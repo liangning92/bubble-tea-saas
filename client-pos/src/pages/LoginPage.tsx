@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import axios from 'axios'
 import { getApiUrl, setApiUrl, clearApiUrl } from '../config'
 import { updateApiUrl } from '../services/api'
+import { connectionManager } from '../services/ConnectionManager'
 
 export function LoginPage() {
   const { t } = useTranslation()
@@ -26,6 +27,15 @@ export function LoginPage() {
       const res = await axios.post(`${getApiUrl()}/auth/login`, { phone, password })
       const { token, user } = res.data.data
       login(token, user)
+
+      // Check if Admin changed the API URL
+      try {
+        const urlChanged = await connectionManager.checkForUrlUpdate()
+        if (urlChanged) {
+          console.log('[Login] API URL updated by Admin:', connectionManager.getCurrentUrl())
+        }
+      } catch {}
+
       navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.message || t('login.loginFailed'))
@@ -37,6 +47,10 @@ export function LoginPage() {
   const handleSaveApiUrl = () => {
     setApiUrl(apiUrl)
     updateApiUrl(apiUrl)
+    // Add to ConnectionManager fallback URLs for auto-reconnect
+    connectionManager.addFallbackUrl(apiUrl)
+    // Force reconnect with new URL
+    connectionManager.forceReconnect()
     // 同时通过 Electron IPC 持久化到文件系统（供主进程使用）
     if (window.electronAPI?.setApiUrl) {
       window.electronAPI.setApiUrl(apiUrl)
@@ -48,6 +62,8 @@ export function LoginPage() {
     clearApiUrl()
     setApiUrlInput('/api')
     updateApiUrl('/api')
+    // Force reconnect with default URL
+    connectionManager.forceReconnect()
     if (window.electronAPI?.setApiUrl) {
       window.electronAPI.setApiUrl('/api')
     }

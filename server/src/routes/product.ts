@@ -77,6 +77,26 @@ router.get('/pos', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// GET /api/products/pos/version - Check if products have changed (lightweight check)
+router.get('/pos/version', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.query.storeId as string || req.user!.storeId
+    const latestProduct = await ProductService.getLatestProductUpdate(storeId)
+
+    res.json({
+      code: 200,
+      data: {
+        latestUpdate: latestProduct?.updatedAt?.toISOString() || null,
+        productCount: latestProduct?.count || 0
+      },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get products version error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to check products version' })
+  }
+})
+
 // GET /api/products/barcode/:barcode - Get product by barcode
 router.get('/barcode/:barcode', authenticate, async (req: AuthRequest, res) => {
   try {

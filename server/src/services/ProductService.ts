@@ -449,19 +449,42 @@ export async function getProductsForPOS(storeId: string) {
     categoryName: p.category?.name,
     costPrice: p.costPrice,
     tags: JSON.parse(p.tags || '[]'),
+    updatedAt: p.updatedAt?.toISOString() || null,
     specs: (p.specs || []).map((s: any) => ({
       id: s.id,
       name: s.name,
       price: s.price,
-      isDefault: s.isDefault
+      isDefault: s.isDefault,
+      updatedAt: s.updatedAt?.toISOString() || null
     })),
     addons: (p.addons || []).map((pa: any) => ({
       id: pa.addon.id,
       name: pa.addon.name,
       price: pa.priceOverride || pa.addon.price,
-      isFree: pa.addon.isFree
+      isFree: pa.addon.isFree,
+      updatedAt: pa.addon.updatedAt?.toISOString() || null
     }))
   }))
+}
+
+// Get latest product update timestamp (for POS sync detection)
+export async function getLatestProductUpdate(storeId: string) {
+  const result = await prisma.product.aggregate({
+    where: {
+      storeId,
+      status: 'active',
+      deletedAt: null
+    },
+    _count: true,
+    _max: {
+      updatedAt: true
+    }
+  })
+
+  return {
+    count: result._count,
+    updatedAt: result._max.updatedAt
+  }
 }
 
 // Batch update product status

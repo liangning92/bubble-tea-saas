@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
 import './i18n'
+import { connectionManager } from './services/ConnectionManager'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,6 +15,10 @@ const queryClient = new QueryClient({
     }
   }
 })
+
+// Initialize ConnectionManager for smart API reconnection
+// This runs in the background and manages API connectivity
+connectionManager.startHealthCheck(30000)  // Check every 30 seconds
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

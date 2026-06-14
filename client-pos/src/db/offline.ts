@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie'
-import { getApiUrl } from '../config'
+import { connectionManager } from '../services/ConnectionManager'
 
 export interface LocalProduct {
   id: string
@@ -149,7 +149,7 @@ export class SyncManager {
           // Update status to syncing
           await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1 })
 
-          const apiUrl = getApiUrl()
+          const apiUrl = connectionManager.getCurrentUrl()
           const response = await fetch(`${apiUrl}/orders`, {
             method: 'POST',
             headers: {
@@ -260,6 +260,8 @@ export const syncManager = new SyncManager()
 
 // Product cache manager
 export class ProductCache {
+  private static VERSION_KEY = 'products_version'
+
   // Save products to local cache
   async saveProducts(products: LocalProduct[]) {
     await db.products.clear()
@@ -272,6 +274,25 @@ export class ProductCache {
   // Get all cached products
   async getProducts(): Promise<LocalProduct[]> {
     return db.products.toArray()
+  }
+
+  // Save product version timestamp
+  async saveProductsVersion(timestamp: string) {
+    await db.config.put({ key: ProductCache.VERSION_KEY, value: timestamp, updatedAt: new Date() })
+  }
+
+  // Get stored product version timestamp
+  async getProductsVersion(): Promise<string | null> {
+    const config = await db.config.get(ProductCache.VERSION_KEY)
+    return config?.value || null
+  }
+
+  // Check if server has newer products
+  async hasNewerProducts(serverTimestamp: string | null): Promise<boolean> {
+    if (!serverTimestamp) return false
+    const localVersion = await this.getProductsVersion()
+    if (!localVersion) return true  // No local cache, need to sync
+    return new Date(serverTimestamp) > new Date(localVersion)
   }
 
   // Get products by category

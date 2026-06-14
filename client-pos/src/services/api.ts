@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { getApiUrl } from '../config'
+import { getApiUrl, setApiUrl } from '../config'
+import { connectionManager, type ConnectionEvent } from './ConnectionManager'
 
 const api = axios.create({
   baseURL: getApiUrl(),
@@ -10,6 +11,17 @@ const api = axios.create({
 export function updateApiUrl(url: string) {
   api.defaults.baseURL = url
 }
+
+// Listen for connection manager events to update API URL
+connectionManager.addListener((event: ConnectionEvent) => {
+  if (event.type === 'connected' || event.type === 'url-changed') {
+    if (event.url) {
+      api.defaults.baseURL = event.url
+      setApiUrl(event.url)
+      console.log('[API] Updated baseURL to:', event.url)
+    }
+  }
+})
 
 // Fetch API URL from server config (Admin can change this)
 export async function fetchApiUrlFromServer(): Promise<string | null> {
@@ -57,6 +69,8 @@ export default api
 export const posApi = {
   // Products (cached for offline)
   getProducts: (storeId: string) => api.get(`/products?storeId=${storeId}&status=active`),
+  getProductsForPOS: (storeId: string) => api.get(`/products/pos?storeId=${storeId}`),
+  getProductsVersion: (storeId: string) => api.get(`/products/pos/version?storeId=${storeId}`),
   getProductByBarcode: (barcode: string) => api.get(`/products/barcode/${barcode}`),
 
   // Channels

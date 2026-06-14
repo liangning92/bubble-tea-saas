@@ -5,6 +5,7 @@ import { posApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
 import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
 import { db, syncManager, productCache, LocalProduct } from '../db/offline'
+import { connectionManager } from '../services/ConnectionManager'
 import { formatCurrency, playSound, playSoundWithSettings } from '../utils/helpers'
 import { showToast, ConfirmModal } from '../components/ui'
 import { AnnouncementBanner } from '../components/AnnouncementBanner'
@@ -119,6 +120,7 @@ export function POSPage() {
   const { filter, setFilter, products, setProducts, searchQuery, setSearchQuery } = useProductStore()
   const [loading, setLoading] = useState(true)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'offline'>('connected')
   // 渠道状态 - 动态加载
   const [posChannels, setPosChannels] = useState<Array<{id: string; nameKey: string; icon: string; code: string; color?: string}>>([])
   const [selectedChannel, setSelectedChannel] = useState<{id: string; nameKey: string; icon: string; code: string; color?: string} | null>(null)
@@ -436,6 +438,76 @@ export function POSPage() {
 
     loadProducts()
     return () => { cancelled = true }
+  }, [user?.storeId])
+
+  // 定期同步产品 (每5分钟检查一次)
+  useEffect(() => {
+    const storeId = user?.storeId || 'default'
+    const token = useAuthStore.getState().token
+
+    const syncProducts = async () => {
+      if (!navigator.onLine) return
+
+      try {
+        // Check if server has newer products
+        const versionRes = await fetch(`/api/products/pos/version?storeId=${storeId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+
+        if (versionRes.ok) {
+          const versionData = await versionRes.json()
+          const serverTimestamp = versionData.data?.latestUpdate
+
+          // Check if we need to sync
+          const hasNewer = await productCache.hasNewerProducts(serverTimestamp)
+
+          if (hasNewer) {
+            console.log('[ProductSync] New products available, syncing...')
+            // Fetch all products
+            const res = await fetch(`/api/products?storeId=${storeId}&status=active`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {}
+            })
+            const data = await res.json()
+
+            if (data?.data?.list) {
+              const localProducts: LocalProduct[] = data.data.list.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                description: p.description,
+                image: p.image,
+                categoryId: p.category?.id || '',
+                categoryName: p.category?.name || '',
+                specs: p.specs || [],
+                addons: p.addons?.map((a: any) => ({
+                  id: a.addon?.id || '',
+                  name: a.addon?.name || '',
+                  price: a.addon?.price || 0
+                })) || []
+              }))
+
+              await productCache.saveProducts(localProducts)
+              if (serverTimestamp) {
+                await productCache.saveProductsVersion(serverTimestamp)
+              }
+              console.log('[ProductSync] Products synced successfully')
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[ProductSync] Sync failed:', e)
+      }
+    }
+
+    // Initial sync check after 30 seconds
+    const initialTimeout = setTimeout(syncProducts, 30000)
+
+    // Then sync every 5 minutes
+    const interval = setInterval(syncProducts, 5 * 60 * 1000)
+
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+    }
   }, [user?.storeId])
 
   // 初始化语言（从localStorage恢复）
@@ -826,6 +898,25 @@ export function POSPage() {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
+  }, [])
+
+  // Connection Manager 状态监听
+  useEffect(() => {
+    const updateConnectionStatus = (event: any) => {
+      if (event.type === 'connected') {
+        setConnectionStatus('connected')
+        setIsOnline(true)
+      } else if (event.type === 'connecting' || event.type === 'degraded') {
+        setConnectionStatus('connecting')
+      } else if (event.type === 'offline') {
+        setConnectionStatus('offline')
+        setIsOnline(false)
+      }
+    }
+    const unsubscribe = connectionManager.addListener(updateConnectionStatus)
+    // 初始化状态
+    setConnectionStatus(connectionManager.getState() === 'offline' ? 'offline' : connectionManager.getState() === 'connecting' ? 'connecting' : 'connected')
+    return unsubscribe
   }, [])
 
   // 自动登出 - 使用配置的分钟数 (默认30分钟)
@@ -1222,6 +1313,12 @@ export function POSPage() {
 
     // QRIS: Generate QR code first
     if (paymentMethod === 'qris' && qrisData.status === 'idle') {
+      // Check if online - QRIS requires internet connection
+      if (!navigator.onLine) {
+        showToast(t('pos.qrisOfflineNotice') || 'QRIS需要网络连接，请使用现金支付', 'warning')
+        setIsCheckingOut(false)
+        return
+      }
       setIsCheckingOut(true)
       try {
         const res = await posApi.createQrisPayment(user?.storeId || 'default', `ORDER-${Date.now()}`, total)
@@ -1240,7 +1337,7 @@ export function POSPage() {
           return
         }
       } catch (error: any) {
-        showToast(error?.response?.data?.message || error?.message || t('pos.qrisCreateFailed') || '生成二维码失败', 'error')
+        showToast(t('pos.qrisOfflineNotice') || 'QRIS暂时不可用，请使用现金支付', 'warning')
         setIsCheckingOut(false)
         return
       }
@@ -1426,8 +1523,14 @@ export function POSPage() {
               {selectedChannel.icon} {t(selectedChannel.nameKey)}
             </span>
           )}
-          <span className={`px-4 py-2 rounded-xl text-base font-medium ${isOnline ? 'bg-green-100 text-green-700' : 'bg-red-500 text-white animate-pulse'}`}>
-            {isOnline ? t('pos.online') : t('pos.offline')}
+          <span className={`px-4 py-2 rounded-xl text-base font-medium ${
+            connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
+            connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
+            'bg-red-500 text-white animate-pulse'
+          }`}>
+            {connectionStatus === 'connected' ? t('pos.online') :
+             connectionStatus === 'connecting' ? t('pos.connecting') || '连接中...' :
+             t('pos.offline')}
           </span>
         </div>
 
