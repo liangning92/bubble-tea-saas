@@ -52,13 +52,5 @@ jobs:
           path: client-pos/release/win-unpacked/
           retention-days: 14
 
-      - name: Create Release Draft
-        if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: true
-          files: |
-            client-pos/release/BubbleTeaPOS.exe
-            client-pos/release/win-unpacked/BubbleTeaPOS.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Note: Release creation removed - download artifacts from Actions tab manually
+      # To enable: add GITHUB_TOKEN with repo scope and use softprops/action-gh-release
