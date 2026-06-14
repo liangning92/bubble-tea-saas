@@ -20,11 +20,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: |
           npm install --include=dev
-          npm install app-builder-lib@24.13.3 electron-builder@24.13.3
+          cd client-pos
+          npm install --include=dev
 
       - name: Build POS Electron app
         run: |
@@ -43,14 +45,55 @@ jobs:
         with:
           name: windows-nsis-installer
           path: client-pos/release/BubbleTeaPOS.exe
-          retention-days: 14
+          retention-days: 7
 
       - name: Upload Portable
         uses: actions/upload-artifact@v4
         with:
           name: windows-portable
           path: client-pos/release/win-unpacked/
-          retention-days: 14
+          retention-days: 7
 
-      # Note: Release creation removed - download artifacts from Actions tab manually
-      # To enable: add GITHUB_TOKEN with repo scope and use softprops/action-gh-release
+      - name: Upload latest.yml
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-yml
+          path: client-pos/release/latest.yml
+          retention-days: 7
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-nsis-installer
+          path: .
+
+      - name: Download latest.yml
+        uses: actions/download-artifact@v4
+        with:
+          name: latest-yml
+          path: .
+
+      - name: Get version from latest.yml
+        id: version
+        run: |
+          VERSION=$(grep "version:" latest.yml | sed 's/version: //')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Found version: $VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            BubbleTeaPOS.exe
+            latest.yml
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          release_name: BubbleTeaPOS v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
