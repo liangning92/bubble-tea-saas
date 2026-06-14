@@ -59,6 +59,6 @@ jobs:
           draft: true
           files: |
             client-pos/release/BubbleTeaPOS.exe
-            client-pos/release/win-unpacked/**
+            client-pos/release/win-unpacked/BubbleTeaPOS.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
