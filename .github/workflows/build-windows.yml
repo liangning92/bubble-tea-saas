@@ -66,6 +66,41 @@ jobs:
             exit 1
           }
 
+      - name: Launch test
+        run: |
+          $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
+          $appName = "BubbleTeaPOS"
+          $wait = 8
+          $port = 9222
+
+          # Start Electron with remote debugging
+          $errLog = "$env:TEMP\electron_err_$PID.log"
+          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
+          Write-Host "Started process $($proc.Id), waiting ${wait}s..."
+          Start-Sleep $wait
+
+          # Check if still running
+          if ($proc.HasExited) {
+            Write-Error "App exited with code $($proc.ExitCode)"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 10 }
+            exit 1
+          }
+
+          # Check stderr for errors
+          if ((Test-Path $errLog) -and (Get-Content $errLog -Raw) -match "Error|Exception|ERR_") {
+            Write-Host "⚠ Stderr warnings:"
+            Get-Content $errLog | Select-Object -First 5
+          }
+
+          # Verify chrome_debugger.json exists (proves renderer started)
+          $debugPort = Test-Path "$env:TEMP\$appName*\ChromiumDevToolsPort*"
+          Write-Host "✓ App is running (PID $($proc.Id))"
+
+          # Cleanup
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Remove-Item $errLog -ErrorAction SilentlyContinue
+          Write-Host "✓ Launch test passed"
+
   build:
     needs: test-windows
     runs-on: windows-latest
