@@ -22,6 +22,8 @@
     "date-fns": "^3.3.0",
     "dexie": "^3.2.4",
     "dexie-react-hooks": "^1.1.7",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
     "esbuild": "^0.28.1",
     "i18next": "^23.8.0",
     "lucide-react": "^0.312.0",
@@ -40,8 +42,6 @@
     "autoprefixer": "^10.4.0",
     "electron": "^28.3.3",
     "electron-builder": "^24.9.0",
-    "electron-log": "^5.4.4",
-    "electron-updater": "^6.8.9",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.0",
@@ -58,11 +58,10 @@
     "npmRebuild": false,
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "node_modules/**/*"
     ],
-    "asar": {
-      "smartUnpack": true
-    },
+    "asar": false,
     "win": {
       "target": [
         {
