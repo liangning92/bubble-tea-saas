@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie'
+import { getApiUrl } from '../config'
 
 export interface LocalProduct {
   id: string
@@ -148,7 +149,8 @@ export class SyncManager {
           // Update status to syncing
           await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1 })
 
-          const response = await fetch('/api/orders', {
+          const apiUrl = getApiUrl()
+          const response = await fetch(`${apiUrl}/orders`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -295,7 +297,7 @@ export class ProductCache {
   // Get categories from cached products
   async getCategories(): Promise<string[]> {
     const products = await db.products.toArray()
-    return [...new Set(products.map(p => p.categoryId))]
+    return Array.from(new Set(products.map(p => p.categoryId)))
   }
 
   // Check if cache is fresh (less than 1 hour old)
