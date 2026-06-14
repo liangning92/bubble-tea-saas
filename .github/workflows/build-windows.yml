@@ -34,10 +34,54 @@ jobs:
           npm run build
           npm run build:electron:main
 
+      - name: Get version from package.json
+        id: version
+        run: |
+          $version = (Get-Content client-pos/package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          echo "Building version: $version"
+
+      - name: Create latest.yml manually
+        run: |
+          $version = (Get-Content client-pos/package.json | ConvertFrom-Json).version
+          $sha = git rev-parse --short HEAD
+          $date = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
+          $content = @"
+          version: $version
+          sha512: COMPUTED-LATER
+          releaseDate: '$date'
+          files:
+            - url: BubbleTeaPOS.exe
+              sha512: COMPUTED-LATER
+              size: $(Get-Item client-pos/release/BubbleTeaPOS.exe).Length
+          path: BubbleTeaPOS.exe
+          githubDownloadUrl: https://github.com/liangning92/bubble-tea-saas/releases/download/v$version/BubbleTeaPOS.exe
+          "@
+          $content | Out-File -FilePath client-pos/release/latest.yml -Encoding utf8
+          Get-Content client-pos/release/latest.yml
+
       - name: Build NSIS Installer
         run: |
           cd client-pos
           npx electron-builder --win nsis --x64
+
+      - name: Update latest.yml with actual file info
+        run: |
+          $version = (Get-Content client-pos/package.json | ConvertFrom-Json).version
+          $sha512 = (Get-FileHash client-pos/release/BubbleTeaPOS.exe -Algorithm SHA512).Hash.ToLower()
+          $size = (Get-Item client-pos/release/BubbleTeaPOS.exe).Length
+          $content = @"
+          version: $version
+          sha512: $sha512
+          releaseDate: $(Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+          files:
+            - url: BubbleTeaPOS.exe
+              sha512: $sha512
+              size: $size
+          path: BubbleTeaPOS.exe
+          githubDownloadUrl: https://github.com/liangning92/bubble-tea-saas/releases/download/v$version/BubbleTeaPOS.exe
+          "@
+          $content | Out-File -FilePath client-pos/release/latest.yml -Encoding utf8
 
       - name: Upload Installer
         uses: actions/upload-artifact@v4
@@ -52,7 +96,6 @@ jobs:
           name: latest-yml
           path: client-pos/release/latest.yml
           retention-days: 7
-          if-no-files-found: warn
 
       - name: Build Portable version
         run: |
@@ -82,22 +125,15 @@ jobs:
         with:
           name: latest-yml
           path: .
-          merge-multiple: true
 
-      - name: Display files
-        run: |
-          ls -la
-
-      - name: Get version from latest.yml
+      - name: Get version
         id: version
-        if: hashFiles('latest.yml') != ''
         run: |
           VERSION=$(grep "version:" latest.yml | sed 's/version: //' | tr -d '\r\n')
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Found version: $VERSION"
+          echo "Creating release for version: $VERSION"
 
       - name: Create GitHub Release
-        if: hashFiles('latest.yml') != ''
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -105,29 +141,6 @@ jobs:
             latest.yml
           tag_name: v${{ steps.version.outputs.VERSION }}
           release_name: BubbleTeaPOS v${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fallback release without version file
-        if: hashFiles('latest.yml') == ''
-        run: |
-          echo "latest.yml not found, creating release manually"
-          # Get version from package.json
-          VERSION=$(grep '"version"' client-pos/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        env:
-          VERSION: ${{ needs.build.outputs.version || '1.0.0' }}
-
-      - name: Create Release with version from package.json
-        if: hashFiles('latest.yml') == ''
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            BubbleTeaPOS.exe
-          tag_name: v2.0.7
-          release_name: BubbleTeaPOS v2.0.7
           draft: false
           prerelease: false
         env:
