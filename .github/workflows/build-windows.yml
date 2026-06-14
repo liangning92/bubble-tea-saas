@@ -20,7 +20,9 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          cd client-pos && npm install
 
       - name: Build POS Electron app
         run: |
@@ -28,8 +30,6 @@ jobs:
           npm run build
           npm run build:electron:main
           npx electron-builder --win nsis --x64
-        env:
-          NODE_VERSION: '20'
 
       - name: Build Portable version
         run: |
