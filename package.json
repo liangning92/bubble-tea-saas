@@ -1,0 +1,42 @@
+{
+  "name": "bubble-tea-saas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bubble Tea SaaS POS System - Indonesia Market",
+  "workspaces": [
+    "server",
+    "client-admin",
+    "client-pos",
+    "client-staff"
+  ],
+  "scripts": {
+    "dev": "npm run dev:server & npm run dev:admin & npm run dev:pos & npm run dev:staff",
+    "dev:server": "cd server && npm run dev",
+    "dev:admin": "cd client-admin && npm run dev",
+    "dev:pos": "cd client-pos && npm run dev",
+    "dev:staff": "cd client-staff && npm run dev",
+    "build": "npm run build:server && npm run build:admin && npm run build:pos && npm run build:staff",
+    "build:server": "cd server && npm run build",
+    "build:admin": "cd client-admin && npm run build",
+    "build:pos": "cd client-pos && npm run build",
+    "build:staff": "cd client-staff && npm run build",
+    "test": "cd server && npm test",
+    "db:generate": "cd server && npx prisma generate",
+    "db:push": "cd server && npx prisma db push",
+    "db:seed": "cd server && npm run db:seed",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "pdfkit": "^0.19.1",
+    "socket.io": "^4.8.3",
+    "xlsx": "^0.18.5"
+  }
+}

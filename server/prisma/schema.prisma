@@ -1,0 +1,2014 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 租户 & 门店
+// ============================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  stores    Store[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Store {
+  id                   String                 @id @default(cuid())
+  tenantId             String
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id])
+  name                 String
+  address              String?
+  phone                String?
+  timezone             String                 @default("Asia/Jakarta")
+  currency             String                 @default("IDR")
+  locale               String                 @default("id")
+  // 税务信息
+  taxId                String? // NPWP 编号
+  companyName          String? // 公司法定名称
+  taxAddress           String? // 税务注册地址
+  businessType         String? // 企业类型
+  products             Product[]
+  inventory            Inventory[]
+  orders               Order[]
+  staff                Staff[]
+  configs              Config[]
+  categories           Category[]
+  addons               Addon[]
+  channels             Channel[]
+  members              Member[]
+  users                User[]
+  suppliers            Supplier[]
+  purchaseOrders       PurchaseOrder[]
+  inventoryCounts      InventoryCount[]
+  campaigns            Campaign[]
+  coupons              Coupon[]
+  leaves               Leave[]
+  disciplines          Discipline[]
+  trainings            Training[]
+  reimbursements       Reimbursement[]
+  leaveTypes           LeaveType[]
+  reimbursementTypes   ReimbursementType[]
+  posTerminals         POSTerminal[]
+  receiptTemplates     ReceiptTemplate[]
+  processRecipes       ProcessRecipe[]
+  expenses             Expense[]
+  hygieneTemplates     HygieneTemplate[]
+  hygieneTasks         HygieneTask[]
+  hygieneAreas         HygieneArea[]
+  hygieneConfigs       HygieneConfig[]
+  processingLogs       ProcessingLog[]
+  tierBenefits         TierBenefit[]
+  pointsExpiryRules    PointsExpiryRule[]
+  pointsRules          PointsRule[]
+  rewardCatalogs       RewardCatalog[]
+  referralCampaigns    ReferralCampaign[]
+  marketingChannels    MarketingChannel[]
+  notifications        Notification[]
+  cashEvents           CashEvent[]
+  shiftSessions        ShiftSession[]
+  cashSummaries        CashSummary[]
+  budgets              Budget[]
+  fixedAssets          FixedAsset[]
+  bankAccounts         BankAccount[]
+  financeAccounts      FinanceAccount[]
+  announcements        Announcement[]
+  messageChannels      MessageChannel[]
+  messageTemplates     MessageTemplate[]
+  messageLogs          MessageLog[]
+  financeAuditLogs     FinanceAuditLog[]
+  campaignCategories   CampaignCategory[]
+  discountRules        DiscountRule[]
+  timedSpecials        TimedSpecial[]
+  stackingRules       StackingRule[]
+  automationLogs      AutomationLog[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  depositRules         DepositRule[]
+  attendanceRules      AttendanceRule[]
+  qrisPayments         QrisPayment[]
+  orderCounters        OrderCounter[]
+  AttendanceCorrection AttendanceCorrection[]
+  ShiftSwap            ShiftSwap[]
+  OvertimeRequest      OvertimeRequest[]
+  Shift                Shift[]
+}
+
+// ============================================
+// 押金管理
+// ============================================
+
+model DepositRule {
+  id             String         @id @default(cuid())
+  storeId        String
+  store          Store          @relation(fields: [storeId], references: [id])
+  name           String // 规则名称
+  depositAmount  Int // 押金总金额（分）
+  deductionType  String // deduction_type: one_time | monthly | limited
+  monthlyAmount  Int? // 每月扣款金额（分），deduction_type=monthly时用
+  maxDeductions  Int? // 最大扣款次数，deduction_type=limited时用
+  refundType     String // refund_type: full | prorata | forfeited | none
+  prorataPercent Float? // 按在职时间比例退款比例，refundType=prorata时用
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  staffDeposits  StaffDeposit[]
+}
+
+model StaffDeposit {
+  id             String                  @id @default(cuid())
+  staffId        String
+  staff          Staff                   @relation(fields: [staffId], references: [id])
+  storeId        String
+  depositRuleId  String
+  depositRule    DepositRule             @relation(fields: [depositRuleId], references: [id])
+  totalAmount    Int // 应收押金总额（分）
+  deductedAmount Int                     @default(0) // 已扣除金额（分）
+  refundedAmount Int                     @default(0) // 已退还金额（分）
+  status         String                  @default("active") // active | completed | refunded
+  startDate      DateTime                @default(now())
+  endDate        DateTime?
+  deductionCount Int                     @default(0) // 已扣次数
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  deductionLogs  StaffDepositDeduction[]
+  refundLogs     StaffDepositRefund[]
+}
+
+model StaffDepositDeduction {
+  id             String       @id @default(cuid())
+  staffDepositId String
+  staffDeposit   StaffDeposit @relation(fields: [staffDepositId], references: [id])
+  salaryId       String?
+  amount         Int // 扣款金额（分）
+  note           String?
+  createdAt      DateTime     @default(now())
+}
+
+model StaffDepositRefund {
+  id             String       @id @default(cuid())
+  staffDepositId String
+  staffDeposit   StaffDeposit @relation(fields: [staffDepositId], references: [id])
+  amount         Int // 退款金额（分）
+  reason         String // full | prorata | damage_deduction | other
+  note           String?
+  processedBy    String // 处理人ID
+  createdAt      DateTime     @default(now())
+}
+
+// ============================================
+// 考勤规则
+// ============================================
+
+model AttendanceRule {
+  id                           String   @id @default(cuid())
+  storeId                      String
+  store                        Store    @relation(fields: [storeId], references: [id])
+  name                         String // 规则名称
+  workStartTime                String   @default("09:00") // 上班时间 HH:mm
+  workEndTime                  String   @default("18:00") // 下班时间 HH:mm
+  gracePeriod                  Int      @default(15) // 宽限期（分钟），不算迟到
+  lateDeductionType            String // late_deduction_type: fixed | daily_rate
+  lateDeductionFixed           Int? // 迟到一次扣固定金额（分）
+  lateDeductionDailyRate       Float? // 迟到扣日薪比例（0.0-1.0）
+  absenceDeductionType         String // absence_deduction_type: fixed | daily_rate
+  absenceDeductionFixed        Int? // 缺勤一次扣固定金额（分）
+  absenceDeductionDailyRate    Float? // 缺勤扣日薪比例
+  earlyLeaveDeductionType      String // early_leave_deduction_type: fixed | daily_rate
+  earlyLeaveDeductionFixed     Int?
+  earlyLeaveDeductionDailyRate Float?
+  overtimeRate                 Float    @default(1.5) // 加班费率（倍数）
+  overtimeMinHours             Int      @default(1) // 最小加班统计小时数
+  sickLeaveDeductionType       String // sick_leave_deduction_type: none | fixed | daily_rate
+  sickLeaveDeductionFixed      Int?
+  sickLeaveDeductionDailyRate  Float?
+  isActive                     Boolean  @default(true)
+  isDefault                    Boolean  @default(false) // 是否为默认规则
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+}
+
+// ============================================
+// 用户 & 认证
+// ============================================
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  password  String
+  role      String // admin | manager | staff | cashier
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  staff     Staff?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// 员工中心
+// ============================================
+
+model Staff {
+  id                   String                 @id @default(cuid())
+  userId               String                 @unique
+  user                 User                   @relation(fields: [userId], references: [id])
+  storeId              String
+  store                Store                  @relation(fields: [storeId], references: [id])
+  name                 String
+  employeeNumber       String
+  position             String                 @default("店员")
+  status               String                 @default("active") // active | inactive | resigned | suspended
+  employmentType       String                 @default("full_time") // full_time | part_time | contract | intern
+  hourlyRate           Int? // 兼职/临时工时薪（分）
+  weeklyHours          Float? // 每周工作时长
+  hireDate             DateTime?
+  terminationDate      DateTime?
+  emergencyContact     String?
+  emergencyPhone       String?
+  bankAccount          String?
+  bankName             String?
+  email                String?
+  address              String?
+  attendances          Attendance[]
+  schedules            Schedule[]
+  salaries             Salary[]
+  leaves               Leave[]
+  disciplines          Discipline[]
+  trainings            Training[]
+  leaveBalances        LeaveBalance[]
+  reimbursements       Reimbursement[]
+  hygieneTasks         HygieneTask[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  StaffPoint           StaffPoint?
+  StaffPointLog        StaffPointLog[]
+  StaffPointRedemption StaffPointRedemption[]
+  deposits             StaffDeposit[]
+  AttendanceCorrection AttendanceCorrection[]
+  ShiftSwap            ShiftSwap[]
+  OvertimeRequest      OvertimeRequest[]
+}
+
+// ============================================
+// 员工积分系统
+// ============================================
+
+model StaffPoint {
+  id            String   @id @default(cuid())
+  staffId       String   @unique
+  staff         Staff    @relation(fields: [staffId], references: [id])
+  storeId       String
+  balance       Int      @default(0)
+  totalEarned   Int      @default(0)
+  totalRedeemed Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model StaffPointLog {
+  id          String    @id @default(cuid())
+  staffId     String
+  staff       Staff     @relation(fields: [staffId], references: [id])
+  storeId     String
+  type        String // earn | redeem | adjust | expire
+  points      Int // positive for earn, negative for redeem
+  reason      String // perfect_attendance | good_performance | training | holiday_work | overtime | leave_redemption | manual_adjust
+  referenceId String? // Related entity ID
+  note        String?
+  expiresAt   DateTime?
+  expiredAt   DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+}
+
+model StaffPointReward {
+  id                   String                 @id @default(cuid())
+  storeId              String
+  name                 String // "Extra leave day" | "Meal voucher" | "Bonus Rp 100k"
+  type                 String // extra_leave | meal_voucher | bonus | merchandise
+  pointsCost           Int
+  value                String? // JSON: { "days": 1 } or { "amount": 100000 }
+  isActive             Boolean                @default(true)
+  stock                Int?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  StaffPointRedemption StaffPointRedemption[]
+}
+
+model StaffPointRedemption {
+  id          String           @id @default(cuid())
+  staffId     String
+  staff       Staff            @relation(fields: [staffId], references: [id])
+  storeId     String
+  rewardId    String
+  reward      StaffPointReward @relation(fields: [rewardId], references: [id])
+  pointsCost  Int
+  status      String           @default("pending") // pending | approved | fulfilled | cancelled
+  fulfilledAt DateTime?
+  fulfilledBy String?
+  createdAt   DateTime         @default(now())
+}
+
+// ============================================
+// 请假管理
+// ============================================
+
+model Leave {
+  id              String    @id @default(cuid())
+  staffId         String
+  staff           Staff     @relation(fields: [staffId], references: [id])
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id])
+  leaveType       String // annual | sick | unpaid | maternity | paternity | bereavement | other
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Int // 请假天数
+  reason          String?
+  status          String    @default("pending") // pending | approved | rejected | cancelled
+  approvedBy      String? // 审批人ID
+  approvedAt      DateTime?
+  rejectionReason String?
+  halfDay         Boolean   @default(false) // 是否半天假
+  contactPhone    String?
+  attachmentUrl   String? // 附件证明URL
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// 请假余额表
+model LeaveBalance {
+  id             String   @id @default(cuid())
+  staffId        String
+  staff          Staff    @relation(fields: [staffId], references: [id])
+  year           Int // 年份
+  annualLeave    Int      @default(0) // 年假天数
+  sickLeave      Int      @default(0) // 病假天数
+  unpaidLeave    Int      @default(0) // 无薪假天数
+  usedLeave      Int      @default(0) // 已用年假
+  usedSick       Int      @default(0) // 已用病假
+  broughtForward Int      @default(0) // 上年结转年假
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([staffId, year])
+}
+
+// ============================================
+// 奖惩记录
+// ============================================
+
+model Discipline {
+  id           String    @id @default(cuid())
+  staffId      String
+  staff        Staff     @relation(fields: [staffId], references: [id])
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id])
+  type         String // warning | deduction | bonus | award | suspension | termination
+  category     String // attendance | performance | conduct | safety | other
+  amount       Int       @default(0) // 扣款或奖励金额（正数为奖励，负数为扣款）
+  points       Int       @default(0) // 奖惩积分（正数奖励，负数扣分）
+  reason       String
+  incidentDate DateTime
+  evidenceUrl  String? // 证据图片
+  approvedBy   String?
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ============================================
+// 培训记录
+// ============================================
+
+model Training {
+  id           String    @id @default(cuid())
+  staffId      String
+  staff        Staff     @relation(fields: [staffId], references: [id])
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id])
+  trainingType String // onboarding | safety | product | service | leadership | compliance | other
+  title        String
+  provider     String?
+  startDate    DateTime
+  endDate      DateTime?
+  duration     Int? // 培训时长（小时）
+  cost         Int? // 培训费用
+  certificate  String? // 证书编号
+  status       String    @default("scheduled") // scheduled | in_progress | completed | cancelled
+  score        Int? // 考核分数
+  passed       Boolean   @default(false)
+  notes        String?
+  attachments  String? // JSON array: [{url, name, type, size}]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ============================================
+// 报销管理
+// ============================================
+
+model Reimbursement {
+  id              String    @id @default(cuid())
+  staffId         String
+  staff           Staff     @relation(fields: [staffId], references: [id])
+  storeId         String
+  store           Store     @relation(fields: [storeId], references: [id])
+  type            String // transportation | meals | communication | medical | other
+  amount          Int // 报销金额（分）
+  description     String
+  receiptUrls     String? // JSON array of receipt image URLs
+  status          String    @default("pending") // pending | approved | rejected | paid | cancelled
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  paidAt          DateTime?
+  paidBy          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Attendance {
+  id           String    @id @default(cuid())
+  staffId      String
+  staff        Staff     @relation(fields: [staffId], references: [id])
+  checkInTime  DateTime
+  checkOutTime DateTime?
+  status       String    @default("normal") // normal | late | early | absence
+  gpsLocation  String?
+  note         String?
+  createdAt    DateTime  @default(now())
+}
+
+// 考勤纠错申请
+model AttendanceCorrection {
+  id               String    @id @default(cuid())
+  staffId          String
+  staff            Staff     @relation(fields: [staffId], references: [id])
+  storeId          String
+  store            Store     @relation(fields: [storeId], references: [id])
+  date             DateTime // 需要纠错的日期
+  originalCheckIn  String? // 原始签到时间 HH:mm
+  originalCheckOut String? // 原始签退时间 HH:mm
+  correctCheckIn   String? // 正确签到时间 HH:mm
+  correctCheckOut  String? // 正确签退时间 HH:mm
+  reason           String // 纠错原因
+  status           String    @default("pending") // pending | approved | rejected
+  adminNote        String? // 管理员备注
+  processedBy      String? // 处理人ID
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// 调班申请
+model ShiftSwap {
+  id            String    @id @default(cuid())
+  staffId       String // 申请人
+  staff         Staff     @relation(fields: [staffId], references: [id])
+  storeId       String
+  store         Store     @relation(fields: [storeId], references: [id])
+  originalDate  DateTime // 原排班日期
+  originalShift String // 原班次
+  targetDate    DateTime // 目标日期
+  targetShift   String // 目标班次
+  reason        String? // 调班原因
+  status        String    @default("pending") // pending | approved | rejected
+  adminNote     String?
+  processedBy   String?
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// 加班申请
+model OvertimeRequest {
+  id          String    @id @default(cuid())
+  staffId     String
+  staff       Staff     @relation(fields: [staffId], references: [id])
+  storeId     String
+  store       Store     @relation(fields: [storeId], references: [id])
+  date        DateTime // 加班日期
+  startTime   String // 开始时间 HH:mm
+  endTime     String // 结束时间 HH:mm
+  reason      String // 加班原因
+  hours       Float // 加班小时数
+  status      String    @default("pending") // pending | approved | rejected
+  adminNote   String?
+  processedBy String?
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Schedule {
+  id        String   @id @default(cuid())
+  staffId   String
+  staff     Staff    @relation(fields: [staffId], references: [id])
+  date      DateTime
+  shift     String // morning | afternoon | evening
+  status    String   @default("scheduled") // scheduled | completed | absent
+  createdAt DateTime @default(now())
+}
+
+model Shift {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  key       String   @unique @default(cuid()) // morning, afternoon, evening, night
+  name      String // 班次名称
+  nameZh    String? // 中文名
+  nameId    String? // 印尼名
+  startTime String // 开始时间 08:00
+  endTime   String // 结束时间 16:00
+  color     String // CSS颜色 #F59E0B
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Salary {
+  id          String   @id @default(cuid())
+  staffId     String
+  staff       Staff    @relation(fields: [staffId], references: [id])
+  month       String // YYYY-MM
+  baseSalary  Int
+  overtime    Int      @default(0)
+  commission  Int      @default(0)
+  bonus       Int      @default(0)
+  deduction   Int      @default(0)
+  finalAmount Int
+  status      String   @default("pending") // pending | paid
+  createdAt   DateTime @default(now())
+
+  @@unique([staffId, month])
+}
+
+// ============================================
+// 商品中心
+// ============================================
+
+model Category {
+  id        String    @id @default(cuid())
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  name      String
+  code      String? // 3-letter prefix like "MILK", "TEA", "JUI"
+  sortOrder Int       @default(0)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([storeId, name])
+}
+
+model Product {
+  id            String                @id @default(cuid())
+  storeId       String
+  store         Store                 @relation(fields: [storeId], references: [id])
+  code          String                @unique // 产品编码 PROD-001
+  name          String
+  description   String?
+  image         String?
+  categoryId    String
+  category      Category              @relation(fields: [categoryId], references: [id])
+  status        String                @default("active") // active | inactive
+  tags          String                @default("[]") // JSON: ["hot", "new", "seasonal"]
+  costPrice     Int                   @default(0) // 成本价(分)
+  sortOrder     Int                   @default(0)
+  deletedAt     DateTime? // 软删除
+  specs         Spec[]
+  addons        ProductAddon[]
+  bomItems      BOMItem[]
+  orderItems    OrderItem[]
+  channelPrices ProductChannelPrice[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([storeId, code])
+}
+
+model Spec {
+  id              String         @id @default(cuid())
+  productId       String
+  product         Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name            String // 中杯 | 大杯
+  price           Int // 基础价格(分)
+  priceAdjustment Int            @default(0) // 相对商品基础价的加价
+  isDefault       Boolean        @default(false)
+  productAddons   ProductAddon[]
+  orderItems      OrderItem[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Addon {
+  id              String         @id @default(cuid())
+  storeId         String
+  store           Store          @relation(fields: [storeId], references: [id])
+  name            String // 珍珠 | 椰果 | 布丁
+  price           Int            @default(0) // 基础价格(分)
+  priceAdjustment Int            @default(0) // 加料加价
+  isFree          Boolean        @default(false)
+  productAddons   ProductAddon[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+// ============================================
+// 渠道管理
+// ============================================
+
+model Channel {
+  id              String                @id @default(cuid())
+  storeId         String
+  store           Store                 @relation(fields: [storeId], references: [id])
+  name            String // 堂食 | GoFood | GrabFood
+  code            String // DINE_IN | GOFOOD | GRAB | SHOPEE | POS
+  icon            String? // emoji图标
+  commission      Float                 @default(0) // 佣金比例 0.2 = 20%
+  status          String                @default("active") // active | inactive
+  sortOrder       Int                   @default(0)
+  // 营业时段设置
+  availableDays   String                @default("1,2,3,4,5,6,7") // 营业日：1-7 代表周一到周日
+  availableHours  String                @default("00:00-23:59") // 营业时间：HH:MM-HH:MM格式
+  minOrderAmount  Int                   @default(0) // 该渠道最低消费
+  dailyOrderLimit Int                   @default(0) // 每日接单上限，0=不限
+  products        ProductChannelPrice[]
+  orders          Order[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([storeId, code])
+}
+
+// 商品-渠道价格关联表
+model ProductChannelPrice {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channelId       String
+  channel         Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  priceAdjustment Float    @default(0) // 价格调整系数 1.0 = 不变 1.13 = +13%
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([productId, channelId])
+}
+
+// 规格与加料的关联表(指定某规格能加哪些料)
+model ProductAddon {
+  id            String  @id @default(cuid())
+  productId     String
+  product       Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  specId        String?
+  spec          Spec?   @relation(fields: [specId], references: [id], onDelete: SetNull)
+  addonId       String
+  addon         Addon   @relation(fields: [addonId], references: [id])
+  priceOverride Int? // 可选的价格覆盖
+
+  @@unique([productId, specId, addonId])
+}
+
+model BOMItem {
+  id            String    @id @default(cuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryId   String
+  inventory     Inventory @relation(fields: [inventoryId], references: [id])
+  quantity      Float // 用量(kg/ml/个)
+  unit          String // kg | ml | 个
+  costPerUnit   Int       @default(0) // 单位成本(分)
+  totalCost     Int       @default(0) // 总成本(分)
+  inventoryType String    @default("raw_material") // raw_material | semi_finished
+  version       Int       @default(1) // BOM版本
+  auditStatus   String    @default("pending") // pending | approved | rejected
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// 库存中心
+// ============================================
+
+model Inventory {
+  id                  String               @id @default(cuid())
+  storeId             String
+  store               Store                @relation(fields: [storeId], references: [id])
+  name                String
+  category            String // 茶叶 | 奶精 | 糖浆 | 小料
+  type                String               @default("raw_material") // raw_material | semi_finished | finished_goods
+  unit                String // kg | ml | 个
+  currentStock        Float                @default(0)
+  avgCost             Int                  @default(0) // 均价(分/kg或分/ml)
+  concentrateRatio    Float                @default(1) // 浓缩比例(比如茶叶浓缩10倍)
+  safetyStock         Float                @default(0)
+  minStock            Float                @default(0) // 最低库存阈值
+  maxStock            Float                @default(0) // 最高库存阈值
+  shelfLife           Int                  @default(0) // 保质期天数
+  processRecipeId     String?              @unique // 关联的加工配方（半成品由哪个配方产出）
+  processRecipe       ProcessRecipe?       @relation(fields: [processRecipeId], references: [id])
+  bomItems            BOMItem[]
+  stockInLogs         StockInLog[]
+  stockOutLogs        StockOutLog[]
+  batches             Batch[]
+  inventoryCountItems InventoryCountItem[]
+  processRecipeItems  ProcessRecipeItem[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model StockInLog {
+  id          String    @id @default(cuid())
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  batchId     String? // 可选：关联批次
+  quantity    Float
+  unitCost    Int // 入库单价(分)
+  totalAmount Int // 总金额(分)
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  staffId     String? // 入库操作员
+  note        String?
+  createdAt   DateTime  @default(now())
+}
+
+model StockOutLog {
+  id          String    @id @default(cuid())
+  inventoryId String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  quantity    Float
+  reason      String // sold | loss | adjust | expired
+  orderId     String?
+  note        String?
+  createdAt   DateTime  @default(now())
+}
+
+// ============================================
+// 供应商管理
+// ============================================
+
+model Supplier {
+  id             String          @id @default(cuid())
+  storeId        String
+  store          Store           @relation(fields: [storeId], references: [id])
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?
+  note           String?
+  isActive       Boolean         @default(true)
+  stockInLogs    StockInLog[]
+  purchaseOrders PurchaseOrder[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+// ============================================
+// 采购订单
+// ============================================
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  storeId      String
+  store        Store               @relation(fields: [storeId], references: [id])
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  orderNumber  String              @unique
+  status       String              @default("pending") // pending | approved | received | cancelled
+  totalAmount  Int                 @default(0)
+  expectedDate DateTime?
+  receivedDate DateTime?
+  note         String?
+  items        PurchaseOrderItem[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryId     String
+  quantity        Float
+  unitCost        Int
+  receivedQty     Float         @default(0)
+  createdAt       DateTime      @default(now())
+}
+
+// ============================================
+// 库存批次
+// ============================================
+
+model Batch {
+  id                String    @id @default(cuid())
+  inventoryId       String
+  inventory         Inventory @relation(fields: [inventoryId], references: [id])
+  batchNumber       String
+  quantity          Float
+  unitCost          Int
+  manufacturingDate DateTime?
+  expiryDate        DateTime?
+  status            String    @default("active") // active | used | expired
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([inventoryId, batchNumber])
+}
+
+// ============================================
+// 库存盘点
+// ============================================
+
+model InventoryCount {
+  id        String               @id @default(cuid())
+  storeId   String
+  store     Store                @relation(fields: [storeId], references: [id])
+  period    String // monthly | quarterly | annual
+  startDate DateTime
+  endDate   DateTime
+  status    String               @default("in_progress") // in_progress | completed | cancelled
+  notes     String?
+  items     InventoryCountItem[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+}
+
+model InventoryCountItem {
+  id               String         @id @default(cuid())
+  inventoryCountId String
+  inventoryCount   InventoryCount @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  inventoryId      String
+  inventory        Inventory      @relation(fields: [inventoryId], references: [id])
+  systemQty        Float
+  countedQty       Float?
+  variance         Float?
+  note             String?
+  countedAt        DateTime?
+  countedBy        String?
+}
+
+// ============================================
+// 加工配方
+// ============================================
+
+model ProcessRecipe {
+  id              String              @id @default(cuid())
+  storeId         String
+  store           Store               @relation(fields: [storeId], references: [id])
+  name            String // 配方名称：煮珍珠
+  outputUnit      String // 产出单位：ml/g/个
+  status          String              @default("active") // active | inactive
+  items           ProcessRecipeItem[]
+  processingLogs  ProcessingLog[]
+  outputInventory Inventory? // 此配方产出的半成品库存
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model ProcessRecipeItem {
+  id              String        @id @default(cuid())
+  processRecipeId String
+  processRecipe   ProcessRecipe @relation(fields: [processRecipeId], references: [id], onDelete: Cascade)
+  inventoryId     String? // 投入关联库存，产出为空
+  inventory       Inventory?    @relation(fields: [inventoryId], references: [id])
+  name            String? // 产出名称（产出时填写）
+  quantity        Float // 用量（投入）或产量（产出）
+  type            String // input | output
+  createdAt       DateTime      @default(now())
+}
+
+//加工记录 - 每次执行加工配方都记录
+model ProcessingLog {
+  id              String        @id @default(cuid())
+  storeId         String
+  store           Store         @relation(fields: [storeId], references: [id])
+  recipeId        String
+  recipe          ProcessRecipe @relation(fields: [recipeId], references: [id])
+  staffId         String // 操作员
+  multiplier      Float // 倍率(做多少份)
+  inputItems      String // 投入原料明细 (JSON字符串)
+  outputItems     String // 产出半成品明细 (JSON字符串)
+  totalInputCost  Int // 总投入成本(分)
+  totalOutputCost Int // 总产出成本(分)
+  note            String?
+  createdAt       DateTime      @default(now())
+}
+
+// ============================================
+// POS现金管理
+// ============================================
+
+model CashEvent {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  staffId       String
+  type          String // float | cash_sale | cash_in | cash_out | reconcile | close_shift
+  amount        Int // 金额（分）
+  paymentMethod String? // 支付方式（用于cash_sale/cash_in时记录来源）
+  orderId       String? // 关联订单ID
+  note          String?
+  shift         String? // morning | afternoon | evening
+  createdAt     DateTime @default(now())
+}
+
+model ShiftSession {
+  id             String    @id @default(cuid())
+  storeId        String
+  store          Store     @relation(fields: [storeId], references: [id])
+  staffId        String // 开班员工
+  shift          String // morning | afternoon | evening
+  openFloat      Int // 开班零钱（分）
+  expectedCash   Int       @default(0) // 期望现金（分）
+  actualCash     Int? // 实际现金（分）
+  cashDifference Int? // 差异（分）
+  nextStaffId    String? // 接班员工
+  status         String    @default("open") // open | closed
+  closeNote      String?
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model CashSummary {
+  id           String   @id @default(cuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id])
+  date         String // YYYY-MM-DD
+  shift        String? // morning | afternoon | evening
+  openFloat    Int      @default(0)
+  cashSales    Int      @default(0)
+  cashIns      Int      @default(0)
+  cashOuts     Int      @default(0)
+  closeFloat   Int      @default(0)
+  expectedCash Int      @default(0)
+  actualCash   Int?
+  difference   Int?
+  staffId      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([storeId, date, shift])
+}
+
+// ============================================
+// 费用管理
+// ============================================
+
+model Expense {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id])
+  type          String // reimbursement | rent | utilities | supplies | salary | other
+  category      String // 报销 | 租金 | 水电 | 物资 | 工资 | 其他
+  amount        Int // 金额（分）
+  description   String
+  date          DateTime @default(now())
+  referenceId   String? // 关联ID（如报销ID）
+  referenceType String? // reimbursement | order | purchase | inventory
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================
+// 财务管理
+// ============================================
+
+model Budget {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  category  String // rent | utilities | staff | marketing | other
+  period    String // monthly | quarterly | yearly
+  amount    Int // 预算金额（分）
+  year      Int
+  month     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FixedAsset {
+  id                 String   @id @default(cuid())
+  storeId            String
+  store              Store    @relation(fields: [storeId], references: [id])
+  name               String
+  description        String?
+  purchaseDate       DateTime
+  originalValue      Int // 原值（分）
+  usefulLife         Int // 使用年限（月）
+  salvageValue       Int // 残值（分）
+  depreciationMethod String   @default("straight_line") // straight_line
+  status             String   @default("active") // active | disposed | sold
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model BankAccount {
+  id           String            @id @default(cuid())
+  storeId      String
+  store        Store             @relation(fields: [storeId], references: [id])
+  name         String // 账户名称
+  bank         String // 银行名称
+  accountNo    String // 账号
+  balance      Int               @default(0) // 余额（分）
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  transactions BankTransaction[]
+}
+
+model BankTransaction {
+  id            String      @id @default(cuid())
+  storeId       String
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  type          String // transfer_in | transfer_out
+  amount        Int // 金额（分）
+  counterparty  String // 对方账户
+  note          String?
+  date          DateTime
+  createdAt     DateTime    @default(now())
+}
+
+model FinanceAccount {
+  id            String            @id @default(cuid())
+  storeId       String
+  store         Store             @relation(fields: [storeId], references: [id])
+  code          String // 科目代码 1001, 4001等
+  name          String // 科目名称
+  type          String // cash | bank | receivable | payable | revenue | cogs | expense
+  balance       Int               @default(0) // 余额（分）
+  parentCode    String? // 上级科目代码
+  sortOrder     Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  fromTransfers FinanceTransfer[] @relation("FromAccount")
+  toTransfers   FinanceTransfer[] @relation("ToAccount")
+}
+
+model FinanceTransfer {
+  id            String         @id @default(cuid())
+  storeId       String
+  fromAccountId String
+  fromAccount   FinanceAccount @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccountId   String
+  toAccount     FinanceAccount @relation("ToAccount", fields: [toAccountId], references: [id])
+  amount        Int // 金额（分）
+  note          String?
+  date          DateTime
+  createdAt     DateTime       @default(now())
+}
+
+// ============================================
+// 卫生管理
+// ============================================
+
+// 卫生区域（可配置）
+model HygieneArea {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  name        String // 区域名称
+  code        String // 区域代码
+  icon        String? // 图标
+  color       String? // 颜色
+  priority    Int      @default(1) // 优先级权重（数字越小优先级越高）
+  description String? // 描述
+  managerId   String? // 区域负责人
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0) // 排序
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([storeId, code]) // 同一店铺内代码唯一
+}
+
+// 卫生模板（完全可配置）
+model HygieneTemplate {
+  id                 String             @id @default(cuid())
+  storeId            String
+  store              Store              @relation(fields: [storeId], references: [id])
+  areaCode           String // 区域代码（关联 HygieneArea.code）
+  name               String // 任务名称
+  description        String? // 详细描述/SOP
+  category           String             @default("daily") // 分类：food_safety/daily/equipment/periodic/opening/closing
+  frequency          String             @default("daily") // 频率：daily/weekly/monthly/specific_days
+  specificDays       String? // 特定日期，JSON数组，如 [1,3,5] 表示周一三五
+  time               String             @default("10:00") // 执行时间 HH:mm
+  priority           Int                @default(2) // 优先级：1=critical, 2=high, 3=normal, 4=low
+  estimatedMinutes   Int                @default(10) // 预计完成时间（分钟）
+  standardBefore     String? // 任务前执行标准
+  standardDuring     String? // 任务中执行标准
+  standardAfter      String? // 任务后执行标准
+  toolsRequired      String? // 需要工具，JSON数组，如 ["抹布", "消毒水"]
+  photoRequired      Boolean            @default(true) // 是否需要拍照
+  evidenceType       String             @default("photo") // 证据类型：photo/signature/both
+  assignedType       String             @default("shift") // 分配方式：shift/staff/area
+  shift              String? // 班次：morning/afternoon/evening
+  staffId            String? // 特定员工ID
+  areaManagerId      String? // 区域负责人（分配给整个区域）
+  requiresApproval   Boolean            @default(false) // 需要主管审核
+  alertMinutesBefore Int                @default(15) // 提前提醒分钟数
+  autoGenerate       Boolean            @default(true) // 自动生成任务
+  regulationCode     String? // 关联法规代码
+  status             String             @default("active") // active | paused
+  nextTriggerAt      DateTime           @default(now()) // 下次触发时间
+  checklists         HygieneChecklist[]
+  tasks              HygieneTask[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+// 检查清单项（子任务）
+model HygieneChecklist {
+  id          String          @id @default(cuid())
+  templateId  String
+  template    HygieneTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  order       Int // 顺序
+  item        String // 检查项内容
+  description String? // 检查项说明
+  isRequired  Boolean         @default(true) // 是否必检
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// 卫生任务实例
+model HygieneTask {
+  id               String           @id @default(cuid())
+  storeId          String
+  store            Store            @relation(fields: [storeId], references: [id])
+  templateId       String?
+  template         HygieneTemplate? @relation(fields: [templateId], references: [id])
+  checklistId      String? // 对应的检查清单项（如果有）
+  staffId          String?
+  staff            Staff?           @relation(fields: [staffId], references: [id])
+  areaCode         String // 区域代码
+  name             String // 任务名称
+  date             String // 任务日期 YYYY-MM-DD
+  time             String // 执行时间 HH:mm
+  priority         Int              @default(2) // 优先级
+  status           String           @default("pending") // pending/completed/skipped/approved/rejected
+  // 完成信息
+  completedAt      DateTime?
+  completedBy      String?
+  photoUrl         String? // 完成照片
+  signatureUrl     String? // 签名
+  note             String? // 备注
+  // 审核信息
+  approvedBy       String?
+  approvedAt       DateTime?
+  qualityScore     Int? // 1-5 质量评分
+  // 问题上报
+  issueDescription String?
+  issuePhotoUrl    String?
+  // 执行追踪
+  startedAt        DateTime? // 开始执行时间
+  actualMinutes    Int? // 实际耗时
+  reminderSent     Boolean          @default(false)
+  logs             HygieneTaskLog[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+// 任务操作日志
+model HygieneTaskLog {
+  id            String      @id @default(cuid())
+  taskId        String
+  task          HygieneTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  action        String // created/assigned/started/completed/approved/skipped/issue/escalated
+  performedBy   String // 操作人ID
+  performedName String? // 操作人姓名（冗余存储便于显示）
+  photoUrl      String?
+  note          String? // 操作备注
+  oldValue      String? // 旧值
+  newValue      String? // 新值
+  createdAt     DateTime    @default(now())
+}
+
+// 卫生管理配置表（完全可用户配置）
+model HygieneConfig {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  key       String // 配置项标识
+  value     String // 配置值（JSON字符串）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, key])
+}
+
+// ============================================
+// 订单中心
+// ============================================
+
+// 订单序号计数器（用于生成每日递增订单号）
+model OrderCounter {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  date      String // 日期 YYYYMMDD
+  counter   Int      @default(0) // 当日序号
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, date])
+  @@index([storeId])
+}
+
+model Order {
+  id               String          @id @default(cuid())
+  storeId          String
+  store            Store           @relation(fields: [storeId], references: [id])
+  channelId        String?
+  channel          Channel?        @relation(fields: [channelId], references: [id])
+  staffId          String
+  memberId         String?
+  member           Member?         @relation(fields: [memberId], references: [id])
+  orderNumber      String          @unique // 订单号(格式: YYYYMMDD-XXXXXX)
+  totalAmount      Int // 总金额(分)
+  discountAmount   Int             @default(0)
+  finalAmount      Int // 实收金额(分)
+  customerCount    Int             @default(1) // 堂食人数
+  status           String          @default("pending") // pending | completed | refunded | cancelled
+  paymentMethod    String // cash | gopay | ovo | dana | shopeepay | qris | debit | member
+  taxCategory      String?         @default("taxable") // taxable | exempt（印尼税收分类）
+  // 渠道扩展信息
+  platformOrderId  String? // 平台订单号(GoFood/Grab/Shopee)
+  tableNumber      String? // 桌号(堂食)
+  callerPhone      String? // 来电号码(电话订餐)
+  driverPickupTime DateTime? // 骑手取餐时间(外卖)
+  purchaseOrderNo  String? // 采购单号(企业订单)
+  socialRef        String? // 社交媒体消息ID(WhatsApp/社媒订单)
+  note             String? // 备注
+  items            OrderItem[]
+  refundRequests   RefundRequest[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// 退款申请
+model RefundRequest {
+  id          String    @id @default(cuid())
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id])
+  amount      Int       @default(0) // 退款金额（分），0表示全额退款
+  reason      String // 退款原因
+  status      String    @default("pending") // pending | approved | rejected
+  requestedBy String // 申请人staffId
+  approvedBy  String? // 审批人staffId
+  approvedAt  DateTime?
+  note        String? // 审批备注
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ============================================
+// QRIS 支付
+// ============================================
+
+model QrisPayment {
+  id           String    @id @default(cuid())
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id])
+  orderId      String?   @unique // 关联的订单号
+  externalId   String    @unique // Xendit external_id
+  xenditId     String?   @unique // Xendit QR code ID
+  amount       Int // 金额（分）
+  status       String    @default("pending") // pending | completed | failed | expired
+  qrString     String // QRIS 字符串
+  qrImage      String? // Base64 QR图片
+  callbackData String? // Webhook 回调数据(JSON)
+  expiresAt    DateTime? // 过期时间
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([externalId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  specId      String
+  spec        Spec     @relation(fields: [specId], references: [id])
+  productName String
+  specName    String
+  quantity    Int
+  unitPrice   Int // 单价(分)
+  addons      String // JSON: [{name, price}]
+  bomCost     Int      @default(0) // 成本(分)
+  createdAt   DateTime @default(now())
+}
+
+// ============================================
+// 会员中心
+// ============================================
+
+model Member {
+  id                   String            @id @default(cuid())
+  storeId              String
+  store                Store             @relation(fields: [storeId], references: [id])
+  name                 String
+  phone                String            @unique
+  level                String            @default("bronze") // bronze | silver | gold | diamond
+  points               Int               @default(0)
+  balance              Int               @default(0) // 储值余额
+  totalSpent           Int               @default(0)
+  birthday             DateTime?
+  email                String?
+  orders               Order[]
+  pointLogs            PointLog[]
+  balanceLogs          MemberBalanceLog[]
+  coupons              MemberCoupon[]
+  lastVisit            DateTime?
+  status               String            @default("active") // active | inactive | blocked
+  tags                 String? // JSON array of tags
+  referralCode         String?           @unique // 推荐码
+  referredBy           String? // 推荐活动CampaignID
+  referredByMemberId   String? // 推荐人MemberID（直接推荐人）
+  marketingChannelId   String?
+  marketingChannel     MarketingChannel? @relation(fields: [marketingChannelId], references: [id])
+  referralLogsInviter  ReferralLog[]     @relation("ReferralInviter")
+  referralLogsRewardee ReferralLog[]     @relation("ReferralRewardee")
+  memberChannels       MemberChannel[]
+  notifications        Notification[]
+  ltv                  MemberLTV?
+  messageLogs          MessageLog[]
+  rewards              MemberReward[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+model PointLog {
+  id        String   @id @default(cuid())
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id])
+  type      String // earn | redeem | adjust | expire | coupon
+  points    Int
+  orderId   String?
+  couponId  String?
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+// 会员储值变动日志
+model MemberBalanceLog {
+  id        String   @id @default(cuid())
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id])
+  type      String // topup | refund | deduct | adjust
+  amount    Int // 变动金额（正数为增加，负数为减少）
+  balanceBefore Int // 变动前余额
+  balanceAfter  Int // 变动后余额
+  orderId   String? // 关联订单（消费扣款时）
+  note      String? // 备注
+  operatorId String? // 操作人ID
+  createdAt DateTime @default(now())
+}
+
+// 会员积分规则配置
+model PointsRule {
+  id                 String   @id @default(cuid())
+  storeId            String   @unique
+  store              Store    @relation(fields: [storeId], references: [id])
+  pointsPerRupiah    Int      @default(10000) // 每消费多少印尼盾=1积分
+  minPurchase        Int      @default(0) // 最低消费才计入积分
+  birthdayMultiplier Float    @default(2.0) // 生日月倍数
+  tierMultiplier     String   @default("{\"bronze\":1,\"silver\":1.2,\"gold\":1.5,\"diamond\":2}") // 各等级倍率
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// 满减规则
+model DiscountRule {
+  id                String   @id @default(cuid())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id])
+  name              String   // 规则名称
+  minOrderAmount    Int      // 满X金额
+  discountValue     Int      // 减Y金额
+  discountType      String   @default("fixed") // fixed固定金额 / percent百分比
+  maxDiscount      Int?     // 最大优惠金额（百分比时）
+  applicableChannels String? // 适用渠道 JSON ["dine_in","takeout"]
+  applicableProducts String? // 适用产品 JSON ["productId1","productId2"]
+  excludeProducts   String?  // 排除产品
+  validFrom         DateTime?
+  validUntil        DateTime?
+  priority          Int      @default(0) // 优先级（数字越大越优先）
+  status            String   @default("active") // active | inactive
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// 限时特价
+model TimedSpecial {
+  id                String   @id @default(cuid())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id])
+  name              String
+  productId         String   // 产品ID
+  specialPrice      Int      // 特价
+  originalPrice     Int?     // 原价
+  startTime         DateTime // 开始时间
+  endTime           DateTime // 结束时间
+  daysOfWeek        String?  // 周几生效 JSON [1,2,3,4,5]
+  applicableChannels String? // 适用渠道
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// 叠加规则（优惠券叠加）
+model StackingRule {
+  id                String   @id @default(cuid())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id])
+  name              String
+  ruleType          String   // stackable | exclusive | replace
+  couponTypeA       String?  // 优惠券类型A
+  couponTypeB       String?  // 优惠券类型B
+  priority          Int      @default(0)
+  note              String?
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ============================================
+// 自动化营销
+// ============================================
+
+model Campaign {
+  id                String              @id @default(cuid())
+  storeId           String
+  store             Store               @relation(fields: [storeId], references: [id])
+  name              String
+  description       String?
+  type              String // birthday | reactivation | loyalty | seasonal | welcome | points_expiring
+  triggerType       String // automatic | manual | scheduled
+  status            String              @default("active") // active | paused | completed
+  startDate         DateTime
+  endDate           DateTime?
+  conditions        String? // JSON: trigger conditions
+  actions           String? // JSON: what to do when triggered
+  stats             String? // JSON: campaign statistics
+  coupons           Coupon[]
+  campaignAnalytics CampaignAnalytics[]
+  categoryId        String?
+  category          CampaignCategory?   @relation(fields: [categoryId], references: [id])
+  triggerConditions TriggerCondition[]
+  campaignActions   CampaignAction[]
+  automationLogs    AutomationLog[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model Coupon {
+  id            String         @id @default(cuid())
+  storeId       String
+  store         Store          @relation(fields: [storeId], references: [id])
+  campaignId    String?
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id])
+  code          String         @unique
+  type          String // discount_percent | discount_fixed | free_product | free_delivery
+  value         Int // 折扣值(百分比或固定金额)
+  minOrder      Int            @default(0) // 最低消费金额
+  maxDiscount   Int            @default(0) // 最高折扣金额
+  validFrom     DateTime
+  validUntil    DateTime
+  usageLimit    Int            @default(0) // 0 = unlimited
+  usedCount     Int            @default(0)
+  status        String         @default("active") // active | expired | cancelled
+  memberCoupons MemberCoupon[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model MemberCoupon {
+  id        String    @id @default(cuid())
+  memberId  String
+  member    Member    @relation(fields: [memberId], references: [id])
+  couponId  String
+  coupon    Coupon    @relation(fields: [couponId], references: [id])
+  usedAt    DateTime?
+  orderId   String?
+  status    String    @default("unused") // unused | used | expired
+  createdAt DateTime  @default(now())
+
+  @@unique([memberId, couponId])
+}
+
+// ============================================
+// 积分兑换奖励
+// ============================================
+
+model RewardCatalog {
+  id          String         @id @default(cuid())
+  storeId     String
+  store       Store          @relation(fields: [storeId], references: [id])
+  name        String
+  description String?
+  type        String // product | addon | voucher | gift
+  productId   String?
+  addonId     String?
+  pointsCost  Int
+  value       Int // 价值金额
+  stock       Int? // 库存数量，null=无限
+  validFrom   DateTime
+  validUntil  DateTime
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  redemptions MemberReward[]
+}
+
+model MemberReward {
+  id         String        @id @default(cuid())
+  memberId   String
+  member     Member        @relation(fields: [memberId], references: [id])
+  rewardId   String
+  reward     RewardCatalog @relation(fields: [rewardId], references: [id])
+  points     Int
+  orderId    String?
+  status     String        @default("unused") // unused | used | expired
+  expiresAt  DateTime
+  redeemedAt DateTime?
+  usedAt     DateTime?
+  createdAt  DateTime      @default(now())
+}
+
+// ============================================
+// 营销扩展模型
+// ============================================
+
+// 推荐计划
+model ReferralCampaign {
+  id             String        @id @default(cuid())
+  storeId        String
+  store          Store         @relation(fields: [storeId], references: [id])
+  name           String
+  description    String?
+  status         String        @default("active") // active | paused | completed
+  startDate      DateTime
+  endDate        DateTime?
+  inviterReward  String // JSON: {type, value}
+  rewardeeReward String // JSON: {type, value}
+  minOrderAmount Int           @default(0)
+  maxUsageCount  Int           @default(0)
+  currentUsage   Int           @default(0)
+  referralCode   String        @unique
+  conditions     String? // JSON
+  logs           ReferralLog[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model ReferralLog {
+  id                   String           @id @default(cuid())
+  referralCampaignId   String
+  referralCampaign     ReferralCampaign @relation(fields: [referralCampaignId], references: [id])
+  inviterMemberId      String
+  inviterMember        Member           @relation("ReferralInviter", fields: [inviterMemberId], references: [id])
+  rewardeeMemberId     String
+  rewardeeMember       Member           @relation("ReferralRewardee", fields: [rewardeeMemberId], references: [id])
+  orderId              String?
+  inviterRewardStatus  String           @default("pending") // pending | fulfilled
+  rewardeeRewardStatus String           @default("pending")
+  createdAt            DateTime         @default(now())
+}
+
+// 会员等级权益
+model TierBenefit {
+  id                    String   @id @default(cuid())
+  storeId               String
+  store                 Store    @relation(fields: [storeId], references: [id])
+  level                 String // bronze | silver | gold | diamond
+  pointsRate            Float    @default(1.0) // 积分倍率
+  birthdayReward        String? // JSON: {type, value}
+  discountPercent       Float    @default(0)
+  freeDeliveryThreshold Int      @default(0)
+  pointsToUpgrade       Int?
+  description           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([storeId, level])
+}
+
+// 积分过期规则
+model PointsExpiryRule {
+  id                String   @id @default(cuid())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id])
+  enabled           Boolean  @default(true)
+  expiryMonths      Int      @default(12)
+  minPointsToExpire Int      @default(100)
+  notificationDays  Int      @default(14)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([storeId])
+}
+
+// 营销渠道
+model MarketingChannel {
+  id             String          @id @default(cuid())
+  storeId        String
+  store          Store           @relation(fields: [storeId], references: [id])
+  name           String // GoFood | Grab | Shopee | Walk-in
+  code           String // GFOOD | GRAB | SHOPEE | WALKIN
+  type           String // delivery_platform | offline | online
+  commission     Float           @default(0)
+  status         String          @default("active")
+  sortOrder      Int             @default(0)
+  members        Member[]
+  memberChannels MemberChannel[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([storeId, code])
+}
+
+model MemberChannel {
+  id           String           @id @default(cuid())
+  memberId     String
+  member       Member           @relation(fields: [memberId], references: [id])
+  channelId    String
+  channel      MarketingChannel @relation(fields: [channelId], references: [id])
+  firstOrderId String?
+  createdAt    DateTime         @default(now())
+
+  @@unique([memberId, channelId])
+}
+
+// 通知记录
+model Notification {
+  id        String    @id @default(cuid())
+  memberId  String?
+  member    Member?   @relation(fields: [memberId], references: [id])
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  type      String // birthday | reactivation | points_expiring | referral | promotion | tier_upgrade
+  title     String
+  message   String
+  data      String? // JSON payload
+  status    String    @default("pending") // pending | sent | read | failed
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// Campaign分析
+model CampaignAnalytics {
+  id            String   @id @default(cuid())
+  campaignId    String
+  campaign      Campaign @relation(fields: [campaignId], references: [id])
+  date          DateTime @default(now())
+  impressions   Int      @default(0)
+  conversions   Int      @default(0)
+  revenue       Int      @default(0) // cents
+  cost          Int      @default(0) // cents (reward cost)
+  couponsIssued Int      @default(0)
+  couponsUsed   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([campaignId, date])
+}
+
+// 会员LTV
+model MemberLTV {
+  id             String   @id @default(cuid())
+  memberId       String   @unique
+  member         Member   @relation(fields: [memberId], references: [id])
+  totalRevenue   Int      @default(0) // cents
+  orderCount     Int      @default(0)
+  avgOrderValue  Int      @default(0) // cents
+  lastCalculated DateTime @default(now())
+}
+
+// ============================================
+// 配置中心
+// ============================================
+
+model Config {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  key       String // pos.default_payment | inventory.low_stock_threshold | ...
+  value     String // JSON string
+  category  String // pos | inventory | staff | member | notification | finance
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, key])
+}
+
+// ============================================
+// 系统配置 - 假期类型 & 报销类型
+// ============================================
+
+model LeaveType {
+  id             String   @id @default(cuid())
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id])
+  code           String // annual | sick | unpaid | maternity | ...
+  name           String // 年假 | 病假 | 无薪假 |产假 | ...
+  color          String   @default("#EC6D88") // 显示颜色
+  icon           String? // 图标名称
+  deductBalance  Boolean  @default(true) // 是否扣除余额
+  requiresProof  Boolean  @default(false) // 是否需要证明文件
+  maxDaysPerYear Int? // 每年最大天数 (null = 无限制)
+  paidLeave      Boolean  @default(true) // 是否带薪
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([storeId, code])
+}
+
+model ReimbursementType {
+  id              String   @id @default(cuid())
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id])
+  code            String // transportation | meals | communication | medical | ...
+  name            String // 交通 | 餐饮 | 通讯 | 医疗 | ...
+  color           String   @default("#EC6D88")
+  icon            String?
+  maxAmount       Int? // 最大报销金额 (null = 无限制)
+  requiresReceipt Boolean  @default(true) // 是否需要收据
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([storeId, code])
+}
+
+// ============================================
+// POS终端配置
+// ============================================
+
+model POSTerminal {
+  id             String    @id @default(cuid())
+  storeId        String
+  store          Store     @relation(fields: [storeId], references: [id])
+  name           String // 终端名称，如"收银机1号"、"前台双屏"
+  terminalType   String    @default("single") // single | dual | touchscreen
+  screenConfig   String // JSON: { customerDisplay: true, sound: true, keyboard: false }
+  receiptConfig  String // JSON: { header, footer, showQR, autoPrint }
+  paymentMethods String // JSON array: ["cash", "gopay", "ovo", "dana", "shopeepay", "member"]
+  quickKeys      String? // JSON: [{productId, position}]
+  isActive       Boolean   @default(true)
+  lastSyncAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([storeId, name])
+}
+
+model ReceiptTemplate {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  name      String // 模板名称
+  content   String // 小票内容模板
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, name])
+}
+
+// 公告看板
+model Announcement {
+  id        String    @id @default(cuid())
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  title     String // 公告标题
+  content   String // 公告内容（支持换行）
+  type      String    @default("info") // info | warning | urgent
+  priority  Int       @default(0) // 越大越靠前
+  isActive  Boolean   @default(true)
+  startAt   DateTime? // 开始时间（可选）
+  endAt     DateTime? // 结束时间（可选）
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([storeId, isActive])
+}
+
+// ============================================
+// 消息发送系统
+// ============================================
+
+// 消息渠道配置 (SMS/WhatsApp/APP Push)
+model MessageChannel {
+  id           String       @id @default(cuid())
+  storeId      String
+  store        Store        @relation(fields: [storeId], references: [id])
+  type         String // sms | whatsapp | push | email
+  name         String // 渠道名称，如"Twilio SMS"、"WhatsApp Business"
+  provider     String // 提供商: twilio | nexmo | whatsapp | fcm
+  config       String // JSON: API keys, endpoints, credentials
+  enabled      Boolean      @default(true)
+  priority     Int          @default(0) // 优先级，数字越大越优先
+  costPerSms   Float        @default(0) // 每条SMS成本 (印尼盾)
+  dailyLimit   Int          @default(1000) // 每日发送上限
+  monthlyLimit Int          @default(10000) // 每月发送上限
+  isDefault    Boolean      @default(false) // 是否为默认渠道
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  logs         MessageLog[]
+
+  @@unique([storeId, type])
+  @@index([storeId])
+}
+
+// 消息模板
+model MessageTemplate {
+  id        String       @id @default(cuid())
+  storeId   String
+  store     Store        @relation(fields: [storeId], references: [id])
+  type      String // birthday | reactivation | points_expiring | seasonal | welcome | referral | custom
+  name      String // 模板名称
+  channel   String // sms | whatsapp | push | all
+  subject   String? // 标题/主题 (用于Email/WhatsApp)
+  body      String // 消息内容，支持变量替换 {member_name}, {coupon_code}, {points}, {expiry_date}, {store_name}
+  variables String // JSON array: ["member_name", "coupon_code", "points"]
+  enabled   Boolean      @default(true)
+  isDefault Boolean      @default(false) // 是否为该类型的默认模板
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  logs      MessageLog[]
+
+  @@unique([storeId, type, channel])
+  @@index([storeId, type])
+}
+
+// 消息发送日志
+model MessageLog {
+  id           String           @id @default(cuid())
+  storeId      String
+  store        Store            @relation(fields: [storeId], references: [id])
+  memberId     String?
+  member       Member?          @relation(fields: [memberId], references: [id])
+  channelId    String?
+  channel      MessageChannel?  @relation(fields: [channelId], references: [id])
+  templateId   String?
+  template     MessageTemplate? @relation(fields: [templateId], references: [id])
+  type         String // birthday | reactivation | points_expiring | etc.
+  channelType  String // sms | whatsapp | push | email
+  recipient    String // 收件人 (手机号/邮箱/设备Token)
+  subject      String? // 消息主题
+  body         String // 实际发送的消息内容
+  status       String           @default("pending") // pending | sent | delivered | failed | cancelled
+  providerId   String? // 提供商返回的消息ID
+  errorMessage String? // 错误信息
+  cost         Float            @default(0) // 发送成本
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+  @@index([memberId])
+}
+
+// ============================================
+// 财务审计日志
+// ============================================
+
+model FinanceAuditLog {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  userId      String // 操作人 staffId
+  action      String // create | update | delete
+  entityType  String // budget | fixed_asset | expense | account | order | refund
+  entityId    String // 被操作的记录 ID
+  description String // 操作描述
+  oldValue    String? // 修改前的值（JSON字符串）
+  newValue    String? // 修改后的值（JSON字符串）
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([storeId, entityType])
+  @@index([userId, createdAt])
+}
+
+// ============================================
+// 自定义活动类别管理
+// ============================================
+
+// 活动类别 - 用户可自定义的活动类别
+model CampaignCategory {
+  id        String     @id @default(cuid())
+  storeId   String
+  store     Store      @relation(fields: [storeId], references: [id])
+  name      String // 类别名称
+  icon      String? // Emoji图标
+  color     String? // Hex颜色
+  isBuiltIn Boolean    @default(false) // 系统内置类别不可删除
+  sortOrder Int        @default(0)
+  campaigns Campaign[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([storeId, name])
+}
+
+// 触发条件定义 - 定义系统中可用的条件类型
+model TriggerConditionDefinition {
+  id           String   @id @default(cuid())
+  key          String   @unique // 条件键名，如 "member.inactive_days"
+  name         String // 显示名称
+  description  String? // 帮助描述
+  fieldType    String // string | number | boolean | date | enum
+  operators    String // JSON数组，允许的操作符
+  valueOptions String? // JSON，对于enum类型，可选值列表
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@map("trigger_condition_definitions")
+}
+
+// 触发条件实例 - 活动上的具体条件配置
+model TriggerCondition {
+  id              String   @id @default(cuid())
+  campaignId      String
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  conditionKey    String // 关联 TriggerConditionDefinition.key
+  operator        String // eq, gt, lt, gte, lte, between, contains
+  value           String // JSON格式的值
+  logicalOperator String   @default("AND") // AND | OR - 条件组合逻辑
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@map("trigger_conditions")
+}
+
+// 动作定义 - 定义系统中可用的动作类型
+model ActionDefinition {
+  id           String   @id @default(cuid())
+  key          String   @unique // 动作键名，如 "send_coupon"
+  name         String // 显示名称
+  description  String? // 帮助描述
+  configSchema String // JSON schema，动作配置的结构
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@map("action_definitions")
+}
+
+// 动作实例 - 活动上的具体动作配置
+model CampaignAction {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  actionKey  String // 关联 ActionDefinition.key
+  config     String // JSON配置
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@map("campaign_actions")
+}
+
+// 自动化执行日志
+model AutomationLog {
+  id           String   @id @default(cuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id])
+  campaignId   String?
+  campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  triggerType  String // birthday | reactivation | points_expiring | seasonal | welcome
+  status      String // running | success | failed
+  matchedCount Int      @default(0) // 匹配会员数
+  executedCount Int     @default(0) // 执行成功数
+  failedCount Int       @default(0) // 执行失败数
+  messageLog String?    // 日志消息
+  errorLog   String?    // 错误信息
+  startedAt  DateTime  @default(now())
+  completedAt DateTime?
+
+  @@map("automation_logs")
+}

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Login Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 40px; }
+    .test { margin: 10px 0; padding: 10px; border-radius: 5px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>🧋 Bubble Tea POS - Login Test</h1>
+  <p>Use this URL: <strong>http://localhost:5173/test-login.html</strong></p>
+
+  <div id="results"></div>
+
+  <script>
+    const results = document.getElementById('results');
+
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = 'test ' + type;
+      div.textContent = message;
+      results.appendChild(div);
+      console.log(message);
+    }
+
+    async function testLogin() {
+      results.innerHTML = '';
+      log('Starting login tests via proxy...', 'info');
+
+      // Test via Vite proxy
+      log('Test 1: Testing login via /api proxy...', 'info');
+      try {
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: '081234567890', password: 'admin123' })
+        });
+        const loginData = await loginRes.json();
+        log('Response code: ' + loginData.code, loginData.code === 200 ? 'success' : 'error');
+        log('Message: ' + loginData.message, loginData.code === 200 ? 'success' : 'error');
+
+        if (loginData.code === 200) {
+          log('✓ Login successful!', 'success');
+          log('Token: ' + loginData.data.token.substring(0, 50) + '...', 'info');
+
+          // Test dashboard
+          log('Test 2: Testing dashboard API...', 'info');
+          const dashRes = await fetch('/api/reports/dashboard', {
+            headers: { 'Authorization': 'Bearer ' + loginData.data.token }
+          });
+          const dashData = await dashRes.json();
+          log('Dashboard: ' + JSON.stringify(dashData).substring(0, 100), 'success');
+        } else {
+          log('✗ Login failed', 'error');
+        }
+      } catch (e) {
+        log('✗ Error: ' + e.message, 'error');
+      }
+    }
+
+    testLogin();
+  </script>
+</body>
+</html>

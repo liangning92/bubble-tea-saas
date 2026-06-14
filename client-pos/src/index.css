@@ -1,0 +1,230 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 使用系统字体作为主要字体，Google字体作为次选 */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+}
+
+:root {
+  /* Primary Colors */
+  --color-primary: #EC6D88;
+  --color-primary-hover: #D94D6E;
+  --color-primary-light: #FCE4EA;
+  /* Semantic Colors */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-info: #3B82F6;
+  /* Surface Colors */
+  --color-surface: #F9FAFB;
+  --color-border: #E5E7EB;
+  --color-text: #1F2937;
+  --color-text-secondary: #6B7280;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+
+  /* Touch Target */
+  --touch-target-min: 48px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #F9FAFB;
+  overflow: hidden;
+  height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  color: var(--color-text);
+}
+
+@layer components {
+  /* ========== Buttons ========== */
+  .btn-primary {
+    @apply bg-pink-500 text-white px-4 py-2.5 rounded-xl font-medium
+           hover:bg-pink-600 active:scale-[0.98] transition-all;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-gray-700 px-4 py-2.5 rounded-xl font-medium border border-gray-200
+           hover:bg-gray-50 active:scale-[0.98] transition-all;
+  }
+
+  .btn-danger {
+    @apply bg-red-500 text-white px-4 py-2.5 rounded-xl font-medium
+           hover:bg-red-600 active:scale-[0.98] transition-all;
+  }
+
+  .btn-success {
+    @apply bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-medium
+           hover:bg-emerald-600 active:scale-[0.98] transition-all;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-gray-600 px-4 py-2.5 rounded-xl font-medium
+           hover:bg-gray-100 active:scale-[0.98] transition-all;
+  }
+
+  /* Large touch button (48px+) */
+  .btn-touch {
+    @apply min-h-[48px] min-w-[48px] px-4 py-3 rounded-xl font-medium
+           active:scale-[0.98] transition-all flex items-center justify-center gap-2;
+  }
+
+  .btn-touch-primary {
+    @apply bg-pink-500 text-white hover:bg-pink-600;
+  }
+
+  .btn-touch-secondary {
+    @apply bg-white text-gray-700 border border-gray-200 hover:bg-gray-50;
+  }
+
+  /* Touch feedback - provides haptic response on tap */
+  .touch-feedback {
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+  }
+  .touch-feedback:active {
+    transform: scale(0.95);
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ========== Form Inputs ========== */
+  .input {
+    @apply w-full px-3 py-2.5 rounded-xl border border-gray-200
+           focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20
+           outline-none transition-all bg-white;
+  }
+
+  .input-error {
+    @apply border-red-500 focus:border-red-500 focus:ring-red-500/20;
+  }
+
+  /* ========== Cards ========== */
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4;
+  }
+
+  .card-hover {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4
+           hover:shadow-md hover:border-pink-300 transition-all cursor-pointer;
+  }
+
+  /* ========== Badges ========== */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary {
+    @apply bg-pink-100 text-pink-700;
+  }
+
+  .badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-error {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .badge-info {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  /* ========== Modal Overlay ========== */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 flex items-end justify-center z-50;
+  }
+
+  .modal-overlay-center {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+  }
+
+  /* ========== Tab Navigation ========== */
+  .tab-active {
+    @apply border-b-2 border-pink-500 text-pink-600 font-medium;
+  }
+
+  .tab-inactive {
+    @apply border-b-2 border-transparent text-gray-500 hover:text-gray-700;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Animation */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.2s ease-out;
+}

@@ -1,0 +1,651 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { configApi } from '../services/api'
+import { useAuthStore } from '../stores/auth'
+import { CheckCircle, Loader2, Clock, AlignRight, ArrowRight } from 'lucide-react'
+
+type TabKey = 'store' | 'payment' | 'pos' | 'receipt' | 'buttons' | 'sound' | 'language' | 'shift' | 'api'
+
+export function SettingsPage() {
+  const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const [activeTab, setActiveTab] = useState<TabKey>('store')
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  // Store Info (Enhanced)
+  const [storeForm, setStoreForm] = useState({
+    storeName: 'Bubble Tea Store',
+    address: '',
+    phone: '',
+    email: '',
+    openingHours: '09:00 - 22:00',
+    city: '',
+    postalCode: '',
+    storeCode: '',
+    businessDays: [true, true, true, true, true, true, false], // Mon-Sun
+    holidays: [] as string[],
+  })
+
+  // Payment Methods with order
+  const [paymentMethods, setPaymentMethods] = useState([
+    { id: 'cash', label: t('settings.paymentCash'), enabled: true, order: 1 },
+    { id: 'gopay', label: 'GoPay', enabled: true, order: 2 },
+    { id: 'ovo', label: 'OVO', enabled: true, order: 3 },
+    { id: 'dana', label: 'DANA', enabled: true, order: 4 },
+    { id: 'shopeepay', label: 'ShopeePay', enabled: true, order: 5 },
+    { id: 'qris', label: 'QRIS', enabled: true, order: 6 },
+       { id: 'debit', label: t('settings.paymentDebit'), enabled: false, order: 7 },
+  ])
+
+  // Payment Settings (limits & defaults)
+  const [paymentSettings, setPaymentSettings] = useState({
+    defaultMethod: 'cash',
+    minAmount: 0,
+    maxCashAmount: 0,
+    changeEnabled: true,
+  })
+
+  // Quick Amounts for Payment Modal
+  const [quickAmounts, setQuickAmounts] = useState({
+    enabled: true,
+    amounts: [10000, 20000, 50000],
+  })
+
+  // POS Quick Buttons visibility
+  const [quickButtons, setQuickButtons] = useState({
+    suspendOrder: { enabled: true, label: 'suspendOrder' },
+    orderHistory: { enabled: true, label: 'orderHistory' },
+    memberRegister: { enabled: true, label: 'memberRegister' },
+    scanBarcode: { enabled: true, label: 'scanBarcode' },
+    cashManagement: { enabled: true, label: 'cashManagement' },
+    discount: { enabled: true, label: 'discount' },
+    clearCartConfirm: { enabled: true, label: 'clearCartConfirm' },
+  })
+
+  // Shift/Handover Settings
+  const [shiftSettings, setShiftSettings] = useState({
+    requireReconciliation: false,
+    requireSupervisorConfirm: false,
+    showSummary: true,
+    cashDifferenceLimit: 0,
+    summaryItems: {
+      orderCount: true,
+      customerCount: true,
+      cashSales: true,
+      qrisSales: true,
+      cashIn: true,
+      cashOut: true,
+      openFloat: true,
+      closeCash: true,
+      dineInCount: true,
+      gofoodCount: true,
+      grabCount: true,
+      shopeeCount: true,
+      suspendedOrders: true,
+      pendingSync: true,
+    }
+  })
+
+  // Receipt Settings - Detailed
+  const [receiptSettings, setReceiptSettings] = useState({
+    // Header items
+    headerStoreName: true,
+    headerAddress: true,
+    headerPhone: true,
+    headerLogo: false,
+    headerAlign: 'center', // left, center, right
+    headerCustomText: '',
+    // Item display
+    showProductName: true,
+    showQuantity: true,
+    showUnitPrice: true,
+    showAddons: true,
+    showSugarIce: true,
+    itemAlign: 'left', // left, center, right
+    // Subtotal/Tax/Discount
+    showSubtotal: true,
+    showTax: true,
+    showDiscount: true,
+    showTotal: true,
+    // Footer
+    footerMessage: 'Terima Kasih! / Thank you!',
+    footerAlign: 'center',
+    footerShowQr: false,
+    footerQrText: 'Follow us @bubbletea',
+    // Other
+    printCopies: 1,
+    paperSize: '58mm',
+    autoPrint: true,
+    printerName: '',
+    taxRate: 11,
+  })
+
+  // Sound Settings
+  const [soundSettings, setSoundSettings] = useState({
+    keypress: { enabled: true, volume: 80 },
+    orderComplete: { enabled: true, volume: 100 },
+    error: { enabled: true, volume: 100 },
+    newOrder: { enabled: true, volume: 100 },
+  })
+
+  // Auto logout
+  const [autoLogout, setAutoLogout] = useState(30)
+
+  // API Settings
+  const [apiSettings, setApiSettings] = useState({
+    xenditEnabled: false,
+    xenditApiKey: '',
+  })
+
+  // POS Layout Settings
+  const [posLayout, setPosLayout] = useState({
+    gridCols: '4',
+    cardSize: 'medium',
+    showCategory: true,
+    showPrice: true,
+    compactMode: false,
+    productSortBy: 'name',
+    productSortOrder: 'asc',
+  })
+
+  const saveConfigMutation = useMutation({
+    mutationFn: (data: any) => configApi.set(user?.storeId || '', data.key, data.value, data.category),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['config'] })
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 2000)
+    }
+  })
+
+  const saveConfig = (category: string, key: string, value: any) => {
+    saveConfigMutation.mutate({ category, key, value })
+  }
+
+  const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled, onChange }) => (
+    <button
+      onClick={onChange}
+      className={`w-12 h-6 rounded-full transition-colors relative ${enabled ? 'bg-primary' : 'bg-gray-300'}`}
+    >
+      <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${enabled ? 'translate-x-[26px]' : 'translate-x-[2px]'}`} />
+    </button>
+  )
+
+  const ToggleItem: React.FC<{ label: string; checked: boolean; onChange: () => void }> = ({ label, checked, onChange }) => (
+    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+      <span className="text-sm font-medium">{label}</span>
+      <Toggle enabled={checked} onChange={onChange} />
+    </div>
+  )
+
+  const tabs: { key: TabKey; labelKey: string }[] = [
+    { key: 'store', labelKey: 'settings.store' },
+    { key: 'payment', labelKey: 'settings.payment' },
+    { key: 'pos', labelKey: 'settings.posLayout' },
+    { key: 'receipt', labelKey: 'settings.receipt' },
+    { key: 'buttons', labelKey: 'settings.buttonSettings' },
+    { key: 'sound', labelKey: 'settings.sound' },
+    { key: 'language', labelKey: 'settings.languageSettings' },
+    { key: 'shift', labelKey: 'settings.shiftSettingsTitle' },
+    { key: 'api', labelKey: 'settings.apiSettings' },
+  ]
+
+  return (
+    <div>
+      {showSuccess && (
+        <div className="fixed top-4 right-4 bg-success text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50 animate-pulse">
+          <CheckCircle size={18} />
+          <span>{t('common.success')}</span>
+        </div>
+      )}
+
+      {/* Tab Navigation */}
+      <div className="sticky top-0 bg-surface z-10 pb-4 border-b border-gray-200 mb-4">
+        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === tab.key
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {t(tab.labelKey)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ========== STORE SETTINGS ========== */}
+      {activeTab === 'store' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.basicInfo')}</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.storeName')}</label>
+                <input type="text" value={storeForm.storeName} onChange={(e) => setStoreForm({ ...storeForm, storeName: e.target.value })} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.city')}</label>
+                <input type="text" value={storeForm.city} onChange={(e) => setStoreForm({ ...storeForm, city: e.target.value })} className="input" placeholder="Jakarta" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.address')}</label>
+                <input type="text" value={storeForm.address} onChange={(e) => setStoreForm({ ...storeForm, address: e.target.value })} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.phone')}</label>
+                <input type="tel" value={storeForm.phone} onChange={(e) => setStoreForm({ ...storeForm, phone: e.target.value })} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.postalCode')}</label>
+                <input type="text" value={storeForm.postalCode} onChange={(e) => setStoreForm({ ...storeForm, postalCode: e.target.value })} className="input" placeholder="12345" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.openingHours')}</label>
+                <input type="text" value={storeForm.openingHours} onChange={(e) => setStoreForm({ ...storeForm, openingHours: e.target.value })} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.email')}</label>
+                <input type="email" value={storeForm.email} onChange={(e) => setStoreForm({ ...storeForm, email: e.target.value })} className="input" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.storeCode')}</label>
+                <input type="text" value={storeForm.storeCode} onChange={(e) => setStoreForm({ ...storeForm, storeCode: e.target.value })} className="input" placeholder="BT001" />
+              </div>
+            </div>
+            <button onClick={() => saveConfig('store', 'storeInfo', storeForm)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4 flex items-center gap-2">
+              {saveConfigMutation.isPending && <Loader2 size={16} className="animate-spin" />}
+              {t('common.save')}
+            </button>
+          </div>
+
+          {/* Business Days */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.businessDays')}</h3>
+            <div className="flex gap-2 flex-wrap">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => (
+                <button
+                  key={day}
+                  onClick={() => {
+                    const newDays = [...storeForm.businessDays]
+                    newDays[idx] = !newDays[idx]
+                    setStoreForm({ ...storeForm, businessDays: newDays })
+                  }}
+                  className={`px-4 py-2 rounded-lg border-2 font-medium ${
+                    storeForm.businessDays[idx]
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-gray-200 text-gray-400'
+                  }`}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500 mt-2">{t('settings.businessDaysHint')}</p>
+          </div>
+
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Clock size={20} />
+              {t('settings.autoLogoutTitle')}
+            </h3>
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                value={autoLogout}
+                onChange={(e) => setAutoLogout(parseInt(e.target.value) || 0)}
+                className="input w-24"
+                min="0"
+                max="120"
+              />
+              <span className="text-gray-600">{t('settings.autoLogoutHint')}</span>
+            </div>
+            <button onClick={() => saveConfig('pos', 'autoLogout', autoLogout)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========== PAYMENT SETTINGS ========== */}
+      {activeTab === 'payment' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.paymentMethods')}</h3>
+            <p className="text-sm text-gray-500 mb-4">{t('settings.paymentLimitsHint')}</p>
+            <div className="space-y-2">
+              {paymentMethods.sort((a, b) => a.order - b.order).map((method) => (
+                <div key={method.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-gray-500 cursor-grab">⋮⋮</div>
+                  <span className="flex-1 font-medium">{t('settings.' + method.label) || method.label}</span>
+                  <Toggle
+                    enabled={method.enabled}
+                    onChange={() => setPaymentMethods(paymentMethods.map(m =>
+                      m.id === method.id ? { ...m, enabled: !m.enabled } : m
+                    ))}
+                  />
+                </div>
+              ))}
+            </div>
+            <button onClick={() => {
+              // Convert array to object format for POS
+              const methodsObj = paymentMethods.reduce((acc, m) => ({ ...acc, [m.id]: m.enabled }), {})
+              saveConfig('payment', 'paymentMethods', methodsObj)
+            }} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+
+          {/* Payment Limits & Defaults */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.paymentLimits')}</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.defaultPayment')}</label>
+                <select
+                  value={paymentSettings.defaultMethod}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, defaultMethod: e.target.value })}
+                  className="input"
+                >
+                  <option value="cash">{t('settings.paymentCash')}</option>
+                  <option value="qris">QRIS</option>
+                  <option value="gopay">GoPay</option>
+                  <option value="ovo">OVO</option>
+                  <option value="dana">DANA</option>
+                  <option value="shopeepay">ShopeePay</option>
+                  <option value="debit">{t('settings.paymentDebit')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.minAmount')}</label>
+                <input
+                  type="number"
+                  value={paymentSettings.minAmount}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, minAmount: parseInt(e.target.value) || 0 })}
+                  className="input"
+                  min="0"
+                  placeholder="0 = no limit"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.maxCashAmount')}</label>
+                <input
+                  type="number"
+                  value={paymentSettings.maxCashAmount}
+                  onChange={(e) => setPaymentSettings({ ...paymentSettings, maxCashAmount: parseInt(e.target.value) || 0 })}
+                  className="input"
+                  min="0"
+                  placeholder="0 = no limit"
+                />
+              </div>
+              <div className="flex items-center justify-end">
+                <div className="flex items-center gap-3">
+                  <span className="font-medium">{t('settings.enableChange')}</span>
+                  <Toggle
+                    enabled={paymentSettings.changeEnabled}
+                    onChange={() => setPaymentSettings({ ...paymentSettings, changeEnabled: !paymentSettings.changeEnabled })}
+                  />
+                </div>
+              </div>
+            </div>
+            <button onClick={() => saveConfig('payment', 'paymentSettings', paymentSettings)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+
+          {/* Quick Amounts for Payment Modal */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.quickAmounts')}</h3>
+            <div className="flex items-center gap-4 mb-4">
+              <span className="font-medium">{t('settings.enableQuickAmounts')}</span>
+              <Toggle
+                enabled={quickAmounts.enabled}
+                onChange={() => setQuickAmounts({ ...quickAmounts, enabled: !quickAmounts.enabled })}
+              />
+            </div>
+            {quickAmounts.enabled && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  {quickAmounts.amounts.map((amount, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        value={amount}
+                        onChange={(e) => {
+                          const newAmounts = [...quickAmounts.amounts]
+                          newAmounts[idx] = parseInt(e.target.value) || 0
+                          setQuickAmounts({ ...quickAmounts, amounts: newAmounts })
+                        }}
+                        className="input"
+                        min="0"
+                      />
+                      <button
+                        onClick={() => setQuickAmounts({
+                          ...quickAmounts,
+                          amounts: quickAmounts.amounts.filter((_, i) => i !== idx)
+                        })}
+                        className="text-red-500 hover:text-red-700 p-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setQuickAmounts({
+                    ...quickAmounts,
+                    amounts: [...quickAmounts.amounts, 10000]
+                  })}
+                  className="btn-secondary text-sm"
+                >
+                  + {t('settings.addAmount')}
+                </button>
+              </div>
+            )}
+            <button onClick={() => saveConfig('pos', 'quickAmounts', quickAmounts)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========== POS LAYOUT ========== */}
+      {activeTab === 'pos' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-2">{t('settings.posSettings')}</h3>
+            <p className="text-sm text-gray-500 mb-4">{t('settings.posSettingsHint')}</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+              <p className="text-blue-700 font-medium mb-2">{t('settings.posSettingsRedirect') || 'POS settings are available at'}</p>
+              <code className="bg-blue-100 px-3 py-1 rounded text-blue-800 font-mono">/settings/pos</code>
+            </div>
+          </div>
+        </div>
+      )}
+          <div className="space-y-2">
+            {[
+              { code: 'id', name: 'Bahasa Indonesia', flag: '🇮🇩' },
+              { code: 'en', name: 'English', flag: '🇬🇧' },
+              { code: 'zh', name: '简体中文', flag: '🇨🇳' }
+            ].map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => {
+                  i18n.changeLanguage(lang.code)
+                  localStorage.setItem('bubble-tea-language', lang.code)
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${
+                  i18n.language === lang.code
+                    ? 'bg-primary/10 text-primary font-medium border-2 border-primary'
+                    : 'hover:bg-gray-50 border-2 border-transparent'
+                }`}
+              >
+                <span className="text-2xl">{lang.flag}</span>
+                <span className="text-lg">{lang.name}</span>
+                {i18n.language === lang.code && (
+                  <CheckCircle size={20} className="ml-auto text-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========== SHIFT SETTINGS ========== */}
+      {activeTab === 'shift' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.shiftSettings')}</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span className="font-medium">{t('settings.requireReconciliation')}</span>
+                  <p className="text-sm text-gray-500">{t('settings.requireReconciliationHint')}</p>
+                </div>
+                <Toggle
+                  enabled={shiftSettings.requireReconciliation}
+                  onChange={() => setShiftSettings({ ...shiftSettings, requireReconciliation: !shiftSettings.requireReconciliation })}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span className="font-medium">{t('settings.requireSupervisor')}</span>
+                  <p className="text-sm text-gray-500">{t('settings.requireSupervisorHint')}</p>
+                </div>
+                <Toggle
+                  enabled={shiftSettings.requireSupervisorConfirm}
+                  onChange={() => setShiftSettings({ ...shiftSettings, requireSupervisorConfirm: !shiftSettings.requireSupervisorConfirm })}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span className="font-medium">{t('settings.showSummary')}</span>
+                  <p className="text-sm text-gray-500">{t('settings.showSummaryHint')}</p>
+                </div>
+                <Toggle
+                  enabled={shiftSettings.showSummary}
+                  onChange={() => setShiftSettings({ ...shiftSettings, showSummary: !shiftSettings.showSummary })}
+                />
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('settings.cashDifferenceLimit')}</label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="number"
+                    value={shiftSettings.cashDifferenceLimit}
+                    onChange={(e) => setShiftSettings({ ...shiftSettings, cashDifferenceLimit: parseInt(e.target.value) || 0 })}
+                    className="input w-32"
+                    min="0"
+                    placeholder="0 = no limit"
+                  />
+                  <span className="text-gray-600">{t('settings.cashDifferenceHint')}</span>
+                </div>
+              </div>
+            </div>
+            <button onClick={() => saveConfig('pos', 'shiftSettings', shiftSettings)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+
+          {/* Summary Items Config */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.summaryItems')}</h3>
+            <p className="text-sm text-gray-500 mb-4">{t('settings.summaryItemsHint')}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <ToggleItem label={t('settings.orderCount')} checked={shiftSettings.summaryItems?.orderCount} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, orderCount: !shiftSettings.summaryItems?.orderCount }})} />
+              <ToggleItem label={t('settings.customerCount')} checked={shiftSettings.summaryItems?.customerCount} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, customerCount: !shiftSettings.summaryItems?.customerCount }})} />
+              <ToggleItem label={t('settings.cashSales')} checked={shiftSettings.summaryItems?.cashSales} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, cashSales: !shiftSettings.summaryItems?.cashSales }})} />
+              <ToggleItem label={t('settings.qrisSales')} checked={shiftSettings.summaryItems?.qrisSales} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, qrisSales: !shiftSettings.summaryItems?.qrisSales }})} />
+              <ToggleItem label={t('settings.cashIn')} checked={shiftSettings.summaryItems?.cashIn} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, cashIn: !shiftSettings.summaryItems?.cashIn }})} />
+              <ToggleItem label={t('settings.cashOut')} checked={shiftSettings.summaryItems?.cashOut} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, cashOut: !shiftSettings.summaryItems?.cashOut }})} />
+              <ToggleItem label={t('settings.openFloat')} checked={shiftSettings.summaryItems?.openFloat} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, openFloat: !shiftSettings.summaryItems?.openFloat }})} />
+              <ToggleItem label={t('settings.closeCash')} checked={shiftSettings.summaryItems?.closeCash} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, closeCash: !shiftSettings.summaryItems?.closeCash }})} />
+              <ToggleItem label={t('settings.dineInCount')} checked={shiftSettings.summaryItems?.dineInCount} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, dineInCount: !shiftSettings.summaryItems?.dineInCount }})} />
+              <ToggleItem label={t('settings.gofoodCount')} checked={shiftSettings.summaryItems?.gofoodCount} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, gofoodCount: !shiftSettings.summaryItems?.gofoodCount }})} />
+              <ToggleItem label={t('settings.grabCount')} checked={shiftSettings.summaryItems?.grabCount} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, grabCount: !shiftSettings.summaryItems?.grabCount }})} />
+              <ToggleItem label={t('settings.shopeeCount')} checked={shiftSettings.summaryItems?.shopeeCount} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, shopeeCount: !shiftSettings.summaryItems?.shopeeCount }})} />
+              <ToggleItem label={t('settings.suspendedOrders')} checked={shiftSettings.summaryItems?.suspendedOrders} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, suspendedOrders: !shiftSettings.summaryItems?.suspendedOrders }})} />
+              <ToggleItem label={t('settings.pendingSync')} checked={shiftSettings.summaryItems?.pendingSync} onChange={() => setShiftSettings({ ...shiftSettings, summaryItems: { ...shiftSettings.summaryItems, pendingSync: !shiftSettings.summaryItems?.pendingSync }})} />
+            </div>
+            <button onClick={() => saveConfig('pos', 'shiftSettings', shiftSettings)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========== API SETTINGS ========== */}
+      {activeTab === 'api' && (
+        <div className="space-y-6">
+          {/* Xendit QRIS */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.xenditSettings')}</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span className="font-medium">{t('settings.xenditEnabled')}</span>
+                  <p className="text-sm text-gray-500">{t('settings.xenditEnabledHint')}</p>
+                </div>
+                <Toggle
+                  enabled={apiSettings.xenditEnabled}
+                  onChange={() => setApiSettings({ ...apiSettings, xenditEnabled: !apiSettings.xenditEnabled })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('settings.xenditApiKey')}</label>
+                <input
+                  type="password"
+                  value={apiSettings.xenditApiKey}
+                  onChange={(e) => setApiSettings({ ...apiSettings, xenditApiKey: e.target.value })}
+                  className="input w-full"
+                  placeholder={t('settings.xenditApiKeyPlaceholder')}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('settings.xenditCallbackUrl')}</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={`${window.location.origin}/api/payments/qris/webhook`}
+                    readOnly
+                    className="input w-full bg-gray-100"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/api/payments/qris/webhook`)
+                      alert(t('common.copied'))
+                    }}
+                    className="btn-secondary"
+                  >
+                    {t('common.copy')}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">{t('settings.xenditCallbackHint')}</p>
+              </div>
+            </div>
+            <button onClick={() => saveConfig('api', 'apiSettings', apiSettings)} disabled={saveConfigMutation.isPending} className="btn-primary mt-4">
+              {t('common.save')}
+            </button>
+          </div>
+
+          {/* Other APIs */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('settings.otherApis')}</h3>
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">{t('settings.moreApisComingSoon')}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
