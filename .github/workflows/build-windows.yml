@@ -33,12 +33,11 @@ jobs:
           cd client-pos
           npm run build
           npm run build:electron:main
-          npx electron-builder --win nsis --x64
 
-      - name: Build Portable version
+      - name: Build NSIS Installer
         run: |
           cd client-pos
-          npx electron-builder --win portable --x64
+          npx electron-builder --win nsis --x64
 
       - name: Upload Installer
         uses: actions/upload-artifact@v4
@@ -47,18 +46,24 @@ jobs:
           path: client-pos/release/BubbleTeaPOS.exe
           retention-days: 7
 
-      - name: Upload Portable
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-portable
-          path: client-pos/release/win-unpacked/
-          retention-days: 7
-
       - name: Upload latest.yml
         uses: actions/upload-artifact@v4
         with:
           name: latest-yml
           path: client-pos/release/latest.yml
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Build Portable version
+        run: |
+          cd client-pos
+          npx electron-builder --win portable --x64
+
+      - name: Upload Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: client-pos/release/win-unpacked/
           retention-days: 7
 
   create-release:
@@ -77,15 +82,22 @@ jobs:
         with:
           name: latest-yml
           path: .
+          merge-multiple: true
+
+      - name: Display files
+        run: |
+          ls -la
 
       - name: Get version from latest.yml
         id: version
+        if: hashFiles('latest.yml') != ''
         run: |
-          VERSION=$(grep "version:" latest.yml | sed 's/version: //')
+          VERSION=$(grep "version:" latest.yml | sed 's/version: //' | tr -d '\r\n')
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Found version: $VERSION"
 
       - name: Create GitHub Release
+        if: hashFiles('latest.yml') != ''
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -93,6 +105,29 @@ jobs:
             latest.yml
           tag_name: v${{ steps.version.outputs.VERSION }}
           release_name: BubbleTeaPOS v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fallback release without version file
+        if: hashFiles('latest.yml') == ''
+        run: |
+          echo "latest.yml not found, creating release manually"
+          # Get version from package.json
+          VERSION=$(grep '"version"' client-pos/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        env:
+          VERSION: ${{ needs.build.outputs.version || '1.0.0' }}
+
+      - name: Create Release with version from package.json
+        if: hashFiles('latest.yml') == ''
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            BubbleTeaPOS.exe
+          tag_name: v2.0.7
+          release_name: BubbleTeaPOS v2.0.7
           draft: false
           prerelease: false
         env:
