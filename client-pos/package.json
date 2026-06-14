@@ -83,7 +83,6 @@
       "deleteAppDataOnUninstall": true,
       "include": "installer.nsh",
       "guid": "7d0ef5b8-459f-4c20-a9ca-64d072057da3"
-    },
-    "publish": null
+    }
   }
 }
