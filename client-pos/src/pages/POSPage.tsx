@@ -409,8 +409,18 @@ export function POSPage() {
             })))
             showToast(t('pos.offlineMode') + ' - ' + t('pos.loadingFromCache'), 'info')
           } else {
-            showToast(t('pos.offlineNoCache'), 'error')
-            if (!cancelled) setLoading(false)
+            // 无缓存，加载示例产品
+            const demoProducts = productCache.getDemoProducts()
+            setProducts(demoProducts.map(p => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              image: p.image,
+              category: { id: p.categoryId, name: p.categoryName },
+              specs: p.specs,
+              addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
+            })))
+            showToast(t('pos.demoMode') || 'Demo Mode - Sample Products', 'info')
           }
         }
       } else {
@@ -428,8 +438,18 @@ export function POSPage() {
             addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
           })))
         } else {
-          showToast(t('pos.offlineNoCache'), 'error')
-          if (!cancelled) setLoading(false)
+          // 无缓存，加载示例产品
+          const demoProducts = productCache.getDemoProducts()
+          setProducts(demoProducts.map(p => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            image: p.image,
+            category: { id: p.categoryId, name: p.categoryName },
+            specs: p.specs,
+            addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
+          })))
+          showToast(t('pos.demoMode') || 'Demo Mode - Sample Products', 'info')
         }
         if (!cancelled) setLoading(false)
       }

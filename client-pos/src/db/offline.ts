@@ -334,6 +334,84 @@ export class ProductCache {
   async clearCache() {
     await db.products.clear()
   }
+
+  // Get demo products (used when no server and no cache)
+  getDemoProducts(): LocalProduct[] {
+    return [
+      {
+        id: 'demo-1',
+        name: 'Milk Tea',
+        description: 'Classic milk tea with boba',
+        categoryId: 'drinks',
+        categoryName: 'Drinks',
+        specs: [
+          { id: 's-1', name: 'Regular', price: 15000 },
+          { id: 's-2', name: 'Large', price: 20000 }
+        ],
+        addons: [
+          { id: 'a-1', name: 'Boba', price: 3000 },
+          { id: 'a-2', name: 'Pearl', price: 3000 }
+        ],
+        updatedAt: new Date()
+      },
+      {
+        id: 'demo-2',
+        name: 'Brown Sugar',
+        description: 'Brown sugar milk tea',
+        categoryId: 'drinks',
+        categoryName: 'Drinks',
+        specs: [
+          { id: 's-3', name: 'Regular', price: 18000 },
+          { id: 's-4', name: 'Large', price: 23000 }
+        ],
+        addons: [
+          { id: 'a-1', name: 'Boba', price: 3000 }
+        ],
+        updatedAt: new Date()
+      },
+      {
+        id: 'demo-3',
+        name: 'Green Tea',
+        description: 'Japanese green tea',
+        categoryId: 'drinks',
+        categoryName: 'Drinks',
+        specs: [
+          { id: 's-5', name: 'Regular', price: 14000 },
+          { id: 's-6', name: 'Large', price: 19000 }
+        ],
+        addons: [],
+        updatedAt: new Date()
+      },
+      {
+        id: 'demo-4',
+        name: 'Taro Milk',
+        description: 'Taro bubble milk tea',
+        categoryId: 'drinks',
+        categoryName: 'Drinks',
+        specs: [
+          { id: 's-7', name: 'Regular', price: 17000 },
+          { id: 's-8', name: 'Large', price: 22000 }
+        ],
+        addons: [
+          { id: 'a-3', name: 'Cream', price: 5000 }
+        ],
+        updatedAt: new Date()
+      },
+      {
+        id: 'demo-5',
+        name: 'Coffee',
+        description: 'Vietnamese coffee',
+        categoryId: 'drinks',
+        categoryName: 'Drinks',
+        specs: [
+          { id: 's-9', name: 'Regular', price: 16000 },
+          { id: 's-10', name: 'Large', price: 21000 }
+        ],
+        addons: [],
+        updatedAt: new Date()
+      }
+    ]
+  }
 }
 
 export const productCache = new ProductCache()

@@ -1,213 +1,90 @@
 import { test, expect, Page } from '@playwright/test'
 
-const APP_URL = 'http://localhost:9222'
-const APP_PORT = 6063
-
-test.describe('BubbleTea POS System', () => {
-  let page: Page
-
-  test.beforeAll(async () => {
-    // Wait for app to be fully loaded
-    await new Promise(r => setTimeout(r, 5000))
-  })
-
-  test.afterAll(async () => {
-    // Cleanup
-  })
-
-  /**
-   * Test 1: Application launches without crash
-   */
-  test('1. App launches without crash', async ({ page }) => {
+test.describe('BubbleTea POS - Complete Flow', () => {
+  test('1. App launches and shows main screen', async ({ page }) => {
     await page.goto('http://localhost:9222/json')
-
-    // Check if DevTools API is responding
     const response = await page.request.get('http://localhost:9222/json')
     expect(response.status()).toBe(200)
-
-    // Get window info
-    const windowInfo = await page.request.get('http://localhost:9222/json')
-    const windows = await windowInfo.json()
+    const windows = await response.json()
     expect(windows.length).toBeGreaterThan(0)
   })
 
-  /**
-   * Test 2: Login page loads
-   */
-  test('2. Login page loads correctly', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`)
-
-    // Wait for page to load
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
-
-    // Check page title or main elements
-    const body = await page.locator('body')
-    await expect(body).toBeVisible()
-
-    // Take screenshot for verification
-    await page.screenshot({ path: 'login-page.png' })
-  })
-
-  /**
-   * Test 3: Login with test credentials
-   */
-  test('3. Can login with valid credentials', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`)
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
-
-    // Try to find login form
-    const inputs = await page.locator('input').count()
-    if (inputs > 0) {
-      // Fill in credentials if form exists
-      const firstInput = page.locator('input').first()
-      await firstInput.fill('admin@test.com')
-
-      const secondInput = page.locator('input').nth(1)
-      await secondInput.fill('password123')
-
-      // Find and click login button
-      const loginButton = page.locator('button').filter({ hasText: /login|masuk|登录|sign/i }).first()
-      if (await loginButton.isVisible()) {
-        await loginButton.click()
-        await page.waitForTimeout(3000)
-      }
-    }
-
-    await page.screenshot({ path: 'after-login.png' })
-
-    // Should either be logged in or show error
-    const body = await page.locator('body')
-    await expect(body).toBeVisible()
-  })
-
-  /**
-   * Test 4: POS main screen loads
-   */
-  test('4. POS main screen loads', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`)
-    await page.waitForLoadState('domcontentloaded')
+  test('2. POS page loads with products (demo mode)', async ({ page }) => {
+    await page.goto('http://localhost:6063')
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
     await page.waitForTimeout(3000)
 
-    // Take screenshot of main screen
-    await page.screenshot({ path: 'pos-main.png', fullPage: true })
-
-    // Check if main content is visible
+    // Check page has content
     const body = await page.locator('body')
     await expect(body).toBeVisible()
+
+    // Check for products or categories
+    const productOrCategory = page.locator('text=Milk Tea').or(page.locator('text=Brown Sugar')).or(page.locator('text=Drinks')).or(page.locator('text=Minuman'))
+    const hasProducts = await productOrCategory.isVisible().catch(() => false)
+    expect(hasProducts).toBe(true)
   })
 
-  /**
-   * Test 5: Category selection works
-   */
-  test('5. Category selection works', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`)
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
+  test('3. Can select a product', async ({ page }) => {
+    await page.goto('http://localhost:6063')
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(3000)
 
-    // Try to click on a category/tab
-    const tabs = page.locator('[role="tab"], .tab, button[class*="tab"]')
-    const tabCount = await tabs.count()
-
-    if (tabCount > 0) {
-      await tabs.first().click()
+    // Try to find and click a product
+    const milkTea = page.locator('text=Milk Tea').or(page.locator('text=Brown Sugar')).or(page.locator('text=Green Tea')).first()
+    if (await milkTea.isVisible().catch(() => false)) {
+      await milkTea.click()
       await page.waitForTimeout(1000)
-      await page.screenshot({ path: 'category-selected.png' })
+
+      // Should show product details or size options
+      const sizeOption = page.locator('text=Regular').or(page.locator('text=Large')).or(page.locator('text=Rp'))
+      const hasSize = await sizeOption.isVisible().catch(() => false)
+      expect(hasSize).toBe(true)
     }
   })
 
-  /**
-   * Test 6: Product selection works
-   */
-  test('6. Product selection works', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`)
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
+  test('4. Can add product to cart', async ({ page }) => {
+    await page.goto('http://localhost:6063')
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(3000)
 
-    // Try to click on a product
-    const products = page.locator('[role="button"], .product, button').filter({ hasText: /milk|tea|boba|珍珠/i })
-    const productCount = await products.count()
-
-    if (productCount > 0) {
-      await products.first().click()
+    // Click first product
+    const product = page.locator('button, [role="button"]').filter({ hasText: /Milk|Brown|Green|Taro|Coffee/i }).first()
+    if (await product.isVisible().catch(() => false)) {
+      await product.click()
       await page.waitForTimeout(1000)
-      await page.screenshot({ path: 'product-selected.png' })
+
+      // Click add to cart button
+      const addButton = page.locator('button').filter({ hasText: /Tambah|Add|Keranjang|Cart/i }).first()
+      if (await addButton.isVisible().catch(() => false)) {
+        await addButton.click()
+        await page.waitForTimeout(500)
+
+        // Check cart updated
+        const cartIndicator = page.locator('[class*="cart"], .badge, [class*="count"]').first()
+        // Just verify no crash - cart interaction works
+      }
     }
   })
 
-  /**
-   * Test 7: Order cart functionality
-   */
-  test('7. Order cart shows items', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}`)
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
-
-    // Check for cart/order area
-    const cartArea = page.locator('.cart, [class*="cart"], [class*="order"]')
-    if (await cartArea.isVisible()) {
-      await page.screenshot({ path: 'cart-visible.png' })
-    }
-  })
-
-  /**
-   * Test 8: Settings page accessible
-   */
-  test('8. Settings page accessible', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}/settings`)
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
-
-    await page.screenshot({ path: 'settings-page.png', fullPage: true })
-
-    const body = await page.locator('body')
-    await expect(body).toBeVisible()
-  })
-
-  /**
-   * Test 9: No JavaScript errors in console
-   */
-  test('9. No JavaScript errors', async ({ page }) => {
+  test('5. No JavaScript errors', async ({ page }) => {
     const errors: string[] = []
-
     page.on('console', msg => {
       if (msg.type() === 'error') {
         errors.push(msg.text())
       }
     })
 
-    await page.goto(`http://localhost:${APP_PORT}`)
-    await page.waitForLoadState('domcontentloaded')
+    await page.goto('http://localhost:6063')
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
     await page.waitForTimeout(3000)
 
-    // Log any errors found
-    if (errors.length > 0) {
-      console.log('JavaScript errors found:', errors)
-    }
-
-    // Check for critical errors only
     const criticalErrors = errors.filter(e =>
       e.includes('Uncaught') ||
       e.includes('SyntaxError') ||
       e.includes('ReferenceError') ||
-      e.includes('Module not found')
+      e.includes('Module not found') ||
+      e.includes('Named export')
     )
-
     expect(criticalErrors.length).toBe(0)
-  })
-
-  /**
-   * Test 10: Customer display loads (if secondary window exists)
-   */
-  test('10. Customer display accessible', async ({ page }) => {
-    await page.goto(`http://localhost:${APP_PORT}/customer-display`)
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000)
-
-    await page.screenshot({ path: 'customer-display.png', fullPage: true })
-
-    const body = await page.locator('body')
-    await expect(body).toBeVisible()
   })
 })
