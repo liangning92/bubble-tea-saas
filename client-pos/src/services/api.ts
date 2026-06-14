@@ -11,6 +11,33 @@ export function updateApiUrl(url: string) {
   api.defaults.baseURL = url
 }
 
+// Fetch API URL from server config (Admin can change this)
+export async function fetchApiUrlFromServer(): Promise<string | null> {
+  try {
+    const token = localStorage.getItem('pos-auth')
+    if (!token) return null
+
+    const { state } = JSON.parse(token)
+    if (!state?.token) return null
+
+    const response = await fetch(`${getApiUrl()}/api/config/pos_api_url`, {
+      headers: {
+        Authorization: `Bearer ${state.token}`
+      }
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      if (data.data?.value) {
+        return data.data.value
+      }
+    }
+  } catch (e) {
+    // Ignore errors, will use cached URL
+  }
+  return null
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('pos-auth')
   if (token) {

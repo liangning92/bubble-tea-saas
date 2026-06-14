@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { posApi } from '../services/api'
+import { posApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
+import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
 import { db, syncManager, productCache, LocalProduct } from '../db/offline'
 import { formatCurrency, playSound, playSoundWithSettings } from '../utils/helpers'
@@ -795,6 +796,24 @@ export function POSPage() {
   useEffect(() => {
     syncManager.startSync(30000)
     return () => syncManager.destroy()
+  }, [])
+
+  // 检查服务器API配置 (Admin可在后台修改，POS自动获取)
+  useEffect(() => {
+    const checkServerApiUrl = async () => {
+      const serverUrl = await fetchApiUrlFromServer()
+      if (serverUrl && serverUrl !== getApiUrl()) {
+        updateApiUrl(serverUrl)
+        setApiUrl(serverUrl)
+      }
+    }
+
+    // 启动时检查
+    checkServerApiUrl()
+
+    // 每5分钟检查一次
+    const interval = setInterval(checkServerApiUrl, 5 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [])
 
   // 网络状态监听
