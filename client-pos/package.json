@@ -63,11 +63,6 @@
     "asar": {
       "smartUnpack": true
     },
-    "publish": {
-      "provider": "github",
-      "owner": "liangning92",
-      "repo": "bubble-tea-saas"
-    },
     "win": {
       "target": [
         {

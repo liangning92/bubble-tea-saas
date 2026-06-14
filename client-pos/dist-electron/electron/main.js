@@ -13,8 +13,9 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
  */
 function getResourcePath(relativePath) {
     if (app.isPackaged) {
-        // 打包后：从 app.getAppPath() + relativePath
-        return path.join(app.getAppPath(), relativePath);
+        // 打包后：__dirname 是 resources/app.asar/dist-electron/electron
+        // 需要向上3层到达 resources/app.asar/ 再进入 relativePath
+        return path.join(__dirname, '..', '..', '..', relativePath);
     }
     else {
         // 开发模式：从项目根目录
