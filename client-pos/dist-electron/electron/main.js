@@ -45,13 +45,24 @@ function createMainWindow() {
         mainWindow.webContents.openDevTools();
     }
     else {
-        mainWindow.loadFile(getResourcePath('dist/index.html'));
+        const indexPath = getResourcePath('dist/index.html');
+        console.log('[Electron] Loading index from:', indexPath);
+        mainWindow.loadFile(indexPath).catch((err) => {
+            console.error('[Electron] Failed to load index:', err);
+        });
     }
     mainWindow.on('closed', () => {
         mainWindow = null;
         if (customerWindow) {
             customerWindow.close();
         }
+    });
+    // 监听页面加载错误
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+        console.error('[Electron] Failed to load:', errorCode, errorDescription);
+    });
+    mainWindow.webContents.on('crashed', () => {
+        console.error('[Electron] Renderer process crashed');
     });
     console.log('[Electron] Main window created');
 }
