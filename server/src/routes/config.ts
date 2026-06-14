@@ -176,7 +176,8 @@ const defaultPOSConfigs = {
   'pos.quick_amounts': { enabled: true, amounts: [10000, 20000, 50000] },
   'pos.shift_settings': { requireReconciliation: false, requireSupervisorConfirm: false, showSummary: true, cashDifferenceLimit: 0 },
   'pos.auto_logout': 30,
-  'pos.sound_settings': { keypress: { enabled: true, volume: 80 }, orderComplete: { enabled: true, volume: 100 }, error: { enabled: true, volume: 100 }, newOrder: { enabled: true, volume: 100 } }
+  'pos.sound_settings': { keypress: { enabled: true, volume: 80 }, orderComplete: { enabled: true, volume: 100 }, error: { enabled: true, volume: 100 }, newOrder: { enabled: true, volume: 100 } },
+  'pos_api_url': '' // POS API URL, set by Admin
 }
 
 const defaultMemberConfigs = {
