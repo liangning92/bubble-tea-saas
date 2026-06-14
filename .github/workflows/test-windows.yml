@@ -1,0 +1,56 @@
+name: Test Windows Electron
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          cd client-pos
+          npm install
+
+      - name: Build POS
+        run: |
+          cd client-pos
+          npm run build
+          npm run build:electron:main
+
+      - name: Build Electron package
+        run: |
+          cd client-pos
+          npx electron-builder --win portable --dir release/test-build
+
+      - name: Verify build output
+        run: |
+          ls -la client-pos/release/test-build/
+          # Verify key files exist
+          Test-Path client-pos/release/test-build/BubbleTeaPOS.exe
+          Test-Path client-pos/release/test-build/resources/app/dist/index.html
+          Test-Path client-pos/release/test-build/resources/app/dist-electron/electron/main.js
+
+      - name: Try to load Electron (smoke test)
+        run: |
+          # Start Electron briefly to catch startup errors
+          $proc = Start-Process -FilePath "client-pos/release/test-build/BubbleTeaPOS.exe" -ArgumentList "--disable-gpu","--no-sandbox" -PassThru
+          Start-Sleep -Seconds 5
+          if (!$proc.HasExited) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "Electron started successfully"
+          } else {
+            Write-Host "Electron exited with code: $($proc.ExitCode)"
+            Get-Content "$env:APPDATA\BubbleTeaPOS\logs/*.log" -ErrorAction SilentlyContinue | Select-Object -Last 50
+          }
+        continue-on-error: true

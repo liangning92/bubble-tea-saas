@@ -1,5 +1,7 @@
 import { BrowserWindow, ipcMain, app } from 'electron'
-import { autoUpdater, UpdateInfo } from 'electron-updater'
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { autoUpdater } = require('electron-updater')
 
 let mainWindow: BrowserWindow | null = null
 
@@ -29,7 +31,7 @@ export function setupUpdater(window: BrowserWindow) {
     sendToRenderer('update-status', 'checking')
   })
 
-  autoUpdater.on('update-available', (info: UpdateInfo) => {
+  autoUpdater.on('update-available', (info: any) => {
     log('info', 'Update available:', info.version)
     sendToRenderer('update-status', 'available', {
       version: info.version,
@@ -37,12 +39,12 @@ export function setupUpdater(window: BrowserWindow) {
     })
   })
 
-  autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+  autoUpdater.on('update-not-available', (info: any) => {
     log('info', 'Update not available, current version:', info.version)
     sendToRenderer('update-status', 'up-to-date', { version: info.version })
   })
 
-  autoUpdater.on('download-progress', (progressObj) => {
+  autoUpdater.on('download-progress', (progressObj: any) => {
     log('info', 'Download progress:', progressObj.percent.toFixed(2) + '%')
     sendToRenderer('update-progress', {
       percent: progressObj.percent,
@@ -52,12 +54,12 @@ export function setupUpdater(window: BrowserWindow) {
     })
   })
 
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+  autoUpdater.on('update-downloaded', (info: any) => {
     log('info', 'Update downloaded:', info.version)
     sendToRenderer('update-status', 'downloaded', { version: info.version })
   })
 
-  autoUpdater.on('error', (err) => {
+  autoUpdater.on('error', (err: any) => {
     log('error', 'Error:', err.message)
     sendToRenderer('update-error', err.message)
   })
@@ -148,7 +150,7 @@ export function checkForUpdatesOnStart() {
   // Delay initial check by 5 seconds to let app fully start
   setTimeout(() => {
     sendToRenderer('update-status', 'checking')
-    autoUpdater.checkForUpdates().catch((err: Error) => {
+    autoUpdater.checkForUpdates().catch((err: any) => {
       log('warn', 'Initial check failed:', err.message)
     })
   }, 5000)

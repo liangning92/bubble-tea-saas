@@ -1,5 +1,10 @@
-import { ipcMain, app } from 'electron';
-import { autoUpdater } from 'electron-updater';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.setupUpdater = setupUpdater;
+exports.checkForUpdatesOnStart = checkForUpdatesOnStart;
+const electron_1 = require("electron");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { autoUpdater } = require('electron-updater');
 let mainWindow = null;
 // Log helper
 function log(level, message, ...args) {
@@ -15,7 +20,7 @@ log('info', 'Auto-updater initialized');
 /**
  * Initialize updater with main window reference
  */
-export function setupUpdater(window) {
+function setupUpdater(window) {
     mainWindow = window;
     // Configure auto-updater
     autoUpdater.autoDownload = false;
@@ -68,10 +73,10 @@ function sendToRenderer(channel, ...args) {
  */
 function setupIpcHandlers() {
     // Check for updates via API
-    ipcMain.handle('check-for-updates', async () => {
+    electron_1.ipcMain.handle('check-for-updates', async () => {
         try {
             sendToRenderer('update-status', 'checking');
-            const currentVersion = app.getVersion();
+            const currentVersion = electron_1.app.getVersion();
             log('info', 'Current version:', currentVersion);
             // Use electron-updater to check GitHub for updates
             try {
@@ -87,13 +92,13 @@ function setupIpcHandlers() {
         catch (error) {
             log('error', 'Check failed:', error.message);
             sendToRenderer('update-status', 'up-to-date', {
-                version: app.getVersion()
+                version: electron_1.app.getVersion()
             });
             return null;
         }
     });
     // Download update
-    ipcMain.handle('download-update', async () => {
+    electron_1.ipcMain.handle('download-update', async () => {
         try {
             log('info', 'Starting download...');
             sendToRenderer('update-status', 'downloading');
@@ -108,20 +113,20 @@ function setupIpcHandlers() {
         }
     });
     // Install update and restart
-    ipcMain.handle('install-update', () => {
+    electron_1.ipcMain.handle('install-update', () => {
         log('info', 'Installing update and restarting...');
         autoUpdater.quitAndInstall(false, true);
     });
     // Get current version
-    ipcMain.handle('get-app-version', () => {
-        return app.getVersion();
+    electron_1.ipcMain.handle('get-app-version', () => {
+        return electron_1.app.getVersion();
     });
 }
 /**
  * Check for updates automatically (call on app start in packaged mode)
  */
-export function checkForUpdatesOnStart() {
-    if (!app.isPackaged) {
+function checkForUpdatesOnStart() {
+    if (!electron_1.app.isPackaged) {
         log('info', 'Skipping auto-check in development mode');
         return;
     }
@@ -134,4 +139,4 @@ export function checkForUpdatesOnStart() {
         });
     }, 5000);
 }
-export default autoUpdater;
+exports.default = autoUpdater;

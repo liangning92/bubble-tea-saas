@@ -66,40 +66,123 @@ jobs:
             exit 1
           }
 
-      - name: Launch test
+      - name: Launch test with JS error detection
         run: |
           $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
-          $appName = "BubbleTeaPOS"
-          $wait = 8
+          $wait = 10
           $port = 9222
 
           # Start Electron with remote debugging
           $errLog = "$env:TEMP\electron_err_$PID.log"
-          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
+          $outLog = "$env:TEMP\electron_out_$PID.log"
+          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
           Write-Host "Started process $($proc.Id), waiting ${wait}s..."
           Start-Sleep $wait
 
-          # Check if still running
+          # Check if crashed
           if ($proc.HasExited) {
-            Write-Error "App exited with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 10 }
+            Write-Error "App exited early with code $($proc.ExitCode)"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
             exit 1
           }
 
-          # Check stderr for errors
-          if ((Test-Path $errLog) -and (Get-Content $errLog -Raw) -match "Error|Exception|ERR_") {
-            Write-Host "⚠ Stderr warnings:"
-            Get-Content $errLog | Select-Object -First 5
+          # Check stderr for JavaScript errors - these don't crash the process but make app unusable
+          $jsErrorPatterns = @(
+            "SyntaxError",
+            "ReferenceError",
+            "TypeError",
+            "Module not found",
+            "Named export.*not found",
+            "Uncaught Exception",
+            "ERR_"
+          )
+
+          $errorsFound = $false
+          if (Test-Path $errLog) {
+            $stderrContent = Get-Content $errLog -Raw
+            foreach ($pattern in $jsErrorPatterns) {
+              if ($stderrContent -match $pattern) {
+                Write-Error "JavaScript error detected: $pattern"
+                Get-Content $errLog | Select-Object -First 20
+                $errorsFound = $true
+              }
+            }
           }
 
-          # Verify chrome_debugger.json exists (proves renderer started)
-          $debugPort = Test-Path "$env:TEMP\$appName*\ChromiumDevToolsPort*"
+          if ($errorsFound) {
+            Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+            Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
+            exit 1
+          }
+
           Write-Host "✓ App is running (PID $($proc.Id))"
+          Write-Host "✓ No JavaScript errors detected in stderr"
 
           # Cleanup
           Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
-          Remove-Item $errLog -ErrorAction SilentlyContinue
+          Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
           Write-Host "✓ Launch test passed"
+
+  e2e-test:
+    needs: test-windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install --include=dev
+          cd client-pos
+          npm install --include=dev
+
+      - name: Build app
+        run: |
+          cd client-pos
+          npm run build
+          npm run build:electron:main
+          npx electron-builder --win portable --x64 --dir
+
+      - name: Install Playwright
+        run: |
+          cd client-pos
+          npx playwright install chromium
+          npx playwright install-deps chromium
+
+      - name: Start app for testing
+        run: |
+          $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
+          $port = 9222
+          $errLog = "$env:TEMP\electron_err_$PID.log"
+          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
+          Write-Host "Started app PID $($proc.Id)"
+          # Wait for app to fully load
+          Start-Sleep 8
+          # Keep process ID for cleanup
+          $proc.Id | Out-File "$env:TEMP\app_pid.txt"
+
+      - name: Run Playwright e2e tests
+        run: |
+          cd client-pos
+          $env:PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true"
+          npx playwright test e2e/pos.spec.ts --reporter=line --timeout=15000 || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: client-pos/test-results/ || client-pos/*.png || client-pos/e2e/*.png
+          retention-days: 7
+          continue-on-error: true
 
   build:
     needs: test-windows

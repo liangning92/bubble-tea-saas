@@ -1,33 +1,34 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { setupUpdater, checkForUpdatesOnStart } from './updater.js';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const electron_1 = require("electron");
+const path_1 = __importDefault(require("path"));
+const updater_1 = require("./updater");
 // 窗口引用
 let mainWindow = null;
 let customerWindow = null;
 // 开发模式检测
-const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
+const isDev = process.env.NODE_ENV !== 'production' && !electron_1.app.isPackaged;
 /**
  * 获取资源文件路径（兼容打包和开发模式）
+ * asar: false 时，app.getAppPath() 返回 resources/app
  */
 function getResourcePath(relativePath) {
-    if (app.isPackaged) {
-        // 打包后：__dirname 是 resources/app.asar/dist-electron/electron
-        // 需要向上3层到达 resources/app.asar/ 再进入 relativePath
-        return path.join(__dirname, '..', '..', '..', relativePath);
+    if (electron_1.app.isPackaged) {
+        return path_1.default.join(electron_1.app.getAppPath(), relativePath);
     }
     else {
-        // 开发模式：从项目根目录
-        return path.join(__dirname, '..', '..', relativePath);
+        return path_1.default.join(__dirname, '..', '..', relativePath);
     }
 }
 /**
  * 创建主窗口（收银界面）
  */
 function createMainWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    mainWindow = new BrowserWindow({
+    const { width, height } = electron_1.screen.getPrimaryDisplay().workAreaSize;
+    mainWindow = new electron_1.BrowserWindow({
         width: Math.floor(width * 0.6),
         height,
         x: 0,
@@ -71,11 +72,11 @@ function createMainWindow() {
  * 创建副屏窗口（顾客展示）
  */
 function createCustomerWindow() {
-    const displays = screen.getAllDisplays();
+    const displays = electron_1.screen.getAllDisplays();
     const externalDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0);
     const targetDisplay = externalDisplay || displays[0];
     const { width, height } = targetDisplay.bounds;
-    customerWindow = new BrowserWindow({
+    customerWindow = new electron_1.BrowserWindow({
         width,
         height,
         x: externalDisplay ? targetDisplay.bounds.x : width,
@@ -96,23 +97,31 @@ function createCustomerWindow() {
     else {
         customerWindow.loadFile(getResourcePath('dist/index.html'), {
             hash: '/customer-display'
+        }).catch((err) => {
+            console.error('[Electron] Customer display load failed:', err);
         });
     }
+    customerWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+        console.error('[Electron] Customer display failed to load:', errorCode, errorDescription);
+    });
+    customerWindow.webContents.on('crashed', () => {
+        console.error('[Electron] Customer display renderer crashed');
+    });
     customerWindow.on('closed', () => {
         customerWindow = null;
     });
     console.log('[Electron] Customer window created');
 }
 // IPC 通信 - 订单状态同步到副屏
-ipcMain.on('order-update', (_event, orderData) => {
+electron_1.ipcMain.on('order-update', (_event, orderData) => {
     if (customerWindow && !customerWindow.isDestroyed()) {
         customerWindow.webContents.send('order-update', orderData);
     }
 });
 // IPC 通信 - API URL 配置（持久化到文件系统）
-ipcMain.handle('get-api-url', () => {
+electron_1.ipcMain.handle('get-api-url', () => {
     const fs = require('fs');
-    const configPath = path.join(app.getPath('userData'), 'api-config.json');
+    const configPath = path_1.default.join(electron_1.app.getPath('userData'), 'api-config.json');
     try {
         if (fs.existsSync(configPath)) {
             const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -122,9 +131,9 @@ ipcMain.handle('get-api-url', () => {
     catch (e) { }
     return '/api';
 });
-ipcMain.handle('set-api-url', (_event, url) => {
+electron_1.ipcMain.handle('set-api-url', (_event, url) => {
     const fs = require('fs');
-    const configPath = path.join(app.getPath('userData'), 'api-config.json');
+    const configPath = path_1.default.join(electron_1.app.getPath('userData'), 'api-config.json');
     try {
         fs.writeFileSync(configPath, JSON.stringify({ apiUrl: url }, null, 2));
         return true;
@@ -134,12 +143,12 @@ ipcMain.handle('set-api-url', (_event, url) => {
         return false;
     }
 });
-ipcMain.on('order-clear', () => {
+electron_1.ipcMain.on('order-clear', () => {
     if (customerWindow && !customerWindow.isDestroyed()) {
         customerWindow.webContents.send('order-clear');
     }
 });
-ipcMain.on('order-complete', (_event, orderNumber) => {
+electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
     if (customerWindow && !customerWindow.isDestroyed()) {
         customerWindow.webContents.send('order-complete', orderNumber);
     }
@@ -147,7 +156,7 @@ ipcMain.on('order-complete', (_event, orderNumber) => {
 /**
  * 打印小票 - Windows原生打印 或 网络打印
  */
-ipcMain.on('print-receipt', async (_event, data) => {
+electron_1.ipcMain.on('print-receipt', async (_event, data) => {
     try {
         const text = generateReceiptText(data);
         console.log('[PRINT] Preparing to print receipt');
@@ -227,7 +236,7 @@ function printViaNetwork(text, host, port) {
  * 打开钱箱 - Windows原生 或 网络
  * 钱箱通常连接到打印机，命令发送到打印机
  */
-ipcMain.on('open-cash-drawer', async (_event, data) => {
+electron_1.ipcMain.on('open-cash-drawer', async (_event, data) => {
     try {
         console.log('[CASH DRAWER] Opening drawer');
         // Windows 原生打印钱箱命令
@@ -260,7 +269,7 @@ async function openCashDrawerViaWindows(printerName) {
         // ESC/POS 钱箱弹出命令: ESC p 0 50 50
         // m=0(钱箱1), t1=50(100ms脉冲), t2=50(100ms间隔)
         const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]);
-        const tempFile = path.join(os.tmpdir(), `drawer_${Date.now()}.bin`);
+        const tempFile = path_1.default.join(os.tmpdir(), `drawer_${Date.now()}.bin`);
         require('fs').writeFileSync(tempFile, cashDrawerCmd);
         // 使用默认打印机或指定打印机
         let psCommand;
@@ -383,21 +392,21 @@ function formatDateTime() {
     return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 // 应用启动
-app.whenReady().then(() => {
+electron_1.app.whenReady().then(() => {
     createMainWindow();
     createCustomerWindow();
     if (mainWindow) {
-        setupUpdater(mainWindow);
-        checkForUpdatesOnStart();
+        (0, updater_1.setupUpdater)(mainWindow);
+        (0, updater_1.checkForUpdatesOnStart)();
     }
 });
-app.on('window-all-closed', () => {
+electron_1.app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-        app.quit();
+        electron_1.app.quit();
     }
 });
-app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+electron_1.app.on('activate', () => {
+    if (electron_1.BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
         createCustomerWindow();
     }

@@ -1,9 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import path from 'path'
-import { fileURLToPath } from 'url'
-import { setupUpdater, checkForUpdatesOnStart } from './updater.js'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+import { setupUpdater, checkForUpdatesOnStart } from './updater'
 
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
@@ -14,14 +11,12 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 
 /**
  * 获取资源文件路径（兼容打包和开发模式）
+ * asar: false 时，app.getAppPath() 返回 resources/app
  */
 function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
-    // 打包后：__dirname 是 resources/app.asar/dist-electron/electron
-    // 需要向上3层到达 resources/app.asar/ 再进入 relativePath
-    return path.join(__dirname, '..', '..', '..', relativePath)
+    return path.join(app.getAppPath(), relativePath)
   } else {
-    // 开发模式：从项目根目录
     return path.join(__dirname, '..', '..', relativePath)
   }
 }
@@ -108,8 +103,18 @@ function createCustomerWindow() {
   } else {
     customerWindow.loadFile(getResourcePath('dist/index.html'), {
       hash: '/customer-display'
+    }).catch((err) => {
+      console.error('[Electron] Customer display load failed:', err)
     })
   }
+
+  customerWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    console.error('[Electron] Customer display failed to load:', errorCode, errorDescription)
+  })
+
+  customerWindow.webContents.on('crashed', () => {
+    console.error('[Electron] Customer display renderer crashed')
+  })
 
   customerWindow.on('closed', () => {
     customerWindow = null
