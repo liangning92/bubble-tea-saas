@@ -21,13 +21,14 @@ jobs:
       - name: Install dependencies
         run: |
           npm install --include=dev
+          npm install app-builder-lib@24.13.3 electron-builder@24.13.3
 
       - name: Build POS Electron app
         run: |
           cd client-pos
           npm run build
           npm run build:electron:main
-          npx electron-builder --win nsis --x64 --config.publish=null
+          npx electron-builder --win nsis --x64
 
       - name: Build Portable version
         run: |
