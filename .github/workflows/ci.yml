@@ -43,14 +43,14 @@ jobs:
       - name: Install dependencies
         run: |
           cd client-pos
-          npm install
+          npm install --include=dev
 
       - name: Build POS
         run: |
           cd client-pos
           npm run build
           npm run build:electron:main
-          npx electron-builder --win portable --x64
+          npx electron-builder --win portable --x64 --config.publish=null
 
       - name: Upload POS build
         uses: actions/upload-artifact@v4
