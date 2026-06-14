@@ -9,7 +9,65 @@ permissions:
   contents: write
 
 jobs:
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm install --include=dev
+
+      - name: Install POS dependencies
+        run: |
+          cd client-pos
+          npm install --include=dev
+
+      - name: TypeScript type check
+        run: |
+          cd client-pos
+          npx tsc --noEmit
+
+      - name: Build Vite frontend
+        run: |
+          cd client-pos
+          npm run build
+
+      - name: Build Electron main process
+        run: |
+          cd client-pos
+          npm run build:electron:main
+
+      - name: Electron smoke test
+        run: |
+          cd client-pos
+          npx electron --version
+
+      - name: Build portable exe (smoke test)
+        run: |
+          cd client-pos
+          npx electron-builder --win portable --x64 --dir
+
+      - name: Verify exe exists
+        run: |
+          if (Test-Path "client-pos/release/win-unpacked/BubbleTeaPOS.exe") {
+            Write-Host "✓ Smoke test passed - exe exists"
+            Get-Item "client-pos/release/win-unpacked/BubbleTeaPOS.exe" | Select-Object Name, Length
+          } else {
+            Write-Error "Smoke test failed - exe not found"
+            exit 1
+          }
+
   build:
+    needs: test-windows
     runs-on: windows-latest
 
     steps:
