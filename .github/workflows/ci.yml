@@ -50,7 +50,7 @@ jobs:
           cd client-pos
           npm run build
           npm run build:electron:main
-          npx electron-builder --win portable --x64 --config.publish=null
+          npx electron-builder --win portable --x64
 
       - name: Upload POS build
         uses: actions/upload-artifact@v4
