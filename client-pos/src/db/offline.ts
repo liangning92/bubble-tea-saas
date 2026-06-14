@@ -124,7 +124,9 @@ export class SyncManager {
         const parsed = JSON.parse(stored)
         return parsed.state?.token || ''
       }
-    } catch { }
+    } catch (e) {
+      console.warn('[SyncManager] Failed to get token:', e)
+    }
     return ''
   }
 

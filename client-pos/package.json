@@ -5,7 +5,6 @@
   "description": "Bubble Tea POS System",
   "author": "Bubble Tea Team",
   "main": "dist-electron/electron/main.js",
-  "type": "module",
   "scripts": {
     "dev": "vite --port 6063",
     "build": "tsc && vite build",

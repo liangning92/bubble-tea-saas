@@ -404,8 +404,8 @@ export function POSPage() {
               description: p.description,
               image: p.image,
               category: { id: p.categoryId, name: p.categoryName },
-              specs: p.specs,
-              addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
+              specs: p.specs || [],
+              addons: (p.addons || []).map(a => ({ addonId: a.id, addon: a }))
             })))
             showToast(t('pos.offlineMode') + ' - ' + t('pos.loadingFromCache'), 'info')
           } else {
@@ -422,6 +422,7 @@ export function POSPage() {
             })))
             showToast(t('pos.demoMode') || 'Demo Mode - Sample Products', 'info')
           }
+          if (!cancelled) setLoading(false)
         }
       } else {
         // 离线模式，从缓存读取
@@ -434,9 +435,10 @@ export function POSPage() {
             description: p.description,
             image: p.image,
             category: { id: p.categoryId, name: p.categoryName },
-            specs: p.specs,
-            addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
+            specs: p.specs || [],
+            addons: (p.addons || []).map(a => ({ addonId: a.id, addon: a }))
           })))
+          if (!cancelled) setLoading(false)
         } else {
           // 无缓存，加载示例产品
           const demoProducts = productCache.getDemoProducts()
@@ -450,10 +452,9 @@ export function POSPage() {
             addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
           })))
           showToast(t('pos.demoMode') || 'Demo Mode - Sample Products', 'info')
+          if (!cancelled) setLoading(false)
         }
-        if (!cancelled) setLoading(false)
       }
-      if (!cancelled) setLoading(false)
     }
 
     loadProducts()
