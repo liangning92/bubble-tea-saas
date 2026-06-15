@@ -22,18 +22,16 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 
 /**
  * 获取资源文件路径（兼容打包和开发模式）
- * 使用 __dirname 作为基准，因为它总是指向当前执行文件所在的目录
+ * 优先使用 app.getAppPath()，因为 __dirname 在某些打包情况下不可靠
  */
 function getResourcePath(relativePath: string): string {
-  // __dirname 在打包后指向 dist-electron/electron
-  // 所以向上两级到达 app 根目录
   if (app.isPackaged) {
-    // asar: false 时，结构是 resources/app/dist-electron/electron/
-    // __dirname = resources/app/dist-electron/electron
-    // 向上两级 = resources/app/
-    return path.join(__dirname, '..', '..', relativePath)
+    // 打包后：app.getAppPath() 返回包含 resources/app 的目录
+    // 结构: resources/app/dist/index.html
+    return path.join(app.getAppPath(), relativePath)
   } else {
-    // 开发模式：__dirname = 项目根目录/dist-electron/electron
+    // 开发模式：使用 __dirname
+    // __dirname = 项目根目录/dist-electron/electron
     return path.join(__dirname, '..', '..', relativePath)
   }
 }
@@ -84,12 +82,33 @@ function createMainWindow() {
       return
     }
 
-    mainWindow.loadFile(indexPath).catch((err) => {
+    mainWindow.loadFile(indexPath).then(() => {
+      console.log('[Electron] Successfully loaded index.html')
+    }).catch((err) => {
       console.error('[Electron] Failed to load index:', err)
-      // 显示错误内容
       if (mainWindow) {
         mainWindow.loadURL(`data:text/html,<html><body style="background:#333;color:#fff;font-family:Arial;padding:40px;"><h2>加载失败</h2><p>${err.message}</p><p>路径: ${indexPath}</p></body></html>`)
       }
+    })
+
+    // 监听页面加载成功
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('[Electron] Page finished loading')
+    })
+
+    // 监听页面加载失败
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('[Electron] Page failed to load:', errorCode, errorDescription)
+    })
+
+    // 监听渲染进程错误
+    mainWindow.webContents.on('render-process-gone', (event, details) => {
+      console.error('[Electron] Renderer process gone:', details)
+    })
+
+    // 监听渲染进程崩溃
+    mainWindow.webContents.on('crashed', () => {
+      console.error('[Electron] Renderer process crashed')
     })
 
     // 监听渲染进程崩溃
