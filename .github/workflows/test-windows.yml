@@ -28,29 +28,60 @@ jobs:
           npm run build
           npm run build:electron:main
 
-      - name: Build Electron package
+      - name: Build Electron package (unpacked dir)
         run: |
           cd client-pos
           npx electron-builder --win portable --dir
 
       - name: Verify build output
         run: |
-          ls -la client-pos/release/test-build/
-          # Verify key files exist
-          Test-Path client-pos/release/test-build/BubbleTeaPOS.exe
-          Test-Path client-pos/release/test-build/resources/app/dist/index.html
-          Test-Path client-pos/release/test-build/resources/app/dist-electron/electron/main.js
-
-      - name: Try to load Electron (smoke test)
-        run: |
-          # Start Electron briefly to catch startup errors
-          $proc = Start-Process -FilePath "client-pos/release/test-build/BubbleTeaPOS.exe" -ArgumentList "--disable-gpu","--no-sandbox" -PassThru
-          Start-Sleep -Seconds 5
-          if (!$proc.HasExited) {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Write-Host "Electron started successfully"
+          Get-ChildItem client-pos/release/win-unpacked/ | Select-Object Name, Length
+          if (Test-Path "client-pos/release/win-unpacked/BubbleTeaPOS.exe") {
+            Write-Host "OK: BubbleTeaPOS.exe exists"
           } else {
-            Write-Host "Electron exited with code: $($proc.ExitCode)"
-            Get-Content "$env:APPDATA\BubbleTeaPOS\logs/*.log" -ErrorAction SilentlyContinue | Select-Object -Last 50
+            Write-Error "FAIL: BubbleTeaPOS.exe not found"
+            exit 1
           }
-        continue-on-error: true
+          if (Test-Path "client-pos/release/win-unpacked/resources/app/dist/index.html") {
+            Write-Host "OK: index.html exists"
+          } else {
+            Write-Error "FAIL: index.html not found"
+            exit 1
+          }
+          if (Test-Path "client-pos/release/win-unpacked/resources/app/dist-electron/electron/main.js") {
+            Write-Host "OK: main.js exists"
+          } else {
+            Write-Error "FAIL: main.js not found"
+            exit 1
+          }
+
+      - name: Smoke test - Launch app briefly
+        run: |
+          $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
+          $port = 9222
+          $errLog = "$env:TEMP\electron_err.log"
+          $outLog = "$env:TEMP\electron_out.log"
+
+          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
+          Write-Host "Started process $($proc.Id)"
+          Start-Sleep -Seconds 8
+
+          if ($proc.HasExited) {
+            Write-Error "CRASH: App exited with code $($proc.ExitCode)"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
+            exit 1
+          }
+
+          # Check if DevTools port responds (proves renderer started)
+          try {
+            $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 5 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) {
+              Write-Host "OK: App is running, DevTools responding"
+            }
+          } catch {
+            Write-Warning "DevTools not responding, but app is still running"
+          }
+
+          Write-Host "OK: App started successfully and is running"
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
