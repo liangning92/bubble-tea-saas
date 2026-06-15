@@ -211,6 +211,7 @@ jobs:
       - name: Install Playwright
         run: |
           cd client-pos
+          npm install -D @playwright/test
           npx playwright install chromium
           npx playwright install-deps chromium
 
