@@ -69,11 +69,12 @@ jobs:
       - name: Verify packaged file structure
         run: |
           $fail = $false
+          # With asar: false, files are in resources/app/
           $required = @(
-            "dist\index.html",
-            "dist\assets",
-            "dist-electron\electron\main.js",
-            "dist-electron\electron\preload.js"
+            "resources\app\dist\index.html",
+            "resources\app\dist\assets",
+            "resources\app\dist-electron\electron\main.js",
+            "resources\app\dist-electron\electron\preload.js"
           )
           foreach ($file in $required) {
             $path = "client-pos/release/win-unpacked/$file"
@@ -189,11 +190,12 @@ jobs:
       - name: Verify file structure
         run: |
           $fail = $false
+          # With asar: false, files are in resources/app/
           $required = @(
-            "dist\index.html",
-            "dist\assets",
-            "dist-electron\electron\main.js",
-            "dist-electron\electron\preload.js"
+            "resources\app\dist\index.html",
+            "resources\app\dist\assets",
+            "resources\app\dist-electron\electron\main.js",
+            "resources\app\dist-electron\electron\preload.js"
           )
           foreach ($file in $required) {
             $path = "client-pos/release/win-unpacked/$file"
