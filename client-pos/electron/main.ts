@@ -14,12 +14,18 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 
 /**
  * 获取资源文件路径（兼容打包和开发模式）
- * asar: false 时，app.getAppPath() 返回 resources/app
+ * 使用 __dirname 作为基准，因为它总是指向当前执行文件所在的目录
  */
 function getResourcePath(relativePath: string): string {
+  // __dirname 在打包后指向 dist-electron/electron
+  // 所以向上两级到达 app 根目录
   if (app.isPackaged) {
-    return path.join(app.getAppPath(), relativePath)
+    // asar: false 时，结构是 resources/app/dist-electron/electron/
+    // __dirname = resources/app/dist-electron/electron
+    // 向上两级 = resources/app/
+    return path.join(__dirname, '..', '..', relativePath)
   } else {
+    // 开发模式：__dirname = 项目根目录/dist-electron/electron
     return path.join(__dirname, '..', '..', relativePath)
   }
 }
@@ -446,12 +452,28 @@ function formatDateTime(): string {
 
 // 应用启动
 app.whenReady().then(() => {
-  createMainWindow()
-  createCustomerWindow()
+  console.log('[Electron] App ready, creating windows...')
+
+  try {
+    createMainWindow()
+    console.log('[Electron] Main window created')
+  } catch (e) {
+    console.error('[Electron] Failed to create main window:', e)
+  }
+
+  try {
+    createCustomerWindow()
+    console.log('[Electron] Customer window created')
+  } catch (e) {
+    console.warn('[Electron] Failed to create customer window:', e)
+  }
 
   if (mainWindow) {
     setupUpdater(mainWindow)
-    checkForUpdatesOnStart()
+    // 延迟 10 秒后检查更新，不阻塞启动
+    setTimeout(() => {
+      checkForUpdatesOnStart()
+    }, 10000)
   }
 })
 
