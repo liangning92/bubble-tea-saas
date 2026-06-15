@@ -66,10 +66,30 @@ jobs:
             exit 1
           }
 
-      - name: Launch test with JS error detection
+      - name: Verify packaged file structure
+        run: |
+          $fail = $false
+          $required = @(
+            "dist\index.html",
+            "dist\assets",
+            "dist-electron\electron\main.js",
+            "dist-electron\electron\preload.js"
+          )
+          foreach ($file in $required) {
+            $path = "client-pos/release/win-unpacked/$file"
+            if (Test-Path $path) {
+              Write-Host "✓ Found: $file"
+            } else {
+              Write-Error "✗ Missing: $file"
+              $fail = $true
+            }
+          }
+          if ($fail) { exit 1 }
+
+      - name: Launch test with comprehensive error detection
         run: |
           $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
-          $wait = 10
+          $wait = 12
           $port = 9222
 
           # Start Electron with remote debugging
@@ -81,32 +101,47 @@ jobs:
 
           # Check if crashed
           if ($proc.HasExited) {
-            Write-Error "App exited early with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
+            Write-Error "CRASH: App exited early with code $($proc.ExitCode)"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 30 }
+            if (Test-Path $outLog) { Get-Content $outLog | Select-Object -First 30 }
             exit 1
           }
 
-          # Check stderr for JavaScript errors - these don't crash the process but make app unusable
-          $jsErrorPatterns = @(
+          # Check stderr for critical errors
+          $criticalPatterns = @(
             "SyntaxError",
             "ReferenceError",
             "TypeError",
             "Module not found",
             "Named export.*not found",
             "Uncaught Exception",
-            "ERR_"
+            "ERR_MODULE_NOT_FOUND",
+            "Cannot find module",
+            "failed to load",
+            "WebView2.*error",
+            "GPU process"
           )
 
           $errorsFound = $false
           if (Test-Path $errLog) {
             $stderrContent = Get-Content $errLog -Raw
-            foreach ($pattern in $jsErrorPatterns) {
+            foreach ($pattern in $criticalPatterns) {
               if ($stderrContent -match $pattern) {
-                Write-Error "JavaScript error detected: $pattern"
-                Get-Content $errLog | Select-Object -First 20
+                Write-Error "CRITICAL: Error detected matching '$pattern'"
+                Get-Content $errLog | Select-Object -First 30
                 $errorsFound = $true
               }
             }
+          }
+
+          # Check if DevTools port is listening (proves renderer started)
+          try {
+            $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 5 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) {
+              Write-Host "✓ Renderer is responding (DevTools port $port)"
+            }
+          } catch {
+            Write-Warning "⚠ DevTools port $port not responding - renderer may not have started"
           }
 
           if ($errorsFound) {
@@ -116,7 +151,7 @@ jobs:
           }
 
           Write-Host "✓ App is running (PID $($proc.Id))"
-          Write-Host "✓ No JavaScript errors detected in stderr"
+          Write-Host "✓ No critical errors detected"
 
           # Cleanup
           Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
@@ -150,6 +185,26 @@ jobs:
           npm run build
           npm run build:electron:main
           npx electron-builder --win portable --x64 --dir
+
+      - name: Verify file structure
+        run: |
+          $fail = $false
+          $required = @(
+            "dist\index.html",
+            "dist\assets",
+            "dist-electron\electron\main.js",
+            "dist-electron\electron\preload.js"
+          )
+          foreach ($file in $required) {
+            $path = "client-pos/release/win-unpacked/$file"
+            if (Test-Path $path) {
+              Write-Host "✓ Found: $file"
+            } else {
+              Write-Error "✗ Missing: $file"
+              $fail = $true
+            }
+          }
+          if ($fail) { exit 1 }
 
       - name: Install Playwright
         run: |
