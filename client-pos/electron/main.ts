@@ -5,6 +5,14 @@ import { setupUpdater, checkForUpdatesOnStart } from './updater'
 // 禁用硬件加速 - 防止某些电脑白屏
 app.disableHardwareAcceleration()
 
+// 添加 Chromium 启动参数，解决触屏/显卡问题
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+app.commandLine.appendSwitch('disable-accelerated-2d-canvas')
+app.commandLine.appendSwitch('no-sandbox')
+app.commandLine.appendSwitch('disable-dev-shm-usage')
+app.commandLine.appendSwitch('disable-gpu-compositing')
+
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
 let customerWindow: BrowserWindow | null = null
@@ -57,18 +65,34 @@ function createMainWindow() {
   } else {
     const indexPath = getResourcePath('dist/index.html')
     const preloadPath = getResourcePath('dist-electron/electron/preload.js')
+    const fs = require('fs')
+
     console.log('[Electron] App path:', app.getAppPath())
     console.log('[Electron] __dirname:', __dirname)
     console.log('[Electron] Loading index from:', indexPath)
     console.log('[Electron] Preload path:', preloadPath)
-
-    // Check if files exist
-    const fs = require('fs')
     console.log('[Electron] Index exists:', fs.existsSync(indexPath))
     console.log('[Electron] Preload exists:', fs.existsSync(preloadPath))
 
+    // 创建诊断窗口显示加载状态
     mainWindow.loadFile(indexPath).catch((err) => {
       console.error('[Electron] Failed to load index:', err)
+      // 显示错误对话框
+      const { dialog } = require('electron')
+      dialog.showErrorBox('Load Error', 'Failed to load index.html: ' + err.message)
+    })
+
+    // 监听加载失败
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('[Electron] Failed to load:', errorCode, errorDescription)
+      mainWindow?.webContents.executeJavaScript(`
+        document.body.innerHTML = '<div style="padding:20px;font-family:Arial;background:#333;color:#fff;min-height:100vh;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;"><h2 style="color:#ff6b6b;">加载失败</h2><p>错误码: ${errorCode}</p><p>${errorDescription}</p><p style="margin-top:20px;">Index: ${indexPath}</p></div>'
+      `)
+    })
+
+    // 监听渲染进程崩溃
+    mainWindow.webContents.on('crashed', () => {
+      console.error('[Electron] Renderer process crashed')
     })
   }
 
