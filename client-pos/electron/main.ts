@@ -47,7 +47,17 @@ function createMainWindow() {
     mainWindow.webContents.openDevTools()
   } else {
     const indexPath = getResourcePath('dist/index.html')
+    const preloadPath = getResourcePath('dist-electron/electron/preload.js')
+    console.log('[Electron] App path:', app.getAppPath())
+    console.log('[Electron] __dirname:', __dirname)
     console.log('[Electron] Loading index from:', indexPath)
+    console.log('[Electron] Preload path:', preloadPath)
+
+    // Check if files exist
+    const fs = require('fs')
+    console.log('[Electron] Index exists:', fs.existsSync(indexPath))
+    console.log('[Electron] Preload exists:', fs.existsSync(preloadPath))
+
     mainWindow.loadFile(indexPath).catch((err) => {
       console.error('[Electron] Failed to load index:', err)
     })
