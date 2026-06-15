@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 
+// 禁用硬件加速 - 防止某些电脑白屏
+app.disableHardwareAcceleration()
+
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
 let customerWindow: BrowserWindow | null = null

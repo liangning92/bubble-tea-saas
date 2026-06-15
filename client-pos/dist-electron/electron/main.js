@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
+// 禁用硬件加速 - 防止某些电脑白屏
+electron_1.app.disableHardwareAcceleration();
 // 窗口引用
 let mainWindow = null;
 let customerWindow = null;
