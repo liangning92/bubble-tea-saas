@@ -31,7 +31,7 @@ jobs:
       - name: Build Electron package
         run: |
           cd client-pos
-          npx electron-builder --win portable --dir release/test-build
+          npx electron-builder --win portable --dir
 
       - name: Verify build output
         run: |
