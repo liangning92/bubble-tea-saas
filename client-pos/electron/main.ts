@@ -14,6 +14,36 @@ function checkWebView2(): boolean {
   }
 }
 
+// 显示错误信息页面（同步版本，不依赖窗口加载）
+function showErrorPageSync(title: string, message: string, details?: string): void {
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #d32f2f; margin-top: 0; }
+    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
+    .btn:hover { background: #1565c0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>⚠️ ${title}</h2>
+    <p>${message}</p>
+    ${details ? `<div class="details"><strong>详细信息：</strong><br>${details}</div>` : ''}
+    <button class="btn" onclick="window.close()">关闭程序</button>
+  </div>
+</body>
+</html>`
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
+  }
+}
+
 // 显示错误信息页面
 function showErrorPage(mainWindow: BrowserWindow, title: string, message: string, details?: string) {
   const html = `<!DOCTYPE html>
@@ -146,21 +176,26 @@ function createMainWindow() {
     // 监听页面加载失败
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
       console.error('[Electron] Page failed to load:', errorCode, errorDescription)
+      if (mainWindow) showErrorPage(mainWindow, '页面加载失败', '无法加载主界面，可能缺少必要的运行时组件。', `错误码: ${errorCode}\n描述: ${errorDescription}`)
     })
 
     // 监听渲染进程错误
     mainWindow.webContents.on('render-process-gone', (event, details) => {
       console.error('[Electron] Renderer process gone:', details)
+      if (mainWindow) showErrorPage(mainWindow, '渲染进程异常', '应用程序渲染进程意外退出。', `详情: ${JSON.stringify(details)}`)
+    })
+
+    // 监听控制台消息（来自渲染进程）
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+      if (level >= 2) { // Error level
+        console.error('[Renderer Error]', message, 'at', sourceId, 'line', line)
+      }
     })
 
     // 监听渲染进程崩溃
-    mainWindow.webContents.on('crashed', () => {
-      console.error('[Electron] Renderer process crashed')
-    })
-
-    // 监听渲染进程崩溃
-    mainWindow.webContents.on('crashed', () => {
-      console.error('[Electron] Renderer process crashed')
+    mainWindow.webContents.on('crashed', (event, killed) => {
+      console.error('[Electron] Renderer process crashed, killed:', killed)
+      if (mainWindow) showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `killed: ${killed}`)
     })
   }
 
