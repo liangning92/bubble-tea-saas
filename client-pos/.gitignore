@@ -1,0 +1,10 @@
+node_modules
+dist
+.vercel
+.git
+*.log
+.env
+.env.*
+.DS_Store
+*.local
+.vscode
