@@ -1253,7 +1253,7 @@ router.get('/message-stats', authenticate, authorize('admin', 'manager'), async 
     // Group by channel
     const byChannelMap = new Map<string, { sent: number; delivered: number; failed: number }>()
     logs.forEach(log => {
-      const channel = log.channel || 'unknown'
+      const channel = log.channelType || 'unknown'
       const existing = byChannelMap.get(channel) || { sent: 0, delivered: 0, failed: 0 }
       existing.sent++
       if (log.status === 'delivered') existing.delivered++
@@ -1461,21 +1461,21 @@ router.get('/referral-funnel', authenticate, authorize('admin', 'manager'), asyn
     // Get referral logs
     const referralLogs = await prisma.referralLog.findMany({
       where: {
-        storeId,
+        referralCampaign: { storeId },
         createdAt: { gte: startDate }
       },
       include: {
-        inviter: { select: { id: true, name: true, phone: true } }
+        inviterMember: { select: { id: true, name: true, phone: true } }
       },
       orderBy: { createdAt: 'desc' }
     })
 
     // Calculate funnel metrics
     const codesGenerated = referralLogs.length
-    const codesUsed = referralLogs.filter(l => l.status === 'completed').length
+    const codesUsed = referralLogs.filter(l => l.orderId).length
 
     // Get members who used referral codes
-    const rewardeeIds = referralLogs.filter(l => l.rewardeeId).map(l => l.rewardeeId)
+    const rewardeeIds = referralLogs.filter(l => l.rewardeeMemberId).map(l => l.rewardeeMemberId)
     const referredMembers = await prisma.member.findMany({
       where: { id: { in: rewardeeIds } },
       include: { orders: true }
@@ -1487,7 +1487,7 @@ router.get('/referral-funnel', authenticate, authorize('admin', 'manager'), asyn
 
     // Calculate revenue from referred members
     const totalReferralRevenue = referredMembers.reduce((sum, m) => {
-      return sum + m.orders.reduce((orderSum, o) => orderSum + o.total, 0)
+      return sum + m.orders.reduce((orderSum, o) => orderSum + o.totalAmount, 0)
     }, 0)
 
     // Reward cost (simplified - would need actual reward calculation)
@@ -1497,19 +1497,19 @@ router.get('/referral-funnel', authenticate, authorize('admin', 'manager'), asyn
     // Top referrers
     const referrerMap = new Map<string, { count: number; reward: number }>()
     referralLogs.forEach(log => {
-      if (log.inviterId) {
-        const existing = referrerMap.get(log.inviterId) || { count: 0, reward: 0 }
+      if (log.inviterMemberId) {
+        const existing = referrerMap.get(log.inviterMemberId) || { count: 0, reward: 0 }
         existing.count++
         existing.reward += 5000
-        referrerMap.set(log.inviterId, existing)
+        referrerMap.set(log.inviterMemberId, existing)
       }
     })
 
     const topReferrers = Array.from(referrerMap.entries())
-      .map(([inviterId, data]) => ({
-        memberId: inviterId,
-        memberName: referralLogs.find(l => l.inviterId === inviterId)?.inviter?.name || 'Unknown',
-        phone: referralLogs.find(l => l.inviterId === inviterId)?.inviter?.phone || '-',
+      .map(([inviterMemberId, data]) => ({
+        memberId: inviterMemberId,
+        memberName: referralLogs.find(l => l.inviterMemberId === inviterMemberId)?.inviterMember?.name || 'Unknown',
+        phone: referralLogs.find(l => l.inviterMemberId === inviterMemberId)?.inviterMember?.phone || '-',
         referralCount: data.count,
         rewardEarned: data.reward
       }))
