@@ -2,6 +2,46 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 
+// 检测 WebView2 是否可用
+function checkWebView2(): boolean {
+  try {
+    // 尝试创建一个隐藏窗口测试 WebView2
+    const testWindow = new BrowserWindow({ show: false, webPreferences: {} })
+    testWindow.close()
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// 显示错误信息页面
+function showErrorPage(mainWindow: BrowserWindow, title: string, message: string, details?: string) {
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #d32f2f; margin-top: 0; }
+    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
+    .btn:hover { background: #1565c0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>⚠️ ${title}</h2>
+    <p>${message}</p>
+    ${details ? `<div class="details"><strong>详细信息：</strong><br>${details}</div>` : ''}
+    <button class="btn" onclick="window.close()">关闭程序</button>
+  </div>
+</body>
+</html>`
+  mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
+}
+
 // 禁用硬件加速 - 防止某些电脑白屏
 app.disableHardwareAcceleration()
 
@@ -78,16 +118,23 @@ function createMainWindow() {
 
     // 如果文件不存在，显示错误
     if (!indexExists) {
-      mainWindow.loadURL(`data:text/html,<html><body style="background:#333;color:#fff;font-family:Arial;padding:40px;"><h2>文件未找到</h2><p>${indexPath}</p><p>请重新安装应用</p></body></html>`)
+      showErrorPage(mainWindow, '文件未找到', '应用程序文件不完整，请重新安装。', `路径: ${indexPath}`)
       return
     }
 
+    // 如果 preload 不存在，显示错误
+    if (!preloadExists) {
+      showErrorPage(mainWindow, '配置文件缺失', '应用程序配置不完整，请重新安装。', `路径: ${preloadPath}`)
+      return
+    }
+
+    // 尝试加载页面
     mainWindow.loadFile(indexPath).then(() => {
       console.log('[Electron] Successfully loaded index.html')
     }).catch((err) => {
       console.error('[Electron] Failed to load index:', err)
       if (mainWindow) {
-        mainWindow.loadURL(`data:text/html,<html><body style="background:#333;color:#fff;font-family:Arial;padding:40px;"><h2>加载失败</h2><p>${err.message}</p><p>路径: ${indexPath}</p></body></html>`)
+        showErrorPage(mainWindow, '页面加载失败', '无法加载主界面，可能缺少必要的运行时组件。', `错误: ${err.message}\n路径: ${indexPath}`)
       }
     })
 
