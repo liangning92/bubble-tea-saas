@@ -984,7 +984,7 @@ export async function getStaffPerformance(storeId: string, startDate: string, en
     staff.completionRate = staff.total > 0 ? Math.round((staff.completed + staff.skipped) / staff.total * 100) : 0
   })
 
-  return Object.values(byStaff).sort((a, b) => b.completed - a.completed)
+  return Object.values(byStaff).sort((a: any, b: any) => b.completed - a.completed)
 }
 
 // ============================================

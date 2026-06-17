@@ -50,7 +50,7 @@ export async function getStaffPointBalancesByStore(storeId: string) {
 
   // Combine staff list with their points
   return staffList.map(staff => {
-    const sp = pointsMap.get(staff.id)
+    const sp = pointsMap.get(staff.id) as any
     return {
       staffId: staff.id,
       staffName: staff.name,
