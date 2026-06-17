@@ -10,20 +10,25 @@ const DEFAULT_API_URL = '/api'
 function autoDetectApiUrl(): string {
   const host = window.location.hostname
 
-  // Tunnel URL mappings - update these when tunnels restart
+  // Vercel production URL - proxy through Vercel's rewrite
+  if (host.includes('vercel.app')) {
+    return '/api'
+  }
+
+  // Tunnel URL mappings
   const tunnelMappings: Record<string, string> = {
-    'thick-hands-hug.loca.lt': 'https://thick-hands-hug.loca.lt',
+    'vercel.app': '',  // Vercel handles API proxy
   }
 
   // Check if accessed via tunnel
   for (const [posHost, apiHost] of Object.entries(tunnelMappings)) {
-    if (host.includes(posHost) || host.includes('loca.lt') || host.includes('serveo') || host.includes('trycloudflare')) {
-      // Return the corresponding API URL
-      return apiHost
+    if (host.includes(posHost)) {
+      return apiHost || '/api'
     }
   }
 
-  return DEFAULT_API_URL
+  // Default to Vercel proxy
+  return '/api'
 }
 
 export function getApiUrl(): string {
