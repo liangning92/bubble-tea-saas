@@ -4,6 +4,6 @@
   "framework": "vite",
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://thick-hands-hug.loca.lt/api/$1" }
+    { "source": "/api/(.*)", "destination": "https://api-production-c60e.up.railway.app/api/$1" }
   ]
 }
