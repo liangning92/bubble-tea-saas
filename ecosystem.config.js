@@ -1,5 +1,4 @@
 const path = require('path');
-
 const WORKDIR = __dirname;
 
 module.exports = {
@@ -18,6 +17,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: '7072',
+        DATABASE_URL: 'file:./prisma/dev.db',
       },
       error_file: '../logs/tea-server-err.log',
       out_file: '../logs/tea-server-out.log',
@@ -36,6 +36,7 @@ module.exports = {
       restart_delay: 5000,
       env: {
         NODE_ENV: 'development',
+        VITE_API_BASE_URL: 'http://localhost:7072',
       },
       error_file: '../logs/tea-admin-err.log',
       out_file: '../logs/tea-admin-out.log',
@@ -54,6 +55,7 @@ module.exports = {
       restart_delay: 5000,
       env: {
         NODE_ENV: 'development',
+        VITE_API_BASE_URL: 'http://localhost:7072',
       },
       error_file: '../logs/tea-pos-err.log',
       out_file: '../logs/tea-pos-out.log',
