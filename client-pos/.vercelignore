@@ -1,0 +1,12 @@
+release/
+node_modules/
+.git/
+*.log
+.env
+.env.*
+.DS_Store
+*.local
+.vscode/
+e2e/
+electron/
+dist-electron/

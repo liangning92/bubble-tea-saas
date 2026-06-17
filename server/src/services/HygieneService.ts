@@ -917,12 +917,18 @@ export async function getStatsByRange(storeId: string, startDate: string, endDat
     ? Math.round(completedWithScore.reduce((sum, t) => sum + (t.qualityScore || 0), 0) / completedWithScore.length * 10) / 10
     : null
 
+  const statsByDate = Object.values(byDate)
+  const completed = statsByDate.reduce((sum: number, d: typeof byDate[string]) => sum + d.completed, 0)
+  const skipped = statsByDate.reduce((sum: number, d: typeof byDate[string]) => sum + d.skipped, 0)
+  const pending = statsByDate.reduce((sum: number, d: typeof byDate[string]) => sum + d.pending, 0)
+  const rejected = statsByDate.reduce((sum: number, d: typeof byDate[string]) => sum + d.rejected, 0)
+
   return {
     total: tasks.length,
-    completed: Object.values(byDate).reduce((sum, d) => sum + d.completed, 0),
-    skipped: Object.values(byDate).reduce((sum, d) => sum + d.skipped, 0),
-    pending: Object.values(byDate).reduce((sum, d) => sum + d.pending, 0),
-    rejected: Object.values(byDate).reduce((sum, d) => sum + d.rejected, 0),
+    completed,
+    skipped,
+    pending,
+    rejected,
     avgQualityScore,
     trend,
     byArea,
