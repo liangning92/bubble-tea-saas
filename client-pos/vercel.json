@@ -1,8 +1,9 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://your-api-server.com/api/$1" }
+    { "source": "/api/(.*)", "destination": "https://thick-hands-hug.loca.lt/api/$1" }
   ]
 }
