@@ -17,7 +17,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: '7072',
-        DATABASE_URL: 'file:/Users/liangning/Desktop/Claude_Work/bubble-tea-saas/server/prisma/dev.db',
+        DATABASE_URL: 'file:./prisma/dev.db',
       },
       error_file: '../logs/tea-server-err.log',
       out_file: '../logs/tea-server-out.log',

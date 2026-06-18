@@ -175,7 +175,7 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // Start Server with Socket.IO
-httpServer.listen(config.port, () => {
+httpServer.listen(config.port, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
