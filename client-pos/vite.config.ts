@@ -13,10 +13,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 6063,
-    allowedHosts: ['.serveo.net', '.serveousercontent.com', '.trycloudflare.com', '.loca.lt'],
+    allowedHosts: ['.serveo.net', '.serveousercontent.com', '.trycloudflare.com', '.loca.lt', '.aicube.online', 'aicube.online'],
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:7072',
         changeOrigin: true
       }
     }

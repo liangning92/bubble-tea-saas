@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.bubbletea.pos",
+  "productName": "Bubble Tea POS",
+  "directories": {
+    "output": "release",
+    "buildResources": "build"
+  },
+  "files": [
+    "server/dist/**/*",
+    "server/node_modules/.prisma/**/*",
+    "server/node_modules/@prisma/**/*",
+    "server/prisma/schema.prisma",
+    "server/prisma/seed.db",
+    "client-pos/dist/**/*",
+    "shared/**/*"
+  ],
+  "extraMetadata": {
+    "main": "dist-electron/main.js"
+  },
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node",
+    "**/node_modules/.prisma/**/*",
+    "**/node_modules/better-sqlite3/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Bubble Tea POS"
+  },
+  "publish": null
+}

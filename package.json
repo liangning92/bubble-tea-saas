@@ -28,7 +28,11 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "electron:build": "npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run build:pos && npm run build:server && npm run electron:compile && electron .",
+    "electron:start": "npm run electron:compile && electron ."
   },
   "engines": {
     "node": ">=18.0.0",
@@ -40,6 +44,9 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.3",
     "vercel": "^54.14.0"
   }
 }

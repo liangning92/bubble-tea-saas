@@ -1,251 +1,17 @@
-name: Build Windows Installer
+name: Build Windows Executable
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
-
-permissions:
-  contents: write
+    inputs:
+      version:
+        description: 'Version tag'
+        required: false
+        default: '1.0.0'
 
 jobs:
-  test-windows:
-    runs-on: windows-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install root dependencies
-        run: npm install --include=dev
-
-      - name: Install POS dependencies
-        run: |
-          cd client-pos
-          npm install --include=dev
-
-      - name: TypeScript type check
-        run: |
-          cd client-pos
-          npx tsc --noEmit
-
-      - name: Build Vite frontend
-        run: |
-          cd client-pos
-          npm run build
-
-      - name: Build Electron main process
-        run: |
-          cd client-pos
-          npm run build:electron:main
-
-      - name: Electron smoke test
-        run: |
-          cd client-pos
-          npx electron --version
-
-      - name: Build portable exe (smoke test)
-        run: |
-          cd client-pos
-          npx electron-builder --win portable --x64 --dir
-
-      - name: Verify exe exists
-        run: |
-          if (Test-Path "client-pos/release/win-unpacked/BubbleTeaPOS.exe") {
-            Write-Host "✓ Smoke test passed - exe exists"
-            Get-Item "client-pos/release/win-unpacked/BubbleTeaPOS.exe" | Select-Object Name, Length
-          } else {
-            Write-Error "Smoke test failed - exe not found"
-            exit 1
-          }
-
-      - name: Verify packaged file structure
-        run: |
-          $fail = $false
-          # With asar: false, files are in resources/app/
-          $required = @(
-            "resources\app\dist\index.html",
-            "resources\app\dist\assets",
-            "resources\app\dist-electron\electron\main.js",
-            "resources\app\dist-electron\electron\preload.js"
-          )
-          foreach ($file in $required) {
-            $path = "client-pos/release/win-unpacked/$file"
-            if (Test-Path $path) {
-              Write-Host "✓ Found: $file"
-            } else {
-              Write-Error "✗ Missing: $file"
-              $fail = $true
-            }
-          }
-          if ($fail) { exit 1 }
-
-      - name: Launch test with comprehensive error detection
-        run: |
-          $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
-          $wait = 12
-          $port = 9222
-
-          # Start Electron with remote debugging
-          $errLog = "$env:TEMP\electron_err_$PID.log"
-          $outLog = "$env:TEMP\electron_out_$PID.log"
-          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
-          Write-Host "Started process $($proc.Id), waiting ${wait}s..."
-          Start-Sleep $wait
-
-          # Check if crashed
-          if ($proc.HasExited) {
-            Write-Error "CRASH: App exited early with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 30 }
-            if (Test-Path $outLog) { Get-Content $outLog | Select-Object -First 30 }
-            exit 1
-          }
-
-          # Check stderr for critical errors
-          $criticalPatterns = @(
-            "SyntaxError",
-            "ReferenceError",
-            "TypeError",
-            "Module not found",
-            "Named export.*not found",
-            "Uncaught Exception",
-            "ERR_MODULE_NOT_FOUND",
-            "Cannot find module",
-            "failed to load",
-            "WebView2.*error",
-            "GPU process"
-          )
-
-          $errorsFound = $false
-          if (Test-Path $errLog) {
-            $stderrContent = Get-Content $errLog -Raw
-            foreach ($pattern in $criticalPatterns) {
-              if ($stderrContent -match $pattern) {
-                Write-Error "CRITICAL: Error detected matching '$pattern'"
-                Get-Content $errLog | Select-Object -First 30
-                $errorsFound = $true
-              }
-            }
-          }
-
-          # Check if DevTools port is listening (proves renderer started)
-          try {
-            $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 5 -ErrorAction Stop
-            if ($response.StatusCode -eq 200) {
-              Write-Host "✓ Renderer is responding (DevTools port $port)"
-            }
-          } catch {
-            Write-Warning "⚠ DevTools port $port not responding - renderer may not have started"
-          }
-
-          if ($errorsFound) {
-            Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
-            Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
-            exit 1
-          }
-
-          Write-Host "✓ App is running (PID $($proc.Id))"
-          Write-Host "✓ No critical errors detected"
-
-          # Cleanup
-          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
-          Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
-          Write-Host "✓ Launch test passed"
-
-  e2e-test:
-    needs: test-windows
-    runs-on: windows-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: |
-          npm install --include=dev
-          cd client-pos
-          npm install --include=dev
-
-      - name: Build app
-        run: |
-          cd client-pos
-          npm run build
-          npm run build:electron:main
-          npx electron-builder --win portable --x64 --dir
-
-      - name: Verify file structure
-        run: |
-          $fail = $false
-          # With asar: false, files are in resources/app/
-          $required = @(
-            "resources\app\dist\index.html",
-            "resources\app\dist\assets",
-            "resources\app\dist-electron\electron\main.js",
-            "resources\app\dist-electron\electron\preload.js"
-          )
-          foreach ($file in $required) {
-            $path = "client-pos/release/win-unpacked/$file"
-            if (Test-Path $path) {
-              Write-Host "✓ Found: $file"
-            } else {
-              Write-Error "✗ Missing: $file"
-              $fail = $true
-            }
-          }
-          if ($fail) { exit 1 }
-
-      - name: Install Playwright
-        run: |
-          cd client-pos
-          npm install -D @playwright/test
-          npx playwright install chromium
-          npx playwright install-deps chromium
-
-      - name: Start app for testing
-        run: |
-          $exePath = "client-pos/release/win-unpacked/BubbleTeaPOS.exe"
-          $port = 9222
-          $errLog = "$env:TEMP\electron_err_$PID.log"
-          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
-          Write-Host "Started app PID $($proc.Id)"
-          # Wait for app to fully load
-          Start-Sleep 8
-          # Keep process ID for cleanup
-          $proc.Id | Out-File "$env:TEMP\app_pid.txt"
-
-      - name: Run Playwright e2e tests
-        run: |
-          cd client-pos
-          $env:PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true"
-          npx playwright test e2e/pos.spec.ts --reporter=line --timeout=15000 || true
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-test-results
-          path: client-pos/test-results/ || client-pos/*.png || client-pos/e2e/*.png
-          retention-days: 7
-          continue-on-error: true
-
   build:
-    needs: test-windows
     runs-on: windows-latest
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -253,113 +19,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
       - name: Install dependencies
-        run: |
-          npm install --include=dev
-          cd client-pos
-          npm install --include=dev
+        run: npm ci
 
-      - name: Build POS Electron app
-        run: |
-          cd client-pos
-          npm run build
-          npm run build:electron:main
+      - name: Build server
+        run: npm run build:server
 
-      - name: Build NSIS Installer
-        run: |
-          cd client-pos
-          npx electron-builder --win nsis --x64
+      - name: Build admin
+        run: npm run build:admin
 
-      - name: Get version from package.json
-        id: version
-        run: |
-          $version = (Get-Content client-pos/package.json | ConvertFrom-Json).version
-          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          echo "Building version: $version"
+      - name: Build POS
+        run: npm run build:pos
 
-      - name: Create latest.yml with SHA512
-        run: |
-          $version = (Get-Content client-pos/package.json | ConvertFrom-Json).version
-          $sha512 = (Get-FileHash client-pos/release/BubbleTeaPOS.exe -Algorithm SHA512).Hash.ToLower()
-          $size = (Get-Item client-pos/release/BubbleTeaPOS.exe).Length
-          $date = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
-          $content = @"
-          version: $version
-          sha512: $sha512
-          releaseDate: '$date'
-          files:
-            - url: BubbleTeaPOS.exe
-              sha512: $sha512
-              size: $size
-          path: BubbleTeaPOS.exe
-          githubDownloadUrl: https://github.com/liangning92/bubble-tea-saas/releases/download/v$version/BubbleTeaPOS.exe
-          "@
-          $content | Out-File -FilePath client-pos/release/latest.yml -Encoding utf8
-          echo "=== latest.yml content ==="
-          Get-Content client-pos/release/latest.yml
+      - name: Compile Electron
+        run: npm run electron:compile
 
-      - name: Upload Installer
+      - name: Build Windows executable
+        run: npx electron-builder --config electron-builder.json --win --publish never
+
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: windows-nsis-installer
-          path: client-pos/release/BubbleTeaPOS.exe
-          retention-days: 7
-
-      - name: Upload latest.yml
-        uses: actions/upload-artifact@v4
-        with:
-          name: latest-yml
-          path: client-pos/release/latest.yml
-          retention-days: 7
-
-      - name: Build Portable version
-        run: |
-          cd client-pos
-          npx electron-builder --win portable --x64
-
-      - name: Upload Portable
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-portable
-          path: client-pos/release/win-unpacked/
-          retention-days: 7
-
-  create-release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download Installer
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-nsis-installer
-          path: .
-
-      - name: Download latest.yml
-        uses: actions/download-artifact@v4
-        with:
-          name: latest-yml
-          path: .
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(grep "version:" latest.yml | sed 's/version: //' | tr -d '\r\n')
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Creating release for version: $VERSION"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            BubbleTeaPOS.exe
-            latest.yml
-          tag_name: v${{ steps.version.outputs.VERSION }}
-          release_name: BubbleTeaPOS v${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: Bubble-Tea-POS-Windows
+          path: release/*.exe
+          retention-days: 30

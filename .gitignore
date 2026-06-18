@@ -33,3 +33,8 @@ backups/
 *.sql.gz*
 client-pos/release/
 win-unpacked/
+
+dist-electron/
+release/
+*.log
+npm-debug.log*

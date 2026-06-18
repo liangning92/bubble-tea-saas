@@ -12,13 +12,13 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
-    allowedHosts: ['.serveo.net', '.serveousercontent.com', '.trycloudflare.com'],
+    allowedHosts: ['.serveo.net', '.serveousercontent.com', '.trycloudflare.com', '.aicube.online', 'aicube.online'],
     watch: {
       usePolling: true
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:7072',
         changeOrigin: true
       }
     }
@@ -26,7 +26,7 @@ export default defineConfig({
   preview: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:7072',
         changeOrigin: true
       }
     }

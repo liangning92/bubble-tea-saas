@@ -391,7 +391,11 @@ export function POSPage() {
               setProducts(data.data.list)
               const firstCat = data.data.list[0]?.category?.name
               if (firstCat) setFilter(firstCat)
+              setLoading(false)
             }
+          } else {
+            // data.data.list 为空
+            if (!cancelled) setLoading(false)
           }
         } catch (e) {
           if (cancelled) return
@@ -516,6 +520,7 @@ export function POSPage() {
         }
       } catch (e) {
         console.error('[ProductSync] Sync failed:', e)
+        // Note: Don't call setLoading(false) here - it's handled by loadProducts
       }
     }
 
