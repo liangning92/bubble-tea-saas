@@ -2,36 +2,8 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs'
-import net from 'net'
 import http from 'http'
-
-// ============================================================================
-// Types
-// ============================================================================
-
-interface PrintReceiptData {
-  orderNum: string
-  header: string
-  footer: string
-  printerHost: string
-  printerPort: number
-  items: Array<{
-    productName: string
-    specName: string
-    quantity: number
-    unitPrice: number
-    addons: Array<{ name: string; price: number }>
-  }>
-  subtotal: number
-  tax: number
-  total: number
-  paymentMethod: string
-  cashierName?: string
-  orderDate?: string
-  customerName?: string
-  paymentReceived?: number
-  change?: number
-}
+import { printReceipt, openCashDrawerWindows, listPrinters, PrintReceiptData } from './hardware.js'
 
 // ============================================================================
 // Constants
@@ -41,18 +13,7 @@ const isDev = !app.isPackaged
 const API_PORT = 7072
 const POS_PORT = 6063
 
-// ESC/POS Commands
-const ESC = '\x1B'
-const ESC_P = '\x1B\x70'  // Cash drawer kick
-const CUT = '\x1B\x6D'     // Full cut
-const PARTIAL_CUT = '\x1B\x6D' // Partial cut
-const ALIGN_CENTER = '\x1B\x61\x31'
-const ALIGN_LEFT = '\x1B\x61\x30'
-const BOLD_ON = '\x1B\x45\x31'
-const BOLD_OFF = '\x1B\x45\x30'
-const DOUBLE_SIZE = '\x1B\x21\x30'
-const NORMAL_SIZE = '\x1B\x21\x00'
-const LINE_FEED = '\n'
+
 
 // ============================================================================
 // Global State
@@ -244,148 +205,54 @@ function stopApiServer() {
 }
 
 // ============================================================================
-// ESC/POS Hardware Communication
-// ============================================================================
-
-function sendToPrinter(host: string, port: number, data: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const socket = new net.Socket()
-    
-    socket.setTimeout(5000)
-
-    socket.connect(port, host, () => {
-      socket.write(Buffer.from(data, 'utf8'), () => {
-        socket.end()
-        resolve()
-      })
-    })
-
-    socket.on('error', (err) => {
-      logError('[PRINTER] Connection error:', err.message)
-      reject(err)
-    })
-
-    socket.on('timeout', () => {
-      socket.destroy()
-      reject(new Error('Printer connection timeout'))
-    })
-  })
-}
-
-function openCashDrawer(host: string, port: number): Promise<void> {
-  // ESC p m t1 t2 - Cash drawer kick
-  // m=0 (pin 2), t1=25 (pulse 25*2ms=50ms), t2=25 (2nd pulse)
-  const command = `${ESC_P}\x00\x19\x1E`
-  return sendToPrinter(host, port, command)
-}
-
-// ============================================================================
-// Receipt Generation (ESC/POS)
-// ============================================================================
-
-function formatCurrency(amount: number): string {
-  return 'Rp ' + amount.toLocaleString('id-ID')
-}
-
-function generateReceipt(data: PrintReceiptData): string {
-  const lines: string[] = []
-  const now = data.orderDate || new Date().toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
-
-  // Header
-  lines.push(ALIGN_CENTER + DOUBLE_SIZE + BOLD_ON + data.header + NORMAL_SIZE + BOLD_OFF)
-  lines.push(ALIGN_CENTER + '--------------------------------')
-  lines.push(ALIGN_LEFT + `No: ${data.orderNum}`)
-  lines.push(ALIGN_LEFT + `Kasir: ${data.cashierName || '-'}`)
-  lines.push(ALIGN_LEFT + now)
-  if (data.customerName) {
-    lines.push(ALIGN_LEFT + `Pelanggan: ${data.customerName}`)
-  }
-  lines.push(ALIGN_CENTER + '--------------------------------')
-
-  // Items
-  for (const item of data.items) {
-    const itemTotal = item.unitPrice * item.quantity
-    lines.push(ALIGN_LEFT + `${item.productName}`)
-    if (item.specName) {
-      lines.push(ALIGN_LEFT + `   ${item.specName}`)
-    }
-    if (item.addons && item.addons.length > 0) {
-      for (const addon of item.addons) {
-        lines.push(ALIGN_LEFT + `   + ${addon.name}`)
-      }
-    }
-    lines.push(ALIGN_LEFT + `   ${item.quantity} x ${formatCurrency(item.unitPrice)}`)
-    lines.push(ALIGN_LEFT + `${''.padEnd(22)}${formatCurrency(itemTotal)}`)
-  }
-
-  lines.push(ALIGN_CENTER + '--------------------------------')
-
-  // Totals
-  const subtotalLine = `${'Subtotal:'.padEnd(24)}${formatCurrency(data.subtotal)}`
-  lines.push(ALIGN_LEFT + subtotalLine)
-  
-  if (data.tax > 0) {
-    const taxLine = `${'PPN (11%):'.padEnd(24)}${formatCurrency(data.tax)}`
-    lines.push(ALIGN_LEFT + taxLine)
-  }
-
-  const totalLine = `${'TOTAL:'.padEnd(24)}${BOLD_ON + formatCurrency(data.total) + BOLD_OFF}`
-  lines.push(ALIGN_LEFT + totalLine)
-  lines.push('')
-
-  // Payment
-  if (data.paymentMethod) {
-    lines.push(ALIGN_LEFT + `${'Metode Bayar:'.padEnd(24)}${data.paymentMethod}`)
-  }
-  if (data.paymentReceived && data.paymentReceived > 0) {
-    lines.push(ALIGN_LEFT + `${'Bayar:'.padEnd(24)}${formatCurrency(data.paymentReceived)}`)
-    if (data.change !== undefined) {
-      lines.push(ALIGN_LEFT + BOLD_ON + `${'Kembalian:'.padEnd(24)}${formatCurrency(data.change)}` + BOLD_OFF)
-    }
-  }
-
-  lines.push(ALIGN_CENTER + '--------------------------------')
-  lines.push(ALIGN_CENTER + NORMAL_SIZE + data.footer)
-  lines.push('')
-  lines.push('')
-
-  return lines.join(LINE_FEED)
-}
-
-// ============================================================================
 // IPC Handlers
 // ============================================================================
 
 function setupIpcHandlers() {
-  // Print receipt
+  // Print receipt (USB or network printer via Windows/macOS/Linux native API)
   ipcMain.handle('print-receipt', async (_event, data: PrintReceiptData) => {
     try {
-      log('[PRINT] Receipt:', data.orderNum)
-      const receipt = generateReceipt(data)
-      await sendToPrinter(data.printerHost, data.printerPort, receipt)
-      log('[PRINT] Success:', data.printerHost)
-      return { success: true }
+      log('[PRINT] Receipt:', data.orderNum, 'Printer:', data.printerName || 'default')
+      const result = await printReceipt(data)
+      if (result.success) {
+        log('[PRINT] Success')
+      } else {
+        logError('[PRINT] Failed:', result.error)
+      }
+      return result
     } catch (err: any) {
-      logError('[PRINT] Failed:', err.message)
+      logError('[PRINT] Exception:', err.message)
       return { success: false, error: err.message }
     }
   })
 
-  // Open cash drawer
-  ipcMain.handle('open-cash-drawer', async (_event, data: { printerHost?: string; printerPort?: number }) => {
+  // Open cash drawer (USB connected via printer)
+  ipcMain.handle('open-cash-drawer', async (_event, data: { printerName?: string }) => {
     try {
-      const host = data.printerHost || '192.168.1.100'
-      const port = data.printerPort || 9100
-      log('[CASH_DRAWER] Opening:', host, port)
-      await openCashDrawer(host, port)
-      log('[CASH_DRAWER] Success')
-      return { success: true }
+      const printerName = data.printerName || 'XPrinter'
+      log('[CASH_DRAWER] Opening via:', printerName)
+      const result = await openCashDrawerWindows(printerName)
+      if (result.success) {
+        log('[CASH_DRAWER] Success')
+      } else {
+        logError('[CASH_DRAWER] Failed:', result.error)
+      }
+      return result
     } catch (err: any) {
-      logError('[CASH_DRAWER] Failed:', err.message)
+      logError('[CASH_DRAWER] Exception:', err.message)
       return { success: false, error: err.message }
+    }
+  })
+
+  // List available printers
+  ipcMain.handle('list-printers', async () => {
+    try {
+      const printers = await listPrinters()
+      log('[PRINTER] Found:', printers.join(', '))
+      return { printers }
+    } catch (err: any) {
+      logError('[PRINTER] List failed:', err.message)
+      return { printers: [] }
     }
   })
 

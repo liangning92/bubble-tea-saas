@@ -300,7 +300,8 @@ export function POSPage() {
 
   // 硬件设置
   const [hardwareSettings, setHardwareSettings] = useState({
-    printerIp: '192.168.1.100',
+    printerName: 'XPrinter',  // Windows printer name (USB)
+    printerIp: '192.168.1.100',   // Network printer (fallback)
     printerPort: 9100,
     autoOpenCashDrawer: true,
     testPrint: null as number | null,
@@ -732,8 +733,7 @@ export function POSPage() {
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'Bubble Tea Shop',
             footer: posReceipt.footer || 'Test Print',
-            printerHost: hs.printerIp || '192.168.1.100',
-            printerPort: hs.printerPort || 9100,
+            printerName: hs.printerName || 'XPrinter',
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
             subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test'
           })
@@ -744,7 +744,7 @@ export function POSPage() {
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
           console.log('[HARDWARE TEST] Test cash drawer triggered')
-          electronAPI?.openCashDrawer?.({})
+          electronAPI?.openCashDrawer?.({ printerName: hs.printerName || 'XPrinter' })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -1434,10 +1434,7 @@ export function POSPage() {
 
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
-        electronAPI?.openCashDrawer?.({
-          printerHost: hardwareSettings.printerIp,
-          printerPort: hardwareSettings.printerPort,
-        })
+        electronAPI?.openCashDrawer?.({ printerName: hardwareSettings.printerName || 'XPrinter' })
       }
 
       electronAPI?.sendOrderComplete(orderNum)
@@ -1490,8 +1487,7 @@ export function POSPage() {
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
-        printerHost: hardwareSettings.printerIp,
-        printerPort: hardwareSettings.printerPort,
+        printerName: hardwareSettings.printerName || 'XPrinter',
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,

@@ -13,7 +13,9 @@
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
-    "shared/**/*"
+    "shared/**/*",
+    "!**/node_modules/**/printer/**/*",
+    "!**/node_modules/**/node-thermal-printer/**/*"
   ],
   "extraMetadata": {
     "main": "dist-electron/main.js"
