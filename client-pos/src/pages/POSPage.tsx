@@ -17,7 +17,7 @@ import {
   Wifi, WifiOff, X, CheckCircle, Search, Loader2,
   ShoppingCart, Trash2, Minus, Plus, Tag, User, Clock,
   Globe, FileText, Users, Printer, ScanLine, Wallet, QrCode,
-  CheckSquare, ClipboardList, Lock
+  CheckSquare, ClipboardList, Lock, Settings
 } from 'lucide-react'
 
 // Electron API
@@ -1633,6 +1633,12 @@ export function POSPage() {
             labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
             onClick: () => setShowTasksModal(true),
             badge: pendingTaskCount
+          })
+          toolbarButtons.push({
+            id: 'hardware',
+            icon: <Settings size={32} />,
+            labelKey: 'Hardware',
+            onClick: () => navigate('/hardware-settings')
           })
           toolbarButtons.push({
             id: 'logout',

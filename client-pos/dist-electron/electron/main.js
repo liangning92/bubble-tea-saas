@@ -248,6 +248,49 @@ function createCustomerWindow() {
     console.log('[Electron] Customer window created');
 }
 // IPC 通信 - 订单状态同步到副屏
+// ========== Printer Listing (Windows) ==========
+electron_1.ipcMain.handle('list-printers', async () => {
+    if (process.platform !== 'win32') {
+        return { printers: [], error: 'Only supported on Windows' };
+    }
+    return new Promise((resolve) => {
+        const { exec } = require('child_process');
+        const psCommand = `Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress`;
+        exec(`powershell -Command "${psCommand}"`, (error, stdout, stderr) => {
+            if (error) {
+                console.error('[LIST-PRINTERS] Error:', error.message);
+                resolve({ printers: [], error: error.message });
+                return;
+            }
+            try {
+                const trimmed = stdout.trim();
+                if (!trimmed) {
+                    resolve({ printers: [], error: null });
+                    return;
+                }
+                // Parse JSON output (might be array or single string)
+                let printers;
+                if (trimmed.startsWith('[')) {
+                    printers = JSON.parse(trimmed);
+                }
+                else if (trimmed.startsWith('{')) {
+                    printers = [JSON.parse(trimmed).Name];
+                }
+                else {
+                    // Plain text, one printer per line
+                    printers = trimmed.split('\n').map((s) => s.trim()).filter(Boolean);
+                }
+                console.log('[LIST-PRINTERS] Found:', printers.length, 'printers');
+                resolve({ printers, error: null });
+            }
+            catch (parseError) {
+                console.error('[LIST-PRINTERS] Parse error:', parseError.message);
+                resolve({ printers: [], error: parseError.message });
+            }
+        });
+    });
+});
+// IPC 通信 - 订单状态同步到副屏
 electron_1.ipcMain.on('order-update', (_event, orderData) => {
     if (customerWindow && !customerWindow.isDestroyed()) {
         customerWindow.webContents.send('order-update', orderData);
@@ -291,7 +334,7 @@ electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
 /**
  * 打印小票 - Windows原生打印 或 网络打印
  */
-electron_1.ipcMain.on('print-receipt', async (_event, data) => {
+electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
     try {
         const text = generateReceiptText(data);
         console.log('[PRINT] Preparing to print receipt');
@@ -300,19 +343,22 @@ electron_1.ipcMain.on('print-receipt', async (_event, data) => {
             try {
                 await printViaWindows(text, data.printerName);
                 console.log('[PRINT] Windows native print successful');
-                return;
+                return { success: true };
             }
             catch (winError) {
                 console.log('[PRINT] Windows native print failed:', winError.message);
+                return { success: false, error: winError.message };
             }
         }
         // 网络打印作为备选
         const printerHost = data.printerHost || process.env.PRINTER_HOST || '192.168.1.100';
         const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
         printViaNetwork(text, printerHost, printerPort);
+        return { success: true };
     }
     catch (error) {
         console.error('[PRINT ERROR]', error);
+        return { success: false, error: error.message };
     }
 });
 /**
@@ -371,7 +417,7 @@ function printViaNetwork(text, host, port) {
  * 打开钱箱 - Windows原生 或 网络
  * 钱箱通常连接到打印机，命令发送到打印机
  */
-electron_1.ipcMain.on('open-cash-drawer', async (_event, data) => {
+electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
     try {
         console.log('[CASH DRAWER] Opening drawer');
         // Windows 原生打印钱箱命令
@@ -379,19 +425,22 @@ electron_1.ipcMain.on('open-cash-drawer', async (_event, data) => {
             try {
                 await openCashDrawerViaWindows(data.printerName);
                 console.log('[CASH DRAWER] Windows native drawer opened');
-                return;
+                return { success: true };
             }
             catch (winError) {
                 console.log('[CASH DRAWER] Windows native failed:', winError.message);
+                return { success: false, error: winError.message };
             }
         }
         // 网络作为备选
         const printerHost = data?.printerHost || process.env.PRINTER_HOST || '192.168.1.100';
         const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
         openCashDrawerViaNetwork(printerHost, printerPort);
+        return { success: true };
     }
     catch (error) {
         console.error('[CASH DRAWER ERROR]', error);
+        return { success: false, error: error.message };
     }
 });
 /**

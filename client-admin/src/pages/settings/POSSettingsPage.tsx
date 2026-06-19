@@ -136,8 +136,10 @@ export function POSSettingsPage() {
 
   // 硬件设置
   const [hardwareSettings, setHardwareSettings] = useState({
+    printerConnectionType: 'usb',
     printerIp: '192.168.1.100',
     printerPort: 9100,
+    printerName: '',
     autoOpenCashDrawer: true,
   })
 
@@ -1027,34 +1029,103 @@ export function POSSettingsPage() {
       {/* ========== HARDWARE TAB ========== */}
       {activeSubTab === 'hardware' && (
         <div className="space-y-6">
+          {/* Info Box */}
+          <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="text-blue-500 mt-0.5">ℹ️</div>
+              <div>
+                <div className="font-medium text-blue-800">Printer Detection on POS App</div>
+                <p className="text-sm text-blue-700 mt-1">
+                  To detect and test USB printers, please open the <strong>POS App</strong> on the cashier computer and go to <strong>Settings → Hardware</strong>. 
+                  The POS app can detect printers connected to that computer.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="card">
             <h3 className="text-lg font-semibold mb-4">{t('posSettings.hardwareSettings')}</h3>
             <div className="space-y-4">
-              {/* Printer IP */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerIp')}</label>
-                  <input
-                    type="text"
-                    value={hardwareSettings.printerIp}
-                    onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerIp: e.target.value })}
-                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                    className="input"
-                    placeholder="192.168.1.100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerPort')}</label>
-                  <input
-                    type="number"
-                    value={hardwareSettings.printerPort}
-                    onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerPort: parseInt(e.target.value) || 9100 })}
-                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                    className="input"
-                    placeholder="9100"
-                  />
+              {/* Connection Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Printer Connection Type</label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'usb' })
+                      handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'usb' })
+                    }}
+                    className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
+                      hardwareSettings.printerConnectionType === 'usb'
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">🖨️</div>
+                    <div className="font-medium text-sm">USB Printer</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'network' })
+                      handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'network' })
+                    }}
+                    className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
+                      hardwareSettings.printerConnectionType === 'network'
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">🌐</div>
+                    <div className="font-medium text-sm">Network Printer</div>
+                  </button>
                 </div>
               </div>
+
+              {/* USB Printer Name */}
+              {hardwareSettings.printerConnectionType === 'usb' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">USB Printer Name</label>
+                  <input
+                    type="text"
+                    value={hardwareSettings.printerName}
+                    onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerName: e.target.value })}
+                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                    className="input"
+                    placeholder="e.g., POS58 Printer, Epson TM-T82i"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the printer name as shown in Windows Control Panel → Devices and Printers
+                  </p>
+                </div>
+              )}
+
+              {/* Network Printer IP/Port */}
+              {hardwareSettings.printerConnectionType === 'network' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerIp')}</label>
+                    <input
+                      type="text"
+                      value={hardwareSettings.printerIp}
+                      onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerIp: e.target.value })}
+                      onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                      className="input"
+                      placeholder="192.168.1.100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerPort')}</label>
+                    <input
+                      type="number"
+                      value={hardwareSettings.printerPort}
+                      onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerPort: parseInt(e.target.value) || 9100 })}
+                      onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                      className="input"
+                      placeholder="9100"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Auto Open Cash Drawer */}
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -1072,37 +1143,9 @@ export function POSSettingsPage() {
                 />
               </div>
 
-              {/* Test Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    // Trigger test print by setting flag in config
-                    handleSave('hardwareSettings', {
-                      ...hardwareSettings,
-                      testPrint: Date.now(), // Timestamp as unique trigger
-                    })
-                    setShowSuccess(true)
-                    setTimeout(() => setShowSuccess(false), 2000)
-                  }}
-                  className="btn-secondary flex items-center gap-2"
-                >
-                  <Printer size={16} />
-                  {t('posSettings.testPrinter')}
-                </button>
-                <button
-                  onClick={() => {
-                    // Trigger test cash drawer by setting flag in config
-                    handleSave('hardwareSettings', {
-                      ...hardwareSettings,
-                      testCashDrawer: Date.now(), // Timestamp as unique trigger
-                    })
-                    setShowSuccess(true)
-                    setTimeout(() => setShowSuccess(false), 2000)
-                  }}
-                  className="btn-secondary flex items-center gap-2"
-                >
-                  {t('posSettings.testCashDrawer')}
-                </button>
+              {/* Cash Drawer Info */}
+              <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">
+                💡 Cash drawer connects via RJ11 cable to your printer (not directly to computer)
               </div>
             </div>
           </div>

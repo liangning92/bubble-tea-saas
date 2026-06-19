@@ -31,11 +31,15 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     },
     // 打印小票
     sendPrintReceipt: (data) => {
-        electron_1.ipcRenderer.send('print-receipt', data);
+        return electron_1.ipcRenderer.invoke('print-receipt', data);
     },
     // 打开钱箱
     openCashDrawer: (data) => {
-        electron_1.ipcRenderer.send('open-cash-drawer', data || {});
+        return electron_1.ipcRenderer.invoke('open-cash-drawer', data || {});
+    },
+    // 列出打印机
+    listPrinters: () => {
+        return electron_1.ipcRenderer.invoke('list-printers');
     },
     // ========== 自动更新相关 ==========
     // 检查更新

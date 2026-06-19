@@ -7,6 +7,7 @@ import { CustomerDisplayPage } from './pages/CustomerDisplayPage'
 import { RegisterMemberPage } from './pages/RegisterMemberPage'
 import { ScanPage } from './pages/ScanPage'
 import { HygieneTasksPage } from './pages/HygieneTasksPage'
+import { HardwareSettingsPage } from './pages/HardwareSettingsPage'
 import { useAuthStore } from './stores/auth'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,11 @@ function App() {
       <Route path="/tasks" element={
         <ProtectedRoute>
           <HygieneTasksPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/hardware-settings" element={
+        <ProtectedRoute>
+          <HardwareSettingsPage />
         </ProtectedRoute>
       } />
       <Route
