@@ -33,7 +33,8 @@ export async function fetchApiUrlFromServer(): Promise<string | null> {
     if (!state?.token || !state?.user?.storeId) return null
 
     const storeId = state.user.storeId
-    const response = await fetch(`${getApiUrl()}/api/config/${storeId}/pos_api_url`, {
+    const baseUrl = getApiUrl().replace(/\/$/, '')  // Remove trailing slash
+    const response = await fetch(`${baseUrl}/config/${storeId}/pos_api_url`, {
       headers: {
         Authorization: `Bearer ${state.token}`
       }

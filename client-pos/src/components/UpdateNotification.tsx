@@ -7,6 +7,11 @@ interface UpdateNotificationProps {
 }
 
 export function UpdateNotification({ className = '' }: UpdateNotificationProps) {
+  // Only render in Electron environment (not in browser/web)
+  if (typeof window !== 'undefined' && !(window as any).electronAPI) {
+    return null
+  }
+
   const { t } = useTranslation()
   const [status, setStatus] = useState<string>('idle')
   const [updateInfo, setUpdateInfo] = useState<any>(null)
