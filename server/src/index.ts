@@ -62,6 +62,7 @@ import { revenueRouter } from './routes/revenue'
 import { default as paymentRouter } from './routes/payment'
 import { default as announcementRouter } from './routes/announcement'
 import { campaignCategoryRouter } from './routes/campaignCategory'
+import { hardwareRouter } from './routes/hardware'
 import { startHygieneScheduler } from './services/SchedulerService'
 import { startMarketingScheduler } from './services/MarketingSchedulerService'
 import { errorHandler } from './middlewares/errorHandler'
@@ -169,6 +170,7 @@ app.use('/api/rewards', rewardCatalogRouter)
 app.use('/api/revenue', revenueRouter)
 app.use('/api/payments', paymentRouter)
 app.use('/api/announcement', announcementRouter)
+app.use('/api/hardware', hardwareRouter)
 
 // Error Handling
 app.use(notFoundHandler)

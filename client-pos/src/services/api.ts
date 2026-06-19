@@ -137,5 +137,17 @@ export const posApi = {
   createQrisPayment: (storeId: string, orderId: string, amount: number) =>
     api.post('/payments/qris/create', { storeId, orderId, amount }),
   getQrisPaymentStatus: (externalId: string) =>
-    api.get(`/payments/qris/status/${externalId}`)
+    api.get(`/payments/qris/status/${externalId}`),
+
+  // Hardware (printers, cash drawers)
+  getDetectedPrinters: () => api.get('/hardware/printers'),
+  uploadPrinters: (printers: string[], storeId: string) =>
+    api.post('/hardware/printers', { printers, storeId }),
+  requestHardwareDetect: (storeId: string) =>
+    api.post('/hardware/detect', { storeId }),
+  getHardwareDetectStatus: () => api.get('/hardware/detect'),
+  requestTestPrint: (printerName: string, storeId: string) =>
+    api.post('/hardware/test-print', { printerName, storeId }),
+  requestTestDrawer: (printerName: string, storeId: string) =>
+    api.post('/hardware/test-drawer', { printerName, storeId })
 }

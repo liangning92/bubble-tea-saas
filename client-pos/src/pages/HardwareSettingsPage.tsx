@@ -84,8 +84,20 @@ export function HardwareSettingsPage() {
     try {
       setDetecting(true)
       const res = await electronAPI.listPrinters()
-      setDetectedPrinters(res.printers || [])
-      if (res.printers?.length === 0) {
+      const printers = res.printers || []
+      setDetectedPrinters(printers)
+      
+      // Upload to server so admin can see the list
+      if (printers.length > 0) {
+        try {
+          await posApi.uploadPrinters(printers, user?.storeId || '')
+          console.log('[Hardware] Uploaded printers to server:', printers)
+        } catch (e) {
+          console.error('[Hardware] Failed to upload printers:', e)
+        }
+      }
+      
+      if (printers.length === 0) {
         setTestResult({ type: 'error', message: 'No printers detected. Make sure your printer is turned on and connected.' })
       }
     } catch (err: any) {

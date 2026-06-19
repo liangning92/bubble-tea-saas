@@ -3,9 +3,20 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer } from 'lucide-react'
+import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw } from 'lucide-react'
+import axios from 'axios'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
+
+// Toggle Component (shared)
+const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled, onChange }) => (
+  <button
+    onClick={onChange}
+    className={`w-12 h-6 rounded-full transition-colors relative ${enabled ? 'bg-primary' : 'bg-gray-300'}`}
+  >
+    <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${enabled ? 'translate-x-[26px]' : 'translate-x-[2px]'}`} />
+  </button>
+)
 
 export function POSSettingsPage() {
   const { t, i18n } = useTranslation()
@@ -143,6 +154,28 @@ export function POSSettingsPage() {
     autoOpenCashDrawer: true,
   })
 
+  // 检测到的打印机列表（从POS客户端上传）
+  const [detectedPrinters, setDetectedPrinters] = useState<string[]>([])
+  const [lastPrinterDetection, setLastPrinterDetection] = useState<string | null>(null)
+  const [loadingPrinters, setLoadingPrinters] = useState(false)
+
+  // 获取检测到的打印机列表
+  const fetchDetectedPrinters = async () => {
+    try {
+      setLoadingPrinters(true)
+      const apiUrl = localStorage.getItem('api_url') || ''
+      const response = await axios.get(`${apiUrl}/api/hardware/printers`)
+      if (response.data?.printers) {
+        setDetectedPrinters(response.data.printers)
+        setLastPrinterDetection(response.data.lastDetection)
+      }
+    } catch (err) {
+      console.error('Failed to fetch detected printers:', err)
+    } finally {
+      setLoadingPrinters(false)
+    }
+  }
+
   // ========== LOAD SAVED CONFIG ==========
   useEffect(() => {
     if (posConfig?.data) {
@@ -213,16 +246,6 @@ export function POSSettingsPage() {
   const handleSave = (key: string, value: any) => {
     saveConfigMutation.mutate({ key, value })
   }
-
-  // ========== TOGGLE COMPONENT ==========
-  const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled, onChange }) => (
-    <button
-      onClick={onChange}
-      className={`w-12 h-6 rounded-full transition-colors relative ${enabled ? 'bg-primary' : 'bg-gray-300'}`}
-    >
-      <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${enabled ? 'translate-x-[26px]' : 'translate-x-[2px]'}`} />
-    </button>
-  )
 
   // ========== SUB TABS ==========
   const subTabs: { key: POSSubTab; labelKey: string; icon: React.ReactNode }[] = [
@@ -1028,129 +1051,213 @@ export function POSSettingsPage() {
 
       {/* ========== HARDWARE TAB ========== */}
       {activeSubTab === 'hardware' && (
-        <div className="space-y-6">
-          {/* Info Box */}
-          <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-            <div className="flex items-start gap-3">
-              <div className="text-blue-500 mt-0.5">ℹ️</div>
-              <div>
-                <div className="font-medium text-blue-800">Printer Detection on POS App</div>
-                <p className="text-sm text-blue-700 mt-1">
-                  To detect and test USB printers, please open the <strong>POS App</strong> on the cashier computer and go to <strong>Settings → Hardware</strong>. 
-                  The POS app can detect printers connected to that computer.
-                </p>
-              </div>
-            </div>
-          </div>
+        <HardwareTabContent
+          hardwareSettings={hardwareSettings}
+          setHardwareSettings={setHardwareSettings}
+          handleSave={handleSave}
+          detectedPrinters={detectedPrinters}
+          lastPrinterDetection={lastPrinterDetection}
+          loadingPrinters={loadingPrinters}
+          onRefreshPrinters={fetchDetectedPrinters}
+        />
+      )}
+    </div>
+  )
+}
 
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.hardwareSettings')}</h3>
-            <div className="space-y-4">
-              {/* Connection Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Printer Connection Type</label>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'usb' })
-                      handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'usb' })
-                    }}
-                    className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
-                      hardwareSettings.printerConnectionType === 'usb'
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">🖨️</div>
-                    <div className="font-medium text-sm">USB Printer</div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'network' })
-                      handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'network' })
-                    }}
-                    className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
-                      hardwareSettings.printerConnectionType === 'network'
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">🌐</div>
-                    <div className="font-medium text-sm">Network Printer</div>
-                  </button>
-                </div>
-              </div>
+// Hardware Tab Content Component
+function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave, detectedPrinters, lastPrinterDetection, loadingPrinters, onRefreshPrinters }: {
+  hardwareSettings: any
+  setHardwareSettings: any
+  handleSave: (key: string, value: any) => void
+  detectedPrinters: string[]
+  lastPrinterDetection: string | null
+  loadingPrinters: boolean
+  onRefreshPrinters: () => void
+}) {
+  const { t } = useTranslation()
 
-              {/* USB Printer Name */}
-              {hardwareSettings.printerConnectionType === 'usb' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">USB Printer Name</label>
-                  <input
-                    type="text"
-                    value={hardwareSettings.printerName}
-                    onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerName: e.target.value })}
-                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                    className="input"
-                    placeholder="e.g., POS58 Printer, Epson TM-T82i"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter the printer name as shown in Windows Control Panel → Devices and Printers
-                  </p>
-                </div>
-              )}
+  // Fetch printers when component mounts
+  useEffect(() => {
+    onRefreshPrinters()
+  }, [])
 
-              {/* Network Printer IP/Port */}
-              {hardwareSettings.printerConnectionType === 'network' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerIp')}</label>
-                    <input
-                      type="text"
-                      value={hardwareSettings.printerIp}
-                      onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerIp: e.target.value })}
-                      onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                      className="input"
-                      placeholder="192.168.1.100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerPort')}</label>
-                    <input
-                      type="number"
-                      value={hardwareSettings.printerPort}
-                      onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerPort: parseInt(e.target.value) || 9100 })}
-                      onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                      className="input"
-                      placeholder="9100"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Auto Open Cash Drawer */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <span className="font-medium">{t('posSettings.autoOpenCashDrawer')}</span>
-                  <p className="text-sm text-gray-500">{t('posSettings.autoOpenCashDrawerHint')}</p>
-                </div>
-                <Toggle
-                  enabled={hardwareSettings.autoOpenCashDrawer}
-                  onChange={() => {
-                    const newVal = !hardwareSettings.autoOpenCashDrawer
-                    setHardwareSettings({ ...hardwareSettings, autoOpenCashDrawer: newVal })
-                    handleSave('hardwareSettings', { ...hardwareSettings, autoOpenCashDrawer: newVal })
-                  }}
-                />
-              </div>
-
-              {/* Cash Drawer Info */}
-              <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">
-                💡 Cash drawer connects via RJ11 cable to your printer (not directly to computer)
-              </div>
-            </div>
+  return (
+    <div className="space-y-6">
+      {/* Info Box */}
+      <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+        <div className="flex items-start gap-3">
+          <div className="text-blue-500 mt-0.5">ℹ️</div>
+          <div>
+            <div className="font-medium text-blue-800">Printer Auto-Detection</div>
+            <p className="text-sm text-blue-700 mt-1">
+              When the <strong>POS App</strong> is opened on the cashier computer and goes to <strong>Settings → Hardware</strong>, 
+              it will automatically detect and upload connected USB printers here.
+            </p>
           </div>
         </div>
+      </div>
+
+      {/* Detected Printers */}
+      {detectedPrinters.length > 0 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Detected USB Printers</h3>
+            <button
+              onClick={onRefreshPrinters}
+              disabled={loadingPrinters}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <RefreshCw size={16} className={loadingPrinters ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
+          <div className="space-y-2">
+            {detectedPrinters.map((printer, idx) => (
+              <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <span className="text-xl">🖨️</span>
+                <span className="font-medium">{printer}</span>
+                {printer === hardwareSettings.printerName && (
+                  <span className="ml-auto text-sm text-primary">✓ Selected</span>
+                )}
+              </div>
+            ))}
+          </div>
+          {lastPrinterDetection && (
+            <p className="text-xs text-gray-500 mt-2">
+              Last detected: {new Date(lastPrinterDetection).toLocaleString()}
+            </p>
+          )}
+        </div>
       )}
+
+      <div className="card">
+        <h3 className="text-lg font-semibold mb-4">{t('posSettings.hardwareSettings')}</h3>
+        <div className="space-y-4">
+          {/* Connection Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Printer Connection Type</label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'usb' })
+                  handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'usb' })
+                }}
+                className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
+                  hardwareSettings.printerConnectionType === 'usb'
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <div className="text-2xl mb-1">🖨️</div>
+                <div className="font-medium text-sm">USB Printer</div>
+              </button>
+              <button
+                onClick={() => {
+                  setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'network' })
+                  handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'network' })
+                }}
+                className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
+                  hardwareSettings.printerConnectionType === 'network'
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <div className="text-2xl mb-1">🌐</div>
+                <div className="font-medium text-sm">Network Printer</div>
+              </button>
+            </div>
+          </div>
+
+          {/* USB Printer Selection */}
+          {hardwareSettings.printerConnectionType === 'usb' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">USB Printer</label>
+              {detectedPrinters.length > 0 ? (
+                <div className="space-y-2">
+                  <select
+                    value={hardwareSettings.printerName}
+                    onChange={(e) => {
+                      setHardwareSettings({ ...hardwareSettings, printerName: e.target.value })
+                      handleSave('hardwareSettings', { ...hardwareSettings, printerName: e.target.value })
+                    }}
+                    className="input"
+                  >
+                    <option value="">-- Select a detected printer --</option>
+                    {detectedPrinters.map((printer, idx) => (
+                      <option key={idx} value={printer}>{printer}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500">
+                    Select from detected printers, or enter manually below
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-yellow-600 mb-2">
+                  No printers detected. Make sure POS App is running on the cashier computer.
+                </p>
+              )}
+              <input
+                type="text"
+                value={hardwareSettings.printerName}
+                onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerName: e.target.value })}
+                onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                className="input mt-2"
+                placeholder="Or enter printer name manually"
+              />
+            </div>
+          )}
+
+          {/* Network Printer IP/Port */}
+          {hardwareSettings.printerConnectionType === 'network' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerIp')}</label>
+                <input
+                  type="text"
+                  value={hardwareSettings.printerIp}
+                  onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerIp: e.target.value })}
+                  onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                  className="input"
+                  placeholder="192.168.1.100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerPort')}</label>
+                <input
+                  type="number"
+                  value={hardwareSettings.printerPort}
+                  onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerPort: parseInt(e.target.value) || 9100 })}
+                  onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                  className="input"
+                  placeholder="9100"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Auto Open Cash Drawer */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div>
+              <span className="font-medium">{t('posSettings.autoOpenCashDrawer')}</span>
+              <p className="text-sm text-gray-500">{t('posSettings.autoOpenCashDrawerHint')}</p>
+            </div>
+            <Toggle
+              enabled={hardwareSettings.autoOpenCashDrawer}
+              onChange={() => {
+                const newVal = !hardwareSettings.autoOpenCashDrawer
+                setHardwareSettings({ ...hardwareSettings, autoOpenCashDrawer: newVal })
+                handleSave('hardwareSettings', { ...hardwareSettings, autoOpenCashDrawer: newVal })
+              }}
+            />
+          </div>
+
+          {/* Cash Drawer Info */}
+          <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">
+            💡 Cash drawer connects via RJ11 cable to your printer (not directly to computer)
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
