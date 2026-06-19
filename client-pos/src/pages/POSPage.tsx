@@ -300,7 +300,7 @@ export function POSPage() {
 
   // 硬件设置
   const [hardwareSettings, setHardwareSettings] = useState({
-    printerName: 'XPrinter',  // Windows printer name (USB)
+    printerName: '',  // Windows printer name (USB) - empty means use system default
     printerIp: '192.168.1.100',   // Network printer (fallback)
     printerPort: 9100,
     autoOpenCashDrawer: true,
@@ -733,7 +733,7 @@ export function POSPage() {
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'Bubble Tea Shop',
             footer: posReceipt.footer || 'Test Print',
-            printerName: hs.printerName || 'XPrinter',
+            printerName: hs.printerName || undefined,
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
             subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test'
           })
@@ -744,7 +744,7 @@ export function POSPage() {
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
           console.log('[HARDWARE TEST] Test cash drawer triggered')
-          electronAPI?.openCashDrawer?.({ printerName: hs.printerName || 'XPrinter' })
+          electronAPI?.openCashDrawer?.({ printerName: hs.printerName || undefined })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -1434,7 +1434,7 @@ export function POSPage() {
 
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
-        electronAPI?.openCashDrawer?.({ printerName: hardwareSettings.printerName || 'XPrinter' })
+        electronAPI?.openCashDrawer?.({ printerName: hardwareSettings.printerName || undefined })
       }
 
       electronAPI?.sendOrderComplete(orderNum)
@@ -1487,7 +1487,7 @@ export function POSPage() {
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
-        printerName: hardwareSettings.printerName || 'XPrinter',
+        printerName: hardwareSettings.printerName || undefined,
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,
