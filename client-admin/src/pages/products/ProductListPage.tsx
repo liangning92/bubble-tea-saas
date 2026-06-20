@@ -130,8 +130,9 @@ export function ProductListPage() {
     }
   })
 
-  const products = productsData?.data?.list || []
-  const categories = categoriesData?.data?.list || Array.isArray(categoriesData?.data) ? categoriesData?.data : []
+  // API: axios response.data = { code, data: { list } }, so data.data.data.list = array
+  const products = productsData?.data?.data?.list || []
+  const categories = categoriesData?.data?.data || []
 
   const filteredProducts = products.filter((p: any) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.code?.toLowerCase().includes(search.toLowerCase())
