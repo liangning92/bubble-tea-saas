@@ -52,12 +52,23 @@ export function ChannelListPage() {
   })
 
   // 获取渠道列表
+  // DEBUG: 直接用 fetch 测试
+  const [debugChannels, setDebugChannels] = useState<any[]>([])
+  useEffect(() => {
+    const auth = JSON.parse(localStorage.getItem('auth-storage') || '{}')
+    const token = auth.state?.token
+    fetch('/api/channels', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(r => r.json())
+      .then(d => { console.log('DEBUG channels:', d); setDebugChannels(d?.data?.list || []) })
+      .catch(e => console.error('DEBUG error:', e))
+  }, [])
+
   const { data, isLoading } = useQuery({
     queryKey: ['channels'],
     queryFn: () => channelApi.list()
   })
 
-  const channels: Channel[] = data?.data?.data?.list || []
+  const channels: Channel[] = debugChannels.length > 0 ? debugChannels : (data?.data?.data?.list || [])
 
   // 创建渠道
   const createMutation = useMutation({
