@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -24,6 +24,12 @@ export function ChannelReportsPage() {
     }),
     enabled: !!user?.storeId
   })
+
+  useEffect(() => {
+    if (user?.storeId) {
+      queryClient.invalidateQueries({ queryKey: ['channel-reports', dateRange] })
+    }
+  }, [user?.storeId, queryClient, dateRange])
 
   const channels = data?.data?.data?.list || []
 

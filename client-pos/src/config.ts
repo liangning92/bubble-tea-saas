@@ -10,25 +10,13 @@ const DEFAULT_API_URL = '/api'
 function autoDetectApiUrl(): string {
   const host = window.location.hostname
 
-  // Vercel production URL - proxy through Vercel's rewrite
-  if (host.includes('vercel.app')) {
+  // Local development: use Vite proxy
+  if (host === 'localhost' || host === '127.0.0.1') {
     return '/api'
   }
 
-  // Tunnel URL mappings
-  const tunnelMappings: Record<string, string> = {
-    'vercel.app': '',  // Vercel handles API proxy
-  }
-
-  // Check if accessed via tunnel
-  for (const [posHost, apiHost] of Object.entries(tunnelMappings)) {
-    if (host.includes(posHost)) {
-      return apiHost || '/api'
-    }
-  }
-
-  // Default to Vercel proxy
-  return '/api'
+  // Remote access via cloudflare tunnel → use api.aicube.online/api
+  return 'https://api.aicube.online/api'
 }
 
 export function getApiUrl(): string {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { orderApi, channelApi, adminApi } from '../../services/api'
@@ -28,6 +28,7 @@ export function OrderListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const queryClient = useQueryClient()
   const [subTab, setSubTab] = useState<OrderSubTab>('orders')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
@@ -45,6 +46,12 @@ export function OrderListPage() {
     enabled: !!user?.storeId
   })
   const channels = channelsData?.data?.data?.list || []
+
+  useEffect(() => {
+    if (user?.storeId) {
+      queryClient.invalidateQueries({ queryKey: ['channels', user.storeId] })
+    }
+  }, [user?.storeId, queryClient])
 
   const { data, isLoading } = useQuery({
     queryKey: ['orders', statusFilter, channelFilter],

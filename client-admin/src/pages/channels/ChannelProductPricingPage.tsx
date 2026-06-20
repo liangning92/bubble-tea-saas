@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -19,6 +19,12 @@ export function ChannelProductPricingPage() {
     queryFn: () => channelApi.list(user?.storeId ?? undefined),
     enabled: !!user?.storeId
   })
+
+  useEffect(() => {
+    if (user?.storeId) {
+      queryClient.invalidateQueries({ queryKey: ['channels', user.storeId] })
+    }
+  }, [user?.storeId, queryClient])
 
   const channels = channelsData?.data?.data?.list || []
 

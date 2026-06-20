@@ -32,6 +32,12 @@ export function SettingsPage() {
   })
 
   useEffect(() => {
+    if (user?.storeId) {
+      queryClient.invalidateQueries({ queryKey: ['config', 'store', user.storeId] })
+    }
+  }, [user?.storeId, queryClient])
+
+  useEffect(() => {
     if (configData?.data?.storeInfo) {
       setStoreInfo(prev => ({ ...prev, ...configData.data.storeInfo }))
     }

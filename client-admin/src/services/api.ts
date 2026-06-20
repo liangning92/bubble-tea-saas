@@ -1,7 +1,19 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
-const API_BASE = '/api'
+// Auto-detect API base URL based on browser hostname:
+// - localhost / 127.0.0.1 → use Vite proxy (/api)
+// - remote access via cloudflare tunnel → use https://api.aicube.online/api
+function getApiBase(): string {
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return '/api'  // Vite dev proxy → localhost:7072
+  }
+  // Remote access: full URL to cloudflare-tunneled backend
+  return 'https://api.aicube.online/api'
+}
+
+const API_BASE = getApiBase()
 
 const api = axios.create({
   baseURL: API_BASE,

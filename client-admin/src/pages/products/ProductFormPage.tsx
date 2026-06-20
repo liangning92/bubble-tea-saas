@@ -61,6 +61,15 @@ export function ProductFormPage() {
     enabled: !!user?.storeId
   })
 
+  // 等待 auth store 从 localStorage 恢复后重新获取数据
+  useEffect(() => {
+    if (user?.storeId) {
+      queryClient.invalidateQueries({ queryKey: ['categories', user.storeId] })
+      queryClient.invalidateQueries({ queryKey: ['inventory', user.storeId] })
+      queryClient.invalidateQueries({ queryKey: ['channels', user.storeId] })
+    }
+  }, [user?.storeId, queryClient])
+
   useEffect(() => {
     if (productData?.data?.data) {
       const p = productData.data.data

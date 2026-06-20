@@ -32,6 +32,12 @@ export function POSSettingsPage() {
     enabled: !!user?.storeId
   })
 
+  useEffect(() => {
+    if (user?.storeId) {
+      queryClient.invalidateQueries({ queryKey: ['config', 'pos', user.storeId] })
+    }
+  }, [user?.storeId, queryClient])
+
   // ========== STATE WITH DEFAULT VALUES ==========
   const [posLayout, setPosLayout] = useState({
     gridCols: '4',
