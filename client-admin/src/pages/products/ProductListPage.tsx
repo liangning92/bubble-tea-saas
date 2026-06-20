@@ -37,13 +37,13 @@ export function ProductListPage() {
   })
 
   const { data: productsData, isLoading } = useQuery({
-    queryKey: ['products'],
-    queryFn: () => productApi.list({ pageSize: 500 })
+    queryKey: ['products', user?.storeId],
+    queryFn: () => productApi.list({ storeId: user?.storeId, pageSize: 500 })
   })
 
   const { data: categoriesData, refetch } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => categoryApi.list()
+    queryKey: ['categories', user?.storeId],
+    queryFn: () => categoryApi.list(user?.storeId || undefined)
   })
 
   const updateStatus = useMutation({

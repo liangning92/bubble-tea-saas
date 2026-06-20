@@ -34,8 +34,8 @@ export function ProductFormPage() {
   const [dragActive, setDragActive] = useState(false)
 
   const { data: categoriesData } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => categoryApi.list()
+    queryKey: ['categories', user?.storeId],
+    queryFn: () => categoryApi.list(user?.storeId || undefined)
   })
 
   const { data: addonsData } = useQuery({
@@ -44,8 +44,8 @@ export function ProductFormPage() {
   })
 
   const { data: inventoryData } = useQuery({
-    queryKey: ['inventory'],
-    queryFn: () => inventoryApi.list({ pageSize: 100 })
+    queryKey: ['inventory', user?.storeId],
+    queryFn: () => inventoryApi.list({ storeId: user?.storeId, pageSize: 100 })
   })
 
   const { data: productData } = useQuery({

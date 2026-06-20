@@ -32,8 +32,8 @@ export function InventoryPage() {
   const [categoryForm, setCategoryForm] = useState({ name: '', code: '', description: '' })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['inventory'],
-    queryFn: () => inventoryApi.list({ pageSize: 500 })
+    queryKey: ['inventory', user?.storeId],
+    queryFn: () => inventoryApi.list({ storeId: user?.storeId, pageSize: 500 })
   })
 
   const { data: alertsData } = useQuery({
@@ -53,7 +53,7 @@ export function InventoryPage() {
   // Fetch process recipes for semi_finished type
   const { data: recipesData } = useQuery({
     queryKey: ['process-recipes'],
-    queryFn: () => processRecipeApi.list()
+    queryFn: () => processRecipeApi.list(user?.storeId)
   })
   const recipes = recipesData?.data?.data?.list || []
 

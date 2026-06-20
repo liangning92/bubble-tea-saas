@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { bomApi, inventoryApi, productApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronDown, ChevronRight,
@@ -48,6 +49,7 @@ export function RecipeEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
 
   const [filterType, setFilterType] = useState<InventoryType>('all')
   const [bomItems, setBomItems] = useState<BOMItem[]>([])
@@ -71,8 +73,8 @@ export function RecipeEditPage() {
 
   // 获取库存列表
   const { data: inventoryData, isLoading: inventoryLoading } = useQuery({
-    queryKey: ['inventory'],
-    queryFn: () => inventoryApi.list({ pageSize: 500 })
+    queryKey: ['inventory', user?.storeId],
+    queryFn: () => inventoryApi.list({ storeId: user?.storeId, pageSize: 500 })
   })
 
   const inventoryList = inventoryData?.data?.data || []
