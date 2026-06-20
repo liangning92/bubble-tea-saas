@@ -175,7 +175,8 @@ export function InventoryPage() {
     return inventory.filter((item: any) => item.category === categoryId || item.category === categories.find(c => c.id === categoryId)?.code).length
   }
 
-  const inventory = data?.data?.list || []
+  // API returns { code, data: { list } } but axios wraps it: data.data.data.list = array
+  const inventory = data?.data?.data?.list || []
   const alerts = alertsData?.data || []
 
   const filteredInventory = inventory.filter((item: any) => {
