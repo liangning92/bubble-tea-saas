@@ -26,8 +26,8 @@ export function SettingsPage() {
 
   // 加载店铺信息
   const { data: configData, isLoading } = useQuery({
-    queryKey: ['config', 'store', user?.storeId],
-    queryFn: () => configApi.get(user?.storeId || '')
+    queryKey: ['config', 'store'],
+    queryFn: () => configApi.get()
   })
 
   useEffect(() => {

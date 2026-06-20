@@ -12,7 +12,7 @@ export function BatchListPage() {
     queryFn: () => materialApi.expiryAlerts(daysFilter)
   })
 
-  const batches = data?.data?.data || []
+  const batches = data?.data || []
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'

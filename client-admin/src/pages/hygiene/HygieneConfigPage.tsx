@@ -135,7 +135,7 @@ export function HygieneConfigPage() {
 
   // Load configs into edit data when configs are fetched
   useEffect(() => {
-    if (configsData?.data?.data) {
+    if (configsData?.data) {
       const configs = configsData.data.data
       setEditData({
         categories: configs.categories || DEFAULT_CATEGORIES,

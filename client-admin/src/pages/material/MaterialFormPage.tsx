@@ -47,7 +47,7 @@ export function MaterialFormPage() {
     queryFn: () => processRecipeApi.list()
   })
 
-  const recipes = recipesData?.data?.data?.list || []
+  const recipes = recipesData?.data?.list || []
 
   const createMutation = useMutation({
     mutationFn: (data: any) => materialApi.create(data),

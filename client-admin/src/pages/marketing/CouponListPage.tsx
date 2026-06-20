@@ -92,7 +92,7 @@ export function CouponListPage() {
     }
   })
 
-  const coupons: Coupon[] = data?.data?.data?.list || []
+  const coupons: Coupon[] = data?.data?.list || []
 
   const closeModal = () => {
     setShowCreate(false)

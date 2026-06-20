@@ -69,7 +69,7 @@ export function StaffFormPage() {
   })
 
   useEffect(() => {
-    if (staffData?.data?.data) {
+    if (staffData?.data) {
       const s = staffData.data.data
       setForm({
         name: s.name || '',

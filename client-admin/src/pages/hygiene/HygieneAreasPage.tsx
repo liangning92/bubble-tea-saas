@@ -75,7 +75,7 @@ export function HygieneAreasPage() {
 
   // Merge: use API areas as source of truth
   // If no areas exist, show empty state for user to create
-  const areas: Area[] = areasData?.data?.data?.list || []
+  const areas: Area[] = areasData?.data?.list || []
 
   const openAddForm = () => {
     setEditingArea(null)

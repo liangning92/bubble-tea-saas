@@ -65,8 +65,8 @@ export function HygieneTodayTasksPage() {
     }
   })
 
-  const tasks = tasksData?.data?.data?.list || []
-  const stats = statsData?.data?.data || { total: 0, completed: 0, skipped: 0, pending: 0, completionRate: 0 }
+  const tasks = tasksData?.data?.list || []
+  const stats = statsData?.data || { total: 0, completed: 0, skipped: 0, pending: 0, completionRate: 0 }
 
   const getAreaLabel = (areaCode: string) => {
     return t(AREA_LABELS[areaCode] || areaCode)

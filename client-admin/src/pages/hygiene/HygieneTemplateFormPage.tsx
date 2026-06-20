@@ -136,7 +136,7 @@ export function HygieneTemplateFormPage() {
 
   // Build areas list (API + defaults)
   const getAreaName = (code: string) => t(`hygiene.${code}`) || code
-  const areas = areasData?.data?.data?.list?.length
+  const areas = areasData?.data?.list?.length
     ? areasData.data.data.list.map((a: any) => ({
         code: a.code,
         name: a.isCustom ? a.name : getAreaName(a.code),
@@ -144,17 +144,17 @@ export function HygieneTemplateFormPage() {
     : DEFAULT_AREA_CODES.map(code => ({ code, name: getAreaName(code) }))
 
   // Build categories list (API + defaults)
-  const categories = categoriesData?.data?.data?.length
+  const categories = categoriesData?.data?.length
     ? categoriesData.data.data.map((c: any) => ({ value: c.value, label: c.label }))
     : CATEGORIES
 
   // Build priorities list
-  const priorities = prioritiesData?.data?.data?.length
+  const priorities = prioritiesData?.data?.length
     ? prioritiesData.data.data.map((p: any) => ({ value: p.value, label: p.label }))
     : PRIORITIES
 
   useEffect(() => {
-    if (templateData?.data?.data) {
+    if (templateData?.data) {
       const template = templateData.data.data
       setForm({
         areaCode: template.areaCode || template.area || 'counter',
@@ -192,7 +192,7 @@ export function HygieneTemplateFormPage() {
     }
   }, [templateData])
 
-  const staffList = staffData?.data?.data?.list || []
+  const staffList = staffData?.data?.list || []
 
   const createMutation = useMutation({
     mutationFn: (data: any) => hygieneApi.createTemplate(data),

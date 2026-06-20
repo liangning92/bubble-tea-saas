@@ -58,8 +58,8 @@ export function TimedSpecialPage() {
     enabled: searchProduct.length > 2
   })
 
-  const specials: TimedSpecial[] = data?.data?.data || []
-  const products = productsData?.data?.data || []
+  const specials: TimedSpecial[] = data?.data || []
+  const products = productsData?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: any) => marketingApi.createTimedSpecial(data),

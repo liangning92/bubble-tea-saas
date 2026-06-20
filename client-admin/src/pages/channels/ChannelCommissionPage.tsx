@@ -16,15 +16,14 @@ export function ChannelCommissionPage() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['channel-commissions', dateRange, user?.storeId],
+    queryKey: ['channel-commissions', dateRange],
     queryFn: () => reportApi.getCommissionReports({
-      storeId: user?.storeId,
       startDate: dateRange.startDate,
       endDate: dateRange.endDate
     })
   })
 
-  const commissionData = data?.data?.data
+  const commissionData = data?.data
   const summaries = commissionData?.list || []
   const totals = commissionData?.totalCommission || 0
 

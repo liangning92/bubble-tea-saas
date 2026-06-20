@@ -43,7 +43,7 @@ export function ReferralFunnelPage() {
     queryFn: () => marketingApi.referralFunnel(storeId, period)
   })
 
-  const funnel: ReferralFunnel = data?.data?.data || {
+  const funnel: ReferralFunnel = data?.data || {
     codesGenerated: 0,
     codesUsed: 0,
     newRegistrations: 0,

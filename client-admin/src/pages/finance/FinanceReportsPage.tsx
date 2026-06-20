@@ -49,9 +49,9 @@ export function FinanceReportsPage() {
     enabled: !!dateRange.startDate && !!dateRange.endDate
   })
 
-  const profit = profitData?.data?.data
-  const income = incomeData?.data?.data
-  const cashFlow = cashFlowData?.data?.data
+  const profit = profitData?.data
+  const income = incomeData?.data
+  const cashFlow = cashFlowData?.data
 
   const reportTabs = [
     { id: 'profit' as ReportTab, label: t('finance.profitAnalysis') },

@@ -15,11 +15,11 @@ export function ChannelProductPricingPage() {
 
   // Get all channels
   const { data: channelsData } = useQuery({
-    queryKey: ['channels', user?.storeId],
-    queryFn: () => channelApi.list(user?.storeId ?? undefined)
+    queryKey: ['channels'],
+    queryFn: () => channelApi.list()
   })
 
-  const channels = channelsData?.data?.data?.list || []
+  const channels = channelsData?.data?.list || []
 
   // Get products with channel prices
   const { data: productsData, isLoading } = useQuery({
@@ -28,7 +28,7 @@ export function ChannelProductPricingPage() {
     enabled: !!selectedChannel
   })
 
-  const products = productsData?.data?.data?.list || []
+  const products = productsData?.data?.list || []
 
   const updateMutation = useMutation({
     mutationFn: ({ productId, priceAdjustment, enabled }: any) =>

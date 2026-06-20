@@ -35,8 +35,8 @@ export function MaterialListPage() {
     enabled: showAlerts
   })
 
-  const materials = materialsData?.data?.data?.list || []
-  const alerts = alertsData?.data?.data || []
+  const materials = materialsData?.data?.list || []
+  const alerts = alertsData?.data || []
 
   return (
     <div className="space-y-6">

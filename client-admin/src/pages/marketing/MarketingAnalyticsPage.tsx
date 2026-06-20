@@ -14,7 +14,7 @@ export function MarketingAnalyticsPage() {
     queryFn: () => marketingApi.marketingROI({ storeId })
   })
 
-  const roi = data?.data?.data
+  const roi = data?.data
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>

@@ -34,7 +34,7 @@ export function AnnouncementFormPage() {
   })
 
   useEffect(() => {
-    if (annData?.data?.data) {
+    if (annData?.data) {
       const ann = annData.data.data
       setFormData({
         title: ann.title || '',

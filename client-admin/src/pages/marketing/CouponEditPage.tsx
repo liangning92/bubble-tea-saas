@@ -31,8 +31,8 @@ export function CouponEditPage() {
   })
 
   useEffect(() => {
-    if (data?.data?.data) {
-      const c = data.data.data
+    if (data?.data) {
+      const c = data.data
       setForm({
         code: c.code || '',
         type: c.type || 'discount_percent',

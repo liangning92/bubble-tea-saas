@@ -34,11 +34,11 @@ export function CampaignCategoryListPage() {
 
   // Fetch categories
   const { data, isLoading } = useQuery({
-    queryKey: ['campaign-categories', user?.storeId],
-    queryFn: () => marketingApi.campaignCategories(user?.storeId || '')
+    queryKey: ['campaign-categories'],
+    queryFn: () => marketingApi.campaignCategories()
   })
 
-  const categories: Category[] = data?.data?.data?.list || []
+  const categories: Category[] = data?.data?.list || []
 
   // Create mutation
   const createMutation = useMutation({

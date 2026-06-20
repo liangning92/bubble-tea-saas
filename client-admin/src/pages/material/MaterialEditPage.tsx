@@ -46,8 +46,8 @@ export function MaterialEditPage() {
   })
 
   useEffect(() => {
-    if (data?.data?.data) {
-      const mat = data.data.data
+    if (data?.data) {
+      const mat = data.data
       setForm({
         name: mat.name || '',
         category: mat.category || 'Other',

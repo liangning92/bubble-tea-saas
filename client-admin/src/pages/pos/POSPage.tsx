@@ -47,7 +47,7 @@ export function POSPage() {
     }
   })
 
-  const products = productsData?.data?.data?.list || []
+  const products = productsData?.data?.list || []
 
   const categories = useMemo(() => {
     const cats = new Map<string, any>()

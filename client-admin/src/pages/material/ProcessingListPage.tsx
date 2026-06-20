@@ -35,7 +35,7 @@ export function ProcessingListPage() {
     }
   })
 
-  const recipes = recipesData?.data?.data?.list || []
+  const recipes = recipesData?.data?.list || []
 
   const handleExecute = (recipeId: string) => {
     const multiplier = prompt(t('material.enterMultiplier') || 'Enter multiplier:', '1')
@@ -179,7 +179,7 @@ function ProcessingHistory() {
     queryFn: () => materialApi.processHistory(20)
   })
 
-  const history = historyData?.data?.data || []
+  const history = historyData?.data || []
 
   if (isLoading) {
     return (

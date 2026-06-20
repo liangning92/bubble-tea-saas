@@ -46,7 +46,7 @@ export function AnnouncementListPage() {
     }
   })
 
-  const announcements = announcementsData?.data?.data || []
+  const announcements = announcementsData?.data || []
 
   const filteredAnnouncements = announcements.filter((ann: any) => {
     // Type filter

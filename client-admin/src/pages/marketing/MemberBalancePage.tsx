@@ -41,8 +41,8 @@ export function MemberBalancePage() {
   const searchMutation = useMutation({
     mutationFn: (phone: string) => marketingApi.searchMember(phone),
     onSuccess: (data) => {
-      if (data?.data?.data) {
-        setSelectedMember(data.data.data)
+      if (data?.data) {
+        setSelectedMember(data.data)
       }
     }
   })
@@ -201,11 +201,11 @@ export function MemberBalancePage() {
               {/* Recent Transactions */}
               {balanceLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-              ) : balanceData?.data?.data?.logs?.length > 0 ? (
+              ) : balanceData?.data?.logs?.length > 0 ? (
                 <div className="mt-6">
                   <h4 className="font-medium mb-3">{t('marketing.recentTransactions')}</h4>
                   <div className="space-y-2">
-                    {balanceData?.data?.data?.logs?.map((log: BalanceLog) => (
+                    {balanceData?.data?.logs?.map((log: BalanceLog) => (
                       <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div className={`w-2 h-2 rounded-full ${getTypeColor(log.type).replace('text-', 'bg-')}`} />
@@ -237,9 +237,9 @@ export function MemberBalancePage() {
         <div className="card">
           {logsLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-          ) : logsData?.data?.data?.length > 0 ? (
+          ) : logsData?.data?.length > 0 ? (
             <div className="space-y-2">
-              {logsData?.data?.data?.map((log: BalanceLog) => (
+              {logsData?.data?.map((log: BalanceLog) => (
                 <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${getTypeColor(log.type).replace('text-', 'bg-')}`} />

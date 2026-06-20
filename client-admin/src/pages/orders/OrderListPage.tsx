@@ -40,10 +40,10 @@ export function OrderListPage() {
 
   // Get channels for filter dropdown
   const { data: channelsData } = useQuery({
-    queryKey: ['channels', user?.storeId],
-    queryFn: () => channelApi.list(user?.storeId ?? undefined)
+    queryKey: ['channels'],
+    queryFn: () => channelApi.list()
   })
-  const channels = channelsData?.data?.data?.list || []
+  const channels = channelsData?.data?.list || []
 
   const { data, isLoading } = useQuery({
     queryKey: ['orders', statusFilter, channelFilter],
@@ -54,7 +54,7 @@ export function OrderListPage() {
     })
   })
 
-  const orders = data?.data?.data?.list || []
+  const orders = data?.data?.list || []
 
   // Load pending refund requests
   const loadRefundRequests = async () => {

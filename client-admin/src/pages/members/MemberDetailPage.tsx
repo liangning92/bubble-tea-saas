@@ -37,7 +37,7 @@ export function MemberDetailPage() {
     }
   })
 
-  const member = data?.data?.data
+  const member = data?.data
 
   if (isLoading) return <div className="text-center py-8">{t('common.loading')}</div>
   if (!member) return <div className="text-center py-8">{t('common.noData')}</div>

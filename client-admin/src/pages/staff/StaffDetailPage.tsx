@@ -19,7 +19,7 @@ export function StaffDetailPage() {
   const [showRoleModal, setShowRoleModal] = useState(false)
   const [selectedRole, setSelectedRole] = useState('')
 
-  const staff = data?.data?.data
+  const staff = data?.data
 
   const updateRoleMutation = useMutation({
     mutationFn: (role: string) => staffApi.updateRole(id!, role),

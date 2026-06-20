@@ -34,18 +34,18 @@ export function ProductFormPage() {
   const [dragActive, setDragActive] = useState(false)
 
   const { data: categoriesData } = useQuery({
-    queryKey: ['categories', user?.storeId],
-    queryFn: () => categoryApi.list(user?.storeId || undefined)
+    queryKey: ['categories'],
+    queryFn: () => categoryApi.list()
   })
 
   const { data: addonsData } = useQuery({
     queryKey: ['addons'],
-    queryFn: () => addonApi.list(user?.storeId || '')
+    queryFn: () => addonApi.list()
   })
 
   const { data: inventoryData } = useQuery({
-    queryKey: ['inventory', user?.storeId],
-    queryFn: () => inventoryApi.list({ storeId: user?.storeId, pageSize: 100 })
+    queryKey: ['inventory'],
+    queryFn: () => inventoryApi.list({ pageSize: 100 })
   })
 
   const { data: productData } = useQuery({
@@ -56,12 +56,12 @@ export function ProductFormPage() {
 
   // 获取渠道列表
   const { data: channelsData } = useQuery({
-    queryKey: ['channels', user?.storeId],
-    queryFn: () => channelApi.list(user?.storeId || undefined)
+    queryKey: ['channels'],
+    queryFn: () => channelApi.list()
   })
 
   useEffect(() => {
-    if (productData?.data?.data) {
+    if (productData?.data) {
       const p = productData.data.data
       setForm({
         name: p.name,
@@ -200,10 +200,10 @@ export function ProductFormPage() {
     }))
   }
 
-  const categories = categoriesData?.data?.data || []
-  const addons = addonsData?.data?.data || []
-  const inventoryItems = inventoryData?.data?.data?.list || []
-  const channels = channelsData?.data?.data?.list || []
+  const categories = categoriesData?.data || []
+  const addons = addonsData?.data || []
+  const inventoryItems = inventoryData?.data?.list || []
+  const channels = channelsData?.data?.list || []
 
   const getChannelPrice = (channelId: string) => {
     return form.channelPrices.find(cp => cp.channelId === channelId)

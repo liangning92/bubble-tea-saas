@@ -21,8 +21,8 @@ export function ReferralDetailPage() {
     enabled: !!id
   })
 
-  const referral = data?.data?.data
-  const stats = statsData?.data?.data
+  const referral = data?.data
+  const stats = statsData?.data
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>

@@ -56,8 +56,8 @@ export function ConsumptionAnalysisPage() {
     enabled: !!dateRange.startDate && !!dateRange.endDate
   })
 
-  const analysis: ConsumptionItem[] = analysisData?.data?.data?.list || []
-  const summary = summaryData?.data?.data || { total: 0, normal: 0, warning: 0, critical: 0, criticalItems: [] }
+  const analysis: ConsumptionItem[] = analysisData?.data?.list || []
+  const summary = summaryData?.data || { total: 0, normal: 0, warning: 0, critical: 0, criticalItems: [] }
 
   // Filter by status
   const filteredAnalysis = selectedStatus === 'all'

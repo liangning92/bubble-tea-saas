@@ -31,14 +31,14 @@ export function TierBenefitsPage() {
   const [benefits, setBenefits] = useState(DEFAULT_BENEFITS)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tier-benefits', user?.storeId],
-    queryFn: () => marketingApi.tierBenefits(user?.storeId || '')
+    queryKey: ['tier-benefits'],
+    queryFn: () => marketingApi.tierBenefits()
   })
 
   // Sync form state when data loads
   useEffect(() => {
-    if (data?.data?.data?.list) {
-      const fetched = data.data.data.list
+    if (data?.data?.list) {
+      const fetched = data.data.list
       const merged = { ...DEFAULT_BENEFITS }
       TIERS.forEach(tier => {
         const fb = fetched.find((b: any) => b.level === tier)

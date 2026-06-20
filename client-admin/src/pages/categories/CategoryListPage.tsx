@@ -32,7 +32,7 @@ export function CategoryListPage() {
     queryFn: () => categoryApi.list()
   })
 
-  const categories: Category[] = data?.data?.data || []
+  const categories: Category[] = data?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: CategoryFormData & { storeId?: string }) => categoryApi.create(data),

@@ -32,7 +32,7 @@ export function OrderDetailPage() {
     }
   })
 
-  const order = data?.data?.data
+  const order = data?.data
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
   if (!order) return <div className="text-center py-8">{t('common.noData')}</div>
 

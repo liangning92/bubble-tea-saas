@@ -16,15 +16,14 @@ export function ChannelReportsPage() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['channel-reports', dateRange, user?.storeId],
+    queryKey: ['channel-reports', dateRange],
     queryFn: () => reportApi.getChannelReports({
-      storeId: user?.storeId,
       startDate: dateRange.startDate,
       endDate: dateRange.endDate
     })
   })
 
-  const channels = data?.data?.data?.list || []
+  const channels = data?.data?.list || []
 
   const totals = channels.reduce((acc: any, ch: any) => ({
     orderCount: acc.orderCount + ch.orderCount,

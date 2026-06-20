@@ -50,7 +50,7 @@ export function DiscountRulePage() {
     queryFn: () => marketingApi.discountRules(storeId)
   })
 
-  const rules: DiscountRule[] = data?.data?.data || []
+  const rules: DiscountRule[] = data?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: any) => marketingApi.createDiscountRule(data),

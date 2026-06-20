@@ -56,28 +56,28 @@ export function MessageSettingsPage() {
     queryKey: ['message-channels'],
     queryFn: () => messageApi.channels()
   })
-  const channels = channelsData?.data?.data?.list || []
+  const channels = channelsData?.data?.list || []
 
   // Fetch templates
   const { data: templatesData, isLoading: templatesLoading } = useQuery({
     queryKey: ['message-templates'],
     queryFn: () => messageApi.templates()
   })
-  const templates = templatesData?.data?.data?.list || []
+  const templates = templatesData?.data?.list || []
 
   // Fetch stats
   const { data: statsData } = useQuery({
     queryKey: ['message-stats'],
     queryFn: () => messageApi.stats()
   })
-  const stats = statsData?.data?.data
+  const stats = statsData?.data
 
   // Fetch variables
   const { data: variablesData } = useQuery({
     queryKey: ['message-variables'],
     queryFn: () => messageApi.variables()
   })
-  const variables = variablesData?.data?.data?.variables || []
+  const variables = variablesData?.data?.variables || []
 
   // Create channel mutation
   const createChannelMutation = useMutation({

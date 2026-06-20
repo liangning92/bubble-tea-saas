@@ -92,7 +92,7 @@ export function MarketingChannelsPage() {
     queryFn: () => marketingApi.marketingChannels(storeId),
   })
 
-  const channels: MarketingChannel[] = data?.data?.data?.list || []
+  const channels: MarketingChannel[] = data?.data?.list || []
 
   // 计算哪些预设渠道还未添加
   const availablePresets = useMemo(() => {

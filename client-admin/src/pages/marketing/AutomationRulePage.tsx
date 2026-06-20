@@ -34,7 +34,7 @@ export function AutomationRulePage() {
     queryFn: () => marketingApi.automationRules(storeId)
   })
 
-  const rules: AutomationRule[] = data?.data?.data || []
+  const rules: AutomationRule[] = data?.data || []
 
   const filteredRules = rules.filter(rule => {
     if (filter === 'all') return true
@@ -228,7 +228,7 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
     queryKey: ['coupons', storeId],
     queryFn: () => marketingApi.coupons(storeId)
   })
-  const coupons = couponsData?.data?.data?.list || []
+  const coupons = couponsData?.data?.list || []
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

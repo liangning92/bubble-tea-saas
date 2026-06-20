@@ -19,8 +19,8 @@ export function RestockSuggestionPage() {
     queryFn: () => materialApi.expiryAlerts(days)
   })
 
-  const suggestions = suggestionsData?.data?.data || []
-  const expiryAlerts = expiryData?.data?.data || []
+  const suggestions = suggestionsData?.data || []
+  const expiryAlerts = expiryData?.data || []
 
   const totalSuggestCost = suggestions.reduce((sum: number, s: any) => sum + (s.suggestCost || 0), 0)
 

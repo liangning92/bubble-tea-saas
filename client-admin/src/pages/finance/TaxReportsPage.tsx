@@ -35,7 +35,7 @@ export function TaxReportsPage() {
   })
 
   const handlePreview = () => {
-    if (taxData?.data?.data) {
+    if (taxData?.data) {
       setPreviewData(taxData.data.data)
       setShowPreview(true)
     }

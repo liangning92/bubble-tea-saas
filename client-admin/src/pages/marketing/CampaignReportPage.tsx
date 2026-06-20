@@ -32,7 +32,7 @@ export function CampaignReportPage() {
     queryFn: () => marketingApi.campaignReports(storeId)
   })
 
-  const reports: CampaignReport[] = data?.data?.data || []
+  const reports: CampaignReport[] = data?.data || []
 
   const filteredReports = reports.filter(r => {
     if (filter === 'all') return true

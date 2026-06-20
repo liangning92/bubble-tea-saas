@@ -15,7 +15,7 @@ export function CouponDetailPage() {
     enabled: !!id
   })
 
-  const coupon = data?.data?.data
+  const coupon = data?.data
 
   const getTypeIcon = (type: string) => {
     switch (type) {

@@ -32,8 +32,8 @@ export function InventoryPage() {
   const [categoryForm, setCategoryForm] = useState({ name: '', code: '', description: '' })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['inventory', user?.storeId],
-    queryFn: () => inventoryApi.list({ storeId: user?.storeId, pageSize: 500 })
+    queryKey: ['inventory'],
+    queryFn: () => inventoryApi.list({ pageSize: 500 })
   })
 
   const { data: alertsData } = useQuery({
@@ -43,9 +43,9 @@ export function InventoryPage() {
 
   // Fetch dynamic categories
   const { data: configData } = useQuery({
-    queryKey: ['config', user?.storeId],
+    queryKey: ['config'],
     queryFn: async () => {
-      const resp = await configApi.get(user?.storeId || '')
+      const resp = await configApi.get()
       return resp.data
     }
   })
@@ -53,9 +53,9 @@ export function InventoryPage() {
   // Fetch process recipes for semi_finished type
   const { data: recipesData } = useQuery({
     queryKey: ['process-recipes'],
-    queryFn: () => processRecipeApi.list(user?.storeId ?? undefined)
+    queryFn: () => processRecipeApi.list()
   })
-  const recipes = recipesData?.data?.data?.list || []
+  const recipes = recipesData?.data?.list || []
 
   // Update categories when config loads
   useEffect(() => {
@@ -131,7 +131,7 @@ export function InventoryPage() {
       await configApi.set(user?.storeId || '', 'inventory_categories', cats, 'inventory')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId] })
+      queryClient.invalidateQueries({ queryKey: ['config'] })
       setShowCategoryModal(false)
       setEditingCategory(null)
       setCategoryForm({ name: '', code: '', description: '' })
@@ -175,8 +175,8 @@ export function InventoryPage() {
     return inventory.filter((item: any) => item.category === categoryId || item.category === categories.find(c => c.id === categoryId)?.code).length
   }
 
-  const inventory = data?.data?.data?.list || []
-  const alerts = alertsData?.data?.data || []
+  const inventory = data?.data?.list || []
+  const alerts = alertsData?.data || []
 
   const filteredInventory = inventory.filter((item: any) => {
     const matchSearch = !search || item.name?.toLowerCase().includes(search.toLowerCase())

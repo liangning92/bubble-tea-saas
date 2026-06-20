@@ -57,7 +57,7 @@ export function StackingRulePage() {
     queryFn: () => marketingApi.stackingRules(storeId)
   })
 
-  const rules: StackingRule[] = data?.data?.data || []
+  const rules: StackingRule[] = data?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: any) => marketingApi.createStackingRule(data),

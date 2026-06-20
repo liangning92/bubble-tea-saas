@@ -15,7 +15,7 @@ export function CampaignDetailPage() {
     enabled: !!id
   })
 
-  const campaign = data?.data?.data
+  const campaign = data?.data
 
   if (isLoading) {
     return (

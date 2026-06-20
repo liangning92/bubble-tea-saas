@@ -17,7 +17,7 @@ export function HygieneStatsPage() {
     queryFn: () => hygieneApi.statsRange(startDate, endDate)
   })
 
-  const stats = statsData?.data?.data?.trend || []
+  const stats = statsData?.data?.trend || []
 
   // Calculate summary
   const totalTasks = stats.reduce((sum: number, s: any) => sum + s.total, 0)

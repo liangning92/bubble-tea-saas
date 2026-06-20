@@ -57,7 +57,7 @@ export function ChannelListPage() {
     queryFn: () => channelApi.list()
   })
 
-  const channels: Channel[] = data?.data?.data?.list || []
+  const channels: Channel[] = data?.data?.list || []
 
   // 创建渠道
   const createMutation = useMutation({

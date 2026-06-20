@@ -27,8 +27,8 @@ export function POSSettingsPage() {
 
   // ========== DATA LOADING ==========
   const { data: posConfig, isLoading } = useQuery({
-    queryKey: ['config', 'pos', user?.storeId],
-    queryFn: () => configApi.get(user?.storeId || '')
+    queryKey: ['config', 'pos'],
+    queryFn: () => configApi.get()
   })
 
   // ========== STATE WITH DEFAULT VALUES ==========

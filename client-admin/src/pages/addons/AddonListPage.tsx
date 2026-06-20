@@ -52,7 +52,7 @@ export function AddonListPage() {
     queryFn: () => addonApi.list(user?.storeId || '')
   })
 
-  const addons: Addon[] = data?.data?.data || []
+  const addons: Addon[] = data?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: AddonFormData) =>

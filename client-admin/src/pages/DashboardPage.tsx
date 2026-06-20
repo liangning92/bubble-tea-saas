@@ -68,7 +68,7 @@ export function DashboardPage() {
     queryFn: () => reportApi.dashboard()
   })
 
-  const dashboard = data?.data?.data
+  const dashboard = data?.data
 
   if (isLoading) {
     return (

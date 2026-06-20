@@ -32,7 +32,7 @@ export function ProcessingFormPage() {
   })
 
   useEffect(() => {
-    if (recipeData?.data?.data) {
+    if (recipeData?.data) {
       const recipe = recipeData.data.data
       const inputs = recipe.items
         .filter((i: any) => i.type === 'input')
@@ -59,7 +59,7 @@ export function ProcessingFormPage() {
     onSuccess: () => navigate('/inventory/process')
   })
 
-  const materials = materialsData?.data?.data?.list || []
+  const materials = materialsData?.data?.list || []
 
   const addInput = () => {
     setForm({ ...form, inputs: [...form.inputs, { inventoryId: '', quantity: 0 }] })

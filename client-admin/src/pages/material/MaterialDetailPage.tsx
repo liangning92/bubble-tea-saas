@@ -30,7 +30,7 @@ export function MaterialDetailPage() {
     )
   }
 
-  const mat = data?.data?.data
+  const mat = data?.data
   if (!mat) {
     return <div className="text-center py-12 text-gray-500">{t('material.notFound')}</div>
   }

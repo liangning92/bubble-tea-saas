@@ -46,7 +46,7 @@ export function NotificationHistoryPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] })
   })
 
-  const notifications = data?.data?.data?.list || []
+  const notifications = data?.data?.list || []
 
   // Filter notifications
   const filteredNotifications = notifications.filter((n: any) => {

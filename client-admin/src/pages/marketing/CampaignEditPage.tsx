@@ -51,7 +51,7 @@ export function CampaignEditPage() {
   })
 
   useEffect(() => {
-    if (campaignData?.data?.data) {
+    if (campaignData?.data) {
       const c = campaignData.data.data
       const actions = c.actions ? JSON.parse(c.actions) : {}
       setForm({
@@ -91,8 +91,8 @@ export function CampaignEditPage() {
     })
   }
 
-  const coupons = couponsData?.data?.data?.list || []
-  const templates = templatesData?.data?.data?.list || []
+  const coupons = couponsData?.data?.list || []
+  const templates = templatesData?.data?.list || []
 
   if (isEdit && campaignLoading) {
     return (

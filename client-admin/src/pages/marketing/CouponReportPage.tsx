@@ -34,7 +34,7 @@ export function CouponReportPage() {
     queryFn: () => marketingApi.couponReports(storeId, period)
   })
 
-  const reports: CouponReport[] = data?.data?.data || []
+  const reports: CouponReport[] = data?.data || []
 
   // Calculate summary
   const summary = reports.reduce((acc, r) => ({

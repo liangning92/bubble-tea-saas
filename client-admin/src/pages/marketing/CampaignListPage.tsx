@@ -59,7 +59,7 @@ export function CampaignListPage() {
     }
   })
 
-  const campaigns: Campaign[] = data?.data?.data?.list || []
+  const campaigns: Campaign[] = data?.data?.list || []
 
   const getTypeBadge = (type: string) => {
     const badges: Record<string, string> = {

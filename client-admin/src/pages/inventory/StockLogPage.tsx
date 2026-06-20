@@ -13,7 +13,7 @@ export function StockLogPage() {
     queryFn: () => inventoryApi.logs(filter)
   })
 
-  const logs = data?.data?.data?.list || []
+  const logs = data?.data?.list || []
 
   const getTypeBadge = (type: string) => {
     switch (type) {

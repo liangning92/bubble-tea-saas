@@ -14,7 +14,7 @@ export function CampaignStatsPage() {
     enabled: !!id
   })
 
-  const stats = data?.data?.data
+  const stats = data?.data
 
   if (isLoading) {
     return (

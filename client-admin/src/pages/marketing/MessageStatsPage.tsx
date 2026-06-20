@@ -45,7 +45,7 @@ export function MessageStatsPage() {
     queryFn: () => marketingApi.messageStats(storeId, period)
   })
 
-  const stats: MessageStats = data?.data?.data || {
+  const stats: MessageStats = data?.data || {
     totalSent: 0,
     totalDelivered: 0,
     totalFailed: 0,

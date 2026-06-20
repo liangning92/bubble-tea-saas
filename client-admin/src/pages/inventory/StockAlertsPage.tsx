@@ -14,7 +14,7 @@ export function StockAlertsPage() {
     queryFn: () => bomApi.getLowStockAlerts(forecastDays)
   })
 
-  const alertsList = alertsData?.data?.data || []
+  const alertsList = alertsData?.data || []
 
   return (
     <div className="space-y-6">

@@ -73,11 +73,11 @@ export function RecipeEditPage() {
 
   // 获取库存列表
   const { data: inventoryData, isLoading: inventoryLoading } = useQuery({
-    queryKey: ['inventory', user?.storeId],
-    queryFn: () => inventoryApi.list({ storeId: user?.storeId, pageSize: 500 })
+    queryKey: ['inventory'],
+    queryFn: () => inventoryApi.list({ pageSize: 500 })
   })
 
-  const inventoryList = inventoryData?.data?.data || []
+  const inventoryList = inventoryData?.data?.list || []
 
   // 按类型分组的库存
   const groupedInventory = useMemo(() => {
@@ -105,13 +105,13 @@ export function RecipeEditPage() {
   })
 
   useEffect(() => {
-    if (productData?.data?.data) {
+    if (productData?.data) {
       setSelectedProduct(productData.data.data)
     }
   }, [productData])
 
   useEffect(() => {
-    if (bomData?.data?.data) {
+    if (bomData?.data) {
       const items = (bomData.data.data.bomDetails || []).map((item: any) => ({
         ...item,
         quantityStr: item.quantity?.toString() || '',

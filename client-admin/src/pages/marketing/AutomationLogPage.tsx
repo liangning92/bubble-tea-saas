@@ -34,7 +34,7 @@ export function AutomationLogPage() {
     queryFn: () => marketingApi.automationLogs(storeId)
   })
 
-  const logs: AutomationLog[] = data?.data?.data || []
+  const logs: AutomationLog[] = data?.data || []
 
   const triggerTypes = [
     { value: 'all', label: t('common.all') },

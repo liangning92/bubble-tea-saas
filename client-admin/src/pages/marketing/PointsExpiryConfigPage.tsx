@@ -20,13 +20,13 @@ export function PointsExpiryConfigPage() {
 
   // Load existing settings
   const { data: existingData, isLoading } = useQuery({
-    queryKey: ['points-expiry-rules', user?.storeId],
-    queryFn: () => marketingApi.pointsExpiryRules(user?.storeId || '')
+    queryKey: ['points-expiry-rules'],
+    queryFn: () => marketingApi.pointsExpiryRules()
   })
 
   // Sync form state when data loads
   useEffect(() => {
-    if (existingData?.data?.data?.list && existingData.data.data.list.length > 0) {
+    if (existingData?.data?.list && existingData.data.data.list.length > 0) {
       const rule = existingData.data.data.list[0]
       setForm({
         enabled: rule.enabled ?? true,

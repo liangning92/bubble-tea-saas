@@ -65,8 +65,8 @@ export function HygieneTemplateListPage() {
     }
   })
 
-  const templates = templatesData?.data?.data?.list || []
-  const staffList = staffData?.data?.data?.list || []
+  const templates = templatesData?.data?.list || []
+  const staffList = staffData?.data?.list || []
 
   const getStaffName = (staffId?: string) => {
     if (!staffId) return '-'
