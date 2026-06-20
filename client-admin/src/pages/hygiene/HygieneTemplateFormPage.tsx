@@ -145,12 +145,12 @@ export function HygieneTemplateFormPage() {
 
   // Build categories list (API + defaults)
   const categories = categoriesData?.data?.length
-    ? categoriesData.data.data.map((c: any) => ({ value: c.value, label: c.label }))
+    ? categoriesData.data.map((c: any) => ({ value: c.value, label: c.label }))
     : CATEGORIES
 
   // Build priorities list
   const priorities = prioritiesData?.data?.length
-    ? prioritiesData.data.data.map((p: any) => ({ value: p.value, label: p.label }))
+    ? prioritiesData.data.map((p: any) => ({ value: p.value, label: p.label }))
     : PRIORITIES
 
   useEffect(() => {
