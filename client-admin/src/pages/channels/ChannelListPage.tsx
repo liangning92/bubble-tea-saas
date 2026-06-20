@@ -54,16 +54,8 @@ export function ChannelListPage() {
   // 获取渠道列表
   const { data, isLoading } = useQuery({
     queryKey: ['channels', user?.storeId],
-    queryFn: () => channelApi.list(user?.storeId || undefined),
-    enabled: !!user?.storeId
+    queryFn: () => channelApi.list(user?.storeId || undefined)
   })
-
-  // 等待 auth store 从 localStorage 恢复后重新获取数据
-  useEffect(() => {
-    if (user?.storeId) {
-      queryClient.invalidateQueries({ queryKey: ['channels', user.storeId] })
-    }
-  }, [user?.storeId, queryClient])
 
   const channels: Channel[] = data?.data?.data?.list || []
 

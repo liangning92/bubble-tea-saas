@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { reportApi } from '../../services/api'
@@ -15,22 +15,14 @@ export function ChannelCommissionPage() {
     endDate: format(new Date(), 'yyyy-MM-dd')
   })
 
-  const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
-    queryKey: ['channel-commissions', dateRange],
+    queryKey: ['channel-commissions', dateRange, user?.storeId],
     queryFn: () => reportApi.getCommissionReports({
       storeId: user?.storeId,
       startDate: dateRange.startDate,
       endDate: dateRange.endDate
-    }),
-    enabled: !!user?.storeId
+    })
   })
-
-  useEffect(() => {
-    if (user?.storeId) {
-      queryClient.invalidateQueries({ queryKey: ['channel-commissions', dateRange] })
-    }
-  }, [user?.storeId, queryClient, dateRange])
 
   const commissionData = data?.data?.data
   const summaries = commissionData?.list || []

@@ -28,15 +28,8 @@ export function POSSettingsPage() {
   // ========== DATA LOADING ==========
   const { data: posConfig, isLoading } = useQuery({
     queryKey: ['config', 'pos', user?.storeId],
-    queryFn: () => configApi.get(user?.storeId || ''),
-    enabled: !!user?.storeId
+    queryFn: () => configApi.get(user?.storeId || '')
   })
-
-  useEffect(() => {
-    if (user?.storeId) {
-      queryClient.invalidateQueries({ queryKey: ['config', 'pos', user.storeId] })
-    }
-  }, [user?.storeId, queryClient])
 
   // ========== STATE WITH DEFAULT VALUES ==========
   const [posLayout, setPosLayout] = useState({
