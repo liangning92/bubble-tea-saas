@@ -131,7 +131,7 @@ export function ProductListPage() {
   })
 
   const products = productsData?.data?.list || []
-  const categories = Array.isArray(categoriesData?.data?.list) ? categoriesData?.data?.list : []
+  const categories = categoriesData?.data?.list || Array.isArray(categoriesData?.data) ? categoriesData?.data : []
 
   const filteredProducts = products.filter((p: any) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.code?.toLowerCase().includes(search.toLowerCase())
