@@ -53,7 +53,7 @@ export function InventoryPage() {
   // Fetch process recipes for semi_finished type
   const { data: recipesData } = useQuery({
     queryKey: ['process-recipes'],
-    queryFn: () => processRecipeApi.list(user?.storeId)
+    queryFn: () => processRecipeApi.list(user?.storeId ?? undefined)
   })
   const recipes = recipesData?.data?.data?.list || []
 
