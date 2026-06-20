@@ -53,8 +53,8 @@ export function ChannelListPage() {
 
   // 获取渠道列表
   const { data, isLoading } = useQuery({
-    queryKey: ['channels', user?.storeId],
-    queryFn: () => channelApi.list(user?.storeId || undefined)
+    queryKey: ['channels'],
+    queryFn: () => channelApi.list()
   })
 
   const channels: Channel[] = data?.data?.data?.list || []
