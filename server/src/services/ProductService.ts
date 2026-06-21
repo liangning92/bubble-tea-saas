@@ -579,16 +579,22 @@ export async function getProductCostDetail(productId: string) {
     const costPerUnit = inv?.avgCost || 0
     const ratio = inv?.concentrateRatio || 1
     const safeRatio = ratio === 0 ? 1 : ratio
-    const itemUnit = (item.unit || inv?.unit || '个').toLowerCase()
-    const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(itemUnit)
+    const invUnit = (inv?.unit || '个').toLowerCase()
+    const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(invUnit)
 
     let unitCost = 0
     if (isPerPiece) {
       unitCost = costPerUnit
     } else {
-      // Unit conversion: kg/L -> g/ml (divide by 1000)
-      // Then apply concentrateRatio (divide by ratio for diluted/concentrated items)
-      unitCost = costPerUnit / 1000 / safeRatio
+      // kg/L inventory: divide by 1000 to convert to g/ml
+      // g/ml inventory: avgCost is already per unit, no conversion needed
+      if (invUnit === 'kg' || invUnit === 'l') {
+        unitCost = costPerUnit / 1000
+      } else {
+        unitCost = costPerUnit
+      }
+      // Apply concentrateRatio (divide by ratio for diluted/concentrated items)
+      unitCost = unitCost / safeRatio
     }
 
     const totalCost = Math.round(item.quantity * unitCost)

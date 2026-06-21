@@ -1,4 +1,5 @@
 import prisma from '../config/database'
+import { recalculateProductCost } from './ProductService'
 
 export interface PurchaseOrderFilter {
   storeId?: string
@@ -169,6 +170,17 @@ export async function receivePurchaseOrder(orderId: string, staffId: string) {
           }
         })
       }
+    }
+
+    // Recalculate cost for all products that use this inventory
+    const affectedInventoryIds = order.items.map(i => i.inventoryId)
+    const bomItems = await tx.bOMItem.findMany({
+      where: { inventoryId: { in: affectedInventoryIds } },
+      select: { productId: true }
+    })
+    const productIds = [...new Set(bomItems.map(b => b.productId))]
+    for (const pid of productIds) {
+      await recalculateProductCost(pid)
     }
 
     return order
