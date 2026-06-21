@@ -212,6 +212,11 @@ export function ChannelListPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-xl">{channel.icon || '📦'}</span>
                         <span className="font-medium text-gray-900">{channel.name}</span>
+                        {['GOFOOD', 'GRAB', 'SHOPEE'].includes(channel.code) && channel.status === 'active' && (
+                          <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">
+                            {t('channels.configureApi') || '需配置API'}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-3">

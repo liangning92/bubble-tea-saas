@@ -9,9 +9,17 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-// Format date
-export function formatDate(date: string | Date): string {
+// Safe parse date string
+function safeParseDate(date: string | Date): Date | null {
+  if (!date) return null
   const d = typeof date === 'string' ? new Date(date) : date
+  return isNaN(d.getTime()) ? null : d
+}
+
+// Format date (handles invalid dates gracefully)
+export function formatDate(date: string | Date, fallback = '-'): string {
+  const d = safeParseDate(date)
+  if (!d) return fallback
   return d.toLocaleDateString('id-ID', {
     year: 'numeric',
     month: 'short',
@@ -20,8 +28,9 @@ export function formatDate(date: string | Date): string {
 }
 
 // Format datetime
-export function formatDateTime(date: string | Date): string {
-  const d = typeof date === 'string' ? new Date(date) : date
+export function formatDateTime(date: string | Date, fallback = '-'): string {
+  const d = safeParseDate(date)
+  if (!d) return fallback
   return d.toLocaleString('id-ID', {
     year: 'numeric',
     month: 'short',
@@ -32,8 +41,9 @@ export function formatDateTime(date: string | Date): string {
 }
 
 // Format time only
-export function formatTime(date: string | Date): string {
-  const d = typeof date === 'string' ? new Date(date) : date
+export function formatTime(date: string | Date, fallback = '-'): string {
+  const d = safeParseDate(date)
+  if (!d) return fallback
   return d.toLocaleTimeString('id-ID', {
     hour: '2-digit',
     minute: '2-digit'
