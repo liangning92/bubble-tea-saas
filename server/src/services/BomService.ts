@@ -179,9 +179,13 @@ function calculateBomCost(bomItems: { quantity: number; costPerUnit: number; uni
     let cpu = item.costPerUnit || item.inventory?.avgCost || 0
 
     if (!isPerPiece) {
-      // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
-      // 公式：qty(g/ml) × (avgCost(分/kg) / 1000 / ratio)
-      cpu = cpu / 1000 / safeRatio
+      // kg/L inventory: divide by 1000 to convert to g/ml
+      // g/ml inventory: avgCost is already per unit, no conversion needed
+      if (invUnit === 'kg' || invUnit === 'l') {
+        cpu = cpu / 1000
+      }
+      // Apply concentrateRatio (for diluted/concentrated items)
+      cpu = cpu / safeRatio
     }
     // 个/件等：直接使用 cpu，不需要转换
 

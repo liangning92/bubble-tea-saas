@@ -109,8 +109,13 @@ async function calculateProductCost(productId: string): Promise<number> {
 
       let cpu = item.costPerUnit || inv.avgCost || 0
       if (!isPerPiece) {
-        // kg/L: divide by 1000 to convert to g/ml, then divide by ratio
-        cpu = cpu / 1000 / safeRatio
+        // kg/L inventory: divide by 1000 to convert to g/ml
+        // g/ml inventory: avgCost is already per unit, no conversion needed
+        if (invUnit === 'kg' || invUnit === 'l') {
+          cpu = cpu / 1000
+        }
+        // Apply concentrateRatio (for diluted/concentrated items)
+        cpu = cpu / safeRatio
       }
       totalCost += (item.quantity || 0) * cpu
     }
