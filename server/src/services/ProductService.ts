@@ -85,7 +85,7 @@ function getConversionFactor(inventoryUnit: string, recipeUnit: string): number 
 }
 
 // Calculate product cost from BOM items (handles semi_finished recursively)
-async function calculateProductCost(productId: string): Promise<number> {
+export async function calculateProductCost(productId: string): Promise<number> {
   const bomItems = await prisma.bOMItem.findMany({
     where: { productId },
     include: { inventory: true }
@@ -122,6 +122,16 @@ async function calculateProductCost(productId: string): Promise<number> {
   }
 
   return Math.round(totalCost)
+}
+
+// Recalculate product cost and persist to database
+export async function recalculateProductCost(productId: string): Promise<number> {
+  const cost = await calculateProductCost(productId)
+  await prisma.product.update({
+    where: { id: productId },
+    data: { costPrice: cost }
+  })
+  return cost
 }
 
 // Get products with filtering
