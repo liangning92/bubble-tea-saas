@@ -24,8 +24,9 @@
   "asarUnpack": [
     "**/*.node",
     "**/node_modules/.prisma/**/*",
-    "**/node_modules/better-sqlite3/**/*"
+    "**/node_modules/@prisma/client/**/*"
   ],
+  "npmRebuild": true,
   "win": {
     "target": [
       {

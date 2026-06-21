@@ -29,7 +29,7 @@
     "docker:logs": "docker-compose logs -f",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "electron:build": "npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
+    "electron:build": "npm run db:generate && npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run build:pos && npm run build:server && npm run electron:compile && electron .",
     "electron:start": "npm run electron:compile && electron ."

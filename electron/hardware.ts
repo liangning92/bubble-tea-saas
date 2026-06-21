@@ -180,7 +180,7 @@ async function printReceiptWindows(printerName: string, data: Buffer): Promise<v
 
 async function openDrawerWindows(printerName: string): Promise<void> {
   const tempFile = getTempFile('drawer')
-  const drawerBytes = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA, 0x1B, 0x64, 0x03])
+  const drawerBytes = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA])
   fs.writeFileSync(tempFile, drawerBytes)
 
   const escapedPrinter = printerName.replace(/'/g, "''")
