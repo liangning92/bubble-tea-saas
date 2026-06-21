@@ -265,7 +265,8 @@ const resources = {
         rate: 'Tarif',
         grossRevenue: 'Pendapatan Kotor',
         commissionAmount: 'Jumlah Komisi',
-        commissionPeriod: 'Periode'
+        commissionPeriod: 'Periode',
+        configureApi: 'Konfigurasi API'
       },
       pos: {
         cart: 'Keranjang',
@@ -805,6 +806,7 @@ const resources = {
         availableVariables: 'Variabel Tersedia',
         editChannel: 'Edit Channel',
         channelName: 'Nama Channel',
+        configureApi: 'Konfigurasi API',
         config: 'Konfigurasi',
         setAsDefault: 'Jadikan Default',
         templateName: 'Nama Template',
@@ -1304,6 +1306,7 @@ const resources = {
         orderChannels: 'Saluran Pesanan',
         orderChannelsHint: 'Pilih saluran yang digunakan untuk pesanan',
         channelName: 'Nama Saluran',
+        configureApi: 'Konfigurasi API',
         channelIcon: 'Ikon',
         taxSettings: 'Pengaturan Pajak',
         enableTax: 'Aktifkan Pajak',
@@ -2354,6 +2357,7 @@ const resources = {
         availableVariables: 'Available Variables',
         editChannel: 'Edit Channel',
         channelName: 'Channel Name',
+        configureApi: 'Configure API',
         config: 'Configuration',
         setAsDefault: 'Set as Default',
         templateName: 'Template Name',
@@ -2570,7 +2574,8 @@ const resources = {
         totalCommission: 'Total Commission',
         commissions: 'Commissions',
         pricing: 'Pricing',
-        addFirst: 'Add first channel'
+        addFirst: 'Add first channel',
+        configureApi: 'Configure API'
       },
       import: {
         title: 'Data Import',
@@ -4322,7 +4327,8 @@ const resources = {
         totalCommission: '总佣金',
         commissions: '佣金记录',
         pricing: '定价',
-        addFirst: '添加第一个渠道'
+        addFirst: '添加第一个渠道',
+        configureApi: '配置 API 密钥'
       },
       pos: {
         title: '收银',
@@ -4651,6 +4657,7 @@ const resources = {
         availableVariables: '可用变量',
         editChannel: '编辑渠道',
         channelName: '渠道名称',
+        configureApi: '请配置API',
         config: '配置',
         setAsDefault: '设为默认',
         templateName: '模板名称',
@@ -5992,6 +5999,7 @@ const resources = {
         orderChannels: '订单渠道',
         orderChannelsHint: '选择使用的订单渠道',
         channelName: '渠道名称',
+        configureApi: '请配置API',
         channelIcon: '图标',
         taxSettings: '税费设置',
         enableTax: '启用税费',
