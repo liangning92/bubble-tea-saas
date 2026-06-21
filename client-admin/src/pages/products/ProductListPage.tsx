@@ -154,7 +154,7 @@ export function ProductListPage() {
     const cost = product.costPrice || 0
     const price = product.specs?.[0]?.price || 0
     if (!cost || !price) return null
-    return ((price - cost) / price * 100).toFixed(0)
+    return ((price - cost) / price * 100).toFixed(1)
   }
 
   const calculateProfit = (product: any) => {

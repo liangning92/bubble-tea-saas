@@ -54,3 +54,40 @@ export function formatTime(date: string | Date, fallback = '-'): string {
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ')
 }
+
+/**
+ * Normalize inventory quantity and unit for display.
+ * Converts kg→g (×1000) and L→ml (×1000) for consistent display.
+ * Returns { quantity, unit } where unit is always g/ml/个/etc (not kg/L).
+ */
+export function normalizeInventoryUnit(quantity: number, unit: string): { quantity: number; unit: string } {
+  const u = (unit || '').toLowerCase()
+  if (u === 'kg') {
+    return { quantity: quantity * 1000, unit: 'g' }
+  }
+  if (u === 'l') {
+    return { quantity: quantity * 1000, unit: 'ml' }
+  }
+  return { quantity, unit }
+}
+
+/**
+ * Format inventory stock with normalized unit for display.
+ * Shows kg→g and L→ml conversion in the display value.
+ */
+export function formatStockDisplay(quantity: number, unit: string): string {
+  const normalized = normalizeInventoryUnit(quantity, unit)
+  const qty = Math.round(normalized.quantity * 100) / 100
+  return `${qty} ${normalized.unit}`
+}
+
+/**
+ * Get normalized unit string (converts kg→g, L→ml).
+ * Does NOT convert the quantity - use normalizeInventoryUnit for that.
+ */
+export function normalizeUnit(unit: string): string {
+  const u = (unit || '').toLowerCase()
+  if (u === 'kg') return 'g'
+  if (u === 'l') return 'ml'
+  return unit
+}

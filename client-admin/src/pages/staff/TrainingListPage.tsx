@@ -233,7 +233,7 @@ export function TrainingListPage() {
                     <td className="px-4 py-3 text-sm">{getTypeLabel(record.trainingType)}</td>
                     <td className="px-4 py-3 text-sm">{record.title}</td>
                     <td className="px-4 py-3 text-sm">{record.provider}</td>
-                    <td className="px-4 py-3 text-sm">{new Date(record.date).toLocaleDateString('id-ID')}</td>
+                    <td className="px-4 py-3 text-sm">{(new Date(record.date).getTime() && !isNaN(new Date(record.date).getTime())) ? new Date(record.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}</td>
                     <td className="px-4 py-3 text-sm">{record.duration}h</td>
                     <td className="px-4 py-3 text-sm">{record.score || '-'}</td>
                     <td className="px-4 py-3">

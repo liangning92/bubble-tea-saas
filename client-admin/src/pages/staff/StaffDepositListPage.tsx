@@ -128,7 +128,9 @@ export function StaffDepositListPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return '-'
+    return d.toLocaleDateString('id-ID', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

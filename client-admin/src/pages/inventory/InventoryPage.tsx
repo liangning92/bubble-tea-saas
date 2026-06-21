@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { inventoryApi, configApi, processRecipeApi } from '../../services/api'
-import { formatCurrency } from '../../utils/helpers'
+import { formatCurrency, formatStockDisplay } from '../../utils/helpers'
 import { AlertTriangle, TrendingUp, TrendingDown, Search, Loader2, Package, Plus, Edit2, Trash2, X } from 'lucide-react'
 
 const DEFAULT_CATEGORIES = [
@@ -344,7 +344,7 @@ export function InventoryPage() {
           <div className="flex flex-wrap gap-2">
             {alerts.slice(0, 10).map((item: any) => (
               <span key={item.id} className="badge badge-error">
-                {item.name}: {item.currentStock} {item.unit}
+                {item.name}: {formatStockDisplay(item.currentStock, item.unit)}
               </span>
             ))}
             {alerts.length > 10 && <span className="text-red-600 text-sm">+{alerts.length - 10} {t('inventory.moreItems')}</span>}
@@ -408,10 +408,9 @@ export function InventoryPage() {
                       <td className="py-3 text-gray-600">{getCategoryName(item.category)}</td>
                       <td className="py-3 text-right">
                         <span className={`font-bold ${isLow ? 'text-red-600' : 'text-gray-900'}`}>
-                          {item.currentStock}
+                          {formatStockDisplay(item.currentStock, item.unit)}
                         </span>
                       </td>
-                      <td className="py-3 text-gray-600">{item.unit}</td>
                       <td className="py-3 text-right">{formatCurrency(item.avgCost)}</td>
                       <td className="py-3 text-right text-gray-500">{item.safetyStock || 0}</td>
                       <td className="py-3">

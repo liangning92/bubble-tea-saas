@@ -233,11 +233,11 @@ export function ShiftSwapListPage() {
               <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
                 <span className="flex items-center gap-1">
                   <Clock size={12} />
-                  {t('staff.requestedAt')}: {new Date(request.createdAt).toLocaleString('id-ID')}
+                  {t('staff.requestedAt')}: {(new Date(request.createdAt).getTime() && !isNaN(new Date(request.createdAt).getTime())) ? new Date(request.createdAt).toLocaleString('id-ID', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                 </span>
                 {request.processedAt && (
                   <span>
-                    {t('staff.processedAt')}: {new Date(request.processedAt).toLocaleString('id-ID')}
+                    {t('staff.processedAt')}: {(new Date(request.processedAt).getTime() && !isNaN(new Date(request.processedAt).getTime())) ? new Date(request.processedAt).toLocaleString('id-ID', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                   </span>
                 )}
               </div>

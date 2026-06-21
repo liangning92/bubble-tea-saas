@@ -108,7 +108,9 @@ export function OvertimeRequestListPage() {
     : requests
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return '-'
+    return d.toLocaleDateString('id-ID', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
