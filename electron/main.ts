@@ -70,7 +70,7 @@ async function waitForServer(port: number, timeout = 15000): Promise<boolean> {
   while (Date.now() - start < timeout) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const req = http.get(`http://127.0.0.1:${port}/api/health`, (res) => {
+        const req = http.get(`http://127.0.0.1:${port}/health`, (res) => {
           resolve()
         })
         req.on('error', reject as () => void)

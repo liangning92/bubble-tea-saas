@@ -98,6 +98,16 @@ app.get('/health', (req, res) => {
   })
 })
 
+// POS Health Check (same as /health, at /api/health for POS client compatibility)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'bubble-tea-api',
+    version: '2.0.0'
+  })
+})
+
 // Version Check for POS updates
 app.get('/api/version', (req, res) => {
   const latestVersion = process.env.APP_VERSION || '1.0.0'
