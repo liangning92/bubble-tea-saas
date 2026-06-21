@@ -109,7 +109,10 @@ export function AttendanceCorrectionListPage() {
     : requests
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    if (!dateStr) return '-'
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return '-'
+    return date.toLocaleDateString('id-ID', {
       weekday: 'short',
       day: 'numeric',
       month: 'short'

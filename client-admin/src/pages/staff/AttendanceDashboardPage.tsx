@@ -27,6 +27,21 @@ interface Staff {
   status: string
 }
 
+// Safe date formatter - returns fallback for invalid dates
+function safeFormatDate(dateStr: string | undefined | null, options?: Intl.DateTimeFormatOptions, fallback = '-'): string {
+  if (!dateStr) return fallback
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return fallback
+  return date.toLocaleDateString('id-ID', options)
+}
+
+function safeFormatTime(dateStr: string | undefined | null, fallback = '-'): string {
+  if (!dateStr) return fallback
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return fallback
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
+
 export function AttendanceDashboardPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
@@ -76,8 +91,8 @@ export function AttendanceDashboardPage() {
           todayStaffList.push({
             staffId: staff.id,
             staffName: staff.name,
-            checkIn: att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : undefined,
-            checkOut: att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : undefined,
+            checkIn: safeFormatTime(att.checkInTime, undefined),
+            checkOut: safeFormatTime(att.checkOutTime, undefined),
             status
           })
         } else {
@@ -111,7 +126,12 @@ export function AttendanceDashboardPage() {
         // Group attendance by day
         const attendanceByDay: Record<string, any[]> = {}
         for (const att of weekAttendanceList) {
-          const dateStr = att.date?.slice(0, 10) || new Date(att.checkInTime).toISOString().slice(0, 10)
+          // Use att.date first, fallback to checkInTime, fallback to today
+          let dateStr = att.date?.slice(0, 10)
+          if (!dateStr) {
+            const fallback = att.checkInTime ? new Date(att.checkInTime) : new Date()
+            dateStr = isNaN(fallback.getTime()) ? new Date().toISOString().slice(0, 10) : fallback.toISOString().slice(0, 10)
+          }
           if (!attendanceByDay[dateStr]) attendanceByDay[dateStr] = []
           attendanceByDay[dateStr].push(att)
         }
@@ -185,8 +205,7 @@ export function AttendanceDashboardPage() {
   }
 
   const formatDateDisplay = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
+    return safeFormatDate(dateStr, { weekday: 'short', day: 'numeric', month: 'short' }, dateStr)
   }
 
   return (
