@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { bomApi } from '../../services/api'
+import { formatStockDisplay } from '../../utils/helpers'
 import { Loader2, AlertTriangle, Package } from 'lucide-react'
 
 export function StockAlertsPage() {
