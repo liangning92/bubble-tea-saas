@@ -15,7 +15,7 @@ export function MemberListPage() {
     queryFn: () => memberApi.list({ pageSize: 100 })
   })
 
-  const members = data?.data?.list || []
+  const members = data?.data?.data?.list || []
 
   // Filter by name if searching
   const displayMembers = searchName

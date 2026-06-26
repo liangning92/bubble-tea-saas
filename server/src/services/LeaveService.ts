@@ -23,7 +23,7 @@ export interface LeaveBalanceUpdate {
 }
 
 // Apply for leave
-export async function applyLeave(data: LeaveApplication) {
+export async function applyLeave(data: LeaveApplication, autoInitBalance: boolean = true) {
   const { staffId, leaveType, totalDays, startDate, endDate } = data
 
   // Get current year
@@ -31,7 +31,16 @@ export async function applyLeave(data: LeaveApplication) {
 
   // Check leave balance for paid leave types
   if (leaveType === 'annual' || leaveType === 'sick') {
-    const balance = await getLeaveBalance(staffId, year)
+    let balance = await getLeaveBalance(staffId, year)
+
+    // If no balance and auto-init is enabled, create one automatically
+    if (!balance && autoInitBalance) {
+      const staff = await prisma.staff.findUnique({ where: { id: staffId } })
+      if (staff?.hireDate) {
+        balance = await initializeLeaveBalanceForStaff(staffId, new Date(staff.hireDate))
+      }
+    }
+
     if (!balance) {
       throw new Error('Leave balance not initialized. Please contact HR.')
     }
@@ -170,6 +179,53 @@ export async function getLeaveBalance(staffId: string, year: number) {
   return balance
 }
 
+// Auto-initialize leave balance for new staff based on hire date
+export async function initializeLeaveBalanceForStaff(staffId: string, hireDate: Date) {
+  const currentYear = new Date().getFullYear()
+  const yearsEmployed = currentYear - hireDate.getFullYear()
+
+  // Calculate annual leave based on employment years (Indonesian standard):
+  // 0-1 years: 12 days
+  // 1-5 years: 12 days
+  // >5 years: can be more (simplified to 15 days)
+  let annualLeave = 12
+  if (yearsEmployed >= 5) {
+    annualLeave = 15
+  }
+
+  // Sick leave is usually 14 days per year (Indonesian standard)
+  const sickLeave = 14
+
+  // Create or update balance for current year
+  let balance = await prisma.leaveBalance.findUnique({
+    where: { staffId_year: { staffId, year: currentYear } }
+  })
+
+  if (balance) {
+    // If balance exists but annual/sick were 0, update them
+    if (balance.annualLeave === 0) {
+      return prisma.leaveBalance.update({
+        where: { id: balance.id },
+        data: { annualLeave, sickLeave }
+      })
+    }
+    return balance
+  }
+
+  return prisma.leaveBalance.create({
+    data: {
+      staffId,
+      year: currentYear,
+      annualLeave,
+      sickLeave,
+      unpaidLeave: 0,
+      broughtForward: 0,
+      usedLeave: 0,
+      usedSick: 0
+    }
+  })
+}
+
 // Set/update leave balance (admin)
 export async function setLeaveBalance(staffId: string, data: LeaveBalanceUpdate) {
   const { year, ...balanceData } = data
@@ -280,6 +336,76 @@ export async function getLeaveById(leaveId: string) {
     where: { id: leaveId },
     include: {
       staff: { select: { id: true, name: true, employeeNumber: true, storeId: true } }
+    }
+  })
+}
+
+// Get approved leaves for a date range (for schedule linkage)
+export async function getApprovedLeavesInRange(storeId: string, startDate: Date, endDate: Date) {
+  return prisma.leave.findMany({
+    where: {
+      storeId,
+      status: 'approved',
+      OR: [
+        {
+          // Leave starts within range
+          startDate: { gte: startDate, lte: endDate }
+        },
+        {
+          // Leave ends within range
+          endDate: { gte: startDate, lte: endDate }
+        },
+        {
+          // Leave spans entire range
+          AND: [
+            { startDate: { lte: startDate } },
+            { endDate: { gte: endDate } }
+          ]
+        }
+      ]
+    },
+    include: {
+      staff: { select: { id: true, name: true, employeeNumber: true } }
+    },
+    orderBy: { startDate: 'asc' }
+  })
+}
+
+// Check if staff has approved leave on a specific date
+export async function hasApprovedLeaveOnDate(staffId: string, date: Date): Promise<boolean> {
+  const startOfDay = new Date(date)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(date)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  const leave = await prisma.leave.findFirst({
+    where: {
+      staffId,
+      status: 'approved',
+      startDate: { lte: endOfDay },
+      endDate: { gte: startOfDay }
+    }
+  })
+
+  return !!leave
+}
+
+// Get leave info for a specific date (for display on schedule)
+export async function getLeaveInfoForDate(staffId: string, date: Date) {
+  const startOfDay = new Date(date)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(date)
+  endOfDay.setHours(23, 59, 59, 999)
+
+  return prisma.leave.findFirst({
+    where: {
+      staffId,
+      status: 'approved',
+      startDate: { lte: endOfDay },
+      endDate: { gte: startOfDay }
+    },
+    include: {
+      staff: { select: { id: true, name: true } }
     }
   })
 }

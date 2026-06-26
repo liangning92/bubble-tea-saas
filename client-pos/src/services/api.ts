@@ -34,7 +34,7 @@ export async function fetchApiUrlFromServer(): Promise<string | null> {
 
     const storeId = state.user.storeId
     const baseUrl = getApiUrl().replace(/\/$/, '')  // Remove trailing slash
-    const response = await fetch(`${baseUrl}/config/${storeId}/pos_api_url`, {
+    const response = await fetch(`${baseUrl}/api/config/${storeId}/pos_api_url`, {
       headers: {
         Authorization: `Bearer ${state.token}`
       }
@@ -87,6 +87,9 @@ export const posApi = {
   getMembers: (params?: any) => api.get('/members', { params }),
   getMemberByBarcode: (barcode: string) => api.get(`/members/barcode/${barcode}`),
   createMember: (data: any) => api.post('/members', data),
+  getMemberCoupons: (memberId: string) => api.get(`/marketing/members/${memberId}/coupons`),
+  redeemCoupon: (memberCouponId: string, orderId: string) =>
+    api.post(`/marketing/coupons/${memberCouponId}/redeem`, { orderId }),
 
   // Auth
   login: (phone: string, password: string) =>
@@ -106,9 +109,10 @@ export const posApi = {
   // Hygiene
   getMyTasks: (date?: string) => api.get('/hygiene/tasks/my', { params: { date } }),
   getPendingTasks: () => api.get('/hygiene/tasks/pending'),
+  getOverdueTasks: () => api.get('/hygiene/tasks/overdue'),
   getTask: (id: string) => api.get('/hygiene/tasks/' + id),
   startTask: (id: string) => api.put('/hygiene/tasks/' + id + '/start'),
-  completeTask: (id: string, data: { photoUrl?: string; signatureUrl?: string; note?: string; checklistResults?: { checklistId: string; completed: boolean; note?: string }[] }) =>
+  completeTask: (id: string, data: { photoUrl?: string; signatureUrl?: string; note?: string; selfRating?: number; checklistResults?: { checklistId: string; completed: boolean; note?: string }[] }) =>
     api.put(`/hygiene/tasks/${id}/complete`, data),
   skipTask: (id: string, note: string) =>
     api.put(`/hygiene/tasks/${id}/skip`, { note }),

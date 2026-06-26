@@ -98,6 +98,7 @@ model Store {
   ShiftSwap            ShiftSwap[]
   OvertimeRequest      OvertimeRequest[]
   Shift                Shift[]
+  staffPointRule      StaffPointRule?
 }
 
 // ============================================
@@ -301,6 +302,21 @@ model StaffPointReward {
   StaffPointRedemption StaffPointRedemption[]
 }
 
+// 员工积分规则
+model StaffPointRule {
+  id                   String   @id @default(cuid())
+  storeId              String   @unique
+  store                Store    @relation(fields: [storeId], references: [id])
+  perfectAttendancePoints Int    @default(50)   // 全勤积分
+  goodPerformancePoints  Int    @default(100)  // 绩效积分
+  completedTrainingPoints Int   @default(30)   // 培训完成积分
+  holidayWorkPoints     Int    @default(20)   // 节假日工作积分
+  overtimePerHourPoints Int    @default(5)    // 加班每小时积分
+  isActive             Boolean @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
 model StaffPointRedemption {
   id          String           @id @default(cuid())
   staffId     String
@@ -477,6 +493,8 @@ model ShiftSwap {
   originalShift String // 原班次
   targetDate    DateTime // 目标日期
   targetShift   String // 目标班次
+  targetStaffId String? // 目标员工（如果需要对方确认）
+  targetConfirmed Boolean @default(false) // 目标员工是否已确认
   reason        String? // 调班原因
   status        String    @default("pending") // pending | approved | rejected
   adminNote     String?
@@ -1104,7 +1122,8 @@ model HygieneTemplate {
   category           String             @default("daily") // 分类：food_safety/daily/equipment/periodic/opening/closing
   frequency          String             @default("daily") // 频率：daily/weekly/monthly/specific_days
   specificDays       String? // 特定日期，JSON数组，如 [1,3,5] 表示周一三五
-  time               String             @default("10:00") // 执行时间 HH:mm
+  time               String             @default("10:00") // 主执行时间 HH:mm（兼容旧版）
+  executionTimes     String? // 每日多次执行时间，JSON数组，如 ["09:00", "13:00", "18:00"]
   priority           Int                @default(2) // 优先级：1=critical, 2=high, 3=normal, 4=low
   estimatedMinutes   Int                @default(10) // 预计完成时间（分钟）
   standardBefore     String? // 任务前执行标准
@@ -1115,7 +1134,8 @@ model HygieneTemplate {
   evidenceType       String             @default("photo") // 证据类型：photo/signature/both
   assignedType       String             @default("shift") // 分配方式：shift/staff/area
   shift              String? // 班次：morning/afternoon/evening
-  staffId            String? // 特定员工ID
+  staffId            String? // 特定员工ID（单个，兼容旧版）
+  staffIds           String? // 多个员工ID，JSON数组，如 ["id1", "id2"]
   areaManagerId      String? // 区域负责人（分配给整个区域）
   requiresApproval   Boolean            @default(false) // 需要主管审核
   alertMinutesBefore Int                @default(15) // 提前提醒分钟数
@@ -1157,7 +1177,7 @@ model HygieneTask {
   date             String // 任务日期 YYYY-MM-DD
   time             String // 执行时间 HH:mm
   priority         Int              @default(2) // 优先级
-  status           String           @default("pending") // pending/completed/skipped/approved/rejected
+  status           String           @default("pending") // pending/completed/skipped/approved/rejected/in_progress/overdue
   // 完成信息
   completedAt      DateTime?
   completedBy      String?
@@ -1167,7 +1187,8 @@ model HygieneTask {
   // 审核信息
   approvedBy       String?
   approvedAt       DateTime?
-  qualityScore     Int? // 1-5 质量评分
+  qualityScore     Int? // 1-5 质量评分（主管评分）
+  selfRating       Int? // 1-5 员工自评质量
   // 问题上报
   issueDescription String?
   issuePhotoUrl    String?
@@ -1175,6 +1196,17 @@ model HygieneTask {
   startedAt        DateTime? // 开始执行时间
   actualMinutes    Int? // 实际耗时
   reminderSent     Boolean          @default(false)
+  // 驳回重做
+  parentTaskId     String? // 父任务ID（重做时关联）
+  redoCount        Int              @default(0) // 重做次数
+  rejectReason     String? // 驳回原因
+  // 逾期追踪
+  dueTime          DateTime? // 截止时间
+  overdueMinutes   Int? // 逾期分钟数（定时任务更新）
+  // 临时任务标记
+  isTemporary      Boolean          @default(false) // 是否临时任务
+  // 执行序号（每日多次执行时使用）
+  executionIndex   Int              @default(0) // 当日第几次执行
   logs             HygieneTaskLog[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -1185,7 +1217,7 @@ model HygieneTaskLog {
   id            String      @id @default(cuid())
   taskId        String
   task          HygieneTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  action        String // created/assigned/started/completed/approved/skipped/issue/escalated
+  action        String // created/assigned/started/completed/approved/skipped/issue/escalated/rejected/redo/reminded/overdue
   performedBy   String // 操作人ID
   performedName String? // 操作人姓名（冗余存储便于显示）
   photoUrl      String?

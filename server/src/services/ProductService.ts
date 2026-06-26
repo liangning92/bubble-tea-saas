@@ -20,6 +20,7 @@ export interface CreateProductData {
   specs?: { name: string; price: number }[]
   addons?: { addonId: string; price?: number }[]
   bomItems?: { inventoryId: string; quantity: number; unit?: string }[]
+  channelPrices?: { channelId: string; priceAdjustment: number; enabled: boolean }[]
 }
 
 // Generate product code: based on category prefix
@@ -161,7 +162,8 @@ export async function getProducts(filter: ProductFilter) {
       },
       bomItems: {
         include: { inventory: true }
-      }
+      },
+      channelPrices: true
     },
     orderBy: { name: 'asc' }
   })
@@ -194,7 +196,8 @@ export async function getProductById(productId: string) {
       },
       bomItems: {
         include: { inventory: true }
-      }
+      },
+      channelPrices: true
     }
   })
 }
@@ -215,7 +218,11 @@ export async function getProductByBarcode(barcode: string, storeId: string) {
       specs: { orderBy: { isDefault: 'desc' }, take: 1 },
       addons: {
         include: { addon: true }
-      }
+      },
+      bomItems: {
+        include: { inventory: true }
+      },
+      channelPrices: true
     }
   })
 }
@@ -248,7 +255,6 @@ export async function createProduct(data: CreateProductData) {
           name: spec.name,
           price: spec.price,
           priceAdjustment: 0,
-          sortOrder: index,
           isDefault: index === 0
         }))
       })
@@ -284,6 +290,18 @@ export async function createProduct(data: CreateProductData) {
       })
     }
 
+    // Create channel prices
+    if (data.channelPrices && data.channelPrices.length > 0) {
+      await tx.productChannelPrice.createMany({
+        data: data.channelPrices.map(cp => ({
+          productId: product.id,
+          channelId: cp.channelId,
+          priceAdjustment: cp.priceAdjustment,
+          enabled: cp.enabled
+        }))
+      })
+    }
+
     return product
   })
 }
@@ -315,42 +333,59 @@ export async function updateProduct(productId: string, data: Partial<CreateProdu
           name: String(spec.name),
           price: Math.floor(Number(spec.price)),
           priceAdjustment: 0,
-          sortOrder: index,
           isDefault: index === 0
         }))
       })
     }
 
-    // Update addons if provided
-    if (data.addons) {
+    // Update addons if provided (check for undefined, not just truthiness)
+    if (data.addons !== undefined) {
       await tx.productAddon.deleteMany({ where: { productId } })
-      await tx.productAddon.createMany({
-        data: data.addons.map(addon => ({
-          productId,
-          addonId: addon.addonId,
-          priceOverride: addon.price
-        }))
-      })
+      if (data.addons.length > 0) {
+        await tx.productAddon.createMany({
+          data: data.addons.map(addon => ({
+            productId,
+            addonId: addon.addonId,
+            priceOverride: addon.price
+          }))
+        })
+      }
     }
 
-    // Update BOM if provided
-    if (data.bomItems) {
+    // Update BOM if provided (check for undefined, not just truthiness)
+    if (data.bomItems !== undefined) {
       await tx.bOMItem.deleteMany({ where: { productId } })
-      await tx.bOMItem.createMany({
-        data: data.bomItems.map(bom => ({
-          productId,
-          inventoryId: bom.inventoryId,
-          quantity: bom.quantity,
-          unit: bom.unit || '个'
-        }))
-      })
-
+      if (data.bomItems.length > 0) {
+        await tx.bOMItem.createMany({
+          data: data.bomItems.map(bom => ({
+            productId,
+            inventoryId: bom.inventoryId,
+            quantity: bom.quantity,
+            unit: bom.unit || '个'
+          }))
+        })
+      }
       // Recalculate cost
       const cost = await calculateProductCost(productId)
       await tx.product.update({
         where: { id: productId },
         data: { costPrice: cost }
       })
+    }
+
+    // Update channel prices if provided (check for undefined, not just truthiness)
+    if (data.channelPrices !== undefined) {
+      await tx.productChannelPrice.deleteMany({ where: { productId } })
+      if (data.channelPrices.length > 0) {
+        await tx.productChannelPrice.createMany({
+          data: data.channelPrices.map(cp => ({
+            productId,
+            channelId: cp.channelId,
+            priceAdjustment: cp.priceAdjustment,
+            enabled: cp.enabled
+          }))
+        })
+      }
     }
 
     return product
@@ -448,7 +483,8 @@ export async function getProductsForPOS(storeId: string) {
         include: {
           addon: true
         }
-      }
+      },
+      channelPrices: true
     },
     orderBy: { name: 'asc' }
   })
@@ -463,6 +499,7 @@ export async function getProductsForPOS(storeId: string) {
     categoryId: p.category?.id,
     categoryName: p.category?.name,
     costPrice: p.costPrice,
+    status: p.status,
     tags: JSON.parse(p.tags || '[]'),
     updatedAt: p.updatedAt?.toISOString() || null,
     specs: (p.specs || []).map((s: any) => ({
@@ -478,6 +515,11 @@ export async function getProductsForPOS(storeId: string) {
       price: pa.priceOverride || pa.addon.price,
       isFree: pa.addon.isFree,
       updatedAt: pa.addon.updatedAt?.toISOString() || null
+    })),
+    channelPrices: (p.channelPrices || []).map((cp: any) => ({
+      channelId: cp.channelId,
+      priceAdjustment: cp.priceAdjustment,
+      enabled: cp.enabled
     }))
   }))
 }

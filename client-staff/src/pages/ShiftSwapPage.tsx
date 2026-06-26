@@ -66,11 +66,11 @@ export function ShiftSwapPage() {
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
-        alert(response.message || 'Failed to submit shift swap')
+        alert(response.message || t('shiftSwap.submitFailed'))
       }
     } catch (error: any) {
       console.error('Failed to submit shift swap:', error)
-      alert(error?.response?.data?.message || 'Failed to submit shift swap')
+      alert(error?.response?.data?.message || t('shiftSwap.submitFailed'))
     } finally {
       setIsSubmitting(false)
     }

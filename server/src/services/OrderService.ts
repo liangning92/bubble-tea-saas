@@ -1,6 +1,7 @@
 import prisma from '../config/database'
 import { config } from '../config/env'
 import { processOrderReferralRewards } from './ReferralService'
+import { getOrCreatePointsRule, calculatePoints } from './PointsRuleService'
 
 export interface CreateOrderData {
   storeId: string
@@ -350,27 +351,51 @@ export async function deductInventory(storeId: string, orderId: string, items: a
   return { success: errors.length === 0, errors, lowStockWarnings: lowStockWarnings.length > 0 ? lowStockWarnings : undefined }
 }
 
-// Update member points
-export async function updateMemberPoints(memberId: string, amount: number) {
-  const pointsEarned = Math.floor(amount / 10000) // 1 point per Rp 10,000
-
-  await prisma.member.update({
+// Update member points (using configured PointsRule)
+export async function updateMemberPoints(memberId: string, amount: number, storeId: string) {
+  // Get member and points rule
+  const member = await prisma.member.findUnique({
     where: { id: memberId },
-    data: {
-      points: { increment: pointsEarned },
-      totalSpent: { increment: amount },
-      lastVisit: new Date()
+    select: { birthday: true, level: true }
+  })
+
+  const rule = await getOrCreatePointsRule(storeId)
+
+  // Calculate points using PointsRuleService (applies birthday multiplier, tier multiplier, etc.)
+  const pointsEarned = calculatePoints(amount, {
+    rule: {
+      pointsPerRupiah: rule.pointsPerRupiah,
+      minPurchase: rule.minPurchase,
+      birthdayMultiplier: rule.birthdayMultiplier,
+      tierMultiplier: rule.tierMultiplier
+    },
+    member: {
+      birthday: member?.birthday || null,
+      level: member?.level || 'bronze'
     }
   })
 
-  await prisma.pointLog.create({
-    data: {
-      memberId,
-      type: 'earn',
-      points: pointsEarned,
-      note: 'Purchase reward'
-    }
-  })
+  if (pointsEarned > 0) {
+    await prisma.member.update({
+      where: { id: memberId },
+      data: {
+        points: { increment: pointsEarned },
+        totalSpent: { increment: amount },
+        lastVisit: new Date()
+      }
+    })
+
+    await prisma.pointLog.create({
+      data: {
+        memberId,
+        type: 'earn',
+        points: pointsEarned,
+        note: 'Purchase reward'
+      }
+    })
+  }
+
+  return pointsEarned
 }
 
 // Get orders with filtering and pagination
@@ -521,6 +546,28 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     }))
   )
 
+  // Calculate member points BEFORE transaction (needs member info + points rule)
+  let calculatedPoints = 0
+  if (data.memberId) {
+    const member = await prisma.member.findUnique({
+      where: { id: data.memberId },
+      select: { birthday: true, level: true }
+    })
+    const rule = await getOrCreatePointsRule(data.storeId)
+    calculatedPoints = calculatePoints(grandTotal, {
+      rule: {
+        pointsPerRupiah: rule.pointsPerRupiah,
+        minPurchase: rule.minPurchase,
+        birthdayMultiplier: rule.birthdayMultiplier,
+        tierMultiplier: rule.tierMultiplier
+      },
+      member: {
+        birthday: member?.birthday || null,
+        level: member?.level || 'bronze'
+      }
+    })
+  }
+
   // Create order with transaction
   const order = await prisma.$transaction(async (tx) => {
     // Use client-provided orderNumber or generate random one
@@ -567,12 +614,11 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     const inventoryResult = await deductInventory(data.storeId, newOrder.id, data.items, tx)
 
     // Update member points (inside same transaction to avoid timeout)
-    if (data.memberId) {
-      const pointsEarned = Math.floor(grandTotal / 10000)
+    if (data.memberId && calculatedPoints > 0) {
       await tx.member.update({
         where: { id: data.memberId },
         data: {
-          points: { increment: pointsEarned },
+          points: { increment: calculatedPoints },
           totalSpent: { increment: grandTotal },
           lastVisit: new Date()
         }
@@ -581,7 +627,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
         data: {
           memberId: data.memberId,
           type: 'earn',
-          points: pointsEarned,
+          points: calculatedPoints,
           orderId: newOrder.id,
           note: 'Purchase reward'
         }
@@ -663,6 +709,30 @@ export async function createRefundRequest(params: {
 
   if (order.status !== 'completed') {
     throw new Error('Only completed orders can be refunded')
+  }
+
+  // Check for existing pending refund request
+  const existingRequest = await prisma.refundRequest.findFirst({
+    where: {
+      orderId: params.orderId,
+      status: 'pending'
+    }
+  })
+  if (existingRequest) {
+    throw new Error('A pending refund request already exists for this order')
+  }
+
+  // Validate total refunded amount won't exceed order total
+  const approvedRefunds = await prisma.refundRequest.findMany({
+    where: {
+      orderId: params.orderId,
+      status: { in: ['approved', 'paid'] }
+    }
+  })
+  const totalAlreadyRefunded = approvedRefunds.reduce((sum, r) => sum + (r.amount || 0), 0)
+  // Default amount=0 means full refund, so check if order is already fully refunded
+  if (totalAlreadyRefunded >= order.totalAmount) {
+    throw new Error('Order has already been fully refunded')
   }
 
   // Create refund request

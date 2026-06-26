@@ -16,16 +16,33 @@ import {
   Package,
   Star,
   Wallet as WalletIcon,
-  BookOpen
+  BookOpen,
+  Globe,
+  ChevronDown
 } from 'lucide-react'
 
+const LANGUAGES = [
+  { code: 'id', label: 'Indonesia', flag: '🇮🇩' },
+  { code: 'en', label: 'English', flag: '🇬🇧' },
+  { code: 'zh', label: '中文', flag: '🇨🇳' }
+]
+
 export function HomePage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
   const [pendingTasksCount, setPendingTasksCount] = useState(0)
   const [, setIsLoading] = useState(true)
+  const [showLangMenu, setShowLangMenu] = useState(false)
+
+  // Load saved language preference
+  useEffect(() => {
+    const savedLang = localStorage.getItem('staff-language')
+    if (savedLang && savedLang !== i18n.language) {
+      i18n.changeLanguage(savedLang)
+    }
+  }, [])
 
   useEffect(() => {
     if (user?.staffId) {
@@ -61,6 +78,17 @@ export function HomePage() {
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const changeLanguage = (langCode: string) => {
+    i18n.changeLanguage(langCode)
+    localStorage.setItem('staff-language', langCode)
+    setShowLangMenu(false)
+  }
+
+  // Get current language
+  const getCurrentLang = () => {
+    return LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
   }
 
   // Get greeting based on time
@@ -103,6 +131,33 @@ export function HomePage() {
             >
               <Bell size={20} />
             </button>
+            {/* Language Switcher */}
+            <div className="relative">
+              <button
+                onClick={() => setShowLangMenu(!showLangMenu)}
+                className="p-2 bg-white/20 rounded-full flex items-center gap-1"
+              >
+                <Globe size={20} />
+                <span className="text-xs">{getCurrentLang().flag}</span>
+                <ChevronDown size={14} />
+              </button>
+              {showLangMenu && (
+                <div className="absolute right-0 top-12 bg-white rounded-lg shadow-lg py-2 z-50 min-w-[140px]">
+                  {LANGUAGES.map(lang => (
+                    <button
+                      key={lang.code}
+                      onClick={() => changeLanguage(lang.code)}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-100 ${
+                        i18n.language === lang.code ? 'text-primary font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      <span>{lang.flag}</span>
+                      <span>{lang.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={handleLogout}
               className="p-2 bg-white/20 rounded-full"

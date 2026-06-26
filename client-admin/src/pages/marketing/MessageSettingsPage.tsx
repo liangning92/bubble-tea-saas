@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { messageApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
 import {
   Loader2, MessageSquare, Settings, FileText, BarChart3,
   Plus, Edit2, Trash2, X, Check, Bell, Globe, Phone
@@ -44,6 +45,8 @@ const CHANNEL_TYPES = [
 export function MessageSettingsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const storeId = user?.storeId
 
   const [activeTab, setActiveTab] = useState<'channels' | 'templates' | 'logs' | 'stats'>('channels')
   const [showCreateChannel, setShowCreateChannel] = useState(false)
@@ -56,14 +59,14 @@ export function MessageSettingsPage() {
     queryKey: ['message-channels'],
     queryFn: () => messageApi.channels()
   })
-  const channels = channelsData?.data?.list || []
+  const channels = channelsData?.data?.data?.list || []
 
   // Fetch templates
   const { data: templatesData, isLoading: templatesLoading } = useQuery({
     queryKey: ['message-templates'],
     queryFn: () => messageApi.templates()
   })
-  const templates = templatesData?.data?.list || []
+  const templates = templatesData?.data?.data?.list || []
 
   // Fetch stats
   const { data: statsData } = useQuery({
@@ -381,10 +384,12 @@ export function MessageSettingsPage() {
             setEditingChannel(null)
           }}
           onSave={(data) => {
-            if (editingChannel) {
-              updateChannelMutation.mutate({ id: editingChannel.id, data })
+            // Ensure config is not empty object - add dummy key if empty
+            if (!editingChannel) {
+              const config = Object.keys(data.config || {}).length > 0 ? data.config : { enabled: 'true' }
+              createChannelMutation.mutate({ ...data, config, storeId })
             } else {
-              createChannelMutation.mutate(data)
+              updateChannelMutation.mutate({ id: editingChannel.id, data })
             }
           }}
           isPending={createChannelMutation.isPending || updateChannelMutation.isPending}

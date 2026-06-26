@@ -177,4 +177,31 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
   }
 })
 
+// ==================== EXPENSE CATEGORIES (Customizable) ====================
+
+// GET /api/expenses/categories
+router.get('/categories', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const categories = await ExpenseService.getExpenseCategories(storeId)
+    res.json({ code: 200, data: { list: categories } })
+  } catch (error: any) {
+    console.error('Get expense categories error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to get expense categories' })
+  }
+})
+
+// PUT /api/expenses/categories
+router.put('/categories', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const { categories } = req.body
+    await ExpenseService.saveExpenseCategories(storeId, categories)
+    res.json({ code: 200, message: 'Expense categories updated' })
+  } catch (error: any) {
+    console.error('Save expense categories error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to save expense categories' })
+  }
+})
+
 export { router as expenseRouter }

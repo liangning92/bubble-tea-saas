@@ -33,12 +33,14 @@ export function InventoryPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['inventory'],
-    queryFn: () => inventoryApi.list({ pageSize: 500 })
+    queryFn: () => inventoryApi.list({ pageSize: 500 }),
+    refetchInterval: 30000 // Auto-refresh every 30 seconds
   })
 
   const { data: alertsData } = useQuery({
     queryKey: ['inventory-alerts'],
-    queryFn: () => inventoryApi.alerts()
+    queryFn: () => inventoryApi.alerts(),
+    refetchInterval: 30000 // Auto-refresh every 30 seconds
   })
 
   // Fetch dynamic categories
@@ -55,7 +57,7 @@ export function InventoryPage() {
     queryKey: ['process-recipes'],
     queryFn: () => processRecipeApi.list()
   })
-  const recipes = recipesData?.data?.list || []
+  const recipes = recipesData?.data?.data?.list || []
 
   // Update categories when config loads
   useEffect(() => {

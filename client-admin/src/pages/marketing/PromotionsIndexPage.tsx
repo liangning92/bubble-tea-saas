@@ -6,13 +6,13 @@ export function PromotionsIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'campaigns', label: t('marketing.campaigns'), path: '/marketing/campaigns' },
-    { key: 'coupons', label: t('marketing.coupons'), path: '/marketing/coupons' },
-    { key: 'referrals', label: t('marketing.referrals'), path: '/marketing/referrals' },
-    { key: 'campaign-categories', label: t('marketing.campaignCategories'), path: '/marketing/campaign-categories' },
+    { key: 'campaigns', label: t('marketing.campaigns'), path: '/marketing/promotions/campaigns' },
+    { key: 'coupons', label: t('marketing.coupons'), path: '/marketing/promotions/coupons' },
+    { key: 'referrals', label: t('marketing.referrals'), path: '/marketing/promotions/referrals' },
+    { key: 'campaign-categories', label: t('marketing.campaignCategories'), path: '/marketing/promotions/campaign-categories' },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path))?.key || 'campaigns'
+  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'campaigns'
 
   return (
     <div className="flex flex-col h-full">

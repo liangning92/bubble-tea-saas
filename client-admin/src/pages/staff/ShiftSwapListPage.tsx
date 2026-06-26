@@ -72,10 +72,10 @@ export function ShiftSwapListPage() {
         alert(t('staff.shiftSwapApproved') || 'Shift swap approved')
         loadData()
       } else {
-        alert(data.message || 'Failed to approve')
+        alert(data.message || t('staff.approveFailed'))
       }
     } catch (error) {
-      alert('Failed to approve')
+      alert(t('staff.approveFailed'))
     } finally {
       setProcessing(null)
     }
@@ -99,10 +99,10 @@ export function ShiftSwapListPage() {
         alert(t('staff.shiftSwapRejected') || 'Shift swap rejected')
         loadData()
       } else {
-        alert(data.message || 'Failed to reject')
+        alert(data.message || t('staff.rejectFailed'))
       }
     } catch (error) {
-      alert('Failed to reject')
+      alert(t('staff.rejectFailed'))
     } finally {
       setProcessing(null)
     }

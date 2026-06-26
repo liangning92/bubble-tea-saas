@@ -6,11 +6,11 @@ export function MessagesIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'channels', label: t('marketing.channels'), path: '/marketing/channels' },
-    { key: 'message-settings', label: t('marketing.messageSettings'), path: '/marketing/message-settings' },
+    { key: 'channels', label: t('marketing.channels'), path: '/marketing/messages/channels' },
+    { key: 'message-settings', label: t('marketing.messageSettings'), path: '/marketing/messages/settings' },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path))?.key || 'channels'
+  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'channels'
 
   return (
     <div className="flex flex-col h-full">

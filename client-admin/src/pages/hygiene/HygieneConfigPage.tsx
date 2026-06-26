@@ -131,6 +131,10 @@ export function HygieneConfigPage() {
       queryClient.invalidateQueries({ queryKey: ['hygiene-frequencies'] })
       queryClient.invalidateQueries({ queryKey: ['hygiene-assignedTypes'] })
     },
+    onError: (error: any) => {
+      console.error('Update config error:', error)
+      alert(t('hygiene.saveConfigFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+    },
   })
 
   // Load configs into edit data when configs are fetched

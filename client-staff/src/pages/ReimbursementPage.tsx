@@ -290,7 +290,7 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="w-full p-3 border border-gray-200 rounded-xl"
-              placeholder="0"
+              placeholder={t('attendance.quantityPlaceholder')}
             />
             {amount && (
               <p className="text-sm text-gray-500 mt-1">{formatCurrency(amount)}</p>

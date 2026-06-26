@@ -24,7 +24,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 
     const salaries = await prisma.salary.findMany({
       where,
-      include: { staff: { include: { user: { select: { phone: true } } }, select: { name: true } } },
+      include: { staff: { include: { user: true } } },
       orderBy: { month: 'desc' }
     })
 

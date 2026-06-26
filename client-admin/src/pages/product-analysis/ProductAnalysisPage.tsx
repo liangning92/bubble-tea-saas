@@ -21,8 +21,8 @@ export function ProductAnalysisPage() {
     queryFn: () => productAnalysisApi.mix(days)
   })
 
-  const abcList = abcData?.data?.list || []
-  const mixList = mixData?.data?.list || []
+  const abcList = abcData?.data?.data?.list || []
+  const mixList = mixData?.data?.data?.list || []
 
   const totalRevenue = mixList.reduce((sum: number, item: any) => sum + (item.revenue || 0), 0)
 

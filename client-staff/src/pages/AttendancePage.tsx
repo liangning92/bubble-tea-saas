@@ -58,12 +58,26 @@ export function AttendancePage() {
     setIsLoading(true)
     setMessage(null)
 
+    // Try to get GPS location
+    let locationStr = ''
+    try {
+      if ('geolocation' in navigator) {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        })
+        locationStr = `${position.coords.latitude},${position.coords.longitude}`
+      }
+    } catch (e) {
+      console.warn('Could not get GPS location:', e)
+      locationStr = 'GPS unavailable'
+    }
+
     try {
       const response = await staffApi.checkIn({
         storeId: user!.storeId,
         date: new Date().toISOString().slice(0, 10),
         checkInTime: new Date().toISOString(),
-        location: 'Jakarta' // In production, use Geolocation API
+        location: locationStr
       })
 
       if (response.code === 201) {
@@ -86,10 +100,24 @@ export function AttendancePage() {
     setIsLoading(true)
     setMessage(null)
 
+    // Try to get GPS location
+    let locationStr = ''
+    try {
+      if ('geolocation' in navigator) {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        })
+        locationStr = `${position.coords.latitude},${position.coords.longitude}`
+      }
+    } catch (e) {
+      console.warn('Could not get GPS location:', e)
+      locationStr = 'GPS unavailable'
+    }
+
     try {
       const response = await staffApi.checkOut(attendance.id, {
         checkOutTime: new Date().toISOString(),
-        location: 'Jakarta'
+        location: locationStr
       })
 
       if (response.data) {
@@ -241,7 +269,7 @@ export function AttendancePage() {
           </div>
           <div>
             <p className="font-medium text-gray-900">{t('attendance.location')}</p>
-            <p className="text-sm text-gray-500">Jakarta, Indonesia</p>
+            <p className="text-sm text-gray-500">{t('attendance.defaultLocation')}</p>
           </div>
         </div>
 

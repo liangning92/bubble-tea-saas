@@ -27,7 +27,7 @@ type OrderSubTab = 'orders' | 'refunds'
 export function OrderListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user: _user } = useAuthStore()
   const [subTab, setSubTab] = useState<OrderSubTab>('orders')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
@@ -43,7 +43,7 @@ export function OrderListPage() {
     queryKey: ['channels'],
     queryFn: () => channelApi.list()
   })
-  const channels = channelsData?.data?.list || []
+  const channels = channelsData?.data?.data?.list || []
 
   const { data, isLoading } = useQuery({
     queryKey: ['orders', statusFilter, channelFilter],
@@ -54,7 +54,7 @@ export function OrderListPage() {
     })
   })
 
-  const orders = data?.data?.list || []
+  const orders = data?.data?.data?.list || []
 
   // Load pending refund requests
   const loadRefundRequests = async () => {

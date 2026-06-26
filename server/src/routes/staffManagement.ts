@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as StaffManagementService from '../services/StaffManagementService'
+import { startOfMonth, endOfMonth } from '../utils/dateUtils'
 
 const router = Router()
 
@@ -134,6 +135,58 @@ router.get('/turnover', authenticate, authorize('admin'), async (req: AuthReques
   } catch (error) {
     console.error('Get turnover rate error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get turnover rate' })
+  }
+})
+
+// GET /api/staff-management/sales-stats - Get sales performance by staff
+router.get('/sales-stats', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const { month, year } = req.query
+
+    const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1
+    const targetYear = year ? parseInt(year as string) : new Date().getFullYear()
+
+    const startDate = startOfMonth(new Date(targetYear, targetMonth - 1))
+    const endDate = endOfMonth(new Date(targetYear, targetMonth - 1))
+
+    // Get all orders for the month
+    const orders = await prisma.order.findMany({
+      where: {
+        storeId,
+        createdAt: { gte: startDate, lte: endDate },
+        status: { not: 'refunded' }
+      }
+    })
+
+    // Aggregate by staff
+    const staffStats: Record<string, { staffId: string; name: string; orderCount: number; revenue: number }> = {}
+
+    for (const order of orders) {
+      if (!staffStats[order.staffId]) {
+        const staff = await prisma.staff.findUnique({ where: { id: order.staffId } })
+        staffStats[order.staffId] = {
+          staffId: order.staffId,
+          name: staff?.name || 'Unknown',
+          orderCount: 0,
+          revenue: 0
+        }
+      }
+      staffStats[order.staffId].orderCount++
+      staffStats[order.staffId].revenue += order.finalAmount
+    }
+
+    const result = Object.values(staffStats).sort((a, b) => b.revenue - a.revenue)
+
+    res.json({
+      code: 200,
+      data: result,
+      month: `${targetYear}-${String(targetMonth).padStart(2, '0')}`,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get sales stats error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get sales stats' })
   }
 })
 

@@ -80,7 +80,7 @@ export function SalaryListPage() {
       if (filterMonth) params.month = filterMonth
       if (filterStatus) params.status = filterStatus
       const response = await salaryApi.list(params)
-      setSalaries(response.data?.data || [])
+      setSalaries(response.data?.data?.list || [])
     } catch (error) {
       console.error('Failed to load salaries:', error)
     } finally {
@@ -91,7 +91,7 @@ export function SalaryListPage() {
   const loadStaff = async () => {
     try {
       const response = await staffApi.list({ storeId: user?.storeId, pageSize: 100 })
-      setStaffOptions(response.data?.data?.list || [])
+      setStaffOptions(response.data?.data?.data?.list || [])
     } catch (error) {
       console.error('Failed to load staff:', error)
     }

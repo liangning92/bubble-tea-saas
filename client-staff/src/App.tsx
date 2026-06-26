@@ -19,6 +19,17 @@ import { DepositPage } from './pages/DepositPage'
 import { DepositRulesPage } from './pages/DepositRulesPage'
 import { TrainingPage } from './pages/TrainingPage'
 import { AttendanceRulesPage } from './pages/AttendanceRulesPage'
+import { BottomNav } from './components/BottomNav'
+
+// Layout with BottomNav
+function LayoutWithNav({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-gray-50 pb-16">
+      {children}
+      <BottomNav />
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -34,7 +45,7 @@ function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <HomePage />
+            <LayoutWithNav><HomePage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -42,7 +53,7 @@ function App() {
         path="/attendance"
         element={
           <ProtectedRoute>
-            <AttendancePage />
+            <LayoutWithNav><AttendancePage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -50,7 +61,7 @@ function App() {
         path="/attendance/correction"
         element={
           <ProtectedRoute>
-            <AttendanceCorrectionPage />
+            <LayoutWithNav><AttendanceCorrectionPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -58,7 +69,7 @@ function App() {
         path="/overtime"
         element={
           <ProtectedRoute>
-            <OvertimeRequestPage />
+            <LayoutWithNav><OvertimeRequestPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -66,7 +77,7 @@ function App() {
         path="/shift-swap"
         element={
           <ProtectedRoute>
-            <ShiftSwapPage />
+            <LayoutWithNav><ShiftSwapPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -74,7 +85,7 @@ function App() {
         path="/announcements"
         element={
           <ProtectedRoute>
-            <AnnouncementsPage />
+            <LayoutWithNav><AnnouncementsPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -82,7 +93,7 @@ function App() {
         path="/schedule"
         element={
           <ProtectedRoute>
-            <SchedulePage />
+            <LayoutWithNav><SchedulePage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -90,7 +101,7 @@ function App() {
         path="/salary"
         element={
           <ProtectedRoute>
-            <SalaryPage />
+            <LayoutWithNav><SalaryPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -98,7 +109,7 @@ function App() {
         path="/profile"
         element={
           <ProtectedRoute>
-            <ProfilePage />
+            <LayoutWithNav><ProfilePage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -106,7 +117,7 @@ function App() {
         path="/leave"
         element={
           <ProtectedRoute>
-            <LeavePage />
+            <LayoutWithNav><LeavePage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -114,7 +125,7 @@ function App() {
         path="/reimbursement"
         element={
           <ProtectedRoute>
-            <ReimbursementPage />
+            <LayoutWithNav><ReimbursementPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -122,7 +133,7 @@ function App() {
         path="/hygiene"
         element={
           <ProtectedRoute>
-            <HygienePage />
+            <LayoutWithNav><HygienePage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -130,7 +141,7 @@ function App() {
         path="/inventory"
         element={
           <ProtectedRoute>
-            <InventoryPage />
+            <LayoutWithNav><InventoryPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -138,7 +149,7 @@ function App() {
         path="/points"
         element={
           <ProtectedRoute>
-            <StaffPointsPage />
+            <LayoutWithNav><StaffPointsPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -146,7 +157,7 @@ function App() {
         path="/deposit"
         element={
           <ProtectedRoute>
-            <DepositPage />
+            <LayoutWithNav><DepositPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -154,7 +165,7 @@ function App() {
         path="/deposit/rules"
         element={
           <ProtectedRoute>
-            <DepositRulesPage />
+            <LayoutWithNav><DepositRulesPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -162,7 +173,7 @@ function App() {
         path="/training"
         element={
           <ProtectedRoute>
-            <TrainingPage />
+            <LayoutWithNav><TrainingPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />
@@ -170,7 +181,7 @@ function App() {
         path="/attendance/rules"
         element={
           <ProtectedRoute>
-            <AttendanceRulesPage />
+            <LayoutWithNav><AttendanceRulesPage /></LayoutWithNav>
           </ProtectedRoute>
         }
       />

@@ -132,3 +132,41 @@ export async function createExpensesBulk(data: Array<{
     }))
   })
 }
+
+// Default expense categories
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { key: 'rent', label: 'Sewa', labelZh: '租金', labelEn: 'Rent', color: 'text-purple-600', bgColor: 'bg-purple-100', isDefault: true },
+  { key: 'utilities', label: 'Utilitas', labelZh: '水电费', labelEn: 'Utilities', color: 'text-blue-600', bgColor: 'bg-blue-100', isDefault: true },
+  { key: 'supplies', label: 'Perlengkapan', labelZh: '用品', labelEn: 'Supplies', color: 'text-green-600', bgColor: 'bg-green-100', isDefault: true },
+  { key: 'salary', label: 'Gaji', labelZh: '工资', labelEn: 'Salary', color: 'text-orange-600', bgColor: 'bg-orange-100', isDefault: true },
+  { key: 'reimbursement', label: 'Ganti Rugi', labelZh: '报销', labelEn: 'Reimbursement', color: 'text-pink-600', bgColor: 'bg-pink-100', isDefault: true },
+  { key: 'other', label: 'Lainnya', labelZh: '其他', labelEn: 'Other', color: 'text-gray-600', bgColor: 'bg-gray-100', isDefault: true }
+]
+
+// Get expense categories from Config or defaults
+export async function getExpenseCategories(storeId: string) {
+  try {
+    const config = await prisma.config.findUnique({
+      where: { storeId_key: { storeId, key: 'expense.categories' } }
+    })
+    if (config && config.value) {
+      return JSON.parse(config.value)
+    }
+  } catch {}
+  return DEFAULT_EXPENSE_CATEGORIES
+}
+
+// Save expense categories to Config
+export async function saveExpenseCategories(storeId: string, categories: any[]) {
+  await prisma.config.upsert({
+    where: { storeId_key: { storeId, key: 'expense.categories' } },
+    update: { value: JSON.stringify(categories) },
+    create: {
+      storeId,
+      key: 'expense.categories',
+      value: JSON.stringify(categories),
+      category: 'expense'
+    }
+  })
+  return categories
+}

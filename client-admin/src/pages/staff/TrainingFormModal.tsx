@@ -110,7 +110,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
       setAttachments(prev => [...prev, ...newFiles])
     } catch (error) {
       console.error('Upload failed:', error)
-      alert('Failed to upload files')
+      alert(t('common.error'))
     } finally {
       setIsUploading(false)
     }
@@ -157,11 +157,11 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
         onClose()
       } else {
         const data = await response.json()
-        alert(data.message || 'Failed to save training record')
+        alert(data.message || t('common.error'))
       }
     } catch (error) {
       console.error('Failed to save:', error)
-      alert('Failed to save training record')
+      alert(t('common.error'))
     } finally {
       setIsSubmitting(false)
        }

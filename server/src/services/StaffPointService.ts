@@ -1,12 +1,29 @@
 import { prisma } from '../config/database'
 
-// Points earning rules
-const POINTS_CONFIG = {
-  perfectAttendance: 50,      // No late/absence in month
-  goodPerformance: 100,       // Good performance review
-  completedTraining: 30,      // Completed a training
-  holidayWork: 20,            // Working on holiday
-  overtimePerHour: 5          // Per hour over 8h
+// Default points values (fallback)
+const DEFAULT_POINTS = {
+  perfectAttendance: 50,
+  goodPerformance: 100,
+  completedTraining: 30,
+  holidayWork: 20,
+  overtimePerHour: 5
+}
+
+// Get points rule from database or return defaults
+async function getPointsRule(storeId: string) {
+  const rule = await prisma.staffPointRule.findUnique({
+    where: { storeId }
+  })
+  if (!rule || !rule.isActive) {
+    return DEFAULT_POINTS
+  }
+  return {
+    perfectAttendance: rule.perfectAttendancePoints,
+    goodPerformance: rule.goodPerformancePoints,
+    completedTraining: rule.completedTrainingPoints,
+    holidayWork: rule.holidayWorkPoints,
+    overtimePerHour: rule.overtimePerHourPoints
+  }
 }
 
 // Get or create staff point balance
@@ -324,8 +341,29 @@ export async function getPendingRedemptions(storeId: string) {
 }
 
 // Approve/fulfill redemption
-export async function fulfillRedemption(id: string, fulfilledBy: string) {
-  const redemption = await prisma.staffPointRedemption.update({
+export async function fulfillRedemption(id: string, fulfilledBy: string, checkStock: boolean = true) {
+  const redemption = await prisma.staffPointRedemption.findUnique({
+    where: { id },
+    include: { reward: true }
+  })
+
+  if (!redemption) {
+    throw new Error('Redemption not found')
+  }
+
+  // Check stock if reward has stock management
+  if (checkStock && redemption.reward?.stock !== null && redemption.reward?.stock !== undefined) {
+    if (redemption.reward.stock <= 0) {
+      throw new Error('Reward is out of stock')
+    }
+    // Deduct stock
+    await prisma.staffPointReward.update({
+      where: { id: redemption.rewardId },
+      data: { stock: { decrement: 1 } }
+    })
+  }
+
+  const updated = await prisma.staffPointRedemption.update({
     where: { id },
     data: {
       status: 'fulfilled',
@@ -343,7 +381,7 @@ export async function fulfillRedemption(id: string, fulfilledBy: string) {
     }
   })
 
-  return redemption
+  return updated
 }
 
 // Cancel redemption
@@ -356,10 +394,11 @@ export async function cancelRedemption(id: string) {
 
 // Award points for perfect attendance (call at end of month)
 export async function awardPerfectAttendancePoints(staffId: string, storeId: string) {
+  const rule = await getPointsRule(storeId)
   return awardPoints({
     staffId,
     storeId,
-    points: POINTS_CONFIG.perfectAttendance,
+    points: rule.perfectAttendance,
     reason: 'perfect_attendance',
     note: 'Perfect attendance this month'
   })
@@ -367,10 +406,11 @@ export async function awardPerfectAttendancePoints(staffId: string, storeId: str
 
 // Award points for training completion
 export async function awardTrainingPoints(staffId: string, storeId: string, trainingId: string) {
+  const rule = await getPointsRule(storeId)
   return awardPoints({
     staffId,
     storeId,
-    points: POINTS_CONFIG.completedTraining,
+    points: rule.completedTraining,
     reason: 'training',
     referenceId: trainingId,
     note: 'Completed training'
@@ -379,7 +419,8 @@ export async function awardTrainingPoints(staffId: string, storeId: string, trai
 
 // Award points for overtime
 export async function awardOvertimePoints(staffId: string, storeId: string, hours: number, referenceId?: string) {
-  const points = Math.floor(hours) * POINTS_CONFIG.overtimePerHour
+  const rule = await getPointsRule(storeId)
+  const points = Math.floor(hours) * rule.overtimePerHour
   return awardPoints({
     staffId,
     storeId,

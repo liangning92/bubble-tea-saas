@@ -37,8 +37,8 @@ export function TierBenefitsPage() {
 
   // Sync form state when data loads
   useEffect(() => {
-    if (data?.data?.list) {
-      const fetched = data.data.list
+    if (data?.data?.data?.list) {
+      const fetched = data.data.data.list
       const merged = { ...DEFAULT_BENEFITS }
       TIERS.forEach(tier => {
         const fb = fetched.find((b: any) => b.level === tier)

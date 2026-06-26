@@ -10,7 +10,8 @@ const router = Router()
 const createMemberSchema = z.object({
   storeId: z.string(),
   name: z.string().min(1).max(50),
-  phone: z.string().min(10).max(15)
+  phone: z.string().min(10).max(15),
+  referredByPhone: z.string().optional()
 })
 
 const updateMemberSchema = z.object({
@@ -178,10 +179,20 @@ router.get('/phone/:phone', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// 生成6位随机推荐码
+function generateReferralCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
 // POST /api/members
 router.post('/', authenticate, validateBody(createMemberSchema), async (req: AuthRequest, res) => {
   try {
-    const { storeId, name, phone } = req.body
+    const { storeId, name, phone, referredByPhone } = req.body
 
     // Check if phone exists
     const existing = await prisma.member.findUnique({ where: { phone } })
@@ -189,8 +200,24 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
       return res.status(400).json({ code: 400, message: 'Phone number already registered' })
     }
 
+    // 自动生成推荐码
+    const referralCode = generateReferralCode()
+
+    // 如果有推荐人手机号，找到推荐人
+    let referredById = null
+    if (referredByPhone) {
+      const referrer = await prisma.member.findUnique({ where: { phone: referredByPhone } })
+      referredById = referrer?.id || null
+    }
+
     const member = await prisma.member.create({
-      data: { storeId, name, phone }
+      data: {
+        storeId,
+        name,
+        phone,
+        referralCode,
+        referredBy: referredById
+      }
     })
 
     // Create welcome point log
@@ -208,10 +235,32 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
       data: { points: 100 }
     })
 
+    // 如果有推荐人，给推荐人奖励
+    if (referredById) {
+      await prisma.pointLog.create({
+        data: {
+          memberId: referredById,
+          type: 'earn',
+          points: 500, // 推荐奖励
+          note: `推荐奖励: ${name}`
+        }
+      })
+      await prisma.member.update({
+        where: { id: referredById },
+        data: { points: { increment: 500 } }
+      })
+    }
+
     res.status(201).json({
       code: 201,
       message: 'Member created',
-      data: { ...member, points: 100 },
+      data: {
+        ...member,
+        points: 100,
+        welcomePoints: 100,
+        referralCode: referralCode,
+        referredByReward: referredById ? 500 : null
+      },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -221,7 +270,7 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
 })
 
 // PUT /api/members/:id
-router.put('/:id', authenticate, async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { name, level, points } = req.body

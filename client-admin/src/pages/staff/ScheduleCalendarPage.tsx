@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
-import { staffApi } from '../../services/api'
-import { ChevronLeft, ChevronRight, Calendar, RefreshCw, Check } from 'lucide-react'
+import { staffApi, shiftApi } from '../../services/api'
+import { ChevronLeft, ChevronRight, Calendar, RefreshCw, Check, Settings } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 interface Staff {
   id: string
@@ -18,15 +19,28 @@ interface ScheduleEntry {
   status: string
 }
 
-const SHIFTS = [
-  { key: 'morning', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
-  { key: 'afternoon', color: 'bg-orange-100 text-orange-700 border-orange-300' },
-  { key: 'evening', color: 'bg-blue-100 text-blue-700 border-blue-300' },
-  { key: 'off', color: 'bg-gray-100 text-gray-500 border-gray-300' }
+interface Shift {
+  id: string
+  key: string
+  name: string
+  nameZh?: string
+  nameId?: string
+  startTime: string
+  endTime: string
+  color: string
+  sortOrder: number
+  isActive: boolean
+}
+
+const DEFAULT_SHIFTS: Shift[] = [
+  { id: 'default-1', key: 'morning', name: 'Morning', nameZh: '早班', nameId: 'Pagi', startTime: '08:00', endTime: '16:00', color: '#F59E0B', sortOrder: 0, isActive: true },
+  { id: 'default-2', key: 'afternoon', name: 'Afternoon', nameZh: '中班', nameId: 'Siang', startTime: '14:00', endTime: '22:00', color: '#F97316', sortOrder: 1, isActive: true },
+  { id: 'default-3', key: 'evening', name: 'Evening', nameZh: '晚班', nameId: 'Malam', startTime: '18:00', endTime: '02:00', color: '#3B82F6', sortOrder: 2, isActive: true },
+  { id: 'default-4', key: 'off', name: 'Off', nameZh: '休息', nameId: 'Libur', startTime: '', endTime: '', color: '#6B7280', sortOrder: 3, isActive: true }
 ]
 
 export function ScheduleCalendarPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const [weekStart, setWeekStart] = useState(() => {
     const now = new Date()
@@ -36,19 +50,22 @@ export function ScheduleCalendarPage() {
   })
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
+  const [shifts, setShifts] = useState<Shift[]>(DEFAULT_SHIFTS)
+  const [leaves, setLeaves] = useState<any[]>([])
+  const [leaveLinkageEnabled, setLeaveLinkageEnabled] = useState(false)
   const [positionFilter, setPositionFilter] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null)
 
   // Get translated shift labels
   const getShiftLabel = (key: string) => {
-    switch (key) {
-      case 'morning': return t('staff.morning')
-      case 'afternoon': return t('staff.afternoon')
-      case 'evening': return t('staff.evening')
-      case 'off': return t('staff.off')
-      default: return key
+    const shift = shifts.find(s => s.key === key)
+    if (shift) {
+      if (i18n.language === 'zh' && shift.nameZh) return shift.nameZh
+      if (i18n.language === 'id' && shift.nameId) return shift.nameId
+      return shift.name
     }
+    return key
   }
 
   // 批量选择状态
@@ -71,6 +88,19 @@ export function ScheduleCalendarPage() {
         month: weekStart.toISOString().slice(0, 7)
       })
       setSchedules(scheduleResponse.data?.data || [])
+      setLeaves(scheduleResponse.data?.leaves || [])
+      setLeaveLinkageEnabled(scheduleResponse.data?.leaveLinkageEnabled || false)
+
+      // Load shifts from API
+      try {
+        const shiftResponse = await shiftApi.list(user?.storeId ?? undefined)
+        const shiftData = shiftResponse.data?.data || []
+        if (Array.isArray(shiftData) && shiftData.length > 0) {
+          setShifts(shiftData)
+        }
+      } catch (shiftError) {
+        console.error('Failed to load shifts:', shiftError)
+      }
     } catch (error) {
       console.error('Failed to load schedule data:', error)
     } finally {
@@ -95,6 +125,18 @@ export function ScheduleCalendarPage() {
   const getSchedule = (staffId: string, date: Date) => {
     const dateStr = date.toISOString().slice(0, 10)
     return schedules.find(s => s.staffId === staffId && s.date?.slice(0, 10) === dateStr)
+  }
+
+  // Get leave info for a specific staff and date
+  const getLeaveInfo = (staffId: string, date: Date) => {
+    if (!leaveLinkageEnabled) return null
+    const dateStr = date.toISOString().slice(0, 10)
+    return leaves.find(l => {
+      if (l.staffId !== staffId) return false
+      const startDate = l.startDate?.slice(0, 10)
+      const endDate = l.endDate?.slice(0, 10)
+      return dateStr >= startDate && dateStr <= endDate
+    })
   }
 
   const handleCellClick = (staffId: string, date: Date) => {
@@ -149,7 +191,7 @@ export function ScheduleCalendarPage() {
       setBatchMode(false)
     } catch (error) {
       console.error('Failed to batch save schedule:', error)
-      alert('Failed to save batch schedule')
+      alert(t('common.error'))
     }
   }
 
@@ -173,7 +215,7 @@ export function ScheduleCalendarPage() {
   }
 
   const getShiftInfo = (shiftKey: string) => {
-    return SHIFTS.find(s => s.key === shiftKey) || SHIFTS[3]
+    return shifts.find(s => s.key === shiftKey) || shifts.find(s => s.key === 'off') || shifts[shifts.length - 1]
   }
 
   const filteredStaff = positionFilter
@@ -194,6 +236,13 @@ export function ScheduleCalendarPage() {
           <div />
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            to="/staff/schedule/shifts"
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <Settings size={16} />
+            {t('staff.shiftConfig') || '班次配置'}
+          </Link>
           <select
             value={positionFilter}
             onChange={(e) => setPositionFilter(e.target.value)}
@@ -233,7 +282,7 @@ export function ScheduleCalendarPage() {
               onChange={e => setBatchShift(e.target.value)}
               className="input w-40"
             >
-              {SHIFTS.map(shift => (
+              {shifts.map(shift => (
                 <option key={shift.key} value={shift.key}>{getShiftLabel(shift.key)}</option>
               ))}
             </select>
@@ -279,8 +328,12 @@ export function ScheduleCalendarPage() {
 
       {/* Legend */}
       <div className="flex gap-3 mb-4">
-        {SHIFTS.map(shift => (
-          <div key={shift.key} className={`px-3 py-1 rounded-full text-xs font-medium border ${shift.color}`}>
+        {shifts.map(shift => (
+          <div
+            key={shift.key}
+            className="px-3 py-1 rounded-full text-xs font-medium border"
+            style={{ backgroundColor: shift.color + '20', color: shift.color, borderColor: shift.color }}
+          >
             {getShiftLabel(shift.key)}
           </div>
         ))}
@@ -352,6 +405,7 @@ export function ScheduleCalendarPage() {
                     {weekDays.map((day, i) => {
                       const schedule = getSchedule(staff.id, day)
                       const shiftInfo = schedule ? getShiftInfo(schedule.shift) : null
+                      const leaveInfo = getLeaveInfo(staff.id, day)
                       const isSelected = selectedStaff.has(staff.id)
 
                       return (
@@ -366,11 +420,21 @@ export function ScheduleCalendarPage() {
                           }`}
                           onClick={() => handleCellClick(staff.id, day)}
                         >
-                          {shiftInfo && (
-                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium border ${shiftInfo.color}`}>
+                          {leaveInfo ? (
+                            <span
+                              className="inline-block px-2 py-1 rounded-full text-xs font-medium border bg-purple-100 text-purple-700 border-purple-300"
+                              title={`Leave: ${leaveInfo.leaveType}`}
+                            >
+                              {t('staff.onLeave') || 'Leave'}
+                            </span>
+                          ) : shiftInfo ? (
+                            <span
+                              className="inline-block px-2 py-1 rounded-full text-xs font-medium border"
+                              style={{ backgroundColor: shiftInfo.color + '20', color: shiftInfo.color, borderColor: shiftInfo.color }}
+                            >
                               {getShiftLabel(shiftInfo.key)}
                             </span>
-                          )}
+                          ) : null}
                         </td>
                       )
                     })}
@@ -388,11 +452,12 @@ export function ScheduleCalendarPage() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{t('staff.selectShift') || '选择班次'}</h3>
             <div className="grid grid-cols-2 gap-3 mb-4">
-              {SHIFTS.map(shift => (
+              {shifts.map(shift => (
                 <button
                   key={shift.key}
                   onClick={() => handleShiftSelect(shift.key)}
-                  className={`px-4 py-3 rounded-xl border text-center transition-colors ${shift.color} hover:opacity-80`}
+                  className="px-4 py-3 rounded-xl border text-center transition-colors hover:opacity-80"
+                  style={{ backgroundColor: shift.color + '20', color: shift.color, borderColor: shift.color }}
                 >
                   <span className="font-medium">{getShiftLabel(shift.key)}</span>
                 </button>

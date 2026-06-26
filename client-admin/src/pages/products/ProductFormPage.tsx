@@ -70,7 +70,7 @@ export function ProductFormPage() {
         image: p.image || '',
         status: p.status,
         specs: p.specs?.length > 0 ? p.specs : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
-        addonIds: p.productAddons?.map((pa: any) => pa.addonId) || [],
+        addonIds: p.addons?.map((pa: any) => pa.addonId) || [],
         bomItems: p.bomItems?.map((b: any) => ({
           inventoryId: b.inventoryId,
           quantity: b.quantity,
@@ -88,13 +88,17 @@ export function ProductFormPage() {
   }, [productData])
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => productApi.create(data),
+    mutationFn: (data: any) => {
+      console.log('Creating product with data:', data)
+      return productApi.create(data)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
       navigate('/products')
     },
     onError: (error: any) => {
       console.error('Create product error:', error)
+      console.error('Error response:', error?.response?.data)
       alert(error?.response?.data?.message || error.message || 'Failed to create product')
     }
   })
@@ -109,20 +113,64 @@ export function ProductFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+
+    console.log('Form submitted:', form)
+    console.log('User storeId:', user?.storeId)
+
+    // Validation
+    if (!form.name.trim()) {
+      alert(t('products.nameRequired') || '请输入产品名称')
+      return
+    }
+    if (!form.categoryId) {
+      alert(t('products.categoryRequired') || '请选择产品分类')
+      return
+    }
+    if (form.specs.length === 0 || !form.specs[0].name.trim()) {
+      alert(t('products.specRequired') || '请至少添加一个规格')
+      return
+    }
+    if (form.specs.some(s => s.price < 0)) {
+      alert(t('products.priceInvalid') || '规格价格不能为负数')
+      return
+    }
+
+    if (!user?.storeId) {
+      alert('Store ID not found. Please login again.')
+      return
+    }
+
+    // Convert addonIds to addons format expected by backend
+    const addons = form.addonIds.map(addonId => ({ addonId }))
+
+    // Convert channelPrices to ProductChannelPrice format
+    const channelPrices = form.channelPrices
+      .filter(cp => cp.enabled)
+      .map(cp => ({
+        channelId: cp.channelId,
+        priceAdjustment: cp.priceAdjustment,
+        enabled: cp.enabled
+      }))
+
     const data = {
-      ...form,
+      name: form.name,
+      categoryId: form.categoryId,
+      description: form.description,
       image: uploadedImages.length > 0 ? uploadedImages[0].url : '',
+      status: form.status,
       specs: form.specs.map((s, i) => ({
         ...s,
         priceAdjustment: 0,
         isDefault: i === 0
       })),
+      addons,
       bomItems: form.bomItems
         .filter(item => item.inventoryId && item.quantity > 0)
         .map(item => ({
           inventoryId: item.inventoryId,
           quantity: item.quantity
-        }))
+        })),
+      channelPrices
     }
     if (isEdit) {
       updateMutation.mutate(data)
@@ -142,8 +190,10 @@ export function ProductFormPage() {
         filename: response.data.data.filenames[i]
       }))
       setUploadedImages(prev => [...prev, ...newImages])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload failed:', error)
+      const msg = error?.response?.data?.message || error?.message || '图片上传失败'
+      alert(msg)
     } finally {
       setIsUploading(false)
     }
@@ -200,10 +250,10 @@ export function ProductFormPage() {
     }))
   }
 
-  const categories = categoriesData?.data || []
-  const addons = addonsData?.data || []
-  const inventoryItems = inventoryData?.data?.list || []
-  const channels = channelsData?.data?.list || []
+  const categories = Array.isArray(categoriesData?.data?.data) ? categoriesData.data.data : []
+  const addons = Array.isArray(addonsData?.data?.data) ? addonsData.data.data : []
+  const inventoryItems = inventoryData?.data?.data?.list || []
+  const channels = channelsData?.data?.data?.list || []
 
   const getChannelPrice = (channelId: string) => {
     return form.channelPrices.find(cp => cp.channelId === channelId)

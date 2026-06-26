@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import prisma from '../config/database'
+import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 
 const router = Router()
 
-// POST /api/stores - Create a new store with tenant
-router.post('/', async (req, res) => {
+// POST /api/stores - Create a new store with tenant (Admin only)
+router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { name, address, phone } = req.body
 
@@ -36,8 +37,8 @@ router.post('/', async (req, res) => {
   }
 })
 
-// GET /api/stores/:id - Get store by ID
-router.get('/:id', async (req, res) => {
+// GET /api/stores/:id - Get store by ID (Admin/Manager)
+router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const store = await prisma.store.findUnique({
       where: { id: req.params.id }

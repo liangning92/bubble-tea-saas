@@ -26,7 +26,7 @@ export function PointsExpiryConfigPage() {
 
   // Sync form state when data loads
   useEffect(() => {
-    if (existingData?.data?.list && existingData.data.data.list.length > 0) {
+    if (existingData?.data?.data?.list && existingData.data.data.list.length > 0) {
       const rule = existingData.data.data.list[0]
       setForm({
         enabled: rule.enabled ?? true,

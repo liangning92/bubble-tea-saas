@@ -16,7 +16,8 @@ export function HygieneIndexPage() {
 
   const isActive = (path: string) => {
     if (path === '') return location.pathname === '/hygiene'
-    return location.pathname.includes(`/${path}`)
+    const fullPath = `/hygiene${path}`
+    return location.pathname === fullPath || location.pathname.startsWith(fullPath + '/')
   }
 
   const currentTab = tabs.find(tab => isActive(tab.path))?.key || 'templates'

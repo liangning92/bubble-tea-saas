@@ -13,7 +13,7 @@ export function MarketingIndexPage() {
     { key: 'operations', label: t('marketing.operations'), path: '/marketing/operations' },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path))?.key || 'promotions'
+  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'promotions'
 
   return (
     <div className="flex flex-col h-full">

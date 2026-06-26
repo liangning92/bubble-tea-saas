@@ -17,7 +17,7 @@ export function HygieneStatsPage() {
     queryFn: () => hygieneApi.statsRange(startDate, endDate)
   })
 
-  const stats = statsData?.data?.trend || []
+  const stats = statsData?.data?.data?.trend || []
 
   // Calculate summary
   const totalTasks = stats.reduce((sum: number, s: any) => sum + s.total, 0)
@@ -106,7 +106,7 @@ export function HygieneStatsPage() {
                   {formatDate(bestDay.date)} - {bestDay.completionRate}%
                 </div>
                 <div className="text-sm text-green-600 mt-1">
-                  {bestDay.completed}/{bestDay.total} {t('hygiene.tasks')}
+                  {bestDay.completed}/{bestDay.total} {t('hygiene.tasks') || 'tasks'}
                 </div>
               </div>
             )}
@@ -117,7 +117,7 @@ export function HygieneStatsPage() {
                   {formatDate(worstDay.date)} - {worstDay.completionRate}%
                 </div>
                 <div className="text-sm text-red-600 mt-1">
-                  {worstDay.completed}/{worstDay.total} {t('hygiene.tasks')}
+                  {worstDay.completed}/{worstDay.total} {t('hygiene.tasks') || 'tasks'}
                 </div>
               </div>
             )}

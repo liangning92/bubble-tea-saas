@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { isFeatureEnabled } from '../services/StaffConfigService'
 import { prisma } from '../config/database'
 
 const router = Router()
@@ -256,10 +257,23 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
     const { id } = req.params
     const { adminNote } = req.body
     const processedBy = req.user!.id
+    const storeId = req.user!.storeId
 
     const swap = await prisma.shiftSwap.findUnique({ where: { id } })
     if (!swap) {
       return res.status(404).json({ code: 404, message: 'Shift swap not found' })
+    }
+
+    // Check if confirmation is required
+    const confirmationRequired = await isFeatureEnabled(storeId, 'shiftSwapConfirmation')
+
+    // If confirmation required and target hasn't confirmed, don't allow approval yet
+    if (confirmationRequired && !swap.targetConfirmed) {
+      return res.status(400).json({
+        code: 400,
+        message: 'Target staff has not confirmed this shift swap yet',
+        timestamp: new Date().toISOString()
+      })
     }
 
     // 更新调班申请状态
@@ -273,7 +287,7 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       }
     })
 
-    // 更新排班记录
+    // 更新排班记录 - 原申请人的原日期排班改为目标日期和目标班次
     await prisma.schedule.updateMany({
       where: {
         staffId: swap.staffId,
@@ -285,6 +299,20 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       }
     })
 
+    // 如果有目标员工，也需要更新目标员工的排班
+    if (swap.targetStaffId) {
+      await prisma.schedule.updateMany({
+        where: {
+          staffId: swap.targetStaffId,
+          date: swap.targetDate
+        },
+        data: {
+          date: swap.originalDate,
+          shift: swap.originalShift
+        }
+      })
+    }
+
     res.json({
       code: 200,
       message: 'Shift swap approved',
@@ -294,6 +322,73 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
   } catch (error) {
     console.error('Approve shift swap error:', error)
     res.status(500).json({ code: 500, message: 'Failed to approve shift swap' })
+  }
+})
+
+// PUT /api/shift-swap/:id/confirm - 目标员工确认调班申请
+router.put('/:id/confirm', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params
+    const staffId = req.user!.staffId
+
+    const swap = await prisma.shiftSwap.findUnique({ where: { id } })
+    if (!swap) {
+      return res.status(404).json({ code: 404, message: 'Shift swap not found' })
+    }
+
+    // Verify this staff is the target
+    if (swap.targetStaffId !== staffId) {
+      return res.status(403).json({ code: 403, message: 'Not authorized to confirm this swap' })
+    }
+
+    if (swap.status !== 'pending') {
+      return res.status(400).json({ code: 400, message: 'Swap is no longer pending' })
+    }
+
+    const updated = await prisma.shiftSwap.update({
+      where: { id },
+      data: {
+        targetConfirmed: true
+      }
+    })
+
+    res.json({
+      code: 200,
+      message: 'Shift swap confirmed',
+      data: updated,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Confirm shift swap error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to confirm shift swap' })
+  }
+})
+
+// GET /api/shift-swap/pending-confirm - 获取需要当前员工确认的调班申请
+router.get('/pending-confirm', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const staffId = req.user!.staffId
+
+    const swaps = await prisma.shiftSwap.findMany({
+      where: {
+        targetStaffId: staffId,
+        status: 'pending',
+        targetConfirmed: false
+      },
+      include: {
+        staff: { select: { name: true, employeeNumber: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({
+      code: 200,
+      data: swaps,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get pending confirm error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get pending confirms' })
   }
 })
 

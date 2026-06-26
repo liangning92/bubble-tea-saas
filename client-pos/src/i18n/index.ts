@@ -4,14 +4,17 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   id: {
     translation: {
-      login: {
-        title: 'Bubble Tea POS',
-        subtitle: 'Sistem Kasir',
+      auth: {
+        appName: 'Bubble Tea POS',
+        appSubtitle: 'Sistem Kasir',
         loginTitle: 'Masuk',
+        loginSubtitle: 'Selamat datang kembali',
         phone: 'Nomor Telepon',
         password: 'Kata Sandi',
         loginButton: 'Masuk',
         loginFailed: 'Login gagal. Periksa nomor dan kata sandi.',
+        rememberMe: 'Ingat saya',
+        forgotPassword: 'Lupa kata sandi?',
         testAccount: 'Akun Tes',
         testPassword: 'Kata Sandi:',
         roleAdmin: 'Admin',
@@ -20,7 +23,11 @@ const resources = {
         hideApiConfig: 'Sembunyikan',
         apiServerConfig: 'Konfigurasi Server API',
         resetDefault: 'Reset Default',
-        currentApi: 'API Saat Ini'
+        currentApi: 'API Saat Ini',
+        noAccount: 'Belum punya akun?',
+        createAccount: 'Daftar',
+        copyright: '© 2026 Bubble Tea POS System',
+        login: 'Masuk'
       },
       common: {
         cancel: 'Batal',
@@ -363,7 +370,10 @@ const resources = {
         phonePlaceholder: 'Masukkan nomor telepon',
         email: 'Email',
         emailOptional: 'Masukkan email (opsional)',
-        birthday: 'Tanggal Lahir'
+        birthday: 'Tanggal Lahir',
+        referralCode: 'Kode Referral',
+        enterReferralCode: '输入推荐码',
+        referralCodePlaceholder: '有朋友推荐码？输入可获得奖励'
       },
       scan: {
         title: 'Pindai Barcode',
@@ -395,14 +405,24 @@ const resources = {
       tasks: {
         title: 'Tugas Kebersihan',
         tasks: 'tugas',
+        today: 'Hari Ini',
+        overdue: 'Terlambat',
         noTasks: 'Semua tugas hari ini selesai',
+        noOverdueTasks: 'Tidak ada tugas terlambat',
         pending: 'Tertunda',
+        inProgress: 'Sedang Dikerjakan',
+        pendingApproval: 'Menunggu Persetujuan',
         completed: 'Selesai',
+        approved: 'Disetujui',
         skipped: 'Dilewati',
+        rejected: 'Ditolak',
         start: 'Mulai',
         complete: 'Selesai',
         skip: 'Lewati',
+        redo: 'Ulangi',
+        temporary: 'Sesuai',
         checklist: 'Daftar Periksa',
+        checklistTip: 'Klik untuk menandai selesai',
         note: 'Catatan',
         notePlaceholder: 'Tambah catatan (opsional)...',
         photoRequired: 'Harus foto',
@@ -421,20 +441,27 @@ const resources = {
         phaseAfter: 'Setelah',
         completeFailed: 'Gagal menyelesaikan',
         skipFailed: 'Gagal melewati',
-        noPending: 'Tidak ada tugas'
+        noPending: 'Tidak ada tugas',
+        selfRating: 'Penilaian Sendiri',
+        selfRatingTip: 'Nilai kualitas pekerjaan Anda sendiri',
+        requiresApproval: 'Butuh Persetujuan',
+        due: 'Tenggat'
       }
     }
   },
   en: {
     translation: {
-      login: {
-        title: 'Bubble Tea POS',
-        subtitle: 'Bubble Tea Shop POS System',
+      auth: {
+        appName: 'Bubble Tea POS',
+        appSubtitle: 'Bubble Tea Shop POS System',
         loginTitle: 'Login',
+        loginSubtitle: 'Welcome back',
         phone: 'Phone Number',
         password: 'Password',
         loginButton: 'Login',
         loginFailed: 'Login failed. Please check your credentials.',
+        rememberMe: 'Remember me',
+        forgotPassword: 'Forgot password?',
         testAccount: 'Test Account',
         testPassword: 'Password:',
         roleAdmin: 'Admin',
@@ -443,7 +470,11 @@ const resources = {
         hideApiConfig: 'Hide',
         apiServerConfig: 'API Server Config',
         resetDefault: 'Reset Default',
-        currentApi: 'Current API'
+        currentApi: 'Current API',
+        noAccount: "Don't have an account?",
+        createAccount: 'Sign up',
+        copyright: '© 2026 Bubble Tea POS System',
+        login: 'Login'
       },
       common: {
         cancel: 'Cancel',
@@ -806,14 +837,24 @@ const resources = {
       tasks: {
         title: 'Hygiene Tasks',
         tasks: 'tasks',
+        today: 'Today',
+        overdue: 'Overdue',
         noTasks: 'All tasks completed for today',
+        noOverdueTasks: 'No overdue tasks',
         pending: 'Pending',
+        inProgress: 'In Progress',
+        pendingApproval: 'Pending Approval',
         completed: 'Completed',
+        approved: 'Approved',
         skipped: 'Skipped',
+        rejected: 'Rejected',
         start: 'Start',
         complete: 'Complete',
         skip: 'Skip',
+        redo: 'Redo',
+        temporary: 'Temporary',
         checklist: 'Checklist',
+        checklistTip: 'Tap to mark complete',
         note: 'Note',
         notePlaceholder: 'Add note (optional)...',
         photoRequired: 'Photo required',
@@ -832,20 +873,27 @@ const resources = {
         phaseAfter: 'After',
         completeFailed: 'Failed to complete',
         skipFailed: 'Failed to skip',
-        noPending: 'No pending tasks'
+        noPending: 'No pending tasks',
+        selfRating: 'Self Rating',
+        selfRatingTip: 'Rate your work quality',
+        requiresApproval: 'Requires Approval',
+        due: 'Due'
       }
     }
   },
   zh: {
     translation: {
-      login: {
-        title: 'Bubble Tea POS',
-        subtitle: '奶茶店收银系统',
+      auth: {
+        appName: 'Bubble Tea POS',
+        appSubtitle: '奶茶店收银系统',
         loginTitle: '登录',
+        loginSubtitle: '欢迎回来',
         phone: '手机号',
         password: '密码',
         loginButton: '登录',
         loginFailed: '登录失败，请检查账号密码',
+        rememberMe: '记住密码',
+        forgotPassword: '忘记密码？',
         testAccount: '测试账号',
         testPassword: '密码:',
         roleAdmin: '管理员',
@@ -854,7 +902,11 @@ const resources = {
         hideApiConfig: '隐藏',
         apiServerConfig: 'API服务器配置',
         resetDefault: '恢复默认',
-        currentApi: '当前API'
+        currentApi: '当前API',
+        noAccount: '还没有账号？',
+        createAccount: '注册',
+        copyright: '© 2026 Bubble Tea POS System',
+        login: '登录'
       },
       pos: {
         title: '收银',
@@ -1205,14 +1257,24 @@ const resources = {
       tasks: {
         title: '卫生任务',
         tasks: '任务',
+        today: '今日',
+        overdue: '已逾期',
         noTasks: '今日已完成所有任务',
+        noOverdueTasks: '暂无逾期任务',
         pending: '待完成',
+        inProgress: '进行中',
+        pendingApproval: '待审核',
         completed: '已完成',
+        approved: '已通过',
         skipped: '已跳过',
+        rejected: '已驳回',
         start: '开始',
         complete: '完成',
         skip: '跳过',
+        redo: '重做',
+        temporary: '临时',
         checklist: '检查清单',
+        checklistTip: '点击标记完成',
         note: '备注',
         notePlaceholder: '添加备注（选填）...',
         photoRequired: '需拍照',
@@ -1228,7 +1290,14 @@ const resources = {
         standardAfter: '任务后',
         phaseBefore: '任务前',
         phaseDuring: '任务中',
-        phaseAfter: '任务后'
+        phaseAfter: '任务后',
+        completeFailed: '完成失败',
+        skipFailed: '跳过失败',
+        noPending: '暂无待处理任务',
+        selfRating: '自我评分',
+        selfRatingTip: '评价本次工作质量',
+        requiresApproval: '需要审核',
+        due: '截止'
       },
       common: {
         cancel: '取消',

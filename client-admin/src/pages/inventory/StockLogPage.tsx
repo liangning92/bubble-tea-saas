@@ -10,7 +10,8 @@ export function StockLogPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['inventory-logs', filter],
-    queryFn: () => inventoryApi.logs(filter)
+    queryFn: () => inventoryApi.logs(filter),
+    refetchInterval: 30000 // Auto-refresh every 30 seconds
   })
 
   const logs = data?.data?.list || []

@@ -115,10 +115,46 @@ function getDefaultConfig(key: string): any[] {
 }
 
 /**
- * 保存卫生配置（用户自定义）
+ * 保存卫生配置（用户自定义）- 合并模式
+ * 用户配置会覆盖默认值，保留默认值的其他项
  */
-export async function setHygieneConfig(storeId: string, key: string, value: any[]) {
-  const jsonValue = JSON.stringify(value)
+export async function setHygieneConfig(storeId: string, key: string, userValues: any[]) {
+  // 获取默认配置
+  const defaultConfig = getDefaultConfig(key)
+
+  // 将用户配置转换为 Map（按 value 字段去重）
+  const userConfigMap = new Map()
+  for (const item of userValues) {
+    if (item.value !== undefined) {
+      userConfigMap.set(item.value, item)
+    }
+  }
+
+  // 合并：默认配置为基础，用户配置覆盖/添加
+  // 默认配置项保留，用户配置中有相同 value 的覆盖，默认配置中没有的用户配置添加
+  const mergedConfig: any[] = []
+  const mergedValues = new Set()
+
+  // 先添加所有默认配置（用户配置覆盖的部分会被覆盖）
+  for (const defaultItem of defaultConfig) {
+    if (userConfigMap.has(defaultItem.value)) {
+      // 用户有覆盖，使用用户配置
+      mergedConfig.push(userConfigMap.get(defaultItem.value))
+      mergedValues.add(defaultItem.value)
+    } else {
+      // 保留默认配置
+      mergedConfig.push(defaultItem)
+    }
+  }
+
+  // 添加用户配置中的新项（默认配置没有的）
+  for (const userItem of userValues) {
+    if (!mergedValues.has(userItem.value)) {
+      mergedConfig.push(userItem)
+    }
+  }
+
+  const jsonValue = JSON.stringify(mergedConfig)
   return prisma.hygieneConfig.upsert({
     where: { storeId_key: { storeId, key } },
     create: { storeId, key, value: jsonValue },
@@ -191,6 +227,22 @@ export async function createArea(data: {
   description?: string
   managerId?: string
 }) {
+  // 验证必填字段
+  if (!data.name || data.name.trim() === '') {
+    throw new Error('Area name is required')
+  }
+  if (!data.code || data.code.trim() === '') {
+    throw new Error('Area code is required')
+  }
+  if (!data.storeId || data.storeId.trim() === '') {
+    throw new Error('Store ID is required')
+  }
+
+  // 验证代码格式（只能是字母、数字、下划线）
+  if (!/^[a-zA-Z0-9_]+$/.test(data.code)) {
+    throw new Error('Area code can only contain letters, numbers, and underscores')
+  }
+
   // 检查代码是否与预设冲突
   const existing = await prisma.hygieneArea.findUnique({
     where: { storeId_code: { storeId: data.storeId, code: data.code } },
@@ -227,6 +279,14 @@ export async function updateArea(areaId: string, data: Partial<{
   isActive: boolean
   sortOrder: number
 }>) {
+  // 检查区域是否存在
+  const existing = await prisma.hygieneArea.findUnique({
+    where: { id: areaId },
+  })
+  if (!existing) {
+    throw new Error('Area not found')
+  }
+
   return prisma.hygieneArea.update({
     where: { id: areaId },
     data,
@@ -237,6 +297,30 @@ export async function updateArea(areaId: string, data: Partial<{
  * 删除区域
  */
 export async function deleteArea(areaId: string) {
+  // 检查区域是否存在
+  const area = await prisma.hygieneArea.findUnique({
+    where: { id: areaId },
+  })
+  if (!area) {
+    throw new Error('Area not found')
+  }
+
+  // 检查是否有任务引用该区域
+  const taskCount = await prisma.hygieneTask.count({
+    where: { areaCode: areaId },
+  })
+  if (taskCount > 0) {
+    throw new Error(`Cannot delete area: ${taskCount} tasks are using this area`)
+  }
+
+  // 检查是否有模板引用该区域
+  const templateCount = await prisma.hygieneTemplate.count({
+    where: { areaCode: areaId },
+  })
+  if (templateCount > 0) {
+    throw new Error(`Cannot delete area: ${templateCount} templates are using this area`)
+  }
+
   return prisma.hygieneArea.delete({
     where: { id: areaId },
   })
@@ -296,13 +380,24 @@ export async function getTemplates(storeId: string, options?: {
 /**
  * 获取单个模板
  */
-export async function getTemplateById(id: string) {
-  return prisma.hygieneTemplate.findUnique({
-    where: { id },
+export async function getTemplateById(id: string, storeId?: string) {
+  const where: any = { id }
+  if (storeId) {
+    where.storeId = storeId
+  }
+
+  const template = await prisma.hygieneTemplate.findUnique({
+    where,
     include: {
       checklists: { orderBy: { order: 'asc' } },
     },
   })
+
+  if (storeId && template && template.storeId !== storeId) {
+    throw new Error('Template not found')
+  }
+
+  return template
 }
 
 /**
@@ -317,6 +412,7 @@ export async function createTemplate(data: {
   frequency?: string
   specificDays?: number[]
   time?: string
+  executionTimes?: string[] // 新增：每日多次执行时间
   priority?: number
   estimatedMinutes?: number
   standardBefore?: string
@@ -328,6 +424,7 @@ export async function createTemplate(data: {
   assignedType?: string
   shift?: string
   staffId?: string
+  staffIds?: string[] // 新增：多个员工ID
   areaManagerId?: string
   requiresApproval?: boolean
   alertMinutesBefore?: number
@@ -335,13 +432,36 @@ export async function createTemplate(data: {
   regulationCode?: string
   checklists?: { item: string; description?: string; isRequired?: boolean }[]
 }) {
-  const { checklists, ...templateData } = data
+  // 验证必填字段
+  if (!data.storeId || data.storeId.trim() === '') {
+    throw new Error('Store ID is required')
+  }
+  if (!data.areaCode || data.areaCode.trim() === '') {
+    throw new Error('Area code is required')
+  }
+  if (!data.name || data.name.trim() === '') {
+    throw new Error('Template name is required')
+  }
+
+  // 验证 priority 范围
+  if (data.priority !== undefined && (data.priority < 1 || data.priority > 4)) {
+    throw new Error('Priority must be between 1 and 4')
+  }
+
+  // 验证 estimatedMinutes 范围
+  if (data.estimatedMinutes !== undefined && data.estimatedMinutes < 1) {
+    throw new Error('Estimated minutes must be greater than 0')
+  }
+
+  const { checklists, staffIds, executionTimes, ...templateData } = data
 
   // 处理 JSON 字段
   const processed: any = {
     ...templateData,
     toolsRequired: templateData.toolsRequired ? JSON.stringify(templateData.toolsRequired) : null,
     specificDays: templateData.specificDays ? JSON.stringify(templateData.specificDays) : null,
+    executionTimes: executionTimes ? JSON.stringify(executionTimes) : null, // 新增
+    staffIds: staffIds ? JSON.stringify(staffIds) : null, // 新增
   }
 
   // 计算下次触发时间
@@ -379,6 +499,7 @@ export async function updateTemplate(templateId: string, data: Partial<{
   frequency: string
   specificDays: number[]
   time: string
+  executionTimes: string[] // 新增：每日多次执行时间
   priority: number
   estimatedMinutes: number
   standard: string
@@ -388,6 +509,7 @@ export async function updateTemplate(templateId: string, data: Partial<{
   assignedType: string
   shift: string
   staffId: string
+  staffIds: string[] // 新增：多个员工ID
   areaManagerId: string
   requiresApproval: boolean
   alertMinutesBefore: number
@@ -396,7 +518,15 @@ export async function updateTemplate(templateId: string, data: Partial<{
   status: string
   checklists: { item: string; description?: string; isRequired?: boolean }[]
 }>) {
-  const { checklists, ...templateData } = data
+  // 检查模板是否存在
+  const existing = await prisma.hygieneTemplate.findUnique({
+    where: { id: templateId },
+  })
+  if (!existing) {
+    throw new Error('Template not found')
+  }
+
+  const { checklists, staffIds, executionTimes, ...templateData } = data
 
   // 处理 JSON 字段
   const processed: any = { ...templateData }
@@ -405,6 +535,12 @@ export async function updateTemplate(templateId: string, data: Partial<{
   }
   if (templateData.specificDays !== undefined) {
     processed.specificDays = templateData.specificDays ? JSON.stringify(templateData.specificDays) : null
+  }
+  if (staffIds !== undefined) {
+    processed.staffIds = staffIds ? JSON.stringify(staffIds) : null
+  }
+  if (executionTimes !== undefined) {
+    processed.executionTimes = executionTimes ? JSON.stringify(executionTimes) : null
   }
 
   // 如果频率或时间变了，重新计算触发时间
@@ -444,25 +580,35 @@ export async function updateTemplate(templateId: string, data: Partial<{
 /**
  * 删除模板（软删除）
  */
-export async function deleteTemplate(templateId: string) {
-  const template = await prisma.hygieneTemplate.update({
+export async function deleteTemplate(templateId: string, storeId: string) {
+  const template = await prisma.hygieneTemplate.findUnique({
+    where: { id: templateId },
+  })
+  if (!template) throw new Error('Template not found')
+
+  // 验证店铺归属
+  if (template.storeId !== storeId) {
+    throw new Error('Template not found')
+  }
+
+  const updated = await prisma.hygieneTemplate.update({
     where: { id: templateId },
     data: { status: 'paused' },
   })
 
   socketManager.emitToStore(template.storeId, 'hygiene:template:deleted', { id: templateId })
 
-  return template
+  return updated
 }
 
 /**
  * 复制模板
  */
-export async function duplicateTemplate(templateId: string, newStoreId?: string) {
-  const original = await getTemplateById(templateId)
+export async function duplicateTemplate(templateId: string, storeId: string, newStoreId?: string) {
+  const original = await getTemplateById(templateId, storeId)
   if (!original) throw new Error('Template not found')
 
-  const { id, createdAt, updatedAt, checklists, areaCode, name, description, category, frequency, specificDays, time, priority, estimatedMinutes, standardBefore, standardDuring, standardAfter, toolsRequired, photoRequired, evidenceType, assignedType, shift, staffId, areaManagerId, requiresApproval, alertMinutesBefore, autoGenerate, regulationCode, storeId } = original
+  const { id, createdAt, updatedAt, checklists, areaCode, name, description, category, frequency, specificDays, time, priority, estimatedMinutes, standardBefore, standardDuring, standardAfter, toolsRequired, photoRequired, evidenceType, assignedType, shift, staffId, areaManagerId, requiresApproval, alertMinutesBefore, autoGenerate, regulationCode } = original
 
   return createTemplate({
     storeId: newStoreId || storeId,
@@ -571,9 +717,14 @@ export async function getPendingTasks(storeId: string, options?: { staffId?: str
 /**
  * 获取单个任务详情
  */
-export async function getTaskById(taskId: string) {
-  return prisma.hygieneTask.findUnique({
-    where: { id: taskId },
+export async function getTaskById(taskId: string, storeId?: string) {
+  const where: any = { id: taskId }
+  if (storeId) {
+    where.storeId = storeId
+  }
+
+  const task = await prisma.hygieneTask.findUnique({
+    where,
     include: {
       staff: { select: { id: true, name: true } },
       template: {
@@ -593,6 +744,12 @@ export async function getTaskById(taskId: string) {
       logs: { orderBy: { createdAt: 'desc' } },
     },
   })
+
+  if (storeId && task && task.storeId !== storeId) {
+    throw new Error('Task not found')
+  }
+
+  return task
 }
 
 /**
@@ -609,33 +766,56 @@ export async function generateDailyTasks(storeId: string, date: string) {
     // 检查是否应该在这天生成
     if (!shouldGenerateOnDate(template, date)) continue
 
-    // 根据 assignedType 获取员工列表
+    // 获取执行时间列表（支持多次执行）
+    const executionTimes = getExecutionTimes(template)
+
+    // 根据 assignedType 获取员工列表（支持多个员工）
     const staffIds = await resolveStaffIds(template, storeId)
 
     for (const staffId of staffIds) {
-      // 检查今天是否已为此模板+员工创建过任务
-      const existing = await prisma.hygieneTask.findFirst({
-        where: { templateId: template.id, staffId, date },
-      })
-      if (existing) continue
+      // 遍历每个执行时间
+      for (let timeIdx = 0; timeIdx < executionTimes.length; timeIdx++) {
+        const execTime = executionTimes[timeIdx]
 
-      const task = await prisma.hygieneTask.create({
-        data: {
-          storeId,
-          templateId: template.id,
-          staffId,
-          areaCode: template.areaCode,
-          name: template.name,
-          date,
-          time: template.time,
-          priority: template.priority,
-          status: 'pending',
-        },
-      })
+        // 检查今天是否已为此模板+员工+执行时间创建过任务
+        const existing = await prisma.hygieneTask.findFirst({
+          where: {
+            templateId: template.id,
+            staffId,
+            date,
+            executionIndex: timeIdx
+          },
+        })
+        if (existing) continue
 
-      await createTaskLog(task.id, staffId, 'created', null, null, `Task auto-generated from template: ${template.name}`)
+        // 计算截止时间（执行时间 + 预计完成时间）
+        const [year, month, day] = date.split('-').map(Number)
+        const [hours, mins] = execTime.split(':').map(Number)
+        const estimated = template.estimatedMinutes || 10
+        // 使用 Date 构造函数直接创建本地时间
+        const dueTime = new Date(year, month - 1, day, hours, mins + estimated, 0, 0)
 
-      createdTasks.push(task)
+        const task = await prisma.hygieneTask.create({
+          data: {
+            storeId,
+            templateId: template.id,
+            staffId,
+            areaCode: template.areaCode,
+            name: template.name,
+            date,
+            time: execTime,
+            priority: template.priority,
+            status: 'pending',
+            executionIndex: timeIdx,
+            dueTime: dueTime,
+          },
+        })
+
+        await createTaskLog(task.id, staffId, 'created', null, null,
+          `Task auto-generated from template: ${template.name}${executionTimes.length > 1 ? ` (${timeIdx + 1}/${executionTimes.length})` : ''}`)
+
+        createdTasks.push(task)
+      }
     }
   }
 
@@ -647,13 +827,46 @@ export async function generateDailyTasks(storeId: string, date: string) {
 }
 
 /**
+ * 获取模板的执行时间列表（支持多次执行）
+ */
+function getExecutionTimes(template: any): string[] {
+  // 优先使用 executionTimes 字段
+  if (template.executionTimes) {
+    try {
+      const times = JSON.parse(template.executionTimes)
+      if (Array.isArray(times) && times.length > 0) {
+        return times.sort() // 按时间排序
+      }
+    } catch { /* ignore */ }
+  }
+  // 回退到单时间字段
+  return [template.time || '10:00']
+}
+
+/**
  * 开始执行任务
  */
-export async function startTask(taskId: string, staffId: string) {
+export async function startTask(taskId: string, staffId: string, storeId: string) {
+  const existingTask = await prisma.hygieneTask.findUnique({
+    where: { id: taskId },
+  })
+
+  if (!existingTask) throw new Error('Task not found')
+
+  // 验证任务属于当前店铺
+  if (existingTask.storeId !== storeId) {
+    throw new Error('Task not found')
+  }
+
+  // 只能对待执行状态的任务开始执行
+  if (existingTask.status !== 'pending') {
+    throw new Error(`Cannot start task: invalid status "${existingTask.status}" (expected "pending")`)
+  }
+
   const task = await prisma.hygieneTask.update({
     where: { id: taskId },
     data: {
-      status: 'pending', // 仍然是 pending，但记录开始时间
+      status: 'in_progress',
       startedAt: new Date(),
     },
   })
@@ -666,31 +879,66 @@ export async function startTask(taskId: string, staffId: string) {
 /**
  * 完成提交任务
  */
-export async function completeTask(taskId: string, staffId: string, staffName: string, data: {
+export async function completeTask(taskId: string, staffId: string, staffName: string, storeId: string, data: {
   photoUrl?: string
   signatureUrl?: string
   note?: string
+  selfRating?: number // 员工自评质量 1-5
   checklistResults?: { checklistId: string; completed: boolean; note?: string }[]
 }) {
+  // 先获取任务和模板信息
+  const existingTask = await prisma.hygieneTask.findUnique({
+    where: { id: taskId },
+    include: { template: { select: { requiresApproval: true, estimatedMinutes: true } } },
+  })
+
+  if (!existingTask) throw new Error('Task not found')
+
+  // 验证任务属于当前店铺
+  if (existingTask.storeId !== storeId) {
+    throw new Error('Task not found')
+  }
+
+  // 只能对正在执行状态的任务提交
+  if (existingTask.status !== 'in_progress') {
+    throw new Error(`Cannot complete task: invalid status "${existingTask.status}" (expected "in_progress")`)
+  }
+
+  // 验证 selfRating 范围
+  if (data.selfRating !== undefined && (data.selfRating < 1 || data.selfRating > 5)) {
+    throw new Error('selfRating must be between 1 and 5')
+  }
+
+  const requiresApproval = existingTask.template?.requiresApproval ?? false
+  const newStatus = requiresApproval ? 'pending_approval' : 'completed'
+
+  // 计算实际耗时（如果有开始时间）
+  let actualMinutes: number | null = null
+  if (existingTask.startedAt) {
+    const startedAt = new Date(existingTask.startedAt)
+    const completedAt = new Date()
+    actualMinutes = Math.round((completedAt.getTime() - startedAt.getTime()) / 60000)
+  }
+
   const task = await prisma.hygieneTask.update({
     where: { id: taskId },
-    include: { template: { select: { requiresApproval: true } } },
     data: {
-      status: data.note?.includes('[issue]') ? 'pending' : 'completed', // 如果备注包含[issue]则需要审核
+      status: newStatus,
       completedAt: new Date(),
       completedBy: staffId,
       photoUrl: data.photoUrl,
       signatureUrl: data.signatureUrl,
       note: data.note,
-      actualMinutes: data.photoUrl ? calculateActualMinutes(taskId) : null,
+      selfRating: data.selfRating,
+      actualMinutes,
     },
   })
 
   await createTaskLog(task.id, staffId, 'completed', data.photoUrl, staffName,
-    data.note || 'Task completed')
+    data.note || `Task completed (self-rating: ${data.selfRating || 'N/A'})`)
 
   // 如果需要审核，通知主管
-  if (task.template?.requiresApproval) {
+  if (requiresApproval) {
     socketManager.emitToStore(task.storeId, 'hygiene:task:needs_approval', {
       taskId: task.id,
       taskName: task.name,
@@ -706,26 +954,106 @@ export async function completeTask(taskId: string, staffId: string, staffName: s
 }
 
 /**
- * 主管审核任务
+ * 主管审核任务（支持批准或驳回重做）
  */
-export async function approveTask(taskId: string, approverId: string, approverName: string, data: {
+export async function approveTask(taskId: string, approverId: string, approverName: string, storeId: string, data: {
   qualityScore: number
   note?: string
   reject?: boolean
   rejectReason?: string
 }) {
-  const task = await prisma.hygieneTask.findUnique({ where: { id: taskId } })
-
-  const updated = await prisma.hygieneTask.update({
+  const task = await prisma.hygieneTask.findUnique({
     where: { id: taskId },
-    data: {
-      status: data.reject ? 'rejected' : 'approved',
-      approvedBy: approverId,
-      approvedAt: new Date(),
-      qualityScore: data.qualityScore,
-      note: data.reject ? data.rejectReason : data.note,
-    },
+    include: { template: true }
   })
+
+  if (!task) throw new Error('Task not found')
+
+  // 验证任务属于当前店铺
+  if (task.storeId !== storeId) {
+    throw new Error('Task not found')
+  }
+
+  // 只能对待审核状态的任务进行审核
+  if (task.status !== 'pending_approval') {
+    throw new Error(`Cannot approve task: invalid status "${task.status}" (expected "pending_approval")`)
+  }
+
+  // 验证 qualityScore 范围
+  if (data.qualityScore < 1 || data.qualityScore > 5) {
+    throw new Error('qualityScore must be between 1 and 5')
+  }
+
+  // 驳回时必须提供原因
+  if (data.reject && (!data.rejectReason || data.rejectReason.trim() === '')) {
+    throw new Error('rejectReason is required when rejecting a task')
+  }
+
+  let updated
+  let newRedoTask = null
+
+  if (data.reject) {
+    // 驳回：创建新的重做任务
+    updated = await prisma.hygieneTask.update({
+      where: { id: taskId },
+      data: {
+        status: 'rejected',
+        approvedBy: approverId,
+        approvedAt: new Date(),
+        qualityScore: data.qualityScore,
+        rejectReason: data.rejectReason,
+      },
+    })
+
+    // 创建新的重做任务
+    const redoDate = new Date().toISOString().split('T')[0]
+    const redoTime = new Date().toTimeString().slice(0, 5)
+    // 计算截止时间：当前时间 + 预计完成时间
+    const dueTime = new Date()
+    dueTime.setMinutes(dueTime.getMinutes() + (task.template?.estimatedMinutes || 10))
+
+    newRedoTask = await prisma.hygieneTask.create({
+      data: {
+        storeId: task.storeId,
+        templateId: task.templateId,
+        staffId: task.staffId,
+        areaCode: task.areaCode,
+        name: `${task.name} (重做)`,
+        date: redoDate,
+        time: redoTime,
+        priority: task.priority,
+        status: 'pending',
+        parentTaskId: taskId,
+        redoCount: task.redoCount + 1,
+        dueTime: dueTime,
+      },
+    })
+
+    await createTaskLog(newRedoTask.id, approverId, 'redo', null, approverName,
+      `Redo task created due to rejection: ${data.rejectReason}`)
+
+    // 通知员工
+    if (task.staffId) {
+      socketManager.emitToStaff(task.staffId, 'hygiene:task:redo', {
+        originalTaskId: taskId,
+        redoTaskId: newRedoTask.id,
+        reason: data.rejectReason,
+        taskName: task.name,
+      })
+    }
+  } else {
+    // 批准
+    updated = await prisma.hygieneTask.update({
+      where: { id: taskId },
+      data: {
+        status: 'approved',
+        approvedBy: approverId,
+        approvedAt: new Date(),
+        qualityScore: data.qualityScore,
+        note: data.note,
+      },
+    })
+  }
 
   const action = data.reject ? 'rejected' : 'approved'
   await createTaskLog(task.id, approverId, action, null, approverName,
@@ -733,13 +1061,35 @@ export async function approveTask(taskId: string, approverId: string, approverNa
 
   socketManager.emitToStore(task.storeId, 'hygiene:task:approved', updated)
 
-  return updated
+  return { task: updated, redoTask: newRedoTask }
 }
 
 /**
  * 跳过任务
  */
-export async function skipTask(taskId: string, staffId: string, staffName: string, reason: string) {
+export async function skipTask(taskId: string, staffId: string, staffName: string, storeId: string, reason: string) {
+  // 先检查任务状态
+  const existingTask = await prisma.hygieneTask.findUnique({
+    where: { id: taskId },
+  })
+
+  if (!existingTask) throw new Error('Task not found')
+
+  // 验证任务属于当前店铺
+  if (existingTask.storeId !== storeId) {
+    throw new Error('Task not found')
+  }
+
+  // 只能跳过 pending 或 in_progress 状态的任务
+  if (!['pending', 'in_progress'].includes(existingTask.status)) {
+    throw new Error(`Cannot skip task: invalid status "${existingTask.status}" (expected "pending" or "in_progress")`)
+  }
+
+  // 跳过必须提供原因
+  if (!reason || reason.trim() === '') {
+    throw new Error('Reason is required when skipping a task')
+  }
+
   const task = await prisma.hygieneTask.update({
     where: { id: taskId },
     data: {
@@ -760,10 +1110,27 @@ export async function skipTask(taskId: string, staffId: string, staffName: strin
 /**
  * 上报问题
  */
-export async function reportIssue(taskId: string, staffId: string, staffName: string, data: {
+export async function reportIssue(taskId: string, staffId: string, staffName: string, storeId: string, data: {
   description: string
   photoUrl?: string
 }) {
+  // 先检查任务状态
+  const existingTask = await prisma.hygieneTask.findUnique({
+    where: { id: taskId },
+  })
+
+  if (!existingTask) throw new Error('Task not found')
+
+  // 验证任务属于当前店铺
+  if (existingTask.storeId !== storeId) {
+    throw new Error('Task not found')
+  }
+
+  // 问题描述必填
+  if (!data.description || data.description.trim() === '') {
+    throw new Error('Issue description is required')
+  }
+
   const task = await prisma.hygieneTask.update({
     where: { id: taskId },
     data: {
@@ -783,6 +1150,123 @@ export async function reportIssue(taskId: string, staffId: string, staffName: st
     reportedBy: staffName,
     description: data.description,
   })
+
+  return task
+}
+
+/**
+ * 获取逾期任务
+ */
+export async function getOverdueTasks(storeId: string) {
+  const now = new Date()
+
+  return prisma.hygieneTask.findMany({
+    where: {
+      storeId,
+      status: { in: ['pending', 'in_progress'] },
+      dueTime: { lt: now },
+    },
+    include: {
+      staff: { select: { id: true, name: true } },
+      template: { select: { id: true, name: true, areaCode: true, priority: true } },
+    },
+    orderBy: [{ priority: 'asc' }, { dueTime: 'asc' }],
+  })
+}
+
+/**
+ * 获取员工任务历史
+ */
+export async function getStaffTaskHistory(staffId: string, storeId: string, page: number, pageSize: number) {
+  const where = {
+    storeId,
+    staffId,
+    status: { in: ['completed', 'approved', 'skipped', 'rejected'] },
+  }
+
+  const [tasks, total] = await Promise.all([
+    prisma.hygieneTask.findMany({
+      where,
+      include: {
+        template: { select: { id: true, name: true, areaCode: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.hygieneTask.count({ where }),
+  ])
+
+  return {
+    list: tasks,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  }
+}
+
+/**
+ * 创建临时任务
+ */
+export async function createTemporaryTask(storeId: string, data: {
+  name: string
+  areaCode: string
+  staffId?: string
+  priority?: number
+  description?: string
+  dueTime?: string
+  date: string
+}) {
+  // 验证必填字段
+  if (!storeId || storeId.trim() === '') {
+    throw new Error('Store ID is required')
+  }
+  if (!data.name || data.name.trim() === '') {
+    throw new Error('Task name is required')
+  }
+  if (!data.areaCode || data.areaCode.trim() === '') {
+    throw new Error('Area code is required')
+  }
+  if (!data.date || data.date.trim() === '') {
+    throw new Error('Date is required')
+  }
+
+  // 验证日期格式
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
+    throw new Error('Date must be in YYYY-MM-DD format')
+  }
+
+  // 解析截止时间（支持 ISO 格式或本地时间格式）
+  let parsedDueTime: Date | null = null
+  if (data.dueTime) {
+    const dueDate = new Date(data.dueTime)
+    if (!isNaN(dueDate.getTime())) {
+      parsedDueTime = dueDate
+    }
+  }
+
+  const task = await prisma.hygieneTask.create({
+    data: {
+      storeId,
+      name: data.name,
+      areaCode: data.areaCode,
+      staffId: data.staffId,
+      priority: data.priority || 2,
+      date: data.date,
+      time: new Date().toTimeString().slice(0, 5),
+      status: 'pending',
+      isTemporary: true,
+      dueTime: parsedDueTime,
+      note: data.description,
+    },
+  })
+
+  if (data.staffId) {
+    await createTaskLog(task.id, data.staffId, 'created', null, null, `Temporary task created: ${data.name}`)
+  }
+
+  socketManager.emitToStore(storeId, 'hygiene:temporary_task:created', task)
 
   return task
 }
@@ -818,7 +1302,18 @@ async function createTaskLog(
 /**
  * 获取任务日志
  */
-export async function getTaskLogs(taskId: string) {
+export async function getTaskLogs(taskId: string, storeId?: string) {
+  // 如果提供了 storeId，验证任务归属
+  if (storeId) {
+    const task = await prisma.hygieneTask.findUnique({
+      where: { id: taskId },
+      select: { storeId: true },
+    })
+    if (!task || task.storeId !== storeId) {
+      throw new Error('Task not found')
+    }
+  }
+
   return prisma.hygieneTaskLog.findMany({
     where: { taskId },
     orderBy: { createdAt: 'desc' },
@@ -840,26 +1335,37 @@ export async function getStats(storeId: string, date: string) {
   const total = tasks.length
   const completed = tasks.filter(t => ['completed', 'approved'].includes(t.status)).length
   const skipped = tasks.filter(t => t.status === 'skipped').length
-  const pending = tasks.filter(t => t.status === 'pending').length
+  const pending = tasks.filter(t => ['pending', 'in_progress'].includes(t.status)).length
+  const pendingApproval = tasks.filter(t => t.status === 'pending_approval').length
   const rejected = tasks.filter(t => t.status === 'rejected').length
+  const overdue = tasks.filter(t => {
+    if (!['pending', 'in_progress'].includes(t.status)) return false
+    if (!t.dueTime) return false
+    return new Date(t.dueTime) < new Date()
+  }).length
 
   // 按区域分组
   const byArea = tasks.reduce((acc, task) => {
     if (!acc[task.areaCode]) {
-      acc[task.areaCode] = { total: 0, completed: 0, pending: 0 }
+      acc[task.areaCode] = { total: 0, completed: 0, pending: 0, overdue: 0 }
     }
     acc[task.areaCode].total++
     if (['completed', 'approved'].includes(task.status)) acc[task.areaCode].completed++
-    if (task.status === 'pending') acc[task.areaCode].pending++
+    if (['pending', 'in_progress'].includes(task.status)) acc[task.areaCode].pending++
+    if (task.dueTime && new Date(task.dueTime) < new Date() && ['pending', 'in_progress'].includes(task.status)) {
+      acc[task.areaCode].overdue++
+    }
     return acc
-  }, {} as Record<string, { total: number; completed: number; pending: number }>)
+  }, {} as Record<string, { total: number; completed: number; pending: number; overdue: number }>)
 
   return {
     total,
     completed,
     skipped,
     pending,
+    pendingApproval,
     rejected,
+    overdue,
     completionRate: total > 0 ? Math.round((completed + skipped) / total * 100) : 0,
     byArea,
   }
@@ -1027,6 +1533,12 @@ export async function processDueTemplates() {
       })
       if (existing) continue
 
+      // 计算截止时间
+      const [year, month, day] = today.split('-').map(Number)
+      const [hours, mins] = (template.time || '10:00').split(':').map(Number)
+      const estimated = template.estimatedMinutes || 10
+      const dueTime = new Date(year, month - 1, day, hours, mins + estimated, 0, 0)
+
       const task = await prisma.hygieneTask.create({
         data: {
           storeId: template.storeId,
@@ -1035,9 +1547,11 @@ export async function processDueTemplates() {
           areaCode: template.areaCode,
           name: template.name,
           date: today,
-          time: template.time,
+          time: template.time || '10:00',
           priority: template.priority,
           status: 'pending',
+          executionIndex: 0,
+          dueTime,
         },
       })
 
@@ -1078,27 +1592,46 @@ export async function processDueTemplates() {
 // ============================================
 
 /**
- * 根据模板分配方式解析员工ID列表
+ * 根据模板分配方式解析员工ID列表（支持多个员工）
  */
 async function resolveStaffIds(template: any, storeId: string): Promise<string[]> {
+  // 优先使用 staffIds（多个员工）
+  if (template.staffIds) {
+    try {
+      const staffIds = JSON.parse(template.staffIds)
+      if (Array.isArray(staffIds) && staffIds.length > 0) {
+        return staffIds
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 回退到单个 staffId
   if (template.assignedType === 'staff' && template.staffId) {
     return [template.staffId]
   }
 
   if (template.assignedType === 'area' && template.areaManagerId) {
     // 查找该区域负责人下的所有员工
-    // 这里简化处理，实际应该查询该区域的员工列表
+    const staffInArea = await prisma.staff.findMany({
+      where: { storeId, status: 'active' },
+      select: { id: true },
+    })
+    // 简化：返回区域经理ID，实际应该返回该区域的员工
     return [template.areaManagerId]
   }
 
   if (template.assignedType === 'shift' && template.shift) {
     // 查询该班次今天的所有员工
     const today = new Date()
-    const dateStr = today.toISOString().split('T')[0]
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0)
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59)
 
     const schedules = await prisma.schedule.findMany({
       where: {
-        date: dateStr,
+        date: {
+          gte: startOfDay,
+          lte: endOfDay
+        },
         shift: template.shift,
         status: { in: ['scheduled', 'confirmed'] },
       },
@@ -1181,15 +1714,6 @@ function calculateNextTrigger(frequency?: string, time?: string, specificDays?: 
   }
 
   return next
-}
-
-/**
- * 计算任务实际耗时
- */
-function calculateActualMinutes(taskId: string): number {
-  // 这个需要在 task 数据中已有 startedAt
-  // 简化处理，返回 null 由前端计算
-  return 0
 }
 
 // ============================================

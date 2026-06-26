@@ -49,7 +49,7 @@ export function RecipeEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { user } = useAuthStore()
+  const { user: _user } = useAuthStore()
 
   const [filterType, setFilterType] = useState<InventoryType>('all')
   const [bomItems, setBomItems] = useState<BOMItem[]>([])
@@ -77,7 +77,7 @@ export function RecipeEditPage() {
     queryFn: () => inventoryApi.list({ pageSize: 500 })
   })
 
-  const inventoryList = inventoryData?.data?.list || []
+  const inventoryList = inventoryData?.data?.data?.list || []
 
   // 按类型分组的库存
   const groupedInventory = useMemo(() => {

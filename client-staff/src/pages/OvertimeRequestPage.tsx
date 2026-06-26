@@ -64,11 +64,11 @@ export function OvertimeRequestPage() {
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
-        alert(response.message || 'Failed to submit overtime')
+        alert(response.message || t('overtime.submitFailed'))
       }
     } catch (error: any) {
       console.error('Failed to submit overtime:', error)
-      alert(error?.response?.data?.message || 'Failed to submit overtime')
+      alert(error?.response?.data?.message || t('overtime.submitFailed'))
     } finally {
       setIsSubmitting(false)
     }

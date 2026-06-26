@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as InventoryService from '../services/InventoryService'
+import { getInventoryAlertConfig, saveInventoryAlertConfig, DEFAULT_INVENTORY_ALERT_CONFIG } from '../services/InventoryAlertConfigService'
 
 const router = Router()
 
@@ -11,7 +12,7 @@ const stockInSchema = z.object({
   inventoryId: z.string(),
   storeId: z.string(),
   quantity: z.number().positive(),
-  unitCost: z.number().int().positive(),
+  unitCost: z.number().int().optional(),
   note: z.string().optional(),
   staffId: z.string().optional(),
   supplierId: z.string().optional()
@@ -30,7 +31,7 @@ const stockOutSchema = z.object({
 const adjustSchema = z.object({
   newStock: z.number().min(0),
   reason: z.string(),
-  staffId: z.string()
+  staffId: z.string().optional()
 })
 
 const createInventorySchema = z.object({
@@ -69,6 +70,38 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Get inventory error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get inventory' })
+  }
+})
+
+// GET /api/inventory/logs - Get all inventory logs (combined stock-in, stock-out, and adjustments)
+router.get('/logs', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.query.storeId as string || req.user!.storeId
+    const inventoryId = req.query.inventoryId as string
+    const type = req.query.type as string
+
+    let logs: any[] = []
+
+    if (!type || type === 'stock_in') {
+      const stockInLogs = await InventoryService.getStockInLogs(storeId, inventoryId)
+      logs = logs.concat(stockInLogs.map((l: any) => ({ ...l, type: 'stock_in' })))
+    }
+
+    if (!type || type === 'stock_out') {
+      const stockOutLogs = await InventoryService.getStockOutLogs(storeId, inventoryId)
+      logs = logs.concat(stockOutLogs.map((l: any) => ({ ...l, type: 'stock_out' })))
+    }
+
+    logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    res.json({
+      code: 200,
+      data: { list: logs },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get inventory logs error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get inventory logs' })
   }
 })
 
@@ -363,6 +396,42 @@ router.get('/anomaly-summary', authenticate, authorize('admin', 'manager'), asyn
   } catch (error) {
     console.error('Get anomaly summary error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get anomaly summary' })
+  }
+})
+
+// GET /api/inventory/alert-config
+router.get('/alert-config', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const config = await getInventoryAlertConfig(storeId)
+    res.json({
+      code: 200,
+      data: config,
+      defaults: DEFAULT_INVENTORY_ALERT_CONFIG,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get inventory alert config error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get inventory alert config' })
+  }
+})
+
+// PUT /api/inventory/alert-config
+router.put('/alert-config', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const configData = req.body
+
+    const config = await saveInventoryAlertConfig(storeId, configData)
+    res.json({
+      code: 200,
+      message: 'Inventory alert config saved',
+      data: config,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Save inventory alert config error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to save inventory alert config' })
   }
 })
 

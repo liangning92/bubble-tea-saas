@@ -31,9 +31,9 @@ export function BomAnalysisPage() {
     queryFn: () => bomApi.getMaterialUsage(forecastDays)
   })
 
-  const products = productsData?.data?.list || []
-  const usageList = usageData?.data || []
-  const detail = productDetail?.data
+  const products = productsData?.data?.data?.list || []
+  const usageList = usageData?.data?.data || []
+  const detail = productDetail?.data?.data
 
   return (
     <div className="space-y-6">

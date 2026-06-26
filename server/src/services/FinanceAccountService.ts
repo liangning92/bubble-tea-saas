@@ -1,6 +1,45 @@
 import prisma from '../config/database'
 
-// Account types: cash | bank | receivable | payable
+// Default account types (used when no custom types are defined)
+const DEFAULT_ACCOUNT_TYPES = [
+  { key: 'cash', label: 'Tunai', labelZh: '现金', labelEn: 'Cash', icon: 'Wallet', color: 'text-green-600', bgColor: 'bg-green-100' },
+  { key: 'bank', label: 'Bank', labelZh: '银行', labelEn: 'Bank', icon: 'Building2', color: 'text-blue-600', bgColor: 'bg-blue-100' },
+  { key: 'receivable', label: 'Piutang', labelZh: '应收账款', labelEn: 'Receivable', icon: 'CreditCard', color: 'text-purple-600', bgColor: 'bg-purple-100' },
+  { key: 'payable', label: 'Hutang', labelZh: '应付账款', labelEn: 'Payable', icon: 'FileText', color: 'text-orange-600', bgColor: 'bg-orange-100' },
+  { key: 'revenue', label: 'Pendapatan', labelZh: '收入', labelEn: 'Revenue', icon: 'TrendingUp', color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+  { key: 'cogs', label: 'HPP', labelZh: '销售成本', labelEn: 'COGS', icon: 'Package', color: 'text-red-600', bgColor: 'bg-red-100' },
+  { key: 'expense', label: 'Beban', labelZh: '费用', labelEn: 'Expense', icon: 'TrendingDown', color: 'text-pink-600', bgColor: 'bg-pink-100' }
+]
+
+// Get account types (from Config or defaults)
+export async function getAccountTypes(storeId: string) {
+  try {
+    const config = await prisma.config.findUnique({
+      where: { storeId_key: { storeId, key: 'finance.accountTypes' } }
+    })
+    if (config && config.value) {
+      return JSON.parse(config.value)
+    }
+  } catch {}
+  // Return defaults if no custom config
+  return DEFAULT_ACCOUNT_TYPES
+}
+
+// Save account types to Config
+export async function saveAccountTypes(storeId: string, types: any[]) {
+  // Upsert config
+  await prisma.config.upsert({
+    where: { storeId_key: { storeId, key: 'finance.accountTypes' } },
+    update: { value: JSON.stringify(types) },
+    create: {
+      storeId,
+      key: 'finance.accountTypes',
+      value: JSON.stringify(types),
+      category: 'finance'
+    }
+  })
+  return types
+}
 
 export async function getAccounts(storeId: string, type?: string) {
   const where: any = { storeId }

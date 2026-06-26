@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { rewardApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
 import { Loader2, Plus, Edit2, Trash2, X, Gift } from 'lucide-react'
 
 interface Reward {
@@ -18,10 +19,10 @@ interface Reward {
 }
 
 const REWARD_TYPES = [
-  { key: 'product', label: 'Product' },
-  { key: 'addon', label: 'Addon' },
-  { key: 'voucher', label: 'Voucher' },
-  { key: 'gift', label: 'Gift' }
+  { key: 'product', labelKey: 'marketing.product' },
+  { key: 'addon', labelKey: 'marketing.addon' },
+  { key: 'voucher', labelKey: 'marketing.voucher' },
+  { key: 'gift', labelKey: 'marketing.gift' }
 ]
 
 const DEFAULT_FORM = {
@@ -38,6 +39,8 @@ const DEFAULT_FORM = {
 
 export function RewardCatalogPage() {
   const { t } = useTranslation()
+  const { user } = useAuthStore()
+  const storeId = user?.storeId
   const queryClient = useQueryClient()
 
   const [showModal, setShowModal] = useState(false)
@@ -74,7 +77,7 @@ export function RewardCatalogPage() {
     }
   })
 
-  const rewards: Reward[] = rewardsData?.data?.list || []
+  const rewards: Reward[] = rewardsData?.data?.data?.list || []
 
   const closeModal = () => {
     setShowModal(false)
@@ -100,10 +103,11 @@ export function RewardCatalogPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const payload = { ...form, storeId }
     if (editingReward) {
-      updateMutation.mutate({ id: editingReward.id, data: form })
+      updateMutation.mutate({ id: editingReward.id, data: payload })
     } else {
-      createMutation.mutate(form)
+      createMutation.mutate(payload)
     }
   }
 
@@ -158,7 +162,7 @@ export function RewardCatalogPage() {
                   </td>
                   <td className="py-3">
                     <span className="badge badge-gray">
-                      {REWARD_TYPES.find(t => t.key === r.type)?.label || r.type}
+                      {t(REWARD_TYPES.find(rewardType => rewardType.key === r.type)?.labelKey || 'marketing.' + r.type)}
                     </span>
                   </td>
                   <td className="py-3 font-medium text-primary">{r.pointsCost}</td>
@@ -212,8 +216,8 @@ export function RewardCatalogPage() {
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className="input"
                 >
-                  {REWARD_TYPES.map(t => (
-                    <option key={t.key} value={t.key}>{t.label}</option>
+                  {REWARD_TYPES.map(rewardType => (
+                    <option key={rewardType.key} value={rewardType.key}>{t(rewardType.labelKey)}</option>
                   ))}
                 </select>
               </div>

@@ -3,9 +3,26 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { isFeatureEnabled, getStaffConfig } from '../services/StaffConfigService'
+import { getApprovedLeavesInRange, hasApprovedLeaveOnDate } from '../services/LeaveService'
 import { validateBody } from '../utils/validation'
 
 const router = Router()
+
+// Helper: Get attendance rule for store (with defaults)
+async function getAttendanceRuleWithDefaults(storeId: string) {
+  const rules = await prisma.attendanceRule.findMany({
+    where: { storeId, isActive: true }
+  })
+  const defaultRule = rules.find(r => r.isDefault) || rules[0]
+
+  return defaultRule || {
+    workStartTime: '09:00',
+    gracePeriod: 15,
+    lateDeductionType: 'none',
+    lateDeductionFixed: 50000
+  }
+}
 
 // Validation schemas
 const createStaffSchema = z.object({
@@ -53,7 +70,7 @@ const attendanceSchema = z.object({
 const scheduleSchema = z.object({
   staffId: z.string(),
   date: z.string(),
-  shift: z.enum(['morning', 'afternoon', 'evening'])
+  shift: z.string()
 })
 
 // GET /api/staff
@@ -155,7 +172,6 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
     }
 
     const staff = await prisma.$transaction(async (tx) => {
-      const bcrypt = await import('bcryptjs')
       const hashed = await bcrypt.hash(password, 10)
 
       const user = await tx.user.create({
@@ -332,6 +348,13 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
     }
 
     const now = new Date()
+    const storeId = staff.storeId
+
+    // Check if attendance rules are enabled
+    const rulesEnabled = await isFeatureEnabled(storeId, 'attendanceRuleActive')
+
+    // Get attendance rule (if enabled)
+    const rule = rulesEnabled ? await getAttendanceRuleWithDefaults(storeId) : null
 
     if (type === 'check_in') {
       // Check if already checked in today
@@ -356,19 +379,20 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
         }
       })
 
-      // Determine if late (after 9:30 AM for morning shift, 14:00 for afternoon, 22:00 for evening)
+      // Determine if late based on attendance rule or defaults
       let status = 'normal'
-      if (todaySchedule) {
-        const hour = now.getHours()
-        if (todaySchedule.shift === 'morning' && (hour > 9 || (hour === 9 && now.getMinutes() > 30))) {
-          status = 'late'
-        } else if (todaySchedule.shift === 'afternoon' && hour > 14) {
-          status = 'late'
-        } else if (todaySchedule.shift === 'evening' && hour > 22) {
+      if (rule) {
+        // Parse work start time from rule
+        const [startHour, startMin] = rule.workStartTime.split(':').map(Number)
+        const gracePeriod = rule.gracePeriod || 0
+        const lateThreshold = startHour * 60 + startMin + gracePeriod
+        const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+        if (currentMinutes > lateThreshold) {
           status = 'late'
         }
       } else {
-        // 无排班时，按默认时间判断（9:30前）
+        // Default: 9:30 AM (no rules enabled)
         const hour = now.getHours()
         if (hour > 9 || (hour === 9 && now.getMinutes() > 30)) {
           status = 'late'
@@ -515,6 +539,22 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
 router.post('/schedule', authenticate, authorize('admin', 'manager'), validateBody(scheduleSchema), async (req: AuthRequest, res) => {
   try {
     const { staffId, date, shift } = req.body
+    const storeId = req.user!.storeId
+
+    // Check if leave-schedule linkage is enabled
+    const leaveLinkageEnabled = await isFeatureEnabled(storeId, 'leaveScheduleLinkage')
+
+    // If linkage enabled, check if staff has approved leave on this date
+    if (leaveLinkageEnabled) {
+      const hasLeave = await hasApprovedLeaveOnDate(staffId, new Date(date))
+      if (hasLeave) {
+        return res.status(400).json({
+          code: 400,
+          message: 'Cannot schedule: Staff has approved leave on this date',
+          timestamp: new Date().toISOString()
+        })
+      }
+    }
 
     // Check if schedule exists
     const existing = await prisma.schedule.findFirst({
@@ -561,6 +601,7 @@ router.post('/schedule', authenticate, authorize('admin', 'manager'), validateBo
 router.get('/schedule/list', authenticate, async (req: AuthRequest, res) => {
   try {
     const { staffId, month } = req.query
+    const storeId = req.user!.storeId
 
     const where: any = {}
     if (staffId) where.staffId = staffId as string
@@ -577,9 +618,22 @@ router.get('/schedule/list', authenticate, async (req: AuthRequest, res) => {
       orderBy: { date: 'asc' }
     })
 
+    // Check if leave-schedule linkage is enabled
+    const leaveLinkageEnabled = await isFeatureEnabled(storeId, 'leaveScheduleLinkage')
+
+    let leaves: any[] = []
+    if (leaveLinkageEnabled && month) {
+      const [year, m] = (month as string).split('-')
+      const startDate = new Date(parseInt(year), parseInt(m) - 1, 1)
+      const endDate = new Date(parseInt(year), parseInt(m), 0)
+      leaves = await getApprovedLeavesInRange(storeId, startDate, endDate)
+    }
+
     res.json({
       code: 200,
       data: schedules,
+      leaves: leaves,
+      leaveLinkageEnabled,
       timestamp: new Date().toISOString()
     })
   } catch (error) {

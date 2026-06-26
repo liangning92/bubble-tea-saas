@@ -128,3 +128,75 @@ export async function getDepreciationSchedule(storeId: string) {
     }
   })
 }
+
+// Dispose fixed asset with sale value - calculates gain/loss and creates journal entry
+export async function disposeFixedAsset(params: {
+  assetId: string
+  saleValue: number
+  disposalDate: Date
+  note?: string
+  disposedBy: string
+}) {
+  const asset = await prisma.fixedAsset.findUnique({
+    where: { id: params.assetId }
+  })
+
+  if (!asset) {
+    throw new Error('Asset not found')
+  }
+
+  if (asset.status !== 'active') {
+    throw new Error('Only active assets can be disposed')
+  }
+
+  // Calculate current book value using depreciation
+  const depreciation = calculateDepreciation(asset)
+  const bookValue = depreciation.currentValue
+
+  // Calculate gain or loss
+  const gainLoss = params.saleValue - bookValue
+  const disposalType = gainLoss >= 0 ? 'gain' : 'loss'
+
+  // Create journal entry for the disposal
+  // Debit: Cash/Bank (sale proceeds)
+  // Credit: Fixed Asset (original value)
+  // Debit/Credit: Accumulated Depreciation (to remove)
+  // Debit (if loss) / Credit (if gain): Disposal Gain/Loss
+  const journalEntry = await prisma.$transaction(async (tx) => {
+    // Update asset status to disposed
+    await tx.fixedAsset.update({
+      where: { id: params.assetId },
+      data: {
+        status: 'disposed',
+        description: `${asset.description || ''} [Disposed on ${params.disposalDate.toISOString().slice(0, 10)}: Sale ${params.saleValue}, Book Value ${bookValue}, ${disposalType === 'gain' ? 'Gain' : 'Loss'} ${Math.abs(gainLoss)}]`
+      }
+    })
+
+    // Create expense/income record for the disposal
+    await tx.expense.create({
+      data: {
+        storeId: asset.storeId,
+        type: 'asset_disposal',
+        category: disposalType === 'gain' ? 'other_income' : 'other',
+        amount: Math.abs(gainLoss),
+        description: `Asset disposal: ${asset.name} - ${disposalType === 'gain' ? 'Gain' : 'Loss'} from sale (Sale: ${params.saleValue}, Book Value: ${bookValue})${params.note ? `. Note: ${params.note}` : ''}`,
+        date: params.disposalDate,
+        referenceId: params.assetId,
+        referenceType: 'fixed_asset_disposal'
+      }
+    })
+
+    return {
+      assetId: params.assetId,
+      assetName: asset.name,
+      originalValue: asset.originalValue,
+      saleValue: params.saleValue,
+      bookValue,
+      gainLoss,
+      disposalType,
+      disposalDate: params.disposalDate
+    }
+  })
+
+  return journalEntry
+}

@@ -104,7 +104,7 @@ export function PointsRuleConfigPage() {
               <span className="text-gray-500">Rp</span>
               <input
                 type="number"
-                value={form.pointsPerRupiah}
+                value={form.pointsPerRupiah ?? 10000}
                 onChange={e => setForm(f => ({ ...f, pointsPerRupiah: Number(e.target.value) }))}
                 className="input w-40"
                 min={1000}
@@ -126,7 +126,7 @@ export function PointsRuleConfigPage() {
               <span className="text-gray-500">Rp</span>
               <input
                 type="number"
-                value={form.minPurchase}
+                value={form.minPurchase ?? 0}
                 onChange={e => setForm(f => ({ ...f, minPurchase: Number(e.target.value) }))}
                 className="input w-40"
                 min={0}

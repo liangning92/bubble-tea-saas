@@ -32,6 +32,7 @@ export function POSSettingsPage() {
   })
 
   // ========== STATE WITH DEFAULT VALUES ==========
+  // 注意: 这些字段名和结构需要与POS客户端期望的一致
   const [posLayout, setPosLayout] = useState({
     gridCols: '4',
     cardSize: 'medium',
@@ -41,6 +42,24 @@ export function POSSettingsPage() {
     compactMode: false,
     productSortBy: 'name', // name, price_asc, price_desc, category
     productSortOrder: 'asc',
+    // POS期望的渠道开关 (扁平结构)
+    channelDineIn: true,
+    channelGoFood: true,
+    channelGrab: true,
+    channelShopee: true,
+    // 快捷键配置
+    hotkeys: {
+      newOrder: 'F1',           // 新订单
+      suspendOrder: 'F2',       // 挂起
+      recallOrder: 'F3',        // 提取
+      quickPay: 'F4',           // 快速支付
+      barcodeScan: 'F5',         // 扫描
+      cashDrawer: 'F6',         // 开钱箱
+      receiptPrint: 'F7',      // 重打小票
+      cancelOrder: 'F8',         // 取消订单
+    },
+    // 分类折叠状态
+    categoryCollapseState: {} as Record<string, boolean>,
   })
 
   const [toolbarSettings, setToolbarSettings] = useState({
@@ -51,23 +70,54 @@ export function POSSettingsPage() {
     showCash: false,
     showTasks: true,
     showLogout: true,
-    // Button labels (customizable)
-    labels: {
-      suspend: 'suspend',
-      history: 'history',
-      scan: 'scan',
-      shift: 'shift',
-      cash: 'cash',
-      tasks: 'tasks',
-      logout: 'logout'
+    // Button labels - 保存为 toolbarLabels 以匹配POS期望
+    toolbarLabels: {
+      suspend: 'toolbar.suspend',
+      history: 'toolbar.history',
+      scan: 'toolbar.scan',
+      shift: 'toolbar.shift',
+      cash: 'toolbar.cash',
+      tasks: 'toolbar.tasks',
+      logout: 'toolbar.logout'
     }
   })
 
   const [channelSettings, setChannelSettings] = useState({
-    dineIn: { enabled: true, name: 'Dine In', icon: '🍵', color: '#EC6D88' },
-    gofood: { enabled: true, name: 'GoFood', icon: '🟢', color: '#25A549' },
-    grab: { enabled: true, name: 'Grab', icon: '🟡', color: '#F88100' },
-    shopee: { enabled: true, name: 'Shopee', icon: '🟠', color: '#EE4D2D' },
+    dineIn: {
+      enabled: true,
+      name: 'Dine In',
+      icon: '🍵',
+      color: '#EC6D88',
+      availableHours: '00:00-23:59',
+      minOrder: 0,
+    },
+    gofood: {
+      enabled: true,
+      name: 'GoFood',
+      icon: '🟢',
+      color: '#25A549',
+      availableHours: '09:00-22:00',
+      minOrder: 0,
+      commissionRate: 15,              // 平台抽成
+    },
+    grab: {
+      enabled: true,
+      name: 'Grab',
+      icon: '🟡',
+      color: '#F88100',
+      availableHours: '09:00-22:00',
+      minOrder: 0,
+      commissionRate: 18,
+    },
+    shopee: {
+      enabled: true,
+      name: 'Shopee',
+      icon: '🟠',
+      color: '#EE4D2D',
+      availableHours: '08:00-22:00',
+      minOrder: 0,
+      commissionRate: 20,
+    },
   })
 
   const [taxSettings, setTaxSettings] = useState({
@@ -132,6 +182,23 @@ export function POSSettingsPage() {
     ovo: false,
     dana: false,
     card: false,
+    // 升级字段
+    defaultMethod: 'cash',           // 默认支付方式
+    minAmount: 0,                    // 最低消费
+    maxCashAmount: 100000,           // 现金最大金额
+    changeEnabled: true,             // 允许找零
+    // 通道费率 (百分比)
+    rates: {
+      qris: 0.7,      // QRIS费率
+      gopay: 1.5,     // GoPay费率
+      ovo: 1.5,       // OVO费率
+      dana: 1.5,       // DANA费率
+      shopeepay: 1.5,  // ShopeePay费率
+      debit: 1.0,     // 借记卡费率
+      card: 1.5,       // 信用卡费率
+    },
+    settlementCycle: 'same_day',     // 结算周期: same_day / next_day
+    installmentEnabled: false,       // 支持分期
   })
 
   // 小票设置
@@ -142,15 +209,34 @@ export function POSSettingsPage() {
     showLogo: true,
     headerCustomText: '',
     footerMessage: '',
+    // 升级字段
+    paperSize: '80mm',           // 纸张尺寸: 58mm / 80mm
+    printCopies: 1,              // 打印份数
+    showQR: false,                // 显示支付二维码
+    showBarcode: true,            // 显示订单条码
+    showKitchenNote: true,        // 显示厨师备注
+    storePhone: '',              // 店铺电话
+    storeAddress: '',             // 店铺地址
+    itemDetailFormat: 'standard', // 明细格式: standard / compact
+    showStaffName: true,          // 显示收款员
+    showCustomerName: false,      // 显示顾客名称
+    autoPrint: true,             // 自动打印
   })
 
   // 硬件设置
   const [hardwareSettings, setHardwareSettings] = useState({
     printerConnectionType: 'usb',
+    printerType: 'escpos',          // 打印机类型: escpos / pcl
     printerIp: '192.168.1.100',
     printerPort: 9100,
     printerName: '',
+    cashDrawerPulse: 100,          // 钱箱脉冲(毫秒)
     autoOpenCashDrawer: true,
+    scannerEnabled: true,            // 扫码枪启用
+    scannerType: 'usb',             // 扫码枪类型: usb / serial
+    displayBrightness: 80,          // 屏幕亮度
+    dualScreenEnabled: false,        // 双屏异显
+    adScreenImageUrl: '',            // 广告屏图片URL
   })
 
   // 检测到的打印机列表（从POS客户端上传）
@@ -188,7 +274,7 @@ export function POSSettingsPage() {
         setToolbarSettings(prev => ({
           ...prev,
           ...configs.toolbarSettings,
-          labels: { ...prev.labels, ...configs.toolbarSettings.labels }
+          toolbarLabels: { ...prev.toolbarLabels, ...(configs.toolbarSettings.toolbarLabels || configs.toolbarSettings.labels || {}) }
         }))
       }
       // Load channel settings
@@ -438,6 +524,30 @@ export function POSSettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Hotkeys */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.hotkeySettings')}</h3>
+            <p className="text-sm text-gray-500 mb-4">{t('posSettings.hotkeySettingsHint')}</p>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(posLayout.hotkeys || {}).map(([key, value]) => (
+                <div key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm text-gray-600 w-28">{t(`posSettings.hotkey${key.charAt(0).toUpperCase() + key.slice(1)}`)}</span>
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => {
+                      const newHotkeys = { ...posLayout.hotkeys, [key]: e.target.value }
+                      setPosLayout({ ...posLayout, hotkeys: newHotkeys })
+                    }}
+                    onBlur={() => handleSave('posLayout', { ...posLayout, hotkeys: posLayout.hotkeys })}
+                    className="input w-24 text-center"
+                    placeholder="F1"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -500,6 +610,13 @@ export function POSSettingsPage() {
                         }
                         setChannelSettings(newChannels)
                         handleSave('channelSettings', newChannels)
+                        handleSave('posLayout', {
+                          ...posLayout,
+                          channelDineIn: newChannels.dineIn?.enabled ?? posLayout.channelDineIn,
+                          channelGoFood: newChannels.gofood?.enabled ?? posLayout.channelGoFood,
+                          channelGrab: newChannels.grab?.enabled ?? posLayout.channelGrab,
+                          channelShopee: newChannels.shopee?.enabled ?? posLayout.channelShopee,
+                        })
                       }}
                     />
                   </div>
@@ -536,6 +653,66 @@ export function POSSettingsPage() {
                         className="input text-sm"
                       />
                     </div>
+                  </div>
+                  {/* 扩展设置 */}
+                  <div className="grid grid-cols-3 gap-3 ml-10 mt-3">
+                    <div>
+                      <label className="text-xs text-gray-500">{t('posSettings.availableHours')}</label>
+                      <input
+                        type="text"
+                        value={channel.availableHours || ''}
+                        onChange={(e) => {
+                          const newChannels = {
+                            ...channelSettings,
+                            [key]: { ...channel, availableHours: e.target.value }
+                          }
+                          setChannelSettings(newChannels)
+                        }}
+                        onBlur={() => handleSave('channelSettings', channelSettings)}
+                        className="input text-sm"
+                        placeholder="09:00-22:00"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">{t('posSettings.minOrder')}</label>
+                      <input
+                        type="number"
+                        value={channel.minOrder || 0}
+                        onChange={(e) => {
+                          const newChannels = {
+                            ...channelSettings,
+                            [key]: { ...channel, minOrder: parseInt(e.target.value) || 0 }
+                          }
+                          setChannelSettings(newChannels)
+                        }}
+                        onBlur={() => handleSave('channelSettings', channelSettings)}
+                        className="input text-sm"
+                        min="0"
+                      />
+                    </div>
+                    {key !== 'dineIn' && (
+                      <div>
+                        <label className="text-xs text-gray-500">{t('posSettings.commissionRate')}</label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={(channel as any).commissionRate || 0}
+                            onChange={(e) => {
+                              const newChannels = {
+                                ...channelSettings,
+                                [key]: { ...(channel as any), commissionRate: parseFloat(e.target.value) || 0 }
+                              }
+                              setChannelSettings(newChannels)
+                            }}
+                            onBlur={() => handleSave('channelSettings', channelSettings)}
+                            className="input text-sm"
+                            min="0"
+                            max="100"
+                          />
+                          <span className="text-gray-500">%</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -941,6 +1118,7 @@ export function POSSettingsPage() {
       {/* ========== PAYMENT TAB ========== */}
       {activeSubTab === 'payment' && (
         <div className="space-y-6">
+          {/* 支付方式开关 */}
           <div className="card">
             <h3 className="text-lg font-semibold mb-4">{t('posSettings.paymentMethods')}</h3>
             <p className="text-sm text-gray-500 mb-4">{t('posSettings.paymentMethodsHint')}</p>
@@ -952,6 +1130,8 @@ export function POSSettingsPage() {
                 { key: 'ovo', label: t('posSettings.paymentOvo'), icon: '🟣' },
                 { key: 'dana', label: t('posSettings.paymentDana'), icon: '🔵' },
                 { key: 'shopeepay', label: t('posSettings.paymentShopeePay'), icon: '🟠' },
+                { key: 'debit', label: t('posSettings.paymentDebit'), icon: '💳' },
+                { key: 'card', label: t('posSettings.paymentCard'), icon: '💰' },
               ].map((method) => (
                 <div key={method.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -973,14 +1153,122 @@ export function POSSettingsPage() {
               ))}
             </div>
           </div>
+
+          {/* 基本设置 */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.paymentBasic')}</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.defaultMethod')}</label>
+                <select
+                  value={paymentMethods.defaultMethod || 'cash'}
+                  onChange={(e) => {
+                    setPaymentMethods({ ...paymentMethods, defaultMethod: e.target.value })
+                    handleSave('paymentMethods', { ...paymentMethods, defaultMethod: e.target.value })
+                  }}
+                  className="input"
+                >
+                  <option value="cash">{t('posSettings.paymentCash')}</option>
+                  <option value="qris">{t('posSettings.paymentQris')}</option>
+                  <option value="gopay">{t('posSettings.paymentGoPay')}</option>
+                  <option value="ovo">{t('posSettings.paymentOvo')}</option>
+                  <option value="dana">{t('posSettings.paymentDana')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.settlementCycle')}</label>
+                <select
+                  value={paymentMethods.settlementCycle || 'same_day'}
+                  onChange={(e) => {
+                    setPaymentMethods({ ...paymentMethods, settlementCycle: e.target.value })
+                    handleSave('paymentMethods', { ...paymentMethods, settlementCycle: e.target.value })
+                  }}
+                  className="input"
+                >
+                  <option value="same_day">{t('posSettings.settlementSameDay')}</option>
+                  <option value="next_day">{t('posSettings.settlementNextDay')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.minAmount')}</label>
+                <input
+                  type="number"
+                  value={paymentMethods.minAmount || 0}
+                  onChange={(e) => setPaymentMethods({ ...paymentMethods, minAmount: parseInt(e.target.value) || 0 })}
+                  onBlur={() => handleSave('paymentMethods', paymentMethods)}
+                  className="input"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.maxCashAmount')}</label>
+                <input
+                  type="number"
+                  value={paymentMethods.maxCashAmount || 100000}
+                  onChange={(e) => setPaymentMethods({ ...paymentMethods, maxCashAmount: parseInt(e.target.value) || 0 })}
+                  onBlur={() => handleSave('paymentMethods', paymentMethods)}
+                  className="input"
+                  min="0"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div>
+                <span className="font-medium">{t('posSettings.changeEnabled')}</span>
+                <p className="text-sm text-gray-500">{t('posSettings.changeEnabledHint')}</p>
+              </div>
+              <Toggle
+                enabled={paymentMethods.changeEnabled ?? true}
+                onChange={() => {
+                  const newVal = !paymentMethods.changeEnabled
+                  setPaymentMethods({ ...paymentMethods, changeEnabled: newVal })
+                  handleSave('paymentMethods', { ...paymentMethods, changeEnabled: newVal })
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 通道费率 */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.paymentRates')}</h3>
+            <p className="text-sm text-gray-500 mb-4">{t('posSettings.paymentRatesHint')}</p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { key: 'qris', label: t('posSettings.paymentQris') },
+                { key: 'gopay', label: t('posSettings.paymentGoPay') },
+                { key: 'ovo', label: t('posSettings.paymentOvo') },
+                { key: 'dana', label: t('posSettings.paymentDana') },
+                { key: 'shopeepay', label: t('posSettings.paymentShopeePay') },
+                { key: 'debit', label: t('posSettings.paymentDebit') },
+                { key: 'card', label: t('posSettings.paymentCard') },
+              ].map((method) => (
+                <div key={method.key} className="flex items-center gap-3">
+                  <span className="text-sm w-20">{method.label}</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={paymentMethods.rates?.[method.key as keyof typeof paymentMethods.rates] || 0}
+                    onChange={(e) => {
+                      const newRates = { ...paymentMethods.rates, [method.key]: parseFloat(e.target.value) || 0 }
+                      setPaymentMethods({ ...paymentMethods, rates: newRates })
+                    }}
+                    onBlur={() => handleSave('paymentMethods', paymentMethods)}
+                    className="input w-24 text-center"
+                  />
+                  <span className="text-gray-500">%</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       {/* ========== RECEIPT TAB ========== */}
       {activeSubTab === 'receipt' && (
         <div className="space-y-6">
+          {/* 基础信息 */}
           <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.receiptSettings')}</h3>
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.receiptBasic')}</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1008,39 +1296,134 @@ export function POSSettingsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.customHeader')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.storePhone')}</label>
                   <input
                     type="text"
-                    value={posReceipt.headerCustomText || ''}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, headerCustomText: e.target.value })}
+                    value={posReceipt.storePhone || ''}
+                    onChange={(e) => setPosReceipt({ ...posReceipt, storePhone: e.target.value })}
                     onBlur={() => handleSave('posReceipt', posReceipt)}
                     className="input"
-                    placeholder={t('posSettings.customHeaderPlaceholder') || 'Custom header line'}
+                    placeholder="021-1234567"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.customFooter')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.storeAddress')}</label>
                   <input
                     type="text"
-                    value={posReceipt.footerMessage || ''}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, footerMessage: e.target.value })}
+                    value={posReceipt.storeAddress || ''}
+                    onChange={(e) => setPosReceipt({ ...posReceipt, storeAddress: e.target.value })}
                     onBlur={() => handleSave('posReceipt', posReceipt)}
                     className="input"
-                    placeholder={t('posSettings.customFooterPlaceholder') || 'Custom footer line'}
+                    placeholder="Jl. Sudirman No.1"
                   />
                 </div>
               </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            </div>
+          </div>
+
+          {/* 打印设置 */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.printSettings')}</h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="font-medium">{t('posSettings.showLogo')}</span>
-               </div>
-                <Toggle
-                  enabled={posReceipt.showLogo}
-                  onChange={() => {
-                    const newVal = !posReceipt.showLogo
-                    setPosReceipt({ ...posReceipt, showLogo: newVal })
-                    handleSave('posReceipt', { ...posReceipt, showLogo: newVal })
-                  }}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.paperSize')}</label>
+                  <select
+                    value={posReceipt.paperSize || '80mm'}
+                    onChange={(e) => {
+                      setPosReceipt({ ...posReceipt, paperSize: e.target.value })
+                      handleSave('posReceipt', { ...posReceipt, paperSize: e.target.value })
+                    }}
+                    className="input"
+                  >
+                    <option value="58mm">58mm</option>
+                    <option value="80mm">80mm</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printCopies')}</label>
+                  <input
+                    type="number"
+                    value={posReceipt.printCopies || 1}
+                    onChange={(e) => setPosReceipt({ ...posReceipt, printCopies: parseInt(e.target.value) || 1 })}
+                    onBlur={() => handleSave('posReceipt', posReceipt)}
+                    className="input"
+                    min="1"
+                    max="5"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.itemDetailFormat')}</label>
+                  <select
+                    value={posReceipt.itemDetailFormat || 'standard'}
+                    onChange={(e) => {
+                      setPosReceipt({ ...posReceipt, itemDetailFormat: e.target.value })
+                      handleSave('posReceipt', { ...posReceipt, itemDetailFormat: e.target.value })
+                    }}
+                    className="input"
+                  >
+                    <option value="standard">{t('posSettings.formatStandard')}</option>
+                    <option value="compact">{t('posSettings.formatCompact')}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 显示选项 */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.displayOptions')}</h3>
+            <div className="space-y-3">
+              {[
+                { key: 'showLogo', label: t('posSettings.showLogo') },
+                { key: 'showQR', label: t('posSettings.showQR') },
+                { key: 'showBarcode', label: t('posSettings.showBarcode') },
+                { key: 'showKitchenNote', label: t('posSettings.showKitchenNote') },
+                { key: 'showStaffName', label: t('posSettings.showStaffName') },
+                { key: 'showCustomerName', label: t('posSettings.showCustomerName') },
+                { key: 'autoPrint', label: t('posSettings.autoPrint') },
+              ].map((item) => (
+                <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="font-medium">{item.label}</span>
+                  <Toggle
+                    enabled={posReceipt[item.key as keyof typeof posReceipt] as boolean}
+                    onChange={() => {
+                      const newVal = !posReceipt[item.key as keyof typeof posReceipt]
+                      setPosReceipt({ ...posReceipt, [item.key]: newVal })
+                      handleSave('posReceipt', { ...posReceipt, [item.key]: newVal })
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 自定义文字 */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.customText')}</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.customHeader')}</label>
+                <input
+                  type="text"
+                  value={posReceipt.headerCustomText || ''}
+                  onChange={(e) => setPosReceipt({ ...posReceipt, headerCustomText: e.target.value })}
+                  onBlur={() => handleSave('posReceipt', posReceipt)}
+                  className="input"
+                  placeholder={t('posSettings.customHeaderPlaceholder') || 'Custom header line'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.customFooter')}</label>
+                <input
+                  type="text"
+                  value={posReceipt.footerMessage || ''}
+                  onChange={(e) => setPosReceipt({ ...posReceipt, footerMessage: e.target.value })}
+                  onBlur={() => handleSave('posReceipt', posReceipt)}
+                  className="input"
+                  placeholder={t('posSettings.customFooterPlaceholder') || 'Custom footer line'}
                 />
               </div>
             </div>
@@ -1250,6 +1633,115 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
               }}
             />
           </div>
+
+          {/* Printer Type */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerType')}</label>
+            <select
+              value={hardwareSettings.printerType || 'escpos'}
+              onChange={(e) => {
+                setHardwareSettings({ ...hardwareSettings, printerType: e.target.value })
+                handleSave('hardwareSettings', { ...hardwareSettings, printerType: e.target.value })
+              }}
+              className="input"
+            >
+              <option value="escpos">ESC/POS</option>
+              <option value="pcl">PCL</option>
+            </select>
+          </div>
+
+          {/* Cash Drawer Pulse */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.cashDrawerPulse')}: {hardwareSettings.cashDrawerPulse || 100}ms</label>
+            <input
+              type="range"
+              min="50"
+              max="500"
+              step="10"
+              value={hardwareSettings.cashDrawerPulse || 100}
+              onChange={(e) => {
+                setHardwareSettings({ ...hardwareSettings, cashDrawerPulse: parseInt(e.target.value) })
+              }}
+              onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500 mt-1">{t('posSettings.cashDrawerPulseHint')}</p>
+          </div>
+
+          {/* Scanner Settings */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">{t('posSettings.scannerEnabled')}</label>
+              <Toggle
+                enabled={hardwareSettings.scannerEnabled ?? true}
+                onChange={() => {
+                  const newVal = !hardwareSettings.scannerEnabled
+                  setHardwareSettings({ ...hardwareSettings, scannerEnabled: newVal })
+                  handleSave('hardwareSettings', { ...hardwareSettings, scannerEnabled: newVal })
+                }}
+              />
+            </div>
+            {hardwareSettings.scannerEnabled !== false && (
+              <select
+                value={hardwareSettings.scannerType || 'usb'}
+                onChange={(e) => {
+                  setHardwareSettings({ ...hardwareSettings, scannerType: e.target.value })
+                  handleSave('hardwareSettings', { ...hardwareSettings, scannerType: e.target.value })
+                }}
+                className="input mt-2"
+              >
+                <option value="usb">USB Scanner</option>
+                <option value="serial">Serial Scanner</option>
+              </select>
+            )}
+          </div>
+
+          {/* Display Settings */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.displayBrightness')}: {hardwareSettings.displayBrightness || 80}%</label>
+            <input
+              type="range"
+              min="20"
+              max="100"
+              step="5"
+              value={hardwareSettings.displayBrightness || 80}
+              onChange={(e) => {
+                setHardwareSettings({ ...hardwareSettings, displayBrightness: parseInt(e.target.value) })
+              }}
+              onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Dual Screen */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div>
+              <span className="font-medium">{t('posSettings.dualScreenEnabled')}</span>
+              <p className="text-sm text-gray-500">{t('posSettings.dualScreenHint')}</p>
+            </div>
+            <Toggle
+              enabled={hardwareSettings.dualScreenEnabled || false}
+              onChange={() => {
+                const newVal = !hardwareSettings.dualScreenEnabled
+                setHardwareSettings({ ...hardwareSettings, dualScreenEnabled: newVal })
+                handleSave('hardwareSettings', { ...hardwareSettings, dualScreenEnabled: newVal })
+              }}
+            />
+          </div>
+
+          {hardwareSettings.dualScreenEnabled && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.adScreenImageUrl')}</label>
+              <input
+                type="text"
+                value={hardwareSettings.adScreenImageUrl || ''}
+                onChange={(e) => setHardwareSettings({ ...hardwareSettings, adScreenImageUrl: e.target.value })}
+                onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                className="input"
+                placeholder="https://example.com/ad-image.png"
+              />
+            </div>
+          )}
 
           {/* Cash Drawer Info */}
           <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">

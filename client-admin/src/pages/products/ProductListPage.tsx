@@ -301,6 +301,12 @@ export function ProductListPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        // Check if there are products in this category
+                        const productsInCategory = products.filter((p: any) => p.categoryId === cat.id)
+                        if (productsInCategory.length > 0) {
+                          alert(`${t('categories.hasProducts')} (${productsInCategory.length} ${t('categories.products')})`)
+                          return
+                        }
                         if (confirm(t('common.confirmDelete'))) {
                           deleteCategory.mutate(cat.id)
                         }

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 
-// 一级导航只有10个模块（费用已整合到财务管理，订单已整合到营收）
+// 一级导航只有10个模块
 const navItems = [
   { path: '/dashboard', label: 'nav.dashboard', icon: LayoutDashboard },
   { path: '/products', label: 'nav.products', icon: Package },

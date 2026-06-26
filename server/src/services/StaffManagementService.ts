@@ -1,5 +1,6 @@
 import prisma from '../config/database'
 import { subDays, startOfMonth, endOfMonth } from '../utils/dateUtils'
+import { getStaffConfig } from './StaffConfigService'
 
 // ==================== STAFF PERFORMANCE ====================
 
@@ -145,6 +146,16 @@ export async function generatePayroll(storeId: string, month: number, year: numb
     where: { storeId, status: 'active' }
   })
 
+  // Check if attendance bonus is enabled
+  const config = await getStaffConfig(storeId)
+  const attendanceBonusEnabled = config.attendanceBonus
+
+  // Get attendance rule for work days calculation
+  const attendanceRule = await prisma.attendanceRule.findFirst({
+    where: { storeId, isActive: true }
+  })
+  const workDaysPerMonth = 26 // Default working days per month
+
   const salaries: any[] = []
 
   for (const staff of staffList) {
@@ -157,8 +168,18 @@ export async function generatePayroll(storeId: string, month: number, year: numb
     })
 
     const workDays = attendances.filter(a => a.checkInTime).length
+
+    // Calculate late days based on rule or default
     const lateDays = attendances.filter(a => {
       if (!a.checkInTime) return false
+      if (attendanceRule) {
+        const [startHour, startMin] = attendanceRule.workStartTime.split(':').map(Number)
+        const gracePeriod = attendanceRule.gracePeriod || 0
+        const checkInTime = new Date(a.checkInTime)
+        const lateThreshold = startHour * 60 + startMin + gracePeriod
+        const checkInMinutes = checkInTime.getHours() * 60 + checkInTime.getMinutes()
+        return checkInMinutes > lateThreshold
+      }
       return new Date(a.checkInTime).getHours() >= 9
     }).length
 
@@ -183,8 +204,20 @@ export async function generatePayroll(storeId: string, month: number, year: numb
     const overtimePay = Math.round(overtimeHours * (baseSalary / 176) * 1.5)
 
     // Deductions
-    const lateDeduction = lateDays * 50000 // Rp 50,000 per late
-    const finalSalary = baseSalary + overtimePay - lateDeduction
+    let lateDeduction = 0
+    if (attendanceRule && attendanceRule.lateDeductionType === 'fixed' && attendanceRule.lateDeductionFixed) {
+      lateDeduction = lateDays * attendanceRule.lateDeductionFixed
+    } else {
+      lateDeduction = lateDays * 50000 // Default Rp 50,000 per late
+    }
+
+    // Attendance bonus: awarded if no late days and worked required days
+    let attendanceBonus = 0
+    if (attendanceBonusEnabled && lateDays === 0 && workDays >= workDaysPerMonth - 2) {
+      attendanceBonus = 200000 // Rp 200,000 perfect attendance bonus
+    }
+
+    const finalSalary = baseSalary + overtimePay + attendanceBonus - lateDeduction
 
     salaries.push({
       staffId: staff.id,

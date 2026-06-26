@@ -87,7 +87,7 @@ router.get('/templates', authenticate, async (req: AuthRequest, res) => {
 // GET /api/hygiene/templates/:id
 router.get('/templates/:id', authenticate, async (req: AuthRequest, res) => {
   try {
-    const template = await HygieneService.getTemplateById(req.params.id)
+    const template = await HygieneService.getTemplateById(req.params.id, req.user!.storeId)
     if (!template) return res.status(404).json({ code: 404, message: 'Template not found' })
     res.json({ code: 200, data: template })
   } catch (error: any) {
@@ -121,7 +121,7 @@ router.put('/templates/:id', authenticate, authorize('admin', 'manager'), async 
 // DELETE /api/hygiene/templates/:id
 router.delete('/templates/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    await HygieneService.deleteTemplate(req.params.id)
+    await HygieneService.deleteTemplate(req.params.id, req.user!.storeId)
     res.json({ code: 200, message: 'Template deleted' })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -184,7 +184,7 @@ router.get('/tasks/my', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// GET /api/hygiene/tasks/pending
+// GET /api/hygiene/tasks/pending - 获取待处理任务
 router.get('/tasks/pending', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
@@ -196,22 +196,64 @@ router.get('/tasks/pending', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// GET /api/hygiene/tasks/:id
-router.get('/tasks/:id', authenticate, async (req: AuthRequest, res) => {
+// GET /api/hygiene/tasks/overdue - 获取逾期任务
+router.get('/tasks/overdue', authenticate, async (req: AuthRequest, res) => {
   try {
-    const task = await HygieneService.getTaskById(req.params.id)
-    if (!task) return res.status(404).json({ code: 404, message: 'Task not found' })
-    res.json({ code: 200, data: task })
+    const storeId = req.user!.storeId
+    const tasks = await HygieneService.getOverdueTasks(storeId)
+    res.json({ code: 200, data: { list: tasks } })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
   }
 })
-router.get('/tasks/pending', authenticate, async (req: AuthRequest, res) => {
+
+// GET /api/hygiene/tasks/history/:staffId - 获取员工任务历史
+router.get('/tasks/history/:staffId', authenticate, async (req: AuthRequest, res) => {
   try {
+    const { page = '1', pageSize = '20' } = req.query
+    const pageNum = parseInt(page as string)
+    const pageSizeNum = parseInt(pageSize as string)
+    const result = await HygieneService.getStaffTaskHistory(
+      req.params.staffId,
+      req.user!.storeId,
+      pageNum,
+      pageSizeNum
+    )
+    res.json({ code: 200, data: result })
+  } catch (error: any) {
+    res.status(500).json({ code: 500, message: error.message })
+  }
+})
+
+// POST /api/hygiene/tasks/temporary - 创建临时任务
+router.post('/tasks/temporary', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const { name, areaCode, staffId, priority, description, dueTime, date } = req.body
     const storeId = req.user!.storeId
-    const { staffId } = req.query
-    const tasks = await HygieneService.getPendingTasks(storeId, { staffId: staffId as string })
-    res.json({ code: 200, data: { list: tasks } })
+    // 使用用户提供的日期或默认为今天
+    const taskDate = date || new Date().toISOString().split('T')[0]
+
+    const task = await HygieneService.createTemporaryTask(storeId, {
+      name,
+      areaCode,
+      staffId,
+      priority,
+      description,
+      dueTime,
+      date: taskDate,
+    })
+    res.status(201).json({ code: 201, data: task })
+  } catch (error: any) {
+    res.status(500).json({ code: 500, message: error.message })
+  }
+})
+
+// GET /api/hygiene/tasks/:id
+router.get('/tasks/:id', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const task = await HygieneService.getTaskById(req.params.id, req.user!.storeId)
+    if (!task) return res.status(404).json({ code: 404, message: 'Task not found' })
+    res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
   }
@@ -221,7 +263,8 @@ router.get('/tasks/pending', authenticate, async (req: AuthRequest, res) => {
 router.post('/tasks/generate', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { date } = req.body
-    const storeId = req.body.storeId || req.user!.storeId
+    // 安全修复：只使用当前用户的 storeId，不允许从请求体传入
+    const storeId = req.user!.storeId
     if (!date) return res.status(400).json({ code: 400, message: 'date required (YYYY-MM-DD)' })
 
     const count = await HygieneService.generateDailyTasks(storeId, date)
@@ -234,7 +277,7 @@ router.post('/tasks/generate', authenticate, authorize('admin', 'manager'), asyn
 // PUT /api/hygiene/tasks/:id/start - 开始执行任务
 router.put('/tasks/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
-    const task = await HygieneService.startTask(req.params.id, req.user!.staffId || '')
+    const task = await HygieneService.startTask(req.params.id, req.user!.staffId || '', req.user!.storeId)
     res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -244,13 +287,14 @@ router.put('/tasks/:id/start', authenticate, async (req: AuthRequest, res) => {
 // PUT /api/hygiene/tasks/:id/complete - 完成提交任务
 router.put('/tasks/:id/complete', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { photoUrl, signatureUrl, note, checklistResults } = req.body
+    const { photoUrl, signatureUrl, note, selfRating, checklistResults } = req.body
     // Get staff name from staffId
     const staffName = req.user!.staffId ? await getStaffName(req.user!.staffId) : 'Unknown'
-    const task = await HygieneService.completeTask(req.params.id, req.user!.staffId || '', staffName, {
+    const task = await HygieneService.completeTask(req.params.id, req.user!.staffId || '', staffName, req.user!.storeId, {
       photoUrl,
       signatureUrl,
       note,
+      selfRating,
       checklistResults,
     })
     res.json({ code: 200, data: task })
@@ -264,13 +308,13 @@ router.put('/tasks/:id/approve', authenticate, authorize('admin', 'manager'), as
   try {
     const { qualityScore, note, reject, rejectReason } = req.body
     const approverName = req.user!.staffId ? await getStaffName(req.user!.staffId) : 'Unknown'
-    const task = await HygieneService.approveTask(req.params.id, req.user!.staffId || '', approverName, {
+    const result = await HygieneService.approveTask(req.params.id, req.user!.staffId || '', approverName, req.user!.storeId, {
       qualityScore,
       note,
       reject,
       rejectReason,
     })
-    res.json({ code: 200, data: task })
+    res.json({ code: 200, data: result })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
   }
@@ -281,7 +325,7 @@ router.put('/tasks/:id/skip', authenticate, async (req: AuthRequest, res) => {
   try {
     const { reason } = req.body
     const staffName = req.user!.staffId ? await getStaffName(req.user!.staffId) : 'Unknown'
-    const task = await HygieneService.skipTask(req.params.id, req.user!.staffId || '', staffName, reason)
+    const task = await HygieneService.skipTask(req.params.id, req.user!.staffId || '', staffName, req.user!.storeId, reason)
     res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -293,7 +337,7 @@ router.put('/tasks/:id/issue', authenticate, async (req: AuthRequest, res) => {
   try {
     const { description, photoUrl } = req.body
     const staffName = req.user!.staffId ? await getStaffName(req.user!.staffId) : 'Unknown'
-    const task = await HygieneService.reportIssue(req.params.id, req.user!.staffId || '', staffName, {
+    const task = await HygieneService.reportIssue(req.params.id, req.user!.staffId || '', staffName, req.user!.storeId, {
       description,
       photoUrl,
     })
@@ -310,7 +354,7 @@ router.put('/tasks/:id/issue', authenticate, async (req: AuthRequest, res) => {
 // GET /api/hygiene/tasks/:id/logs
 router.get('/tasks/:id/logs', authenticate, async (req: AuthRequest, res) => {
   try {
-    const logs = await HygieneService.getTaskLogs(req.params.id)
+    const logs = await HygieneService.getTaskLogs(req.params.id, req.user!.storeId)
     res.json({ code: 200, data: { list: logs } })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })

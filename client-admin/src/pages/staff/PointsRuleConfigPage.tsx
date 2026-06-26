@@ -86,7 +86,7 @@ export function PointsRuleConfigPage() {
       }
     } catch (error) {
       console.error('Failed to save:', error)
-      alert('Failed to save')
+      alert(t('common.error'))
     } finally {
       setSaving(false)
     }

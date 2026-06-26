@@ -35,7 +35,7 @@ export function MaterialListPage() {
     enabled: showAlerts
   })
 
-  const materials = materialsData?.data?.list || []
+  const materials = materialsData?.data?.data?.list || []
   const alerts = alertsData?.data || []
 
   return (

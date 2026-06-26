@@ -8,7 +8,6 @@ import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  Package,
   Users,
   AlertTriangle,
   Loader2,
@@ -77,8 +76,6 @@ export function DashboardPage() {
       </div>
     )
   }
-
-  const lowStockItems = dashboard?.inventory?.lowStockItems || []
 
   return (
     <div>
@@ -207,7 +204,7 @@ export function DashboardPage() {
           )}
         </div>
 
-        {/* 库存预警 */}
+        {/* 库存预警 - 基于预测消耗 */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -215,23 +212,37 @@ export function DashboardPage() {
               {t('dashboard.lowStockAlert')}
             </h2>
             <button
-              onClick={() => navigate('/inventory')}
+              onClick={() => navigate('/inventory/stock-alerts')}
               className="text-sm text-primary hover:text-primary-hover font-medium"
             >
               {t('dashboard.viewAll')} →
             </button>
           </div>
-          {lowStockItems.length > 0 ? (
+          {dashboard?.inventory?.lowStockItems?.length > 0 ? (
             <div className="space-y-2">
-              {lowStockItems.slice(0, 5).map((item: any) => (
-                <div key={item.id} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
+              {dashboard.inventory.lowStockItems.map((item: any) => (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between p-2 rounded-lg ${
+                    item.urgency === 'critical' ? 'bg-red-50 border border-red-200' :
+                    item.urgency === 'warning' ? 'bg-orange-50 border border-orange-200' :
+                    'bg-gray-50'
+                  }`}
+                >
                   <div>
                     <span className="font-medium">{item.name}</span>
                     <span className="text-sm text-gray-500 ml-2">({item.unit})</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-error font-bold">{item.currentStock}</span>
-                    <span className="text-xs text-gray-400"> / {item.safetyStock} min</span>
+                    <span className={`font-bold ${
+                      item.urgency === 'critical' ? 'text-red-600' :
+                      item.urgency === 'warning' ? 'text-orange-600' : 'text-gray-600'
+                    }`}>
+                      {item.daysLeft} {t('bom.days') || 'days'}
+                    </span>
+                    <span className="text-xs text-gray-400 ml-1">
+                      ({item.currentStock} {item.unit})
+                    </span>
                   </div>
                 </div>
               ))}
@@ -241,6 +252,52 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ========== 消耗异常预警 ========== */}
+      {dashboard?.inventory?.consumptionAnomalies?.length > 0 && (
+        <div className="card border-orange-200 bg-orange-50/50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2 text-orange-700">
+              <AlertTriangle size={20} />
+              {t('dashboard.consumptionAnomaly') || '消耗异常预警'}
+            </h2>
+            <button
+              onClick={() => navigate('/inventory/consumption-analysis')}
+              className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+            >
+              {t('dashboard.viewAll')} →
+            </button>
+          </div>
+          <div className="space-y-2">
+            {dashboard.inventory.consumptionAnomalies.map((item: any) => (
+              <div
+                key={item.id}
+                className={`flex items-center justify-between p-3 rounded-lg ${
+                  item.status === 'critical' ? 'bg-red-100 border border-red-300' :
+                  item.status === 'warning' ? 'bg-yellow-100 border border-yellow-300' :
+                  'bg-green-50 border border-green-200'
+                }`}
+              >
+                <div>
+                  <span className="font-medium">{item.name}</span>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {t('dashboard.theoretical')} {item.theoretical?.toFixed(1)} {item.unit} vs{' '}
+                    {t('dashboard.actual')} {item.actual?.toFixed(1)} {item.unit}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`font-bold text-lg ${
+                    item.status === 'critical' ? 'text-red-600' :
+                    item.status === 'warning' ? 'text-orange-600' : 'text-green-600'
+                  }`}>
+                    {item.variance >= 0 ? '+' : ''}{item.variancePercent?.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ========== 员工 + 会员情况 ========== */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -267,12 +324,15 @@ export function DashboardPage() {
         </div>
 
         <div className="card flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-blue-100">
-            <Package size={24} className="text-info" />
+          <div className="p-3 rounded-xl bg-red-100">
+            <AlertTriangle size={24} className="text-red-500" />
           </div>
           <div>
             <p className="text-sm text-gray-500">{t('dashboard.lowStock')}</p>
-            <p className="text-2xl font-bold">{dashboard?.inventory?.lowStockCount || 0}</p>
+            <p className="text-2xl font-bold text-red-600">
+              {dashboard?.inventory?.criticalCount || 0}
+              <span className="text-sm text-gray-400 font-normal"> / {dashboard?.inventory?.warningCount || 0} {t('dashboard.warning') || 'warning'}</span>
+            </p>
           </div>
         </div>
       </div>

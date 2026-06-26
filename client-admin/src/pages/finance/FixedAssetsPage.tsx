@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { assetApi } from '../../services/api'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import { TrendingDown, Plus, Edit2, Trash2, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react'
+import { TrendingDown, Plus, Edit2, Trash2, RefreshCw, AlertCircle, CheckCircle, X } from 'lucide-react'
 
 interface FixedAsset {
   id: string
@@ -37,6 +37,13 @@ export function FixedAssetsPage() {
   const [activeTab, setActiveTab] = useState<'list' | 'schedule'>('list')
   const [showForm, setShowForm] = useState(false)
   const [editingAsset, setEditingAsset] = useState<FixedAsset | null>(null)
+  const [showDisposeModal, setShowDisposeModal] = useState(false)
+  const [disposeAsset, setDisposeAsset] = useState<FixedAsset | null>(null)
+  const [disposeData, setDisposeData] = useState({
+    saleValue: '',
+    disposalDate: new Date().toISOString().split('T')[0],
+    note: ''
+  })
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -137,6 +144,38 @@ export function FixedAssetsPage() {
       fetchAssets()
     } catch (error) {
       console.error('Failed to delete asset:', error)
+    }
+  }
+
+  const handleDispose = (asset: FixedAsset) => {
+    setDisposeAsset(asset)
+    setDisposeData({
+      saleValue: '',
+      disposalDate: new Date().toISOString().split('T')[0],
+      note: ''
+    })
+    setShowDisposeModal(true)
+  }
+
+  const submitDispose = async () => {
+    if (!disposeAsset) return
+    const saleValue = parseFloat(disposeData.saleValue.replace(/,/g, ''))
+    if (isNaN(saleValue) || saleValue < 0) {
+      alert(t('finance.invalidSaleValue'))
+      return
+    }
+    try {
+      await assetApi.dispose(disposeAsset.id, {
+        saleValue,
+        disposalDate: disposeData.disposalDate,
+        note: disposeData.note
+      })
+      setShowDisposeModal(false)
+      setDisposeAsset(null)
+      fetchAssets()
+      fetchSchedule()
+    } catch (error: any) {
+      alert(error.response?.data?.message || t('common.error'))
     }
   }
 
@@ -269,6 +308,15 @@ export function FixedAssetsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {asset.status === 'active' && (
+                          <button
+                            onClick={() => handleDispose(asset)}
+                            className="p-2 text-orange-400 hover:text-orange-600 rounded-lg hover:bg-orange-50"
+                            title={t('finance.dispose')}
+                          >
+                            <TrendingDown size={16} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEdit(asset)}
                           className="p-2 text-gray-400 hover:text-primary rounded-lg hover:bg-gray-100"
@@ -445,6 +493,89 @@ export function FixedAssetsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dispose Modal */}
+      {showDisposeModal && disposeAsset && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">{t('finance.disposeAsset')}</h3>
+              <button onClick={() => setShowDisposeModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="font-medium">{disposeAsset.name}</p>
+                <p className="text-sm text-gray-500">{t('finance.originalValue')}: {formatCurrency(disposeAsset.originalValue)}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('finance.saleValue')} *
+                </label>
+                <input
+                  type="text"
+                  value={disposeData.saleValue}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^\d]/g, '')
+                    if (raw === '') {
+                      setDisposeData({ ...disposeData, saleValue: '' })
+                      return
+                    }
+                    const num = parseInt(raw, 10)
+                    setDisposeData({ ...disposeData, saleValue: num.toLocaleString('id-ID') })
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('finance.disposalDate')} *
+                </label>
+                <input
+                  type="date"
+                  value={disposeData.disposalDate}
+                  onChange={e => setDisposeData({ ...disposeData, disposalDate: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('finance.note')}
+                </label>
+                <textarea
+                  value={disposeData.note}
+                  onChange={e => setDisposeData({ ...disposeData, note: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  rows={2}
+                  placeholder={t('finance.disposeNotePlaceholder')}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDisposeModal(false)}
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={submitDispose}
+                  className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                >
+                  {t('finance.dispose')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

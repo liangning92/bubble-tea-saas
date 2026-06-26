@@ -211,6 +211,22 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
       return res.status(404).json({ code: 404, message: 'Refund request not found' })
     }
 
+    // Validate refund amount does not exceed order total
+    if (request.amount > request.order.totalAmount) {
+      return res.status(400).json({
+        code: 400,
+        message: `Refund amount (${request.amount}) cannot exceed order total (${request.order.totalAmount})`
+      })
+    }
+
+    // Validate refund amount is positive
+    if (request.amount <= 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'Refund amount must be greater than 0'
+      })
+    }
+
     // Update refund request status
     await prisma.refundRequest.update({
       where: { id },

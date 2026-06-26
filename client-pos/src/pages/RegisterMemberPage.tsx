@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, CheckCircle, User, Mail, Phone, Calendar } from 'lucide-react'
+import { ArrowLeft, CheckCircle, User, Mail, Phone, Calendar, Gift } from 'lucide-react'
 import { useAuthStore } from '../stores/auth'
 import { posApi } from '../services/api'
 import { showToast } from '../components/ui'
@@ -15,7 +15,8 @@ export function RegisterMemberPage() {
     name: '',
     phone: '',
     email: '',
-    birthday: ''
+    birthday: '',
+    referredByPhone: ''
   })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -23,7 +24,7 @@ export function RegisterMemberPage() {
   // 输入弹窗状态
   const [inputModal, setInputModal] = useState<{
     isOpen: boolean
-    field: 'name' | 'phone' | 'email' | 'birthday'
+    field: 'name' | 'phone' | 'email' | 'birthday' | 'referredByPhone'
     title: string
     value: string
     placeholder: string
@@ -39,7 +40,7 @@ export function RegisterMemberPage() {
     required: false
   })
 
-  const openInput = (field: 'name' | 'phone' | 'email' | 'birthday', title: string, placeholder: string, inputMode: 'text' | 'email' | 'tel' = 'text', required = false) => {
+  const openInput = (field: 'name' | 'phone' | 'email' | 'birthday' | 'referredByPhone', title: string, placeholder: string, inputMode: 'text' | 'email' | 'tel' = 'text', required = false) => {
     setInputModal({
       isOpen: true,
       field,
@@ -181,6 +182,23 @@ export function RegisterMemberPage() {
               className="w-full p-4 text-lg rounded-xl border-2 border-gray-200 focus:border-pink-500 focus:outline-none bg-white"
             />
           </div>
+        </div>
+
+        {/* Referral Code Field - 裂变入口 */}
+        <div className="mb-6">
+          <label className="block text-base font-medium text-gray-700 mb-2">
+            {t('member.referralCode') || '推荐码 (可选)'}
+          </label>
+          <button
+            type="button"
+            onClick={() => openInput('referredByPhone', t('member.enterReferralCode') || '输入推荐码', t('member.referralCodePlaceholder') || '朋友推荐码', 'text', false)}
+            className="w-full p-4 text-lg rounded-xl border-2 border-gray-200 bg-white text-left flex items-center justify-between active:border-pink-500 transition-colors"
+          >
+            <span className={form.referredByPhone ? 'text-gray-900' : 'text-gray-400'}>
+              {form.referredByPhone || t('member.referralCodePlaceholder') || '有朋友推荐码？输入可获得奖励'}
+            </span>
+            <Gift size={20} className="text-gray-400" />
+          </button>
         </div>
       </form>
 

@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import prisma from '../config/database'
+import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 
 const router = Router()
 
-// 获取公告列表 (Admin)
-router.get('/', async (req, res) => {
+// 获取公告列表 (Admin/Manager)
+router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId } = req.query
     const where: any = { isActive: true }
@@ -21,7 +22,7 @@ router.get('/', async (req, res) => {
 })
 
 // 创建公告 (Admin)
-router.post('/', async (req, res) => {
+router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { storeId, title, content, type = 'info', priority = 0, startAt, endAt } = req.body
     if (!storeId || !title || !content) {
@@ -37,7 +38,7 @@ router.post('/', async (req, res) => {
 })
 
 // 删除公告 (Admin)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     await prisma.announcement.delete({ where: { id: req.params.id } })
     res.json({ code: 200, message: 'Deleted' })
@@ -47,7 +48,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 // 更新公告 (Admin)
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { title, content, type, priority, isActive, startAt, endAt } = req.body
     const announcement = await prisma.announcement.update({
@@ -68,8 +69,8 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// 获取当前生效公告 (POS轮询)
-router.get('/active', async (req, res) => {
+// 获取当前生效公告 (POS轮询 - 需要认证)
+router.get('/active', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId } = req.query
     if (!storeId) {
@@ -102,8 +103,8 @@ router.get('/active', async (req, res) => {
   }
 })
 
-// 获取卫生任务提醒 (推送到公告看板)
-router.get('/hygiene/pending', async (req, res) => {
+// 获取卫生任务提醒 (推送到公告看板 - 需要认证)
+router.get('/hygiene/pending', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId } = req.query
     if (!storeId) {

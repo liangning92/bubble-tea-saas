@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { hygieneApi } from '../../services/api'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, X } from 'lucide-react'
 
 // Default area options for new areas (user can still use these or enter custom)
 export const DEFAULT_AREA_OPTIONS = [
@@ -56,6 +56,10 @@ export function HygieneAreasPage() {
       queryClient.invalidateQueries({ queryKey: ['hygiene-areas'] })
       closeForm()
     },
+    onError: (error: any) => {
+      console.error('Create area error:', error)
+      alert(t('hygiene.createAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+    },
   })
 
   const updateMutation = useMutation({
@@ -64,6 +68,10 @@ export function HygieneAreasPage() {
       queryClient.invalidateQueries({ queryKey: ['hygiene-areas'] })
       closeForm()
     },
+    onError: (error: any) => {
+      console.error('Update area error:', error)
+      alert(t('hygiene.updateAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+    },
   })
 
   const deleteMutation = useMutation({
@@ -71,11 +79,15 @@ export function HygieneAreasPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hygiene-areas'] })
     },
+    onError: (error: any) => {
+      console.error('Delete area error:', error)
+      alert(t('hygiene.deleteAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+    },
   })
 
   // Merge: use API areas as source of truth
   // If no areas exist, show empty state for user to create
-  const areas: Area[] = areasData?.data?.list || []
+  const areas: Area[] = areasData?.data?.data?.list || []
 
   const openAddForm = () => {
     setEditingArea(null)
@@ -108,12 +120,17 @@ export function HygieneAreasPage() {
   }
 
   const handleSave = () => {
-    if (!form.code || !form.name) return
+    try {
+      if (!form.code || !form.name) return
 
-    if (editingArea?.id) {
-      updateMutation.mutate({ id: editingArea.id, data: form })
-    } else {
-      createMutation.mutate(form)
+      if (editingArea?.id) {
+        updateMutation.mutate({ id: editingArea.id, data: form })
+      } else {
+        createMutation.mutate(form)
+      }
+    } catch (err) {
+      console.error('Save error:', err)
+      alert(t('hygiene.saveAreaFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')))
     }
   }
 
@@ -172,7 +189,7 @@ export function HygieneAreasPage() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleDelete(area.id!)
+                      if (area.id) handleDelete(area.id)
                     }}
                     className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
                   >
@@ -192,12 +209,15 @@ export function HygieneAreasPage() {
 
       {/* Add/Edit Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
-            <div className="p-6 border-b">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closeForm}>
+          <div className="bg-white rounded-xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
                 {editingArea ? t('hygiene.editArea') : t('hygiene.addArea')}
               </h3>
+              <button onClick={closeForm} className="p-1 hover:bg-gray-100 rounded">
+                <X size={20} />
+              </button>
             </div>
 
             <div className="p-6 space-y-5">
@@ -254,7 +274,7 @@ export function HygieneAreasPage() {
                   value={form.name || ''}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="input w-full"
-                  placeholder="e.g., 备料区"
+                  placeholder={t('hygiene.areaNamePlaceholder') || 'e.g., Counter'}
                 />
               </div>
 
@@ -312,7 +332,7 @@ export function HygieneAreasPage() {
                   min="1"
                   max="99"
                 />
-                <p className="text-xs text-gray-500 mt-1">数字越小排序越靠前</p>
+                <p className="text-xs text-gray-500 mt-1">{t('hygiene.priorityHint')}</p>
               </div>
             </div>
 

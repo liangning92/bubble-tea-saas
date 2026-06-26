@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -8,7 +8,7 @@ import { Loader2, Search, Settings } from 'lucide-react'
 
 export function ChannelProductPricingPage() {
   const { t } = useTranslation()
-  const { user } = useAuthStore()
+  const { user: _user } = useAuthStore()
   const queryClient = useQueryClient()
   const [selectedChannel, setSelectedChannel] = useState<string>('')
   const [search, setSearch] = useState('')
@@ -19,7 +19,7 @@ export function ChannelProductPricingPage() {
     queryFn: () => channelApi.list()
   })
 
-  const channels = channelsData?.data?.list || []
+  const channels = channelsData?.data?.data?.list || []
 
   // Get products with channel prices
   const { data: productsData, isLoading } = useQuery({
@@ -28,7 +28,7 @@ export function ChannelProductPricingPage() {
     enabled: !!selectedChannel
   })
 
-  const products = productsData?.data?.list || []
+  const products = productsData?.data?.data?.list || []
 
   const updateMutation = useMutation({
     mutationFn: ({ productId, priceAdjustment, enabled }: any) =>

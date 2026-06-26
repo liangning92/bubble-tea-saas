@@ -28,16 +28,16 @@ const defaultForm = {
 }
 
 const ruleTypes = [
-  { value: 'stackable', label: '可叠加', desc: '两种优惠券可以同时使用' },
-  { value: 'exclusive', label: '互斥', desc: '两种优惠券不能同时使用' },
-  { value: 'replace', label: '替换', desc: '使用B券时自动替换A券' }
+  { value: 'stackable', labelKey: 'marketing.stackingRuleTypes.stackable', descKey: 'marketing.stackingRuleTypes.stackableDesc' },
+  { value: 'exclusive', labelKey: 'marketing.stackingRuleTypes.exclusive', descKey: 'marketing.stackingRuleTypes.exclusiveDesc' },
+  { value: 'replace', labelKey: 'marketing.stackingRuleTypes.replace', descKey: 'marketing.stackingRuleTypes.replaceDesc' }
 ]
 
 const couponTypes = [
-  { value: 'discount_percent', label: '百分比折扣' },
-  { value: 'discount_fixed', label: '固定金额折扣' },
-  { value: 'free_product', label: '赠品' },
-  { value: 'free_delivery', label: '免配送费' }
+  { value: 'discount_percent', labelKey: 'marketing.discount_percent' },
+  { value: 'discount_fixed', labelKey: 'marketing.discount_fixed' },
+  { value: 'free_product', labelKey: 'marketing.free_product' },
+  { value: 'free_delivery', labelKey: 'marketing.free_delivery' }
 ]
 
 export function StackingRulePage() {
@@ -119,11 +119,13 @@ export function StackingRulePage() {
   }
 
   const getRuleTypeLabel = (type: string) => {
-    return ruleTypes.find(r => r.value === type)?.label || type
+    const rule = ruleTypes.find(r => r.value === type)
+    return rule ? t(rule.labelKey) : type
   }
 
   const getRuleTypeDesc = (type: string) => {
-    return ruleTypes.find(r => r.value === type)?.desc || ''
+    const rule = ruleTypes.find(r => r.value === type)
+    return rule ? t(rule.descKey) : ''
   }
 
   const getRuleTypeColor = (type: string) => {
@@ -136,7 +138,8 @@ export function StackingRulePage() {
   }
 
   const getCouponTypeLabel = (type: string) => {
-    return couponTypes.find(c => c.value === type)?.label || type
+    const ct = couponTypes.find(c => c.value === type)
+    return ct ? t(ct.labelKey) : type
   }
 
   return (
@@ -256,7 +259,7 @@ export function StackingRulePage() {
                   className="input"
                 >
                   {ruleTypes.map(type => (
-                    <option key={type.value} value={type.value}>{type.label} - {type.desc}</option>
+                    <option key={type.value} value={type.value}>{t(type.labelKey)} - {t(type.descKey)}</option>
                   ))}
                 </select>
               </div>
@@ -271,7 +274,7 @@ export function StackingRulePage() {
                   >
                     <option value="">-</option>
                     {couponTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
+                      <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
                     ))}
                   </select>
                 </div>
@@ -284,7 +287,7 @@ export function StackingRulePage() {
                   >
                     <option value="">-</option>
                     {couponTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
+                      <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
                     ))}
                   </select>
                 </div>
@@ -353,7 +356,7 @@ export function StackingRulePage() {
                   className="input"
                 >
                   {ruleTypes.map(type => (
-                    <option key={type.value} value={type.value}>{type.label} - {type.desc}</option>
+                    <option key={type.value} value={type.value}>{t(type.labelKey)} - {t(type.descKey)}</option>
                   ))}
                 </select>
               </div>
@@ -368,7 +371,7 @@ export function StackingRulePage() {
                   >
                     <option value="">-</option>
                     {couponTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
+                      <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
                     ))}
                   </select>
                 </div>
@@ -381,7 +384,7 @@ export function StackingRulePage() {
                   >
                     <option value="">-</option>
                     {couponTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
+                      <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
                     ))}
                   </select>
                 </div>

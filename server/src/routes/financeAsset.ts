@@ -81,4 +81,33 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
   }
 })
 
+// POST /api/finance/assets/:id/dispose - Dispose asset with sale value
+router.post('/:id/dispose', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+  try {
+    const { saleValue, disposalDate, note } = req.body
+
+    if (saleValue === undefined || saleValue < 0) {
+      res.status(400).json({ code: 400, message: 'Sale value must be a non-negative number' })
+      return
+    }
+
+    const result = await FixedAssetService.disposeFixedAsset({
+      assetId: req.params.id,
+      saleValue,
+      disposalDate: disposalDate ? new Date(disposalDate) : new Date(),
+      note,
+      disposedBy: req.user!.staffId || req.user!.id
+    })
+
+    res.json({
+      code: 200,
+      message: 'Asset disposed successfully',
+      data: result
+    })
+  } catch (error: any) {
+    console.error('Dispose asset error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to dispose asset' })
+  }
+})
+
 export { router as financeAssetRouter }

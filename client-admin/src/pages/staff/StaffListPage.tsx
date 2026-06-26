@@ -29,7 +29,7 @@ export function StaffListPage() {
     queryFn: () => staffApi.attendanceToday()
   })
 
-  const staff = data?.data?.list || []
+  const staff = data?.data?.data?.list || []
   const todayRecord = todayAttendance?.data
 
   const getStatusBadge = (status: string) => {

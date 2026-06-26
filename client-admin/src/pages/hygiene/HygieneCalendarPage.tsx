@@ -37,7 +37,7 @@ export function HygieneCalendarPage() {
     queryFn: () => hygieneApi.statsRange(startDate, endDate)
   })
 
-  const statsByDate = (statsData?.data?.trend || []).reduce((acc: any, stat: any) => {
+  const statsByDate = (statsData?.data?.data?.trend || []).reduce((acc: any, stat: any) => {
     acc[stat.date] = stat
     return acc
   }, {})

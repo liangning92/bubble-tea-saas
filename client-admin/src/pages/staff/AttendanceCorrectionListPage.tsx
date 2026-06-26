@@ -68,10 +68,10 @@ export function AttendanceCorrectionListPage() {
         alert(t('staff.correctionApproved') || 'Correction approved')
         loadData()
       } else {
-        alert(data.message || 'Failed to approve')
+        alert(data.message || t('common.error'))
       }
     } catch (error) {
-      alert('Failed to approve')
+      alert(t('common.error'))
     } finally {
       setProcessing(null)
     }
@@ -95,10 +95,10 @@ export function AttendanceCorrectionListPage() {
         alert(t('staff.correctionRejected') || 'Correction rejected')
         loadData()
       } else {
-        alert(data.message || 'Failed to reject')
+        alert(data.message || t('common.error'))
       }
     } catch (error) {
-      alert('Failed to reject')
+      alert(t('common.error'))
     } finally {
       setProcessing(null)
     }

@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
-import { authenticate, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 
 const router = Router()
 
 // GET /api/reports/revenue
-router.get('/revenue', authenticate, async (req: AuthRequest, res) => {
+router.get('/revenue', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, startDate, endDate, groupBy } = req.query
 
@@ -14,9 +14,6 @@ router.get('/revenue', authenticate, async (req: AuthRequest, res) => {
       status: { in: ['completed', 'refunded'] }
     }
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     if (startDate || endDate) {
       where.createdAt = {}
@@ -95,7 +92,7 @@ router.get('/revenue', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/daily
-router.get('/daily', authenticate, async (req: AuthRequest, res) => {
+router.get('/daily', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, startDate, endDate } = req.query
 
@@ -103,9 +100,6 @@ router.get('/daily', authenticate, async (req: AuthRequest, res) => {
       status: 'completed'
     }
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     if (startDate || endDate) {
       where.createdAt = {}
@@ -144,7 +138,7 @@ router.get('/daily', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/hourly
-router.get('/hourly', authenticate, async (req: AuthRequest, res) => {
+router.get('/hourly', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, date } = req.query
 
@@ -156,9 +150,6 @@ router.get('/hourly', authenticate, async (req: AuthRequest, res) => {
       }
     }
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     const orders = await prisma.order.findMany({ where })
 
@@ -185,15 +176,12 @@ router.get('/hourly', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/inventory
-router.get('/inventory', authenticate, async (req: AuthRequest, res) => {
+router.get('/inventory', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId } = req.query
 
     const where: any = {}
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     const inventory = await prisma.inventory.findMany({
       where,
@@ -229,15 +217,12 @@ router.get('/inventory', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/staff
-router.get('/staff', authenticate, async (req: AuthRequest, res) => {
+router.get('/staff', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, month } = req.query
 
     const where: any = {}
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     const staff = await prisma.staff.findMany({
       where,
@@ -278,7 +263,7 @@ router.get('/staff', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/dashboard
-router.get('/dashboard', authenticate, async (req: AuthRequest, res) => {
+router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
 
@@ -463,15 +448,12 @@ router.get('/dashboard', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/channels - 获取所有渠道的统计数据
-router.get('/channels', authenticate, async (req: AuthRequest, res) => {
+router.get('/channels', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, startDate, endDate } = req.query
 
     const where: any = {}
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     const dateWhere: any = {}
     if (startDate || endDate) {
@@ -531,7 +513,7 @@ router.get('/channels', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/channels/:id - 获取单个渠道的详细统计
-router.get('/channels/:id', authenticate, async (req: AuthRequest, res) => {
+router.get('/channels/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { startDate, endDate } = req.query
@@ -600,15 +582,12 @@ router.get('/channels/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/reports/commissions - 获取佣金汇总
-router.get('/commissions', authenticate, async (req: AuthRequest, res) => {
+router.get('/commissions', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, startDate, endDate } = req.query
 
     const where: any = {}
     if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
-    }
 
     const dateWhere: any = {}
     if (startDate || endDate) {

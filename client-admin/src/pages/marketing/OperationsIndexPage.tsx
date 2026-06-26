@@ -6,12 +6,12 @@ export function OperationsIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'automation', label: t('marketing.automation'), path: '/marketing/automation' },
-    { key: 'notifications', label: t('marketing.notifications'), path: '/marketing/notifications' },
-    { key: 'analytics', label: t('marketing.analytics'), path: '/marketing/analytics' },
+    { key: 'automation', label: t('marketing.automation'), path: '/marketing/operations/automation' },
+    { key: 'notifications', label: t('marketing.notifications'), path: '/marketing/operations/notifications' },
+    { key: 'analytics', label: t('marketing.analytics'), path: '/marketing/operations/analytics' },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path))?.key || 'automation'
+  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'automation'
 
   return (
     <div className="flex flex-col h-full">

@@ -87,9 +87,9 @@ export async function markAsPaid(reimbursementId: string, paidBy: string) {
       data: {
         storeId: reimbursement.storeId,
         type: 'reimbursement',
-        category: reimbType?.name || '报销',
+        category: reimbType?.name || 'Ganti Rugi',
         amount: reimbursement.amount,
-        description: `员工报销: ${reimbursement.description}`,
+        description: `[Reimbursement] ${reimbursement.description}`,
         referenceId: reimbursementId,
         referenceType: 'reimbursement'
       }

@@ -52,7 +52,9 @@ export function AddonListPage() {
     queryFn: () => addonApi.list(user?.storeId || '')
   })
 
-  const addons: Addon[] = data?.data || []
+  // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
+  // So data?.data?.data is the actual array
+  const addons: Addon[] = data?.data?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: AddonFormData) =>

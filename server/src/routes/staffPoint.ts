@@ -359,4 +359,71 @@ router.get('/rewards/available', authenticate, async (req: AuthRequest, res) => 
   }
 })
 
+// ==================== Points Rule Config ====================
+
+import { z } from 'zod'
+
+const pointsRuleSchema = z.object({
+  perfectAttendancePoints: z.number().optional(),
+  goodPerformancePoints: z.number().optional(),
+  completedTrainingPoints: z.number().optional(),
+  holidayWorkPoints: z.number().optional(),
+  overtimePerHourPoints: z.number().optional(),
+  isActive: z.boolean().optional()
+})
+
+// GET /api/staff-points/rules - Get store points rule
+router.get('/rules', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    let rule = await prisma.staffPointRule.findUnique({ where: { storeId } })
+
+    // Create default if not exists
+    if (!rule) {
+      rule = await prisma.staffPointRule.create({
+        data: {
+          storeId,
+          perfectAttendancePoints: 50,
+          goodPerformancePoints: 100,
+          completedTrainingPoints: 30,
+          holidayWorkPoints: 20,
+          overtimePerHourPoints: 5,
+          isActive: true
+        }
+      })
+    }
+
+    res.json({ code: 200, data: rule, timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('Get points rule error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get points rule' })
+  }
+})
+
+// PUT /api/staff-points/rules - Update store points rule
+router.put('/rules', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const data = pointsRuleSchema.parse(req.body)
+
+    let rule = await prisma.staffPointRule.findUnique({ where: { storeId } })
+
+    if (rule) {
+      rule = await prisma.staffPointRule.update({
+        where: { storeId },
+        data
+      })
+    } else {
+      rule = await prisma.staffPointRule.create({
+        data: { storeId, ...data }
+      })
+    }
+
+    res.json({ code: 200, message: 'Points rule updated', data: rule, timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('Update points rule error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to update points rule' })
+  }
+})
+
 export { router as staffPointRouter }

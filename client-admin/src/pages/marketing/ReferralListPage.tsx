@@ -32,7 +32,7 @@ const defaultForm = {
   rewardeeRewardCouponId: '',
   minOrderAmount: 0,
   maxUsageCount: 0,
-  startDate: '',
+  startDate: new Date().toISOString().split('T')[0],
   endDate: '',
   status: 'active' as 'active' | 'inactive'
 }
@@ -55,7 +55,7 @@ export function ReferralListPage() {
     queryKey: ['coupons'],
     queryFn: () => marketingApi.coupons(storeId)
   })
-  const coupons = couponsData?.data?.list || []
+  const coupons = couponsData?.data?.data?.list || []
 
   const { data, isLoading } = useQuery({
     queryKey: ['referrals'],
@@ -95,7 +95,7 @@ export function ReferralListPage() {
     }
   })
 
-  const referrals: Referral[] = data?.data?.list || []
+  const referrals: Referral[] = data?.data?.data?.list || []
 
   const closeModal = () => {
     setShowCreate(false)

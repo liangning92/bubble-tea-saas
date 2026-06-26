@@ -106,3 +106,41 @@ export async function getBudgetSummary(storeId: string, year: number, month?: nu
     totalActual: Object.values(actuals).reduce((sum, v) => sum + v, 0)
   }
 }
+
+// Default budget categories
+const DEFAULT_BUDGET_CATEGORIES = [
+  { key: 'rent', label: 'Sewa', labelZh: '租金', labelEn: 'Rent', color: 'text-purple-600', bgColor: 'bg-purple-100' },
+  { key: 'utilities', label: 'Utilitas', labelZh: '水电费', labelEn: 'Utilities', color: 'text-blue-600', bgColor: 'bg-blue-100' },
+  { key: 'staff', label: 'Gaji Staff', labelZh: '员工工资', labelEn: 'Staff Salary', color: 'text-green-600', bgColor: 'bg-green-100' },
+  { key: 'marketing', label: 'Pemasaran', labelZh: '营销', labelEn: 'Marketing', color: 'text-orange-600', bgColor: 'bg-orange-100' },
+  { key: 'supplies', label: 'Perlengkapan', labelZh: '用品', labelEn: 'Supplies', color: 'text-pink-600', bgColor: 'bg-pink-100' },
+  { key: 'other', label: 'Lainnya', labelZh: '其他', labelEn: 'Other', color: 'text-gray-600', bgColor: 'bg-gray-100' }
+]
+
+// Get budget categories (from Config or defaults)
+export async function getBudgetCategories(storeId: string) {
+  try {
+    const config = await prisma.config.findUnique({
+      where: { storeId_key: { storeId, key: 'finance.budgetCategories' } }
+    })
+    if (config && config.value) {
+      return JSON.parse(config.value)
+    }
+  } catch {}
+  return DEFAULT_BUDGET_CATEGORIES
+}
+
+// Save budget categories to Config
+export async function saveBudgetCategories(storeId: string, categories: any[]) {
+  await prisma.config.upsert({
+    where: { storeId_key: { storeId, key: 'finance.budgetCategories' } },
+    update: { value: JSON.stringify(categories) },
+    create: {
+      storeId,
+      key: 'finance.budgetCategories',
+      value: JSON.stringify(categories),
+      category: 'finance'
+    }
+  })
+  return categories
+}

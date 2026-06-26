@@ -151,7 +151,7 @@ export function AttendanceCorrectionPage() {
                     type="time"
                     value={formData.originalCheckIn}
                     onChange={(e) => setFormData({ ...formData, originalCheckIn: e.target.value })}
-                    placeholder="09:00"
+                    placeholder={t('attendance.timePlaceholder')}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   />
                 </div>
@@ -163,7 +163,7 @@ export function AttendanceCorrectionPage() {
                     type="time"
                     value={formData.originalCheckOut}
                     onChange={(e) => setFormData({ ...formData, originalCheckOut: e.target.value })}
-                    placeholder="18:00"
+                    placeholder={t('attendance.timePlaceholder')}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   />
                 </div>
@@ -178,7 +178,7 @@ export function AttendanceCorrectionPage() {
                     type="time"
                     value={formData.correctCheckIn}
                     onChange={(e) => setFormData({ ...formData, correctCheckIn: e.target.value })}
-                    placeholder="09:00"
+                    placeholder={t('attendance.timePlaceholder')}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   />
                 </div>
@@ -190,7 +190,7 @@ export function AttendanceCorrectionPage() {
                     type="time"
                     value={formData.correctCheckOut}
                     onChange={(e) => setFormData({ ...formData, correctCheckOut: e.target.value })}
-                    placeholder="18:00"
+                    placeholder={t('attendance.timePlaceholder')}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   />
                 </div>

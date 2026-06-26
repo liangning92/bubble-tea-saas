@@ -38,7 +38,7 @@ export function CampaignCategoryListPage() {
     queryFn: () => marketingApi.campaignCategories()
   })
 
-  const categories: Category[] = data?.data?.list || []
+  const categories: Category[] = data?.data?.data?.list || []
 
   // Create mutation
   const createMutation = useMutation({

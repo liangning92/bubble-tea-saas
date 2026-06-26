@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 
 export function CouponEditPage() {
@@ -10,6 +11,7 @@ export function CouponEditPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
   const isEdit = !!id
 
   const [form, setForm] = useState({
@@ -21,7 +23,8 @@ export function CouponEditPage() {
     validFrom: '',
     validUntil: '',
     usageLimit: 0,
-    status: 'active'
+    status: 'active',
+    storeId: user?.storeId || ''
   })
 
   const { data, isLoading } = useQuery({
@@ -32,7 +35,7 @@ export function CouponEditPage() {
 
   useEffect(() => {
     if (data?.data) {
-      const c = data.data
+      const c = data.data as any
       setForm({
         code: c.code || '',
         type: c.type || 'discount_percent',
@@ -42,7 +45,8 @@ export function CouponEditPage() {
         validFrom: c.validFrom ? c.validFrom.split('T')[0] : '',
         validUntil: c.validUntil ? c.validUntil.split('T')[0] : '',
         usageLimit: c.usageLimit || 0,
-        status: c.status || 'active'
+        status: c.status || 'active',
+        storeId: c.storeId || user?.storeId || ''
       })
     }
   }, [data])
@@ -60,7 +64,9 @@ export function CouponEditPage() {
 
   const handleSubmit = () => {
     if (!form.code || !form.value || !form.validFrom || !form.validUntil) return
-    saveMutation.mutate(form)
+    // Ensure storeId is set for new coupons
+    const dataToSave = isEdit ? form : { ...form, storeId: user?.storeId }
+    saveMutation.mutate(dataToSave)
   }
 
   if (isEdit && isLoading) {

@@ -72,18 +72,18 @@ export function RegisterPage() {
     setError('')
 
     try {
-      // Create store first
-      let storeId = ''
-      try {
-        const storeResponse = await storeApi.create({
-          name: formData.storeName || formData.name + "'s Store"
-        })
-        storeId = storeResponse.data?.data?.id || ''
-      } catch (storeErr) {
-        console.warn('Store creation failed, continuing without store:', storeErr)
+      // Step 1: Create store (required)
+      const storeResponse = await storeApi.create({
+        name: formData.storeName || formData.name + "'s Store"
+      })
+
+      if (!storeResponse.data?.data?.id) {
+        throw new Error('Failed to create store')
       }
 
-      // Register user
+      const storeId = storeResponse.data.data.id
+
+      // Step 2: Register user with store
       const response = await authApi.register({
         phone: formData.phone,
         password: formData.password,
@@ -98,7 +98,8 @@ export function RegisterPage() {
         setError(response.data?.message || t('auth.registerFailed'))
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.registerFailed'))
+      const errorMessage = err.response?.data?.message || err.message || t('auth.registerFailed')
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -212,7 +213,7 @@ export function RegisterPage() {
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
-                      placeholder="081234567890"
+                      placeholder={t('auth.phonePlaceholder')}
                       className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:border-primary focus:outline-none transition-colors"
                       required
                     />
@@ -231,7 +232,7 @@ export function RegisterPage() {
                       name="password"
                       value={formData.password}
                       onChange={handleChange}
-                      placeholder="••••••••"
+                      placeholder={t('auth.passwordPlaceholder')}
                       className="w-full pl-12 pr-12 py-4 rounded-xl border-2 border-gray-200 focus:border-primary focus:outline-none transition-colors"
                       required
                     />
@@ -257,7 +258,7 @@ export function RegisterPage() {
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleChange}
-                      placeholder="••••••••"
+                      placeholder={t('auth.passwordPlaceholder')}
                       className="w-full pl-12 pr-12 py-4 rounded-xl border-2 border-gray-200 focus:border-primary focus:outline-none transition-colors"
                       required
                     />

@@ -10,7 +10,7 @@ export function MembersIndexPage() {
     { key: 'tier-benefits', label: t('marketing.tierBenefits'), path: '/marketing/tier-benefits' },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path))?.key || 'members'
+  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'members'
 
   return (
     <div className="flex flex-col h-full">

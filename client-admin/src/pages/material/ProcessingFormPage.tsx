@@ -59,7 +59,7 @@ export function ProcessingFormPage() {
     onSuccess: () => navigate('/inventory/process')
   })
 
-  const materials = materialsData?.data?.list || []
+  const materials = materialsData?.data?.data?.list || []
 
   const addInput = () => {
     setForm({ ...form, inputs: [...form.inputs, { inventoryId: '', quantity: 0 }] })

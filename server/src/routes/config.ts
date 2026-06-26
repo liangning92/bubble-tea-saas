@@ -3,6 +3,7 @@ import { z } from 'zod'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
+import { getStaffConfig, saveStaffConfig, DEFAULT_STAFF_CONFIG } from '../services/StaffConfigService'
 
 const router = Router()
 
@@ -45,6 +46,47 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Get configs error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get configs' })
+  }
+})
+
+// ==================== STAFF FEATURE CONFIG ====================
+// NOTE: These routes MUST be before /:storeId/:key to avoid being matched by that pattern
+
+// GET /api/config/staff/features
+router.get('/staff/features', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const config = await getStaffConfig(storeId)
+
+    res.json({
+      code: 200,
+      data: config,
+      defaults: DEFAULT_STAFF_CONFIG,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get staff features error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get staff features' })
+  }
+})
+
+// PUT /api/config/staff/features
+router.put('/staff/features', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const features = req.body
+
+    const config = await saveStaffConfig(storeId, features)
+
+    res.json({
+      code: 200,
+      message: 'Staff features updated',
+      data: config,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Save staff features error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to save staff features' })
   }
 })
 
@@ -157,6 +199,7 @@ router.delete('/:storeId/:key', authenticate, authorize('admin'), async (req: Au
     res.status(500).json({ code: 500, message: 'Failed to delete config' })
   }
 })
+
 
 // Default configs for POS
 const defaultPOSConfigs = {

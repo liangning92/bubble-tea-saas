@@ -11,12 +11,13 @@ export function StaffFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  useAuthStore()
+  const { user } = useAuthStore()
   const isEdit = !!id
-
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    password: '',
+    role: 'staff',
     position: '',
     email: '',
     address: '',
@@ -74,6 +75,8 @@ export function StaffFormPage() {
       setForm({
         name: s.name || '',
         phone: s.phone || s.user?.phone || '',
+        password: '', // Password not shown in edit mode
+        role: s.user?.role || 'staff',
         position: s.position || '',
         email: s.email || '',
         address: s.address || '',
@@ -91,10 +94,18 @@ export function StaffFormPage() {
   }, [staffData])
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => staffApi.create(data),
+    mutationFn: (data: any) => {
+      console.log('Creating staff with data:', data)
+      return staffApi.create(data)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff'] })
       navigate('/staff')
+    },
+    onError: (error: any) => {
+      console.error('Create staff error:', error)
+      console.error('Error response:', error?.response?.data)
+      alert(error?.response?.data?.message || error.message || 'Failed to create staff')
     }
   })
 
@@ -108,11 +119,35 @@ export function StaffFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('=== FORM SUBMIT ===')
+    console.log('form:', form)
+    console.log('user:', user)
+    console.log('user?.storeId:', user?.storeId)
+
     const submitData: any = { ...form }
+    // Add storeId from current user
+    submitData.storeId = user?.storeId
+
+    console.log('submitData before processing:', submitData)
+
     // Convert empty strings to appropriate values
     if (submitData.hourlyRate === '') submitData.hourlyRate = undefined
     if (submitData.weeklyHours === '') submitData.weeklyHours = undefined
     if (submitData.hireDate === '') submitData.hireDate = undefined
+    if (submitData.password === '') submitData.password = undefined
+
+    console.log('submitData after processing:', submitData)
+
+    // Validation for new staff
+    if (!isEdit && !submitData.password) {
+      alert(t('staff.passwordRequired') || 'Password is required')
+      return
+    }
+
+    if (!submitData.storeId) {
+      alert('Store ID is missing. Please login again.')
+      return
+    }
 
     if (isEdit) updateMutation.mutate(submitData)
     else createMutation.mutate(submitData)
@@ -151,6 +186,36 @@ export function StaffFormPage() {
               />
             </div>
           </div>
+
+          {/* Password field - only for new staff */}
+          {!isEdit && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.password')} *</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="input"
+                  required
+                  minLength={6}
+                  placeholder={t('staff.passwordPlaceholder') || 'Minimum 6 characters'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.systemRole') || 'System Role'}</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  className="input"
+                >
+                  <option value="staff">{t('staff.staff') || 'Staff'}</option>
+                  <option value="cashier">{t('staff.cashier') || 'Cashier'}</option>
+                  <option value="manager">{t('staff.manager') || 'Manager'}</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -15,6 +15,8 @@ import { InventoryIndexPage } from './pages/inventory/InventoryIndexPage'
 import { InventoryPage } from './pages/inventory/InventoryPage'
 import { StockLogPage } from './pages/inventory/StockLogPage'
 import { StockAlertsPage } from './pages/inventory/StockAlertsPage'
+import { StockAlertConfigPage } from './pages/inventory/StockAlertConfigPage'
+import { InventoryCountPage } from './pages/inventory/InventoryCountPage'
 import { StaffIndexPage } from './pages/staff/StaffIndexPage'
 import { StaffListPage } from './pages/staff/StaffListPage'
 import { StaffFormPage } from './pages/staff/StaffFormPage'
@@ -168,6 +170,8 @@ function App() {
           <Route path="process/new" element={<ProcessingFormPage />} />
           <Route path="process/:id/edit" element={<ProcessingFormPage />} />
           <Route path="alerts" element={<StockAlertsPage />} />
+          <Route path="alert-config" element={<StockAlertConfigPage />} />
+          <Route path="count" element={<InventoryCountPage />} />
           <Route path="restock" element={<RestockSuggestionPage />} />
           <Route path="suppliers" element={<SupplierListPage />} />
         </Route>
@@ -184,6 +188,9 @@ function App() {
           {/* 1. 员工档案 */}
           <Route index element={<StaffListPage />} />
           <Route path="new" element={<StaffFormPage />} />
+          {/* Specific routes before catch-all :id to avoid /deposit being matched as employee id */}
+          <Route path="deposit" element={<Navigate to="/staff/salary/deposit" replace />} />
+          {/* Catch-all employee id routes */}
           <Route path=":id" element={<StaffDetailPage />} />
           <Route path=":id/edit" element={<StaffFormPage />} />
 

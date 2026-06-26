@@ -34,7 +34,18 @@ export function AutomationRulePage() {
     queryFn: () => marketingApi.automationRules(storeId)
   })
 
-  const rules: AutomationRule[] = data?.data || []
+  // Handle different API response structures
+  const rawData = data?.data
+  let rules: AutomationRule[] = []
+  if (Array.isArray(rawData)) {
+    rules = rawData
+  } else if (rawData?.list && Array.isArray(rawData.list)) {
+    rules = rawData.list
+  } else if (typeof rawData === 'object' && rawData !== null) {
+    // Try to extract array values
+    rules = Object.values(rawData).filter(v => Array.isArray(v))[0] || []
+  }
+  console.log('Automation rules raw:', rawData, 'parsed:', rules)
 
   const filteredRules = rules.filter(rule => {
     if (filter === 'all') return true
@@ -228,7 +239,7 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
     queryKey: ['coupons', storeId],
     queryFn: () => marketingApi.coupons(storeId)
   })
-  const coupons = couponsData?.data?.list || []
+  const coupons = couponsData?.data?.data?.list || []
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -237,19 +248,22 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
       messageTemplateId: form.messageTemplateId || undefined,
       channelType: form.channelType
     }
-    onSubmit.mutate({
-      id: rule?.id,
-      data: {
-        storeId,
-        name: form.name,
-        type: form.type,
-        triggerType: form.triggerType,
-        startDate: form.startDate ? new Date(form.startDate).toISOString() : new Date().toISOString(),
-        endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
-        status: form.status,
-        actions: JSON.stringify(actions)
-      }
-    })
+    const data = {
+      storeId,
+      name: form.name,
+      type: form.type,
+      triggerType: form.triggerType,
+      startDate: form.startDate ? new Date(form.startDate).toISOString() : new Date().toISOString(),
+      endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
+      status: form.status,
+      actions: JSON.stringify(actions)
+    }
+    // For create (rule is null), pass just data; for update, pass { id, data }
+    if (rule?.id) {
+      onSubmit.mutate({ id: rule.id, data })
+    } else {
+      onSubmit.mutate(data)
+    }
   }
 
   return (

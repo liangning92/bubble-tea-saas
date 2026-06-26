@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { revenueApi } from '../../services/api'
+import { revenueApi, configApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
 import { TrendingUp, TrendingDown, ShoppingBag, Bike, Store, Utensils, CreditCard, Calendar } from 'lucide-react'
 
@@ -61,6 +62,7 @@ type Period = 'today' | 'week' | 'month' | 'custom'
 
 export function RevenuePage() {
   const { t } = useTranslation()
+  const { user } = useAuthStore()
   const [channels, setChannels] = useState<ChannelData[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [period, setPeriod] = useState<Period>('today')
@@ -71,10 +73,35 @@ export function RevenuePage() {
   const periodRef = useRef(period)
   const customDateRangeRef = useRef(customDateRange)
 
+  // Load user preference for default period
   useEffect(() => {
-    periodRef.current = period
-    customDateRangeRef.current = customDateRange
-  }, [period, customDateRange])
+    const loadPreference = async () => {
+      try {
+        const res = await configApi.get(user?.storeId || '')
+        // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
+        const configs = res.data?.data?.data || []
+        const pref = configs.find((c: any) => c.key === 'revenue.defaultPeriod')
+        if (pref) {
+          setPeriod(pref.value as Period)
+          periodRef.current = pref.value as Period
+        }
+      } catch (e) {
+        console.error('Failed to load preference:', e)
+      }
+    }
+    loadPreference()
+  }, [user])
+
+  // Save preference when period changes
+  const handlePeriodChange = async (newPeriod: Period) => {
+    setPeriod(newPeriod)
+    periodRef.current = newPeriod
+    try {
+      await configApi.set(user?.storeId || '', 'revenue.defaultPeriod', newPeriod, 'finance')
+    } catch (e) {
+      console.error('Failed to save preference:', e)
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -241,7 +268,7 @@ export function RevenuePage() {
       <div className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setPeriod('today')}
+            onClick={() => handlePeriodChange('today')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${
               period === 'today'
                 ? 'bg-primary text-white'
@@ -251,7 +278,7 @@ export function RevenuePage() {
             {t('finance.today')}
           </button>
           <button
-            onClick={() => setPeriod('week')}
+            onClick={() => handlePeriodChange('week')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${
               period === 'week'
                 ? 'bg-primary text-white'
@@ -261,7 +288,7 @@ export function RevenuePage() {
             {t('finance.thisWeek')}
           </button>
           <button
-            onClick={() => setPeriod('month')}
+            onClick={() => handlePeriodChange('month')}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${
               period === 'month'
                 ? 'bg-primary text-white'
@@ -272,7 +299,7 @@ export function RevenuePage() {
           </button>
           <div className="h-6 w-px bg-gray-300 mx-1" />
           <button
-            onClick={() => setPeriod('custom')}
+            onClick={() => handlePeriodChange('custom')}
             className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 ${
               period === 'custom'
                 ? 'bg-primary text-white'

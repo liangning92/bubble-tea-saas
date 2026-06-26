@@ -56,6 +56,7 @@ export interface RevenueSummary {
   grossMargin: number
   ppnCollected: number
   ppnPaid: number
+  ppnRefunded: number  // PPN refunded due to partial/total refunds
   netRevenue: number
   totalRefunded: number
 }
@@ -107,7 +108,12 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
   // PPN based on configured rate
   const ppnCollected = Math.round(totalRevenue * ppnRate)
   const ppnPaid = Math.round(totalCost * ppnRate)
-  const netRevenue = totalRevenue + ppnCollected - ppnPaid
+
+  // Calculate PPN refund proportionally - when orders are refunded, PPN should also be refunded
+  // PPN is part of the order total, so refund ratio applies
+  const ppnRefunded = Math.round(totalRefunded * ppnRate)
+
+  const netRevenue = totalRevenue + ppnCollected - ppnPaid - ppnRefunded
 
   return {
     totalRevenue,
@@ -118,6 +124,7 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
     grossMargin,
     ppnCollected,
     ppnPaid,
+    ppnRefunded,
     netRevenue,
     totalRefunded
   }
@@ -384,7 +391,7 @@ export async function getTaxReport(storeId: string, month: number, year: number)
   const startDate = startOfMonth(new Date(year, month - 1))
   const endDate = endOfMonth(new Date(year, month - 1))
 
-  const [orders, ppnRate, taxableRatio] = await Promise.all([
+  const [orders, ppnRate, taxableRatio, refunds] = await Promise.all([
     prisma.order.findMany({
       where: {
         storeId,
@@ -393,7 +400,15 @@ export async function getTaxReport(storeId: string, month: number, year: number)
       }
     }),
     getPpnRate(storeId),
-    getTaxableRatio(storeId)
+    getTaxableRatio(storeId),
+    // Get approved refunds for this period to calculate PPN refund
+    prisma.refundRequest.findMany({
+      where: {
+        status: 'approved',
+        order: { storeId },
+        approvedAt: { gte: startDate, lte: endDate }
+      }
+    })
   ])
 
   const discountAmount = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0)
@@ -408,6 +423,10 @@ export async function getTaxReport(storeId: string, month: number, year: number)
   const taxableBase = Math.round(rawTaxableBase * taxableRatio / 100)
   const ppnCollected = Math.round(taxableBase * ppnRate)
 
+  // Calculate total refunded amount and proportional PPN refund
+  const totalRefunded = refunds.reduce((sum, r) => sum + (r.amount || 0), 0)
+  const ppnRefunded = Math.round(totalRefunded * ppnRate)
+
   // Group by payment method for PPH reporting
   const byPaymentMethod: Record<string, number> = {}
   for (const order of orders) {
@@ -417,15 +436,44 @@ export async function getTaxReport(storeId: string, month: number, year: number)
     byPaymentMethod[order.paymentMethod] += order.finalAmount
   }
 
-  // PPH (Pajak Penghasilan) calculation placeholder
-  // TODO: Implement PPH 21 (employee income tax), PPH 23 (service providers), PPH 25 (monthly)
-  // PPH rates: PPH 21 = 5% (for income up to 60M), 15% (60M-250M), 25% (250M-500M), 30% (>500M)
-  // This requires employee salary data and supplier payment data to compute accurately
-  const pphPlaceholder = {
-    note: 'PPH calculation requires employee salary and supplier payment data integration',
-    pph21: 0,  // Employee income tax
-    pph23: 0,  // Contractor/service provider tax
-    pph25: 0   // Monthly income tax installment
+  // PPH (Pajak Penghasilan) calculation structure
+  // PPH rates (Indonesian tax law):
+  // - PPH 21 (employee income tax): 5% (income up to 60M), 15% (60M-250M), 25% (250M-500M), 30% (>500M)
+  // - PPH 23 (contractor/service provider): 2% on gross income
+  // - PPH 25 (monthly installment): Based on annual tax estimate / 12
+  //
+  // DATA REQUIREMENTS:
+  // - PPH 21: Requires Salary model with employeeId, grossSalary, pph21Withheld per period
+  // - PPH 23: Requires SupplierPayment model with amount, pph23Withheld per payment
+  // - PPH 25: Requires monthly salary payments integrated with pph21 calculation
+  //
+  // Current implementation returns structure with data requirements documented.
+  // Full implementation requires:
+  // 1. Salary table with pph21 field (already exists via Salary model)
+  // 2. Supplier payment records linked to finance
+  // 3. Monthly tax installment calculation
+  const pphData = {
+    status: 'requires_integration',
+    note: 'PPH calculation requires Salary and SupplierPayment data integration',
+    // PPH 21 - Employee income tax (withheld from salary)
+    pph21: {
+      amount: 0,
+      note: 'Sum of PPH 21 withheld from employee salaries in period',
+      dataRequired: ['Salary.pph21Withheld', 'Staff data']
+    },
+    // PPH 23 - Service provider tax (2% on contractor payments)
+    pph23: {
+      amount: 0,
+      rate: 0.02,
+      note: '2% of gross payments to service providers/contractors',
+      dataRequired: ['SupplierPayment.pph23Withheld', 'Contractor invoices']
+    },
+    // PPH 25 - Monthly income tax installment
+    pph25: {
+      amount: 0,
+      note: 'Monthly tax installment based on annual estimate',
+      dataRequired: ['Annual tax estimate / 12']
+    }
   }
 
   return {
@@ -437,10 +485,12 @@ export async function getTaxReport(storeId: string, month: number, year: number)
     rawTaxableBase,  // Before ratio adjustment
     taxableRatio,     // User-configured ratio (0-100%)
     ppnCollected,
+    ppnRefunded,      // PPN refunded due to partial/total refunds
     ppnRate,
+    totalRefunded,    // Total refund amount for the period
     revenueByPaymentMethod: byPaymentMethod,
     orderCount: orders.length,
-    pph: pphPlaceholder
+    pph: pphData
   }
 }
 

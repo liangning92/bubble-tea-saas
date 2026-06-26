@@ -47,6 +47,7 @@
   "devDependencies": {
     "electron": "^33.4.0",
     "electron-builder": "^26.0.12",
+    "playwright": "^1.61.0",
     "typescript": "^5.8.3",
     "vercel": "^54.14.0"
   }

@@ -9,7 +9,7 @@ import { format, subDays } from 'date-fns'
 
 export function ChannelCommissionPage() {
   const { t } = useTranslation()
-  const { user } = useAuthStore()
+  const { user: _user } = useAuthStore()
   const [dateRange, setDateRange] = useState({
     startDate: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
     endDate: format(new Date(), 'yyyy-MM-dd')

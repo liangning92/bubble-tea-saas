@@ -67,10 +67,10 @@ export function OvertimeRequestListPage() {
         alert(t('staff.overtimeApproved') || 'Overtime request approved')
         loadData()
       } else {
-        alert(data.message || 'Failed to approve')
+        alert(data.message || t('common.error'))
       }
     } catch (error) {
-      alert('Failed to approve')
+      alert(t('common.error'))
     } finally {
       setProcessing(null)
     }
@@ -94,10 +94,10 @@ export function OvertimeRequestListPage() {
         alert(t('staff.overtimeRejected') || 'Overtime request rejected')
         loadData()
       } else {
-        alert(data.message || 'Failed to reject')
+        alert(data.message || t('common.error'))
       }
     } catch (error) {
-      alert('Failed to reject')
+      alert(t('common.error'))
     } finally {
       setProcessing(null)
     }

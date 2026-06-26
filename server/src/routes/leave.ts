@@ -126,6 +126,24 @@ router.get('/balance', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// GET /api/leave/balance/:staffId - Admin/Manager view staff member's leave balance
+router.get('/balance/:staffId', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const { staffId } = req.params
+    const year = parseInt(req.query.year as string) || new Date().getFullYear()
+    const balance = await LeaveService.getLeaveBalance(staffId, year)
+
+    res.json({
+      code: 200,
+      data: balance,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error: any) {
+    console.error('Get staff leave balance error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to get leave balance' })
+  }
+})
+
 // PUT /api/leave/cancel/:id - Cancel my leave application
 router.put('/cancel/:id', authenticate, async (req: AuthRequest, res) => {
   try {

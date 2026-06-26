@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { hygieneApi, staffApi } from '../../services/api'
-import { Plus, Edit2, Trash2, Loader2, CheckCircle, Copy } from 'lucide-react'
+import { Plus, Edit2, Trash2, Loader2, CheckCircle, Copy, X } from 'lucide-react'
 
 const AREAS = [
   { value: 'counter', label: 'hygiene.counter' },
@@ -55,6 +55,10 @@ export function HygieneTemplateListPage() {
       setShowSuccess(true)
       setDeleteId(null)
       setTimeout(() => setShowSuccess(false), 2000)
+    },
+    onError: (error: any) => {
+      console.error('Delete template error:', error)
+      alert(t('hygiene.deleteTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     }
   })
 
@@ -62,11 +66,15 @@ export function HygieneTemplateListPage() {
     mutationFn: (id: string) => hygieneApi.duplicateTemplate(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hygiene-templates'] })
+    },
+    onError: (error: any) => {
+      console.error('Duplicate template error:', error)
+      alert(t('hygiene.duplicateTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     }
   })
 
-  const templates = templatesData?.data?.list || []
-  const staffList = staffData?.data?.list || []
+  const templates = templatesData?.data?.data?.list || []
+  const staffList = staffData?.data?.data?.list || []
 
   const getStaffName = (staffId?: string) => {
     if (!staffId) return '-'
@@ -191,9 +199,9 @@ export function HygieneTemplateListPage() {
                   </td>
                   <td className="py-3 px-4">
                     {template.autoGenerate ? (
-                      <span className="text-xs text-green-600">Auto</span>
+                      <span className="text-xs text-green-600">{t('hygiene.auto') || 'Auto'}</span>
                     ) : (
-                      <span className="text-xs text-gray-400">Manual</span>
+                      <span className="text-xs text-gray-400">{t('hygiene.manual') || 'Manual'}</span>
                     )}
                   </td>
                   <td className="py-3 px-4 text-right">
@@ -228,9 +236,14 @@ export function HygieneTemplateListPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
-            <h3 className="text-lg font-semibold mb-4">{t('hygiene.confirmDelete')}</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setDeleteId(null)}>
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">{t('hygiene.confirmDelete')}</h3>
+              <button onClick={() => setDeleteId(null)} className="p-1 hover:bg-gray-100 rounded">
+                <X size={20} />
+              </button>
+            </div>
             <p className="text-gray-600 mb-6">{t('hygiene.deleteWarning')}</p>
             <div className="flex gap-3 justify-end">
               <button

@@ -1,5 +1,7 @@
 import prisma from '../config/database'
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays } from '../utils/dateUtils'
+import { getLowStockAlerts } from './BomService'
+import { getConsumptionAnalysis } from './InventoryService'
 
 export interface DateRange {
   startDate: Date
@@ -14,7 +16,11 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
   const monthStart = startOfMonth(targetDate)
   const monthEnd = endOfMonth(targetDate)
 
-  const [todayOrders, monthOrders, lowStockItems, todayStaff] = await Promise.all([
+  // Get last 30 days for analysis
+  const analysisStart = startOfDay(subDays(targetDate, 30))
+  const analysisEnd = endOfDay(targetDate)
+
+  const [todayOrders, monthOrders, todayStaff, lowStockAlerts, consumptionAnomalies] = await Promise.all([
     // Today's orders
     prisma.order.findMany({
       where: {
@@ -33,19 +39,21 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
       },
       include: { items: true }
     }),
-    // Low stock items
-    prisma.inventory.findMany({
-      where: {
-        storeId,
-        currentStock: { lte: prisma.inventory.fields.minStock }
-      }
-    }),
     // Today's staff attendance (via staff relationship)
     prisma.attendance.findMany({
       where: {
         checkInTime: { gte: todayStart, lte: todayEnd }
       },
       include: { staff: { select: { name: true } } }
+    }),
+    // Low stock alerts based on consumption forecast
+    getLowStockAlerts(storeId, 7),
+    // Consumption anomalies (variance > 10%)
+    getConsumptionAnalysis({
+      storeId,
+      startDate: analysisStart.toISOString(),
+      endDate: analysisEnd.toISOString(),
+      varianceThreshold: 10
     })
   ])
 
@@ -83,6 +91,13 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
     paymentStats[order.paymentMethod] = (paymentStats[order.paymentMethod] || 0) + order.finalAmount
   })
 
+  // Filter low stock alerts by urgency
+  const criticalAlerts = lowStockAlerts.filter(a => a.urgency === 'critical')
+  const warningAlerts = lowStockAlerts.filter(a => a.urgency === 'warning')
+
+  // Filter consumption anomalies by status (warning + critical)
+  const consumptionAnomalyList = consumptionAnomalies?.filter(a => a.varianceStatus !== 'normal') || []
+
   return {
     today: {
       orderCount: todayOrderCount,
@@ -95,8 +110,35 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
       revenue: monthRevenue,
       avgOrderValue: monthOrderCount > 0 ? Math.round(monthRevenue / monthOrderCount) : 0
     },
-    lowStockAlert: lowStockItems.length,
-    staffPresent: todayStaff.filter(s => s.checkInTime && !s.checkOutTime).length,
+    inventory: {
+      lowStockCount: lowStockAlerts.length,
+      criticalCount: criticalAlerts.length,
+      warningCount: warningAlerts.length,
+      lowStockItems: lowStockAlerts.slice(0, 5).map(a => ({
+        id: a.inventoryId,
+        name: a.name,
+        currentStock: a.currentStock,
+        daysLeft: a.daysUntilStockOut,
+        urgency: a.urgency,
+        unit: a.unit,
+        suggestedReorderQty: a.suggestedReorderQty
+      })),
+      consumptionAnomalies: consumptionAnomalyList.slice(0, 5).map(a => ({
+        id: a.inventoryId,
+        name: a.inventoryName,
+        theoretical: a.theoreticalConsumption,
+        actual: a.actualConsumption,
+        variance: a.variance,
+        variancePercent: a.variancePercent,
+        status: a.varianceStatus,
+        unit: a.unit
+      }))
+    },
+    staff: {
+      checkedIn: todayStaff.filter(s => s.checkInTime && !s.checkOutTime).length,
+      total: todayStaff.length,
+      pendingLeave: 0 // Will be filled by separate query if needed
+    },
     topProducts,
     paymentStats
   }

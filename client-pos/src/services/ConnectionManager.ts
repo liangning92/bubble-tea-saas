@@ -202,8 +202,9 @@ class ConnectionManagerClass {
 
       const storeId = state.user.storeId
 
-      // Try current URL first
-      const response = await fetch(`${this.currentUrl}/api/config/${storeId}/pos_api_url`, {
+      // Use absolute URL to avoid /api/api/... double-prefix issue
+      const baseUrl = this.currentUrl.startsWith('http') ? this.currentUrl : window.location.origin
+      const response = await fetch(`${baseUrl}/api/config/${storeId}/pos_api_url`, {
         headers: {
           Authorization: `Bearer ${state.token}`
         },

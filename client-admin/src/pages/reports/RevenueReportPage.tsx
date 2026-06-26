@@ -26,7 +26,7 @@ export function RevenueReportPage() {
   })
 
   const revenue = revenueData?.data
-  const daily = dailyData?.data?.list || []
+  const daily = dailyData?.data?.data?.list || []
 
   return (
     <div className="space-y-6">
@@ -96,7 +96,7 @@ export function RevenueReportPage() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hourlyData?.data?.list || []}>
+              <BarChart data={hourlyData?.data?.data?.list || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="hour" />
                 <YAxis />

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { bomApi } from '../../services/api'
-import { formatStockDisplay } from '../../utils/helpers'
 import { Loader2, AlertTriangle, Package } from 'lucide-react'
 
 export function StockAlertsPage() {
@@ -12,10 +11,12 @@ export function StockAlertsPage() {
   // 低库存预警
   const { data: alertsData, isLoading } = useQuery({
     queryKey: ['bom-alerts', forecastDays],
-    queryFn: () => bomApi.getLowStockAlerts(forecastDays)
+    queryFn: () => bomApi.getLowStockAlerts(forecastDays),
+    refetchInterval: 30000 // Auto-refresh every 30 seconds
   })
 
-  const alertsList = alertsData?.data || []
+  // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
+  const alertsList = alertsData?.data?.data || []
 
   return (
     <div className="space-y-6">

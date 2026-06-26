@@ -1,4 +1,5 @@
 import prisma from '../config/database'
+import { getTierBenefitByLevel } from './TierBenefitService'
 
 export interface MemberFilter {
   storeId?: string
@@ -185,7 +186,7 @@ export async function adjustPoints(memberId: string, points: number, note: strin
   return member
 }
 
-// Check and upgrade member level based on totalSpent
+// Check and upgrade member level based on totalSpent (using TierBenefit configuration)
 export async function checkLevelUpgrade(memberId: string) {
   const member = await prisma.member.findUnique({
     where: { id: memberId }
@@ -193,12 +194,35 @@ export async function checkLevelUpgrade(memberId: string) {
 
   if (!member) return member
 
-  let newLevel = member.level
+  // Get threshold from TierBenefit config (descending order: diamond > gold > silver > bronze)
+  const tierThresholds = [
+    { level: 'diamond', threshold: 0 },
+    { level: 'gold', threshold: 0 },
+    { level: 'silver', threshold: 0 },
+    { level: 'bronze', threshold: 0 }
+  ]
 
-  if (member.totalSpent >= 5000000) newLevel = 'diamond'
-  else if (member.totalSpent >= 2000000) newLevel = 'gold'
-  else if (member.totalSpent >= 500000) newLevel = 'silver'
-  else newLevel = 'bronze'
+  try {
+    // Fetch thresholds from TierBenefit table
+    const diamond = await getTierBenefitByLevel(member.storeId, 'diamond')
+    const gold = await getTierBenefitByLevel(member.storeId, 'gold')
+    const silver = await getTierBenefitByLevel(member.storeId, 'silver')
+
+    if (diamond?.pointsToUpgrade) tierThresholds[0].threshold = diamond.pointsToUpgrade
+    if (gold?.pointsToUpgrade) tierThresholds[1].threshold = gold.pointsToUpgrade
+    if (silver?.pointsToUpgrade) tierThresholds[2].threshold = silver.pointsToUpgrade
+  } catch (e) {
+    // Fallback to default thresholds if TierBenefit not configured
+    tierThresholds[0].threshold = 5000000 // diamond
+    tierThresholds[1].threshold = 2000000 // gold
+    tierThresholds[2].threshold = 500000  // silver
+  }
+
+  // Determine new level based on thresholds (descending order)
+  let newLevel = 'bronze'
+  if (member.totalSpent >= tierThresholds[0].threshold) newLevel = 'diamond'
+  else if (member.totalSpent >= tierThresholds[1].threshold) newLevel = 'gold'
+  else if (member.totalSpent >= tierThresholds[2].threshold) newLevel = 'silver'
 
   if (newLevel !== member.level) {
     await prisma.member.update({

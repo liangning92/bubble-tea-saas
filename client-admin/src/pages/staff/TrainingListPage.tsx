@@ -147,7 +147,7 @@ export function TrainingListPage() {
       }
     } catch (error) {
       console.error('Failed to save categories:', error)
-      alert('Failed to save categories')
+      alert(t('common.error'))
     }
   }
 

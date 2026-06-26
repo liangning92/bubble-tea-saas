@@ -62,7 +62,7 @@ export async function getInventoryById(inventoryId: string) {
 }
 
 // Stock in operation
-export async function stockIn(data: StockOperation & { unitCost: number }) {
+export async function stockIn(data: StockOperation & { unitCost?: number }) {
   const { inventoryId, storeId, quantity, unitCost, note, staffId, supplierId } = data
 
   return prisma.$transaction(async (tx) => {
@@ -75,10 +75,13 @@ export async function stockIn(data: StockOperation & { unitCost: number }) {
       throw new Error('Inventory not found')
     }
 
-    // Calculate new average cost
-    const totalCurrentValue = inventory.avgCost * inventory.currentStock
-    const totalNewValue = unitCost * quantity
-    const newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (inventory.currentStock + quantity))
+    // Calculate new average cost only if unitCost is provided and positive
+    let newAvgCost = inventory.avgCost
+    if (unitCost && unitCost > 0) {
+      const totalCurrentValue = inventory.avgCost * inventory.currentStock
+      const totalNewValue = unitCost * quantity
+      newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (inventory.currentStock + quantity))
+    }
 
     // Update inventory
     const updated = await tx.inventory.update({
@@ -94,8 +97,8 @@ export async function stockIn(data: StockOperation & { unitCost: number }) {
       data: {
         inventoryId,
         quantity,
-        unitCost,
-        totalAmount: quantity * unitCost,
+        unitCost: unitCost || 0,
+        totalAmount: (unitCost || 0) * quantity,
         supplierId,
         staffId,
         note

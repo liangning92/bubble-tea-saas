@@ -42,7 +42,10 @@ router.get('/summary', authenticate, authorize('admin', 'manager'), async (req: 
 // POST /api/finance/budgets
 router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    const budget = await BudgetService.createBudget(req.body)
+    const budget = await BudgetService.createBudget({
+      ...req.body,
+      storeId: req.user!.storeId
+    })
     res.status(201).json({ code: 201, data: budget })
   } catch (error: any) {
     console.error('Create budget error:', error)
@@ -69,6 +72,33 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
   } catch (error: any) {
     console.error('Delete budget error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to delete budget' })
+  }
+})
+
+// ==================== BUDGET CATEGORIES (Customizable) ====================
+
+// GET /api/finance/budgets/categories
+router.get('/categories', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const categories = await BudgetService.getBudgetCategories(storeId)
+    res.json({ code: 200, data: { list: categories } })
+  } catch (error: any) {
+    console.error('Get budget categories error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to get budget categories' })
+  }
+})
+
+// PUT /api/finance/budgets/categories
+router.put('/categories', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const { categories } = req.body
+    await BudgetService.saveBudgetCategories(storeId, categories)
+    res.json({ code: 200, message: 'Budget categories updated' })
+  } catch (error: any) {
+    console.error('Save budget categories error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to save budget categories' })
   }
 })
 

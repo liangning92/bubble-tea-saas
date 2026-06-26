@@ -46,9 +46,9 @@ export function AnnouncementListPage() {
     }
   })
 
-  const announcements = announcementsData?.data || []
+  const announcements = Array.isArray(announcementsData?.data) ? announcementsData?.data : []
 
-  const filteredAnnouncements = announcements.filter((ann: any) => {
+  const filteredAnnouncements = (announcements || []).filter((ann: any) => {
     // Type filter
     if (filterType !== 'all' && ann.type !== filterType) return false
     // Search filter

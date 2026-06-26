@@ -32,7 +32,9 @@ export function CategoryListPage() {
     queryFn: () => categoryApi.list()
   })
 
-  const categories: Category[] = data?.data || []
+  // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
+  // So data?.data?.data is the actual array
+  const categories: Category[] = data?.data?.data || []
 
   const createMutation = useMutation({
     mutationFn: (data: CategoryFormData & { storeId?: string }) => categoryApi.create(data),

@@ -108,7 +108,7 @@ export function RewardsPage() {
       }
     } catch (error) {
       console.error('Failed to save:', error)
-      alert('Failed to save')
+      alert(t('common.error'))
     } finally {
       setIsLoading(false)
     }
@@ -164,7 +164,7 @@ export function RewardsPage() {
       await loadRedemptions()
     } catch (error) {
       console.error('Failed to fulfill:', error)
-      alert('Failed to fulfill redemption')
+      alert(t('common.error'))
     }
   }
 
@@ -174,7 +174,7 @@ export function RewardsPage() {
       await loadRedemptions()
     } catch (error) {
       console.error('Failed to cancel:', error)
-      alert('Failed to cancel redemption')
+      alert(t('common.error'))
     }
   }
 

@@ -59,7 +59,7 @@ export function CampaignListPage() {
     }
   })
 
-  const campaigns: Campaign[] = data?.data?.list || []
+  const campaigns: Campaign[] = data?.data?.data?.list || []
 
   const getTypeBadge = (type: string) => {
     const badges: Record<string, string> = {
@@ -272,7 +272,7 @@ export function CampaignListPage() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => createMutation.mutate({ ...newCampaign, storeId })}
-                disabled={!newCampaign.name || createMutation.isPending}
+                disabled={!newCampaign.name || !newCampaign.startDate || createMutation.isPending}
                 className="btn-primary flex-1 flex items-center justify-center gap-2"
               >
                 {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}

@@ -92,7 +92,7 @@ export function CouponListPage() {
     }
   })
 
-  const coupons: Coupon[] = data?.data?.list || []
+  const coupons: Coupon[] = data?.data?.data?.list || []
 
   const closeModal = () => {
     setShowCreate(false)
@@ -365,7 +365,7 @@ export function CouponListPage() {
                 />
               </div>
               <div className="flex gap-3 pt-4">
-                <button type="submit" disabled={!form.code || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                <button type="submit" disabled={!form.code || !form.validFrom || !form.validUntil || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>

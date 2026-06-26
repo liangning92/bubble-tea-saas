@@ -210,27 +210,14 @@ export function ExpenseListPage() {
     }
   }
 
-  // Handle approve reimbursement - creates expense record
+  // Handle approve reimbursement - only updates status, expense created on "mark paid"
   const handleReimbApprove = async (id: string) => {
     try {
       await reimbursementApi.approve(id)
-      // Create expense record from reimbursement
-      const reimb = reimbursements.find(r => r.id === id)
-      if (reimb) {
-        await expenseApi.create({
-          storeId: user?.storeId,
-          type: 'operational',
-          category: 'reimbursement',
-          amount: reimb.amount,
-          description: `[报销] ${reimb.description}`,
-          date: new Date().toISOString().split('T')[0]
-        })
-      }
       alert(t('reimbursement.approved'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       loadReimbursements()
-      loadData()
     } catch (error) {
       console.error('Failed to approve:', error)
       alert(t('common.error'))
@@ -282,26 +269,25 @@ export function ExpenseListPage() {
     }
   }
 
-  const loadCustomTypes = () => {
+  const loadCustomTypes = async () => {
     try {
-      const stored = localStorage.getItem(`expense_types_${user?.storeId}`)
-      if (stored) {
-        const parsed = JSON.parse(stored) as ExpenseCategory[]
-        // Merge with defaults (defaults win on missing fields)
-        const merged = DEFAULT_CATEGORY_DEFS.map(def => {
-          const saved = parsed.find((p: ExpenseCategory) => p.key === def.key)
-          return saved ? { ...def, ...saved } : def
-        })
-        setExpenseTypes(merged)
-      }
+      const res = await expenseApi.getCategories()
+      setExpenseTypes(res.data.data.list || DEFAULT_CATEGORY_DEFS)
     } catch (error) {
-      console.error('Failed to load custom types:', error)
+      console.error('Failed to load expense categories:', error)
+      // Fallback to defaults
+      setExpenseTypes(DEFAULT_CATEGORY_DEFS)
     }
   }
 
-  const saveCustomTypes = (types: ExpenseCategory[]) => {
-    localStorage.setItem(`expense_types_${user?.storeId}`, JSON.stringify(types))
-    setExpenseTypes(types)
+  const saveCustomTypes = async (types: ExpenseCategory[]) => {
+    try {
+      await expenseApi.saveCategories(types)
+      setExpenseTypes(types)
+    } catch (error) {
+      console.error('Failed to save expense categories:', error)
+      alert(t('common.error'))
+    }
   }
 
   const saveRecurringExpenses = (items: RecurringExpense[]) => {
@@ -324,11 +310,13 @@ export function ExpenseListPage() {
       }
 
       setIsSaving(true)
+      // Parse amount - remove thousand separators before converting to number
+      const rawAmount = formData.amount.replace(/,/g, '')
       const data = {
         storeId: user?.storeId,
         type: formData.type,
         category: formData.category,
-        amount: Math.round(parseFloat(formData.amount) * 100),
+        amount: Math.round(parseFloat(rawAmount || '0') * 100),
         description: formData.description,
         date: formData.date
       }
@@ -440,12 +428,14 @@ export function ExpenseListPage() {
       return
     }
 
+    // Parse amount - remove thousand separators before converting to number
+    const rawAmount = recurringForm.amount.replace(/,/g, '')
     const newItem: RecurringExpense = {
       id: Date.now().toString(),
       storeId: user?.storeId || '',
       name: recurringForm.name,
       category: recurringForm.category,
-      amount: Math.round(parseFloat(recurringForm.amount) * 100),
+      amount: Math.round(parseFloat(rawAmount || '0') * 100),
       frequency: recurringForm.frequency,
       nextDueDate: recurringForm.nextDueDate,
       active: true
@@ -513,9 +503,11 @@ export function ExpenseListPage() {
 
   const openEditModal = (expense: Expense) => {
     setSelectedExpense(expense)
+    // Format amount with thousand separators for display
+    const displayAmount = (expense.amount / 100).toLocaleString('id-ID')
     setFormData({
       category: expense.category,
-      amount: (expense.amount / 100).toString(),
+      amount: displayAmount,
       description: expense.description || '',
       date: expense.date.split('T')[0],
       type: expense.type
@@ -983,12 +975,29 @@ export function ExpenseListPage() {
                   {t('expense.amount')}
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  onChange={(e) => {
+                    // Remove non-numeric characters except dots and commas
+                    const raw = e.target.value.replace(/[^\d]/g, '')
+                    if (raw === '') {
+                      setFormData({ ...formData, amount: '' })
+                      return
+                    }
+                    // Format with thousand separators
+                    const num = parseInt(raw, 10)
+                    const formatted = num.toLocaleString('id-ID')
+                    setFormData({ ...formData, amount: formatted })
+                  }}
+                  onBlur={(e) => {
+                    // Ensure we store raw number on blur
+                    const raw = e.target.value.replace(/[^\d]/g, '')
+                    if (raw) {
+                      setFormData({ ...formData, amount: raw })
+                    }
+                  }}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"
-                  min="0"
                 />
               </div>
 
@@ -1073,12 +1082,26 @@ export function ExpenseListPage() {
                   ))}
                 </select>
                 <input
-                  type="number"
+                  type="text"
                   value={recurringForm.amount}
-                  onChange={(e) => setRecurringForm({ ...recurringForm, amount: e.target.value })}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^\d]/g, '')
+                    if (raw === '') {
+                      setRecurringForm({ ...recurringForm, amount: '' })
+                      return
+                    }
+                    const num = parseInt(raw, 10)
+                    const formatted = num.toLocaleString('id-ID')
+                    setRecurringForm({ ...recurringForm, amount: formatted })
+                  }}
+                  onBlur={(e) => {
+                    const raw = e.target.value.replace(/[^\d]/g, '')
+                    if (raw) {
+                      setRecurringForm({ ...recurringForm, amount: raw })
+                    }
+                  }}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder={t('expense.amount')}
-                  min="0"
                 />
                 <select
                   value={recurringForm.frequency}

@@ -41,6 +41,11 @@ api.interceptors.response.use(
 
 export default api
 
+// Update API base URL dynamically (for API URL configuration)
+export function updateApiUrl(url: string) {
+  api.defaults.baseURL = url
+}
+
 // Auth
 export const authApi = {
   login: (phone: string, password: string) => api.post('/auth/login', { phone, password }),
@@ -106,7 +111,18 @@ export const inventoryApi = {
   alerts: () => api.get('/inventory/alerts/low-stock'),
   stats: () => api.get('/inventory/stats/summary'),
   consumptionAnalysis: (params: any) => api.get('/inventory/consumption-analysis', { params }),
-  anomalySummary: (params: any) => api.get('/inventory/anomaly-summary', { params })
+  anomalySummary: (params: any) => api.get('/inventory/anomaly-summary', { params }),
+  // Alert config
+  getAlertConfig: () => api.get('/inventory/alert-config'),
+  saveAlertConfig: (config: any) => api.put('/inventory/alert-config', config),
+  // Inventory count
+  getInventoryCounts: () => api.get('/inventory-counts'),
+  getInventoryCount: (id: string) => api.get('/inventory-counts/' + id),
+  createInventoryCount: (data: any) => api.post('/inventory-counts', data),
+  updateInventoryCountItem: (countId: string, itemId: string, data: any) =>
+    api.put('/inventory-counts/' + countId + '/item/' + itemId, data),
+  completeInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/complete'),
+  cancelInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/cancel')
 }
 
 // Staff
@@ -179,7 +195,10 @@ export const configApi = {
   get: (storeId?: string) => api.get('/config', { params: storeId ? { storeId } : undefined }),
   set: (storeId: string, key: string, value: any, category: string) => api.post('/config', { storeId, key, value, category }),
   setBatch: (storeId: string, configs: Array<{ key: string; value: any; category: string }>) => api.post('/config/batch', { storeId, configs }),
-  getDefaults: (category: string) => api.get('/config/defaults/' + category)
+  getDefaults: (category: string) => api.get('/config/defaults/' + category),
+  // Staff feature config
+  getStaffFeatures: () => api.get('/config/staff/features'),
+  setStaffFeatures: (features: any) => api.put('/config/staff/features', features)
 }
 
 // Addons
@@ -314,7 +333,10 @@ export const expenseApi = {
   delete: (id: string) => api.delete('/expenses/' + id),
   summary: (days?: number) => api.get('/expenses/summary', { params: days ? { days } : undefined }),
   bulkImport: (expenses: any[]) => api.post('/expenses/bulk', { expenses }),
-  export: (params?: any) => api.get('/expenses/export', { params, responseType: 'blob' })
+  export: (params?: any) => api.get('/expenses/export', { params, responseType: 'blob' }),
+  // Expense categories (customizable)
+  getCategories: () => api.get('/expenses/categories'),
+  saveCategories: (categories: any[]) => api.put('/expenses/categories', { categories })
 }
 
 // Finance Budgets
@@ -323,7 +345,10 @@ export const budgetApi = {
   summary: (year: number, month?: number) => api.get('/finance/budgets/summary', { params: { year, month } }),
   create: (data: any) => api.post('/finance/budgets', data),
   update: (id: string, data: any) => api.put('/finance/budgets/' + id, data),
-  delete: (id: string) => api.delete('/finance/budgets/' + id)
+  delete: (id: string) => api.delete('/finance/budgets/' + id),
+  // Budget categories (customizable)
+  getCategories: () => api.get('/finance/budgets/categories'),
+  saveCategories: (categories: any[]) => api.put('/finance/budgets/categories', { categories })
 }
 
 // Finance Assets
@@ -333,7 +358,9 @@ export const assetApi = {
   get: (id: string) => api.get('/finance/assets/' + id),
   create: (data: any) => api.post('/finance/assets', data),
   update: (id: string, data: any) => api.put('/finance/assets/' + id, data),
-  delete: (id: string) => api.delete('/finance/assets/' + id)
+  delete: (id: string) => api.delete('/finance/assets/' + id),
+  dispose: (id: string, data: { saleValue: number; disposalDate?: string; note?: string }) =>
+    api.post('/finance/assets/' + id + '/dispose', data)
 }
 
 // Finance Accounts (Chart of Accounts)
@@ -345,7 +372,10 @@ export const accountApi = {
   update: (id: string, data: any) => api.put('/finance/accounts/' + id, data),
   delete: (id: string) => api.delete('/finance/accounts/' + id),
   transfer: (data: any) => api.post('/finance/accounts/transfer', data),
-  transfers: (params?: any) => api.get('/finance/accounts/transfers/list', { params })
+  transfers: (params?: any) => api.get('/finance/accounts/transfers/list', { params }),
+  // Account types (customizable)
+  getTypes: () => api.get('/finance/accounts/types'),
+  saveTypes: (types: any[]) => api.put('/finance/accounts/types', { types })
 }
 
 // Bank Accounts
@@ -452,6 +482,10 @@ export const hygieneApi = {
   getTask: (id: string) => api.get('/hygiene/tasks/' + id),
   myTasks: (params?: { date?: string }) => api.get('/hygiene/tasks/my', { params }),
   pendingTasks: (params?: { staffId?: string }) => api.get('/hygiene/tasks/pending', { params }),
+  overdueTasks: () => api.get('/hygiene/tasks/overdue'),
+  staffHistory: (staffId: string, page?: number, pageSize?: number) =>
+    api.get('/hygiene/tasks/history/' + staffId, { params: { page, pageSize } }),
+  createTemporaryTask: (data: any) => api.post('/hygiene/tasks/temporary', data),
   generateTasks: (date: string) => api.post('/hygiene/tasks/generate', { date }),
   startTask: (id: string) => api.put('/hygiene/tasks/' + id + '/start'),
   completeTask: (id: string, data: any) => api.put('/hygiene/tasks/' + id + '/complete', data),
@@ -667,7 +701,10 @@ export const staffPointsApi = {
   // Redemption
   getPendingRedemptions: () => api.get('/staff-points/redemption/pending'),
   fulfillRedemption: (id: string) => api.post('/staff-points/redemption/' + id + '/fulfill'),
-  cancelRedemption: (id: string) => api.post('/staff-points/redemption/' + id + '/cancel')
+  cancelRedemption: (id: string) => api.post('/staff-points/redemption/' + id + '/cancel'),
+  // Points Rules
+  getRules: () => api.get('/staff-points/rules'),
+  saveRules: (rules: any) => api.put('/staff-points/rules', rules)
 }
 
 // Deposit Management

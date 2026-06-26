@@ -6,12 +6,12 @@ export function PointsIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'points-rule', label: t('marketing.pointsRule'), path: '/marketing/points-rule' },
-    { key: 'points-expiry', label: t('marketing.pointsExpiry'), path: '/marketing/points-expiry' },
-    { key: 'rewards', label: t('marketing.rewards'), path: '/marketing/rewards' },
+    { key: 'points-rule', label: t('marketing.pointsRule'), path: '/marketing/points/rule' },
+    { key: 'points-expiry', label: t('marketing.pointsExpiry'), path: '/marketing/points/expiry' },
+    { key: 'rewards', label: t('marketing.rewards'), path: '/marketing/points/rewards' },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.startsWith(tab.path))?.key || 'points-rule'
+  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'points-rule'
 
   return (
     <div className="flex flex-col h-full">

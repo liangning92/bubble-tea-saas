@@ -9,48 +9,48 @@ import { Loader2, ArrowLeft, Plus, Trash2 } from 'lucide-react'
 const DEFAULT_AREA_CODES = ['counter', 'kitchen', 'ingredients', 'floor', 'restroom', 'waste', 'equipment', 'ventilation']
 
 const CATEGORIES = [
-  { value: 'food_safety', label: 'Food Safety' },
-  { value: 'daily', label: 'Daily Cleaning' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'periodic', label: 'Periodic' },
-  { value: 'opening', label: 'Opening' },
-  { value: 'closing', label: 'Closing' },
+  { value: 'food_safety', labelKey: 'hygiene.foodSafety' },
+  { value: 'daily', labelKey: 'hygiene.dailyCleaning' },
+  { value: 'equipment', labelKey: 'hygiene.equipmentMaintenance' },
+  { value: 'periodic', labelKey: 'hygiene.periodicMaintenance' },
+  { value: 'opening', labelKey: 'hygiene.openingChecklist' },
+  { value: 'closing', labelKey: 'hygiene.closingChecklist' },
 ]
 
 const FREQUENCIES = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'specific_days', label: 'Specific Days' },
+  { value: 'daily', labelKey: 'hygiene.daily' },
+  { value: 'weekly', labelKey: 'hygiene.weekly' },
+  { value: 'monthly', labelKey: 'hygiene.monthly' },
+  { value: 'specific_days', labelKey: 'hygiene.specificDays' },
 ]
 
 const PRIORITIES = [
-  { value: 1, label: 'Critical' },
-  { value: 2, label: 'High' },
-  { value: 3, label: 'Normal' },
-  { value: 4, label: 'Low' },
+  { value: 1, labelKey: 'hygiene.priorityCritical' },
+  { value: 2, labelKey: 'hygiene.priorityHigh' },
+  { value: 3, labelKey: 'hygiene.priorityNormal' },
+  { value: 4, labelKey: 'hygiene.priorityLow' },
 ]
 
 const EVIDENCE_TYPES = [
-  { value: 'photo', label: 'Photo' },
-  { value: 'signature', label: 'Signature' },
-  { value: 'both', label: 'Photo & Signature' },
+  { value: 'photo', labelKey: 'hygiene.evidencePhoto' },
+  { value: 'signature', labelKey: 'hygiene.evidenceSignature' },
+  { value: 'both', labelKey: 'hygiene.evidenceBoth' },
 ]
 
 const SHIFTS = [
-  { value: 'morning', label: 'Morning' },
-  { value: 'afternoon', label: 'Afternoon' },
-  { value: 'evening', label: 'Evening' },
+  { value: 'morning', labelKey: 'hygiene.morning' },
+  { value: 'afternoon', labelKey: 'hygiene.afternoon' },
+  { value: 'evening', labelKey: 'hygiene.evening' },
 ]
 
 const WEEKDAYS = [
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-  { value: 7, label: 'Sun' },
+  { value: 1, labelKey: 'hygiene.mon' },
+  { value: 2, labelKey: 'hygiene.tue' },
+  { value: 3, labelKey: 'hygiene.wed' },
+  { value: 4, labelKey: 'hygiene.thu' },
+  { value: 5, labelKey: 'hygiene.fri' },
+  { value: 6, labelKey: 'hygiene.sat' },
+  { value: 7, labelKey: 'hygiene.sun' },
 ]
 
 const AREAS = [
@@ -78,6 +78,9 @@ export function HygieneTemplateFormPage() {
   const queryClient = useQueryClient()
   const isEdit = Boolean(id)
 
+  // Helper to get label text from item with either label or labelKey
+  const getLabel = (item: any) => item.labelKey ? t(item.labelKey) : item.label
+
   const [form, setForm] = useState({
     areaCode: 'counter',
     name: '',
@@ -86,6 +89,7 @@ export function HygieneTemplateFormPage() {
     frequency: 'daily',
     specificDays: [] as number[],
     time: '10:00',
+    executionTimes: [] as string[], // 每日多次执行时间
     priority: 2,
     estimatedMinutes: 10,
     standardBefore: '',
@@ -97,6 +101,7 @@ export function HygieneTemplateFormPage() {
     assignedType: 'shift',
     shift: 'morning',
     staffId: '',
+    staffIds: [] as string[], // 多个员工
     requiresApproval: false,
     alertMinutesBefore: 15,
     autoGenerate: true,
@@ -136,7 +141,7 @@ export function HygieneTemplateFormPage() {
 
   // Build areas list (API + defaults)
   const getAreaName = (code: string) => t(`hygiene.${code}`) || code
-  const areas = areasData?.data?.list?.length
+  const areas = areasData?.data?.data?.list?.length
     ? areasData.data.data.list.map((a: any) => ({
         code: a.code,
         name: a.isCustom ? a.name : getAreaName(a.code),
@@ -164,6 +169,7 @@ export function HygieneTemplateFormPage() {
         frequency: template.frequency || 'daily',
         specificDays: template.specificDays ? JSON.parse(template.specificDays) : [],
         time: template.time || '10:00',
+        executionTimes: template.executionTimes ? JSON.parse(template.executionTimes) : [], // 新增
         priority: template.priority || 2,
         estimatedMinutes: template.estimatedMinutes || 10,
         standardBefore: template.standardBefore || '',
@@ -175,6 +181,7 @@ export function HygieneTemplateFormPage() {
         assignedType: template.assignedType || 'shift',
         shift: template.shift || 'morning',
         staffId: template.staffId || '',
+        staffIds: template.staffIds ? JSON.parse(template.staffIds) : [], // 新增
         requiresApproval: template.requiresApproval ?? false,
         alertMinutesBefore: template.alertMinutesBefore || 15,
         autoGenerate: template.autoGenerate ?? true,
@@ -192,13 +199,17 @@ export function HygieneTemplateFormPage() {
     }
   }, [templateData])
 
-  const staffList = staffData?.data?.list || []
+  const staffList = staffData?.data?.data?.list || []
 
   const createMutation = useMutation({
     mutationFn: (data: any) => hygieneApi.createTemplate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hygiene-templates'] })
       navigate('/hygiene')
+    },
+    onError: (error: any) => {
+      console.error('Create template error:', error)
+      alert(t('hygiene.createTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 
@@ -208,35 +219,45 @@ export function HygieneTemplateFormPage() {
       queryClient.invalidateQueries({ queryKey: ['hygiene-templates'] })
       navigate('/hygiene')
     },
+    onError: (error: any) => {
+      console.error('Update template error:', error)
+      alert(t('hygiene.updateTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+    },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    const payload = {
-      ...form,
-      // Clear fields based on assignedType
-      ...(form.assignedType === 'staff' ? { shift: null, areaManagerId: null } : {}),
-      ...(form.assignedType === 'shift' ? { staffId: null, areaManagerId: null } : {}),
-      ...(form.assignedType === 'area' ? { staffId: null, shift: null } : {}),
-      // Parse specificDays to JSON
-      specificDays: form.frequency === 'specific_days' ? form.specificDays : undefined,
-    }
+    try {
+      const payload: any = {
+        ...form,
+        // Clear fields based on assignedType
+        ...(form.assignedType === 'staff' ? { shift: null, areaManagerId: null, staffIds: null } : {}),
+        ...(form.assignedType === 'shift' ? { staffId: null, staffIds: null, areaManagerId: null } : {}),
+        ...(form.assignedType === 'area' ? { staffId: null, staffIds: null, shift: null } : {}),
+        // Parse specificDays to JSON
+        specificDays: form.frequency === 'specific_days' ? form.specificDays : undefined,
+        // Parse executionTimes to JSON (keep as array for API)
+      }
 
-    // Add checklists
-    if (checklists.length > 0) {
-      (payload as any).checklists = checklists.map((c, idx) => ({
-        item: c.item,
-        description: c.description,
-        isRequired: c.isRequired,
-        order: idx,
-      }))
-    }
+      // Add checklists
+      if (checklists.length > 0) {
+        payload.checklists = checklists.map((c: any, idx: number) => ({
+          item: c.item,
+          description: c.description,
+          isRequired: c.isRequired,
+          order: idx,
+        }))
+      }
 
-    if (isEdit) {
-      updateMutation.mutate(payload)
-    } else {
-      createMutation.mutate(payload)
+      if (isEdit) {
+        updateMutation.mutate(payload)
+      } else {
+        createMutation.mutate(payload)
+      }
+    } catch (err) {
+      console.error('Submit error:', err)
+      alert(t('hygiene.submitFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')))
     }
   }
 
@@ -332,7 +353,7 @@ export function HygieneTemplateFormPage() {
               >
                 {categories.map((cat: any) => (
                   <option key={cat.value} value={cat.value}>
-                    {cat.label}
+                    {getLabel(cat)}
                   </option>
                 ))}
               </select>
@@ -382,7 +403,7 @@ export function HygieneTemplateFormPage() {
               >
                 {priorities.map((p: any) => (
                   <option key={p.value} value={p.value}>
-                    {p.label}
+                    {getLabel(p)}
                   </option>
                 ))}
               </select>
@@ -418,6 +439,45 @@ export function HygieneTemplateFormPage() {
             </div>
           </div>
 
+          {/* Execution Times (Multiple Daily Executions) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {t('hygiene.executionTimes')} ({t('hygiene.executionTimesOptional')})
+            </label>
+            <div className="flex flex-wrap gap-2 items-center">
+              {form.executionTimes.map((time, idx) => (
+                <div key={idx} className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                  <span className="text-sm">{time}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newTimes = form.executionTimes.filter((_, i) => i !== idx)
+                      setForm({ ...form, executionTimes: newTimes })
+                    }}
+                    className="text-blue-500 hover:text-red-500"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <input
+                type="time"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    const input = e.target as HTMLInputElement
+                    if (input.value && !form.executionTimes.includes(input.value)) {
+                      setForm({ ...form, executionTimes: [...form.executionTimes, input.value].sort() })
+                      input.value = ''
+                    }
+                  }
+                }}
+                className="input w-32"
+                placeholder={t('hygiene.addTime')}
+              />
+              <span className="text-xs text-gray-500">{t('hygiene.executionTimesTip')}</span>
+            </div>
+          </div>
+
           {/* Frequency */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -433,7 +493,7 @@ export function HygieneTemplateFormPage() {
                     onChange={(e) => setForm({ ...form, frequency: e.target.value })}
                     className="text-primary"
                   />
-                  <span className="text-sm">{freq.label}</span>
+                  <span className="text-sm">{getLabel(freq)}</span>
                 </label>
               ))}
             </div>
@@ -457,7 +517,7 @@ export function HygieneTemplateFormPage() {
                         : 'bg-gray-100 text-gray-700'
                     }`}
                   >
-                    {day.label}
+                    {getLabel(day)}
                   </button>
                 ))}
               </div>
@@ -568,7 +628,7 @@ export function HygieneTemplateFormPage() {
               >
                 {EVIDENCE_TYPES.map((type) => (
                   <option key={type.value} value={type.value}>
-                    {type.label}
+                    {getLabel(type)}
                   </option>
                 ))}
               </select>
@@ -624,23 +684,50 @@ export function HygieneTemplateFormPage() {
                 >
                   {SHIFTS.map((s) => (
                     <option key={s.value} value={s.value}>
-                      {s.label}
+                      {getLabel(s)}
                     </option>
                   ))}
                 </select>
               ) : form.assignedType === 'staff' ? (
-                <select
-                  value={form.staffId}
-                  onChange={(e) => setForm({ ...form, staffId: e.target.value })}
-                  className="input w-full"
-                >
-                  <option value="">{t('hygiene.selectStaff')}</option>
-                  {staffList.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <select
+                    value={form.staffId}
+                    onChange={(e) => setForm({ ...form, staffId: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="">{t('hygiene.selectStaff')}</option>
+                    {staffList.map((s: any) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Multiple Staff Selection */}
+                  <div className="mt-2">
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      {t('hygiene.orSelectMultipleStaff')}
+                    </label>
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto border border-gray-200 rounded p-2">
+                      {staffList.map((s: any) => (
+                        <label key={s.id} className="flex items-center gap-1 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.staffIds.includes(s.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setForm({ ...form, staffIds: [...form.staffIds, s.id] })
+                              } else {
+                                setForm({ ...form, staffIds: form.staffIds.filter(id => id !== s.id) })
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          {s.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <select
                   value={form.areaCode || ''}

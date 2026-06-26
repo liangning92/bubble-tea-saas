@@ -84,15 +84,16 @@ export function CampaignEditPage() {
 
   const handleSubmit = () => {
     if (!form.name || !form.startDate) return
+    // API expects actions as object, not string
     saveMutation.mutate({
       ...form,
       storeId,
-      actions: JSON.stringify(form.actions)
+      actions: form.actions
     })
   }
 
-  const coupons = couponsData?.data?.list || []
-  const templates = templatesData?.data?.list || []
+  const coupons = couponsData?.data?.data?.list || []
+  const templates = templatesData?.data?.data?.list || []
 
   if (isEdit && campaignLoading) {
     return (

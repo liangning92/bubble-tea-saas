@@ -205,6 +205,10 @@ export function POSPage() {
   // 本地状态
   const [discountAmount, setDiscountAmount] = useState(0)
   const [tempDiscount, setTempDiscount] = useState('')
+  // 优惠券状态
+  const [memberCoupons, setMemberCoupons] = useState<any[]>([])
+  const [selectedCoupon, setSelectedCoupon] = useState<any>(null)
+  const [isLoadingCoupons, setIsLoadingCoupons] = useState(false)
 
   // Confirm Modal
   const [confirmModal, setConfirmModal] = useState<{
@@ -233,6 +237,7 @@ export function POSPage() {
   useEffect(() => { cartRef.current = cart }, [cart])
   useEffect(() => { paymentMethodRef.current = paymentMethod }, [paymentMethod])
   useEffect(() => { paidAmountRef.current = paidAmount }, [paidAmount])
+
 
   // POS布局设置
   const [posLayout, setPosLayout] = useState({
@@ -300,10 +305,18 @@ export function POSPage() {
 
   // 硬件设置
   const [hardwareSettings, setHardwareSettings] = useState({
-    printerName: '',  // Windows printer name (USB) - empty means use system default
-    printerIp: '192.168.1.100',   // Network printer (fallback)
-    printerPort: 9100,
+    printerConnectionType: 'usb',  // usb / network
+    printerType: 'escpos',         // escpos / pcl
+    printerName: '',              // Windows printer name (USB)
+    printerIp: '192.168.1.100',   // Network printer IP
+    printerPort: 9100,             // Network printer port
+    cashDrawerPulse: 100,         // 钱箱脉冲(ms)
     autoOpenCashDrawer: true,
+    scannerEnabled: true,          // 扫码枪启用
+    scannerType: 'usb',            // usb / serial
+    displayBrightness: 80,         // 屏幕亮度
+    dualScreenEnabled: false,       // 双屏异显
+    adScreenImageUrl: '',          // 广告屏图片
     testPrint: null as number | null,
     testCashDrawer: null as number | null,
   })
@@ -568,27 +581,32 @@ export function POSPage() {
           })
         }
 
-        // POS布局设置 - Admin保存为posLayout对象
+        // POS布局设置 - Admin保存为posLayout对象，包含快捷键、渠道开关等
         const posLayoutData = configs.posLayout || {}
         if (Object.keys(posLayoutData).length > 0) {
           setPosLayout(prev => ({
             ...prev,
-            gridCols: posLayoutData.gridCols || '4',
-            cardSize: posLayoutData.cardSize || 'medium',
-            showCategory: posLayoutData.showCategory ?? true,
-            showPrice: posLayoutData.showPrice ?? true,
-            calculateTax: posLayoutData.calculateTax ?? true,
-            showTax: posLayoutData.showTax ?? true,
-            taxRate: posLayoutData.taxRate ?? 11,
-            showSuspend: posLayoutData.showSuspend ?? true,
-            showHistory: posLayoutData.showHistory ?? true,
-            showScan: posLayoutData.showScan ?? true,
-            showShift: posLayoutData.showShift ?? true,
-            showCash: posLayoutData.showCash ?? false,
-            channelDineIn: posLayoutData.channelDineIn ?? true,
-            channelGoFood: posLayoutData.channelGoFood ?? true,
-            channelGrab: posLayoutData.channelGrab ?? true,
-            channelShopee: posLayoutData.channelShopee ?? true,
+            // 基础布局
+            gridCols: posLayoutData.gridCols || prev.gridCols,
+            cardSize: posLayoutData.cardSize || prev.cardSize,
+            showCategory: posLayoutData.showCategory ?? prev.showCategory,
+            showPrice: posLayoutData.showPrice ?? prev.showPrice,
+            calculateTax: posLayoutData.calculateTax ?? prev.calculateTax,
+            showTax: posLayoutData.showTax ?? prev.showTax,
+            taxRate: posLayoutData.taxRate ?? prev.taxRate,
+            // 工具栏按钮
+            showSuspend: posLayoutData.showSuspend ?? prev.showSuspend,
+            showHistory: posLayoutData.showHistory ?? prev.showHistory,
+            showScan: posLayoutData.showScan ?? prev.showScan,
+            showShift: posLayoutData.showShift ?? prev.showShift,
+            showCash: posLayoutData.showCash ?? prev.showCash,
+            // 渠道开关
+            channelDineIn: posLayoutData.channelDineIn ?? prev.channelDineIn,
+            channelGoFood: posLayoutData.channelGoFood ?? prev.channelGoFood,
+            channelGrab: posLayoutData.channelGrab ?? prev.channelGrab,
+            channelShopee: posLayoutData.channelShopee ?? prev.channelShopee,
+            // 快捷键
+            hotkeys: posLayoutData.hotkeys || prev.hotkeys,
           }))
         }
 
@@ -605,14 +623,25 @@ export function POSPage() {
           }))
         }
 
-        // 小票/税费设置 - 支持 posReceipt 或 receiptSettings
+        // 小票设置 - Admin保存完整posReceipt对象
         const receiptConfig = configs.posReceipt || configs.receiptSettings
         if (receiptConfig) {
           setPosReceipt({
             header: receiptConfig.header || receiptConfig.headerCustomText || 'Bubble Tea Shop',
             footer: receiptConfig.footer || receiptConfig.footerMessage || 'Thank you!',
             taxRate: receiptConfig.taxRate || 11,
-            showLogo: receiptConfig.showLogo ?? true
+            showLogo: receiptConfig.showLogo ?? true,
+            paperSize: receiptConfig.paperSize || '80mm',
+            printCopies: receiptConfig.printCopies || 1,
+            showQR: receiptConfig.showQR ?? false,
+            showBarcode: receiptConfig.showBarcode ?? true,
+            showKitchenNote: receiptConfig.showKitchenNote ?? true,
+            storePhone: receiptConfig.storePhone || '',
+            storeAddress: receiptConfig.storeAddress || '',
+            itemDetailFormat: receiptConfig.itemDetailFormat || 'standard',
+            showStaffName: receiptConfig.showStaffName ?? true,
+            showCustomerName: receiptConfig.showCustomerName ?? false,
+            autoPrint: receiptConfig.autoPrint ?? true,
           })
         }
 
@@ -621,9 +650,25 @@ export function POSPage() {
           setTaxSettings(configs.taxSettings)
         }
 
-        // 硬件设置（打印机、钱箱）- 测试标志由轮询处理
+        // 硬件设置（打印机、钱箱）- Admin保存完整结构
         if (configs.hardwareSettings) {
-          setHardwareSettings(configs.hardwareSettings)
+          const hw = configs.hardwareSettings
+          setHardwareSettings({
+            printerConnectionType: hw.printerConnectionType || 'usb',
+            printerType: hw.printerType || 'escpos',
+            printerName: hw.printerName || '',
+            printerIp: hw.printerIp || '192.168.1.100',
+            printerPort: hw.printerPort || 9100,
+            cashDrawerPulse: hw.cashDrawerPulse || 100,
+            autoOpenCashDrawer: hw.autoOpenCashDrawer ?? true,
+            scannerEnabled: hw.scannerEnabled ?? true,
+            scannerType: hw.scannerType || 'usb',
+            displayBrightness: hw.displayBrightness || 80,
+            dualScreenEnabled: hw.dualScreenEnabled || false,
+            adScreenImageUrl: hw.adScreenImageUrl || '',
+            testPrint: null,
+            testCashDrawer: null,
+          })
         }
 
         // 支付方式配置
@@ -675,14 +720,17 @@ export function POSPage() {
         // 渠道颜色配置
         if (configs.channelSettings) {
           setPosChannels(prev => prev.map(ch => {
-            // 兼容多种key格式: dineIn, dine_in, DINE_IN, dinein
-            const normalizedCode = ch.code.toLowerCase().replace(/_/g, '')
-            const channelConfig =
-              configs.channelSettings[ch.code] ||
-              configs.channelSettings[normalizedCode] ||
-              Object.values(configs.channelSettings).find((c: any) =>
-                c.name?.toLowerCase().replace(/[^a-z]/g, '') === normalizedCode
-              )
+            // Admin 保存的 key 格式: dineIn, gofood, grab, shopee
+            // POS 使用的 code 格式: DINE_IN, GOFOOD, GRAB, SHOPEE
+            // 建立直接映射表
+            const codeToKeyMap: Record<string, string> = {
+              'DINE_IN': 'dineIn',
+              'GOFOOD': 'gofood',
+              'GRAB': 'grab',
+              'SHOPEE': 'shopee',
+            }
+            const adminKey = codeToKeyMap[ch.code]
+            const channelConfig = adminKey ? configs.channelSettings[adminKey] : null
             if (channelConfig) {
               return {
                 ...ch,
@@ -1048,7 +1096,7 @@ export function POSPage() {
     setTasksLoading(true)
     try {
       const res = await posApi.getMyTasks()
-      setTasks(res.data?.data || [])
+      setTasks(res.data?.data?.list || [])
     } catch (e) {
       console.error('Failed to fetch tasks:', e)
     } finally {
@@ -1176,6 +1224,20 @@ export function POSPage() {
 
   // Sync totalRef after total is calculated
   useEffect(() => { totalRef.current = total }, [total])
+
+  // Auto-apply coupon discount when selected coupon changes
+  useEffect(() => {
+    if (selectedCoupon?.coupon) {
+      const coupon = selectedCoupon.coupon
+      if (coupon.type === 'discount_fixed') {
+        setDiscountAmount(Math.min(coupon.value, subtotal + tax))
+      } else if (coupon.type === 'discount_percent') {
+        const discount = Math.round((subtotal + tax) * (coupon.value / 100))
+        const maxDiscount = coupon.maxDiscount || Infinity
+        setDiscountAmount(Math.min(discount, maxDiscount, subtotal + tax))
+      }
+    }
+  }, [selectedCoupon, subtotal, tax])
 
   // 最大可用积分（不能超过总价）
   const maxRedeemablePoints = member ? Math.min(member.points || 0, Math.floor(total * 100)) : 0
@@ -1318,10 +1380,25 @@ export function POSPage() {
   const searchMember = async () => {
     if (!memberPhone || isSearchingMember) return
     setIsSearchingMember(true)
+    setMemberCoupons([])
+    setSelectedCoupon(null)
+    setDiscountAmount(0)
     try {
       const res = await posApi.getMembers({ phone: memberPhone })
-      if (res.data?.data?.list?.[0]) setMember(res.data.data.list[0])
-      else {
+      if (res.data?.data?.list?.[0]) {
+        const found = res.data.data.list[0]
+        setMember(found)
+        // 获取会员优惠券
+        try {
+          const couponsRes = await posApi.getMemberCoupons(found.id)
+          if (couponsRes.data?.data?.list) {
+            const unusedCoupons = couponsRes.data.data.list.filter((c: any) => c.status === 'unused')
+            setMemberCoupons(unusedCoupons)
+          }
+        } catch {
+          // 优惠券获取失败不影响主流程
+        }
+      } else {
         setMember(null)
         showToast(t('pos.noMemberFound'), 'info')
       }
@@ -1431,6 +1508,19 @@ export function POSPage() {
       const orderNum = res.data?.data?.orderNumber || localId.replace('LOCAL-', '')
       setOrderSuccess(orderNum)
       playSoundWithSettings('orderComplete', soundSettings.orderComplete)
+
+      // 核销会员优惠券
+      if (selectedCoupon?.id) {
+        try {
+          await posApi.redeemCoupon(selectedCoupon.id, orderNum)
+        } catch (couponErr) {
+          console.error('Failed to redeem coupon:', couponErr)
+        }
+      }
+
+      // 清空已使用的优惠券
+      setSelectedCoupon(null)
+      setMemberCoupons(prev => prev.filter(c => c.id !== selectedCoupon?.id))
 
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {

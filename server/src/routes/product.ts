@@ -26,6 +26,11 @@ const createProductSchema = z.object({
   bomItems: z.array(z.object({
     inventoryId: z.string(),
     quantity: z.number().positive()
+  })).optional(),
+  channelPrices: z.array(z.object({
+    channelId: z.string(),
+    priceAdjustment: z.number(),
+    enabled: z.boolean()
   })).optional()
 })
 
@@ -140,8 +145,8 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// GET /api/products/:id/cost - Get product cost detail
-router.get('/:id/cost', authenticate, async (req: AuthRequest, res) => {
+// GET /api/products/:id/cost - Get product cost detail (admin/manager only)
+router.get('/:id/cost', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const costDetail = await ProductService.getProductCostDetail(id)
@@ -164,6 +169,8 @@ router.get('/:id/cost', authenticate, async (req: AuthRequest, res) => {
 // POST /api/products
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createProductSchema), async (req: AuthRequest, res) => {
   try {
+    console.log('=== CREATE PRODUCT REQUEST ===')
+    console.log('body:', JSON.stringify(req.body, null, 2))
     const product = await ProductService.createProduct(req.body)
 
     res.status(201).json({
@@ -172,9 +179,10 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
       data: product,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
-    console.error('Create product error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to create product' })
+  } catch (error: any) {
+    console.error('Create product error:', error.message || error)
+    console.error('Stack:', error.stack)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to create product' })
   }
 })
 
@@ -196,7 +204,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     res.status(500).json({
       code: 500,
       message: error.message || 'Failed to update product',
-      error: error.stack || error.toString()
+      error: error.message
     })
   }
 })
