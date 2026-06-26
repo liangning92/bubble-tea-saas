@@ -257,6 +257,17 @@ export function POSPage() {
     channelGoFood: true,
     channelGrab: true,
     channelShopee: true,
+    // 快捷键配置
+    hotkeys: {
+      newOrder: 'F1',
+      suspendOrder: 'F2',
+      recallOrder: 'F3',
+      quickPay: 'F4',
+      barcodeScan: 'F5',
+      cashDrawer: 'F6',
+      receiptPrint: 'F7',
+      cancelOrder: 'F8',
+    },
     // 工具栏按钮自定义标签
     toolbarLabels: {
       suspend: 'toolbar.suspend',
@@ -277,12 +288,23 @@ export function POSPage() {
     openingHours: ''
   })
 
-  // 小票/税费设置
+  // 小票设置
   const [posReceipt, setPosReceipt] = useState({
     header: 'Bubble Tea Shop',
     footer: 'Thank you!',
     taxRate: 11,
-    showLogo: true
+    showLogo: true,
+    paperSize: '80mm',
+    printCopies: 1,
+    showQR: false,
+    showBarcode: true,
+    showKitchenNote: true,
+    storePhone: '',
+    storeAddress: '',
+    itemDetailFormat: 'standard',
+    showStaffName: true,
+    showCustomerName: false,
+    autoPrint: true,
   })
 
   // 税费设置（包含免税商品ID列表）
