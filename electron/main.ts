@@ -322,7 +322,6 @@ async function createWindow() {
     width: 1280,
     height: 800,
     title: 'Bubble Tea POS',
-    icon: path.join(__dirname, '..', 'shared', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
