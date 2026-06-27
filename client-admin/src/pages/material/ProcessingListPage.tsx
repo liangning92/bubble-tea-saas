@@ -192,13 +192,24 @@ function ProcessingHistory() {
 
   if (history.length === 0) return null
 
+  // Helper to safely parse JSON
+  const safeParse = (str: any, fallback: any[]) => {
+    if (!str) return fallback
+    if (Array.isArray(str)) return str
+    try {
+      return JSON.parse(str)
+    } catch {
+      return fallback
+    }
+  }
+
   return (
     <div className="card">
       <h3 className="font-semibold mb-4">{t('material.processHistory') || 'Process History'}</h3>
       <div className="space-y-3">
         {history.map((log: any) => {
-          const inputs = typeof log.inputItems === 'string' ? JSON.parse(log.inputItems) : log.inputItems
-          const outputs = typeof log.outputItems === 'string' ? JSON.parse(log.outputItems) : log.outputItems
+          const inputs = safeParse(log.inputItems, [])
+          const outputs = safeParse(log.outputItems, [])
 
           return (
             <div key={log.id} className="border border-border rounded-lg p-4">
@@ -215,19 +226,19 @@ function ProcessingHistory() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-gray-500 mb-1">{t('material.inputs') || 'Inputs'}</div>
-                  {inputs.map((item: any, idx: number) => (
+                  {inputs.length > 0 ? inputs.map((item: any, idx: number) => (
                     <div key={idx} className="text-gray-600">
                       {item.name}: {item.quantity} {item.unit}
                     </div>
-                  ))}
+                  )) : <div className="text-gray-400">-</div>}
                 </div>
                 <div>
                   <div className="text-gray-500 mb-1">{t('material.outputs') || 'Outputs'}</div>
-                  {outputs.map((item: any, idx: number) => (
+                  {outputs.length > 0 ? outputs.map((item: any, idx: number) => (
                     <div key={idx} className="text-green-600">
                       {item.name}: {item.quantity} {item.unit}
                     </div>
-                  ))}
+                  )) : <div className="text-gray-400">-</div>}
                 </div>
               </div>
               {log.note && <div className="mt-2 text-sm text-gray-500">{log.note}</div>}
