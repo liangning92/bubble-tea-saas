@@ -194,15 +194,17 @@ export function ExpenseListPage() {
     }
   }
 
-  // Load pending reimbursements
+  // Load reimbursements (pending and approved for action, not paid which are done)
   const loadReimbursements = async () => {
     setIsLoadingReimbursements(true)
     try {
       const params: any = {}
       params.storeId = user?.storeId
-      params.status = 'pending' // Only load pending for approval
+      // Load all, filter client-side to show pending + approved (for action)
       const response = await reimbursementApi.list(params)
-      setReimbursements(response.data?.data || [])
+      const all = response.data?.data || []
+      // Filter to show pending and approved (for action), hide paid/cancelled/rejected
+      setReimbursements(all.filter((r: any) => r.status === 'pending' || r.status === 'approved'))
     } catch (error) {
       console.error('Failed to load reimbursements:', error)
     } finally {
