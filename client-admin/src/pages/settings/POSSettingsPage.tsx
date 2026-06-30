@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw } from 'lucide-react'
+import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
@@ -207,16 +207,18 @@ export function POSSettingsPage() {
     footer: 'Thank you!',
     taxRate: 11,
     showLogo: true,
+    storeLogo: '',               // 店铺Logo URL
     headerCustomText: '',
     footerMessage: '',
     // 升级字段
     paperSize: '80mm',           // 纸张尺寸: 58mm / 80mm
     printCopies: 1,              // 打印份数
     showQR: false,                // 显示支付二维码
+    qrCodeUrl: '',               // 二维码链接/图片URL
     showBarcode: true,            // 显示订单条码
     showKitchenNote: true,        // 显示厨师备注
-    storePhone: '',              // 店铺电话
-    storeAddress: '',             // 店铺地址
+    storePhone: '',               // 店铺电话
+    storeAddress: '',            // 店铺地址
     itemDetailFormat: 'standard', // 明细格式: standard / compact
     showStaffName: true,          // 显示收款员
     showCustomerName: false,      // 显示顾客名称
@@ -1399,6 +1401,89 @@ export function POSSettingsPage() {
               ))}
             </div>
           </div>
+
+          {/* Logo上传 */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">{t('posSettings.storeLogo') || 'Store Logo'}</h3>
+            <div className="space-y-4">
+              {posReceipt.storeLogo && (
+                <div className="relative inline-block">
+                  <img src={posReceipt.storeLogo} alt="Store Logo" className="h-20 object-contain border rounded-lg p-2 bg-white" />
+                  <button
+                    onClick={() => {
+                      setPosReceipt({ ...posReceipt, storeLogo: '' })
+                      handleSave('posReceipt', { ...posReceipt, storeLogo: '' })
+                    }}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <div>
+                <input
+                  type="text"
+                  value={posReceipt.storeLogo || ''}
+                  onChange={(e) => setPosReceipt({ ...posReceipt, storeLogo: e.target.value })}
+                  onBlur={() => handleSave('posReceipt', posReceipt)}
+                  className="input"
+                  placeholder={t('posSettings.logoUrlPlaceholder') || 'Logo URL or upload below'}
+                />
+                <p className="text-xs text-gray-500 mt-1">{t('posSettings.logoUrlHint') || 'Enter logo URL or use upload button'}</p>
+              </div>
+              <div>
+                <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
+                  <Upload size={16} />
+                  {t('posSettings.uploadLogo') || 'Upload Logo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      try {
+                        const formData = new FormData()
+                        formData.append('images', file)
+                        const res = await axios.post('/api/upload/product', formData, {
+                          headers: { 'Content-Type': 'multipart/form-data' }
+                        })
+                        const url = res.data.data.urls[0]
+                        setPosReceipt({ ...posReceipt, storeLogo: url })
+                        handleSave('posReceipt', { ...posReceipt, storeLogo: url })
+                      } catch (err) {
+                        console.error('Logo upload failed:', err)
+                        alert('Logo upload failed')
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* QR码设置 */}
+          {posReceipt.showQR && (
+            <div className="card">
+              <h3 className="text-lg font-semibold mb-4">{t('posSettings.qrCode') || 'QR Code'}</h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t('posSettings.qrCodeUrl') || 'QR Code URL / Content'}
+                </label>
+                <input
+                  type="text"
+                  value={posReceipt.qrCodeUrl || ''}
+                  onChange={(e) => setPosReceipt({ ...posReceipt, qrCodeUrl: e.target.value })}
+                  onBlur={() => handleSave('posReceipt', posReceipt)}
+                  className="input"
+                  placeholder={t('posSettings.qrCodePlaceholder') || 'Enter payment QR code URL or content'}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('posSettings.qrCodeHint') || 'Enter URL or text content for the QR code on receipt'}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 自定义文字 */}
           <div className="card">
