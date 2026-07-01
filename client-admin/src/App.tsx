@@ -108,6 +108,9 @@ import { FinanceReportsPage } from './pages/finance/FinanceReportsPage'
 import { FinanceIndexPage } from './pages/finance/FinanceIndexPage'
 import { FixedAssetsPage } from './pages/finance/FixedAssetsPage'
 import { TaxReportsPage } from './pages/finance/TaxReportsPage'
+import { AccountsPage } from './pages/finance/AccountsPage'
+import { BudgetPage } from './pages/finance/BudgetPage'
+import { FinanceSettingsPage } from './pages/finance/FinanceSettingsPage'
 import { ExpenseListPage } from './pages/expense/ExpenseListPage'
 import { ChannelIndexPage } from './pages/channels/ChannelIndexPage'
 import { ChannelListPage } from './pages/channels/ChannelListPage'
@@ -308,6 +311,8 @@ function App() {
         <Route path="finance" element={<FinanceIndexPage />}>
           <Route index element={<Navigate to="/finance/revenue" replace />} />
           <Route path="revenue" element={<RevenuePage />} />
+          <Route path="accounts" element={<AccountsPage />} />
+          <Route path="budgets" element={<BudgetPage />} />
           <Route path="orders" element={<OrderListPage />} />
           <Route path="orders/:id" element={<OrderDetailPage />} />
           <Route path="refunds" element={<RefundRequestListPage />} />
@@ -315,6 +320,7 @@ function App() {
           <Route path="fixed-assets" element={<FixedAssetsPage />} />
           <Route path="reports" element={<FinanceReportsPage />} />
           <Route path="tax" element={<TaxReportsPage />} />
+          <Route path="settings" element={<FinanceSettingsPage />} />
         </Route>
 
         {/* 公告管理 */}
