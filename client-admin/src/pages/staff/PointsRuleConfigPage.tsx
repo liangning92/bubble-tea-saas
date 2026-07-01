@@ -79,7 +79,7 @@ export function PointsRuleConfigPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('common.success') || 'Saved successfully')
+        alert(t('common.success'))
         loadRule()
       } else {
         alert(data.message || 'Failed to save')

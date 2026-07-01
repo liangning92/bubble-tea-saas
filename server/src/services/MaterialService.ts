@@ -259,7 +259,7 @@ export async function calculateRestockSuggestions(storeId: string, daysAhead: nu
         currentStock: Math.round(currentStock * 100) / 100,
         dailyUsage: Math.round(usage.dailyUsage * 100) / 100,
         suggestQty,
-        suggestCost: suggestQty * (inv.avgCost || 0)
+        suggestCost: suggestQty * Number(inv.avgCost || 0)
       })
     }
   }
@@ -301,14 +301,14 @@ export async function executeProcessing(
     const itemUnit = (inv.unit || '个').toLowerCase()
     const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(itemUnit)
 
-    let unitCost = inv.avgCost || 0
+    let unitCost = Number(inv.avgCost || 0)
     if (!isPerPiece) {
       // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
       unitCost = unitCost / 1000 / safeRatio
     }
     // 个/件等：直接使用，不需要转换
 
-    const cost = deductQty * unitCost
+    const cost = Number(deductQty) * unitCost
     totalInputCost += cost
 
     inputItems.push({
@@ -316,8 +316,8 @@ export async function executeProcessing(
       name: inv.name,
       unit: itemUnit,
       quantity: deductQty,
-      unitCost: Math.round(unitCost),
-      cost: Math.round(cost)
+      unitCost: Math.round(Number(unitCost)),
+      cost: Math.round(Number(cost))
     })
   }
 

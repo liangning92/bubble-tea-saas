@@ -17,7 +17,7 @@ import {
   Wifi, WifiOff, X, CheckCircle, Search, Loader2,
   ShoppingCart, Trash2, Minus, Plus, Tag, User, Clock,
   Globe, FileText, Users, Printer, ScanLine, Wallet, QrCode,
-  CheckSquare, ClipboardList, Lock, Settings
+  CheckSquare, ClipboardList, Lock, Settings, RotateCcw
 } from 'lucide-react'
 
 // Electron API
@@ -189,6 +189,13 @@ export function POSPage() {
   // 考勤二维码弹窗
   const [showAttendanceQR, setShowAttendanceQR] = useState(false)
 
+  // 退款弹窗
+  const [showRefundModal, setShowRefundModal] = useState(false)
+  const [refundOrders, setRefundOrders] = useState<any[]>([])
+  const [selectedRefundOrder, setSelectedRefundOrder] = useState<any>(null)
+  const [refundReason, setRefundReason] = useState('')
+  const [isProcessingRefund, setIsProcessingRefund] = useState(false)
+
   // 支付 - 使用orderStore
   const {
     paymentMethod, setPaymentMethod,
@@ -252,6 +259,7 @@ export function POSPage() {
     showHistory: true,
     showScan: true,
     showShift: true,
+    showRefund: true,
     showCash: false,
     channelDineIn: true,
     channelGoFood: true,
@@ -272,6 +280,7 @@ export function POSPage() {
     toolbarLabels: {
       suspend: 'toolbar.suspend',
       history: 'toolbar.history',
+      refund: 'toolbar.refund',
       scan: 'toolbar.scan',
       shift: 'toolbar.shift',
       cash: 'toolbar.cash',
@@ -1126,6 +1135,35 @@ export function POSPage() {
     }
   }
 
+  // 加载可退款订单
+  const fetchRefundOrders = async () => {
+    if (!user?.storeId) return
+    try {
+      const res = await posApi.getOrders({ storeId: user.storeId, limit: 50, status: 'completed' })
+      const refundable = (res.data?.data?.list || []).filter((o: any) => o.status === 'completed')
+      setRefundOrders(refundable)
+    } catch (e) {
+      console.error('Failed to fetch refund orders:', e)
+    }
+  }
+
+  // 处理退款
+  const processRefund = async () => {
+    if (!selectedRefundOrder) return
+    setIsProcessingRefund(true)
+    try {
+      await posApi.requestRefund({ orderId: selectedRefundOrder.id, reason: refundReason, staffId: user?.id })
+      showToast(t('pos.refundSuccess') || 'Refund request submitted')
+      setShowRefundModal(false)
+      setSelectedRefundOrder(null)
+      setRefundReason('')
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || t('pos.refundFailed') || 'Refund failed')
+    } finally {
+      setIsProcessingRefund(false)
+    }
+  }
+
   // 加载现金摘要
   const fetchCashSummary = async () => {
     try {
@@ -1729,6 +1767,17 @@ export function POSPage() {
               icon: <FileText size={32} />,
               labelKey: posLayout.toolbarLabels?.history || 'toolbar.history',
               onClick: () => setShowHistoryModal(true)
+            })
+          }
+          if (posLayout.showRefund !== false) {
+            toolbarButtons.push({
+              id: 'refund',
+              icon: <RotateCcw size={32} />,
+              labelKey: posLayout.toolbarLabels?.refund || 'toolbar.refund',
+              onClick: () => {
+                fetchRefundOrders()
+                setShowRefundModal(true)
+              }
             })
           }
           if (posLayout.showCash === true) {
@@ -2766,6 +2815,75 @@ export function POSPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 退款弹窗 */}
+      {showRefundModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowRefundModal(false)}>
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 flex justify-between items-center border-b">
+              <h3 className="font-bold">{t('toolbar.refund')}</h3>
+              <button onClick={() => setShowRefundModal(false)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {refundOrders.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">{t('pos.noRefundableOrders') || 'No completed orders to refund'}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-500">{t('pos.selectOrderToRefund') || 'Select an order to refund'}</p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {refundOrders.map(order => (
+                      <div
+                        key={order.id}
+                        className={`p-3 rounded-xl cursor-pointer transition-colors ${
+                          selectedRefundOrder?.id === order.id ? 'bg-primary/10 border-2 border-primary' : 'bg-gray-50 hover:bg-gray-100'
+                        }`}
+                        onClick={() => setSelectedRefundOrder(order)}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-bold">#{order.orderNumber || order.id}</p>
+                            <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-primary">{formatCurrency(order.finalAmount || order.totalAmount)}</p>
+                            <p className="text-xs text-gray-500">{order.channelName || order.channelId}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedRefundOrder && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-xl">
+                      <label className="block text-sm font-medium mb-2">{t('pos.refundReason') || 'Refund Reason'}</label>
+                      <textarea
+                        value={refundReason}
+                        onChange={e => setRefundReason(e.target.value)}
+                        className="w-full p-3 border rounded-lg"
+                        rows={2}
+                        placeholder={t('pos.enterRefundReason') || 'Enter reason for refund'}
+                      />
+                    </div>
+                  )}
+                  <button
+                    onClick={processRefund}
+                    disabled={!selectedRefundOrder || isProcessingRefund}
+                    className="w-full py-3 bg-red-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isProcessingRefund ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <RotateCcw size={20} />
+                    )}
+                    {t('pos.processRefund') || 'Process Refund'}
+                  </button>
+                </>
               )}
             </div>
           </div>

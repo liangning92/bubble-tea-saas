@@ -143,7 +143,7 @@ export function TrainingListPage() {
       if (response.ok) {
         setCategories(categoryForm)
         setShowCategoryModal(false)
-        alert(t('common.success') || 'Saved successfully')
+        alert(t('common.success'))
       }
     } catch (error) {
       console.error('Failed to save categories:', error)

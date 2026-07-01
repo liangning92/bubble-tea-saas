@@ -238,7 +238,7 @@ export function DashboardPage() {
                       item.urgency === 'critical' ? 'text-red-600' :
                       item.urgency === 'warning' ? 'text-orange-600' : 'text-gray-600'
                     }`}>
-                      {item.daysLeft} {t('bom.days') || 'days'}
+                      {item.daysLeft} {t('bom.days')}
                     </span>
                     <span className="text-xs text-gray-400 ml-1">
                       ({item.currentStock} {item.unit})
@@ -259,7 +259,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2 text-orange-700">
               <AlertTriangle size={20} />
-              {t('dashboard.consumptionAnomaly') || '消耗异常预警'}
+              {t('dashboard.consumptionAnomaly')}
             </h2>
             <button
               onClick={() => navigate('/inventory/consumption-analysis')}
@@ -331,7 +331,7 @@ export function DashboardPage() {
             <p className="text-sm text-gray-500">{t('dashboard.lowStock')}</p>
             <p className="text-2xl font-bold text-red-600">
               {dashboard?.inventory?.criticalCount || 0}
-              <span className="text-sm text-gray-400 font-normal"> / {dashboard?.inventory?.warningCount || 0} {t('dashboard.warning') || 'warning'}</span>
+              <span className="text-sm text-gray-400 font-normal"> / {dashboard?.inventory?.warningCount || 0} {t('dashboard.warning')}</span>
             </p>
           </div>
         </div>

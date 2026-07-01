@@ -119,19 +119,19 @@ export function ProductFormPage() {
 
     // Validation
     if (!form.name.trim()) {
-      alert(t('products.nameRequired') || '请输入产品名称')
+      alert(t('products.nameRequired'))
       return
     }
     if (!form.categoryId) {
-      alert(t('products.categoryRequired') || '请选择产品分类')
+      alert(t('products.categoryRequired'))
       return
     }
     if (form.specs.length === 0 || !form.specs[0].name.trim()) {
-      alert(t('products.specRequired') || '请至少添加一个规格')
+      alert(t('products.specRequired'))
       return
     }
     if (form.specs.some(s => s.price < 0)) {
-      alert(t('products.priceInvalid') || '规格价格不能为负数')
+      alert(t('products.priceInvalid'))
       return
     }
 

@@ -135,7 +135,7 @@ export function HygieneAreasPage() {
   }
 
   const handleDelete = (id: string) => {
-    if (window.confirm(t('hygiene.confirmDelete') || 'Delete this area?')) {
+    if (window.confirm(t('hygiene.confirmDelete'))) {
       deleteMutation.mutate(id)
     }
   }

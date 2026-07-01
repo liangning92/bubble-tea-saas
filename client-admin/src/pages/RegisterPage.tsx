@@ -42,19 +42,19 @@ export function RegisterPage() {
 
   const validateStep1 = () => {
     if (!formData.name.trim()) {
-      setError(t('auth.nameRequired') || 'Name is required')
+      setError(t('auth.nameRequired'))
       return false
     }
     if (!formData.phone.match(/^[\d]{10,14}$/)) {
-      setError(t('auth.invalidPhone') || 'Invalid phone number')
+      setError(t('auth.invalidPhone'))
       return false
     }
     if (formData.password.length < 6) {
-      setError(t('auth.passwordMinLength') || 'Password must be at least 6 characters')
+      setError(t('auth.passwordMinLength'))
       return false
     }
     if (formData.password !== formData.confirmPassword) {
-      setError(t('auth.passwordMismatch') || 'Passwords do not match')
+      setError(t('auth.passwordMismatch'))
       return false
     }
     return true
@@ -158,7 +158,7 @@ export function RegisterPage() {
                 {step > 1 ? <Check size={20} /> : '1'}
               </div>
               <span className={`text-sm font-medium ${step >= 1 ? 'text-primary' : 'text-gray-500'}`}>
-                {t('auth.stepBasic') || '基本信息'}
+                {t('auth.stepBasic')}
               </span>
             </div>
             <div className={`w-12 h-1 transition-colors ${step >= 2 ? 'bg-primary' : 'bg-gray-200'}`} />
@@ -167,7 +167,7 @@ export function RegisterPage() {
                 2
               </div>
               <span className={`text-sm font-medium ${step >= 2 ? 'text-primary' : 'text-gray-500'}`}>
-                {t('auth.stepStore') || '店铺信息'}
+                {t('auth.stepStore')}
               </span>
             </div>
           </div>

@@ -132,7 +132,7 @@ export async function receivePurchaseOrder(orderId: string, staffId: string) {
 
       if (inventory) {
         // Calculate new average cost
-        const totalCurrentValue = inventory.currentStock * inventory.avgCost
+        const totalCurrentValue = Number(inventory.currentStock) * Number(inventory.avgCost)
         const totalNewValue = item.quantity * item.unitCost
         const newStock = inventory.currentStock + item.quantity
         const newAvgCost = newStock > 0

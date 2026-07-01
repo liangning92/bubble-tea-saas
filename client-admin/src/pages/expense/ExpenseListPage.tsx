@@ -634,7 +634,7 @@ export function ExpenseListPage() {
                 expenseSubTab === 'expenses' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {t('expense.expenses') || 'Expenses'}
+              {t('expense.expenses')}
             </button>
             <button
               onClick={() => setExpenseSubTab('reimbursements')}
@@ -642,7 +642,7 @@ export function ExpenseListPage() {
                 expenseSubTab === 'reimbursements' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {t('reimbursement.title') || 'Reimbursements'}
+              {t('reimbursement.title')}
               {pendingReimbCount > 0 && (
                 <span className="ml-1.5 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{pendingReimbCount}</span>
               )}
@@ -869,7 +869,7 @@ export function ExpenseListPage() {
         <div className="p-4 space-y-4">
           {reimbursements.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl">
-              <p className="text-gray-500">{t('reimbursement.noRequests') || 'No reimbursement requests'}</p>
+              <p className="text-gray-500">{t('reimbursement.noRequests')}</p>
             </div>
           ) : (
             <div className="bg-white rounded-xl overflow-hidden">
@@ -957,6 +957,21 @@ export function ExpenseListPage() {
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('expense.type')}
+                </label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  className="w-full p-3 border border-gray-200 rounded-xl"
+                >
+                  <option value="operational">{t('expense.typeOperational')}</option>
+                  <option value="asset">{t('expense.typeAsset')}</option>
+                  <option value="asset_disposal">{t('expense.typeDisposal')}</option>
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('expense.category')}

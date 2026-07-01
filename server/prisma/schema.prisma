@@ -726,7 +726,7 @@ model Inventory {
   type                String               @default("raw_material") // raw_material | semi_finished | finished_goods
   unit                String // kg | ml | 个
   currentStock        Float                @default(0)
-  avgCost             Int                  @default(0) // 均价(分/kg或分/ml)
+  avgCost             BigInt               @default(0) // 均价(分/kg或分/ml)
   concentrateRatio    Float                @default(1) // 浓缩比例(比如茶叶浓缩10倍)
   safetyStock         Float                @default(0)
   minStock            Float                @default(0) // 最低库存阈值

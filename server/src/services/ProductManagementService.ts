@@ -91,7 +91,7 @@ export async function calculateRecipeCost(recipeId: string) {
     })
     if (inventory) {
       // Cost per unit = avgCost / unit conversion
-      const costPerUnit = inventory.avgCost / (inventory.unit === 'kg' ? 1000 : inventory.unit === 'l' ? 1000 : 1)
+      const costPerUnit = Number(inventory.avgCost) / (inventory.unit === 'kg' ? 1000 : inventory.unit === 'l' ? 1000 : 1)
       materialCost += costPerUnit * ing.quantity
     }
   }

@@ -74,10 +74,10 @@ export function LeaveBalancePage() {
           broughtForward: balance.broughtForward
         })
       })
-      alert(t('common.saveSuccess') || 'Saved successfully')
+      alert(t('common.saveSuccess'))
     } catch (error) {
       console.error('Failed to save:', error)
-      alert(t('common.saveFailed') || 'Failed to save')
+      alert(t('common.saveFailed'))
     } finally {
       setSaving(null)
     }
@@ -102,9 +102,9 @@ export function LeaveBalancePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold">{t('staff.leaveBalance') || '请假余额'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.leaveBalance')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t('staff.leaveBalanceDesc') || '管理员工年假和病假余额'}
+            {t('staff.leaveBalanceDesc')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ export function LeaveBalancePage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={t('staff.searchStaff') || '搜索员工...'}
+            placeholder={t('staff.searchStaff')}
             className="input w-full pl-10"
           />
         </div>
@@ -148,28 +148,28 @@ export function LeaveBalancePage() {
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
-                  {t('staff.name') || '员工'}
+                  {t('staff.name')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.annualLeave') || '年假'}
+                  {t('staff.annualLeave')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.used') || '已用'}
+                  {t('staff.used')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.available') || '剩余'}
+                  {t('staff.available')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.sickLeave') || '病假'}
+                  {t('staff.sickLeave')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.used') || '已用'}
+                  {t('staff.used')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.available') || '剩余'}
+                  {t('staff.available')}
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">
-                  {t('staff.actions') || '操作'}
+                  {t('staff.actions')}
                 </th>
               </tr>
             </thead>

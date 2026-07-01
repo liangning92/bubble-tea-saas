@@ -198,7 +198,7 @@ router.get('/inventory', authenticate, authorize('admin', 'manager'), async (req
       unit: item.unit,
       currentStock: item.currentStock,
       avgCost: item.avgCost,
-      totalValue: item.currentStock * item.avgCost,
+      totalValue: Number(item.currentStock) * Number(item.avgCost),
       safetyStock: item.safetyStock,
       isLowStock: item.currentStock <= item.safetyStock,
       lastIn: item.stockInLogs[0] || null,

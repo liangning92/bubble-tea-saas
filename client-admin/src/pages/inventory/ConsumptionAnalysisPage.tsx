@@ -106,19 +106,19 @@ export function ConsumptionAnalysisPage() {
               onClick={() => setQuickDateRange(7)}
               className="btn btn-sm btn-outline"
             >
-              7 {t('common.days') || 'days'}
+              7 {t('common.days')}
             </button>
             <button
               onClick={() => setQuickDateRange(14)}
               className="btn btn-sm btn-outline"
             >
-              14 {t('common.days') || 'days'}
+              14 {t('common.days')}
             </button>
             <button
               onClick={() => setQuickDateRange(30)}
               className="btn btn-sm btn-outline"
             >
-              30 {t('common.days') || 'days'}
+              30 {t('common.days')}
             </button>
           </div>
 
@@ -140,7 +140,7 @@ export function ConsumptionAnalysisPage() {
 
           <div className="flex gap-2 items-center ml-auto">
             <label className="text-sm text-gray-600">
-              {t('inventory.varianceThreshold') || 'Variance Threshold'}:
+              {t('inventory.varianceThreshold')}:
             </label>
             <select
               value={varianceThreshold}
@@ -162,24 +162,24 @@ export function ConsumptionAnalysisPage() {
         <div className="card text-center border-2 border-green-200">
           <CheckCircle className="mx-auto mb-2 text-green-500" size={32} />
           <div className="text-3xl font-bold text-green-600">{summary.normal}</div>
-          <div className="text-sm text-gray-500">{t('inventory.normal') || 'Normal'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.normal')}</div>
         </div>
 
         <div className="card text-center border-2 border-orange-200">
           <AlertTriangle className="mx-auto mb-2 text-orange-500" size={32} />
           <div className="text-3xl font-bold text-orange-600">{summary.warning}</div>
-          <div className="text-sm text-gray-500">{t('inventory.warning') || 'Warning'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.warning')}</div>
         </div>
 
         <div className="card text-center border-2 border-red-200">
           <AlertCircle className="mx-auto mb-2 text-red-500" size={32} />
           <div className="text-3xl font-bold text-red-600">{summary.critical}</div>
-          <div className="text-sm text-gray-500">{t('inventory.critical') || 'Abnormal'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.critical')}</div>
         </div>
 
         <div className="card text-center">
           <div className="text-3xl font-bold text-gray-600">{summary.total}</div>
-          <div className="text-sm text-gray-500">{t('inventory.total') || 'Total'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.total')}</div>
         </div>
       </div>
 
@@ -189,25 +189,25 @@ export function ConsumptionAnalysisPage() {
           onClick={() => setSelectedStatus('all')}
           className={`btn btn-sm ${selectedStatus === 'all' ? 'btn-primary' : 'btn-outline'}`}
         >
-          {t('common.all') || 'All'}
+          {t('common.all')}
         </button>
         <button
           onClick={() => setSelectedStatus('critical')}
           className={`btn btn-sm ${selectedStatus === 'critical' ? 'btn-primary' : 'btn-outline'}`}
         >
-          {t('inventory.critical') || 'Abnormal'}
+          {t('inventory.critical')}
         </button>
         <button
           onClick={() => setSelectedStatus('warning')}
           className={`btn btn-sm ${selectedStatus === 'warning' ? 'btn-primary' : 'btn-outline'}`}
         >
-          {t('inventory.warning') || 'Warning'}
+          {t('inventory.warning')}
         </button>
         <button
           onClick={() => setSelectedStatus('normal')}
           className={`btn btn-sm ${selectedStatus === 'normal' ? 'btn-primary' : 'btn-outline'}`}
         >
-          {t('inventory.normal') || 'Normal'}
+          {t('inventory.normal')}
         </button>
       </div>
 
@@ -218,25 +218,25 @@ export function ConsumptionAnalysisPage() {
         </div>
       ) : !dateRange.startDate || !dateRange.endDate ? (
         <div className="card text-center py-12 text-gray-500">
-          {t('inventory.selectDateRange') || 'Select date range'}
+          {t('inventory.selectDateRange')}
         </div>
       ) : filteredAnalysis.length === 0 ? (
         <div className="card text-center py-12 text-gray-500">
           <CheckCircle size={48} className="mx-auto mb-4 text-green-300" />
-          <p>{t('inventory.noAnomalies') || 'No anomalies found'}</p>
+          <p>{t('inventory.noAnomalies')}</p>
         </div>
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr className="text-left text-sm text-gray-500 border-b">
-                <th className="pb-3 px-4">{t('inventory.material') || 'Raw Material'}</th>
-                <th className="pb-3 px-4 text-right">{t('inventory.theoreticalConsumption') || 'Theoretical'}</th>
-                <th className="pb-3 px-4 text-right">{t('inventory.actualConsumption') || 'Actual'}</th>
-                <th className="pb-3 px-4 text-right">{t('inventory.variance') || 'Variance'}</th>
-                <th className="pb-3 px-4 text-right">{t('inventory.variancePercent') || 'Variance %'}</th>
-                <th className="pb-3 px-4 text-center">{t('inventory.status') || 'Status'}</th>
-                <th className="pb-3 px-4 text-right">{t('inventory.orderCount') || 'Orders'}</th>
+                <th className="pb-3 px-4">{t('inventory.material')}</th>
+                <th className="pb-3 px-4 text-right">{t('inventory.theoreticalConsumption')}</th>
+                <th className="pb-3 px-4 text-right">{t('inventory.actualConsumption')}</th>
+                <th className="pb-3 px-4 text-right">{t('inventory.variance')}</th>
+                <th className="pb-3 px-4 text-right">{t('inventory.variancePercent')}</th>
+                <th className="pb-3 px-4 text-center">{t('inventory.status')}</th>
+                <th className="pb-3 px-4 text-right">{t('inventory.orderCount')}</th>
               </tr>
             </thead>
             <tbody>
@@ -281,7 +281,7 @@ export function ConsumptionAnalysisPage() {
         <div className="card border-red-200">
           <h3 className="font-semibold mb-4 flex items-center gap-2 text-red-600">
             <AlertCircle size={20} />
-            {t('inventory.criticalItemsDetail') || 'Abnormal items detail'}
+            {t('inventory.criticalItemsDetail')}
           </h3>
           <div className="space-y-3">
             {summary.criticalItems.map((item: ConsumptionItem) => (
@@ -290,7 +290,7 @@ export function ConsumptionAnalysisPage() {
                   <div>
                     <div className="font-medium text-red-700">{item.inventoryName}</div>
                     <div className="text-sm text-red-600">
-                      {t('inventory.theoreticalVsActual') || 'Theoretical'}：{item.theoreticalConsumption.toFixed(2)} {item.unit} vs {t('inventory.actualConsumption') || 'Actual'}：{item.actualConsumption.toFixed(2)} {item.unit}
+                      {t('inventory.theoreticalVsActual')}：{item.theoreticalConsumption.toFixed(2)} {item.unit} vs {t('inventory.actualConsumption')}：{item.actualConsumption.toFixed(2)} {item.unit}
                     </div>
                   </div>
                   <div className="text-right">
@@ -298,14 +298,14 @@ export function ConsumptionAnalysisPage() {
                       {item.variance >= 0 ? '+' : ''}{item.variancePercent.toFixed(1)}%
                     </div>
                     <div className="text-sm text-gray-500">
-                      {item.variance >= 0 ? t('inventory.overConsumption') || 'Over-consumed' : t('inventory.underConsumption') || 'Under-consumed'}
+                      {item.variance >= 0 ? t('inventory.overConsumption') : t('inventory.underConsumption')}
                       {Math.abs(item.variance).toFixed(2)} {item.unit}
                     </div>
                   </div>
                 </div>
                 <div className="mt-2 text-xs text-gray-500">
-                  {t('inventory.relatedOrders') || 'Related orders'}：{item.orderCount} |
-                  {item.lastOrderDate && `${t('inventory.lastOrder') || 'Last order'}：${new Date(item.lastOrderDate).toLocaleDateString()}`}
+                  {t('inventory.relatedOrders')}：{item.orderCount} |
+                  {item.lastOrderDate && `${t('inventory.lastOrder')}：${new Date(item.lastOrderDate).toLocaleDateString()}`}
                 </div>
               </div>
             ))}

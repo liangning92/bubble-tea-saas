@@ -40,24 +40,24 @@ export function StaffFormPage() {
   const resetPasswordMutation = useMutation({
     mutationFn: (password: string) => staffApi.resetPassword(id!, password),
     onSuccess: () => {
-      alert(t('staff.passwordResetSuccess') || 'Password reset successfully')
+      alert(t('staff.passwordResetSuccess'))
       setShowPasswordModal(false)
       setNewPassword('')
       setConfirmPassword('')
       setResetError('')
     },
     onError: (error: any) => {
-      setResetError(error?.message || t('staff.passwordResetFailed') || 'Failed to reset password')
+      setResetError(error?.message || t('staff.passwordResetFailed'))
     }
   })
 
   const handlePasswordReset = () => {
     if (newPassword.length < 6) {
-      setResetError(t('staff.passwordMinLength') || 'Password must be at least 6 characters')
+      setResetError(t('staff.passwordMinLength'))
       return
     }
     if (newPassword !== confirmPassword) {
-      setResetError(t('staff.passwordMismatch') || 'Passwords do not match')
+      setResetError(t('staff.passwordMismatch'))
       return
     }
     resetPasswordMutation.mutate(newPassword)
@@ -140,7 +140,7 @@ export function StaffFormPage() {
 
     // Validation for new staff
     if (!isEdit && !submitData.password) {
-      alert(t('staff.passwordRequired') || 'Password is required')
+      alert(t('staff.passwordRequired'))
       return
     }
 
@@ -203,15 +203,15 @@ export function StaffFormPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.systemRole') || 'System Role'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.systemRole')}</label>
                 <select
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="input"
                 >
-                  <option value="staff">{t('staff.staff') || 'Staff'}</option>
-                  <option value="cashier">{t('staff.cashier') || 'Cashier'}</option>
-                  <option value="manager">{t('staff.manager') || 'Manager'}</option>
+                  <option value="staff">{t('staff.staff')}</option>
+                  <option value="cashier">{t('staff.cashier')}</option>
+                  <option value="manager">{t('staff.manager')}</option>
                 </select>
               </div>
             </div>

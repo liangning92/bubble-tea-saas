@@ -241,7 +241,7 @@ export function ScheduleCalendarPage() {
             className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
           >
             <Settings size={16} />
-            {t('staff.shiftConfig') || '班次配置'}
+            {t('staff.shiftConfig')}
           </Link>
           <select
             value={positionFilter}
@@ -272,7 +272,7 @@ export function ScheduleCalendarPage() {
               : 'border border-gray-200 hover:bg-gray-50'
           }`}
         >
-          {batchMode ? t('staff.batchModeActive') || '批量模式' : t('staff.batchMode') || '批量排班'}
+          {batchMode ? t('staff.batchModeActive') : t('staff.batchMode')}
         </button>
 
         {batchMode && (
@@ -287,7 +287,7 @@ export function ScheduleCalendarPage() {
               ))}
             </select>
             <span className="text-sm text-gray-500">
-              {t('staff.selectedCount') || '已选择'}: {selectedStaff.size} {t('staff.staff') || '人'}
+              {t('staff.selectedCount')}: {selectedStaff.size} {t('staff.staff')}
             </span>
             <button
               onClick={handleBatchSave}
@@ -295,7 +295,7 @@ export function ScheduleCalendarPage() {
               className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
             >
               <Check size={18} />
-              {t('staff.applyToWeek') || '应用到本周'}
+              {t('staff.applyToWeek')}
             </button>
             <button
               onClick={() => {
@@ -425,7 +425,7 @@ export function ScheduleCalendarPage() {
                               className="inline-block px-2 py-1 rounded-full text-xs font-medium border bg-purple-100 text-purple-700 border-purple-300"
                               title={`Leave: ${leaveInfo.leaveType}`}
                             >
-                              {t('staff.onLeave') || 'Leave'}
+                              {t('staff.onLeave')}
                             </span>
                           ) : shiftInfo ? (
                             <span
@@ -450,7 +450,7 @@ export function ScheduleCalendarPage() {
       {editingCell && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingCell(null)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{t('staff.selectShift') || '选择班次'}</h3>
+            <h3 className="text-lg font-bold mb-4">{t('staff.selectShift')}</h3>
             <div className="grid grid-cols-2 gap-3 mb-4">
               {shifts.map(shift => (
                 <button

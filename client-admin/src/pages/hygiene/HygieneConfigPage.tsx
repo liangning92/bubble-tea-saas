@@ -180,13 +180,13 @@ export function HygieneConfigPage() {
   }
 
   const tabs: { key: ConfigTab; label: string }[] = [
-    { key: 'categories', label: t('hygiene.categories') || 'Categories' },
-    { key: 'priorities', label: t('hygiene.priorities') || 'Priorities' },
-    { key: 'shifts', label: t('hygiene.shifts') || 'Shifts' },
-    { key: 'evidence_types', label: t('hygiene.evidenceTypes') || 'Evidence Types' },
-    { key: 'weekdays', label: t('hygiene.weekdays') || 'Weekdays' },
-    { key: 'frequencies', label: t('hygiene.frequencies') || 'Frequencies' },
-    { key: 'assigned_types', label: t('hygiene.assignedTypes') || 'Assigned Types' },
+    { key: 'categories', label: t('hygiene.categories') },
+    { key: 'priorities', label: t('hygiene.priorities') },
+    { key: 'shifts', label: t('hygiene.shifts') },
+    { key: 'evidence_types', label: t('hygiene.evidenceTypes') },
+    { key: 'weekdays', label: t('hygiene.weekdays') },
+    { key: 'frequencies', label: t('hygiene.frequencies') },
+    { key: 'assigned_types', label: t('hygiene.assignedTypes') },
   ]
 
   return (

@@ -199,9 +199,9 @@ export function HygieneTemplateListPage() {
                   </td>
                   <td className="py-3 px-4">
                     {template.autoGenerate ? (
-                      <span className="text-xs text-green-600">{t('hygiene.auto') || 'Auto'}</span>
+                      <span className="text-xs text-green-600">{t('hygiene.auto')}</span>
                     ) : (
-                      <span className="text-xs text-gray-400">{t('hygiene.manual') || 'Manual'}</span>
+                      <span className="text-xs text-gray-400">{t('hygiene.manual')}</span>
                     )}
                   </td>
                   <td className="py-3 px-4 text-right">

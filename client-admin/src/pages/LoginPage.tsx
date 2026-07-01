@@ -311,15 +311,6 @@ export function LoginPage() {
           </p>
         </div>
 
-        {/* Demo Info */}
-        <div className="mt-4 p-4 bg-white/80 border border-gray-200 rounded-xl">
-          <p className="text-center text-xs text-gray-400 uppercase tracking-wider mb-2">{t('auth.testAccount')}</p>
-          <div className="text-center text-gray-500 text-xs space-y-1">
-            <p>{t('auth.roleAdmin')}: <span className="font-mono text-gray-700">081234567890</span></p>
-            <p>{t('auth.roleCashier')}: <span className="font-mono text-gray-700">081234567892</span></p>
-            <p>{t('auth.testPassword')}: <span className="font-mono text-gray-700">admin123</span></p>
-          </div>
-        </div>
       </div>
     </div>
   )

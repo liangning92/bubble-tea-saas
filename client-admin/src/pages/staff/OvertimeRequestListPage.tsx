@@ -51,7 +51,7 @@ export function OvertimeRequestListPage() {
   }, [token, filter])
 
   const handleApprove = async (id: string) => {
-    if (!confirm(t('staff.overtimeConfirmApprove') || 'Approve this overtime request?')) return
+    if (!confirm(t('staff.overtimeConfirmApprove'))) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/overtime/${id}/approve`, {
@@ -64,7 +64,7 @@ export function OvertimeRequestListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.overtimeApproved') || 'Overtime request approved')
+        alert(t('staff.overtimeApproved'))
         loadData()
       } else {
         alert(data.message || t('common.error'))
@@ -77,7 +77,7 @@ export function OvertimeRequestListPage() {
   }
 
   const handleReject = async (id: string) => {
-    const adminNote = prompt(t('staff.enterRejectReason') || 'Enter rejection reason:')
+    const adminNote = prompt(t('staff.enterRejectReason'))
     if (adminNote === null) return
     setProcessing(id)
     try {
@@ -91,7 +91,7 @@ export function OvertimeRequestListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.overtimeRejected') || 'Overtime request rejected')
+        alert(t('staff.overtimeRejected'))
         loadData()
       } else {
         alert(data.message || t('common.error'))
@@ -125,9 +125,9 @@ export function OvertimeRequestListPage() {
       rejected: 'bg-red-100 text-red-700'
     }
     const labels: Record<string, string> = {
-      pending: t('staff.statusPending') || 'Pending',
-      approved: t('staff.statusApproved') || 'Approved',
-      rejected: t('staff.statusRejected') || 'Rejected'
+      pending: t('staff.statusPending'),
+      approved: t('staff.statusApproved'),
+      rejected: t('staff.statusRejected')
     }
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || colors.pending}`}>
@@ -142,10 +142,10 @@ export function OvertimeRequestListPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Timer size={28} className="text-primary" />
-          <h1 className="text-xl font-bold">{t('staff.overtimeRequest') || 'Overtime Request'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.overtimeRequest')}</h1>
         </div>
         <button onClick={loadData} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">
-          {t('common.refresh') || 'Refresh'}
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -161,7 +161,7 @@ export function OvertimeRequestListPage() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) || status : t('common.all') || 'All'}
+            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) : t('common.all')}
             {status === 'pending' && requests.filter(r => r.status === 'pending').length > 0 && (
               <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                 {requests.filter(r => r.status === 'pending').length}
@@ -176,7 +176,7 @@ export function OvertimeRequestListPage() {
         <div className="text-center py-12 text-gray-500">{t('common.loading')}</div>
       ) : filteredRequests.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl">
-          <p className="text-gray-500">{t('staff.noOvertimeRequests') || 'No overtime requests'}</p>
+          <p className="text-gray-500">{t('staff.noOvertimeRequests')}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -206,17 +206,17 @@ export function OvertimeRequestListPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div>
-                      <p className="text-xs text-gray-400">{t('staff.startTime') || 'Start Time'}</p>
+                      <p className="text-xs text-gray-400">{t('staff.startTime')}</p>
                       <p className="text-lg font-bold text-gray-900">{request.startTime}</p>
                     </div>
                     <div className="text-gray-400">→</div>
                     <div>
-                      <p className="text-xs text-gray-400">{t('staff.endTime') || 'End Time'}</p>
+                      <p className="text-xs text-gray-400">{t('staff.endTime')}</p>
                       <p className="text-lg font-bold text-gray-900">{request.endTime}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-400">{t('staff.totalHours') || 'Total Hours'}</p>
+                    <p className="text-xs text-gray-400">{t('staff.totalHours')}</p>
                     <p className="text-2xl font-bold text-primary">{request.hours}h</p>
                   </div>
                 </div>
@@ -224,14 +224,14 @@ export function OvertimeRequestListPage() {
 
               {/* Reason */}
               <div className="mt-3">
-                <p className="text-xs text-gray-400">{t('staff.reason') || 'Reason'}</p>
+                <p className="text-xs text-gray-400">{t('staff.reason')}</p>
                 <p className="text-sm text-gray-700">{request.reason}</p>
               </div>
 
               {/* Admin Note */}
               {request.adminNote && (
                 <div className="mt-3 p-2 bg-red-50 rounded-lg">
-                  <p className="text-xs text-red-400">{t('staff.adminNote') || 'Admin Note'}</p>
+                  <p className="text-xs text-red-400">{t('staff.adminNote')}</p>
                   <p className="text-sm text-red-700">{request.adminNote}</p>
                 </div>
               )}

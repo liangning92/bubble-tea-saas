@@ -52,7 +52,7 @@ export function AttendanceCorrectionListPage() {
   }, [token, filter])
 
   const handleApprove = async (id: string) => {
-    if (!confirm(t('staff.correctionConfirmApprove') || 'Approve this correction request?')) return
+    if (!confirm(t('staff.correctionConfirmApprove'))) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/staff-correction/${id}/approve`, {
@@ -65,7 +65,7 @@ export function AttendanceCorrectionListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.correctionApproved') || 'Correction approved')
+        alert(t('staff.correctionApproved'))
         loadData()
       } else {
         alert(data.message || t('common.error'))
@@ -78,7 +78,7 @@ export function AttendanceCorrectionListPage() {
   }
 
   const handleReject = async (id: string) => {
-    const adminNote = prompt(t('staff.enterRejectReason') || 'Enter rejection reason:')
+    const adminNote = prompt(t('staff.enterRejectReason'))
     if (adminNote === null) return
     setProcessing(id)
     try {
@@ -92,7 +92,7 @@ export function AttendanceCorrectionListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.correctionRejected') || 'Correction rejected')
+        alert(t('staff.correctionRejected'))
         loadData()
       } else {
         alert(data.message || t('common.error'))
@@ -131,9 +131,9 @@ export function AttendanceCorrectionListPage() {
       rejected: 'bg-red-100 text-red-700'
     }
     const labels: Record<string, string> = {
-      pending: t('staff.statusPending') || 'Pending',
-      approved: t('staff.statusApproved') || 'Approved',
-      rejected: t('staff.statusRejected') || 'Rejected'
+      pending: t('staff.statusPending'),
+      approved: t('staff.statusApproved'),
+      rejected: t('staff.statusRejected')
     }
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || colors.pending}`}>
@@ -148,10 +148,10 @@ export function AttendanceCorrectionListPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Clock size={28} className="text-primary" />
-          <h1 className="text-xl font-bold">{t('staff.attendanceCorrection') || 'Attendance Correction'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.attendanceCorrection')}</h1>
         </div>
         <button onClick={loadData} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">
-          {t('common.refresh') || 'Refresh'}
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -167,7 +167,7 @@ export function AttendanceCorrectionListPage() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) || status : t('common.all') || 'All'}
+            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) : t('common.all')}
             {status === 'pending' && requests.filter(r => r.status === 'pending').length > 0 && (
               <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                 {requests.filter(r => r.status === 'pending').length}
@@ -182,7 +182,7 @@ export function AttendanceCorrectionListPage() {
         <div className="text-center py-12 text-gray-500">{t('common.loading')}</div>
       ) : filteredRequests.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl">
-          <p className="text-gray-500">{t('staff.noCorrections') || 'No correction requests'}</p>
+          <p className="text-gray-500">{t('staff.noCorrections')}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -209,24 +209,24 @@ export function AttendanceCorrectionListPage() {
 
               {/* Time Changes */}
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-2">{t('staff.timeChange') || 'Time Change'}</p>
+                <p className="text-xs text-gray-500 mb-2">{t('staff.timeChange')}</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-400">{t('staff.original') || 'Original'}</p>
+                    <p className="text-xs text-gray-400">{t('staff.original')}</p>
                     <p className="text-sm font-medium">
-                      {t('staff.checkIn') || 'Check In'}: {formatTime(request.originalCheckIn)}
+                      {t('staff.checkIn')}: {formatTime(request.originalCheckIn)}
                     </p>
                     <p className="text-sm font-medium">
-                      {t('staff.checkOut') || 'Check Out'}: {formatTime(request.originalCheckOut)}
+                      {t('staff.checkOut')}: {formatTime(request.originalCheckOut)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400">{t('staff.corrected') || 'Corrected'}</p>
+                    <p className="text-xs text-gray-400">{t('staff.corrected')}</p>
                     <p className="text-sm font-medium text-green-600">
-                      {t('staff.checkIn') || 'Check In'}: {formatTime(request.correctCheckIn)}
+                      {t('staff.checkIn')}: {formatTime(request.correctCheckIn)}
                     </p>
                     <p className="text-sm font-medium text-green-600">
-                      {t('staff.checkOut') || 'Check Out'}: {formatTime(request.correctCheckOut)}
+                      {t('staff.checkOut')}: {formatTime(request.correctCheckOut)}
                     </p>
                   </div>
                 </div>
@@ -234,14 +234,14 @@ export function AttendanceCorrectionListPage() {
 
               {/* Reason */}
               <div className="mt-3">
-                <p className="text-xs text-gray-400">{t('staff.reason') || 'Reason'}</p>
+                <p className="text-xs text-gray-400">{t('staff.reason')}</p>
                 <p className="text-sm text-gray-700">{request.reason}</p>
               </div>
 
               {/* Admin Note */}
               {request.adminNote && (
                 <div className="mt-3 p-2 bg-red-50 rounded-lg">
-                  <p className="text-xs text-red-400">{t('staff.adminNote') || 'Admin Note'}</p>
+                  <p className="text-xs text-red-400">{t('staff.adminNote')}</p>
                   <p className="text-sm text-red-700">{request.adminNote}</p>
                 </div>
               )}

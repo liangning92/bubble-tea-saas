@@ -90,10 +90,10 @@ export function StaffDetailPage() {
 
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
-      admin: t('staff.roleAdmin') || 'Admin',
-      manager: t('staff.roleManager') || 'Manager',
-      cashier: t('staff.roleCashier') || 'Cashier',
-      staff: t('staff.roleStaff') || 'Staff'
+      admin: t('staff.roleAdmin'),
+      manager: t('staff.roleManager'),
+      cashier: t('staff.roleCashier'),
+      staff: t('staff.roleStaff')
     }
     return labels[role] || role
   }
@@ -178,7 +178,7 @@ export function StaffDetailPage() {
         {/* Role & Permissions Card */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">{t('staff.rolePermission') || '角色权限'}</h3>
+            <h3 className="font-semibold text-gray-900">{t('staff.rolePermission')}</h3>
             <button
               onClick={handleOpenRoleModal}
               className="p-2 rounded-lg hover:bg-gray-100 text-primary"
@@ -189,14 +189,14 @@ export function StaffDetailPage() {
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-gray-500">{t('staff.systemRole') || '系统角色'}</span>
+              <span className="text-gray-500">{t('staff.systemRole')}</span>
               <span className="font-medium">{getRoleLabel(currentRole)}</span>
             </div>
             <div className="text-xs text-gray-400">
-              <p>• Admin: {t('staff.roleAdminDesc') || '全部权限'}</p>
-              <p>• Manager: {t('staff.roleManagerDesc') || '管理本门店'}</p>
-              <p>• Cashier: {t('staff.roleCashierDesc') || '收银权限'}</p>
-              <p>• Staff: {t('staff.roleStaffDesc') || '基础权限'}</p>
+              <p>• Admin: {t('staff.roleAdminDesc')}</p>
+              <p>• Manager: {t('staff.roleManagerDesc')}</p>
+              <p>• Cashier: {t('staff.roleCashierDesc')}</p>
+              <p>• Staff: {t('staff.roleStaffDesc')}</p>
             </div>
           </div>
         </div>
@@ -303,14 +303,14 @@ export function StaffDetailPage() {
       {showRoleModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRoleModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{t('staff.editRole') || '编辑角色'}</h3>
+            <h3 className="text-lg font-bold mb-4">{t('staff.editRole')}</h3>
 
             <div className="space-y-3 mb-4">
               {[
-                { key: 'admin', label: t('staff.roleAdmin') || 'Admin', desc: t('staff.roleAdminDesc') || '全部权限' },
-                { key: 'manager', label: t('staff.roleManager') || 'Manager', desc: t('staff.roleManagerDesc') || '管理本门店' },
-                { key: 'cashier', label: t('staff.roleCashier') || 'Cashier', desc: t('staff.roleCashierDesc') || '收银权限' },
-                { key: 'staff', label: t('staff.roleStaff') || 'Staff', desc: t('staff.roleStaffDesc') || '基础权限' }
+                { key: 'admin', label: t('staff.roleAdmin'), desc: t('staff.roleAdminDesc') },
+                { key: 'manager', label: t('staff.roleManager'), desc: t('staff.roleManagerDesc') },
+                { key: 'cashier', label: t('staff.roleCashier'), desc: t('staff.roleCashierDesc') },
+                { key: 'staff', label: t('staff.roleStaff'), desc: t('staff.roleStaffDesc') }
               ].map(role => (
                 <label
                   key={role.key}

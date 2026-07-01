@@ -109,11 +109,11 @@ async function calculateItemCost(inventoryId: string, quantity: number): Promise
     const costPerUnit = inv.avgCost || 0
     if (isPerPiece) {
       // 个/件等：直接 × avgCost
-      return quantity * costPerUnit
+      return quantity * Number(costPerUnit)
     } else {
       // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
       // 公式：quantity(g/ml) × (avgCost(分/kg) / 1000 / ratio)
-      return quantity * costPerUnit / 1000 / safeRatio
+      return quantity * Number(costPerUnit) / 1000 / safeRatio
     }
   }
 
@@ -147,10 +147,10 @@ async function calculateItemCost(inventoryId: string, quantity: number): Promise
 
       if (inputIsPerPiece) {
         // 个/件：直接 × avgCost
-        inputCostPerOutput += input.quantity * inputCostPerUnit
+        inputCostPerOutput += input.quantity * Number(inputCostPerUnit)
       } else {
         // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
-        inputCostPerOutput += input.quantity * inputCostPerUnit / 1000 / safeInputRatio
+        inputCostPerOutput += input.quantity * Number(inputCostPerUnit) / 1000 / safeInputRatio
       }
     }
 

@@ -127,7 +127,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-       <Routes>
+    <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
@@ -141,7 +141,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
 
-        {/* 1. 产品管理 - 产品目录、配方管理、加工工艺、产品分析 */}
+        {/* 1. 产品管理 */}
         <Route path="products" element={<ProductsIndexPage />}>
           <Route index element={<ProductListPage />} />
           <Route path="new" element={<ProductFormPage />} />
@@ -154,7 +154,7 @@ function App() {
           <Route path="addons" element={<AddonListPage />} />
         </Route>
 
-        {/* 渠道管理 - 独立的顶级模块 */}
+        {/* 渠道管理 */}
         <Route path="channels" element={<ChannelIndexPage />}>
           <Route index element={<ChannelListPage />} />
           <Route path="reports" element={<ChannelReportsPage />} />
@@ -162,7 +162,7 @@ function App() {
           <Route path="pricing" element={<ChannelProductPricingPage />} />
         </Route>
 
-        {/* 2. 库存管理 - 库存列表、库存记录、加工工艺、库存预警、补货建议、供应商 */}
+        {/* 2. 库存管理 */}
         <Route path="inventory" element={<InventoryIndexPage />}>
           <Route index element={<InventoryPage />} />
           <Route path="logs" element={<StockLogPage />} />
@@ -176,25 +176,22 @@ function App() {
           <Route path="suppliers" element={<SupplierListPage />} />
         </Route>
 
-        {/* 3. 运营功能 - KDS、外卖聚合、排队叫号（不在导航栏显示，但保留独立路由） */}
+        {/* 3. 运营功能 */}
         <Route path="kds" element={<KDSPage />} />
         <Route path="kds/config" element={<KDSConfigPage />} />
         <Route path="delivery" element={<DeliveryHubPage />} />
         <Route path="queue" element={<QueueManagePage />} />
         <Route path="queue/display" element={<QueueDisplayPage />} />
 
-        {/* 员工管理 - 6个一级Tab: 员工档案/考勤管理/排班管理/培训管理/薪资管理/积分管理 */}
+        {/* 员工管理 */}
         <Route path="staff" element={<StaffIndexPage />}>
-          {/* 1. 员工档案 */}
           <Route index element={<StaffListPage />} />
           <Route path="new" element={<StaffFormPage />} />
-          {/* Specific routes before catch-all :id to avoid /deposit being matched as employee id */}
           <Route path="deposit" element={<Navigate to="/staff/salary/deposit" replace />} />
-          {/* Catch-all employee id routes */}
           <Route path=":id" element={<StaffDetailPage />} />
           <Route path=":id/edit" element={<StaffFormPage />} />
 
-          {/* 2. 考勤管理 (考勤记录 + 排班申请) */}
+          {/* 考勤管理 */}
           <Route path="attendance" element={<AttendanceIndexPage />}>
             <Route index element={<AttendanceDashboardPage />} />
             <Route path="dashboard" element={<AttendanceDashboardPage />} />
@@ -207,14 +204,14 @@ function App() {
             <Route path="rules" element={<AttendanceRulesPage />} />
           </Route>
 
-          {/* 3. 排班管理 */}
+          {/* 排班管理 */}
           <Route path="schedule" element={<ScheduleCalendarPage />} />
           <Route path="schedule/shifts" element={<ShiftConfigPage />} />
 
-          {/* 4. 培训管理 */}
+          {/* 培训管理 */}
           <Route path="training" element={<TrainingListPage />} />
 
-          {/* 5. 薪资管理 (工资 + 报销 + 押金) */}
+          {/* 薪资管理 */}
           <Route path="salary" element={<SalaryIndexPage />}>
             <Route index element={<SalaryListPage />} />
             <Route path="salary" element={<SalaryListPage />} />
@@ -224,7 +221,7 @@ function App() {
             <Route path="reimbursement/types" element={<ReimbursementTypeConfigPage />} />
           </Route>
 
-          {/* 6. 积分管理 */}
+          {/* 积分管理 */}
           <Route path="points" element={<StaffPointsIndexPage />}>
             <Route index element={<StaffPointsPage />} />
             <Route path="rules" element={<StaffPointsRuleConfigPage />} />
@@ -232,28 +229,11 @@ function App() {
           </Route>
         </Route>
 
-        {/* 6. 营销管理 - 促销/会员/积分/消息/运营 */}
+        {/* 营销管理 */}
         <Route path="marketing" element={<MarketingIndexPage />}>
-          {/* 默认跳转 - 重定向旧路由到新分组 */}
           <Route index element={<Navigate to="/marketing/promotions" replace />} />
 
-          {/* 旧路由兼容 - 重定向到新分组 */}
-          <Route path="campaigns" element={<Navigate to="/marketing/promotions/campaigns" replace />} />
-          <Route path="coupons" element={<Navigate to="/marketing/promotions/coupons" replace />} />
-          <Route path="referrals" element={<Navigate to="/marketing/promotions/referrals" replace />} />
-          <Route path="campaign-categories" element={<Navigate to="/marketing/promotions/campaign-categories" replace />} />
-          <Route path="members" element={<Navigate to="/marketing/members" replace />} />
-          <Route path="tier-benefits" element={<Navigate to="/marketing/members/tier-benefits" replace />} />
-          <Route path="points-rule" element={<Navigate to="/marketing/points" replace />} />
-          <Route path="points-expiry" element={<Navigate to="/marketing/points/expiry" replace />} />
-          <Route path="rewards" element={<Navigate to="/marketing/points/rewards" replace />} />
-          <Route path="channels" element={<Navigate to="/marketing/messages" replace />} />
-          <Route path="message-settings" element={<Navigate to="/marketing/messages/settings" replace />} />
-          <Route path="automation" element={<Navigate to="/marketing/operations" replace />} />
-          <Route path="notifications" element={<Navigate to="/marketing/operations/notifications" replace />} />
-          <Route path="analytics" element={<Navigate to="/marketing/operations/analytics" replace />} />
-
-          {/* 促销: 活动/优惠券/推荐/类别/满减规则 */}
+          {/* 促销 */}
           <Route path="promotions" element={<PromotionsIndexPage />}>
             <Route index element={<CampaignListPage />} />
             <Route path="campaigns" element={<CampaignListPage />} />
@@ -272,7 +252,8 @@ function App() {
             <Route path="timed-specials" element={<TimedSpecialPage />} />
             <Route path="stacking-rules" element={<StackingRulePage />} />
           </Route>
-          {/* 会员: 会员列表/等级权益 */}
+
+          {/* 会员 */}
           <Route path="members" element={<MembersIndexPage />}>
             <Route index element={<MemberListPage />} />
             <Route path="list" element={<MemberListPage />} />
@@ -280,21 +261,24 @@ function App() {
             <Route path="tier-benefits" element={<TierBenefitsPage />} />
             <Route path="balance" element={<MemberBalancePage />} />
           </Route>
-          {/* 积分: 规则/过期/奖励 */}
+
+          {/* 积分 */}
           <Route path="points" element={<PointsIndexPage />}>
             <Route index element={<PointsRuleConfigPage />} />
             <Route path="rule" element={<PointsRuleConfigPage />} />
             <Route path="expiry" element={<PointsExpiryConfigPage />} />
             <Route path="rewards" element={<RewardCatalogPage />} />
           </Route>
-          {/* 消息: 渠道/设置 */}
+
+          {/* 消息 */}
           <Route path="messages" element={<MessagesIndexPage />}>
             <Route index element={<MarketingChannelsPage />} />
             <Route path="channels" element={<MarketingChannelsPage />} />
             <Route path="settings" element={<MessageSettingsPage />} />
             <Route path="stats" element={<MessageStatsPage />} />
           </Route>
-          {/* 运营: 自动化/通知/分析 */}
+
+          {/* 运营 */}
           <Route path="operations" element={<OperationsIndexPage />}>
             <Route index element={<AutomationPage />} />
             <Route path="automation" element={<AutomationPage />} />
@@ -308,7 +292,7 @@ function App() {
           </Route>
         </Route>
 
-        {/* 7. 卫生管理 - 任务、统计 */}
+        {/* 卫生管理 */}
         <Route path="hygiene" element={<HygieneIndexPage />}>
           <Route index element={<HygieneTemplateListPage />} />
           <Route path="new" element={<HygieneTemplateFormPage />} />
@@ -320,7 +304,7 @@ function App() {
           <Route path="config" element={<HygieneConfigPage />} />
         </Route>
 
-        {/* 8. 财务管理 - 营收/订单/退款/费用/固定资产/报表/税务 */}
+        {/* 财务管理 */}
         <Route path="finance" element={<FinanceIndexPage />}>
           <Route index element={<Navigate to="/finance/revenue" replace />} />
           <Route path="revenue" element={<RevenuePage />} />
@@ -333,16 +317,16 @@ function App() {
           <Route path="tax" element={<TaxReportsPage />} />
         </Route>
 
-        {/* 9. 公告管理 */}
+        {/* 公告管理 */}
         <Route path="announcement" element={<AnnouncementListPage />} />
         <Route path="announcement/new" element={<AnnouncementFormPage />} />
         <Route path="announcement/edit/:id" element={<AnnouncementFormPage />} />
 
-        {/* 10. 系统设置 */}
+        {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<POSSettingsPage />} />
 
-        {/* 10. 数据导入 */}
+        {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />
       </Route>
     </Routes>

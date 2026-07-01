@@ -113,12 +113,12 @@ export async function calculateProductCost(productId: string): Promise<number> {
         // kg/L inventory: divide by 1000 to convert to g/ml
         // g/ml inventory: avgCost is already per unit, no conversion needed
         if (invUnit === 'kg' || invUnit === 'l') {
-          cpu = cpu / 1000
+          cpu = Number(cpu) / 1000
         }
         // Apply concentrateRatio (for diluted/concentrated items)
-        cpu = cpu / safeRatio
+        cpu = Number(cpu) / safeRatio
       }
-      totalCost += (item.quantity || 0) * cpu
+      totalCost += (item.quantity || 0) * Number(cpu)
     }
   }
 
@@ -410,8 +410,8 @@ export async function updateProductBom(productId: string, bomItems: { inventoryI
       data: bomItems.map(bom => {
         const inv = invMap[bom.inventoryId]
         const inventoryType = inv?.type || 'raw_material'
-        const costPerUnit = inv?.avgCost || 0
-        const totalCost = Math.round(bom.quantity * costPerUnit)
+        const costPerUnit = Number(inv?.avgCost) || 0
+        const totalCost = Math.round(bom.quantity * Number(costPerUnit))
         return {
           productId,
           inventoryId: bom.inventoryId,
@@ -626,17 +626,17 @@ export async function getProductCostDetail(productId: string) {
 
     let unitCost = 0
     if (isPerPiece) {
-      unitCost = costPerUnit
+      unitCost = Number(costPerUnit)
     } else {
       // kg/L inventory: divide by 1000 to convert to g/ml
       // g/ml inventory: avgCost is already per unit, no conversion needed
       if (invUnit === 'kg' || invUnit === 'l') {
-        unitCost = costPerUnit / 1000
+        unitCost = Number(costPerUnit) / 1000
       } else {
-        unitCost = costPerUnit
+        unitCost = Number(costPerUnit)
       }
       // Apply concentrateRatio (divide by ratio for diluted/concentrated items)
-      unitCost = unitCost / safeRatio
+      unitCost = Number(unitCost) / safeRatio
     }
 
     const totalCost = Math.round(item.quantity * unitCost)

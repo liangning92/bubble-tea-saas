@@ -93,7 +93,7 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
       const safeRatio = ratio === 0 ? 1 : ratio
 
       // 计算单位成本
-      let unitCost = inv.avgCost || 0
+      let unitCost = Number(inv.avgCost || 0)
       if (!isPerPiece) {
         // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
         unitCost = unitCost / 1000 / safeRatio
@@ -162,7 +162,7 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
       const currentAvgCost = outputInv.avgCost || 0
       const newTotalStock = currentStock + addQty
       const newAvgCost = newTotalStock > 0
-        ? Math.round((currentStock * currentAvgCost + addQty * outputUnitCost) / newTotalStock)
+        ? Math.round((Number(currentStock) * Number(currentAvgCost) + addQty * outputUnitCost) / newTotalStock)
         : outputUnitCost
 
       await tx.inventory.update({

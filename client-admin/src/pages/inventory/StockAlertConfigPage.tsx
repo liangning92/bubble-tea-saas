@@ -27,10 +27,10 @@ export function StockAlertConfigPage() {
     mutationFn: (config: AlertConfig) => inventoryApi.saveAlertConfig(config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-alert-config'] })
-      alert(t('common.saveSuccess') || '保存成功')
+      alert(t('common.saveSuccess'))
     },
     onError: () => {
-      alert(t('common.saveFailed') || '保存失败')
+      alert(t('common.saveFailed'))
     }
   })
 
@@ -91,10 +91,10 @@ export function StockAlertConfigPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {t('inventory.alertConfig') || '预警规则配置'}
+            {t('inventory.alertConfig')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t('inventory.alertConfigDesc') || '配置库存预警规则，系统将根据这些规则发送预警通知'}
+            {t('inventory.alertConfigDesc')}
           </p>
         </div>
         <div className="flex gap-3">
@@ -103,7 +103,7 @@ export function StockAlertConfigPage() {
             className="btn btn-outline flex items-center gap-2"
           >
             <RotateCcw size={16} />
-            {t('common.reset') || '重置'}
+            {t('common.reset')}
           </button>
           <button
             onClick={handleSave}
@@ -115,7 +115,7 @@ export function StockAlertConfigPage() {
             ) : (
               <Save size={16} />
             )}
-            {t('common.save') || '保存'}
+            {t('common.save')}
           </button>
         </div>
       </div>
@@ -128,10 +128,10 @@ export function StockAlertConfigPage() {
           </div>
           <div>
             <h2 className="text-lg font-semibold">
-              {t('inventory.lowStockAlert') || '低库存预警'}
+              {t('inventory.lowStockAlert')}
             </h2>
             <p className="text-sm text-gray-500">
-              {t('inventory.lowStockAlertDesc') || '当原料库存预计可用天数低于阈值时发送预警'}
+              {t('inventory.lowStockAlertDesc')}
             </p>
           </div>
           <div className="ml-auto">
@@ -143,7 +143,7 @@ export function StockAlertConfigPage() {
                 className="toggle toggle-primary"
               />
               <span className="text-sm text-gray-600">
-                {config.enableLowStockAlert ? t('common.enabled') || '已启用' : t('common.disabled') || '已禁用'}
+                {config.enableLowStockAlert ? t('common.enabled') : t('common.disabled')}
               </span>
             </label>
           </div>
@@ -153,7 +153,7 @@ export function StockAlertConfigPage() {
           <div className="grid grid-cols-2 gap-6">
             <div className="form-group">
               <label className="form-label">
-                {t('inventory.warningDays') || '预警天数'}
+                {t('inventory.warningDays')}
               </label>
               <input
                 type="number"
@@ -164,13 +164,13 @@ export function StockAlertConfigPage() {
                 className="input w-full"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {t('inventory.warningDaysHint') || '库存预计可用天数 ≤ 此值时发送预警'}
+                {t('inventory.warningDaysHint')}
               </p>
             </div>
 
             <div className="form-group">
               <label className="form-label">
-                {t('inventory.criticalDays') || '紧急天数'}
+                {t('inventory.criticalDays')}
               </label>
               <input
                 type="number"
@@ -181,7 +181,7 @@ export function StockAlertConfigPage() {
                 className="input w-full"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {t('inventory.criticalDaysHint') || '库存预计可用天数 ≤ 此值时发送紧急预警'}
+                {t('inventory.criticalDaysHint')}
               </p>
             </div>
           </div>
@@ -196,10 +196,10 @@ export function StockAlertConfigPage() {
           </div>
           <div>
             <h2 className="text-lg font-semibold">
-              {t('inventory.consumptionAlert') || '消耗异常预警'}
+              {t('inventory.consumptionAlert')}
             </h2>
             <p className="text-sm text-gray-500">
-              {t('inventory.consumptionAlertDesc') || '当实际消耗与理论消耗差异超过阈值时发送预警'}
+              {t('inventory.consumptionAlertDesc')}
             </p>
           </div>
           <div className="ml-auto">
@@ -211,7 +211,7 @@ export function StockAlertConfigPage() {
                 className="toggle toggle-primary"
               />
               <span className="text-sm text-gray-600">
-                {config.enableConsumptionAlert ? t('common.enabled') || '已启用' : t('common.disabled') || '已禁用'}
+                {config.enableConsumptionAlert ? t('common.enabled') : t('common.disabled')}
               </span>
             </label>
           </div>
@@ -221,7 +221,7 @@ export function StockAlertConfigPage() {
           <div className="grid grid-cols-2 gap-6">
             <div className="form-group">
               <label className="form-label">
-                {t('inventory.varianceWarningPercent') || '预警阈值 (%)'}
+                {t('inventory.varianceWarningPercent')}
               </label>
               <input
                 type="number"
@@ -232,13 +232,13 @@ export function StockAlertConfigPage() {
                 className="input w-full"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {t('inventory.varianceWarningHint') || '差异超过此百分比时发送预警'}
+                {t('inventory.varianceWarningHint')}
               </p>
             </div>
 
             <div className="form-group">
               <label className="form-label">
-                {t('inventory.varianceCriticalPercent') || '紧急阈值 (%)'}
+                {t('inventory.varianceCriticalPercent')}
               </label>
               <input
                 type="number"
@@ -249,7 +249,7 @@ export function StockAlertConfigPage() {
                 className="input w-full"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {t('inventory.varianceCriticalHint') || '差异超过此百分比时发送紧急预警'}
+                {t('inventory.varianceCriticalHint')}
               </p>
             </div>
           </div>
@@ -264,10 +264,10 @@ export function StockAlertConfigPage() {
           </div>
           <div>
             <h2 className="text-lg font-semibold">
-              {t('inventory.systemSettings') || '系统设置'}
+              {t('inventory.systemSettings')}
             </h2>
             <p className="text-sm text-gray-500">
-              {t('inventory.systemSettingsDesc') || '预警系统的其他配置'}
+              {t('inventory.systemSettingsDesc')}
             </p>
           </div>
         </div>
@@ -275,21 +275,21 @@ export function StockAlertConfigPage() {
         <div className="grid grid-cols-1 gap-6">
           <div className="form-group max-w-xs">
             <label className="form-label">
-              {t('inventory.autoCheckInterval') || '自动检查间隔'}
+              {t('inventory.autoCheckInterval')}
             </label>
             <select
               value={config.autoCheckIntervalHours}
               onChange={(e) => handleChange('autoCheckIntervalHours', parseInt(e.target.value))}
               className="input w-full"
             >
-              <option value={6}>6 {t('common.hours') || '小时'}</option>
-              <option value={12}>12 {t('common.hours') || '小时'}</option>
-              <option value={24}>24 {t('common.hours') || '小时'}</option>
-              <option value={48}>48 {t('common.hours') || '小时'}</option>
-              <option value={168}>168 {t('common.hours') || '小时'} (1 {t('common.week') || '周'})</option>
+              <option value={6}>6 {t('common.hours')}</option>
+              <option value={12}>12 {t('common.hours')}</option>
+              <option value={24}>24 {t('common.hours')}</option>
+              <option value={48}>48 {t('common.hours')}</option>
+              <option value={168}>168 {t('common.hours')} (1 {t('common.week')})</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              {t('inventory.autoCheckIntervalHint') || '系统自动检查库存状态的时间间隔'}
+              {t('inventory.autoCheckIntervalHint')}
             </p>
           </div>
         </div>
@@ -297,33 +297,33 @@ export function StockAlertConfigPage() {
 
       {/* Preview */}
       <div className="card bg-gray-50">
-        <h3 className="font-medium mb-4">{t('inventory.preview') || '规则预览'}</h3>
+        <h3 className="font-medium mb-4">{t('inventory.preview')}</h3>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-orange-500"></span>
             <span className="text-gray-600">
-              {t('inventory.warning') || '预警'}: {t('inventory.stockLasts') || '库存预计可用'}{' '}
-              <span className="font-bold text-orange-600">≤ {config.lowStockWarningDays} {t('common.days') || '天'}</span>
+              {t('inventory.warning')}: {t('inventory.stockLasts')}{' '}
+              <span className="font-bold text-orange-600">≤ {config.lowStockWarningDays} {t('common.days')}</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-red-500"></span>
             <span className="text-gray-600">
-              {t('inventory.critical') || '紧急'}: {t('inventory.stockLasts') || '库存预计可用'}{' '}
-              <span className="font-bold text-red-600">≤ {config.lowStockCriticalDays} {t('common.days') || '天'}</span>
+              {t('inventory.critical')}: {t('inventory.stockLasts')}{' '}
+              <span className="font-bold text-red-600">≤ {config.lowStockCriticalDays} {t('common.days')}</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
             <span className="text-gray-600">
-              {t('inventory.consumptionWarning') || '消耗预警'}: {t('inventory.variance') || '差异'}{' '}
+              {t('inventory.consumptionWarning')}: {t('inventory.variance')}{' '}
               <span className="font-bold text-yellow-600">&gt; {config.varianceWarningPercent}%</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-red-600"></span>
             <span className="text-gray-600">
-              {t('inventory.consumptionCritical') || '消耗紧急'}: {t('inventory.variance') || '差异'}{' '}
+              {t('inventory.consumptionCritical')}: {t('inventory.variance')}{' '}
               <span className="font-bold text-red-600">&gt; {config.varianceCriticalPercent}%</span>
             </span>
           </div>

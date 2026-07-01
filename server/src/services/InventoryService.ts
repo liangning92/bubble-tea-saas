@@ -76,9 +76,10 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     }
 
     // Calculate new average cost only if unitCost is provided and positive
-    let newAvgCost = inventory.avgCost
+    const avgCost = Number(inventory.avgCost)
+    let newAvgCost = avgCost
     if (unitCost && unitCost > 0) {
-      const totalCurrentValue = inventory.avgCost * inventory.currentStock
+      const totalCurrentValue = avgCost * inventory.currentStock
       const totalNewValue = unitCost * quantity
       newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (inventory.currentStock + quantity))
     }
@@ -167,7 +168,7 @@ export async function getLowStockAlerts(storeId: string) {
       category: item.category,
       unit: item.unit,
       shortage: item.safetyStock - item.currentStock,
-      estimatedRestockCost: Math.round((item.safetyStock - item.currentStock) * item.avgCost)
+      estimatedRestockCost: Math.round((item.safetyStock - item.currentStock) * Number(item.avgCost))
     }))
     .sort((a, b) => a.shortage - b.shortage)
 }
@@ -204,8 +205,8 @@ export async function adjustInventory(
         data: {
           inventoryId,
           quantity: difference,
-          unitCost: inventory.avgCost,
-          totalAmount: difference * inventory.avgCost,
+          unitCost: Number(inventory.avgCost),
+          totalAmount: difference * Number(inventory.avgCost),
           note: `Adjustment: ${reason}`
         }
       })
@@ -233,7 +234,7 @@ export async function getInventoryStats(storeId: string) {
   const total = items.length
   const lowStock = items.filter(i => i.currentStock > 0 && i.currentStock <= i.minStock).length
   const outOfStock = items.filter(i => i.currentStock === 0).length
-  const totalValue = items.reduce((sum, i) => sum + Math.round(i.currentStock * i.avgCost), 0)
+  const totalValue = items.reduce((sum, i) => sum + Math.round(i.currentStock * Number(i.avgCost)), 0)
   const totalItems = items.reduce((sum, i) => sum + i.currentStock, 0)
 
   return { total, lowStock, outOfStock, totalValue, totalItems }

@@ -63,9 +63,9 @@ export function SalesStatsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold">{t('staff.salesStats') || '销售业绩'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.salesStats')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t('staff.salesStatsDesc') || '查看员工销售业绩和排行榜'}
+            {t('staff.salesStatsDesc')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -89,7 +89,7 @@ export function SalesStatsPage() {
               <TrendingUp size={24} className="text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">{t('staff.totalRevenue') || '总销售额'}</p>
+              <p className="text-sm text-gray-500">{t('staff.totalRevenue')}</p>
               <p className="text-xl font-bold">{formatCurrency(totalRevenue)}</p>
             </div>
           </div>
@@ -100,7 +100,7 @@ export function SalesStatsPage() {
               <Award size={24} className="text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">{t('staff.topPerformer') || '销售冠军'}</p>
+              <p className="text-sm text-gray-500">{t('staff.topPerformer')}</p>
               <p className="text-xl font-bold">{stats[0]?.name || '-'}</p>
             </div>
           </div>
@@ -111,7 +111,7 @@ export function SalesStatsPage() {
               <TrendingUp size={24} className="text-purple-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">{t('staff.avgPerOrder') || '平均订单金额'}</p>
+              <p className="text-sm text-gray-500">{t('staff.avgPerOrder')}</p>
               <p className="text-xl font-bold">
                 {stats.length > 0
                   ? formatCurrency(Math.round(totalRevenue / stats.reduce((sum, s) => sum + s.orderCount, 0)))
@@ -125,7 +125,7 @@ export function SalesStatsPage() {
       {/* Leaderboard */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 bg-gray-50 border-b">
-          <h2 className="font-semibold">{t('staff.leaderboard') || '业绩排行榜'}</h2>
+          <h2 className="font-semibold">{t('staff.leaderboard')}</h2>
         </div>
 
         {loading ? (
@@ -134,7 +134,7 @@ export function SalesStatsPage() {
           </div>
         ) : stats.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            {t('staff.noData') || '暂无数据'}
+            {t('staff.noData')}
           </div>
         ) : (
           <div className="divide-y">
@@ -154,7 +154,7 @@ export function SalesStatsPage() {
                 <div className="flex-1">
                   <div className="font-medium">{stat.name}</div>
                   <div className="text-sm text-gray-500">
-                    {stat.orderCount} {t('staff.orders') || '订单'}
+                    {stat.orderCount} {t('staff.orders')}
                   </div>
                 </div>
 
@@ -162,7 +162,7 @@ export function SalesStatsPage() {
                 <div className="text-right">
                   <div className="font-bold text-lg">{formatCurrency(stat.revenue)}</div>
                   <div className="text-sm text-gray-500">
-                    {getTopPercentage(stat.revenue)}% {t('staff.ofTotal') || '占比'}
+                    {getTopPercentage(stat.revenue)}% {t('staff.ofTotal')}
                   </div>
                 </div>
 

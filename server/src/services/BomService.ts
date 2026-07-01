@@ -86,7 +86,7 @@ export async function getProductBomDetail(productId: string) {
 
     const ratio = inv?.concentrateRatio || 1
     const safeRatio = ratio === 0 ? 1 : ratio
-    const cpu = (inv?.avgCost || 0) / factor / safeRatio
+    const cpu = Number(inv?.avgCost || 0) / factor / safeRatio
     const totalCost = (item.quantity || 0) * cpu
 
     return {
@@ -164,7 +164,7 @@ function getConversionFactor(inventoryUnit: string, recipeUnit: string): number 
  * 浓缩比例：
  * - concentrateRatio > 1：浓缩液需要稀释，如茶叶10倍浓缩，实际用量 = 配方用量 / ratio
  */
-function calculateBomCost(bomItems: { quantity: number; costPerUnit: number; unit?: string; totalCost?: number; inventory: { avgCost: number; concentrateRatio: number; unit: string } }[]) {
+function calculateBomCost(bomItems: { quantity: number; costPerUnit: number; unit?: string; totalCost?: number; inventory: { avgCost: number | bigint; concentrateRatio: number; unit: string } }[]) {
   let totalBomCost = 0
 
   for (const item of bomItems) {
@@ -176,7 +176,7 @@ function calculateBomCost(bomItems: { quantity: number; costPerUnit: number; uni
     const safeRatio = ratio === 0 ? 1 : ratio
 
     // 优先使用 costPerUnit，如果为 0 则使用 inventory.avgCost
-    let cpu = item.costPerUnit || item.inventory?.avgCost || 0
+    let cpu = item.costPerUnit || Number(item.inventory?.avgCost) || 0
 
     if (!isPerPiece) {
       // kg/L inventory: divide by 1000 to convert to g/ml
@@ -273,7 +273,7 @@ export async function getMaterialUsageForecast(storeId: string, days: number = 3
           inventoryId: inv.id,
           name: inv.name,
           unit: inv.unit,
-          avgCost: inv.avgCost,
+          avgCost: Number(inv.avgCost),
           dailyUsage: 0,
           totalUsage: 0,
           currentStock: inv.currentStock,
@@ -355,7 +355,7 @@ export async function getInventoryCostBreakdown(inventoryId: string, quantity: n
   if (inv.type === 'raw_material') {
     const ratio = inv.concentrateRatio || 1
     const safeRatio = ratio === 0 ? 1 : ratio
-    const cpu = (inv.avgCost || 0) / factor / safeRatio
+    const cpu = Number(inv.avgCost || 0) / factor / safeRatio
     return {
       type: 'raw_material',
       cost: Math.round(quantity * cpu),
@@ -405,7 +405,7 @@ export async function getInventoryCostBreakdown(inventoryId: string, quantity: n
       const safeRatio = inputRatio === 0 ? 1 : inputRatio
 
       const inputQty = input.quantity * outputMultiplier
-      let inputCpu = inputInv.avgCost || 0
+      let inputCpu = Number(inputInv.avgCost || 0)
       if (!isPerPiece) {
         // kg/L：先 ÷1000 再 ÷concentrateRatio
         inputCpu = inputCpu / 1000 / safeRatio
@@ -417,7 +417,7 @@ export async function getInventoryCostBreakdown(inventoryId: string, quantity: n
         name: inputInv.name,
         unit: inputInv.unit,
         quantity: Math.round(inputQty * 100) / 100,
-        costPerUnit: Math.round(inputCpu * 100) / 100,
+        costPerUnit: Math.round(Number(inputCpu) * 100) / 100,
         totalCost: inputCost
       })
 

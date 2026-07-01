@@ -144,6 +144,67 @@ git add -A && git commit -m "backup before [操作描述]"
 ### 第八阶段：最终验收
 - 功能/页面/API/联调/测试完成率 → 100%
 
+## 测试框架
+
+### Playwright 自动化测试
+
+```bash
+# 运行所有测试
+npm run test:playwright
+
+# 运行冒烟测试（每次修改后必须运行）
+npm run test:playwright:smoke
+
+# 运行 i18n 测试
+npm run test:playwright:i18n
+
+# 运行 POS 测试
+npm run test:playwright:pos
+
+# UI 模式（可视化调试）
+npm run test:playwright:ui
+```
+
+### 测试分层
+
+| 层级 | 内容 | 执行者 | 频率 |
+|------|------|--------|------|
+| L1 | npm run build + TypeScript 检查 | Claude | 每次修改 |
+| L2 | Playwright 冒烟测试 | Claude + CI | 每次 PR |
+| L3 | Playwright 完整测试 + i18n | Claude + CI | 每次 PR |
+| L4 | 人工探索性测试 | 人工 | 上线前 |
+
+### 测试文件位置
+
+- 测试配置: `playwright.config.ts`
+- 测试用例: `tests/*.spec.ts`
+- 测试文档: `tests/README.md`
+
+## 工作流 (Workflow)
+
+对于代码库级别的扫荡型任务，使用 Dynamic Workflow：
+
+```bash
+# 在 prompt 中写 "workflow" 触发轻量模式
+Run a workflow to audit all finance module files
+
+# 或使用 ultracode 模式（自动决定何时启动工作流）
+/effort ultracode
+```
+
+### 工作流场景
+
+**适合用工作流**：
+- 代码库级别的扫荡型任务（整个 repo 的 bug 扫描）
+- 大规模迁移/改造
+- 需要交叉验证的研究问题
+- 关键决策需要"对抗式审查"
+
+**不适合用工作流**：
+- 一轮对话能搞定的事
+- 不需要并行/交叉验证的简单逻辑
+- token 预算敏感的场景
+
 ## 备注
 
 - Admin 管理端支持 3 种语言: 印尼语 (id)、英语 (en)、中文 (zh)

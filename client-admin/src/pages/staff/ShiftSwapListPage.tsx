@@ -56,7 +56,7 @@ export function ShiftSwapListPage() {
   }, [token])
 
   const handleApprove = async (id: string) => {
-    if (!confirm(t('staff.shiftSwapConfirmApprove') || 'Approve this shift swap request?')) return
+    if (!confirm(t('staff.shiftSwapConfirmApprove'))) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/shift-swap/${id}/approve`, {
@@ -69,7 +69,7 @@ export function ShiftSwapListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.shiftSwapApproved') || 'Shift swap approved')
+        alert(t('staff.shiftSwapApproved'))
         loadData()
       } else {
         alert(data.message || t('staff.approveFailed'))
@@ -82,7 +82,7 @@ export function ShiftSwapListPage() {
   }
 
   const handleReject = async (id: string) => {
-    const adminNote = prompt(t('staff.enterRejectReason') || 'Enter rejection reason:')
+    const adminNote = prompt(t('staff.enterRejectReason'))
     if (adminNote === null) return
     setProcessing(id)
     try {
@@ -96,7 +96,7 @@ export function ShiftSwapListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.shiftSwapRejected') || 'Shift swap rejected')
+        alert(t('staff.shiftSwapRejected'))
         loadData()
       } else {
         alert(data.message || t('staff.rejectFailed'))
@@ -126,10 +126,10 @@ export function ShiftSwapListPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <ArrowRightLeft size={28} className="text-primary" />
-          <h1 className="text-xl font-bold">{t('staff.shiftSwap') || 'Shift Swap'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.shiftSwap')}</h1>
         </div>
         <button onClick={loadData} className="btn-secondary">
-          {t('common.refresh') || 'Refresh'}
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -145,7 +145,7 @@ export function ShiftSwapListPage() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) || status : t('common.all') || 'All'}
+            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) : t('common.all')}
             {status === 'pending' && requests.filter(r => r.status === 'pending').length > 0 && (
               <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                 {requests.filter(r => r.status === 'pending').length}
@@ -174,7 +174,7 @@ export function ShiftSwapListPage() {
                   request.status === 'approved' ? 'bg-green-100 text-green-700' :
                   'bg-red-100 text-red-700'
                 }`}>
-                  {t(`staff.status${request.status.charAt(0).toUpperCase() + request.status.slice(1)}`) || request.status}
+                  {t(`staff.status${request.status.charAt(0).toUpperCase() + request.status.slice(1)}`)}
                 </span>
               </div>
 
@@ -183,13 +183,13 @@ export function ShiftSwapListPage() {
                 <div className="text-center">
                   <p className="text-xs text-gray-500 mb-1">{t('staff.originalDate')}</p>
                   <p className="font-medium">{formatDate(request.originalDate)}</p>
-                  <p className="text-sm text-gray-600">{t(SHIFT_LABELS[request.originalShift]) || request.originalShift}</p>
+                  <p className="text-sm text-gray-600">{t(SHIFT_LABELS[request.originalShift])}</p>
                 </div>
                 <ArrowRightLeft size={24} className="text-primary" />
                 <div className="text-center">
                   <p className="text-xs text-gray-500 mb-1">{t('staff.targetDate')}</p>
                   <p className="font-medium">{formatDate(request.targetDate)}</p>
-                  <p className="text-sm text-gray-600">{t(SHIFT_LABELS[request.targetShift]) || request.targetShift}</p>
+                  <p className="text-sm text-gray-600">{t(SHIFT_LABELS[request.targetShift])}</p>
                 </div>
               </div>
 
@@ -216,7 +216,7 @@ export function ShiftSwapListPage() {
                     className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
                   >
                     <Check size={18} />
-                    {t('common.approve') || 'Approve'}
+                    {t('common.approve')}
                   </button>
                   <button
                     onClick={() => handleReject(request.id)}
@@ -224,7 +224,7 @@ export function ShiftSwapListPage() {
                     className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
                   >
                     <X size={18} />
-                    {t('common.reject') || 'Reject'}
+                    {t('common.reject')}
                   </button>
                 </div>
               )}

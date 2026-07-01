@@ -290,7 +290,7 @@ export async function getInventoryReport(storeId: string) {
 
   // Calculate value
   const totalValue = inventory.reduce(
-    (sum, item) => sum + item.currentStock * item.avgCost,
+    (sum, item) => sum + Number(item.currentStock) * Number(item.avgCost),
     0
   )
 
@@ -307,7 +307,7 @@ export async function getInventoryReport(storeId: string) {
       }
     }
     categoryStats[cat].items++
-    categoryStats[cat].value += item.currentStock * item.avgCost
+    categoryStats[cat].value += Number(item.currentStock) * Number(item.avgCost)
   })
 
   // Low stock items

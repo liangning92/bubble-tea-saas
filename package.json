@@ -21,6 +21,11 @@
     "build:pos": "cd client-pos && npm run build",
     "build:staff": "cd client-staff && npm run build",
     "test": "cd server && npm test",
+    "test:playwright": "npx playwright test",
+    "test:playwright:ui": "npx playwright test --ui",
+    "test:playwright:smoke": "npx playwright test tests/smoke.spec.ts",
+    "test:playwright:i18n": "npx playwright test tests/i18n.spec.ts",
+    "test:playwright:pos": "npx playwright test tests/pos.spec.ts",
     "db:generate": "cd server && npx prisma generate",
     "db:push": "cd server && npx prisma db push",
     "db:seed": "cd server && npm run db:seed",
@@ -45,9 +50,9 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "electron": "^33.4.0",
     "electron-builder": "^26.0.12",
-    "playwright": "^1.61.0",
     "typescript": "^5.8.3",
     "vercel": "^54.14.0"
   }

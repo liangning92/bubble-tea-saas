@@ -300,7 +300,7 @@ export async function predictWaste(storeId: string) {
       currentStock: item.currentStock,
       estimatedWasteRate: baseWasteRate,
       estimatedWasteQuantity: Math.round(potentialWaste),
-      estimatedWasteValue: Math.round(potentialWaste * item.avgCost)
+      estimatedWasteValue: Math.round(potentialWaste * Number(item.avgCost))
     }
   })
 

@@ -132,18 +132,18 @@ export function InventoryCountPage() {
 
   const handleComplete = () => {
     if (!selectedCount) return
-    if (!confirm(t('inventory.confirmCompleteCount') || '确定完成盘点？系统库存将被调整为实际盘点数量。')) return
+    if (!confirm(t('inventory.confirmCompleteCount'))) return
     completeMutation.mutate(selectedCount.id)
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <span className="badge badge-success">{t('inventory.completed') || '已完成'}</span>
+        return <span className="badge badge-success">{t('inventory.completed')}</span>
       case 'in_progress':
-        return <span className="badge badge-warning">{t('inventory.inProgress') || '进行中'}</span>
+        return <span className="badge badge-warning">{t('inventory.inProgress')}</span>
       case 'cancelled':
-        return <span className="badge badge-secondary">{t('inventory.cancelled') || '已取消'}</span>
+        return <span className="badge badge-secondary">{t('inventory.cancelled')}</span>
       default:
         return <span className="badge">{status}</span>
     }
@@ -151,9 +151,9 @@ export function InventoryCountPage() {
 
   const getPeriodLabel = (period: string) => {
     switch (period) {
-      case 'monthly': return t('inventory.monthly') || '月度盘点'
-      case 'quarterly': return t('inventory.quarterly') || '季度盘点'
-      case 'annual': return t('inventory.annual') || '年度盘点'
+      case 'monthly': return t('inventory.monthly')
+      case 'quarterly': return t('inventory.quarterly')
+      case 'annual': return t('inventory.annual')
       default: return period
     }
   }
@@ -163,15 +163,15 @@ export function InventoryCountPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('inventory.inventoryCount') || '库存盘点'}</h1>
-          <p className="text-sm text-gray-500 mt-1">{t('inventory.inventoryCountDesc') || '定期盘点实物库存，修正系统数据'}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('inventory.inventoryCount')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('inventory.inventoryCountDesc')}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="btn btn-primary flex items-center gap-2"
         >
           <Plus size={16} />
-          {t('inventory.newCount') || '新建盘点'}
+          {t('inventory.newCount')}
         </button>
       </div>
 
@@ -179,19 +179,19 @@ export function InventoryCountPage() {
       <div className="grid grid-cols-3 gap-4">
         <div className="card text-center">
           <div className="text-3xl font-bold text-gray-600">{counts.length}</div>
-          <div className="text-sm text-gray-500">{t('inventory.totalCounts') || '总盘点次数'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.totalCounts')}</div>
         </div>
         <div className="card text-center">
           <div className="text-3xl font-bold text-orange-600">
             {counts.filter(c => c.status === 'in_progress').length}
           </div>
-          <div className="text-sm text-gray-500">{t('inventory.inProgress') || '进行中'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.inProgress')}</div>
         </div>
         <div className="card text-center">
           <div className="text-3xl font-bold text-green-600">
             {counts.filter(c => c.status === 'completed').length}
           </div>
-          <div className="text-sm text-gray-500">{t('inventory.completed') || '已完成'}</div>
+          <div className="text-sm text-gray-500">{t('inventory.completed')}</div>
         </div>
       </div>
 
@@ -203,9 +203,9 @@ export function InventoryCountPage() {
       ) : counts.length === 0 ? (
         <div className="card text-center py-12">
           <Package size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500">{t('inventory.noCounts') || '暂无盘点记录'}</p>
+          <p className="text-gray-500">{t('inventory.noCounts')}</p>
           <button onClick={() => setShowCreateModal(true)} className="btn btn-primary mt-4">
-            {t('inventory.createFirst') || '创建第一次盘点'}
+            {t('inventory.createFirst')}
           </button>
         </div>
       ) : (
@@ -239,7 +239,7 @@ export function InventoryCountPage() {
                 <div className="flex items-center gap-3">
                   {getStatusBadge(count.status)}
                   <span className="text-sm text-gray-400">
-                    {count.items?.length || 0} {t('inventory.items') || '项'}
+                    {count.items?.length || 0} {t('inventory.items')}
                   </span>
                 </div>
               </div>
@@ -263,13 +263,13 @@ export function InventoryCountPage() {
         <div className="flex items-center justify-between">
           <div>
             <button onClick={() => { setActiveTab('list'); setSelectedCount(null) }} className="text-sm text-gray-500 hover:text-gray-700 mb-2">
-              ← {t('common.back') || '返回'}
+              ← {t('common.back')}
             </button>
             <h1 className="text-2xl font-bold text-gray-900">{getPeriodLabel(selectedCount.period)}</h1>
             <div className="flex items-center gap-4 mt-2">
               {getStatusBadge(selectedCount.status)}
               <span className="text-sm text-gray-500">
-                {countedItems.length} / {selectedCount.items?.length || 0} {t('inventory.counted') || '已盘点'}
+                {countedItems.length} / {selectedCount.items?.length || 0} {t('inventory.counted')}
               </span>
             </div>
           </div>
@@ -282,7 +282,7 @@ export function InventoryCountPage() {
                   className="btn btn-outline flex items-center gap-2"
                 >
                   <X size={16} />
-                  {t('inventory.cancelCount') || '取消盘点'}
+                  {t('inventory.cancelCount')}
                 </button>
                 <button
                   onClick={handleComplete}
@@ -290,7 +290,7 @@ export function InventoryCountPage() {
                   className="btn btn-primary flex items-center gap-2"
                 >
                   {completeMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                  {t('inventory.completeCount') || '完成盘点'}
+                  {t('inventory.completeCount')}
                 </button>
               </>
             )}
@@ -302,17 +302,17 @@ export function InventoryCountPage() {
           <div className="grid grid-cols-3 gap-4">
             <div className="card bg-green-50 border-green-200">
               <div className="text-2xl font-bold text-green-600">{countedItems.length}</div>
-              <div className="text-sm text-gray-500">{t('inventory.counted') || '已盘点'}</div>
+              <div className="text-sm text-gray-500">{t('inventory.counted')}</div>
             </div>
             <div className="card bg-red-50 border-red-200">
               <div className="text-2xl font-bold text-red-600">
                 {selectedCount.items?.length || 0 - countedItems.length}
               </div>
-              <div className="text-sm text-gray-500">{t('inventory.pending') || '待盘点'}</div>
+              <div className="text-sm text-gray-500">{t('inventory.pending')}</div>
             </div>
             <div className="card bg-orange-50 border-orange-200">
               <div className="text-2xl font-bold text-orange-600">{varianceItems.length}</div>
-              <div className="text-sm text-gray-500">{t('inventory.hasVariance') || '有差异'}</div>
+              <div className="text-sm text-gray-500">{t('inventory.hasVariance')}</div>
             </div>
           </div>
         )}
@@ -322,7 +322,7 @@ export function InventoryCountPage() {
           <div className="card bg-orange-50 border-orange-200">
             <div className="flex items-center gap-2 text-orange-700 font-medium mb-3">
               <AlertTriangle size={20} />
-              {t('inventory.varianceItems') || '以下项目存在差异，完成盘点后将修正系统库存'}
+              {t('inventory.varianceItems')}
             </div>
             <div className="space-y-2">
               {varianceItems.slice(0, 5).map(item => (
@@ -333,10 +333,10 @@ export function InventoryCountPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-500">
-                      {t('inventory.system') || '系统'}: {item.systemQty}
+                      {t('inventory.system')}: {item.systemQty}
                     </span>
                     <span className="text-sm text-gray-500">
-                      {t('inventory.actual') || '实际'}: {item.countedQty}
+                      {t('inventory.actual')}: {item.countedQty}
                     </span>
                     <span className={`font-bold ${item.variance! > 0 ? 'text-red-600' : 'text-blue-600'}`}>
                       {item.variance! > 0 ? '+' : ''}{item.variance}
@@ -346,7 +346,7 @@ export function InventoryCountPage() {
               ))}
               {varianceItems.length > 5 && (
                 <div className="text-center text-sm text-gray-500">
-                  {t('inventory.andMore') || '还有'} {varianceItems.length - 5} {t('inventory.itemsVariance') || '项有差异'}
+                  {t('inventory.andMore')} {varianceItems.length - 5} {t('inventory.itemsVariance')}
                 </div>
               )}
             </div>
@@ -355,17 +355,17 @@ export function InventoryCountPage() {
 
         {/* Items Table */}
         <div className="card">
-          <h3 className="font-medium mb-4">{t('inventory.countItems') || '盘点明细'}</h3>
+          <h3 className="font-medium mb-4">{t('inventory.countItems')}</h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
-                  <th className="pb-3">{t('inventory.material') || '原料'}</th>
-                  <th className="pb-3 text-right">{t('inventory.systemQty') || '系统库存'}</th>
-                  <th className="pb-3 text-right">{t('inventory.actualQty') || '实际数量'}</th>
-                  <th className="pb-3 text-right">{t('inventory.varianceCol') || '差异'}</th>
+                  <th className="pb-3">{t('inventory.material')}</th>
+                  <th className="pb-3 text-right">{t('inventory.systemQty')}</th>
+                  <th className="pb-3 text-right">{t('inventory.actualQty')}</th>
+                  <th className="pb-3 text-right">{t('inventory.varianceCol')}</th>
                   {selectedCount.status === 'in_progress' && (
-                    <th className="pb-3 text-center">{t('inventory.action') || '操作'}</th>
+                    <th className="pb-3 text-center">{t('inventory.action')}</th>
                   )}
                 </tr>
               </thead>
@@ -424,7 +424,7 @@ export function InventoryCountPage() {
   const renderCreateModal = () => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">{t('inventory.newCount') || '新建盘点'}</h2>
+        <h2 className="text-xl font-bold mb-4">{t('inventory.newCount')}</h2>
 
         <div className="space-y-4">
           <div className="form-group">

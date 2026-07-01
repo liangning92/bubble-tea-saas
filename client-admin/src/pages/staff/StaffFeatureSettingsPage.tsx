@@ -126,9 +126,9 @@ export function StaffFeatureSettingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold">{t('staff.features.title') || '员工功能设置'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.features.title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t('staff.features.subtitle') || '开启或关闭各项员工管理功能，适应不同门店需求'}
+            {t('staff.features.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -137,7 +137,7 @@ export function StaffFeatureSettingsPage() {
             className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2"
           >
             <X size={18} />
-            {t('staff.features.reset') || '重置默认'}
+            {t('staff.features.reset')}
           </button>
           <button
             onClick={handleSave}
@@ -151,7 +151,7 @@ export function StaffFeatureSettingsPage() {
             ) : (
               <Save size={18} />
             )}
-            {saved ? (t('staff.features.saved') || '已保存') : (t('common.save') || '保存')}
+            {saved ? t('staff.features.saved') : t('common.save')}
           </button>
         </div>
       </div>
@@ -201,7 +201,7 @@ export function StaffFeatureSettingsPage() {
       {/* Footer Note */}
       <div className="mt-6 p-4 bg-blue-50 rounded-lg">
         <p className="text-sm text-blue-700">
-          💡 {t('staff.features.note') || '提示：部分功能需要刷新页面后生效。关闭某功能后，相关数据仍会保留但不再显示。'}
+          💡 {t('staff.features.note')}
         </p>
       </div>
     </div>

@@ -140,7 +140,7 @@ export function ShiftConfigPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">{t('staff.shiftConfig') || '班次配置'}</h1>
+          <h1 className="text-xl font-bold">{t('staff.shiftConfig')}</h1>
         </div>
         <div className="flex gap-2">
           <button
@@ -154,7 +154,7 @@ export function ShiftConfigPage() {
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover flex items-center gap-2"
           >
             <Plus size={18} />
-            {t('staff.addShift') || '添加班次'}
+            {t('staff.addShift')}
           </button>
         </div>
       </div>
@@ -164,12 +164,12 @@ export function ShiftConfigPage() {
         <div className="text-center py-12 text-gray-500">{t('common.loading')}</div>
       ) : shifts.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl">
-          <p className="text-gray-500">{t('staff.noShifts') || '暂无班次'}</p>
+          <p className="text-gray-500">{t('staff.noShifts')}</p>
           <button
             onClick={() => handleOpenModal()}
             className="mt-2 text-primary hover:text-primary-hover"
           >
-            {t('staff.addFirstShift') || '添加第一个班次'}
+            {t('staff.addFirstShift')}
           </button>
         </div>
       ) : (
@@ -210,11 +210,11 @@ export function ShiftConfigPage() {
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">{t('staff.startTime') || '开始时间'}</span>
+                  <span className="text-gray-500">{t('staff.startTime')}</span>
                   <span className="font-medium">{shift.startTime}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">{t('staff.endTime') || '结束时间'}</span>
+                  <span className="text-gray-500">{t('staff.endTime')}</span>
                   <span className="font-medium">{shift.endTime}</span>
                 </div>
               </div>
@@ -229,7 +229,7 @@ export function ShiftConfigPage() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold">
-                {editingShift ? (t('staff.editShift') || '编辑班次') : (t('staff.addShift') || '添加班次')}
+                {editingShift ? t('staff.editShift') : t('staff.addShift')}
               </h2>
               <button onClick={handleCloseModal} className="p-1 hover:bg-gray-100 rounded">
                 <X size={20} />
@@ -239,7 +239,7 @@ export function ShiftConfigPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('staff.shiftKey') || '班次标识'} (ID)
+                  {t('staff.shiftKey')} (ID)
                 </label>
                 <input
                   type="text"
@@ -253,7 +253,7 @@ export function ShiftConfigPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('staff.shiftName') || '班次名称'} (EN) *
+                  {t('staff.shiftName')} (EN) *
                 </label>
                 <input
                   type="text"
@@ -267,7 +267,7 @@ export function ShiftConfigPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('staff.shiftNameZh') || '班次名称'} (ZH)
+                    {t('staff.shiftNameZh')} (ZH)
                   </label>
                   <input
                     type="text"
@@ -279,7 +279,7 @@ export function ShiftConfigPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('staff.shiftNameId') || '班次名称'} (ID)
+                    {t('staff.shiftNameId')} (ID)
                   </label>
                   <input
                     type="text"
@@ -294,7 +294,7 @@ export function ShiftConfigPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('staff.startTime') || '开始时间'} *
+                    {t('staff.startTime')} *
                   </label>
                   <input
                     type="time"
@@ -305,7 +305,7 @@ export function ShiftConfigPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('staff.endTime') || '结束时间'} *
+                    {t('staff.endTime')} *
                   </label>
                   <input
                     type="time"

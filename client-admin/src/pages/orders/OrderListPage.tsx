@@ -45,7 +45,7 @@ export function OrderListPage() {
   })
   const channels = channelsData?.data?.data?.list || []
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['orders', statusFilter, channelFilter],
     queryFn: () => orderApi.list({
       pageSize: 100,
@@ -164,6 +164,11 @@ export function OrderListPage() {
         {isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        ) : isError ? (
+          <div className="text-center py-8">
+            <p className="text-red-500 mb-2">{t('common.error')}</p>
+            <p className="text-sm text-gray-500">{String(error?.message || 'Failed to load orders')}</p>
           </div>
         ) : orders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">{t('common.noData')}</div>
