@@ -11,7 +11,7 @@ const configSchema = z.object({
   storeId: z.string(),
   key: z.string(),
   value: z.any(),
-  category: z.enum(['pos', 'inventory', 'staff', 'member', 'notification', 'payment', 'store', 'marketing'])
+  category: z.enum(['pos', 'inventory', 'staff', 'member', 'notification', 'payment', 'store', 'marketing', 'finance', 'hygiene'])
 })
 
 // GET /api/config
