@@ -13,6 +13,7 @@
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
+    "dist-electron/**/*",
     "shared/**/*",
     "!**/node_modules/**/printer/**/*",
     "!**/node_modules/**/node-thermal-printer/**/*"
