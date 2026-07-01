@@ -22,19 +22,19 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Build server
-        run: npm run build:server
+        run: yarn run build:server
 
       - name: Build admin
-        run: npm run build:admin
+        run: yarn run build:admin
 
       - name: Build POS
-        run: npm run build:pos
+        run: yarn run build:pos
 
       - name: Compile Electron
-        run: npm run electron:compile
+        run: yarn run electron:compile
 
       - name: Build Windows executable
         run: npx electron-builder --config electron-builder.json --win --publish never
