@@ -7,9 +7,9 @@
 - **包管理**: npm
 
 ## 应用端口
-- **Server API**: `http://localhost:3000`
+- **Server API**: `http://localhost:7072`
 - **Admin 管理端**: `http://localhost:5173`
-- **POS 收银端**: `http://localhost:6065`
+- **POS 收银端**: `http://localhost:6063`
 
 ## 语言规范 (i18n) ⚠️ 关键规则
 
@@ -115,6 +115,42 @@ cp server/prisma/dev.db server/prisma/dev.db.backup-$(date +%Y%m%d%H%M%S)
 # 备份整个项目
 git add -A && git commit -m "backup before [操作描述]"
 ```
+
+## 🚀 推送前自检清单 ⚠️ 强制执行
+
+**每次推送到GitHub触发CI构建前，必须完成以下检查：**
+
+### 必须完成的检查
+
+| 检查项 | 命令 | 失败怎么办 |
+|--------|------|-----------|
+| TypeScript 类型检查 | `cd server && npx tsc --noEmit` | 修复类型错误，直到通过 |
+| 服务端构建 | `cd server && npm run build` | 修复构建错误，直到通过 |
+| Admin 构建 | `cd client-admin && npm run build` | 修复构建错误，直到通过 |
+| POS 构建 | `cd client-pos && npm run build` | 修复构建错误，直到通过 |
+
+### 检查流程
+
+```
+1. 修改代码
+2. 本地 TypeScript 类型检查 (tsc --noEmit)
+3. 本地完整构建 (npm run build)
+4. 构建通过后 → git add → git commit → git push
+```
+
+### ⚠️ 禁止的行为
+
+- ❌ **没完成自检就推送**
+- ❌ **构建失败后不修复就反复推送**
+- ❌ **本地还没通过就依赖GitHub CI来"调试"**
+
+### 为什么这样做
+
+- GitHub CI 额度有限
+- 本地调试比CI快速反馈更快
+- 减少"发现问题→修复→推送→又发现问题"循环
+
+---
 
 ## 开发规范（8阶段流程）
 
