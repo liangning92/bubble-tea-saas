@@ -196,6 +196,18 @@ export function SettingsPage() {
               />
             </div>
           </div>
+
+          {/* 保存按钮 */}
+          <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
+            <button
+              onClick={() => handleSave('storeInfo', storeInfo)}
+              disabled={saveMutation.isPending}
+              className="btn-primary flex items-center gap-2"
+            >
+              {saveMutation.isPending && <Loader2 size={18} className="animate-spin" />}
+              {t('common.save')}
+            </button>
+          </div>
         </div>
       )}
 

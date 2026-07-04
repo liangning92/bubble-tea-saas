@@ -210,7 +210,7 @@ export function HygieneAreasPage() {
       {/* Add/Edit Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50 p-4" onClick={closeForm}>
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl pointer-events-auto" onClick={e => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl w-full max-w-md shadow-xl pointer-events-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
                 {editingArea ? t('hygiene.editArea') : t('hygiene.addArea')}
