@@ -591,7 +591,7 @@ export function POSPage() {
   }, [])
 
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
-  useEffect(() => {
+  const loadConfig = useCallback(() => {
     const storeId = user?.storeId || 'default'
     const token = useAuthStore.getState().token
     fetch(`/api/config?storeId=${storeId}`, {
@@ -790,6 +790,22 @@ export function POSPage() {
         showToast(t('common.error') + ' - Config', 'error')
       })
   }, [user?.storeId])
+
+  // 页面可见性变化时重新加载配置（Admin修改设置后自动同步）
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadConfig()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [loadConfig])
+
+  // 初始加载配置
+  useEffect(() => {
+    loadConfig()
+  }, [loadConfig])
 
   // 硬件配置轮询 - 检测 Admin 测试命令
   useEffect(() => {
