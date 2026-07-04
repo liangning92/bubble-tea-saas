@@ -373,8 +373,8 @@ const resources = {
         emailOptional: 'Masukkan email (opsional)',
         birthday: 'Tanggal Lahir',
         referralCode: 'Kode Referral',
-        enterReferralCode: '输入推荐码',
-        referralCodePlaceholder: '有朋友推荐码？输入可获得奖励'
+        enterReferralCode: 'Masukkan Kode Referral',
+        referralCodePlaceholder: 'Punya kode referral? Masukkan untuk dapat hadiah'
       },
       scan: {
         title: 'Pindai Barcode',
@@ -807,7 +807,10 @@ const resources = {
         phonePlaceholder: 'Enter phone number',
         email: 'Email',
         emailOptional: 'Enter email (optional)',
-        birthday: 'Birthday'
+        birthday: 'Birthday',
+        referralCode: 'Referral Code',
+        enterReferralCode: 'Enter Referral Code',
+        referralCodePlaceholder: 'Have a referral code? Enter to get rewards'
       },
       scan: {
         title: 'Barcode Scan',
@@ -1228,7 +1231,10 @@ const resources = {
         phonePlaceholder: '输入手机号',
         email: '邮箱',
         emailOptional: '输入邮箱（选填）',
-        birthday: '生日'
+        birthday: '生日',
+        referralCode: '推荐码',
+        enterReferralCode: '输入推荐码',
+        referralCodePlaceholder: '有推荐码？输入获得奖励'
       },
       scan: {
         title: '条码扫描',
