@@ -572,10 +572,12 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     })
   }
 
+  // Generate order number BEFORE transaction (upsert uses its own transaction, must not be nested)
+  const orderNumber = data.orderNumber || await generateOrderNumber(data.storeId)
+
   // Create order with transaction
   const order = await prisma.$transaction(async (tx) => {
-    // Use client-provided orderNumber or generate random one
-    const orderNumber = data.orderNumber || await generateOrderNumber(data.storeId)
+    // Use pre-generated order number
 
     const newOrder = await tx.order.create({
       data: {

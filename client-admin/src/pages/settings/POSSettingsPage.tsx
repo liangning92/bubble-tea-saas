@@ -1529,6 +1529,129 @@ export function POSSettingsPage() {
               </div>
             </div>
           </div>
+          </div>
+
+          {/* 右侧：小票预览 */}
+          <div className="sticky top-6">
+            <div className="card">
+              <h3 className="text-lg font-semibold mb-4">{t('posSettings.preview') || 'Receipt Preview'}</h3>
+              <div className="bg-white border rounded-lg p-4 font-mono text-sm" style={{ width: `${posReceipt.paperSize === '58mm' ? '200px' : '280px'}` }}>
+                {/* Logo */}
+                {posReceipt.showLogo && posReceipt.storeLogo && (
+                  <div className="text-center mb-2">
+                    <img src={posReceipt.storeLogo} alt="Logo" className="h-12 mx-auto object-contain" />
+                  </div>
+                )}
+
+                {/* Header */}
+                <div className="text-center border-b pb-2 mb-2">
+                  <div className="font-bold">{posReceipt.header || 'Bubble Tea Shop'}</div>
+                  {posReceipt.headerCustomText && <div className="text-xs text-gray-500">{posReceipt.headerCustomText}</div>}
+                </div>
+
+                {/* Store Info */}
+                {(posReceipt.storePhone || posReceipt.storeAddress) && (
+                  <div className="text-xs text-gray-600 border-b pb-2 mb-2">
+                    {posReceipt.storePhone && <div>Tel: {posReceipt.storePhone}</div>}
+                    {posReceipt.storeAddress && <div>{posReceipt.storeAddress}</div>}
+                  </div>
+                )}
+
+                {/* Order Info */}
+                <div className="text-xs border-b pb-2 mb-2">
+                  <div>No: BT20260704001</div>
+                  <div>Date: 2026-07-04 14:30</div>
+                  {posReceipt.showStaffName && <div>Kasir: Admin</div>}
+                  {posReceipt.showCustomerName && <div>Pelanggan: -</div>}
+                </div>
+
+                {/* Items */}
+                <div className="border-b pb-2 mb-2 text-xs">
+                  <div className="font-bold mb-1">Items:</div>
+                  <div className="flex justify-between">
+                    <span>珍珠奶茶 (大)</span>
+                    <span>15,000</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500 pl-2">
+                    <span>少冰/正常糖</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500 pl-2">
+                    <span>+ 珍珠</span>
+                    <span>2,000</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span>Boba MilkTea (L)</span>
+                    <span>18,000</span>
+                  </div>
+                </div>
+
+                {/* Subtotal & Tax */}
+                <div className="text-xs border-b pb-2 mb-2">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span>35,000</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>Tax (11%)</span>
+                    <span>3,850</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span>Discount</span>
+                      <span>-{discountAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Total */}
+                <div className="flex justify-between font-bold text-base border-b pb-2 mb-2">
+                  <span>TOTAL</span>
+                  <span>Rp 38,850</span>
+                </div>
+
+                {/* Payment */}
+                <div className="text-xs border-b pb-2 mb-2">
+                  <div className="flex justify-between">
+                    <span>Cash</span>
+                    <span>50,000</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Change</span>
+                    <span>11,150</span>
+                  </div>
+                </div>
+
+                {/* QR Code */}
+                {posReceipt.showQR && (
+                  <div className="text-center border-b pb-2 mb-2">
+                    <div className="w-16 h-16 bg-gray-200 mx-auto mb-1 flex items-center justify-center text-xs">QR</div>
+                    <div className="text-xs text-gray-500">Scan to pay</div>
+                  </div>
+                )}
+
+                {/* Barcode */}
+                {posReceipt.showBarcode && (
+                  <div className="text-center border-b pb-2 mb-2">
+                    <div className="h-8 bg-black mx-auto" style={{ width: '120px' }} />
+                    <div className="text-xs">BT20260704001</div>
+                  </div>
+                )}
+
+                {/* Kitchen Note */}
+                {posReceipt.showKitchenNote && (
+                  <div className="text-xs border-b pb-2 mb-2 text-center text-gray-500">
+                    <div>Note: </div>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="text-center text-xs">
+                  <div className="font-bold">{posReceipt.footer || 'Thank you!'}</div>
+                  {posReceipt.footerMessage && <div className="text-gray-500">{posReceipt.footerMessage}</div>}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
