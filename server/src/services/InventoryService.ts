@@ -1,5 +1,22 @@
 import prisma from '../config/database'
 
+// ============================================
+// BigInt 序列化辅助函数
+// ============================================
+function serializeBigInt(obj: any): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'bigint') return Number(obj)
+  if (Array.isArray(obj)) return obj.map(serializeBigInt)
+  if (typeof obj === 'object') {
+    const result: any = {}
+    for (const key of Object.keys(obj)) {
+      result[key] = serializeBigInt(obj[key])
+    }
+    return result
+  }
+  return obj
+}
+
 export interface InventoryFilter {
   storeId?: string
   categoryId?: string
@@ -38,15 +55,15 @@ export async function getInventory(filter: InventoryFilter) {
 
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
-    return items.filter(item => item.currentStock <= item.safetyStock)
+    return serializeBigInt(items.filter(item => item.currentStock <= item.safetyStock))
   }
 
-  return items
+  return serializeBigInt(items)
 }
 
 // Get single inventory item
 export async function getInventoryById(inventoryId: string) {
-  return prisma.inventory.findUnique({
+  const result = await prisma.inventory.findUnique({
     where: { id: inventoryId },
     include: {
       stockInLogs: {
@@ -59,6 +76,7 @@ export async function getInventoryById(inventoryId: string) {
       }
     }
   })
+  return serializeBigInt(result)
 }
 
 // Stock in operation

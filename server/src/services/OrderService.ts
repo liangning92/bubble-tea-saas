@@ -408,6 +408,7 @@ export async function getOrders(params: {
   channelId?: string
   startDate?: string
   endDate?: string
+  date?: string  // Single date for "show orders on this date"
   page?: number
   pageSize?: number
 }) {
@@ -440,6 +441,17 @@ export async function getOrders(params: {
     where.createdAt = {}
     if (startDate) where.createdAt.gte = new Date(startDate)
     if (endDate) where.createdAt.lte = new Date(endDate)
+  } else if (params.date) {
+    // Support single date parameter for "show orders on this date"
+    const dateStr = params.date
+    const startOfDay = new Date(dateStr)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endOfDay = new Date(dateStr)
+    endOfDay.setHours(23, 59, 59, 999)
+    where.createdAt = {
+      gte: startOfDay,
+      lte: endOfDay
+    }
   }
 
   const [orders, total] = await Promise.all([

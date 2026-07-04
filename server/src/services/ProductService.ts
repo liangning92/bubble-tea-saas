@@ -1,6 +1,46 @@
 import prisma from '../config/database'
 import { getInventoryCostBreakdown } from './BomService'
 
+// Helper: Serialize BigInt values to numbers for JSON response
+function serializeBigInt(obj: any): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'bigint') return Number(obj)
+  if (Array.isArray(obj)) return obj.map(serializeBigInt)
+  if (typeof obj === 'object') {
+    const result: any = {}
+    for (const key of Object.keys(obj)) {
+      result[key] = serializeBigInt(obj[key])
+    }
+    return result
+  }
+  return obj
+}
+
+// Helper: Transform product for API response (removes BigInt from nested objects)
+function transformProductForApi(product: any): any {
+  const { bomItems, ...rest } = product
+  return {
+    ...serializeBigInt(rest),
+    bomItems: (bomItems || []).map((bi: any) => ({
+      id: bi.id,
+      productId: bi.productId,
+      inventoryId: bi.inventoryId,
+      quantity: bi.quantity,
+      costPerUnit: bi.costPerUnit,
+      createdAt: bi.createdAt,
+      updatedAt: bi.updatedAt,
+      inventory: bi.inventory ? {
+        id: bi.inventory.id,
+        name: bi.inventory.name,
+        unit: bi.inventory.unit,
+        currentStock: bi.inventory.currentStock,
+        avgCost: Number(bi.inventory.avgCost), // Convert BigInt to number
+        type: bi.inventory.type
+      } : undefined
+    }))
+  }
+}
+
 export interface ProductFilter {
   storeId?: string
   categoryId?: string
@@ -181,12 +221,12 @@ export async function getProducts(filter: ProductFilter) {
     return p
   }))
 
-  return productsWithCost
+  return productsWithCost.map(transformProductForApi)
 }
 
 // Get single product
 export async function getProductById(productId: string) {
-  return prisma.product.findUnique({
+  const product = await prisma.product.findUnique({
     where: { id: productId },
     include: {
       category: true,
@@ -200,6 +240,7 @@ export async function getProductById(productId: string) {
       channelPrices: true
     }
   })
+  return product ? transformProductForApi(product) : null
 }
 
 // Get product by barcode (using product code)

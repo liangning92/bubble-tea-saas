@@ -1,6 +1,23 @@
 import prisma from '../config/database'
 
 // ============================================
+// BigInt 序列化辅助函数
+// ============================================
+function serializeBigInt(obj: any): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'bigint') return Number(obj)
+  if (Array.isArray(obj)) return obj.map(serializeBigInt)
+  if (typeof obj === 'object') {
+    const result: any = {}
+    for (const key of Object.keys(obj)) {
+      result[key] = serializeBigInt(obj[key])
+    }
+    return result
+  }
+  return obj
+}
+
+// ============================================
 // 原料分类类型
 // ============================================
 export const INVENTORY_TYPES = {
@@ -32,20 +49,21 @@ export async function getInventoryList(storeId: string, type?: string) {
   const where: any = { storeId }
   if (type) where.type = type
 
-  return prisma.inventory.findMany({
+  const result = await prisma.inventory.findMany({
     where,
     orderBy: [
       { category: 'asc' },
       { name: 'asc' }
     ]
   })
+  return serializeBigInt(result)
 }
 
 // ============================================
 // 获取单个原料详情（含批次）
 // ============================================
 export async function getInventoryDetail(id: string) {
-  return prisma.inventory.findUnique({
+  const result = await prisma.inventory.findUnique({
     where: { id },
     include: {
       batches: {
@@ -54,6 +72,7 @@ export async function getInventoryDetail(id: string) {
       }
     }
   })
+  return serializeBigInt(result)
 }
 
 // ============================================
