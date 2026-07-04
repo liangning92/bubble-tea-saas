@@ -127,7 +127,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /api/inventory/stock-in
-router.post('/stock-in', authenticate, authorize('admin', 'manager'), validateBody(stockInSchema), async (req: AuthRequest, res) => {
+router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), validateBody(stockInSchema), async (req: AuthRequest, res) => {
   try {
     const item = await InventoryService.stockIn({
       ...req.body,

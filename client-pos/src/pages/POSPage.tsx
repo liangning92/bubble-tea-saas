@@ -189,12 +189,10 @@ export function POSPage() {
   // 考勤二维码弹窗
   const [showAttendanceQR, setShowAttendanceQR] = useState(false)
 
-  // 退款弹窗
-  const [showRefundModal, setShowRefundModal] = useState(false)
-  const [refundOrders, setRefundOrders] = useState<any[]>([])
-  const [selectedRefundOrder, setSelectedRefundOrder] = useState<any>(null)
-  const [refundReason, setRefundReason] = useState('')
-  const [isProcessingRefund, setIsProcessingRefund] = useState(false)
+  // 删除申请弹窗
+  const [deleteModalOrder, setDeleteModalOrder] = useState<any>(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [isSubmittingDelete, setIsSubmittingDelete] = useState(false)
 
   // 支付 - 使用orderStore
   const {
@@ -259,7 +257,6 @@ export function POSPage() {
     showHistory: true,
     showScan: true,
     showShift: true,
-    showRefund: true,
     showCash: false,
     channelDineIn: true,
     channelGoFood: true,
@@ -1137,6 +1134,27 @@ export function POSPage() {
     }
   }
 
+  // 提交删除申请
+  const submitDeleteRequest = async () => {
+    if (!deleteModalOrder || !deleteReason.trim()) return
+    setIsSubmittingDelete(true)
+    try {
+      await posApi.requestRefund({
+        orderId: deleteModalOrder.id,
+        reason: deleteReason,
+        staffId: user?.id
+      })
+      showToast(t('pos.deleteRequestSubmitted') || 'Delete request submitted', 'success')
+      setDeleteModalOrder(null)
+      setDeleteReason('')
+      fetchOrders() // 刷新列表
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || t('pos.deleteRequestFailed') || 'Failed to submit request', 'error')
+    } finally {
+      setIsSubmittingDelete(false)
+    }
+  }
+
   // 加载卫生任务
   const fetchTasks = async () => {
     if (!user?.storeId) return
@@ -1148,35 +1166,6 @@ export function POSPage() {
       console.error('Failed to fetch tasks:', e)
     } finally {
       setTasksLoading(false)
-    }
-  }
-
-  // 加载可退款订单
-  const fetchRefundOrders = async () => {
-    if (!user?.storeId) return
-    try {
-      const res = await posApi.getOrders({ storeId: user.storeId, limit: 50, status: 'completed' })
-      const refundable = (res.data?.data?.list || []).filter((o: any) => o.status === 'completed')
-      setRefundOrders(refundable)
-    } catch (e) {
-      console.error('Failed to fetch refund orders:', e)
-    }
-  }
-
-  // 处理退款
-  const processRefund = async () => {
-    if (!selectedRefundOrder) return
-    setIsProcessingRefund(true)
-    try {
-      await posApi.requestRefund({ orderId: selectedRefundOrder.id, reason: refundReason, staffId: user?.id })
-      showToast(t('pos.refundSuccess') || 'Refund request submitted')
-      setShowRefundModal(false)
-      setSelectedRefundOrder(null)
-      setRefundReason('')
-    } catch (e: any) {
-      showToast(e?.response?.data?.message || t('pos.refundFailed') || 'Refund failed')
-    } finally {
-      setIsProcessingRefund(false)
     }
   }
 
@@ -1783,17 +1772,6 @@ export function POSPage() {
               icon: <FileText size={32} />,
               labelKey: posLayout.toolbarLabels?.history || 'toolbar.history',
               onClick: () => setShowHistoryModal(true)
-            })
-          }
-          if (posLayout.showRefund !== false) {
-            toolbarButtons.push({
-              id: 'refund',
-              icon: <RotateCcw size={32} />,
-              labelKey: posLayout.toolbarLabels?.refund || 'toolbar.refund',
-              onClick: () => {
-                fetchRefundOrders()
-                setShowRefundModal(true)
-              }
             })
           }
           if (posLayout.showCash === true) {
@@ -2821,6 +2799,20 @@ export function POSPage() {
                           <span key={idx}>{item.quantity}x {item.productName}{idx < order.items.length - 1 ? ', ' : ''}</span>
                         ))}
                       </div>
+                      {/* 删除申请按钮 - 收银员可见 */}
+                      {user?.role !== 'admin' && user?.role !== 'manager' && (
+                        <div className="mt-2 pt-2 border-t border-gray-200 flex justify-end">
+                          <button
+                            onClick={() => {
+                              setDeleteModalOrder(order)
+                              setDeleteReason('')
+                            }}
+                            className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
+                          >
+                            {t('pos.requestDelete') || 'Request Delete'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2830,70 +2822,43 @@ export function POSPage() {
         </div>
       )}
 
-      {/* 退款弹窗 */}
-      {showRefundModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowRefundModal(false)}>
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
+      {/* 删除申请弹窗 */}
+      {deleteModalOrder && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setDeleteModalOrder(null)}>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[80]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
-              <h3 className="font-bold">{t('toolbar.refund')}</h3>
-              <button onClick={() => setShowRefundModal(false)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
+              <h3 className="font-bold">{t('pos.requestDelete') || 'Request Delete Order'}</h3>
+              <button onClick={() => setDeleteModalOrder(null)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
                 <X size={20} />
               </button>
             </div>
             <div className="p-4 space-y-4">
-              {refundOrders.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">{t('pos.noRefundableOrders') || 'No completed orders to refund'}</p>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-500">{t('pos.selectOrderToRefund') || 'Select an order to refund'}</p>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {refundOrders.map(order => (
-                      <div
-                        key={order.id}
-                        className={`p-3 rounded-xl cursor-pointer transition-colors ${
-                          selectedRefundOrder?.id === order.id ? 'bg-primary/10 border-2 border-primary' : 'bg-gray-50 hover:bg-gray-100'
-                        }`}
-                        onClick={() => setSelectedRefundOrder(order)}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-bold">#{order.orderNumber || order.id}</p>
-                            <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-primary">{formatCurrency(order.finalAmount || order.totalAmount)}</p>
-                            <p className="text-xs text-gray-500">{order.channelName || order.channelId}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedRefundOrder && (
-                    <div className="mt-4 p-4 bg-gray-50 rounded-xl">
-                      <label className="block text-sm font-medium mb-2">{t('pos.refundReason') || 'Refund Reason'}</label>
-                      <textarea
-                        value={refundReason}
-                        onChange={e => setRefundReason(e.target.value)}
-                        className="w-full p-3 border rounded-lg"
-                        rows={2}
-                        placeholder={t('pos.enterRefundReason') || 'Enter reason for refund'}
-                      />
-                    </div>
-                  )}
-                  <button
-                    onClick={processRefund}
-                    disabled={!selectedRefundOrder || isProcessingRefund}
-                    className="w-full py-3 bg-red-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isProcessingRefund ? (
-                      <Loader2 size={20} className="animate-spin" />
-                    ) : (
-                      <RotateCcw size={20} />
-                    )}
-                    {t('pos.processRefund') || 'Process Refund'}
-                  </button>
-                </>
-              )}
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <p className="font-bold">#{deleteModalOrder.orderNumber || deleteModalOrder.id}</p>
+                <p className="text-sm text-gray-500">{formatCurrency(deleteModalOrder.finalAmount || deleteModalOrder.totalAmount)}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">{t('pos.deleteReason') || 'Reason for deletion'}</label>
+                <textarea
+                  value={deleteReason}
+                  onChange={e => setDeleteReason(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                  rows={3}
+                  placeholder={t('pos.enterDeleteReason') || 'Please enter the reason for deletion request...'}
+                />
+              </div>
+              <button
+                onClick={submitDeleteRequest}
+                disabled={!deleteReason.trim() || isSubmittingDelete}
+                className="w-full py-3 bg-red-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSubmittingDelete ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : (
+                  <RotateCcw size={20} />
+                )}
+                {t('pos.submitDeleteRequest') || 'Submit Request'}
+              </button>
             </div>
           </div>
         </div>
