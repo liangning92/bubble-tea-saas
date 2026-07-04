@@ -53,6 +53,7 @@ export async function createExpense(data: {
   category: string
   amount: number
   description: string
+  date: Date
   referenceId?: string
   referenceType?: string
 }) {
@@ -67,6 +68,7 @@ export async function createExpense(data: {
       category: data.category,
       amount: data.amount,
       description: data.description,
+      date: data.date,
       referenceId: data.referenceId,
       referenceType: data.referenceType
     }

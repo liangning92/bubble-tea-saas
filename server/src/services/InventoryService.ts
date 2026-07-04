@@ -306,7 +306,7 @@ export async function createInventory(data: {
   shelfLife?: number
   concentrateRatio?: number
 }) {
-  return prisma.inventory.create({
+  const result = await prisma.inventory.create({
     data: {
       storeId: data.storeId,
       name: data.name,
@@ -320,6 +320,7 @@ export async function createInventory(data: {
       concentrateRatio: data.concentrateRatio || 1
     }
   })
+  return serializeBigInt(result)
 }
 
 // Update inventory item
@@ -338,10 +339,11 @@ export async function updateInventory(
     concentrateRatio: number
   }>
 ) {
-  return prisma.inventory.update({
+  const result = await prisma.inventory.update({
     where: { id: inventoryId },
     data
   })
+  return serializeBigInt(result)
 }
 
 // Delete inventory item

@@ -2799,20 +2799,18 @@ export function POSPage() {
                           <span key={idx}>{item.quantity}x {item.productName}{idx < order.items.length - 1 ? ', ' : ''}</span>
                         ))}
                       </div>
-                      {/* 删除申请按钮 - 收银员可见 */}
-                      {user?.role !== 'admin' && user?.role !== 'manager' && (
-                        <div className="mt-2 pt-2 border-t border-gray-200 flex justify-end">
-                          <button
-                            onClick={() => {
-                              setDeleteModalOrder(order)
-                              setDeleteReason('')
-                            }}
-                            className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
-                          >
-                            {t('pos.requestDelete') || 'Request Delete'}
-                          </button>
-                        </div>
-                      )}
+                      {/* 删除申请按钮 - 所有用户可见 */}
+                      <div className="mt-2 pt-2 border-t border-gray-200 flex justify-end">
+                        <button
+                          onClick={() => {
+                            setDeleteModalOrder(order)
+                            setDeleteReason('')
+                          }}
+                          className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
+                        >
+                          {t('pos.requestDelete') || 'Request Delete'}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
