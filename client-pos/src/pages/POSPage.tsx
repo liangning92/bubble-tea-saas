@@ -1805,13 +1805,6 @@ export function POSPage() {
             })
           }
           toolbarButtons.push({
-            id: 'tasks',
-            icon: <ClipboardList size={32} />,
-            labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
-            onClick: () => setShowTasksModal(true),
-            badge: pendingTaskCount
-          })
-          toolbarButtons.push({
             id: 'hardware',
             icon: <Settings size={32} />,
             labelKey: 'Hardware',
@@ -2918,66 +2911,6 @@ export function POSPage() {
             </div>
             <div className="p-4">
               <p className="text-gray-500 text-center py-8">{t('toolbar.cashComingSoon')}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 任务弹窗 */}
-      {showTasksModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowTasksModal(false)}>
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
-              <h3 className="font-bold">{t('toolbar.tasks')}</h3>
-              <button onClick={() => setShowTasksModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-4">
-              {tasksLoading ? (
-                <p className="text-gray-500 text-center py-8">{t('common.loading') || 'Loading...'}</p>
-              ) : tasks.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">{t('tasks.noPending') || 'No pending tasks'}</p>
-              ) : (
-                <div className="space-y-2">
-                  {tasks.map(task => (
-                    <div key={task.id} className="p-3 bg-gray-50 rounded-xl">
-                      <p className="font-bold">{task.title || task.templateName}</p>
-                      <p className="text-sm text-gray-500">{task.areaName || task.location}</p>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={async () => {
-                            try {
-                              await posApi.completeTask(task.id, {})
-                              showToast(t('tasks.completed') || 'Task completed', 'success')
-                              fetchTasks()
-                            } catch (e) {
-                              showToast(t('tasks.completeFailed') || 'Failed to complete task', 'error')
-                            }
-                          }}
-                          className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium touch-feedback hover:bg-green-200"
-                        >
-                          {t('tasks.complete') || 'Complete'}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await posApi.skipTask(task.id, '')
-                              showToast(t('tasks.skipped') || 'Task skipped', 'success')
-                              fetchTasks()
-                            } catch (e) {
-                              showToast(t('tasks.skipFailed') || 'Failed to skip task', 'error')
-                            }
-                          }}
-                          className="px-3 py-2 bg-yellow-100 text-yellow-700 rounded-lg text-sm font-medium touch-feedback hover:bg-yellow-200"
-                        >
-                          {t('tasks.skip') || 'Skip'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
