@@ -2783,7 +2783,18 @@ export function POSPage() {
               ) : (
                 <div className="space-y-2">
                   {orders.map(order => (
-                    <div key={order.id} className="p-3 bg-gray-50 rounded-xl">
+                    <div
+                      key={order.id}
+                      onClick={() => {
+                        setDeleteModalOrder(order)
+                        setDeleteReason('')
+                      }}
+                      className={`p-3 rounded-xl cursor-pointer transition-all ${
+                        deleteModalOrder?.id === order.id
+                          ? 'bg-primary/10 border-2 border-primary'
+                          : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+                      }`}
+                    >
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-bold">#{order.orderNumber || order.id}</p>
@@ -2798,18 +2809,6 @@ export function POSPage() {
                         {order.items?.map((item: any, idx: number) => (
                           <span key={idx}>{item.quantity}x {item.productName}{idx < order.items.length - 1 ? ', ' : ''}</span>
                         ))}
-                      </div>
-                      {/* 删除申请按钮 - 所有用户可见 */}
-                      <div className="mt-2 pt-2 border-t border-gray-200 flex justify-end">
-                        <button
-                          onClick={() => {
-                            setDeleteModalOrder(order)
-                            setDeleteReason('')
-                          }}
-                          className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
-                        >
-                          {t('pos.requestDelete') || 'Request Delete'}
-                        </button>
                       </div>
                     </div>
                   ))}
