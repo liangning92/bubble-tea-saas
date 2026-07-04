@@ -644,15 +644,17 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
           note: 'Purchase reward'
         }
       })
-
-      // Process referral rewards if this is a referred member
-      if (data.memberId) {
-        await processOrderReferralRewards(newOrder.id)
-      }
     }
 
     return { ...newOrder, lowStockWarnings: inventoryResult.lowStockWarnings }
   })
+
+  // Process referral rewards AFTER transaction (avoid nested transaction timeout)
+  if (data.memberId) {
+    processOrderReferralRewards(order.id).catch(err => {
+      console.error('Failed to process referral rewards:', err)
+    })
+  }
 
   return {
     ...order,
