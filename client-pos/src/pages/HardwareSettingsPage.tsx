@@ -196,7 +196,7 @@ export function HardwareSettingsPage() {
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/20 rounded-lg">
             <ChevronLeft size={24} />
           </button>
-          <h1 className="text-xl font-semibold">{t('Hardware Settings')}</h1>
+          <h1 className="text-xl font-semibold">{t('hardware.title')}</h1>
         </div>
       </header>
 
@@ -215,9 +215,9 @@ export function HardwareSettingsPage() {
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Printer size={20} />
-            {t('Printer Connection')}
+            {t('hardware.printerConnection')}
           </h2>
-          
+
           <div className="flex gap-3 mb-4">
             <button
               onClick={() => setSettings(s => ({ ...s, printerConnectionType: 'usb' }))}
@@ -228,8 +228,8 @@ export function HardwareSettingsPage() {
               }`}
             >
               <div className="text-2xl mb-1">🖨️</div>
-              <div className="font-medium">USB Printer</div>
-              <div className="text-xs text-gray-500">Direct connection</div>
+              <div className="font-medium">{t('hardware.usbPrinter')}</div>
+              <div className="text-xs text-gray-500">{t('hardware.directConnection')}</div>
             </button>
             <button
               onClick={() => setSettings(s => ({ ...s, printerConnectionType: 'network' }))}
@@ -240,8 +240,8 @@ export function HardwareSettingsPage() {
               }`}
             >
               <div className="text-2xl mb-1">🌐</div>
-              <div className="font-medium">Network Printer</div>
-              <div className="text-xs text-gray-500">Via IP address</div>
+              <div className="font-medium">{t('hardware.networkPrinter')}</div>
+              <div className="text-xs text-gray-500">{t('hardware.viaIpAddress')}</div>
             </button>
           </div>
 
@@ -250,7 +250,7 @@ export function HardwareSettingsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('Printer Name')}
+                  {t('hardware.printerName')}
                 </label>
                 <div className="flex gap-2">
                   <select
@@ -258,7 +258,7 @@ export function HardwareSettingsPage() {
                     onChange={(e) => setSettings(s => ({ ...s, printerName: e.target.value }))}
                     className="flex-1 input"
                   >
-                    <option value="">-- Select Printer --</option>
+                    <option value="">{t('hardware.selectPrinter')}</option>
                     {detectedPrinters.map(p => (
                       <option key={p} value={p}>{p}</option>
                     ))}
@@ -273,19 +273,19 @@ export function HardwareSettingsPage() {
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   {detectedPrinters.length > 0
-                    ? `Found ${detectedPrinters.length} printer(s)`
-                    : 'Click refresh to detect printers'}
+                    ? t('hardware.foundPrinters').replace('%d', String(detectedPrinters.length))
+                    : t('hardware.clickRefresh')}
                 </p>
               </div>
 
               {detectedPrinters.length === 0 && (
                 <div className="p-4 bg-yellow-50 rounded-xl text-yellow-800">
-                  <div className="font-medium mb-2">No printers detected?</div>
+                  <div className="font-medium mb-2">{t('hardware.noPrintersDetected')}</div>
                   <ul className="text-sm space-y-1">
-                    <li>• Make sure the printer is turned ON</li>
-                    <li>• Check USB cable connection</li>
-                    <li>• Install printer driver from Windows</li>
-                    <li>• Click refresh button to retry</li>
+                    <li>• {t('hardware.printerTips')}</li>
+                    <li>• {t('hardware.checkUsbCable')}</li>
+                    <li>• {t('hardware.installDriver')}</li>
+                    <li>• {t('hardware.clickRefreshRetry')}</li>
                   </ul>
                 </div>
               )}
@@ -297,7 +297,7 @@ export function HardwareSettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('Printer IP')}
+                  {t('hardware.printerIp')}
                 </label>
                 <input
                   type="text"
@@ -309,7 +309,7 @@ export function HardwareSettingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('Port')}
+                  {t('hardware.port')}
                 </label>
                 <input
                   type="number"
@@ -327,13 +327,13 @@ export function HardwareSettingsPage() {
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Box size={20} />
-            {t('Cash Drawer')}
+            {t('hardware.cashDrawer')}
           </h2>
-          
+
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
             <div>
-              <div className="font-medium">{t('Auto Open Cash Drawer')}</div>
-              <div className="text-sm text-gray-500">{t('Opens automatically with cash payments')}</div>
+              <div className="font-medium">{t('hardware.autoOpenCashDrawer')}</div>
+              <div className="text-sm text-gray-500">{t('hardware.autoOpenHint')}</div>
             </div>
             <button
               onClick={() => setSettings(s => ({ ...s, autoOpenCashDrawer: !s.autoOpenCashDrawer }))}
@@ -348,13 +348,13 @@ export function HardwareSettingsPage() {
           </div>
 
           <div className="mt-4 p-3 bg-blue-50 rounded-xl text-blue-800 text-sm">
-            💡 {t('Cash drawer connects via RJ11 cable to your printer')}
+            {t('hardware.cashDrawerRj11Tip')}
           </div>
         </div>
 
         {/* Test Buttons */}
         <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">{t('Test Hardware')}</h2>
+          <h2 className="text-lg font-semibold mb-4">{t('hardware.testHardware')}</h2>
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={testPrint}
@@ -366,7 +366,7 @@ export function HardwareSettingsPage() {
               ) : (
                 <Printer size={24} />
               )}
-              <span>{t('Test Print')}</span>
+              <span>{t('hardware.testPrint')}</span>
             </button>
             <button
               onClick={testCashDrawer}
@@ -378,7 +378,7 @@ export function HardwareSettingsPage() {
               ) : (
                 <Box size={24} />
               )}
-              <span>{t('Test Cash Drawer')}</span>
+              <span>{t('hardware.testCashDrawer')}</span>
             </button>
           </div>
         </div>
@@ -389,7 +389,7 @@ export function HardwareSettingsPage() {
           disabled={saving}
           className="w-full btn-primary py-4 text-lg font-semibold"
         >
-          {saving ? <Loader2 className="animate-spin mx-auto" size={24} /> : t('Save Settings')}
+          {saving ? <Loader2 className="animate-spin mx-auto" size={24} /> : t('hardware.saveSettings')}
         </button>
       </div>
     </div>

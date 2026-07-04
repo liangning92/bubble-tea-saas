@@ -225,13 +225,66 @@ export function POSSettingsPage() {
     autoPrint: true,             // 自动打印
   })
 
+  // 打印机类型定义
+  type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
+
+  // 迁移旧格式到新格式
+  const migratePrinterConfig = (hw: any): any => {
+    // 如果已有 printers 数组，说明是新格式，直接返回
+    if (hw.printers && Array.isArray(hw.printers)) {
+      return hw
+    }
+    // 旧格式只有一个打印机，转换为新格式
+    const legacyPrinter = {
+      id: 'receipt-1',
+      name: 'Receipt Printer',
+      type: 'receipt' as PrinterType,
+      enabled: true,
+      connectionType: hw.printerConnectionType || 'usb',
+      printerName: hw.printerName || '',
+      printerIp: hw.printerIp || '192.168.1.100',
+      printerPort: hw.printerPort || 9100,
+    }
+    return {
+      ...hw,
+      printers: [legacyPrinter],
+    }
+  }
+
   // 硬件设置
-  const [hardwareSettings, setHardwareSettings] = useState({
-    printerConnectionType: 'usb',
-    printerType: 'escpos',          // 打印机类型: escpos / pcl
-    printerIp: '192.168.1.100',
-    printerPort: 9100,
-    printerName: '',
+  const [hardwareSettings, setHardwareSettings] = useState(() => ({
+    printers: [
+      {
+        id: 'receipt-1',
+        name: 'Receipt Printer',
+        type: 'receipt' as PrinterType,
+        enabled: true,
+        connectionType: 'usb' as const,
+        printerName: '',
+        printerIp: '192.168.1.100',
+        printerPort: 9100,
+      },
+      {
+        id: 'kitchen-1',
+        name: 'Kitchen Printer',
+        type: 'kitchen' as PrinterType,
+        enabled: false,
+        connectionType: 'usb' as const,
+        printerName: '',
+        printerIp: '192.168.1.100',
+        printerPort: 9100,
+      },
+      {
+        id: 'label-1',
+        name: 'Label Printer',
+        type: 'label' as PrinterType,
+        enabled: false,
+        connectionType: 'usb' as const,
+        printerName: '',
+        printerIp: '192.168.1.100',
+        printerPort: 9100,
+      },
+    ],
     cashDrawerPulse: 100,          // 钱箱脉冲(毫秒)
     autoOpenCashDrawer: true,
     scannerEnabled: true,            // 扫码枪启用
@@ -245,7 +298,7 @@ export function POSSettingsPage() {
       adImageUrl: '',
       promotions: ['🧋', '🍓', '💳', '🎁'],
     },
-  })
+  }))
 
   // 检测到的打印机列表（从POS客户端上传）
   const [detectedPrinters, setDetectedPrinters] = useState<string[]>([])
@@ -320,13 +373,14 @@ export function POSSettingsPage() {
       }
       // Load hardware settings
       if (configs.hardwareSettings) {
+        const migrated = migratePrinterConfig(configs.hardwareSettings)
         setHardwareSettings(prev => ({
           ...prev,
-          ...configs.hardwareSettings,
+          ...migrated,
           // Deep merge dualScreen object
           dualScreen: {
             ...prev.dualScreen,
-            ...(configs.hardwareSettings.dualScreen || {}),
+            ...(migrated.dualScreen || {}),
           }
         }))
       }
@@ -1595,12 +1649,6 @@ export function POSSettingsPage() {
                     <span>Tax (11%)</span>
                     <span>3,850</span>
                   </div>
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-green-600">
-                      <span>Discount</span>
-                      <span>-{discountAmount.toLocaleString()}</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Total */}
