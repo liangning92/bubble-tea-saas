@@ -307,6 +307,10 @@ const resources = {
         deleteSuccess: 'Pesanan dihapus',
         deleteFailed: 'Gagal menghapus',
         deleteReasonRequired: 'Harap masukkan alasan hapus',
+        requestDelete: 'Minta Hapus',
+        submitDeleteRequest: 'Kirim Permintaan Hapus',
+        deleteRequestSubmitted: 'Permintaan hapus dikirim',
+        deleteRequestFailed: 'Gagal mengirim',
         more: 'lebih'
       },
       cash: {
@@ -743,6 +747,10 @@ const resources = {
         deleteSuccess: 'Order deleted',
         deleteFailed: 'Failed to delete',
         deleteReasonRequired: 'Please enter delete reason',
+        requestDelete: 'Request Delete',
+        submitDeleteRequest: 'Submit Delete Request',
+        deleteRequestSubmitted: 'Delete request submitted',
+        deleteRequestFailed: 'Failed to submit',
         more: 'more'
       },
       cash: {
@@ -1167,6 +1175,10 @@ const resources = {
         deleteSuccess: '订单已删除',
         deleteFailed: '删除失败',
         deleteReasonRequired: '请输入删除原因',
+        requestDelete: '申请删除',
+        submitDeleteRequest: '提交删除申请',
+        deleteRequestSubmitted: '删除申请已提交',
+        deleteRequestFailed: '提交失败',
         more: '更多'
       },
       cash: {
