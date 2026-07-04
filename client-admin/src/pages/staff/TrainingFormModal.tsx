@@ -168,8 +168,8 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-bold mb-4">{editData ? t('staff.editTraining') : t('staff.addTraining')}</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">

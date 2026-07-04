@@ -458,8 +458,8 @@ export function InventoryPage() {
 
       {/* Add Item Modal */}
       {showAddItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">{t('inventory.addItem')}</h3>
               <button onClick={() => setShowAddItem(false)} className="text-gray-400 hover:text-gray-600">
@@ -555,8 +555,8 @@ export function InventoryPage() {
 
       {/* Edit Item Modal */}
       {showEditItem && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">{t('common.edit') || 'Edit Item'}</h3>
               <button onClick={() => setShowEditItem(false)} className="text-gray-400 hover:text-gray-600">
@@ -654,8 +654,8 @@ export function InventoryPage() {
 
       {/* Stock In Modal */}
       {showStockIn && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">{t('inventory.stockIn') || 'Stock In'} - {selectedItem.name}</h3>
               <button onClick={() => setShowStockIn(false)} className="text-gray-400 hover:text-gray-600">
@@ -708,8 +708,8 @@ export function InventoryPage() {
 
       {/* Stock Out Modal */}
       {showStockOut && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">{t('inventory.stockOut') || 'Stock Out'} - {selectedItem.name}</h3>
               <button onClick={() => setShowStockOut(false)} className="text-gray-400 hover:text-gray-600">
@@ -752,8 +752,8 @@ export function InventoryPage() {
 
       {/* Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">
                 {editingCategory ? t('inventory.editCategory') : t('inventory.addCategory')}

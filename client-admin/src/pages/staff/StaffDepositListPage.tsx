@@ -403,7 +403,7 @@ export function StaffDepositListPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">{t('staff.addStaffDeposit')}</h3>
@@ -477,7 +477,7 @@ export function StaffDepositListPage() {
 
       {/* Deduct Modal */}
       {showDeductModal && deductingDeposit && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDeductModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowDeductModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">{t('staff.recordDeduction')}</h3>
@@ -537,7 +537,7 @@ export function StaffDepositListPage() {
 
       {/* Refund Modal */}
       {showRefundModal && refundingDeposit && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRefundModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowRefundModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">{t('staff.processRefund')}</h3>

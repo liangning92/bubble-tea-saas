@@ -529,7 +529,7 @@ export function HygieneTasksPage() {
                 </div>
               )}
 
-              {/* Actions */}
+              {/* Actions - Pending: show Start button */}
               {!showSkipConfirm && selectedTask.status === 'pending' && (
                 <div className="flex gap-3 pt-4 border-t">
                   <button
@@ -540,12 +540,12 @@ export function HygieneTasksPage() {
                     {t('tasks.skip')}
                   </button>
                   <button
-                    onClick={handleComplete}
+                    onClick={handleStart}
                     disabled={actionLoading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-500 text-white rounded-xl"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-500 text-white rounded-xl"
                   >
                     {actionLoading ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />}
-                    {t('tasks.complete')}
+                    {t('tasks.start')}
                   </button>
                 </div>
               )}

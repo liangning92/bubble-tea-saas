@@ -190,8 +190,8 @@ export function RewardCatalogPage() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
                 {editingReward ? tl('marketing.editReward', '编辑奖励') : tl('marketing.addReward', '添加奖励')}
@@ -292,8 +292,8 @@ export function RewardCatalogPage() {
       )}
 
       {deleteId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{tl('common.delete', '删除')}</h3>
             <p className="text-gray-600 mb-6">{tl('marketing.deleteRewardConfirm', '确定删除此奖励？')}</p>
             <div className="flex gap-3">

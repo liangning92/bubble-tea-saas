@@ -217,7 +217,7 @@ export function StaffPointsPage() {
 
       {/* History Modal */}
       {showHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowHistory(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowHistory(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{selectedStaffName} - {t('staff.pointsHistory')}</h3>
             <div className="space-y-3">
@@ -251,7 +251,7 @@ export function StaffPointsPage() {
 
       {/* Earn Points Modal */}
       {showEarnModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowEarnModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowEarnModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{t('staff.earnPoints')} - {selectedStaffName}</h3>
             <div className="space-y-4">
@@ -304,7 +304,7 @@ export function StaffPointsPage() {
 
       {/* Adjust Points Modal */}
       {showAdjustModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAdjustModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowAdjustModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{t('staff.adjustPoints')} - {selectedStaffName}</h3>
             <div className="space-y-4">

@@ -448,7 +448,7 @@ export function ScheduleCalendarPage() {
 
       {/* Shift Selection Modal */}
       {editingCell && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingCell(null)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setEditingCell(null)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{t('staff.selectShift')}</h3>
             <div className="grid grid-cols-2 gap-3 mb-4">

@@ -273,7 +273,7 @@ export function AttendanceRulesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto" onClick={() => setShowModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50 overflow-y-auto" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 my-8" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">
               {editingRule ? t('staff.editAttendanceRule') : t('staff.addAttendanceRule')}

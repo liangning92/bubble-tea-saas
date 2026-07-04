@@ -199,8 +199,8 @@ export function CampaignListPage() {
 
       {/* Create Campaign Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">{t('marketing.createCampaign')}</h3>
             <div className="space-y-4">
               <div>
@@ -288,8 +288,8 @@ export function CampaignListPage() {
 
       {/* Delete Confirmation Modal */}
       {showDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
             <p className="text-gray-600 mb-6">{t('marketing.deleteCampaignConfirm')}</p>
             <div className="flex gap-3">

@@ -140,8 +140,8 @@ export function SupplierListPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">{editingSupplier ? t('purchases.editSupplier') : t('purchases.addSupplier')}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">

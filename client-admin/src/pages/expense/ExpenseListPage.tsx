@@ -942,8 +942,8 @@ export function ExpenseListPage() {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">
                 {selectedExpense ? t('expense.editExpense') : t('expense.addExpense')}
@@ -1066,8 +1066,8 @@ export function ExpenseListPage() {
 
       {/* Recurring Expenses Modal */}
       {showRecurringModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-lg rounded-xl p-6 mx-4 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-lg rounded-xl p-6 mx-4 max-h-[80vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">{t('expense.recurring')}</h2>
               <button
@@ -1181,8 +1181,8 @@ export function ExpenseListPage() {
 
       {/* Expense Type Management Modal */}
       {showTypeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">{t('expense.manageTypes')}</h2>
               <button
@@ -1232,8 +1232,8 @@ export function ExpenseListPage() {
 
       {/* Reimbursement Action Modal */}
       {selectedReimbursement && reimbActionType && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-bold mb-4">{getReimbActionTitle()}</h2>
 
             <div className="mb-4 p-4 bg-gray-50 rounded-xl">

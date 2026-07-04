@@ -336,7 +336,7 @@ export function HygieneTodayTasksPage() {
 
       {/* Task Detail Modal */}
       {showDetailModal && selectedTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDetailModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowDetailModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">{selectedTask.name}</h2>
@@ -378,7 +378,7 @@ export function HygieneTodayTasksPage() {
 
       {/* Approval Modal */}
       {showApproveModal && selectedTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowApproveModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowApproveModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">{t('hygiene.approveTask')}</h2>
@@ -460,7 +460,7 @@ export function HygieneTodayTasksPage() {
 
       {/* Create Temporary Task Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">{t('hygiene.addTemporaryTask')}</h2>

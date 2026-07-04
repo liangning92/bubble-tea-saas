@@ -2067,7 +2067,7 @@ export function POSPage() {
 
       {/* 加料弹窗 */}
       {showAddonModal && selectedProduct && selectedSpec && (
-  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddonModal(false)}>
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowAddonModal(false)}>
     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
       <div className="bg-primary text-white px-5 py-4 flex justify-between items-center">
         <div>
@@ -2147,7 +2147,7 @@ export function POSPage() {
 )}
 
 {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPaymentModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowPaymentModal(false)}>
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-primary text-white px-5 py-4 flex justify-between items-center flex-shrink-0">
               <h2 className="font-bold">{t('pos.confirmPayment')}</h2>
@@ -2311,7 +2311,7 @@ export function POSPage() {
 
       {/* 折扣弹窗 */}
       {showDiscountModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDiscountModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowDiscountModal(false)}>
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('pos.discount')}</h3>
@@ -2381,7 +2381,7 @@ export function POSPage() {
 
       {/* 会员弹窗 */}
       {showMemberModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowMemberModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowMemberModal(false)}>
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('pos.member')}</h3>
@@ -2463,8 +2463,8 @@ export function POSPage() {
 
       {/* 挂单弹窗 */}
       {showSuspendModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowSuspendModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 pointer-events-none" onClick={() => setShowSuspendModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('pos.suspendOrderTitle')}</h3>
               <button onClick={() => setShowSuspendModal(false)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
@@ -2497,7 +2497,7 @@ export function POSPage() {
 
       {/* 交接班弹窗 */}
       {showShiftModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowShiftModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowShiftModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
               <h3 className="font-bold">{shiftData?.hasOpenShift ? t('pos.shiftChange') : t('pos.shiftOpen')}</h3>
@@ -2763,7 +2763,7 @@ export function POSPage() {
 
       {/* 扫描弹窗 */}
       {showScanModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowScanModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowScanModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('toolbar.scan')}</h3>
@@ -2780,7 +2780,7 @@ export function POSPage() {
 
       {/* 历史记录弹窗 */}
       {showHistoryModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowHistoryModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowHistoryModal(false)}>
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('toolbar.history')}</h3>
@@ -2823,7 +2823,7 @@ export function POSPage() {
 
       {/* 退款弹窗 */}
       {showRefundModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowRefundModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowRefundModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('toolbar.refund')}</h3>
@@ -2892,7 +2892,7 @@ export function POSPage() {
 
       {/* 现金管理弹窗 */}
       {showCashModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCashModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowCashModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('toolbar.cash')}</h3>
@@ -2909,7 +2909,7 @@ export function POSPage() {
 
       {/* 任务弹窗 */}
       {showTasksModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowTasksModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowTasksModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
               <h3 className="font-bold">{t('toolbar.tasks')}</h3>
@@ -2969,7 +2969,7 @@ export function POSPage() {
 
       {/* 退出确认弹窗 */}
       {showLogoutModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowLogoutModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center p-4" onClick={() => setShowLogoutModal(false)}>
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('toolbar.logout')}</h3>

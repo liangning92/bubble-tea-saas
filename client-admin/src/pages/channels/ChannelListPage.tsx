@@ -267,8 +267,8 @@ export function ChannelListPage() {
 
       {/* 创建/编辑弹窗 */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingChannel ? t('channels.editChannel') : t('channels.addChannel')}
             </h2>
@@ -348,8 +348,8 @@ export function ChannelListPage() {
 
       {/* 删除确认弹窗 */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">{t('common.confirm')}</h2>
             <p className="text-gray-600 mb-4">
               确定要删除此渠道吗？删除后，该渠道的订单将无法接收。

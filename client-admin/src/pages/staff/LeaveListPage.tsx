@@ -233,8 +233,8 @@ export function LeaveListPage() {
 
       {/* Action Modal */}
       {selectedLeave && actionType && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-bold mb-4">
               {actionType === 'approve' ? t('leave.approveLeave') : t('leave.rejectLeave')}
             </h2>

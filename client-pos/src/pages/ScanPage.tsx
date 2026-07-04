@@ -45,16 +45,19 @@ export function ScanPage() {
     setScannedProduct(null)
     setScannedMember(null)
 
+    let found = false
     try {
       // Try product first
       const productRes = await posApi.getProductByBarcode(manualInput.trim())
       if (productRes.data?.data) {
         setScannedProduct(productRes.data.data)
+        found = true
       } else {
         // Try member
         const memberRes = await posApi.getMemberByBarcode(manualInput.trim())
         if (memberRes.data?.data) {
           setScannedMember(memberRes.data.data)
+          found = true
         } else {
           setError(t('scan.notFound'))
         }
@@ -63,7 +66,10 @@ export function ScanPage() {
       setError(t('scan.scanFailed'))
     } finally {
       setLoading(false)
-      setManualInput('')
+      // Only clear input on success, keep on error so user can see what they typed
+      if (found) {
+        setManualInput('')
+      }
       inputRef.current?.focus()
     }
   }

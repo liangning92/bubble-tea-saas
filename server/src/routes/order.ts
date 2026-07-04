@@ -31,7 +31,7 @@ const createOrderSchema = z.object({
 // GET /api/orders
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize } = req.query
+    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date } = req.query
 
     const result = await OrderService.getOrders({
       storeId: storeId as string,
@@ -42,6 +42,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       channelId: channelId as string,
       startDate: startDate as string,
       endDate: endDate as string,
+      date: date as string,
       page: parseInt(page as string) || 1,
       pageSize: parseInt(pageSize as string) || 20
     })

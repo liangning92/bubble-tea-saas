@@ -155,8 +155,8 @@ export function RefundRequestListPage() {
 
       {/* Detail Modal */}
       {selectedRequest && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-[90%] max-w-lg rounded-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white w-[90%] max-w-lg rounded-xl overflow-hidden max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white p-4 border-b flex items-center justify-between">
               <h3 className="font-bold text-lg">{t('orders.refundDetail')}</h3>
               <button onClick={() => setSelectedRequest(null)} className="p-2 hover:bg-gray-100 rounded-lg">

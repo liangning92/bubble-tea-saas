@@ -267,8 +267,8 @@ export function MemberBalancePage() {
 
       {/* Topup Modal */}
       {showTopup && selectedMember && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">{t('marketing.topup')}</h3>
             <div className="space-y-4">
               <div>
@@ -309,8 +309,8 @@ export function MemberBalancePage() {
 
       {/* Deduct Modal */}
       {showDeduct && selectedMember && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">{t('marketing.deduct')}</h3>
             <div className="space-y-4">
               <div>

@@ -389,8 +389,8 @@ export function FixedAssetsPage() {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b">
               <h3 className="text-lg font-semibold">
                 {editingAsset ? t('finance.editAsset') : t('finance.addAsset')}
@@ -499,8 +499,8 @@ export function FixedAssetsPage() {
 
       {/* Dispose Modal */}
       {showDisposeModal && disposeAsset && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">{t('finance.disposeAsset')}</h3>
               <button onClick={() => setShowDisposeModal(false)} className="p-1 hover:bg-gray-100 rounded">

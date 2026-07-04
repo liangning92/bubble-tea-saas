@@ -271,8 +271,8 @@ export function CouponListPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">{t('marketing.createCoupon')}</h3>
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
@@ -378,8 +378,8 @@ export function CouponListPage() {
 
       {/* Edit Modal */}
       {showEdit && editingCoupon && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">{t('marketing.editCoupon')}</h3>
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
@@ -484,8 +484,8 @@ export function CouponListPage() {
 
       {/* Delete Confirmation Modal */}
       {showDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
             <p className="text-gray-600 mb-6">{t('marketing.deleteCouponConfirm')}</p>
             <div className="flex gap-3">
