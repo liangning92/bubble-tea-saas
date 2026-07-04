@@ -1,4 +1,4 @@
-// Format currency to IDR (amount is in cents, divide by 100)
+// Format currency to IDR
 export function formatCurrency(amount: number): string {
   if (amount === undefined || amount === null) return 'Rp 0'
   return new Intl.NumberFormat('id-ID', {
@@ -6,7 +6,7 @@ export function formatCurrency(amount: number): string {
     currency: 'IDR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
-  }).format(amount / 100)
+  }).format(amount)
 }
 
 // Safe parse date string
