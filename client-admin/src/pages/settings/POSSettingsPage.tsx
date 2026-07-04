@@ -237,8 +237,14 @@ export function POSSettingsPage() {
     scannerEnabled: true,            // 扫码枪启用
     scannerType: 'usb',             // 扫码枪类型: usb / serial
     displayBrightness: 80,          // 屏幕亮度
-    dualScreenEnabled: false,        // 双屏异显
-    adScreenImageUrl: '',            // 广告屏图片URL
+    dualScreen: {
+      enabled: false,
+      layoutStyle: 'full',
+      welcomeText: 'Bubble Tea Malaysia',
+      showLogo: false,
+      adImageUrl: '',
+      promotions: ['🧋', '🍓', '💳', '🎁'],
+    },
   })
 
   // 检测到的打印机列表（从POS客户端上传）
@@ -314,7 +320,15 @@ export function POSSettingsPage() {
       }
       // Load hardware settings
       if (configs.hardwareSettings) {
-        setHardwareSettings(prev => ({ ...prev, ...configs.hardwareSettings }))
+        setHardwareSettings(prev => ({
+          ...prev,
+          ...configs.hardwareSettings,
+          // Deep merge dualScreen object
+          dualScreen: {
+            ...prev.dualScreen,
+            ...(configs.hardwareSettings.dualScreen || {}),
+          }
+        }))
       }
     }
   }, [posConfig])
@@ -1267,7 +1281,9 @@ export function POSSettingsPage() {
 
       {/* ========== RECEIPT TAB ========== */}
       {activeSubTab === 'receipt' && (
-        <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-6">
+          {/* 左侧：设置表单 */}
+          <div className="space-y-6">
           {/* 基础信息 */}
           <div className="card">
             <h3 className="text-lg font-semibold mb-4">{t('posSettings.receiptBasic')}</h3>
@@ -1798,35 +1814,149 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
             />
           </div>
 
-          {/* Dual Screen */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <div>
-              <span className="font-medium">{t('posSettings.dualScreenEnabled')}</span>
-              <p className="text-sm text-gray-500">{t('posSettings.dualScreenHint')}</p>
-            </div>
-            <Toggle
-              enabled={hardwareSettings.dualScreenEnabled || false}
-              onChange={() => {
-                const newVal = !hardwareSettings.dualScreenEnabled
-                setHardwareSettings({ ...hardwareSettings, dualScreenEnabled: newVal })
-                handleSave('hardwareSettings', { ...hardwareSettings, dualScreenEnabled: newVal })
-              }}
-            />
-          </div>
-
-          {hardwareSettings.dualScreenEnabled && (
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.adScreenImageUrl')}</label>
-              <input
-                type="text"
-                value={hardwareSettings.adScreenImageUrl || ''}
-                onChange={(e) => setHardwareSettings({ ...hardwareSettings, adScreenImageUrl: e.target.value })}
-                onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                className="input"
-                placeholder="https://example.com/ad-image.png"
+          {/* Dual Screen Settings */}
+          <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <span className="font-semibold text-blue-800">{t('posSettings.dualScreenSettings')}</span>
+                <p className="text-sm text-blue-700 mt-1">{t('posSettings.dualScreenHint')}</p>
+              </div>
+              <Toggle
+                enabled={hardwareSettings.dualScreen?.enabled || false}
+                onChange={() => {
+                  const newVal = !hardwareSettings.dualScreen?.enabled
+                  const newHardwareSettings = {
+                    ...hardwareSettings,
+                    dualScreen: { ...hardwareSettings.dualScreen!, enabled: newVal }
+                  }
+                  setHardwareSettings(newHardwareSettings)
+                  handleSave('hardwareSettings', newHardwareSettings)
+                }}
               />
             </div>
-          )}
+
+            {hardwareSettings.dualScreen?.enabled && (
+              <div className="space-y-4 mt-4 pt-4 border-t border-blue-200">
+                {/* Layout Style */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenLayout')}</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="layoutStyle"
+                        value="simple"
+                        checked={hardwareSettings.dualScreen?.layoutStyle === 'simple'}
+                        onChange={() => {
+                          const newHardwareSettings = {
+                            ...hardwareSettings,
+                            dualScreen: { ...hardwareSettings.dualScreen!, layoutStyle: 'simple' }
+                          }
+                          setHardwareSettings(newHardwareSettings)
+                          handleSave('hardwareSettings', newHardwareSettings)
+                        }}
+                        className="text-primary"
+                      />
+                      <span className="text-sm">{t('posSettings.dualScreenLayoutSimple')}</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="layoutStyle"
+                        value="full"
+                        checked={hardwareSettings.dualScreen?.layoutStyle === 'full'}
+                        onChange={() => {
+                          const newHardwareSettings = {
+                            ...hardwareSettings,
+                            dualScreen: { ...hardwareSettings.dualScreen!, layoutStyle: 'full' }
+                          }
+                          setHardwareSettings(newHardwareSettings)
+                          handleSave('hardwareSettings', newHardwareSettings)
+                        }}
+                        className="text-primary"
+                      />
+                      <span className="text-sm">{t('posSettings.dualScreenLayoutFull')}</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Welcome Text */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenWelcomeText')}</label>
+                  <input
+                    type="text"
+                    value={hardwareSettings.dualScreen?.welcomeText || ''}
+                    onChange={(e) => {
+                      const newHardwareSettings = {
+                        ...hardwareSettings,
+                        dualScreen: { ...hardwareSettings.dualScreen!, welcomeText: e.target.value }
+                      }
+                      setHardwareSettings(newHardwareSettings)
+                    }}
+                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                    className="input"
+                    placeholder="Bubble Tea Malaysia"
+                  />
+                </div>
+
+                {/* Show Logo Toggle */}
+                <div className="flex items-center justify-between p-3 bg-white rounded-lg">
+                  <span className="text-sm font-medium text-gray-700">{t('posSettings.dualScreenShowLogo')}</span>
+                  <Toggle
+                    enabled={hardwareSettings.dualScreen?.showLogo || false}
+                    onChange={() => {
+                      const newVal = !hardwareSettings.dualScreen?.showLogo
+                      const newHardwareSettings = {
+                        ...hardwareSettings,
+                        dualScreen: { ...hardwareSettings.dualScreen!, showLogo: newVal }
+                      }
+                      setHardwareSettings(newHardwareSettings)
+                      handleSave('hardwareSettings', newHardwareSettings)
+                    }}
+                  />
+                </div>
+
+                {/* Ad Image URL */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenAdImage')}</label>
+                  <input
+                    type="text"
+                    value={hardwareSettings.dualScreen?.adImageUrl || ''}
+                    onChange={(e) => {
+                      const newHardwareSettings = {
+                        ...hardwareSettings,
+                        dualScreen: { ...hardwareSettings.dualScreen!, adImageUrl: e.target.value }
+                      }
+                      setHardwareSettings(newHardwareSettings)
+                    }}
+                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                    className="input"
+                    placeholder="https://example.com/ad-image.png"
+                  />
+                </div>
+
+                {/* Promotions */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenPromotions')}</label>
+                  <p className="text-xs text-gray-500 mb-2">{t('posSettings.dualScreenPromotionsHint')}</p>
+                  <textarea
+                    value={(hardwareSettings.dualScreen?.promotions || []).join('\n')}
+                    onChange={(e) => {
+                      const promotions = e.target.value.split('\n').filter(line => line.trim())
+                      const newHardwareSettings = {
+                        ...hardwareSettings,
+                        dualScreen: { ...hardwareSettings.dualScreen!, promotions }
+                      }
+                      setHardwareSettings(newHardwareSettings)
+                    }}
+                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
+                    className="input min-h-[120px]"
+                    placeholder="🧋&#10;🍓&#10;💳&#10;🎁"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Cash Drawer Info */}
           <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">

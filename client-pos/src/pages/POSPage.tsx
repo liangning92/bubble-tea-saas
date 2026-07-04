@@ -110,6 +110,15 @@ interface Product {
   addons: { addonId: string; addon: { id: string; name: string; price: number } }[]
 }
 
+interface DualScreenConfig {
+  enabled: boolean
+  layoutStyle: 'simple' | 'full'
+  welcomeText: string
+  showLogo: boolean
+  adImageUrl: string
+  promotions: string[]
+}
+
 export function POSPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -343,8 +352,14 @@ export function POSPage() {
     scannerEnabled: true,          // 扫码枪启用
     scannerType: 'usb',            // usb / serial
     displayBrightness: 80,         // 屏幕亮度
-    dualScreenEnabled: false,       // 双屏异显
-    adScreenImageUrl: '',          // 广告屏图片
+    dualScreen: {
+      enabled: false,
+      layoutStyle: 'full' as 'simple' | 'full',
+      welcomeText: 'Bubble Tea Malaysia',
+      showLogo: false,
+      adImageUrl: '',
+      promotions: ['🧋', '🍓', '💳', '🎁'],
+    },
     testPrint: null as number | null,
     testCashDrawer: null as number | null,
   })
@@ -681,7 +696,16 @@ export function POSPage() {
         // 硬件设置（打印机、钱箱）- Admin保存完整结构
         if (configs.hardwareSettings) {
           const hw = configs.hardwareSettings
-          setHardwareSettings({
+          const newDualScreen: DualScreenConfig = hw.dualScreen ? {
+            enabled: hw.dualScreen.enabled ?? false,
+            layoutStyle: hw.dualScreen.layoutStyle || 'full',
+            welcomeText: hw.dualScreen.welcomeText || 'Bubble Tea Malaysia',
+            showLogo: hw.dualScreen.showLogo ?? false,
+            adImageUrl: hw.dualScreen.adImageUrl || '',
+            promotions: hw.dualScreen.promotions || ['🧋', '🍓', '💳', '🎁'],
+          } : hardwareSettings.dualScreen
+
+          setHardwareSettings(prev => ({
             printerConnectionType: hw.printerConnectionType || 'usb',
             printerType: hw.printerType || 'escpos',
             printerName: hw.printerName || '',
@@ -692,11 +716,13 @@ export function POSPage() {
             scannerEnabled: hw.scannerEnabled ?? true,
             scannerType: hw.scannerType || 'usb',
             displayBrightness: hw.displayBrightness || 80,
-            dualScreenEnabled: hw.dualScreenEnabled || false,
-            adScreenImageUrl: hw.adScreenImageUrl || '',
+            dualScreen: newDualScreen,
             testPrint: null,
             testCashDrawer: null,
-          })
+          }))
+
+          // 同步 dualScreen 配置到 localStorage，供副屏使用
+          localStorage.setItem('dualScreenConfig', JSON.stringify(newDualScreen))
         }
 
         // 支付方式配置

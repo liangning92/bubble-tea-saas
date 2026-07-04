@@ -223,7 +223,13 @@ const resources = {
         confirmOpenShift: 'Konfirmasi Buka Shift',
         actualCash: 'Tunai Aktual',
         enterActualCash: 'Masukkan jumlah tunai actual',
-        expectedHint: 'Estimasi:'
+        expectedHint: 'Estimasi:',
+        locked: 'Terkunci',
+        unlock: 'Buka Kunci',
+        tapToUnlock: 'Ketuk untuk membuka',
+        enterPinToUnlock: 'Masukkan PIN untuk membuka',
+        wrongPin: 'PIN Salah',
+        logoutConfirm: 'Apakah Anda yakin ingin keluar?'
       },
       toolbar: {
         shift: 'Shift',
@@ -674,7 +680,13 @@ const resources = {
         confirmOpenShift: 'Confirm Open Shift',
         actualCash: 'Actual Cash',
         enterActualCash: 'Enter actual cash amount',
-        expectedHint: 'Expected:'
+        expectedHint: 'Expected:',
+        locked: 'Locked',
+        unlock: 'Unlock',
+        tapToUnlock: 'Tap to unlock',
+        enterPinToUnlock: 'Enter PIN to unlock',
+        wrongPin: 'Wrong PIN',
+        logoutConfirm: 'Are you sure you want to logout?'
       },
       toolbar: {
         shift: 'Shift',
@@ -1102,7 +1114,13 @@ const resources = {
         confirmOpenShift: '确认开班',
         actualCash: '实际现金',
         enterActualCash: '输入实际现金金额',
-        expectedHint: '应收:'
+        expectedHint: '应收:',
+        locked: '已锁定',
+        unlock: '解锁',
+        tapToUnlock: '点击解锁',
+        enterPinToUnlock: '输入PIN解锁',
+        wrongPin: 'PIN错误',
+        logoutConfirm: '确定要退出登录吗？'
       },
       toolbar: {
         shift: '交班',

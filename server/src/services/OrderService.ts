@@ -50,29 +50,21 @@ export async function generateOrderNumber(storeId: string, prefix: string = ''):
   const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '') // YYYYMMDD
   const today = dateStr
 
-  // Get or create counter for today
-  let counter = await prisma.orderCounter.findUnique({
+  // Atomic upsert: create if not exists, increment if exists
+  // This avoids race conditions between findUnique/create/update
+  const counter = await prisma.orderCounter.upsert({
     where: {
       storeId_date: { storeId, date: today }
+    },
+    create: {
+      storeId,
+      date: today,
+      counter: 1
+    },
+    update: {
+      counter: { increment: 1 }
     }
   })
-
-  if (!counter) {
-    // Create new counter for today
-    counter = await prisma.orderCounter.create({
-      data: {
-        storeId,
-        date: today,
-        counter: 1
-      }
-    })
-  } else {
-    // Increment counter
-    counter = await prisma.orderCounter.update({
-      where: { id: counter.id },
-      data: { counter: counter.counter + 1 }
-    })
-  }
 
   // Format: PREFIX{YYYYMMDD}{NNNN}
   // Example: BT202606110001 (4 digit sequence)

@@ -19,13 +19,17 @@ interface OrderData {
   total: number
 }
 
-// Promotions data - could be fetched from API in production
-const PROMOTIONS = [
-  { id: 1, emoji: '🧋' },
-  { id: 2, emoji: '🍓' },
-  { id: 3, emoji: '💳' },
-  { id: 4, emoji: '🎁' }
-]
+interface DualScreenConfig {
+  enabled: boolean
+  layoutStyle: 'simple' | 'full'
+  welcomeText: string
+  showLogo: boolean
+  adImageUrl: string
+  promotions: string[]
+}
+
+// Default promotions
+const DEFAULT_PROMOTIONS = ['🧋', '🍓', '💳', '🎁']
 
 export function CustomerDisplayPage() {
   const { t } = useTranslation()
@@ -36,16 +40,38 @@ export function CustomerDisplayPage() {
   })
   const [currentPromotion, setCurrentPromotion] = useState(0)
   const [displayState, setDisplayState] = useState<'idle' | 'ordering' | 'paying' | 'complete'>('idle')
+  const [dualScreenConfig, setDualScreenConfig] = useState<DualScreenConfig>({
+    enabled: false,
+    layoutStyle: 'full',
+    welcomeText: 'Bubble Tea Malaysia',
+    showLogo: false,
+    adImageUrl: '',
+    promotions: DEFAULT_PROMOTIONS,
+  })
+
+  // Load dualScreen config from localStorage
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('dualScreenConfig')
+    if (savedConfig) {
+      try {
+        const config = JSON.parse(savedConfig)
+        setDualScreenConfig(config)
+      } catch (e) {
+        console.error('Failed to parse dualScreenConfig:', e)
+      }
+    }
+  }, [])
 
   // Auto-rotate promotions
+  const promotions = dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS
   useEffect(() => {
     if (displayState === 'idle') {
       const interval = setInterval(() => {
-        setCurrentPromotion(p => (p + 1) % PROMOTIONS.length)
+        setCurrentPromotion(p => (p + 1) % promotions.length)
       }, 5000)
       return () => clearInterval(interval)
     }
-  }, [displayState])
+  }, [displayState, promotions.length])
 
   // Listen for order updates from main screen via Electron IPC
   useEffect(() => {
@@ -73,25 +99,51 @@ export function CustomerDisplayPage() {
     })
   }, [])
 
-  const promotion = PROMOTIONS[currentPromotion]
+  const promotion = promotions[currentPromotion]
 
-  // Idle state - show promotions
+  // Simple layout style - just logo and welcome text
+  if (dualScreenConfig.layoutStyle === 'simple') {
+    if (displayState === 'idle') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-primary to-primary/80 flex flex-col items-center justify-center text-white">
+          {dualScreenConfig.showLogo && (
+            <div className="text-8xl mb-6">🧋</div>
+          )}
+          <h1 className="text-5xl font-bold mb-2">
+            {dualScreenConfig.welcomeText || 'Bubble Tea Malaysia'}
+          </h1>
+        </div>
+      )
+    }
+  }
+
+  // Idle state - show promotions (full layout)
   if (displayState === 'idle') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-500 to-pink-600 flex flex-col items-center justify-center text-white">
-        <div className="text-8xl mb-6 animate-pulse">{promotion.emoji}</div>
-        <h1 className="text-5xl font-bold mb-2">
-          {t('customerDisplay.promotions.welcome')}
-        </h1>
-        <p className="text-2xl opacity-90">Bubble Tea Malaysia</p>
-        <div className="flex gap-2 mt-8">
-          {PROMOTIONS.map((_, i) => (
-            <div
-              key={i}
-              className={`w-3 h-3 rounded-full ${i === currentPromotion ? 'bg-white' : 'bg-white/40'}`}
-            />
-          ))}
-        </div>
+        {dualScreenConfig.adImageUrl ? (
+          <img
+            src={dualScreenConfig.adImageUrl}
+            alt="Advertisement"
+            className="w-full h-full object-cover absolute inset-0"
+          />
+        ) : (
+          <>
+            <div className="text-8xl mb-6 animate-pulse">{promotion}</div>
+            <h1 className="text-5xl font-bold mb-2">
+              {dualScreenConfig.welcomeText || t('customerDisplay.promotions.welcome')}
+            </h1>
+            <p className="text-2xl opacity-90">Bubble Tea Malaysia</p>
+            <div className="flex gap-2 mt-8">
+              {promotions.map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-3 h-3 rounded-full ${i === currentPromotion ? 'bg-white' : 'bg-white/40'}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     )
   }
