@@ -18,9 +18,18 @@ function serializeBigInt(obj: any): any {
 
 // Helper: Transform product for API response (removes BigInt from nested objects)
 function transformProductForApi(product: any): any {
-  const { bomItems, ...rest } = product
+  const { bomItems, specs, addons, channelPrices, category, ...rest } = product
   return {
     ...serializeBigInt(rest),
+    category: category ? serializeBigInt(category) : undefined,
+    specs: (specs || []).map((s: any) => serializeBigInt(s)),
+    addons: (addons || []).map((a: any) => ({
+      id: a.id,
+      addonId: a.addonId,
+      price: a.price,
+      addon: a.addon ? serializeBigInt(a.addon) : undefined
+    })),
+    channelPrices: (channelPrices || []).map((cp: any) => serializeBigInt(cp)),
     bomItems: (bomItems || []).map((bi: any) => ({
       id: bi.id,
       productId: bi.productId,
@@ -33,8 +42,8 @@ function transformProductForApi(product: any): any {
         id: bi.inventory.id,
         name: bi.inventory.name,
         unit: bi.inventory.unit,
-        currentStock: bi.inventory.currentStock,
-        avgCost: Number(bi.inventory.avgCost), // Convert BigInt to number
+        currentStock: Number(bi.inventory.currentStock),
+        avgCost: Number(bi.inventory.avgCost),
         type: bi.inventory.type
       } : undefined
     }))
