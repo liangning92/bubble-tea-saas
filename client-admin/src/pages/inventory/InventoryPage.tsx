@@ -389,13 +389,13 @@ export function InventoryPage() {
             <table className="w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
-                  <th className="pb-3 font-medium">{t('inventory.itemName') || 'Name'}</th>
-                  <th className="pb-3 font-medium">{t('inventory.category') || 'Category'}</th>
-                  <th className="pb-3 font-medium text-right">{t('inventory.currentStock') || 'Current Stock'}</th>
-                  <th className="pb-3 font-medium text-right">{t('inventory.unit') || 'Unit'}</th>
-                  <th className="pb-3 font-medium text-right">{t('inventory.avgCost') || 'Avg Cost'}</th>
-                  <th className="pb-3 font-medium text-right">{t('inventory.safetyStock') || 'Safety Stock'}</th>
-                  <th className="pb-3 font-medium text-center">{t('common.actions') || 'Actions'}</th>
+                  <th className="py-3 pr-4 font-medium w-1/4">{t('inventory.itemName') || 'Name'}</th>
+                  <th className="py-3 px-2 font-medium w-24">{t('inventory.category') || 'Category'}</th>
+                  <th className="py-3 px-2 font-medium text-right w-24">{t('inventory.currentStock') || 'Stock'}</th>
+                  <th className="py-3 px-2 font-medium text-right w-20">{t('inventory.unit') || 'Unit'}</th>
+                  <th className="py-3 px-2 font-medium text-right w-24">{t('inventory.avgCost') || 'Cost'}</th>
+                  <th className="py-3 px-2 font-medium text-right w-24">{t('inventory.safetyStock') || 'Safety'}</th>
+                  <th className="py-3 pl-4 font-medium text-center w-32">{t('common.actions') || 'Actions'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -403,19 +403,20 @@ export function InventoryPage() {
                   const isLow = item.isLowStock || item.currentStock <= (item.safetyStock || 0)
                   return (
                     <tr key={item.id} className={`border-b last:border-0 hover:bg-gray-50 ${isLow ? 'bg-red-50/30' : ''}`}>
-                      <td className="py-3">
+                      <td className="py-3 pr-4">
                         <span className="font-medium text-gray-900">{item.name}</span>
                         {isLow && <AlertTriangle size={16} className="inline ml-2 text-red-500" />}
                       </td>
-                      <td className="py-3 text-gray-600">{getCategoryName(item.category)}</td>
-                      <td className="py-3 text-right">
+                      <td className="py-3 px-2 text-gray-600">{getCategoryName(item.category)}</td>
+                      <td className="py-3 px-2 text-right">
                         <span className={`font-bold ${isLow ? 'text-red-600' : 'text-gray-900'}`}>
                           {formatStockDisplay(item.currentStock, item.unit)}
                         </span>
                       </td>
-                      <td className="py-3 text-right">{formatCurrency(item.avgCost)}</td>
-                      <td className="py-3 text-right text-gray-500">{item.safetyStock || 0}</td>
-                      <td className="py-3">
+                      <td className="py-3 px-2 text-right text-gray-500">{item.unit}</td>
+                      <td className="py-3 px-2 text-right">{formatCurrency(item.avgCost)}</td>
+                      <td className="py-3 px-2 text-right text-gray-500">{item.safetyStock || 0}</td>
+                      <td className="py-3 pl-4">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => { setSelectedItem(item); setShowStockIn(true) }}
