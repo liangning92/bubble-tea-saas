@@ -2591,13 +2591,13 @@ export function POSPage() {
                   {/* 开班金额和应收现金 */}
                   {shiftSettings.showSummary && (
                     <div className="grid grid-cols-2 gap-3 mb-4">
-                      {shiftSettings.summaryItems.openFloat && (
+                      {shiftSettings.summaryItems?.openFloat && (
                         <div className="p-3 bg-blue-50 rounded-xl">
                           <p className="text-xs text-gray-500">{t('pos.openFloat')}</p>
                           <p className="font-bold text-blue-600">{formatCurrency(shiftData?.openFloat || 0)}</p>
                         </div>
                       )}
-                      {shiftSettings.summaryItems.closeCash && (
+                      {shiftSettings.summaryItems?.closeCash && (
                         <div className="p-3 bg-green-50 rounded-xl">
                           <p className="text-xs text-gray-500">{t('pos.expectedCash')}</p>
                           <p className="font-bold text-green-600">{formatCurrency(shiftData?.expectedCash || 0)}</p>
@@ -2611,19 +2611,19 @@ export function POSPage() {
                     <div className="p-3 bg-gray-50 rounded-xl mb-4">
                       <p className="text-sm font-medium text-gray-700 mb-2">{t('pos.todaySummary')}</p>
                       <div className="space-y-1">
-                        {shiftSettings.summaryItems.cashSales && (
+                        {shiftSettings.summaryItems?.cashSales && (
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-500">{t('pos.cashSales')}</span>
                             <span className="font-medium">{formatCurrency(shiftData?.todayCashSales || 0)}</span>
                           </div>
                         )}
-                        {shiftSettings.summaryItems.cashIn && (
+                        {shiftSettings.summaryItems?.cashIn && (
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-500">{t('pos.cashIn')}</span>
                             <span className="font-medium text-green-600">+{formatCurrency(shiftData?.todayCashIns || 0)}</span>
                           </div>
                         )}
-                        {shiftSettings.summaryItems.cashOut && (
+                        {shiftSettings.summaryItems?.cashOut && (
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-500">{t('pos.cashOut')}</span>
                             <span className="font-medium text-red-600">-{formatCurrency(shiftData?.todayCashOuts || 0)}</span>
@@ -2636,13 +2636,13 @@ export function POSPage() {
                   {/* 订单统计 */}
                   {shiftSettings.showSummary && (
                     <div className="grid grid-cols-2 gap-3 mb-4">
-                      {shiftSettings.summaryItems.orderCount && (
+                      {shiftSettings.summaryItems?.orderCount && (
                         <div className="p-3 bg-orange-50 rounded-xl">
                           <p className="text-xs text-gray-500">{t('pos.todayOrders')}</p>
                           <p className="font-bold text-orange-600">{shiftData?.todayOrderCount || 0}</p>
                         </div>
                       )}
-                      {shiftSettings.summaryItems.suspendedOrders && (
+                      {shiftSettings.summaryItems?.suspendedOrders && (
                         <div className="p-3 bg-purple-50 rounded-xl">
                           <p className="text-xs text-gray-500">{t('pos.suspendedOrders')}</p>
                           <p className="font-bold text-purple-600">{shiftData?.suspendedOrderCount || 0}</p>
@@ -2652,7 +2652,7 @@ export function POSPage() {
                   )}
 
                   {/* 状态信息 */}
-                  {shiftSettings.showSummary && shiftSettings.summaryItems.pendingSync && (
+                  {shiftSettings.showSummary && shiftSettings.summaryItems?.pendingSync && (
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">{t('pos.pendingSync')}</span>
