@@ -275,7 +275,7 @@ export function InventoryPage() {
         >
           <div className="text-center">
             <p className={`text-lg font-bold ${selectedCategory === null ? 'text-error' : 'text-gray-700'}`}>
-              All
+              {t('common.all')}
             </p>
             <p className="text-xs text-gray-400 mt-1">{inventory.length} {t('inventory.items')}</p>
           </div>

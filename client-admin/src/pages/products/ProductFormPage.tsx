@@ -69,7 +69,7 @@ export function ProductFormPage() {
         description: p.description || '',
         image: p.image || '',
         status: p.status,
-        specs: p.specs?.length > 0 ? p.specs : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
+        specs: p.specs?.length > 0 ? p.specs.filter((s: any) => s.name).map((s: any) => ({ name: s.name, price: s.price || 0 })) : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
         addonIds: p.addons?.map((pa: any) => pa.addonId) || [],
         bomItems: p.bomItems?.map((b: any) => ({
           inventoryId: b.inventoryId,
