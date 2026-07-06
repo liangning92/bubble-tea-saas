@@ -28,7 +28,10 @@ export interface CreateOrderData {
     addons?: { name: string; price: number }[]
   }[]
   discountAmount?: number
+  pointsRedeemed?: number    // 积分抵扣金额
+  taxEnabled?: boolean       // 是否计算税费（根据客户端配置）
   paymentMethod: string
+  status?: string           // 订单状态: completed, suspended
 }
 
 export interface OrderResult {
@@ -512,6 +515,12 @@ async function getChannelPrice(channelId: string, productId: string, defaultPric
 
 // Create new order
 export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
+  // DEBUG: log taxEnabled value
+  console.log(`[createOrder] taxEnabled=${data.taxEnabled} (type=${typeof data.taxEnabled}), storeId=${data.storeId}`)
+  console.log(`[createOrder] totalAmount=${data.items?.reduce((s: number, i: any) => s + i.unitPrice * i.quantity, 0)}`)
+  console.log(`[createOrder] RECEIVED customerCount=${data.customerCount}`)
+  console.log(`[createOrder] RECEIVED full data:`, JSON.stringify(data))
+
   // Get channel info for pricing lookup
   const channel = data.channelId
     ? await prisma.channel.findUnique({ where: { id: data.channelId } })
@@ -534,11 +543,14 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     })
   )
 
-  const finalAmount = totalAmount - (data.discountAmount || 0)
+  // 统一计算订单金额（服务端作为权威数据源）
+  // Points discount: 100 points = 1 IDR (same as client calculation)
+  const pointsDiscount = Math.floor((data.pointsRedeemed || 0) / 100)
+  const finalAmount = totalAmount - (data.discountAmount || 0) - pointsDiscount
 
-  // Add PPN (Indonesian tax 11%)
-  const ppnAmount = Math.round(finalAmount * config.indonesia.ppnRate)
-  const grandTotal = finalAmount + ppnAmount
+  // Add PPN (Indonesian tax 11%) - only if taxEnabled is not explicitly false
+  const ppnAmount = data.taxEnabled !== false ? Math.round(finalAmount * config.indonesia.ppnRate) : 0
+  const grandTotal = Math.max(0, finalAmount + ppnAmount)
 
   // Calculate BOM cost for each item
   const itemsWithCost = await Promise.all(
@@ -576,6 +588,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   const orderNumber = data.orderNumber || await generateOrderNumber(data.storeId)
 
   // Create order with transaction
+  console.log(`[createOrder] Starting transaction for orderNumber: ${orderNumber}, customerCount: ${data.customerCount}`)
   const order = await prisma.$transaction(async (tx) => {
     // Use pre-generated order number
 
@@ -587,10 +600,10 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
         memberId: data.memberId,
         customerCount: data.customerCount || 1,
         orderNumber,
-        totalAmount,
+        totalAmount,  // 服务端计算的订单总额（含渠道调价）
         discountAmount: data.discountAmount || 0,
         finalAmount: grandTotal,
-        status: 'completed',
+        status: data.status || 'completed',
         paymentMethod: data.paymentMethod,
         // 渠道扩展信息
         platformOrderId: data.platformOrderId,
@@ -616,11 +629,13 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
       include: { items: true }
     })
 
-    // Deduct inventory and get low stock warnings (pass tx to reuse transaction)
-    const inventoryResult = await deductInventory(data.storeId, newOrder.id, data.items, tx)
+    // Deduct inventory and get low stock warnings (skip for suspended orders)
+    const inventoryResult = data.status === 'suspended'
+      ? { success: true, errors: [], lowStockWarnings: [] }
+      : await deductInventory(data.storeId, newOrder.id, data.items, tx)
 
-    // Update member points (inside same transaction to avoid timeout)
-    if (data.memberId && calculatedPoints > 0) {
+    // Update member points (skip for suspended orders)
+    if (data.memberId && calculatedPoints > 0 && data.status !== 'suspended') {
       await tx.member.update({
         where: { id: data.memberId },
         data: {
@@ -640,16 +655,34 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
       })
     }
 
+    // 自动创建现金销售事件（仅完成的现金支付，跳过挂单）- 移入transaction保证一致性
+    if (data.paymentMethod === 'cash' && data.status !== 'suspended') {
+      await tx.cashEvent.create({
+        data: {
+          storeId: data.storeId,
+          staffId: data.staffId,
+          type: 'cash_sale',
+          amount: grandTotal,
+          paymentMethod: 'cash',
+          orderId: newOrder.orderNumber,
+          note: `订单 #${newOrder.orderNumber}`
+        }
+      })
+    }
+
     return { ...newOrder, lowStockWarnings: inventoryResult.lowStockWarnings }
   })
 
-  // Process referral rewards AFTER transaction (avoid nested transaction timeout)
-  if (data.memberId) {
+  console.log(`[createOrder] Transaction SUCCESS, order.id=${order.id}, orderNumber=${order.orderNumber}`)
+
+  // Process referral rewards AFTER transaction (skip for suspended orders)
+  if (data.memberId && data.status !== 'suspended') {
     processOrderReferralRewards(order.id).catch(err => {
       console.error('Failed to process referral rewards:', err)
     })
   }
 
+  console.log(`[createOrder] Returning order result, grandTotal=${grandTotal}`)
   return {
     ...order,
     ppnAmount,

@@ -38,6 +38,16 @@ const CHANNELS = [
   { id: 'shopee', nameKey: 'shopee', icon: '🟠', code: 'SHOPEE' }
 ]
 
+// 将API渠道代码转换为POS格式
+function convertChannelCode(code: string): { id: string; nameKey: string } {
+  const lower = code.toLowerCase()
+  // DINE_IN -> dine_in, GOFOOD -> gofood, etc
+  const id = lower
+  // DINE_IN -> dineIn, GOFOOD -> gofood
+  const nameKey = lower.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+  return { id, nameKey }
+}
+
 // 渠道可用性检查函数
 function isChannelAvailable(availableDays: string, availableHours: string): { available: boolean; message?: string } {
   const now = new Date()
@@ -134,6 +144,7 @@ export function POSPage() {
   const [posChannels, setPosChannels] = useState<Array<{id: string; nameKey: string; icon: string; code: string; color?: string}>>([])
   const [selectedChannel, setSelectedChannel] = useState<{id: string; nameKey: string; icon: string; code: string; color?: string} | null>(null)
   const [dineInCount, setDineInCount] = useState(1) // 堂食人数
+  const [customerCount, setCustomerCount] = useState(1) // 顾客人数（所有渠道）
   // 订单扩展信息
   const [tableNumber, setTableNumber] = useState('')
   const [callerPhone, setCallerPhone] = useState('')
@@ -155,10 +166,18 @@ export function POSPage() {
   // 交接班数据
   const [shiftData, setShiftData] = useState<any>(null)
   const [selectedShiftType, setSelectedShiftType] = useState<string>('morning')
+  const [shiftActualCash, setShiftActualCash] = useState('')
+  const [shiftSupervisorPin, setShiftSupervisorPin] = useState('')
+  const [shiftInputTarget, setShiftInputTarget] = useState<'actualCash' | 'supervisorPin' | null>(null)
   // 锁屏状态
   const [isLocked, setIsLocked] = useState(false)
   const [lockPin, setLockPin] = useState('')
   const [lockError, setLockError] = useState(false)
+
+  // POS 操作会话 ID（用于审计日志）
+  const [posSessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8))
+  // 追踪是否有未完成的 checkout（用于检测飞单）
+  const hasCheckoutCompleteRef = useRef(false)
 
   // 弹窗 - 使用uiStore
   const {
@@ -291,6 +310,7 @@ export function POSPage() {
       shift: 'toolbar.shift',
       cash: 'toolbar.cash',
       tasks: 'toolbar.tasks',
+      hardware: 'toolbar.hardware',
       logout: 'toolbar.logout'
     }
   })
@@ -322,6 +342,24 @@ export function POSPage() {
     autoPrint: true,
   })
 
+  // 小票模板（从ReceiptTemplate表加载，支持拖拽编辑器自定义）
+  const [receiptTemplate, setReceiptTemplate] = useState<any>(null)
+
+  // POS 操作日志辅助函数
+  const logPOSAction = useCallback((params: {
+    action: string
+    entityId?: string
+    description: string
+    metadata?: Record<string, any>
+    severity?: 'info' | 'warning' | 'critical'
+  }) => {
+    const storeId = user?.storeId || 'default'
+    posApi.logPOSAction({
+      ...params,
+      sessionId: posSessionId,
+    }).catch((err: any) => console.warn('[POS Action Log]', err))
+  }, [user?.storeId, posSessionId])
+
   // 税费设置（包含免税商品ID列表）
   const [taxSettings, setTaxSettings] = useState({
     enabled: true,
@@ -342,16 +380,50 @@ export function POSPage() {
 
   // 硬件设置
   const [hardwareSettings, setHardwareSettings] = useState({
-    printerConnectionType: 'usb',  // usb / network
-    printerType: 'escpos',         // escpos / pcl
-    printerName: '',              // Windows printer name (USB)
-    printerIp: '192.168.1.100',   // Network printer IP
-    printerPort: 9100,             // Network printer port
-    cashDrawerPulse: 100,         // 钱箱脉冲(ms)
+    printers: [
+      {
+        id: 'receipt-1',
+        type: 'receipt' as const,
+        name: 'Receipt Printer',
+        enabled: true,
+        connectionType: 'usb' as 'usb' | 'network',
+        printerName: '',
+        printerIp: '192.168.1.100',
+        printerPort: 9100,
+      },
+      {
+        id: 'kitchen-1',
+        type: 'kitchen' as const,
+        name: 'Kitchen Printer',
+        enabled: false,
+        connectionType: 'usb' as 'usb' | 'network',
+        printerName: '',
+        printerIp: '192.168.1.100',
+        printerPort: 9100,
+      },
+      {
+        id: 'label-1',
+        type: 'label' as const,
+        name: 'Label Printer',
+        enabled: false,
+        connectionType: 'usb' as 'usb' | 'network',
+        printerName: '',
+        printerIp: '192.168.1.100',
+        printerPort: 9100,
+      },
+    ],
+    // Legacy fields for backward compatibility
+    printerConnectionType: 'usb',
+    printerType: 'escpos',
+    printerName: '',
+    printerIp: '192.168.1.100',
+    printerPort: 9100,
+    // Other hardware settings
+    cashDrawerPulse: 100,
     autoOpenCashDrawer: true,
-    scannerEnabled: true,          // 扫码枪启用
-    scannerType: 'usb',            // usb / serial
-    displayBrightness: 80,         // 屏幕亮度
+    scannerEnabled: true,
+    scannerType: 'usb',
+    displayBrightness: 80,
     dualScreen: {
       enabled: false,
       layoutStyle: 'full' as 'simple' | 'full',
@@ -413,6 +485,34 @@ export function POSPage() {
   })
 
   // 获取产品 (支持离线缓存)
+  useEffect(() => {
+    // 登录日志
+    logPOSAction({
+      action: 'login',
+      description: `收银员登录 POS`,
+      metadata: { storeId: user?.storeId, staffId: user?.staff?.id },
+      severity: 'info',
+    })
+
+    // 登出清理
+    return () => {
+      if (cartRef.current.length > 0 && !hasCheckoutCompleteRef.current) {
+        logPOSAction({
+          action: 'cart_clear',
+          description: `页面关闭，${cartRef.current.length}件商品未结账`,
+          metadata: { itemCount: cartRef.current.length },
+          severity: 'critical',
+        })
+      }
+      logPOSAction({
+        action: 'logout',
+        description: `收银员退出 POS`,
+        metadata: {},
+        severity: 'info',
+      })
+    }
+  }, [])
+
   useEffect(() => {
     const storeId = user?.storeId || 'default'
     const token = useAuthStore.getState().token
@@ -604,7 +704,9 @@ export function POSPage() {
 
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
   const loadConfig = useCallback(() => {
-    const storeId = user?.storeId || 'default'
+    // Guard: only load when storeId is available (not during initial loading with 'default')
+    if (!user?.storeId) return
+    const storeId = user.storeId
     const token = useAuthStore.getState().token
     fetch(`/api/config?storeId=${storeId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -662,38 +764,55 @@ export function POSPage() {
             showScan: configs.toolbarSettings.showScan ?? prev.showScan,
             showShift: configs.toolbarSettings.showShift ?? prev.showShift,
             showCash: configs.toolbarSettings.showCash ?? prev.showCash,
-            toolbarLabels: configs.toolbarSettings.labels || prev.toolbarLabels,
+            // Admin 保存的 key 是 toolbarLabels，但 POS 也可能用 labels 作为 fallback
+            toolbarLabels: configs.toolbarSettings.toolbarLabels || configs.toolbarSettings.labels || prev.toolbarLabels,
           }))
         }
 
-        // 小票设置 - Admin保存完整posReceipt对象
+        // 小票设置 - Admin保存完整posReceipt对象，合并默认值
         const receiptConfig = configs.posReceipt || configs.receiptSettings
         if (receiptConfig) {
-          setPosReceipt({
-            header: receiptConfig.header || receiptConfig.headerCustomText || 'Bubble Tea Shop',
-            footer: receiptConfig.footer || receiptConfig.footerMessage || 'Thank you!',
-            taxRate: receiptConfig.taxRate || 11,
-            showLogo: receiptConfig.showLogo ?? true,
-            paperSize: receiptConfig.paperSize || '80mm',
-            printCopies: receiptConfig.printCopies || 1,
-            showQR: receiptConfig.showQR ?? false,
-            showBarcode: receiptConfig.showBarcode ?? true,
-            showKitchenNote: receiptConfig.showKitchenNote ?? true,
-            storePhone: receiptConfig.storePhone || '',
-            storeAddress: receiptConfig.storeAddress || '',
-            itemDetailFormat: receiptConfig.itemDetailFormat || 'standard',
-            showStaffName: receiptConfig.showStaffName ?? true,
-            showCustomerName: receiptConfig.showCustomerName ?? false,
-            autoPrint: receiptConfig.autoPrint ?? true,
-          })
+          setPosReceipt(prev => ({
+            header: receiptConfig.header || receiptConfig.headerCustomText || prev.header,
+            footer: receiptConfig.footer || receiptConfig.footerMessage || prev.footer,
+            taxRate: receiptConfig.taxRate ?? prev.taxRate,
+            showLogo: receiptConfig.showLogo ?? prev.showLogo,
+            paperSize: receiptConfig.paperSize || prev.paperSize,
+            printCopies: receiptConfig.printCopies ?? prev.printCopies,
+            showQR: receiptConfig.showQR ?? prev.showQR,
+            showBarcode: receiptConfig.showBarcode ?? prev.showBarcode,
+            showKitchenNote: receiptConfig.showKitchenNote ?? prev.showKitchenNote,
+            storePhone: receiptConfig.storePhone || prev.storePhone,
+            storeAddress: receiptConfig.storeAddress || prev.storeAddress,
+            itemDetailFormat: receiptConfig.itemDetailFormat || prev.itemDetailFormat,
+            showStaffName: receiptConfig.showStaffName ?? prev.showStaffName,
+            showCustomerName: receiptConfig.showCustomerName ?? prev.showCustomerName,
+            autoPrint: receiptConfig.autoPrint ?? prev.autoPrint,
+          }))
+
+          // 加载小票模板（如果有templateId）
+          if (receiptConfig.templateId) {
+            posApi.getReceiptTemplate(receiptConfig.templateId)
+              .then((res: any) => {
+                if (res.data?.data?.content) {
+                  try {
+                    const template = JSON.parse(res.data.data.content)
+                    setReceiptTemplate(template)
+                  } catch (e) {
+                    console.error('Failed to parse receipt template:', e)
+                  }
+                }
+              })
+              .catch((err: any) => console.error('Failed to load receipt template:', err))
+          }
         }
 
-        // 税费设置（包含免税商品）
+        // 税费设置（包含免税商品）- 合并默认值
         if (configs.taxSettings) {
-          setTaxSettings(configs.taxSettings)
+          setTaxSettings(prev => ({ ...prev, ...configs.taxSettings }))
         }
 
-        // 硬件设置（打印机、钱箱）- Admin保存完整结构
+        // 硬件设置（打印机、钱箱）- Admin保存完整结构，合并默认值
         if (configs.hardwareSettings) {
           const hw = configs.hardwareSettings
           const newDualScreen: DualScreenConfig = hw.dualScreen ? {
@@ -706,38 +825,45 @@ export function POSPage() {
           } : hardwareSettings.dualScreen
 
           setHardwareSettings(prev => ({
-            printerConnectionType: hw.printerConnectionType || 'usb',
-            printerType: hw.printerType || 'escpos',
-            printerName: hw.printerName || '',
-            printerIp: hw.printerIp || '192.168.1.100',
-            printerPort: hw.printerPort || 9100,
-            cashDrawerPulse: hw.cashDrawerPulse || 100,
-            autoOpenCashDrawer: hw.autoOpenCashDrawer ?? true,
-            scannerEnabled: hw.scannerEnabled ?? true,
-            scannerType: hw.scannerType || 'usb',
-            displayBrightness: hw.displayBrightness || 80,
+            ...prev,
+            printers: hw.printers && Array.isArray(hw.printers) ? hw.printers : prev.printers,
+            printerConnectionType: hw.printerConnectionType || prev.printerConnectionType,
+            printerType: hw.printerType || prev.printerType,
+            printerName: hw.printerName || prev.printerName,
+            printerIp: hw.printerIp || prev.printerIp,
+            printerPort: hw.printerPort || prev.printerPort,
+            cashDrawerPulse: hw.cashDrawerPulse || prev.cashDrawerPulse,
+            autoOpenCashDrawer: hw.autoOpenCashDrawer ?? prev.autoOpenCashDrawer,
+            scannerEnabled: hw.scannerEnabled ?? prev.scannerEnabled,
+            scannerType: hw.scannerType || prev.scannerType,
+            displayBrightness: hw.displayBrightness || prev.displayBrightness,
             dualScreen: newDualScreen,
             testPrint: null,
             testCashDrawer: null,
           }))
 
+
           // 同步 dualScreen 配置到 localStorage，供副屏使用
           localStorage.setItem('dualScreenConfig', JSON.stringify(newDualScreen))
         }
 
-        // 支付方式配置
+        // 支付方式配置 - 使用Admin配置，覆盖默认值
         if (configs.paymentMethods) {
           const methods = configs.paymentMethods
-          const enabledMethods = Object.entries(methods)
-            .filter(([_, enabled]) => enabled)
-            .map(([id]) => {
+          // 已知支付方式key列表（只处理这些，忽略配置中的其他字段如defaultMethod, rates等）
+          const paymentMethodKeys = ['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card']
+          const enabledMethods = paymentMethodKeys
+            .filter(key => methods[key] === true)
+            .map(id => {
               const methodMap: Record<string, any> = {
                 cash: { id: 'cash', labelKey: 'pos.paymentCash', icon: '💵' },
                 qris: { id: 'qris', labelKey: 'pos.paymentQris', icon: '📱' },
                 gopay: { id: 'gopay', labelKey: 'pos.paymentGoPay', icon: '🟢' },
                 ovo: { id: 'ovo', labelKey: 'pos.paymentOvo', icon: '🟣' },
                 dana: { id: 'dana', labelKey: 'pos.paymentDana', icon: '🔵' },
-                shopeepay: { id: 'shopeepay', labelKey: 'pos.paymentShopeePay', icon: '🟠' }
+                shopeepay: { id: 'shopeepay', labelKey: 'pos.paymentShopeePay', icon: '🟠' },
+                debit: { id: 'debit', labelKey: 'pos.paymentDebit', icon: '💳' },
+                card: { id: 'card', labelKey: 'pos.paymentCard', icon: '💳' }
               }
               return methodMap[id] || { id, labelKey: `pos.payment${id.charAt(0).toUpperCase() + id.slice(1)}`, icon: '💰' }
             })
@@ -747,28 +873,37 @@ export function POSPage() {
               if (b.id === 'cash') return 1
               return 0
             })
+          // 如果有配置且有启用的方式，完全替换默认值
           if (enabledMethods.length > 0) {
             setPaymentMethods(enabledMethods)
             setPaymentMethod(enabledMethods[0].id)
           }
         }
+        // 如果没有配置，使用默认值（空对象表示使用服务端/客户端默认）
 
-        // 快捷金额设置
+        // 快捷金额设置 - 合并默认值
         if (configs.quickAmounts) {
-          setQuickAmounts(configs.quickAmounts)
+          setQuickAmounts(prev => ({ ...prev, ...configs.quickAmounts }))
         }
 
-        // 支付设置 (限额/默认方式)
+        // 支付设置 (限额/默认方式) - 合并默认值
         if (configs.paymentSettings) {
-          setPaymentSettings(configs.paymentSettings)
+          setPaymentSettings(prev => ({ ...prev, ...configs.paymentSettings }))
           if (configs.paymentSettings.defaultMethod) {
             setPaymentMethod(configs.paymentSettings.defaultMethod)
           }
         }
 
-        // 交接班设置
+        // 交接班设置 - 合并默认值，防止缺失字段
         if (configs.shiftSettings) {
-          setShiftSettings(configs.shiftSettings)
+          setShiftSettings(prev => ({
+            ...prev,
+            ...configs.shiftSettings,
+            summaryItems: {
+              ...prev.summaryItems,
+              ...(configs.shiftSettings.summaryItems || {})
+            }
+          }))
         }
 
         // 渠道颜色配置
@@ -804,9 +939,9 @@ export function POSPage() {
           }))
         }
 
-        // 声音设置
+        // 声音设置 - 合并默认值
         if (configs.soundSettings) {
-          setSoundSettings(configs.soundSettings)
+          setSoundSettings(prev => ({ ...prev, ...configs.soundSettings }))
         }
       })
       .catch(() => {
@@ -828,6 +963,16 @@ export function POSPage() {
   // 初始加载配置
   useEffect(() => {
     loadConfig()
+  }, [loadConfig])
+
+  // 定期轮询配置（Admin修改后自动同步，30秒间隔）
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadConfig()
+      }
+    }, 30000) // 30秒轮询
+    return () => clearInterval(pollInterval)
   }, [loadConfig])
 
   // 硬件配置轮询 - 检测 Admin 测试命令
@@ -888,30 +1033,44 @@ export function POSPage() {
       .then(data => {
         const apiChannels = data?.data?.list || []
         if (apiChannels.length > 0) {
-          // 将API渠道转换为POS格式
+          // 将API渠道转换为POS格式，排除POS本身
+          // 使用 ch.id（数据库UUID）作为channelId，code用于翻译key
           const loadedChannels = apiChannels
-            .filter((ch: any) => ch.status === 'active')
-            .map((ch: any) => ({
-              id: ch.code.toLowerCase().replace(/_/g, '_'),
-              nameKey: `pos.channel${ch.code}` as string,
-              icon: ch.icon || '📦',
-              code: ch.code
-            }))
+            .filter((ch: any) => ch.status === 'active' && ch.code !== 'POS')
+            .map((ch: any) => {
+              const { id, nameKey } = convertChannelCode(ch.code)
+              return {
+                id: ch.id,  // 使用数据库中的实际UUID
+                nameKey: `pos.${nameKey}` as string,
+                icon: ch.icon || '📦',
+                code: ch.code  // 保留code备用
+              }
+            })
           setPosChannels(loadedChannels)
-          // 如果当前没有选择渠道，默认选中第一个
-          if (!selectedChannel && loadedChannels.length > 0) {
-            setSelectedChannel(loadedChannels[0])
+          // 解锁后必须先选择渠道，弹出渠道选择框
+          if (!selectedChannel) {
+            setDineInCount(1) // 重置人数
+            setCustomerCount(1) // 重置顾客人数
+            setShowChannelModal(true)
           }
         } else {
           // API没有渠道，使用默认值
           setPosChannels(CHANNELS)
-          if (!selectedChannel) setSelectedChannel(posChannels[0] || null)
+          if (!selectedChannel) {
+            setDineInCount(1)
+            setCustomerCount(1)
+            setShowChannelModal(true)
+          }
         }
       })
       .catch(() => {
         // 失败时使用默认渠道
         setPosChannels(CHANNELS)
-        if (!selectedChannel) setSelectedChannel(posChannels[0] || null)
+        if (!selectedChannel) {
+          setDineInCount(1)
+          setCustomerCount(1)
+          setShowChannelModal(true)
+        }
       })
   }, [user?.storeId])
 
@@ -943,7 +1102,7 @@ export function POSPage() {
                 id: `REBUY-${Date.now()}-${Math.random()}`,
                 productId: item.productId || '',
                 productName: item.productName,
-                specId: '',
+                specId: item.specId || '',  // 保留规格ID以便重复检测
                 specName: item.specName || item.productName,
                 unitPrice: item.unitPrice || 0,
                 quantity: item.quantity || 1,
@@ -985,7 +1144,7 @@ export function POSPage() {
               id: `SCAN-${Date.now()}`,
               productId: item.productId || '',
               productName: item.productName,
-              specId: '',
+              specId: item.specId || '',  // 保留规格ID以便重复检测
               specName: item.specName || item.productName,
               unitPrice: item.unitPrice || 0,
               quantity: item.quantity || 1,
@@ -1117,13 +1276,17 @@ export function POSPage() {
     }
   }, [displaySettings.autoLockMinutes])
 
-  // 解锁处理
+  // 解锁处理 - 如果设置了PIN则必须输入正确才能解锁
   const handleUnlock = () => {
-    if (displaySettings.lockScreenPin && lockPin !== displaySettings.lockScreenPin) {
-      setLockError(true)
-      setLockPin('')
-      return
+    if (displaySettings.lockScreenPin) {
+      // 有设置PIN时，必须验证
+      if (lockPin !== displaySettings.lockScreenPin) {
+        setLockError(true)
+        setLockPin('')
+        return
+      }
     }
+    // 无PIN或PIN正确时才能解锁
     setIsLocked(false)
     setLockPin('')
     setLockError(false)
@@ -1255,6 +1418,10 @@ export function POSPage() {
         if (showDiscountModal) setShowDiscountModal(false)
         if (showSuspendModal) setShowSuspendModal(false)
         if (showShiftModal) setShowShiftModal(false)
+        if (showHistoryModal) setShowHistoryModal(false)
+        if (showScanModal) setShowScanModal(false)
+        if (showCashModal) setShowCashModal(false)
+        if (showLogoutModal) setShowLogoutModal(false)
       }
       // Enter: 确认支付 (在支付弹窗中)
       if (e.key === 'Enter' && showPaymentModal) {
@@ -1279,7 +1446,7 @@ export function POSPage() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [products, filter, showAddonModal, showPaymentModal, showMemberModal, showDiscountModal, showSuspendModal, showShiftModal])
+  }, [products, filter, showAddonModal, showPaymentModal, showMemberModal, showDiscountModal, showSuspendModal, showShiftModal, showHistoryModal, showScanModal, showCashModal, showLogoutModal])
 
   const productStore = useProductStore()
   const categories = productStore.categories()
@@ -1307,11 +1474,11 @@ export function POSPage() {
       const addonsTotal = item.addons.reduce((a, addon) => a + addon.price * addon.qty, 0)
       return sum + (item.unitPrice + addonsTotal) * item.quantity
     }, 0)
-  const tax = posLayout.calculateTax && posLayout.showTax !== false ? Math.round(taxableSubtotal * taxRate) : 0
+  const tax = taxSettings.enabled !== false && posLayout.showTax !== false ? Math.round(taxableSubtotal * taxRate) : 0
   // 积分抵扣：每100积分抵扣1印尼盾
-  const pointsDiscount = pointsToRedeem / 100
+  const pointsDiscount = (pointsToRedeem || 0) / 100
   const total = Math.max(0, subtotal + tax - discountAmount - pointsDiscount)
-  const change = paidAmount ? Math.max(0, parseInt(paidAmount) - total) : 0
+  const change = paidAmount ? Math.max(0, (parseInt(paidAmount) || 0) - total) : 0
 
   // Sync totalRef after total is calculated
   useEffect(() => { totalRef.current = total }, [total])
@@ -1370,6 +1537,22 @@ export function POSPage() {
       }
       return [...prev, newItem]
     })
+    // 审计日志
+    logPOSAction({
+      action: 'cart_add',
+      entityId: newItem.id,
+      description: `添加商品: ${newItem.productName} x${addonQty}`,
+      metadata: {
+        productId: newItem.productId,
+        productName: newItem.productName,
+        specId: newItem.specId,
+        specName: newItem.specName,
+        quantity: addonQty,
+        unitPrice: newItem.unitPrice,
+        addons: addons.map(a => a.name),
+      },
+      severity: 'info',
+    })
     setShowAddonModal(false)
     setSelectedProduct(null)
     setSelectedSpec(null)
@@ -1417,26 +1600,87 @@ export function POSPage() {
   }
 
   const clearCart = () => {
+    // 检测是否有未结账商品被清空（飞单嫌疑）
+    if (cart.length > 0 && !hasCheckoutCompleteRef.current) {
+      logPOSAction({
+        action: 'cart_clear',
+        description: `清空购物车（${cart.length}件商品未结账）`,
+        metadata: { itemCount: cart.length, totalAmount: subtotal + tax },
+        severity: 'warning',
+      })
+    }
     setCart([])
     setDiscountAmount(0)
     setMember(null)
+    setOrderSuccess('') // 清除订单成功提示
   }
 
-  // 挂单
-  const suspendOrder = () => {
+  // 挂单 - 同时在服务端创建订单记录
+  const suspendOrder = async () => {
     if (cart.length === 0) {
       showToast(t('pos.emptyCart'), 'warning')
       return
     }
-    const order = { id: `SUSP-${Date.now()}`, cart: [...cart], channel: selectedChannel, time: new Date().toLocaleTimeString() }
-    const updated = [...suspendedOrders, order]
-    setSuspendedOrders(updated)
-    localStorage.setItem('suspended_orders', JSON.stringify(updated))
-    clearCart()
-    showToast(`${t('pos.orderSuspended')} (${updated.length})`, 'success')
+    try {
+      // 在服务端创建挂单状态的订单
+      const orderData: any = {
+        storeId: user?.storeId || 'default',
+        staffId: user?.staff?.id || 'default',
+        channelId: selectedChannel?.id || 'POS',
+        channelName: selectedChannel ? t(selectedChannel.nameKey) : 'POS',
+        items: cart.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          specId: item.specId,
+          specName: item.specName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          addons: item.addons.map(a => ({ name: a.name, price: a.price }))
+        })),
+        paymentMethod: 'cash', // 挂单时不选择支付方式
+        discountAmount: 0,
+        pointsRedeemed: 0,
+        taxEnabled: taxSettings.enabled !== false,
+        customerCount: selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount, // 设置默认值
+        status: 'suspended' // 关键：设置为挂单状态
+      }
+      // 堂食时添加用餐人数和桌号
+      if (selectedChannel?.code === 'DINE_IN') {
+        orderData.dineInCount = dineInCount
+        orderData.tableNumber = tableNumber
+      }
+      // 外卖平台订单号
+      if (selectedChannel?.id === 'gofood' || selectedChannel?.id === 'grab' || selectedChannel?.id === 'shopee') {
+        orderData.platformOrderId = platformOrderId
+      }
+      const res = await posApi.createOrder(orderData)
+      const serverOrder = res.data?.data
+      // 本地也存储一份，用于快速恢复
+      const order = {
+        id: serverOrder?.id || `SUSP-${Date.now()}`,
+        orderNumber: serverOrder?.orderNumber,
+        cart: [...cart],
+        channel: selectedChannel,
+        time: new Date().toLocaleTimeString()
+      }
+      const updated = [...suspendedOrders, order]
+      setSuspendedOrders(updated)
+      localStorage.setItem('suspended_orders', JSON.stringify(updated))
+      logPOSAction({
+        action: 'suspend',
+        description: `挂单，${cart.length}件商品`,
+        metadata: { itemCount: cart.length, totalAmount: subtotal + tax, orderId: serverOrder?.id },
+        severity: 'info',
+      })
+      clearCart()
+      showToast(`${t('pos.orderSuspended')} (${updated.length})`, 'success')
+    } catch (err: any) {
+      console.error('Failed to suspend order:', err)
+      showToast(t('common.error') + ': ' + (err?.message || '挂单失败'), 'error')
+    }
   }
 
-  const resumeOrder = (order: typeof suspendedOrders[0]) => {
+  const resumeOrder = async (order: typeof suspendedOrders[0]) => {
     // 如果当前购物车有内容，需要确认覆盖
     if (cart.length > 0) {
       setConfirmModal({
@@ -1444,18 +1688,22 @@ export function POSPage() {
         title: t('pos.resumeConfirmTitle', 'Resume Order'),
         message: t('pos.resumeConfirm'),
         type: 'warning',
-        onConfirm: () => {
-          setCart(order.cart)
-          setSelectedChannel(order.channel)
-          setSuspendedOrders((prev: any[]) => {
-            const updated = prev.filter((o: any) => o.id !== order.id)
-            localStorage.setItem('suspended_orders', JSON.stringify(updated))
-            return updated
-          })
-          showToast(t('pos.orderResumed'), 'success')
-        }
+        onConfirm: () => resumeOrderConfirmed(order)
       })
       return
+    }
+    await resumeOrderConfirmed(order)
+  }
+
+  const resumeOrderConfirmed = async (order: typeof suspendedOrders[0]) => {
+    // 取单时删除服务端 suspended 订单（结账会创建新订单）
+    try {
+      if (order.id && !order.id.startsWith('SUSP-')) {
+        await posApi.deleteOrder(order.id)
+      }
+    } catch (err) {
+      console.error('Failed to delete suspended order from server:', err)
+      // 继续流程，不阻塞取单
     }
     setCart(order.cart)
     setSelectedChannel(order.channel)
@@ -1464,6 +1712,7 @@ export function POSPage() {
       localStorage.setItem('suspended_orders', JSON.stringify(updated))
       return updated
     })
+    logPOSAction({ action: 'resume', description: `取单恢复`, metadata: { itemCount: order.cart.length, orderId: order.orderNumber }, severity: 'info' })
     showToast(t('pos.orderResumed'), 'success')
   }
 
@@ -1479,6 +1728,13 @@ export function POSPage() {
       if (res.data?.data?.list?.[0]) {
         const found = res.data.data.list[0]
         setMember(found)
+        logPOSAction({
+          action: 'member_add',
+          entityId: found.id,
+          description: `添加会员: ${found.name}`,
+          metadata: { memberId: found.id, memberName: found.name, phone: found.phone },
+          severity: 'info',
+        })
         // 获取会员优惠券
         try {
           const couponsRes = await posApi.getMemberCoupons(found.id)
@@ -1546,7 +1802,29 @@ export function POSPage() {
 
     // QRIS: If paid, proceed to create order
     if (paymentMethod === 'qris' && qrisData.status !== 'paid') {
-      return // Wait for payment
+      // Handle expired/failed status with user feedback
+      if (qrisData.status === 'expired') {
+        showToast(t('pos.qrisExpired') || 'QR码已过期，请重新生成', 'warning')
+        setQrisData({ status: 'idle', qrImage: '', qrString: '', externalId: '' })
+        return
+      }
+      if (qrisData.status === 'failed') {
+        showToast(t('pos.qrisFailed') || 'QR生成失败，请重试', 'error')
+        setQrisData({ status: 'idle', qrImage: '', qrString: '', externalId: '' })
+        return
+      }
+      return // Wait for payment (idle/waiting)
+    }
+
+    // 渠道必填字段检查
+    const orderChannel = selectedChannel || { id: 'POS', nameKey: 'pos.counter' as const, code: 'POS' }
+    if (orderChannel.code === 'DINE_IN' && (!dineInCount || dineInCount < 1)) {
+      showToast(t('pos.dineInCountRequired'), 'error')
+      return
+    }
+    if (['gofood', 'grab', 'shopee'].includes(orderChannel.id) && !platformOrderId) {
+      showToast(t('pos.platformOrderIdRequired'), 'error')
+      return
     }
 
     // 现金限额检查
@@ -1557,8 +1835,14 @@ export function POSPage() {
     }
 
     setIsCheckingOut(true)
+    logPOSAction({
+      action: 'checkout_start',
+      description: `开始结账，合计: ${formatCurrency(total)}`,
+      metadata: { totalAmount: total, itemCount: cart.length, paymentMethod },
+      severity: 'info',
+    })
     const localId = `LOCAL-${Date.now()}`
-    const orderChannel = selectedChannel || { id: 'POS', nameKey: 'pos.counter' as const, code: 'POS' }
+    // 发送原始数据，服务端统一计算税费和总价
     const orderData: any = {
       storeId: user?.storeId || 'default',
       staffId: user?.staff?.id || 'default',
@@ -1571,18 +1855,22 @@ export function POSPage() {
         specId: item.specId,
         specName: item.specName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice: item.unitPrice,  // 原始单价，不含税
         addons: item.addons.map(a => ({ name: a.name, price: a.price }))
       })),
       paymentMethod,
-      discountAmount,
-      pointsRedeemed: pointsToRedeem,
-      finalAmount: total,
-      orderNumber: paymentModalOrderNum // 使用弹窗中生成的订单号
+      discountAmount,              // 折扣金额（客户端计算）
+      pointsRedeemed: pointsToRedeem,  // 积分抵扣（客户端计算）
+      taxEnabled: taxSettings.enabled !== false,  // 税费开关
+      orderNumber: paymentModalOrderNum
     }
+    // 所有订单都记录顾客人数
+    console.log('[DEBUG] customerCount:', customerCount, 'dineInCount:', dineInCount, 'orderChannel:', orderChannel)
+    orderData.customerCount = customerCount
+    console.log('[DEBUG] orderData.customerCount after assignment:', orderData.customerCount)
     // 堂食时添加用餐人数和桌号
-    if (orderChannel.id === 'dine_in') {
-      orderData.customerCount = dineInCount
+    if (orderChannel.code === 'DINE_IN') {
+      orderData.dineInCount = dineInCount
       orderData.tableNumber = tableNumber
     }
     // 外卖平台订单号
@@ -1594,11 +1882,32 @@ export function POSPage() {
       orderData.note = orderNote
     }
 
+    console.log('[DEBUG] Full orderData before API call:', JSON.stringify(orderData))
+    console.log('[DEBUG] orderData.customerCount at send time:', orderData.customerCount)
     try {
       const res = await posApi.createOrder(orderData)
       const orderNum = res.data?.data?.orderNumber || localId.replace('LOCAL-', '')
+      // 使用服务端计算的权威金额（包含税费、折扣、积分）
+      const serverGrandTotal = res.data?.data?.grandTotal || total
       setOrderSuccess(orderNum)
       playSoundWithSettings('orderComplete', soundSettings.orderComplete)
+
+      // 审计日志
+      hasCheckoutCompleteRef.current = true
+      logPOSAction({
+        action: 'checkout_complete',
+        entityId: orderNum,
+        description: `结账完成，订单: ${orderNum}`,
+        metadata: { orderId: res.data?.data?.id, orderNum, totalAmount: serverGrandTotal, paymentMethod, itemCount: cart.length },
+        severity: 'info',
+      })
+      logPOSAction({
+        action: 'order_created',
+        entityId: res.data?.data?.id || orderNum,
+        description: `订单创建: ${orderNum}`,
+        metadata: { orderId: res.data?.data?.id, orderNum, totalAmount: serverGrandTotal },
+        severity: 'info',
+      })
 
       // 核销会员优惠券
       if (selectedCoupon?.id) {
@@ -1621,22 +1930,14 @@ export function POSPage() {
       electronAPI?.sendOrderComplete(orderNum)
       // 打印小票
       printReceipt(orderNum, orderData)
-      // 记录现金销售事件（仅现金支付）
-      if (paymentMethod === 'cash') {
-        try {
-          await posApi.createCashEvent({
-            type: 'cash_sale',
-            amount: Math.round(total),
-            paymentMethod: 'cash',
-            orderId: orderNum,
-            note: `订单 #${orderNum}`
-          })
-        } catch (cashError) {
-          console.error('Failed to record cash sale event:', cashError)
-        }
-      }
+      // 打印厨房单
+      printKitchenOrder(orderNum, cart)
+      // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
+      // 结账成功：立即清空购物车和关闭弹窗
+      clearCart()
+      setShowPaymentModal(false)
+      setIsCheckingOut(false)
       showToast(`${t('pos.orderSuccess')} #${orderNum}`, 'success')
-      setTimeout(() => { setOrderSuccess(''); clearCart(); setIsCheckingOut(false) }, 5000)
     } catch (error: any) {
       playSoundWithSettings('error', soundSettings.error)
       // 显示服务器返回的具体错误消息（如"库存不足: 生珍珠"）
@@ -1644,14 +1945,16 @@ export function POSPage() {
       showToast(errorMsg + ' - ' + t('pos.orderSavedOffline') || 'Order saved for retry', 'warning')
       await db.orders.add({
         localId, storeId: orderData.storeId, staffId: orderData.staffId,
-        items: orderData.items, subtotal, ppn: tax, totalAmount: total,
+        items: orderData.items, subtotal, ppn: tax, totalAmount: subtotal,
         finalAmount: total, discountAmount, paymentMethod,
+        taxEnabled: orderData.taxEnabled, pointsRedeemed: orderData.pointsRedeemed,
+        orderNumber: orderData.orderNumber, customerCount: orderData.customerCount || 1,
         status: 'pending', syncAttempts: 0, createdAt: new Date()
       })
       // Don't show success banner - order is pending sync
       setIsCheckingOut(false)
+      setShowPaymentModal(false)
     }
-    setShowPaymentModal(false)
   }
 
   // Keep handleCheckoutRef in sync - called after handleCheckout is defined
@@ -1660,15 +1963,22 @@ export function POSPage() {
   // 打印小票
   const printReceipt = (orderNum: string, orderData: any) => {
     if (!electronAPI?.sendPrintReceipt) {
-      // 无打印API，静默跳过
       return
     }
+    // Find enabled receipt printer
+    const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
+    if (!receiptPrinter) {
+      return
+    }
+    const printerName = receiptPrinter.connectionType === 'network'
+      ? undefined
+      : receiptPrinter.printerName || undefined
     try {
       electronAPI.sendPrintReceipt({
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
-        printerName: hardwareSettings.printerName || undefined,
+        printerName,
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,
@@ -1686,17 +1996,63 @@ export function POSPage() {
         paidAmount: paidAmount ? parseInt(paidAmount) : 0,
         change,
         memberName: member?.name,
-        pointsRedeemed: pointsToRedeem
+        pointsRedeemed: pointsToRedeem,
+        // Pass template blocks if loaded, otherwise undefined (electron uses legacy)
+        ...(receiptTemplate?.blocks ? {
+          blocks: receiptTemplate.blocks,
+          data: {
+            header: posReceipt.header,
+            footer: posReceipt.footer,
+            storeName: 'Bubble Tea Shop',
+            storePhone: posReceipt.storePhone,
+            storeAddress: posReceipt.storeAddress,
+            items: cart.map(item => ({
+              productName: item.productName,
+              specName: item.specName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              sugarLevelName: item.sugarLevelName,
+              iceLevelName: item.iceLevelName,
+              addons: item.addons
+            })),
+            subtotal,
+            tax,
+            total,
+            discount: discountAmount,
+            paymentMethod: t(paymentMethods.find(m => m.id === paymentMethod)?.labelKey || 'pos.paymentCash') || paymentMethod,
+            cashierName: '',
+            customerName: member?.name || '',
+            orderDate: undefined,
+            paidAmount: paidAmount ? parseInt(paidAmount) : 0,
+            change,
+          }
+        } : {})
       }, (result: any) => {
         if (result?.success) {
-          // 打印成功，无需提示
         } else {
-          // 打印失败，轻微提示不阻塞流程
           console.warn('Print failed:', result?.error)
         }
       })
     } catch (err) {
       console.warn('Print error:', err)
+    }
+  }
+
+  const printKitchenOrder = (orderNum: string, items: any[]) => {
+    const kitchenPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'kitchen' && p.enabled)
+    if (!kitchenPrinter) {
+      return
+    }
+    if (!electronAPI?.sendKitchenOrder) {
+      return
+    }
+    const printerName = kitchenPrinter.connectionType === 'network'
+      ? undefined
+      : kitchenPrinter.printerName || undefined
+    try {
+      electronAPI.sendKitchenOrder({ orderNum, printerName, items })
+    } catch (err) {
+      console.warn('Kitchen print error:', err)
     }
   }
 
@@ -1720,10 +2076,12 @@ export function POSPage() {
           </div>
           {selectedChannel && (
             <span
-              className="ml-3 px-4 py-2 text-white rounded-xl text-base font-medium"
+              onClick={() => setShowChannelModal(true)}
+              className="ml-3 px-4 py-2 text-white rounded-xl text-base font-medium cursor-pointer hover:bg-white/20 transition-colors"
               style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
             >
               {selectedChannel.icon} {t(selectedChannel.nameKey)}
+              {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount') || '人'})`}
             </span>
           )}
           <span className={`px-4 py-2 rounded-xl text-base font-medium ${
@@ -1742,8 +2100,8 @@ export function POSPage() {
           {LANGS.map(l => (
             <button
               key={l.code}
-              onClick={() => {
-                i18n.changeLanguage(l.code)
+              onClick={async () => {
+                await i18n.changeLanguage(l.code)
                 localStorage.setItem('pos_lang', l.code)
                 setLang(l.code)
               }}
@@ -1809,12 +2167,6 @@ export function POSPage() {
             })
           }
           toolbarButtons.push({
-            id: 'hardware',
-            icon: <Settings size={32} />,
-            labelKey: 'Hardware',
-            onClick: () => navigate('/hardware-settings')
-          })
-          toolbarButtons.push({
             id: 'logout',
             icon: <X size={32} />,
             labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
@@ -1845,8 +2197,8 @@ export function POSPage() {
         })()}
       </header>
 
-      {/* 渠道选择弹窗 */}
-      {showChannelModal && !selectedChannel && (
+      {/* 渠道选择弹窗 - 解锁后必须先选择 */}
+      {showChannelModal && (
         <ChannelSelectModal
           channels={posChannels}
           posLayout={posLayout}
@@ -1860,6 +2212,10 @@ export function POSPage() {
           onPlatformOrderIdChange={setPlatformOrderId}
           onConfirm={() => {
             if (selectedChannel) {
+              // 堂食时同步 customerCount 和 dineInCount
+              if (selectedChannel.code === 'DINE_IN') {
+                setCustomerCount(dineInCount)
+              }
               setShowChannelModal(false)
               const cats = productStore.categories()
               if (cats.length > 0 && !filter) {
@@ -1923,7 +2279,7 @@ export function POSPage() {
                     if (product.specs?.length) handleSpecClick(product, product.specs[0])
                   }}
                   className={`${cardHeightClass} bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary active:scale-95 transition-all overflow-hidden flex flex-col items-center justify-center ${!product.specs?.length ? 'opacity-50' : ''}`}
-                  style={{ minHeight: '80px' }}
+                  style={{ minHeight: '110px' }}
                 >
                   {product.image ? (
                     <div className="w-full h-full flex items-center justify-center bg-gray-50 p-1">
@@ -2059,6 +2415,7 @@ export function POSPage() {
                   + {t('pos.discount')}
                 </button>
                 <button onClick={() => {
+                  console.log('[DEBUG] Checkout button clicked', { cartLength: cart.length, isCheckingOut })
                   playSoundWithSettings('keypress', soundSettings.keypress)
                   // 生成不规则订单号（防顾客推断销量）
                   const date = new Date()
@@ -2067,6 +2424,7 @@ export function POSPage() {
                   const orderNum = `${dateStr}${random}`
                   setPaymentModalOrderNum(orderNum)
                   setShowPaymentModal(true)
+                  console.log('[DEBUG] Payment modal should be open now', { showPaymentModal: true })
                 }} className="w-full py-5 bg-primary text-white rounded-xl font-bold text-xl active:scale-95 transition-transform touch-feedback">
                   💰 {t('pos.checkout')}
                 </button>
@@ -2190,6 +2548,14 @@ export function POSPage() {
                 <p className="text-xs text-gray-500">{t('pos.receivable')}</p>
                 <p className="text-2xl font-bold text-green-600">{formatCurrency(total)}</p>
               </div>
+            </div>
+            {/* 顾客人数显示（已在渠道选择时设置） */}
+            <div className="px-4 py-3 bg-blue-50 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👥</span>
+                <span className="text-sm font-medium text-gray-700">{t('pos.customerCount') || '顾客人数'}</span>
+              </div>
+              <span className="text-xl font-bold">{selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount}</span>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               <p className="text-sm font-medium mb-2">{t('pos.payment')}</p>
@@ -2655,10 +3021,58 @@ export function POSPage() {
                           <p className="font-bold text-orange-600">{shiftData?.todayOrderCount || 0}</p>
                         </div>
                       )}
+                      {shiftData?.todayOrderAmount > 0 && (
+                        <div className="p-3 bg-orange-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.todaySales') || '今日销售额'}</p>
+                          <p className="font-bold text-orange-600">{formatCurrency(shiftData?.todayOrderAmount || 0)}</p>
+                        </div>
+                      )}
                       {shiftSettings.summaryItems?.suspendedOrders && (
                         <div className="p-3 bg-purple-50 rounded-xl">
                           <p className="text-xs text-gray-500">{t('pos.suspendedOrders')}</p>
                           <p className="font-bold text-purple-600">{shiftData?.suspendedOrderCount || 0}</p>
+                        </div>
+                      )}
+                      {shiftSettings.summaryItems?.customerCount && (
+                        <div className="p-3 bg-teal-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.customerCount')}</p>
+                          <p className="font-bold text-teal-600">{shiftData?.customerCount || 0}</p>
+                        </div>
+                      )}
+                      {shiftSettings.summaryItems?.qrisSales && (
+                        <div className="p-3 bg-indigo-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.qrisSales')}</p>
+                          <p className="font-bold text-indigo-600">{formatCurrency(shiftData?.qrisSales || 0)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 渠道订单统计 */}
+                  {shiftSettings.showSummary && (
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {shiftSettings.summaryItems?.dineInCount && (
+                        <div className="p-3 bg-pink-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.dineInOrders')}</p>
+                          <p className="font-bold text-pink-600">{shiftData?.dineInCount || 0}</p>
+                        </div>
+                      )}
+                      {shiftSettings.summaryItems?.gofoodCount && (
+                        <div className="p-3 bg-yellow-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.gofoodOrders')}</p>
+                          <p className="font-bold text-yellow-600">{shiftData?.gofoodCount || 0}</p>
+                        </div>
+                      )}
+                      {shiftSettings.summaryItems?.grabCount && (
+                        <div className="p-3 bg-green-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.grabOrders')}</p>
+                          <p className="font-bold text-green-600">{shiftData?.grabCount || 0}</p>
+                        </div>
+                      )}
+                      {shiftSettings.summaryItems?.shopeeCount && (
+                        <div className="p-3 bg-orange-50 rounded-xl">
+                          <p className="text-xs text-gray-500">{t('pos.shopeeOrders')}</p>
+                          <p className="font-bold text-orange-600">{shiftData?.shopeeCount || 0}</p>
                         </div>
                       )}
                     </div>
@@ -2683,13 +3097,12 @@ export function POSPage() {
                   {/* 实际现金输入 */}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.actualCash') || '实际现金'}</label>
-                    <input
-                      type="number"
-                      id="actualCashInput"
-                      placeholder={t('pos.enterActualCash') || '输入实际现金金额'}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl touch-feedback text-lg"
-                      defaultValue={shiftData?.expectedCash || 0}
-                    />
+                    <div
+                      className="w-full px-4 py-3 border-2 border-primary/30 bg-primary/5 rounded-xl text-lg font-bold text-center cursor-pointer"
+                      onClick={() => setShiftInputTarget('actualCash')}
+                    >
+                      {shiftActualCash ? formatCurrency(parseInt(shiftActualCash) || 0) : (shiftData?.expectedCash ? formatCurrency(shiftData.expectedCash) : '0')}
+                    </div>
                     {shiftData?.expectedCash && (
                       <p className="text-xs text-gray-500 mt-1">
                         {t('pos.expectedHint') || '应收'} {formatCurrency(shiftData.expectedCash)}
@@ -2701,12 +3114,12 @@ export function POSPage() {
                   {shiftSettings.requireSupervisorConfirm && (
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t('pos.supervisorPin')}</label>
-                      <input
-                        type="password"
-                        placeholder={t('pos.enterSupervisorPin')}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl touch-feedback"
-                        id="supervisorPin"
-                      />
+                      <div
+                        className="w-full px-4 py-3 border-2 border-primary/30 bg-primary/5 rounded-xl text-center cursor-pointer"
+                        onClick={() => setShiftInputTarget('supervisorPin')}
+                      >
+                        {'●'.repeat(shiftSupervisorPin.length) || <span className="text-gray-400">{t('pos.enterSupervisorPin')}</span>}
+                      </div>
                     </div>
                   )}
 
@@ -2721,15 +3134,12 @@ export function POSPage() {
                     <button
                       onClick={async () => {
                         if (shiftSettings.requireSupervisorConfirm) {
-                          const pinInput = document.getElementById('supervisorPin') as HTMLInputElement
-                          const pin = pinInput?.value
-                          if (!pin || pin.length < 4) {
+                          if (!shiftSupervisorPin || shiftSupervisorPin.length < 4) {
                             showToast(t('pos.supervisorPinRequired'), 'error')
                             return
                           }
                         }
-                        const actualCashInput = document.getElementById('actualCashInput') as HTMLInputElement
-                        const actualCash = parseInt(actualCashInput?.value) || 0
+                        const actualCash = parseInt(shiftActualCash) || 0
                         try {
                           await posApi.closeShift({
                             actualCash,
@@ -2739,6 +3149,8 @@ export function POSPage() {
                           setSuspendedOrders([])
                           localStorage.removeItem('suspended_orders')
                           setShowShiftModal(false)
+                          setShiftActualCash('')
+                          setShiftSupervisorPin('')
                           logout()
                         } catch (e) {
                           showToast(t('pos.shiftCloseFailed'), 'error')
@@ -2749,6 +3161,84 @@ export function POSPage() {
                       {t('pos.shiftConfirm')}
                     </button>
                   </div>
+
+                  {/* 交接班数字键盘 */}
+                  {shiftInputTarget && (
+                    <div className="mt-4 p-3 bg-gray-100 rounded-xl">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-500">
+                          {shiftInputTarget === 'actualCash' ? t('pos.actualCash') : t('pos.supervisorPin')}
+                        </span>
+                        <button onClick={() => setShiftInputTarget(null)} className="text-gray-500 hover:text-gray-700">
+                          ✕
+                        </button>
+                      </div>
+                      <div className="text-2xl font-bold text-center mb-3 h-10">
+                        {shiftInputTarget === 'actualCash'
+                          ? (shiftActualCash ? formatCurrency(parseInt(shiftActualCash) || 0) : '0')
+                          : '●'.repeat(shiftSupervisorPin.length) || '—'}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                          <button
+                            key={n}
+                            onClick={() => {
+                              if (shiftInputTarget === 'actualCash') {
+                                const newVal = shiftActualCash === '0' ? String(n) : shiftActualCash + String(n)
+                                if (newVal.length <= 10) setShiftActualCash(newVal)
+                              } else {
+                                if (shiftSupervisorPin.length < 6) setShiftSupervisorPin(prev => prev + String(n))
+                              }
+                            }}
+                            className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
+                          >
+                            {n}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => {
+                            if (shiftInputTarget === 'actualCash') setShiftActualCash('0')
+                            else setShiftSupervisorPin('')
+                          }}
+                          className="h-12 bg-red-50 border rounded-xl text-base font-bold text-red-500 hover:bg-red-100 touch-feedback"
+                        >
+                          C
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (shiftInputTarget === 'actualCash') {
+                              const newVal = shiftActualCash + '0'
+                              if (newVal.length <= 10) setShiftActualCash(newVal)
+                            } else {
+                              if (shiftSupervisorPin.length < 6) setShiftSupervisorPin(prev => prev + '0')
+                            }
+                          }}
+                          className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-gray-100 touch-feedback"
+                        >
+                          0
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (shiftInputTarget === 'actualCash') {
+                              if (shiftActualCash.length > 1) setShiftActualCash(prev => prev.slice(0, -1))
+                              else setShiftActualCash('0')
+                            } else {
+                              setShiftSupervisorPin(prev => prev.slice(0, -1))
+                            }
+                          }}
+                          className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-gray-100 touch-feedback"
+                        >
+                          ←
+                        </button>
+                        <button
+                          onClick={() => setShiftInputTarget(null)}
+                          className="h-12 bg-primary text-white border rounded-xl text-base font-bold hover:bg-primary-dark touch-feedback"
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -2957,12 +3447,16 @@ export function POSPage() {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setIsLocked(false)}
-                className="w-full py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
-              >
-                {t('pos.tapToUnlock') || 'Tap to Unlock'}
-              </button>
+              <div className="space-y-4 text-center">
+                <p className="text-red-500 font-medium">{t('pos.lockPinNotSet') || 'Screen lock PIN has not been set'}</p>
+                <p className="text-sm text-gray-500">{t('pos.contactAdmin') || 'Please contact administrator to set lock screen PIN in Admin settings → POS Settings → Display'}</p>
+                <button
+                  onClick={() => setShowLogoutModal(true)}
+                  className="w-full py-3 bg-gray-500 text-white rounded-xl font-bold touch-feedback"
+                >
+                  {t('common.logout') || 'Logout'}
+                </button>
+              </div>
             )}
           </div>
         </div>

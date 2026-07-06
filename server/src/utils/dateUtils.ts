@@ -6,6 +6,30 @@ export function startOfDay(date: Date): Date {
   return d
 }
 
+/**
+ * Get start of today in Asia/Jakarta (WIB, UTC+7) timezone
+ * This ensures consistent "today" calculation regardless of server timezone
+ * Used for POS cash management, shift reports, etc.
+ */
+export function startOfTodayJakarta(): Date {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date())
+
+  const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '1')
+  const year = getPart('year')
+  const month = getPart('month') - 1 // JS months are 0-indexed
+  const day = getPart('day')
+
+  const today = new Date(0)
+  today.setFullYear(year, month, day)
+  today.setHours(0, 0, 0, 0)
+  return today
+}
+
 export function endOfDay(date: Date): Date {
   const d = new Date(date)
   d.setHours(23, 59, 59, 999)

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import prisma from '../config/database'
+import { startOfTodayJakarta } from '../utils/dateUtils'
 
 const router = Router()
 
@@ -41,6 +42,17 @@ router.post('/events', authenticate, authorize('admin', 'manager', 'cashier'), a
     const staffId = req.user!.staffId || ''
     const { type, amount, paymentMethod, orderId, note, shift } = req.body
 
+    console.log('[POS-CASH] Creating cash event:', {
+      storeId,
+      staffId,
+      type,
+      amount,
+      paymentMethod,
+      orderId,
+      userStoreId: req.user!.storeId,
+      userRole: req.user!.role
+    })
+
     const event = await prisma.cashEvent.create({
       data: {
         storeId,
@@ -54,6 +66,7 @@ router.post('/events', authenticate, authorize('admin', 'manager', 'cashier'), a
       }
     })
 
+    console.log('[POS-CASH] Cash event created:', event)
     res.status(201).json({ code: 201, data: event })
   } catch (error) {
     console.error('Create cash event error:', error)
@@ -65,8 +78,7 @@ router.post('/events', authenticate, authorize('admin', 'manager', 'cashier'), a
 router.get('/balance', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfTodayJakarta()
 
     // 获取今日所有现金事件
     const todayEvents = await prisma.cashEvent.findMany({
@@ -128,8 +140,11 @@ router.get('/balance', authenticate, authorize('admin', 'manager', 'cashier'), a
 router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    console.log('[POS-CASH] shifts/current called with storeId:', storeId, 'user:', req.user!.role)
+
+    // 计算今日开始时间（使用 Asia/Jakarta 时区，确保跨环境一致性）
+    // startOfTodayJakarta() 返回今天 00:00 WIB = 昨天 17:00 UTC
+    const today = startOfTodayJakarta()
 
     // 获取当前打开的班次
     const currentShift = await prisma.shiftSession.findFirst({
@@ -137,7 +152,7 @@ router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashi
       orderBy: { openedAt: 'desc' }
     })
 
-    // 获取今日所有现金事件
+    // 获取今日所有现金事件（使用 WIB 00:00）
     const todayEvents = await prisma.cashEvent.findMany({
       where: {
         storeId,
@@ -166,6 +181,65 @@ router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashi
       }
     })
 
+    // 获取今日订单总金额（用于交接班显示）
+    const todayOrderAmountResult = await prisma.order.aggregate({
+      where: {
+        storeId,
+        createdAt: { gte: today }
+      },
+      _sum: { finalAmount: true }
+    })
+    const todayOrderAmount = todayOrderAmountResult._sum.finalAmount || 0
+
+    // 获取今日各渠道订单数量
+    const channelOrderCounts = await prisma.order.groupBy({
+      by: ['channelId'],
+      where: {
+        storeId,
+        createdAt: { gte: today }
+      },
+      _count: { id: true }
+    })
+
+    // 获取渠道ID到code的映射
+    const channels = await prisma.channel.findMany({
+      where: { storeId },
+      select: { id: true, code: true }
+    })
+    const channelIdToCode: Record<string, string> = {}
+    channels.forEach(ch => { channelIdToCode[ch.id] = ch.code })
+
+    // 统计各渠道订单数
+    const dineInCount = channelOrderCounts
+      .filter(c => channelIdToCode[c.channelId || ''] === 'DINE_IN')
+      .reduce((sum, c) => sum + c._count.id, 0)
+    const gofoodCount = channelOrderCounts
+      .filter(c => channelIdToCode[c.channelId || ''] === 'GOFOOD')
+      .reduce((sum, c) => sum + c._count.id, 0)
+    const grabCount = channelOrderCounts
+      .filter(c => channelIdToCode[c.channelId || ''] === 'GRAB')
+      .reduce((sum, c) => sum + c._count.id, 0)
+    const shopeeCount = channelOrderCounts
+      .filter(c => channelIdToCode[c.channelId || ''] === 'SHOPEE')
+      .reduce((sum, c) => sum + c._count.id, 0)
+
+    // 获取今日客户数量（所有订单的堂食人数之和）
+    const customerCountResult = await prisma.order.aggregate({
+      where: { storeId, createdAt: { gte: today } },
+      _sum: { customerCount: true }
+    })
+    const customerCount = customerCountResult._sum.customerCount || 0
+
+    // 获取今日 QRIS 销售金额
+    const todayQrisSales = await prisma.order.aggregate({
+      where: {
+        storeId,
+        createdAt: { gte: today },
+        paymentMethod: 'qris'
+      },
+      _sum: { totalAmount: true }
+    })
+
     // 获取挂单数量
     const suspendedOrders = await prisma.order.count({
       where: {
@@ -191,7 +265,16 @@ router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashi
         expectedCash,
         currentBalance: expectedCash, // 当前余额 = 期望现金
         todayOrderCount: todayOrders,
-        suspendedOrderCount: suspendedOrders
+        todayOrderAmount, // 今日订单总金额
+        suspendedOrderCount: suspendedOrders,
+        // 新增：渠道订单统计
+        dineInCount,
+        gofoodCount,
+        grabCount,
+        shopeeCount,
+        // 新增：客户数和QRIS销售
+        customerCount,
+        qrisSales: todayQrisSales._sum.totalAmount || 0
       }
     })
   } catch (error) {
@@ -234,6 +317,8 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
     const storeId = req.user!.storeId
     const staffId = req.user!.staffId || ''
     const { openFloat, shift } = req.body
+
+    console.log('[POS-CASH] shift/open called:', { storeId, staffId, openFloat, shift, userRole: req.user!.role })
 
     // 检查是否有未关闭的班次
     const openShift = await prisma.shiftSession.findFirst({
@@ -290,8 +375,7 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     }
 
     // 计算期望现金
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfTodayJakarta()
 
     const shiftEvents = await prisma.cashEvent.findMany({
       where: {
@@ -446,8 +530,7 @@ router.get('/today', authenticate, authorize('admin', 'manager', 'cashier'), asy
     })
 
     // 获取今日所有现金事件
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
+    const todayStart = startOfTodayJakarta()
 
     const events = await prisma.cashEvent.findMany({
       where: {
@@ -503,8 +586,7 @@ router.get('/today', authenticate, authorize('admin', 'manager', 'cashier'), asy
 router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfTodayJakarta()
 
     // 获取今日所有事件
     const todayEvents = await prisma.cashEvent.findMany({
