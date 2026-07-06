@@ -429,6 +429,7 @@ export function POSSettingsPage() {
     showCash: false,
     showTasks: true,
     showLogout: true,
+    showExpense: true,
     // Button labels - 保存为 toolbarLabels 以匹配POS期望
     toolbarLabels: {
       suspend: 'toolbar.suspend',
@@ -437,7 +438,8 @@ export function POSSettingsPage() {
       shift: 'toolbar.shift',
       cash: 'toolbar.cash',
       tasks: 'toolbar.tasks',
-      logout: 'toolbar.logout'
+      logout: 'toolbar.logout',
+      expense: 'toolbar.expense'
     }
   })
 
@@ -1006,6 +1008,7 @@ export function POSSettingsPage() {
                 { key: 'showScan', label: t('posSettings.scanBarcode') },
                 { key: 'showShift', label: t('posSettings.shiftChange') },
                 { key: 'showCash', label: t('posSettings.cashManagement') },
+                { key: 'showExpense', label: t('posSettings.expense') },
                 { key: 'showTasks', label: t('posSettings.hygieneTasks') },
                 { key: 'showLogout', label: t('posSettings.logout') },
               ].map((item) => (
