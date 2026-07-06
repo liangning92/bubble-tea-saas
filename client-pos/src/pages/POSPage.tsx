@@ -1718,7 +1718,7 @@ export function POSPage() {
         orderData.tableNumber = tableNumber
       }
       // 外卖平台订单号
-      if (selectedChannel?.id === 'gofood' || selectedChannel?.id === 'grab' || selectedChannel?.id === 'shopee') {
+      if (selectedChannel?.code === 'GOFOOD' || selectedChannel?.code === 'GRAB' || selectedChannel?.code === 'SHOPEE') {
         orderData.platformOrderId = platformOrderId
       }
       const res = await posApi.createOrder(orderData)
@@ -1890,7 +1890,7 @@ export function POSPage() {
       showToast(t('pos.dineInCountRequired'), 'error')
       return
     }
-    if (['gofood', 'grab', 'shopee'].includes(orderChannel.id) && !platformOrderId) {
+    if (['GOFOOD', 'GRAB', 'SHOPEE'].includes(orderChannel.id) && !platformOrderId) {
       showToast(t('pos.platformOrderIdRequired'), 'error')
       return
     }
@@ -1942,7 +1942,7 @@ export function POSPage() {
       orderData.tableNumber = tableNumber
     }
     // 外卖平台订单号
-    if (orderChannel.id === 'gofood' || orderChannel.id === 'grab' || orderChannel.id === 'shopee') {
+    if (orderChannel.code === 'GOFOOD' || orderChannel.code === 'GRAB' || orderChannel.code === 'SHOPEE') {
       orderData.platformOrderId = platformOrderId
     }
     // 订单备注
