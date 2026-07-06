@@ -144,6 +144,8 @@ export function POSPage() {
   // 渠道状态 - 动态加载
   const [posChannels, setPosChannels] = useState<Array<{id: string; nameKey: string; icon: string; code: string; color?: string}>>([])
   const [selectedChannel, setSelectedChannel] = useState<{id: string; nameKey: string; icon: string; code: string; color?: string} | null>(null)
+  // 渠道设置（用于控制各渠道开关）
+  const [channelSettings, setChannelSettings] = useState<Record<string, { enabled: boolean }>>({})
   const [dineInCount, setDineInCount] = useState(1) // 堂食人数
   const [customerCount, setCustomerCount] = useState(1) // 顾客人数（所有渠道）
   // 订单扩展信息
@@ -916,8 +918,11 @@ export function POSPage() {
           }))
         }
 
-        // 渠道颜色配置
+        // 渠道颜色配置和开关设置
         if (configs.channelSettings) {
+          // 存储渠道设置（包含enabled开关）供ChannelSelectModal使用
+          setChannelSettings(configs.channelSettings)
+
           setPosChannels(prev => prev.map(ch => {
             // Admin 保存的 key 格式: dineIn, gofood, grab, shopee
             // POS 使用的 code 格式: DINE_IN, GOFOOD, GRAB, SHOPEE
@@ -2274,6 +2279,7 @@ export function POSPage() {
         <ChannelSelectModal
           channels={posChannels}
           posLayout={posLayout}
+          channelSettings={channelSettings}
           selectedChannel={selectedChannel}
           onSelectChannel={setSelectedChannel}
           dineInCount={dineInCount}

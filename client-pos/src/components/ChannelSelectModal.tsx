@@ -18,6 +18,7 @@ interface PosLayout {
 interface ChannelSelectModalProps {
   channels: Channel[]
   posLayout: PosLayout
+  channelSettings: Record<string, { enabled: boolean }>
   selectedChannel: Channel | null
   onSelectChannel: (ch: Channel) => void
   dineInCount: number
@@ -33,6 +34,7 @@ interface ChannelSelectModalProps {
 export function ChannelSelectModal({
   channels,
   posLayout,
+  channelSettings,
   selectedChannel,
   onSelectChannel,
   dineInCount,
@@ -48,10 +50,17 @@ export function ChannelSelectModal({
   const [activeInput, setActiveInput] = useState<'count' | 'table'>('count')
 
   const availableChannels = channels.filter(ch => {
-    if (ch.id === 'dine_in') return posLayout.channelDineIn
-    if (ch.id === 'gofood') return posLayout.channelGoFood
-    if (ch.id === 'grab') return posLayout.channelGrab
-    if (ch.id === 'shopee') return posLayout.channelShopee
+    // Use ch.code (e.g., 'DINE_IN') to map to channelSettings key (e.g., 'dineIn')
+    const codeToKeyMap: Record<string, string> = {
+      'DINE_IN': 'dineIn',
+      'GOFOOD': 'gofood',
+      'GRAB': 'grab',
+      'SHOPEE': 'shopee',
+    }
+    const adminKey = codeToKeyMap[ch.code]
+    if (adminKey && channelSettings[adminKey]) {
+      return channelSettings[adminKey].enabled !== false
+    }
     return true
   })
 
