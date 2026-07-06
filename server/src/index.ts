@@ -14,6 +14,8 @@ import { staffRouter } from './routes/staff'
 import { memberRouter } from './routes/member'
 import { categoryRouter } from './routes/category'
 import { configRouter } from './routes/config'
+import { receiptTemplateRouter } from './routes/receiptTemplate'
+import { posActionLogRouter } from './routes/posActionLog'
 import { reportRouter } from './routes/report'
 import { supplierRouter } from './routes/supplier'
 import { purchaseOrderRouter } from './routes/purchaseOrder'
@@ -130,6 +132,8 @@ app.use('/api/inventory', inventoryRouter)
 app.use('/api/staff', staffRouter)
 app.use('/api/members', memberRouter)
 app.use('/api/config', configRouter)
+app.use('/api/receipt-templates', receiptTemplateRouter)
+app.use('/api/pos-action-logs', posActionLogRouter)
 app.use('/api/reports', reportRouter)
 app.use('/api/suppliers', supplierRouter)
 app.use('/api/purchase-orders', purchaseOrderRouter)

@@ -3,7 +3,7 @@ import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
-import { printReceipt, openCashDrawerWindows, listPrinters, PrintReceiptData } from './hardware.js'
+import { printReceipt, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
 
 // ============================================================================
 // Constants
@@ -210,10 +210,21 @@ function stopApiServer() {
 
 function setupIpcHandlers() {
   // Print receipt (USB or network printer via Windows/macOS/Linux native API)
-  ipcMain.handle('print-receipt', async (_event, data: PrintReceiptData) => {
+  ipcMain.handle('print-receipt', async (_event, data: PrintReceiptData | PrintReceiptFromTemplate) => {
     try {
       log('[PRINT] Receipt:', data.orderNum, 'Printer:', data.printerName || 'default')
-      const result = await printReceipt(data)
+
+      let result: { success: boolean; error?: string }
+      if ('blocks' in data && 'data' in data) {
+        // Template-based format
+        log('[PRINT] Using template-based receipt generation')
+        const buffer = generateReceiptFromTemplate(data as PrintReceiptFromTemplate)
+        result = await printReceiptRaw(buffer, data.printerName)
+      } else {
+        // Legacy flat format
+        result = await printReceipt(data as PrintReceiptData)
+      }
+
       if (result.success) {
         log('[PRINT] Success')
       } else {
@@ -222,6 +233,23 @@ function setupIpcHandlers() {
       return result
     } catch (err: any) {
       logError('[PRINT] Exception:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Print kitchen order
+  ipcMain.handle('print-kitchen', async (_event, data: PrintKitchenData) => {
+    try {
+      log('[KITCHEN] Order:', data.orderNum, 'Printer:', data.printerName || 'default')
+      const result = await printKitchenOrder(data)
+      if (result.success) {
+        log('[KITCHEN] Success')
+      } else {
+        logError('[KITCHEN] Failed:', result.error)
+      }
+      return result
+    } catch (err: any) {
+      logError('[KITCHEN] Exception:', err.message)
       return { success: false, error: err.message }
     }
   })

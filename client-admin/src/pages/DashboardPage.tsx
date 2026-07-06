@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
-import { reportApi } from '../services/api'
+import { reportApi, posActionLogApi } from '../services/api'
 import { formatCurrency } from '../utils/helpers'
 import {
   ShoppingCart,
@@ -13,7 +13,8 @@ import {
   Loader2,
   Target,
   UserPlus,
-  Award
+  Award,
+  Clock,
 } from 'lucide-react'
 
 function StatCard({
@@ -53,6 +54,87 @@ function StatCard({
         <div className={`p-3 rounded-xl ${color}`}>
           <Icon size={24} className="text-white" />
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ========== POS 操作预警组件 ==========
+function POSAlertsWidget() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+
+  const { data: statsData } = useQuery({
+    queryKey: ['pos-alert-stats'],
+    queryFn: () => posActionLogApi.getStats(),
+    refetchInterval: 30000, // Refresh every 30s
+  })
+
+  const { data: sessionsData } = useQuery({
+    queryKey: ['pos-active-sessions'],
+    queryFn: () => posActionLogApi.getSessions(),
+    refetchInterval: 10000, // Refresh every 10s
+  })
+
+  const stats = statsData?.data?.data
+  const activeSessions = sessionsData?.data?.data || []
+  const unhandledCount = (stats?.warningCount || 0) + (stats?.criticalCount || 0)
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      {/* 预警统计卡片 */}
+      <div className="card flex items-center gap-4">
+        <div className={`p-3 rounded-xl ${unhandledCount > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
+          <AlertTriangle size={24} className={unhandledCount > 0 ? 'text-red-600' : 'text-green-600'} />
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('dashboard.posAlerts') || 'POS操作预警'}</p>
+          <p className="text-2xl font-bold">
+            {unhandledCount}
+            <span className="text-sm font-normal text-gray-400 ml-1">
+              ({stats?.warningCount || 0} ⚠ / {stats?.criticalCount || 0} 🔴)
+            </span>
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/pos-monitor')}
+          className="ml-auto text-sm text-primary hover:text-primary-hover font-medium"
+        >
+          {t('dashboard.viewAll')} →
+        </button>
+      </div>
+
+      {/* 今日操作总数 */}
+      <div className="card flex items-center gap-4">
+        <div className="p-3 rounded-xl bg-blue-100">
+          <Clock size={24} className="text-blue-600" />
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('dashboard.posOperations') || '今日操作'}</p>
+          <p className="text-2xl font-bold">{stats?.todayTotal || 0}</p>
+        </div>
+      </div>
+
+      {/* 未完成订单 */}
+      <div className="card flex items-center gap-4">
+        <div className={`p-3 rounded-xl ${activeSessions.length > 0 ? 'bg-orange-100' : 'bg-green-100'}`}>
+          <ShoppingCart size={24} className={activeSessions.length > 0 ? 'text-orange-600' : 'text-green-600'} />
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('dashboard.activeSessions') || '进行中会话'}</p>
+          <p className="text-2xl font-bold">{activeSessions.length}</p>
+          {activeSessions.length > 0 && (
+            <p className="text-xs text-orange-500 mt-1">
+              {activeSessions[0]?.staffName} - {activeSessions[0]?.itemCount || 0}件商品未结账
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => navigate('/pos-monitor')}
+          className="ml-auto text-sm text-primary hover:text-primary-hover font-medium"
+        >
+          {t('dashboard.viewDetails')} →
+        </button>
       </div>
     </div>
   )
@@ -336,6 +418,9 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ========== POS 操作预警 ========== */}
+      <POSAlertsWidget />
 
       {/* ========== 最近订单 ========== */}
       <div className="card">

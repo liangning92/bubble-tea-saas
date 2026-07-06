@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 interface SuspendedOrder {
   id: string
+  orderNumber?: string  // 服务端订单号（挂单时创建）
   cart: any[]
   channel: any
   time: string

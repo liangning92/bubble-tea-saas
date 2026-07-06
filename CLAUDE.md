@@ -95,6 +95,59 @@ cd client-pos && npm run dev
 - SQLite 数据库
 - Schema 文件: `server/prisma/schema.prisma`
 
+## ⚠️ 数据一致性规则（强制执行）⚠️
+
+### 禁止临时补丁
+所有修改必须符合长期架构设计。禁止：
+- 发送聚合值让服务端忽略后再计算
+- 前后端各自计算同一数据
+- `as any` 绕过类型检查作为 workaround
+- 硬编码绕过业务逻辑
+
+### 前后端职责分离
+
+| 层级 | 职责 | 示例 |
+|------|------|------|
+| **客户端** | UI计算、用户输入验证、离线缓存 | 计算 subtotal、discount、pointsRedeemed |
+| **服务端** | 业务规则、数据验证、权威计算 | 渠道调价、库存扣减、积分计算、税费计算 |
+
+**规则**：
+- 客户端发送**原始数据**（items, discountAmount, pointsRedeemed, channelId）
+- 服务端**统一计算**所有聚合值（totalAmount, finalAmount, ppnAmount）
+- 服务端**必须使用**客户端发送的值，或拒绝请求并报错
+
+### 数据一致性检查清单（每次修改必须验证）
+
+```
+□ 客户端发送的字段，服务端是否使用？
+□ 服务端计算的字段，客户端是否正确显示？
+□ 前后端计算公式是否一致？（税费=基数×税率，积分=金额/100）
+□ 离线存储与在线数据格式是否一致？
+□ 历史订单金额与结账时是否一致？
+```
+
+### 修复Bug的正确姿势
+
+**错误方式（临时补丁）**：
+```typescript
+// POS 发送 finalAmount 已含税，服务端又加税
+const total = subtotal + tax
+posApi.createOrder({ finalAmount: total })  // 服务端重复加税
+```
+
+**正确方式（长期架构）**：
+```typescript
+// POS 发送原始数据
+posApi.createOrder({ subtotal, discountAmount, pointsRedeemed })
+
+// 服务端统一计算
+const finalAmount = subtotal - discountAmount - pointsDiscount
+const ppnAmount = finalAmount * ppnRate
+const grandTotal = finalAmount + ppnAmount
+```
+
+---
+
 ## ⚠️ 危险操作必须备份
 
 ### 执行前必须备份的操作

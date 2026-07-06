@@ -9,7 +9,7 @@ import { authenticate, AuthRequest } from '../middlewares/auth'
 const router = Router()
 
 // Ensure upload directories exist
-const dirs = ['uploads/products', 'uploads/receipts', 'uploads/attachments', 'uploads/avatars']
+const dirs = ['uploads/products', 'uploads/receipts', 'uploads/attachments', 'uploads/avatars', 'uploads/dualScreen']
 dirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
@@ -38,6 +38,20 @@ const fileFilter = (req: any, file: any, cb: any) => {
     cb(null, true)
   } else {
     cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP and PDF are allowed.'))
+  }
+}
+
+// Video filter for dualScreen uploads
+const videoFilter = (req: any, file: any, cb: any) => {
+  const allowedMimes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'video/mp4', 'video/webm', 'video/ogg'
+  ]
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true)
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP, MP4, WebM and OGG are allowed.'))
   }
 }
 
@@ -75,6 +89,12 @@ const uploadAvatar = multer({
     }
   },
   limits: { ...limits, files: 1 }
+})
+
+const uploadDualScreen = multer({
+  storage: createStorage('dualScreen'),
+  fileFilter: videoFilter,
+  limits: { fileSize: 50 * 1024 * 1024, files: 10 } // 50MB max, 10 files
 })
 
 // POST /api/upload/product - Upload product image
@@ -153,11 +173,36 @@ router.post('/avatar', authenticate, uploadAvatar.single('avatar'), (req: AuthRe
   }
 })
 
+// POST /api/upload/dualScreen - Upload dual screen images/videos
+router.post('/dualScreen', authenticate, uploadDualScreen.array('files', 10), (req: AuthRequest, res) => {
+  try {
+    const files = req.files as any[]
+    const urls = files.map(file => `/uploads/dualScreen/${file.filename}`)
+    const fileInfos = files.map(file => ({
+      url: `/uploads/dualScreen/${file.filename}`,
+      filename: file.filename,
+      mimetype: file.mimetype,
+      size: file.size,
+      isVideo: file.mimetype.startsWith('video/')
+    }))
+
+    res.json({
+      code: 200,
+      message: 'Files uploaded successfully',
+      data: { urls, files: fileInfos },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error: any) {
+    console.error('Upload dualScreen error:', error)
+    res.status(400).json({ code: 400, message: error.message || 'Upload failed' })
+  }
+})
+
 // DELETE /api/upload/:type/:filename - Delete uploaded file
 router.delete('/:type/:filename', authenticate, (req: AuthRequest, res) => {
   try {
     const { type, filename } = req.params
-    const allowedTypes = ['products', 'receipts', 'attachments', 'avatars']
+    const allowedTypes = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen']
 
     if (!allowedTypes.includes(type)) {
       return res.status(400).json({ code: 400, message: 'Invalid file type' })

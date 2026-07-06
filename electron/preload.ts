@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('electronAPI', {
   // Hardware
   sendPrintReceipt: (data: any) => ipcRenderer.invoke('print-receipt', data),
+  sendKitchenOrder: (data: any) => ipcRenderer.invoke('print-kitchen', data),
   openCashDrawer: (data?: { printerHost?: string; printerPort?: number }) =>
     ipcRenderer.invoke('open-cash-drawer', data || {}),
 

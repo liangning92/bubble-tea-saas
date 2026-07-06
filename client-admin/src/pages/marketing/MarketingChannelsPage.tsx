@@ -4,30 +4,28 @@ import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import {
-  Plus, Loader2, Globe, ShoppingBag, Store, Phone, Building2,
+  Plus, Loader2, Globe, Phone, Building2,
   Edit2, Trash2, Search,
-  Users, DollarSign, BarChart3, X, Check
+  Users, DollarSign, BarChart3, X, Check, MessageCircle
 } from 'lucide-react'
 
-// 预设渠道类型 - 奶茶店常用渠道
+// 预设营销渠道 - 消息推送平台（不是订单销售渠道！）
 const PRESET_CHANNELS = [
-  { name: 'GoFood', code: 'GFOOD', type: 'delivery_platform', commission: 0.20, icon: '🟢' },
-  { name: 'GrabFood', code: 'GRAB', type: 'delivery_platform', commission: 0.20, icon: '🟡' },
-  { name: 'ShopeeFood', code: 'SHOPEE', type: 'delivery_platform', commission: 0.18, icon: '🟠' },
-  { name: 'Tokopedia', code: 'TOKOPEDIA', type: 'delivery_platform', commission: 0.15, icon: '🛒' },
-  { name: 'TikTok Shop', code: 'TIKTOK', type: 'delivery_platform', commission: 0.12, icon: '🎵' },
-  { name: 'Walk-in', code: 'WALKIN', type: 'offline', commission: 0, icon: '🚶' },
-  { name: 'Call Order', code: 'CALL', type: 'call', commission: 0, icon: '📞' },
-  { name: 'Corporate', code: 'CORPORATE', type: 'corporate', commission: 0.05, icon: '🏢' },
+  { name: 'WhatsApp', code: 'WHATSAPP', type: 'whatsapp', icon: '💬' },
+  { name: 'Twilio SMS', code: 'TWILIO', type: 'sms', icon: '📱' },
+  { name: 'Firebase Cloud Messaging', code: 'FCM', type: 'push', icon: '☁️' },
+  { name: 'Email', code: 'EMAIL', type: 'email', icon: '📧' },
+  { name: 'Line', code: 'LINE', type: 'messenger', icon: '💬' },
+  { name: 'Telegram', code: 'TELEGRAM', type: 'messenger', icon: '✈️' },
 ]
 
-// 渠道类型配置
+// 营销渠道类型配置
 const CHANNEL_TYPES = [
-  { key: 'offline', label: 'offline', icon: Store },
-  { key: 'delivery_platform', label: 'deliveryPlatform', icon: ShoppingBag },
-  { key: 'online', label: 'online', icon: Globe },
-  { key: 'call', label: 'callOrder', icon: Phone },
-  { key: 'corporate', label: 'corporate', icon: Building2 },
+  { key: 'whatsapp', label: 'WhatsApp', icon: Phone },
+  { key: 'sms', label: 'SMS', icon: Phone },
+  { key: 'push', label: 'Push Notification', icon: Globe },
+  { key: 'email', label: 'Email', icon: Building2 },
+  { key: 'messenger', label: 'Messenger', icon: MessageCircle },
 ]
 
 interface MarketingChannel {
@@ -181,7 +179,7 @@ export function MarketingChannelsPage() {
         name: preset.name,
         code: preset.code,
         type: preset.type,
-        commission: preset.commission,
+        commission: 0,
         status: 'active',
         sortOrder: channels.length,
       })
@@ -314,7 +312,6 @@ export function MarketingChannelsPage() {
               >
                 <span>{preset.icon}</span>
                 <span>{preset.name}</span>
-                <span className="text-xs text-gray-400">({preset.commission * 100}%)</span>
               </button>
             ))}
           </div>

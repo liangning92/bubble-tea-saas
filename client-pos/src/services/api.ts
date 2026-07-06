@@ -67,6 +67,14 @@ api.interceptors.request.use((config) => {
 
 export default api
 
+// 添加请求拦截器来调试
+api.interceptors.request.use((config) => {
+  if (config.url?.includes('orders') && config.method === 'post') {
+    console.log('[API Request]', config.url, 'data:', JSON.stringify(config.data));
+  }
+  return config;
+});
+
 export const posApi = {
   // Products (cached for offline)
   getProducts: (storeId: string) => api.get(`/products?storeId=${storeId}&status=active`),
@@ -79,6 +87,7 @@ export const posApi = {
 
   // Orders
   createOrder: (data: any) => api.post('/orders', data),
+  deleteOrder: (id: string) => api.delete(`/orders/${id}`),
   getOrders: (params?: any) => api.get('/orders', { params }),
   requestRefund: (data: { orderId: string; reason: string; staffId?: string }) =>
     api.post('/orders/refund-request', data),
@@ -102,6 +111,20 @@ export const posApi = {
     api.get(`/config/${storeId}/${key}`),
   setConfig: (storeId: string, key: string, value: any, category: string = 'pos') =>
     api.post('/config', { storeId, key, value, category }),
+
+  // Receipt Template
+  getReceiptTemplate: (templateId: string) =>
+    api.get('/receipt-templates/' + templateId),
+
+  // POS Action Log
+  logPOSAction: (data: {
+    action: string
+    sessionId: string
+    entityId?: string
+    description: string
+    metadata?: Record<string, any>
+    severity?: 'info' | 'warning' | 'critical'
+  }) => api.post('/pos-action-logs', data),
 
   // Staff
   getStaffInfo: () => api.get('/auth/me'),
@@ -154,5 +177,11 @@ export const posApi = {
   requestTestPrint: (printerName: string, storeId: string) =>
     api.post('/hardware/test-print', { printerName, storeId }),
   requestTestDrawer: (printerName: string, storeId: string) =>
-    api.post('/hardware/test-drawer', { printerName, storeId })
+    api.post('/hardware/test-drawer', { printerName, storeId }),
+
+  // Expenses - POS can record daily expenses
+  getExpenses: (params?: { startDate?: string; endDate?: string; type?: string }) =>
+    api.get('/expenses', { params }),
+  createExpense: (data: { type: string; category: string; amount: number; description: string; date: string }) =>
+    api.post('/expenses', data),
 }

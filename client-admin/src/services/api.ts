@@ -453,6 +453,13 @@ export const uploadApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  uploadDualScreen: (files: File[]) => {
+    const formData = new FormData()
+    files.forEach(file => formData.append('files', file))
+    return api.post('/upload/dualScreen', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
   delete: (type: string, filename: string) => api.delete('/upload/' + type + '/' + filename)
 }
 
@@ -738,4 +745,24 @@ export const trainingApi = {
   saveCategories: (data: any) => api.post('/training/categories', data),
   getAll: () => api.get('/staff-management/training/all'),
   delete: (id: string) => api.delete('/staff-management/training/' + id)
+}
+
+export const receiptTemplateApi = {
+  list: (storeId: string) => api.get('/receipt-templates', { params: { storeId } }),
+  get: (id: string) => api.get('/receipt-templates/' + id),
+  create: (data: { storeId: string; name: string; content: string; isDefault?: boolean }) =>
+    api.post('/receipt-templates', data),
+  update: (id: string, data: { name?: string; content?: string; isDefault?: boolean }) =>
+    api.put('/receipt-templates/' + id, data),
+  delete: (id: string) => api.delete('/receipt-templates/' + id),
+  setDefault: (id: string) => api.put('/receipt-templates/' + id + '/set-default'),
+  getDefault: (storeId: string) => api.get('/receipt-templates/default', { params: { storeId } })
+}
+
+export const posActionLogApi = {
+  list: (params: { page?: number; limit?: number; staffId?: string; severity?: string; action?: string; startDate?: string; endDate?: string }) =>
+    api.get('/pos-action-logs', { params }),
+  getStats: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/pos-action-logs/stats', { params }),
+  getSessions: () => api.get('/pos-action-logs/sessions'),
 }

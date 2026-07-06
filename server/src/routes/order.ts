@@ -25,7 +25,15 @@ const createOrderSchema = z.object({
     })).optional().default([])
   })),
   discountAmount: z.number().int().optional().default(0),
-  paymentMethod: z.enum(['cash', 'gopay', 'ovo', 'dana', 'shopeepay', 'member', 'bca_va', 'mandiri_va'])
+  pointsRedeemed: z.number().int().optional().default(0),
+  taxEnabled: z.boolean().optional().default(true),
+  paymentMethod: z.enum(['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card', 'member', 'bca_va', 'mandiri_va']),
+  status: z.enum(['completed', 'suspended']).optional().default('completed'),
+  customerCount: z.number().int().optional().default(1),
+  dineInCount: z.number().int().optional(),
+  tableNumber: z.string().optional(),
+  platformOrderId: z.string().optional(),
+  orderNumber: z.string().optional()
 })
 
 // GET /api/orders
@@ -174,6 +182,33 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
   } catch (error) {
     console.error('Update order status error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update order status' })
+  }
+})
+
+// DELETE /api/orders/:id - Delete a suspended order (used when resuming order)
+router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params
+
+    // Only allow deleting suspended orders
+    const order = await prisma.order.findUnique({ where: { id } })
+    if (!order) {
+      return res.status(404).json({ code: 404, message: 'Order not found' })
+    }
+    if (order.status !== 'suspended') {
+      return res.status(400).json({ code: 400, message: 'Only suspended orders can be deleted' })
+    }
+
+    await prisma.order.delete({ where: { id } })
+
+    res.json({
+      code: 200,
+      message: 'Order deleted',
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Delete order error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to delete order' })
   }
 })
 

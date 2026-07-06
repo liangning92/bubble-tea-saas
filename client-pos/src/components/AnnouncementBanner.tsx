@@ -12,6 +12,8 @@ interface Announcement {
   priority: number
   taskId?: string
   taskStatus?: string
+  taskTime?: string
+  staffName?: string
 }
 
 const TYPE_STYLES: Record<string, string> = {
@@ -68,14 +70,27 @@ export function AnnouncementBanner() {
   // 只显示1条公告，紧凑横向布局
   const displayAnnouncement = announcements[0]
 
+  // 判断是否是卫生任务公告（有taskId字段）
+  const isHygieneTask = !!displayAnnouncement?.taskId
+
   return (
     <div className="absolute bottom-0 left-0 right-0 z-30 bg-primary px-3 py-2 shadow-lg">
       {displayAnnouncement && (
         <div className="flex items-center gap-2">
-          <span className="text-lg">📢</span>
+          <span className="text-lg">{isHygieneTask ? '🧹' : '📢'}</span>
           <div className="flex-1 min-w-0 flex items-center gap-2">
             <span className="text-white font-bold text-sm truncate">{displayAnnouncement.title}</span>
-            <span className="text-white/70 text-xs truncate">{displayAnnouncement.content}</span>
+            {isHygieneTask ? (
+              // 卫生任务公告：显示时间、区域和负责人
+              <span className="text-white/70 text-xs truncate">
+                {displayAnnouncement.taskTime ? `⏰ ${displayAnnouncement.taskTime}` : ''}
+                {displayAnnouncement.content ? ` | ${displayAnnouncement.content}` : ''}
+                {displayAnnouncement.staffName ? ` | 👤 ${displayAnnouncement.staffName}` : ''}
+              </span>
+            ) : (
+              // 普通公告：直接显示content
+              <span className="text-white/70 text-xs truncate">{displayAnnouncement.content}</span>
+            )}
           </div>
           <button
             onClick={() => handleDismiss(displayAnnouncement.id)}

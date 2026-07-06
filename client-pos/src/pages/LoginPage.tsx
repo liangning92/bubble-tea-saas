@@ -222,14 +222,6 @@ export function LoginPage() {
                 )}
               </button>
             </form>
-
-            {/* Register link */}
-            <p className="mt-6 text-center text-gray-500 text-sm">
-              {t('auth.noAccount')}{' '}
-              <Link to="/register" className="text-primary-hover font-medium hover:text-primary-hover transition-colors">
-                {t('auth.createAccount')}
-              </Link>
-            </p>
           </div>
 
           {/* Test account card */}

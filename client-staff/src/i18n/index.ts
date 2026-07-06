@@ -17,7 +17,10 @@ const resources = {
         all: 'Semua',
         active: 'Aktif',
         inactive: 'Tidak Aktif',
-        noData: 'Tidak ada data'
+        noData: 'Tidak ada data',
+        errorPageTitle: 'Terjadi kesalahan',
+        goBack: 'Kembali',
+        reloadPage: 'Muat Ulang'
       },
       nav: {
         home: 'Beranda',
@@ -451,7 +454,10 @@ const resources = {
         all: 'All',
         active: 'Active',
         inactive: 'Inactive',
-        noData: 'No data'
+        noData: 'No data',
+        errorPageTitle: 'Something went wrong',
+        goBack: 'Go Back',
+        reloadPage: 'Reload Page'
       },
       nav: {
         home: 'Home',
@@ -885,7 +891,10 @@ const resources = {
         all: '全部',
         active: '激活',
         inactive: '未激活',
-        noData: '暂无数据'
+        noData: '暂无数据',
+        errorPageTitle: '页面出错了',
+        goBack: '返回',
+        reloadPage: '刷新页面'
       },
       nav: {
         home: '首页',

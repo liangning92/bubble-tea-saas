@@ -267,20 +267,19 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
   try {
     const storeId = req.user!.storeId
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
+    // Use UTC-based dates for consistent query (store uses UTC timestamps)
+    const now = new Date()
+    const todayUTC = new Date(now.getFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
+    const thisMonthUTC = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1)
+    const yesterdayUTC = new Date(todayUTC)
+    yesterdayUTC.setUTCDate(yesterdayUTC.getUTCDate() - 1)
 
     // ============ 今日数据 ============
     const todayOrders = await prisma.order.findMany({
       where: {
         storeId,
         status: 'completed',
-        createdAt: { gte: today }
+        createdAt: { gte: todayUTC }
       },
       include: { items: true }
     })
@@ -294,7 +293,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
       where: {
         storeId,
         status: 'completed',
-        createdAt: { gte: yesterday, lt: today }
+        createdAt: { gte: yesterdayUTC, lt: todayUTC }
       }
     })
     const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + o.finalAmount, 0)
@@ -304,7 +303,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
       where: {
         storeId,
         status: 'completed',
-        createdAt: { gte: thisMonth }
+        createdAt: { gte: thisMonthUTC }
       },
       include: { items: true }
     })
@@ -334,7 +333,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
 
     const todayAttendance = await prisma.attendance.count({
       where: {
-        checkInTime: { gte: today }
+        checkInTime: { gte: todayUTC }
       }
     })
 
@@ -350,7 +349,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
     const todayNewMembers = await prisma.member.count({
       where: {
         storeId,
-        createdAt: { gte: today }
+        createdAt: { gte: todayUTC }
       }
     })
 

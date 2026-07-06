@@ -17,7 +17,8 @@ import {
   Wifi, WifiOff, X, CheckCircle, Search, Loader2,
   ShoppingCart, Trash2, Minus, Plus, Tag, User, Clock,
   Globe, FileText, Users, Printer, ScanLine, Wallet, QrCode,
-  CheckSquare, ClipboardList, Lock, Settings, RotateCcw
+  CheckSquare, ClipboardList, Lock, Settings, RotateCcw,
+  Receipt, PlusCircle, XCircle
 } from 'lucide-react'
 
 // Electron API
@@ -174,6 +175,12 @@ export function POSPage() {
   const [lockPin, setLockPin] = useState('')
   const [lockError, setLockError] = useState(false)
 
+  // 费用记录状态
+  const [todayExpenses, setTodayExpenses] = useState<any[]>([])
+  const [expenseCategory, setExpenseCategory] = useState('')
+  const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseDescription, setExpenseDescription] = useState('')
+
   // POS 操作会话 ID（用于审计日志）
   const [posSessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8))
   // 追踪是否有未完成的 checkout（用于检测飞单）
@@ -193,6 +200,7 @@ export function POSPage() {
     showCashModal, setShowCashModal,
     showTasksModal, setShowTasksModal,
     showLogoutModal, setShowLogoutModal,
+    showExpenseModal, setShowExpenseModal,
     selectedProduct, setSelectedProduct,
     selectedSpec, setSelectedSpec,
     selectedAddonIds, setSelectedAddonIds,
@@ -286,6 +294,7 @@ export function POSPage() {
     showScan: true,
     showShift: true,
     showCash: false,
+    showExpense: true,
     channelDineIn: true,
     channelGoFood: true,
     channelGrab: true,
@@ -764,6 +773,7 @@ export function POSPage() {
             showScan: configs.toolbarSettings.showScan ?? prev.showScan,
             showShift: configs.toolbarSettings.showShift ?? prev.showShift,
             showCash: configs.toolbarSettings.showCash ?? prev.showCash,
+            showExpense: configs.toolbarSettings.showExpense ?? prev.showExpense,
             // Admin 保存的 key 是 toolbarLabels，但 POS 也可能用 labels 作为 fallback
             toolbarLabels: configs.toolbarSettings.toolbarLabels || configs.toolbarSettings.labels || prev.toolbarLabels,
           }))
@@ -1377,6 +1387,59 @@ export function POSPage() {
       console.error('Failed to fetch shift data:', e)
     }
   }
+
+  // 加载今日费用数据
+  const fetchTodayExpenses = async () => {
+    if (!user?.storeId) return
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayStr = today.toISOString().split('T')[0]
+      const res = await posApi.getExpenses({ startDate: todayStr })
+      // Filter expenses for today based on date field
+      const allExpenses = res.data?.data?.list || []
+      const todayExp = allExpenses.filter((e: any) => {
+        const expDate = new Date(e.date).toISOString().split('T')[0]
+        return expDate === todayStr
+      })
+      setTodayExpenses(todayExp)
+    } catch (e) {
+      console.error('Failed to fetch expenses:', e)
+    }
+  }
+
+  // 创建费用记录
+  const createExpense = async () => {
+    if (!expenseCategory || !expenseAmount || !user?.storeId) {
+      showToast(t('pos.expenseRequired') || '请填写费用类别和金额', 'warning')
+      return
+    }
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      await posApi.createExpense({
+        type: 'operational',
+        category: expenseCategory,
+        amount: parseInt(expenseAmount),
+        description: expenseDescription,
+        date: today.toISOString()
+      })
+      showToast(t('pos.expenseCreated') || '费用已记录', 'success')
+      setExpenseCategory('')
+      setExpenseAmount('')
+      setExpenseDescription('')
+      fetchTodayExpenses()
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || t('pos.expenseFailed') || '记录费用失败', 'error')
+    }
+  }
+
+  // 打开费用弹窗时加载数据
+  useEffect(() => {
+    if (showExpenseModal) {
+      fetchTodayExpenses()
+    }
+  }, [showExpenseModal])
 
   // 打开历史订单弹窗时加载数据
   useEffect(() => {
@@ -2164,6 +2227,15 @@ export function POSPage() {
               icon: <Wallet size={32} />,
               labelKey: posLayout.toolbarLabels?.cash || 'toolbar.cash',
               onClick: () => setShowCashModal(true)
+            })
+          }
+          // 费用按钮 - 记录每日临时支出
+          if (posLayout.showExpense !== false) {
+            toolbarButtons.push({
+              id: 'expense',
+              icon: <Receipt size={32} />,
+              labelKey: 'toolbar.expense',
+              onClick: () => setShowExpenseModal(true)
             })
           }
           toolbarButtons.push({
@@ -3389,6 +3461,102 @@ export function POSPage() {
             </div>
             <div className="p-4">
               <p className="text-gray-500 text-center py-8">{t('toolbar.cashComingSoon')}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 费用记录弹窗 */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseModal(false)}>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
+              <h3 className="font-bold">{t('pos.expense') || '费用记录'}</h3>
+              <button onClick={() => setShowExpenseModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* 今日费用汇总 */}
+              <div className="bg-red-50 rounded-xl p-3">
+                <p className="text-sm text-gray-500">{t('pos.todayExpenses') || '今日费用'}</p>
+                <p className="font-bold text-red-600 text-xl">
+                  {formatCurrency(todayExpenses.reduce((sum: number, e: any) => sum + e.amount, 0))}
+                </p>
+                <p className="text-xs text-gray-500">{todayExpenses.length} {t('pos.expenseItems') || '笔记录'}</p>
+              </div>
+
+              {/* 今日费用列表 */}
+              {todayExpenses.length > 0 && (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {todayExpenses.map((expense: any) => (
+                    <div key={expense.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
+                      <div>
+                        <p className="font-medium">{expense.category}</p>
+                        <p className="text-gray-500 text-xs">{expense.description || '-'}</p>
+                      </div>
+                      <p className="font-medium text-red-500">-{formatCurrency(expense.amount)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 新增费用表单 */}
+              <div className="border-t pt-4">
+                <p className="font-medium mb-3">{t('pos.addExpense') || '新增费用'}</p>
+
+                {/* 费用类别 */}
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseCategory') || '类别'}</label>
+                  <select
+                    value={expenseCategory}
+                    onChange={(e) => setExpenseCategory(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl"
+                  >
+                    <option value="">{t('pos.selectCategory') || '选择类别'}</option>
+                    <option value="supplies">{t('pos.expenseSupplies') || '物资采购'}</option>
+                    <option value="utilities">{t('pos.expenseUtilities') || '水电费'}</option>
+                    <option value="rent">{t('pos.expenseRent') || '租金'}</option>
+                    <option value="transport">{t('pos.expenseTransport') || '交通费'}</option>
+                    <option value="packaging">{t('pos.expensePackaging') || '包装费'}</option>
+                    <option value="cleaning">{t('pos.expenseCleaning') || '清洁用品'}</option>
+                    <option value="maintenance">{t('pos.expenseMaintenance') || '设备维护'}</option>
+                    <option value="other">{t('pos.expenseOther') || '其他'}</option>
+                  </select>
+                </div>
+
+                {/* 金额 */}
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseAmount') || '金额'}</label>
+                  <input
+                    type="number"
+                    value={expenseAmount}
+                    onChange={(e) => setExpenseAmount(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border rounded-xl"
+                  />
+                </div>
+
+                {/* 备注 */}
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseNote') || '备注'}</label>
+                  <input
+                    type="text"
+                    value={expenseDescription}
+                    onChange={(e) => setExpenseDescription(e.target.value)}
+                    placeholder={t('pos.expenseNotePlaceholder') || '可选备注'}
+                    className="w-full px-3 py-2 border rounded-xl"
+                  />
+                </div>
+
+                {/* 提交按钮 */}
+                <button
+                  onClick={createExpense}
+                  className="w-full py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
+                >
+                  {t('pos.saveExpense') || '记录费用'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

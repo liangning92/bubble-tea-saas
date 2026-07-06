@@ -73,6 +73,7 @@ model Store {
   notifications        Notification[]
   cashEvents           CashEvent[]
   shiftSessions        ShiftSession[]
+  pOSActionLogs        POSActionLog[]
   cashSummaries        CashSummary[]
   budgets              Budget[]
   fixedAssets          FixedAsset[]
@@ -1272,7 +1273,7 @@ model Order {
   discountAmount   Int             @default(0)
   finalAmount      Int // 实收金额(分)
   customerCount    Int             @default(1) // 堂食人数
-  status           String          @default("pending") // pending | completed | refunded | cancelled
+  status           String          @default("pending") // pending | completed | refunded | cancelled | suspended
   paymentMethod    String // cash | gopay | ovo | dana | shopeepay | qris | debit | member
   taxCategory      String?         @default("taxable") // taxable | exempt（印尼税收分类）
   // 渠道扩展信息
@@ -1826,6 +1827,29 @@ model ReceiptTemplate {
   updatedAt DateTime @updatedAt
 
   @@unique([storeId, name])
+}
+
+// POS 操作审计日志
+model POSActionLog {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  staffId     String
+  staffName   String
+  sessionId   String   // POS 会话 ID（区分不同收银机/班次）
+  action      String   // login | logout | cart_add | cart_update | cart_clear |
+                      // checkout_start | checkout_complete | order_created |
+                      // suspend | resume | member_add | member_remove | shift_open | shift_close
+  entityId    String?  // orderId, cartItemId, memberId
+  description String   // 人可读描述
+  metadata    String?  // JSON: { productId, quantity, amount, skippedSteps }
+  severity    String   @default("info")  // info | warning | critical
+  createdAt   DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([storeId, staffId, createdAt])
+  @@index([storeId, severity, createdAt])
+  @@index([sessionId, createdAt])
 }
 
 // 公告看板

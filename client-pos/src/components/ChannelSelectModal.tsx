@@ -1,4 +1,5 @@
-import { Minus, Plus } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 
 interface Channel {
   id: string
@@ -43,6 +44,9 @@ export function ChannelSelectModal({
   onConfirm,
   t
 }: ChannelSelectModalProps) {
+  const [tableInput, setTableInput] = useState('')
+  const [activeInput, setActiveInput] = useState<'count' | 'table'>('count')
+
   const availableChannels = channels.filter(ch => {
     if (ch.id === 'dine_in') return posLayout.channelDineIn
     if (ch.id === 'gofood') return posLayout.channelGoFood
@@ -51,83 +55,183 @@ export function ChannelSelectModal({
     return true
   })
 
+  useEffect(() => {
+    if (!tableNumber && !tableInput) return
+    if (tableNumber !== tableInput) {
+      setTableInput(tableNumber)
+    }
+  }, [tableNumber])
+
+  const handleNumberPad = (num: string) => {
+    if (activeInput === 'count') {
+      const current = dineInCount === 0 ? '' : String(dineInCount)
+      const newValue = current + num
+      const numVal = parseInt(newValue)
+      if (!isNaN(numVal) && numVal > 0 && numVal <= 99) {
+        onDineInCountChange(numVal)
+      }
+    } else {
+      if (tableInput.length < 4) {
+        const newValue = tableInput + num
+        setTableInput(newValue)
+        onTableNumberChange(newValue)
+      }
+    }
+  }
+
+  const handleBackspace = () => {
+    if (activeInput === 'count') {
+      const newCount = Math.floor(dineInCount / 10)
+      onDineInCountChange(Math.max(1, newCount))
+    } else {
+      const newValue = tableInput.slice(0, -1)
+      setTableInput(newValue)
+      onTableNumberChange(newValue)
+    }
+  }
+
+  const handleClear = () => {
+    if (activeInput === 'count') {
+      onDineInCountChange(1)
+    } else {
+      setTableInput('')
+      onTableNumberChange('')
+    }
+  }
+
+  const quickNumbers = [1, 2, 3, 4, 5, 10]
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md p-6">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">{t('pos.selectChannel') || '请选择销售渠道'}</h2>
-          <p className="text-sm text-gray-500 mt-1">{t('pos.selectChannelHint') || '选择后才能开始点单'}</p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-primary text-white px-5 py-4 flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-bold">{t('pos.selectChannel')}</h2>
+            <p className="text-xs text-white/70">{t('pos.selectChannelHint')}</p>
+          </div>
+          <button
+            onClick={onConfirm}
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20"
+          >
+            <X size={24} />
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          {availableChannels.map(ch => (
-            <button
-              key={ch.id}
-              onClick={() => onSelectChannel(ch)}
-              className={`min-h-20 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${
-                selectedChannel?.id === ch.id
-                  ? 'border-pink-500 bg-pink-50'
-                  : 'border-gray-200 hover:border-pink-300'
-              }`}
-            >
-              <span className="text-3xl">{ch.icon}</span>
-              <span className="font-bold text-sm">{t(ch.nameKey)}</span>
-            </button>
-          ))}
+        {/* Channel Grid */}
+        <div className="p-4">
+          <div className="grid grid-cols-4 gap-3">
+            {availableChannels.map(ch => (
+              <button
+                key={ch.id}
+                onClick={() => onSelectChannel(ch)}
+                className={`min-h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${
+                  selectedChannel?.id === ch.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <span className="text-3xl">{ch.icon}</span>
+                <span className="text-xs font-medium text-gray-700">{t(ch.nameKey)}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* 堂食人数选择 */}
-        {selectedChannel && selectedChannel.id === 'dine_in' && (
-          <div className="mb-4 p-4 bg-orange-50 rounded-xl">
-            <p className="text-sm font-medium text-gray-700 mb-3">{t('pos.dineInCount') || '堂食人数'}</p>
-            <div className="flex items-center justify-center gap-4">
-              <button
-                onClick={() => onDineInCountChange(Math.max(1, dineInCount - 1))}
-                className="w-14 h-14 rounded-full bg-white border-2 border-gray-300 font-bold text-xl hover:border-pink-400 touch-feedback"
-              >
-                <Minus size={24} className="mx-auto" />
-              </button>
-              <span className="w-16 text-center text-3xl font-bold">{dineInCount}</span>
-              <button
-                onClick={() => onDineInCountChange(Math.min(20, dineInCount + 1))}
-                className="w-14 h-14 rounded-full bg-pink-500 text-white font-bold text-xl hover:bg-pink-600 touch-feedback"
-              >
-                <Plus size={24} className="mx-auto" />
-              </button>
-            </div>
-            <div className="mt-3">
-              <input
-                type="text"
-                placeholder={t('pos.tableNumber') || '桌号(可选)'}
-                value={tableNumber}
-                onChange={(e) => onTableNumberChange(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg text-center"
-              />
+        {/* Dine-in Options - 仅堂食显示 */}
+        {selectedChannel && selectedChannel.code === 'DINE_IN' && (
+          <div className="px-4 pb-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              {/* Tab切换 */}
+              <div className="flex mb-4 bg-white rounded-lg p-1">
+                <button
+                  onClick={() => setActiveInput('count')}
+                  className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeInput === 'count' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  👥 {t('pos.dineInCount') || '人数'}
+                </button>
+                <button
+                  onClick={() => setActiveInput('table')}
+                  className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeInput === 'table' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  🪑 {t('pos.tableNumber') || '桌号'}
+                </button>
+              </div>
+
+              {/* 当前值显示 */}
+              <div className="bg-white rounded-lg py-3 mb-4 text-center border border-gray-200">
+                <span className="text-4xl font-bold text-primary">
+                  {activeInput === 'count' ? dineInCount : (tableInput || '-')}
+                </span>
+              </div>
+
+              {/* 人数快捷按钮 */}
+              {activeInput === 'count' && (
+                <div className="flex gap-2 mb-4">
+                  {quickNumbers.map(n => (
+                    <button
+                      key={n}
+                      onClick={() => onDineInCountChange(n)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                        dineInCount === n
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* 数字键盘 */}
+              <div className="grid grid-cols-3 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => handleNumberPad(String(n))}
+                    className="py-3 rounded-lg bg-white border border-gray-300 text-lg font-medium hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={handleClear}
+                  className="py-3 rounded-lg bg-gray-100 border border-gray-300 text-base font-medium hover:bg-gray-200"
+                >
+                  C
+                </button>
+                <button
+                  onClick={() => handleNumberPad('0')}
+                  className="py-3 rounded-lg bg-white border border-gray-300 text-lg font-medium hover:bg-gray-50"
+                >
+                  0
+                </button>
+                <button
+                  onClick={handleBackspace}
+                  className="py-3 rounded-lg bg-gray-100 border border-gray-300 text-base font-medium hover:bg-gray-200"
+                >
+                  ⌫
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* 外卖平台单号输入 */}
-        {selectedChannel && (selectedChannel.id === 'gofood' || selectedChannel.id === 'grab' || selectedChannel.id === 'shopee') && (
-          <div className="mb-4 p-4 bg-blue-50 rounded-xl">
-            <p className="text-sm font-medium text-gray-700 mb-2">{t('pos.platformOrderId') || '平台订单号'}</p>
-            <input
-              type="text"
-              placeholder={t('pos.platformOrderIdHint') || '请输入平台订单号'}
-              value={platformOrderId}
-              onChange={(e) => onPlatformOrderIdChange(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
-            />
-          </div>
-        )}
-
-        <button
-          onClick={onConfirm}
-          disabled={!selectedChannel || (selectedChannel.id === 'dine_in' && dineInCount < 1)}
-          className="w-full py-4 bg-green-500 text-white rounded-xl font-bold text-lg disabled:bg-gray-300 touch-feedback"
-        >
-          {t('pos.confirmChannel') || '确认开始点单'}
-        </button>
+        {/* 确认按钮 */}
+        <div className="px-4 pb-4">
+          <button
+            onClick={onConfirm}
+            disabled={!selectedChannel || (selectedChannel.code === 'DINE_IN' && dineInCount < 1)}
+            className="w-full py-4 bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 active:bg-primary/90 transition-colors"
+          >
+            {t('pos.confirmChannel')}
+          </button>
+        </div>
       </div>
     </div>
   )

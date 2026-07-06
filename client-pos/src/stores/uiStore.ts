@@ -15,6 +15,7 @@ interface UiStore {
   showCashModal: boolean
   showTasksModal: boolean
   showLogoutModal: boolean
+  showExpenseModal: boolean
   // Selected items
   selectedProduct: Product | null
   selectedSpec: { id: string; name: string; price: number } | null
@@ -43,6 +44,7 @@ interface UiStore {
   setShowCashModal: (show: boolean) => void
   setShowTasksModal: (show: boolean) => void
   setShowLogoutModal: (show: boolean) => void
+  setShowExpenseModal: (show: boolean) => void
   setSelectedProduct: (product: Product | null) => void
   setSelectedSpec: (spec: { id: string; name: string; price: number } | null) => void
   setSelectedAddonIds: (ids: string[] | ((prev: string[]) => string[])) => void
@@ -66,6 +68,7 @@ export const useUiStore = create<UiStore>((set) => ({
   showCashModal: false,
   showTasksModal: false,
   showLogoutModal: false,
+  showExpenseModal: false,
   selectedProduct: null,
   selectedSpec: null,
   selectedAddonIds: [],
@@ -86,6 +89,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setShowCashModal: (show) => set({ showCashModal: show }),
   setShowTasksModal: (show) => set({ showTasksModal: show }),
   setShowLogoutModal: (show) => set({ showLogoutModal: show }),
+  setShowExpenseModal: (show) => set({ showExpenseModal: show }),
   setSelectedProduct: (product) => set({ selectedProduct: product }),
   setSelectedSpec: (spec) => set({ selectedSpec: spec }),
   setSelectedAddonIds: (idsOrFn: any) => set((state: UiStore) => ({

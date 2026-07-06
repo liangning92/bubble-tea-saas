@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../utils/helpers'
 
@@ -19,17 +19,50 @@ interface OrderData {
   total: number
 }
 
+interface MediaFile {
+  url: string
+  filename: string
+  mimetype: string
+  isVideo: boolean
+}
+
+type ColumnContent = 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
+
+interface LayoutColumn {
+  width: number
+  content: ColumnContent
+}
+
+interface Layout {
+  columns: LayoutColumn[]
+}
+
 interface DualScreenConfig {
   enabled: boolean
-  layoutStyle: 'simple' | 'full'
+  idleLayout: Layout
+  orderingLayout: Layout
   welcomeText: string
-  showLogo: boolean
-  adImageUrl: string
+  mediaFiles: MediaFile[]
   promotions: string[]
 }
 
 // Default promotions
 const DEFAULT_PROMOTIONS = ['🧋', '🍓', '💳', '🎁']
+
+// Default layouts
+const DEFAULT_IDLE_LAYOUT: Layout = {
+  columns: [
+    { width: 60, content: 'media' },
+    { width: 40, content: 'promotions' },
+  ]
+}
+
+const DEFAULT_ORDERING_LAYOUT: Layout = {
+  columns: [
+    { width: 30, content: 'media' },
+    { width: 70, content: 'order' },
+  ]
+}
 
 export function CustomerDisplayPage() {
   const { t } = useTranslation()
@@ -42,12 +75,14 @@ export function CustomerDisplayPage() {
   const [displayState, setDisplayState] = useState<'idle' | 'ordering' | 'paying' | 'complete'>('idle')
   const [dualScreenConfig, setDualScreenConfig] = useState<DualScreenConfig>({
     enabled: false,
-    layoutStyle: 'full',
+    idleLayout: DEFAULT_IDLE_LAYOUT,
+    orderingLayout: DEFAULT_ORDERING_LAYOUT,
     welcomeText: 'Bubble Tea Malaysia',
-    showLogo: false,
-    adImageUrl: '',
+    mediaFiles: [],
     promotions: DEFAULT_PROMOTIONS,
   })
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Load dualScreen config from localStorage
   useEffect(() => {
@@ -55,23 +90,55 @@ export function CustomerDisplayPage() {
     if (savedConfig) {
       try {
         const config = JSON.parse(savedConfig)
-        setDualScreenConfig(config)
+        setDualScreenConfig({
+          ...config,
+          idleLayout: config.idleLayout || DEFAULT_IDLE_LAYOUT,
+          orderingLayout: config.orderingLayout || DEFAULT_ORDERING_LAYOUT,
+        })
       } catch (e) {
         console.error('Failed to parse dualScreenConfig:', e)
       }
     }
   }, [])
 
-  // Auto-rotate promotions
+  const mediaFiles = dualScreenConfig.mediaFiles || []
   const promotions = dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS
+
+  // Get current layout based on display state
+  const currentLayout = displayState === 'idle'
+    ? dualScreenConfig.idleLayout || DEFAULT_IDLE_LAYOUT
+    : displayState === 'complete'
+      ? null
+      : dualScreenConfig.orderingLayout || DEFAULT_ORDERING_LAYOUT
+
+  // Auto-rotate media (images or promotions)
   useEffect(() => {
-    if (displayState === 'idle') {
+    if (displayState !== 'idle') return
+
+    // If has media files, rotate through them
+    if (mediaFiles.length > 0) {
       const interval = setInterval(() => {
-        setCurrentPromotion(p => (p + 1) % promotions.length)
-      }, 5000)
+        setCurrentMediaIndex(p => (p + 1) % mediaFiles.length)
+      }, 10000) // 10 seconds per media
       return () => clearInterval(interval)
     }
-  }, [displayState, promotions.length])
+
+    // Otherwise rotate promotions
+    const interval = setInterval(() => {
+      setCurrentPromotion(p => (p + 1) % promotions.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [displayState, mediaFiles.length, promotions.length])
+
+  // Auto-play video when it's the current media
+  useEffect(() => {
+    if (displayState === 'idle' && mediaFiles.length > 0 && videoRef.current) {
+      const currentMedia = mediaFiles[currentMediaIndex]
+      if (currentMedia?.isVideo) {
+        videoRef.current.play().catch(() => {})
+      }
+    }
+  }, [currentMediaIndex, displayState, mediaFiles])
 
   // Listen for order updates from main screen via Electron IPC
   useEffect(() => {
@@ -100,55 +167,120 @@ export function CustomerDisplayPage() {
   }, [])
 
   const promotion = promotions[currentPromotion]
+  const currentMedia = mediaFiles[currentMediaIndex]
 
-  // Simple layout style - just logo and welcome text
-  if (dualScreenConfig.layoutStyle === 'simple') {
-    if (displayState === 'idle') {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-primary to-primary/80 flex flex-col items-center justify-center text-white">
-          {dualScreenConfig.showLogo && (
-            <div className="text-8xl mb-6">🧋</div>
-          )}
-          <h1 className="text-5xl font-bold mb-2">
-            {dualScreenConfig.welcomeText || 'Bubble Tea Malaysia'}
-          </h1>
-        </div>
-      )
-    }
-  }
-
-  // Idle state - show promotions (full layout)
-  if (displayState === 'idle') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-500 to-pink-600 flex flex-col items-center justify-center text-white">
-        {dualScreenConfig.adImageUrl ? (
-          <img
-            src={dualScreenConfig.adImageUrl}
-            alt="Advertisement"
-            className="w-full h-full object-cover absolute inset-0"
-          />
-        ) : (
-          <>
-            <div className="text-8xl mb-6 animate-pulse">{promotion}</div>
-            <h1 className="text-5xl font-bold mb-2">
-              {dualScreenConfig.welcomeText || t('customerDisplay.promotions.welcome')}
-            </h1>
-            <p className="text-2xl opacity-90">Bubble Tea Malaysia</p>
-            <div className="flex gap-2 mt-8">
+  // Render column content based on type
+  const renderColumnContent = (content: ColumnContent, isVideoRef?: React.RefObject<HTMLVideoElement | null>) => {
+    switch (content) {
+      case 'media':
+        if (mediaFiles.length > 0) {
+          const media = mediaFiles[currentMediaIndex]
+          if (media?.isVideo) {
+            return (
+              <video
+                ref={isVideoRef as React.RefObject<HTMLVideoElement>}
+                src={media.url}
+                className="w-full h-full object-contain"
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            )
+          }
+          return <img src={media?.url} alt="" className="w-full h-full object-contain" />
+        }
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 text-white">
+            <span className="text-6xl">{promotion}</span>
+          </div>
+        )
+      case 'promotions':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4">
+            <div className="text-5xl mb-4">{promotion}</div>
+            <div className="text-xl text-center">{dualScreenConfig.welcomeText || 'Welcome'}</div>
+            <div className="flex gap-2 mt-4">
               {promotions.map((_, i) => (
                 <div
                   key={i}
-                  className={`w-3 h-3 rounded-full ${i === currentPromotion ? 'bg-white' : 'bg-white/40'}`}
+                  className={`w-2 h-2 rounded-full ${i === currentPromotion ? 'bg-white' : 'bg-white/40'}`}
                 />
               ))}
             </div>
-          </>
-        )}
-      </div>
-    )
+          </div>
+        )
+      case 'welcome':
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
+            <span className="text-3xl font-bold">{dualScreenConfig.welcomeText || 'Welcome'}</span>
+          </div>
+        )
+      case 'order':
+        return (
+          <div className="w-full h-full flex flex-col bg-gray-50">
+            <div className="bg-primary text-white py-3 px-4 text-center font-bold">Your Order</div>
+            <div className="flex-1 p-4 overflow-y-auto space-y-3">
+              {orderData?.items.map((item) => (
+                <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🧋</span>
+                    <div>
+                      <p className="font-bold">{item.productName}</p>
+                      <p className="text-gray-500 text-sm">{item.specName}</p>
+                      {item.addons.length > 0 && (
+                        <p className="text-gray-400 text-xs">+ {item.addons.map(a => a.name).join(', ')}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-primary">{formatCurrency(item.unitPrice * item.quantity)}</p>
+                    <p className="text-gray-500 text-sm">x{item.quantity}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white border-t p-4">
+              <div className="space-y-1 mb-3">
+                <div className="flex justify-between text-gray-500 text-sm">
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(orderData?.subtotal || 0)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500 text-sm">
+                  <span>Tax</span>
+                  <span>{formatCurrency(orderData?.ppn || 0)}</span>
+                </div>
+                {(orderData?.discount || 0) > 0 && (
+                  <div className="flex justify-between text-green-500 text-sm">
+                    <span>Discount</span>
+                    <span>-{formatCurrency(orderData?.discount || 0)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-between font-bold text-xl pt-2 border-t">
+                <span>Total</span>
+                <span className="text-primary">{formatCurrency(orderData?.total || 0)}</span>
+              </div>
+              {displayState === 'ordering' && (
+                <div className="mt-3 bg-yellow-100 text-yellow-800 py-2 rounded-lg text-center text-sm font-medium">
+                  Please pay at counter
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      case 'logo':
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <span className="text-8xl">🧋</span>
+          </div>
+        )
+      default:
+        return null
+    }
   }
 
-  // Order complete state - show thank you message
+  // Order complete state - show thank you message (always full screen)
   if (displayState === 'complete') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-500 to-green-600 flex flex-col items-center justify-center text-white">
@@ -162,75 +294,18 @@ export function CustomerDisplayPage() {
     )
   }
 
-  // Ordering or paying - show order details
+  // Render dynamic layout
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="bg-primary text-white py-4 px-6 text-center">
-        <h2 className="text-2xl font-bold">{t('customerDisplay.yourOrder')}</h2>
-      </div>
-
-      {/* Order Items */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="space-y-4">
-          {orderData?.items.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">🧋</span>
-                    <div>
-                      <p className="font-bold text-lg">{item.productName}</p>
-                      <p className="text-gray-500 text-sm">{item.specName}</p>
-                      {item.addons.length > 0 && (
-                        <p className="text-gray-400 text-xs mt-1">
-                          + {item.addons.map(a => a.name).join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-lg text-primary">
-                    {formatCurrency(item.unitPrice * item.quantity)}
-                  </p>
-                  <p className="text-gray-500 text-sm">x{item.quantity}</p>
-                </div>
-              </div>
-            </div>
-          ))}
+    <div className="min-h-screen bg-gray-900 flex">
+      {currentLayout?.columns.map((col, index) => (
+        <div
+          key={index}
+          className="h-screen overflow-hidden"
+          style={{ width: `${col.width}%` }}
+        >
+          {renderColumnContent(col.content, index === 0 ? videoRef : undefined)}
         </div>
-      </div>
-
-      {/* Footer - Total */}
-      <div className="bg-white border-t shadow-lg p-6">
-        <div className="space-y-2 mb-4">
-          <div className="flex justify-between text-gray-500">
-            <span>{t('customerDisplay.subtotal')}</span>
-            <span>{formatCurrency(orderData?.subtotal || 0)}</span>
-          </div>
-          <div className="flex justify-between text-gray-500">
-            <span>{t('customerDisplay.tax')}</span>
-            <span>{formatCurrency(orderData?.ppn || 0)}</span>
-          </div>
-          {(orderData?.discount || 0) > 0 && (
-            <div className="flex justify-between text-green-500">
-              <span>{t('customerDisplay.discount')}</span>
-              <span>-{formatCurrency(orderData?.discount || 0)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold text-2xl pt-3 border-t">
-            <span>{t('customerDisplay.total')}</span>
-            <span className="text-primary">{formatCurrency(orderData?.total || 0)}</span>
-          </div>
-        </div>
-
-        {displayState === 'ordering' && (
-          <div className="bg-yellow-100 text-yellow-800 py-3 rounded-lg text-center font-medium">
-            {t('customerDisplay.pleasePayAtCounter')}
-          </div>
-        )}
-      </div>
+      ))}
     </div>
   )
 }

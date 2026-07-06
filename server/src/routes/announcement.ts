@@ -129,11 +129,13 @@ router.get('/hygiene/pending', authenticate, async (req: AuthRequest, res) => {
       orderBy: { time: 'asc' }
     })
 
-    // 转换为公告格式
+    // 转换为公告格式 - 返回原始数据，让客户端根据i18n格式化
     const hygieneAnnouncements = tasks.map(task => ({
       id: `hygiene-${task.id}`,
-      title: `🧹 卫生任务提醒`,
-      content: `${task.name}\n区域: ${task.areaCode}\n时间: ${task.time}\n负责人: ${task.staff?.name || '待分配'}`,
+      title: task.name,
+      content: task.areaCode || '',
+      taskTime: task.time || '',
+      staffName: task.staff?.name || '',
       type: 'warning',
       priority: 100,
       isActive: true,

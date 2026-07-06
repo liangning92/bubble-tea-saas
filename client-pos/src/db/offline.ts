@@ -27,6 +27,10 @@ export interface LocalOrder {
   finalAmount: number
   discountAmount: number
   paymentMethod: string
+  taxEnabled: boolean
+  pointsRedeemed: number
+  orderNumber: string
+  customerCount: number
   status: 'pending' | 'syncing' | 'synced' | 'failed'
   syncAttempts: number
   createdAt: Date
@@ -161,10 +165,19 @@ export class SyncManager {
             body: JSON.stringify({
               storeId: order.storeId,
               staffId: order.staffId,
+              channelId: 'POS',
               memberId: order.memberId,
               items: order.items,
+              subtotal: order.subtotal,
+              ppn: order.ppn,
+              totalAmount: order.totalAmount,
+              finalAmount: order.finalAmount,
+              discountAmount: order.discountAmount,
               paymentMethod: order.paymentMethod,
-              discountAmount: order.discountAmount
+              taxEnabled: order.taxEnabled,
+              pointsRedeemed: order.pointsRedeemed,
+              orderNumber: order.orderNumber,
+              customerCount: order.customerCount || 1
             })
           })
 

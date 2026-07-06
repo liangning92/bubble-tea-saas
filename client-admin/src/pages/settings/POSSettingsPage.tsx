@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { configApi } from '../../services/api'
+import { configApi, uploadApi } from '../../services/api'
+import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
@@ -17,6 +18,364 @@ const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled,
     <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${enabled ? 'translate-x-[26px]' : 'translate-x-[2px]'}`} />
   </button>
 )
+
+// Media file type
+interface MediaFile {
+  url: string
+  filename: string
+  mimetype: string
+  isVideo: boolean
+}
+
+// DualScreen Media Upload Component
+const DualScreenMediaUpload: React.FC<{
+  mediaFiles: MediaFile[]
+  onUpload: (files: MediaFile[]) => void
+  onRemove: (index: number) => void
+}> = ({ mediaFiles, onUpload, onRemove }) => {
+  const { t } = useTranslation()
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    await uploadFiles(Array.from(files))
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const files = e.dataTransfer.files
+    if (files.length === 0) return
+    await uploadFiles(Array.from(files))
+  }
+
+  const uploadFiles = async (files: File[]) => {
+    setUploading(true)
+    try {
+      const response = await uploadApi.uploadDualScreen(files)
+      const newFiles = response.data.data.files || []
+      onUpload([...mediaFiles, ...newFiles])
+    } catch (error) {
+      console.error('Upload failed:', error)
+      alert(t('common.error'))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Upload Area */}
+      <div
+        className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+          dragOver ? 'border-primary bg-primary/5' : 'border-gray-300 hover:border-primary'
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => document.getElementById('dualScreenFileInput')?.click()}
+      >
+        <input
+          type="file"
+          id="dualScreenFileInput"
+          className="hidden"
+          accept="image/*,video/*"
+          multiple
+          onChange={handleFileSelect}
+        />
+        {uploading ? (
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 size={20} className="animate-spin" />
+            <span className="text-sm text-gray-500">{t('common.uploading')}</span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <Upload size={24} className="text-gray-400" />
+            <span className="text-sm text-gray-500">{t('posSettings.dualScreenUploadHint')}</span>
+            <span className="text-xs text-gray-400">JPG, PNG, GIF, MP4, WebM (max 50MB)</span>
+          </div>
+        )}
+      </div>
+
+      {/* Preview Grid */}
+      {mediaFiles.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {mediaFiles.map((file, index) => (
+            <div key={index} className="relative group">
+              {file.isVideo ? (
+                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                  <video src={file.url} className="w-full h-full object-cover rounded-lg" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white text-2xl">▶</span>
+                  </div>
+                </div>
+              ) : (
+                <img src={file.url} alt="" className="aspect-video object-cover rounded-lg" />
+              )}
+              <button
+                onClick={() => onRemove(index)}
+                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X size={14} />
+              </button>
+              {file.isVideo && (
+                <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">VIDEO</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Layout Column types
+type ColumnContent = 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
+
+interface LayoutColumn {
+  width: number
+  content: ColumnContent
+}
+
+interface Layout {
+  columns: LayoutColumn[]
+}
+
+// DualScreen Layout Editor Component
+const _DualScreenLayoutEditor: React.FC<{
+  layout: Layout
+  onChange: (layout: Layout) => void
+  title: string
+}> = ({ layout, onChange, title }) => {
+  const { t } = useTranslation()
+
+  const updateColumn = (index: number, updates: Partial<LayoutColumn>) => {
+    const newColumns = [...layout.columns]
+    newColumns[index] = { ...newColumns[index], ...updates }
+    onChange({ columns: newColumns })
+  }
+
+  const addColumn = () => {
+    if (layout.columns.length >= 3) return
+    const newColumns = [...layout.columns, { width: Math.floor(100 / (layout.columns.length + 1)), content: 'promotions' as ColumnContent }]
+    // Redistribute widths
+    const equalWidth = Math.floor(100 / newColumns.length)
+    newColumns.forEach((col) => col.width = equalWidth)
+    onChange({ columns: newColumns })
+  }
+
+  const removeColumn = (index: number) => {
+    if (layout.columns.length <= 1) return
+    const newColumns = layout.columns.filter((_, idx) => idx !== index)
+    const equalWidth = Math.floor(100 / newColumns.length)
+    newColumns.forEach((col) => col.width = equalWidth)
+    onChange({ columns: newColumns })
+  }
+
+  return (
+    <div className="p-3 bg-white rounded-lg border">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium">{title}</span>
+        <div className="flex gap-1">
+          {layout.columns.length < 3 && (
+            <button onClick={addColumn} className="px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary/90">
+              + Column
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {layout.columns.map((col, index) => (
+          <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+            {/* Width slider */}
+            <div className="flex items-center gap-2 w-32">
+              <input
+                type="range"
+                min="10"
+                max="80"
+                value={col.width}
+                onChange={(e) => updateColumn(index, { width: parseInt(e.target.value) })}
+                className="w-20"
+              />
+              <span className="text-xs w-8">{col.width}%</span>
+            </div>
+
+            {/* Content type */}
+            <select
+              value={col.content}
+              onChange={(e) => updateColumn(index, { content: e.target.value as ColumnContent })}
+              className="flex-1 text-sm input"
+            >
+              <option value="media">{t('posSettings.columnMedia')}</option>
+              <option value="promotions">{t('posSettings.columnPromotions')}</option>
+              <option value="welcome">{t('posSettings.columnWelcome')}</option>
+              <option value="order">{t('posSettings.columnOrder')}</option>
+              <option value="logo">{t('posSettings.columnLogo')}</option>
+            </select>
+
+            {/* Remove */}
+            {layout.columns.length > 1 && (
+              <button onClick={() => removeColumn(index)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Width sum indicator */}
+      <div className="mt-2 text-xs text-gray-500 text-right">
+        Total: {layout.columns.reduce((sum, col) => sum + col.width, 0)}%
+      </div>
+    </div>
+  )
+}
+
+// DualScreen Preview Component
+const DualScreenPreview: React.FC<{
+  dualScreen: any
+}> = ({ dualScreen }) => {
+  const { t } = useTranslation()
+  const [previewState, setPreviewState] = useState<'idle' | 'ordering' | 'complete'>('idle')
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const promotions = dualScreen.promotions || ['🧋', '🍓', '💳', '🎁']
+  const mediaFiles = dualScreen.mediaFiles || []
+
+  const idleLayout = dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] }
+  const orderingLayout = dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] }
+  const currentLayout = previewState === 'idle' ? idleLayout : orderingLayout
+
+  // Auto-rotate for preview
+  useEffect(() => {
+    if (previewState !== 'idle') return
+    if (mediaFiles.length > 0) {
+      const interval = setInterval(() => {
+        setCurrentIndex(p => (p + 1) % mediaFiles.length)
+      }, 3000)
+      return () => clearInterval(interval)
+    } else {
+      const interval = setInterval(() => {
+        setCurrentIndex(p => (p + 1) % promotions.length)
+      }, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [previewState, mediaFiles.length, promotions.length])
+
+  const currentMedia = mediaFiles[currentIndex]
+  const currentPromotion = promotions[currentIndex]
+
+  // Render column content
+  const renderColumnContent = (content: string) => {
+    switch (content) {
+      case 'media':
+        if (mediaFiles.length > 0) {
+          return currentMedia?.isVideo ? (
+            <video src={currentMedia.url} className="w-full h-full object-contain" autoPlay loop muted />
+          ) : (
+            <img src={currentMedia?.url} alt="" className="w-full h-full object-contain" />
+          )
+        }
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 text-white">
+            <span className="text-4xl">{currentPromotion}</span>
+          </div>
+        )
+      case 'promotions':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4">
+            <div className="text-3xl mb-2">{currentPromotion}</div>
+            <div className="text-sm text-center">{dualScreen.welcomeText || 'Welcome'}</div>
+          </div>
+        )
+      case 'welcome':
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
+            <span className="text-xl font-bold">{dualScreen.welcomeText || 'Welcome'}</span>
+          </div>
+        )
+      case 'order':
+        return (
+          <div className="w-full h-full flex flex-col bg-gray-50">
+            <div className="bg-primary text-white py-2 px-4 text-center text-sm font-bold">Your Order</div>
+            <div className="flex-1 p-2 space-y-2 overflow-y-auto">
+              <div className="flex justify-between items-center bg-white p-2 rounded text-xs">
+                <div className="flex items-center gap-2">
+                  <span>🧋</span>
+                  <div>
+                    <div className="font-medium">Brown Sugar</div>
+                    <div className="text-gray-500">Large</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">Rp 25K</div>
+                  <div className="text-gray-500">x1</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white border-t p-2">
+              <div className="flex justify-between text-sm">
+                <span>Total</span>
+                <span className="font-bold text-primary">Rp 25K</span>
+              </div>
+            </div>
+          </div>
+        )
+      case 'logo':
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <span className="text-6xl">🧋</span>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="mt-4 p-4 bg-gray-100 rounded-xl">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-gray-700">{t('posSettings.dualScreenPreview')}</span>
+        <div className="flex gap-1">
+          {(['idle', 'ordering', 'complete'] as const).map((state) => (
+            <button
+              key={state}
+              onClick={() => setPreviewState(state)}
+              className={`px-2 py-1 text-xs rounded ${previewState === state ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'}`}
+            >
+              {state === 'idle' ? t('posSettings.previewIdle') : state === 'ordering' ? t('posSettings.previewOrdering') : t('posSettings.previewComplete')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Preview Screen with dynamic columns */}
+      <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        {previewState === 'complete' ? (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-500 to-green-600 text-white">
+            <div className="text-4xl mb-2">✓</div>
+            <div className="text-lg font-bold">Thank You!</div>
+            <div className="text-sm opacity-80">Order #12345</div>
+          </div>
+        ) : (
+          <div className="w-full h-full flex">
+            {currentLayout.columns.map((col: any, index: number) => (
+              <div
+                key={index}
+                className="h-full overflow-hidden"
+                style={{ width: `${col.width}%` }}
+              >
+                {renderColumnContent(col.content)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function POSSettingsPage() {
   const { t, i18n } = useTranslation()
@@ -202,7 +561,7 @@ export function POSSettingsPage() {
   })
 
   // 小票设置
-  const [posReceipt, setPosReceipt] = useState({
+  const [_posReceipt, setPosReceipt] = useState({
     header: 'Bubble Tea Shop',
     footer: 'Thank you!',
     taxRate: 11,
@@ -292,11 +651,24 @@ export function POSSettingsPage() {
     displayBrightness: 80,          // 屏幕亮度
     dualScreen: {
       enabled: false,
-      layoutStyle: 'full',
+      // 空闲时布局 - 可自定义列数和内容
+      idleLayout: {
+        columns: [
+          { width: 60, content: 'media' },
+          { width: 40, content: 'promotions' },
+        ]
+      },
+      // 点单时布局
+      orderingLayout: {
+        columns: [
+          { width: 30, content: 'media' },
+          { width: 70, content: 'order' },
+        ]
+      },
+      // 共用内容
       welcomeText: 'Bubble Tea Malaysia',
-      showLogo: false,
-      adImageUrl: '',
       promotions: ['🧋', '🍓', '💳', '🎁'],
+      mediaFiles: [],
     },
   }))
 
@@ -1335,372 +1707,13 @@ export function POSSettingsPage() {
 
       {/* ========== RECEIPT TAB ========== */}
       {activeSubTab === 'receipt' && (
-        <div className="grid grid-cols-2 gap-6">
-          {/* 左侧：设置表单 */}
-          <div className="space-y-6">
-          {/* 基础信息 */}
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.receiptBasic')}</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.receiptHeader')}</label>
-                  <input
-                    type="text"
-                    value={posReceipt.header}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, header: e.target.value })}
-                    onBlur={() => handleSave('posReceipt', posReceipt)}
-                    className="input"
-                    placeholder="Bubble Tea Shop"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.receiptFooter')}</label>
-                  <input
-                    type="text"
-                    value={posReceipt.footer}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, footer: e.target.value })}
-                    onBlur={() => handleSave('posReceipt', posReceipt)}
-                    className="input"
-                    placeholder="Thank you!"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.storePhone')}</label>
-                  <input
-                    type="text"
-                    value={posReceipt.storePhone || ''}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, storePhone: e.target.value })}
-                    onBlur={() => handleSave('posReceipt', posReceipt)}
-                    className="input"
-                    placeholder="021-1234567"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.storeAddress')}</label>
-                  <input
-                    type="text"
-                    value={posReceipt.storeAddress || ''}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, storeAddress: e.target.value })}
-                    onBlur={() => handleSave('posReceipt', posReceipt)}
-                    className="input"
-                    placeholder="Jl. Sudirman No.1"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 打印设置 */}
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.printSettings')}</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.paperSize')}</label>
-                  <select
-                    value={posReceipt.paperSize || '80mm'}
-                    onChange={(e) => {
-                      setPosReceipt({ ...posReceipt, paperSize: e.target.value })
-                      handleSave('posReceipt', { ...posReceipt, paperSize: e.target.value })
-                    }}
-                    className="input"
-                  >
-                    <option value="58mm">58mm</option>
-                    <option value="80mm">80mm</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printCopies')}</label>
-                  <input
-                    type="number"
-                    value={posReceipt.printCopies || 1}
-                    onChange={(e) => setPosReceipt({ ...posReceipt, printCopies: parseInt(e.target.value) || 1 })}
-                    onBlur={() => handleSave('posReceipt', posReceipt)}
-                    className="input"
-                    min="1"
-                    max="5"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.itemDetailFormat')}</label>
-                  <select
-                    value={posReceipt.itemDetailFormat || 'standard'}
-                    onChange={(e) => {
-                      setPosReceipt({ ...posReceipt, itemDetailFormat: e.target.value })
-                      handleSave('posReceipt', { ...posReceipt, itemDetailFormat: e.target.value })
-                    }}
-                    className="input"
-                  >
-                    <option value="standard">{t('posSettings.formatStandard')}</option>
-                    <option value="compact">{t('posSettings.formatCompact')}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 显示选项 */}
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.displayOptions')}</h3>
-            <div className="space-y-3">
-              {[
-                { key: 'showLogo', label: t('posSettings.showLogo') },
-                { key: 'showQR', label: t('posSettings.showQR') },
-                { key: 'showBarcode', label: t('posSettings.showBarcode') },
-                { key: 'showKitchenNote', label: t('posSettings.showKitchenNote') },
-                { key: 'showStaffName', label: t('posSettings.showStaffName') },
-                { key: 'showCustomerName', label: t('posSettings.showCustomerName') },
-                { key: 'autoPrint', label: t('posSettings.autoPrint') },
-              ].map((item) => (
-                <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="font-medium">{item.label}</span>
-                  <Toggle
-                    enabled={posReceipt[item.key as keyof typeof posReceipt] as boolean}
-                    onChange={() => {
-                      const newVal = !posReceipt[item.key as keyof typeof posReceipt]
-                      setPosReceipt({ ...posReceipt, [item.key]: newVal })
-                      handleSave('posReceipt', { ...posReceipt, [item.key]: newVal })
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Logo上传 */}
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.storeLogo') || 'Store Logo'}</h3>
-            <div className="space-y-4">
-              {posReceipt.storeLogo && (
-                <div className="relative inline-block">
-                  <img src={posReceipt.storeLogo} alt="Store Logo" className="h-20 object-contain border rounded-lg p-2 bg-white" />
-                  <button
-                    onClick={() => {
-                      setPosReceipt({ ...posReceipt, storeLogo: '' })
-                      handleSave('posReceipt', { ...posReceipt, storeLogo: '' })
-                    }}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
-              <div>
-                <input
-                  type="text"
-                  value={posReceipt.storeLogo || ''}
-                  onChange={(e) => setPosReceipt({ ...posReceipt, storeLogo: e.target.value })}
-                  onBlur={() => handleSave('posReceipt', posReceipt)}
-                  className="input"
-                  placeholder={t('posSettings.logoUrlPlaceholder') || 'Logo URL or upload below'}
-                />
-                <p className="text-xs text-gray-500 mt-1">{t('posSettings.logoUrlHint') || 'Enter logo URL or use upload button'}</p>
-              </div>
-              <div>
-                <label className="btn-secondary cursor-pointer inline-flex items-center gap-2">
-                  <Upload size={16} />
-                  {t('posSettings.uploadLogo') || 'Upload Logo'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      try {
-                        const formData = new FormData()
-                        formData.append('images', file)
-                        const res = await axios.post('/api/upload/product', formData, {
-                          headers: { 'Content-Type': 'multipart/form-data' }
-                        })
-                        const url = res.data.data.urls[0]
-                        setPosReceipt({ ...posReceipt, storeLogo: url })
-                        handleSave('posReceipt', { ...posReceipt, storeLogo: url })
-                      } catch (err) {
-                        console.error('Logo upload failed:', err)
-                        alert('Logo upload failed')
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* QR码设置 */}
-          {posReceipt.showQR && (
-            <div className="card">
-              <h3 className="text-lg font-semibold mb-4">{t('posSettings.qrCode') || 'QR Code'}</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('posSettings.qrCodeUrl') || 'QR Code URL / Content'}
-                </label>
-                <input
-                  type="text"
-                  value={posReceipt.qrCodeUrl || ''}
-                  onChange={(e) => setPosReceipt({ ...posReceipt, qrCodeUrl: e.target.value })}
-                  onBlur={() => handleSave('posReceipt', posReceipt)}
-                  className="input"
-                  placeholder={t('posSettings.qrCodePlaceholder') || 'Enter payment QR code URL or content'}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {t('posSettings.qrCodeHint') || 'Enter URL or text content for the QR code on receipt'}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* 自定义文字 */}
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.customText')}</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.customHeader')}</label>
-                <input
-                  type="text"
-                  value={posReceipt.headerCustomText || ''}
-                  onChange={(e) => setPosReceipt({ ...posReceipt, headerCustomText: e.target.value })}
-                  onBlur={() => handleSave('posReceipt', posReceipt)}
-                  className="input"
-                  placeholder={t('posSettings.customHeaderPlaceholder') || 'Custom header line'}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.customFooter')}</label>
-                <input
-                  type="text"
-                  value={posReceipt.footerMessage || ''}
-                  onChange={(e) => setPosReceipt({ ...posReceipt, footerMessage: e.target.value })}
-                  onBlur={() => handleSave('posReceipt', posReceipt)}
-                  className="input"
-                  placeholder={t('posSettings.customFooterPlaceholder') || 'Custom footer line'}
-                />
-              </div>
-            </div>
-          </div>
-          </div>
-
-          {/* 右侧：小票预览 */}
-          <div className="sticky top-6">
-            <div className="card">
-              <h3 className="text-lg font-semibold mb-4">{t('posSettings.preview') || 'Receipt Preview'}</h3>
-              <div className="bg-white border rounded-lg p-4 font-mono text-sm" style={{ width: `${posReceipt.paperSize === '58mm' ? '200px' : '280px'}` }}>
-                {/* Logo */}
-                {posReceipt.showLogo && posReceipt.storeLogo && (
-                  <div className="text-center mb-2">
-                    <img src={posReceipt.storeLogo} alt="Logo" className="h-12 mx-auto object-contain" />
-                  </div>
-                )}
-
-                {/* Header */}
-                <div className="text-center border-b pb-2 mb-2">
-                  <div className="font-bold">{posReceipt.header || 'Bubble Tea Shop'}</div>
-                  {posReceipt.headerCustomText && <div className="text-xs text-gray-500">{posReceipt.headerCustomText}</div>}
-                </div>
-
-                {/* Store Info */}
-                {(posReceipt.storePhone || posReceipt.storeAddress) && (
-                  <div className="text-xs text-gray-600 border-b pb-2 mb-2">
-                    {posReceipt.storePhone && <div>Tel: {posReceipt.storePhone}</div>}
-                    {posReceipt.storeAddress && <div>{posReceipt.storeAddress}</div>}
-                  </div>
-                )}
-
-                {/* Order Info */}
-                <div className="text-xs border-b pb-2 mb-2">
-                  <div>No: BT20260704001</div>
-                  <div>Date: 2026-07-04 14:30</div>
-                  {posReceipt.showStaffName && <div>Kasir: Admin</div>}
-                  {posReceipt.showCustomerName && <div>Pelanggan: -</div>}
-                </div>
-
-                {/* Items */}
-                <div className="border-b pb-2 mb-2 text-xs">
-                  <div className="font-bold mb-1">Items:</div>
-                  <div className="flex justify-between">
-                    <span>珍珠奶茶 (大)</span>
-                    <span>15,000</span>
-                  </div>
-                  <div className="flex justify-between text-gray-500 pl-2">
-                    <span>少冰/正常糖</span>
-                  </div>
-                  <div className="flex justify-between text-gray-500 pl-2">
-                    <span>+ 珍珠</span>
-                    <span>2,000</span>
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span>Boba MilkTea (L)</span>
-                    <span>18,000</span>
-                  </div>
-                </div>
-
-                {/* Subtotal & Tax */}
-                <div className="text-xs border-b pb-2 mb-2">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>35,000</span>
-                  </div>
-                  <div className="flex justify-between text-gray-500">
-                    <span>Tax (11%)</span>
-                    <span>3,850</span>
-                  </div>
-                </div>
-
-                {/* Total */}
-                <div className="flex justify-between font-bold text-base border-b pb-2 mb-2">
-                  <span>TOTAL</span>
-                  <span>Rp 38,850</span>
-                </div>
-
-                {/* Payment */}
-                <div className="text-xs border-b pb-2 mb-2">
-                  <div className="flex justify-between">
-                    <span>Cash</span>
-                    <span>50,000</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Change</span>
-                    <span>11,150</span>
-                  </div>
-                </div>
-
-                {/* QR Code */}
-                {posReceipt.showQR && (
-                  <div className="text-center border-b pb-2 mb-2">
-                    <div className="w-16 h-16 bg-gray-200 mx-auto mb-1 flex items-center justify-center text-xs">QR</div>
-                    <div className="text-xs text-gray-500">Scan to pay</div>
-                  </div>
-                )}
-
-                {/* Barcode */}
-                {posReceipt.showBarcode && (
-                  <div className="text-center border-b pb-2 mb-2">
-                    <div className="h-8 bg-black mx-auto" style={{ width: '120px' }} />
-                    <div className="text-xs">BT20260704001</div>
-                  </div>
-                )}
-
-                {/* Kitchen Note */}
-                {posReceipt.showKitchenNote && (
-                  <div className="text-xs border-b pb-2 mb-2 text-center text-gray-500">
-                    <div>Note: </div>
-                  </div>
-                )}
-
-                {/* Footer */}
-                <div className="text-center text-xs">
-                  <div className="font-bold">{posReceipt.footer || 'Thank you!'}</div>
-                  {posReceipt.footerMessage && <div className="text-gray-500">{posReceipt.footerMessage}</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ReceiptTemplateEditor
+          storeId={user?.storeId || ''}
+          onSave={() => {
+            // Refresh configs after saving template
+            queryClient.invalidateQueries({ queryKey: ['configs', user?.storeId] })
+          }}
+        />
       )}
 
       {/* ========== HARDWARE TAB ========== */}
@@ -1719,6 +1732,146 @@ export function POSSettingsPage() {
   )
 }
 
+// ========== PRINTER CONFIG COMPONENTS ==========
+
+type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
+
+const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
+  receipt: 'Receipt Printer',
+  kitchen: 'Kitchen Printer',
+  label: 'Label Printer',
+  kds: 'KDS Display'
+}
+
+const PRINTER_TYPE_ICONS: Record<PrinterType, string> = {
+  receipt: '🧾',
+  kitchen: '👨‍🍳',
+  label: '🏷️',
+  kds: '📺'
+}
+
+// Single Printer Config Card
+function PrinterConfigCard({
+  printer,
+  detectedPrinters,
+  onUpdate,
+  onToggle
+}: {
+  printer: any
+  detectedPrinters: string[]
+  onUpdate: (p: any) => void
+  onToggle: () => void
+}) {
+  const isEnabled = printer.enabled ?? false
+  const printerType = printer.type as PrinterType
+
+  return (
+    <div className={`p-4 rounded-xl border-2 transition-colors ${isEnabled ? 'border-primary bg-white' : 'border-gray-200 bg-gray-50 opacity-60'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">{PRINTER_TYPE_ICONS[printerType]}</span>
+          <div>
+            <div className="font-medium">{PRINTER_TYPE_LABELS[printerType]}</div>
+            {printer.name && <div className="text-xs text-gray-500">{printer.name}</div>}
+          </div>
+        </div>
+        <Toggle enabled={isEnabled} onChange={onToggle} />
+      </div>
+
+      {isEnabled && (
+        <div className="space-y-3 mt-4 pt-4 border-t">
+          {/* Printer Name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Printer Name</label>
+            <input
+              type="text"
+              value={printer.name || ''}
+              onChange={(e) => onUpdate({ ...printer, name: e.target.value })}
+              className="input text-sm"
+              placeholder="e.g. EPSON-TM82"
+            />
+          </div>
+
+          {/* Connection Type */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Connection</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onUpdate({ ...printer, connectionType: 'usb' })}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm border transition-colors ${printer.connectionType === 'usb' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600'}`}
+              >
+                🖨️ USB
+              </button>
+              <button
+                onClick={() => onUpdate({ ...printer, connectionType: 'network' })}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm border transition-colors ${printer.connectionType === 'network' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600'}`}
+              >
+                🌐 Network
+              </button>
+            </div>
+          </div>
+
+          {/* USB Printer Selection */}
+          {printer.connectionType === 'usb' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">USB Printer</label>
+              {detectedPrinters.length > 0 && (
+                <select
+                  value={printer.printerName || ''}
+                  onChange={(e) => onUpdate({ ...printer, printerName: e.target.value })}
+                  className="input text-sm"
+                >
+                  <option value="">-- Select --</option>
+                  {detectedPrinters.map((p, i) => (
+                    <option key={i} value={p}>{p}</option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="text"
+                value={printer.printerName || ''}
+                onChange={(e) => onUpdate({ ...printer, printerName: e.target.value })}
+                className="input text-sm mt-2"
+                placeholder="Or enter manually"
+              />
+            </div>
+          )}
+
+          {/* Network Printer */}
+          {printer.connectionType === 'network' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">IP Address</label>
+                <input
+                  type="text"
+                  value={printer.printerIp || ''}
+                  onChange={(e) => onUpdate({ ...printer, printerIp: e.target.value })}
+                  className="input text-sm"
+                  placeholder="192.168.1.100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Port</label>
+                <input
+                  type="number"
+                  value={printer.printerPort || 9100}
+                  onChange={(e) => onUpdate({ ...printer, printerPort: parseInt(e.target.value) || 9100 })}
+                  className="input text-sm"
+                  placeholder="9100"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isEnabled && (
+        <p className="text-xs text-gray-400 mt-2">Disabled - enable to configure</p>
+      )}
+    </div>
+  )
+}
+
 // Hardware Tab Content Component
 function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave, detectedPrinters, lastPrinterDetection, loadingPrinters, onRefreshPrinters }: {
   hardwareSettings: any
@@ -1731,166 +1884,85 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
 }) {
   const { t } = useTranslation()
 
-  // Fetch printers when component mounts
   useEffect(() => {
     onRefreshPrinters()
   }, [])
 
+  const updatePrinter = (index: number, updated: any) => {
+    const printers = [...(hardwareSettings.printers || [])]
+    printers[index] = updated
+    setHardwareSettings({ ...hardwareSettings, printers })
+    handleSave('hardwareSettings', { ...hardwareSettings, printers })
+  }
+
+  const togglePrinter = (index: number) => {
+    const printers = [...(hardwareSettings.printers || [])]
+    printers[index] = { ...printers[index], enabled: !printers[index].enabled }
+    setHardwareSettings({ ...hardwareSettings, printers })
+    handleSave('hardwareSettings', { ...hardwareSettings, printers })
+  }
+
+  const enabledPrinters = (hardwareSettings.printers || []).filter((p: any) => p.enabled)
+
   return (
     <div className="space-y-6">
-      {/* Info Box */}
       <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
         <div className="flex items-start gap-3">
           <div className="text-blue-500 mt-0.5">ℹ️</div>
           <div>
-            <div className="font-medium text-blue-800">Printer Auto-Detection</div>
+            <div className="font-medium text-blue-800">Multi-Printer Support</div>
             <p className="text-sm text-blue-700 mt-1">
-              When the <strong>POS App</strong> is opened on the cashier computer and goes to <strong>Settings → Hardware</strong>, 
-              it will automatically detect and upload connected USB printers here.
+              Configure multiple printers for different purposes. Only enabled printers will be used.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Detected Printers */}
       {detectedPrinters.length > 0 && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Detected USB Printers</h3>
-            <button
-              onClick={onRefreshPrinters}
-              disabled={loadingPrinters}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={onRefreshPrinters} disabled={loadingPrinters} className="btn-secondary flex items-center gap-2">
               <RefreshCw size={16} className={loadingPrinters ? 'animate-spin' : ''} />
               Refresh
             </button>
           </div>
-          <div className="space-y-2">
-            {detectedPrinters.map((printer, idx) => (
-              <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <span className="text-xl">🖨️</span>
-                <span className="font-medium">{printer}</span>
-                {printer === hardwareSettings.printerName && (
-                  <span className="ml-auto text-sm text-primary">✓ Selected</span>
-                )}
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {detectedPrinters.map((printer, idx) => {
+              const isInUse = enabledPrinters.some((p: any) => p.printerName === printer)
+              return (
+                <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg text-sm">
+                  <span>🖨️</span>
+                  <span className="font-medium">{printer}</span>
+                  {isInUse && <span className="text-xs text-green-600">✓ In use</span>}
+                </div>
+              )
+            })}
           </div>
           {lastPrinterDetection && (
-            <p className="text-xs text-gray-500 mt-2">
-              Last detected: {new Date(lastPrinterDetection).toLocaleString()}
-            </p>
+            <p className="text-xs text-gray-500 mt-2">Last detected: {new Date(lastPrinterDetection).toLocaleString()}</p>
           )}
         </div>
       )}
 
+      <div>
+        <h3 className="text-lg font-semibold mb-4">Printers ({enabledPrinters.length} enabled)</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(hardwareSettings.printers || []).map((printer: any, index: number) => (
+            <PrinterConfigCard
+              key={printer.id || index}
+              printer={printer}
+              detectedPrinters={detectedPrinters}
+              onUpdate={(p) => updatePrinter(index, p)}
+              onToggle={() => togglePrinter(index)}
+            />
+          ))}
+        </div>
+      </div>
+
       <div className="card">
         <h3 className="text-lg font-semibold mb-4">{t('posSettings.hardwareSettings')}</h3>
         <div className="space-y-4">
-          {/* Connection Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Printer Connection Type</label>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'usb' })
-                  handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'usb' })
-                }}
-                className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
-                  hardwareSettings.printerConnectionType === 'usb'
-                    ? 'border-primary bg-primary/5 text-primary'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-2xl mb-1">🖨️</div>
-                <div className="font-medium text-sm">USB Printer</div>
-              </button>
-              <button
-                onClick={() => {
-                  setHardwareSettings({ ...hardwareSettings, printerConnectionType: 'network' })
-                  handleSave('hardwareSettings', { ...hardwareSettings, printerConnectionType: 'network' })
-                }}
-                className={`flex-1 py-3 px-4 rounded-xl border-2 transition-colors ${
-                  hardwareSettings.printerConnectionType === 'network'
-                    ? 'border-primary bg-primary/5 text-primary'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-2xl mb-1">🌐</div>
-                <div className="font-medium text-sm">Network Printer</div>
-              </button>
-            </div>
-          </div>
-
-          {/* USB Printer Selection */}
-          {hardwareSettings.printerConnectionType === 'usb' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">USB Printer</label>
-              {detectedPrinters.length > 0 ? (
-                <div className="space-y-2">
-                  <select
-                    value={hardwareSettings.printerName}
-                    onChange={(e) => {
-                      setHardwareSettings({ ...hardwareSettings, printerName: e.target.value })
-                      handleSave('hardwareSettings', { ...hardwareSettings, printerName: e.target.value })
-                    }}
-                    className="input"
-                  >
-                    <option value="">-- Select a detected printer --</option>
-                    {detectedPrinters.map((printer, idx) => (
-                      <option key={idx} value={printer}>{printer}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500">
-                    Select from detected printers, or enter manually below
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-yellow-600 mb-2">
-                  No printers detected. Make sure POS App is running on the cashier computer.
-                </p>
-              )}
-              <input
-                type="text"
-                value={hardwareSettings.printerName}
-                onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerName: e.target.value })}
-                onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                className="input mt-2"
-                placeholder="Or enter printer name manually"
-              />
-            </div>
-          )}
-
-          {/* Network Printer IP/Port */}
-          {hardwareSettings.printerConnectionType === 'network' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerIp')}</label>
-                <input
-                  type="text"
-                  value={hardwareSettings.printerIp}
-                  onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerIp: e.target.value })}
-                  onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                  className="input"
-                  placeholder="192.168.1.100"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerPort')}</label>
-                <input
-                  type="number"
-                  value={hardwareSettings.printerPort}
-                  onChange={(e) => setHardwareSettings({ ...hardwareSettings, printerPort: parseInt(e.target.value) || 9100 })}
-                  onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                  className="input"
-                  placeholder="9100"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Auto Open Cash Drawer */}
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div>
               <span className="font-medium">{t('posSettings.autoOpenCashDrawer')}</span>
@@ -1906,41 +1978,18 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
             />
           </div>
 
-          {/* Printer Type */}
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.printerType')}</label>
-            <select
-              value={hardwareSettings.printerType || 'escpos'}
-              onChange={(e) => {
-                setHardwareSettings({ ...hardwareSettings, printerType: e.target.value })
-                handleSave('hardwareSettings', { ...hardwareSettings, printerType: e.target.value })
-              }}
-              className="input"
-            >
-              <option value="escpos">ESC/POS</option>
-              <option value="pcl">PCL</option>
-            </select>
-          </div>
-
-          {/* Cash Drawer Pulse */}
           <div className="p-3 bg-gray-50 rounded-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.cashDrawerPulse')}: {hardwareSettings.cashDrawerPulse || 100}ms</label>
             <input
-              type="range"
-              min="50"
-              max="500"
-              step="10"
+              type="range" min="50" max="500" step="10"
               value={hardwareSettings.cashDrawerPulse || 100}
-              onChange={(e) => {
-                setHardwareSettings({ ...hardwareSettings, cashDrawerPulse: parseInt(e.target.value) })
-              }}
+              onChange={(e) => setHardwareSettings({ ...hardwareSettings, cashDrawerPulse: parseInt(e.target.value) })}
               onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
               className="w-full"
             />
             <p className="text-xs text-gray-500 mt-1">{t('posSettings.cashDrawerPulseHint')}</p>
           </div>
 
-          {/* Scanner Settings */}
           <div className="p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-700">{t('posSettings.scannerEnabled')}</label>
@@ -1968,24 +2017,17 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
             )}
           </div>
 
-          {/* Display Settings */}
           <div className="p-3 bg-gray-50 rounded-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.displayBrightness')}: {hardwareSettings.displayBrightness || 80}%</label>
             <input
-              type="range"
-              min="20"
-              max="100"
-              step="5"
+              type="range" min="20" max="100" step="5"
               value={hardwareSettings.displayBrightness || 80}
-              onChange={(e) => {
-                setHardwareSettings({ ...hardwareSettings, displayBrightness: parseInt(e.target.value) })
-              }}
+              onChange={(e) => setHardwareSettings({ ...hardwareSettings, displayBrightness: parseInt(e.target.value) })}
               onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
               className="w-full"
             />
           </div>
 
-          {/* Dual Screen Settings */}
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1996,10 +2038,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                 enabled={hardwareSettings.dualScreen?.enabled || false}
                 onChange={() => {
                   const newVal = !hardwareSettings.dualScreen?.enabled
-                  const newHardwareSettings = {
-                    ...hardwareSettings,
-                    dualScreen: { ...hardwareSettings.dualScreen!, enabled: newVal }
-                  }
+                  const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, enabled: newVal } }
                   setHardwareSettings(newHardwareSettings)
                   handleSave('hardwareSettings', newHardwareSettings)
                 }}
@@ -2008,128 +2047,74 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
 
             {hardwareSettings.dualScreen?.enabled && (
               <div className="space-y-4 mt-4 pt-4 border-t border-blue-200">
-                {/* Layout Style */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenLayout')}</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="layoutStyle"
-                        value="simple"
-                        checked={hardwareSettings.dualScreen?.layoutStyle === 'simple'}
-                        onChange={() => {
-                          const newHardwareSettings = {
-                            ...hardwareSettings,
-                            dualScreen: { ...hardwareSettings.dualScreen!, layoutStyle: 'simple' }
-                          }
-                          setHardwareSettings(newHardwareSettings)
-                          handleSave('hardwareSettings', newHardwareSettings)
-                        }}
-                        className="text-primary"
-                      />
-                      <span className="text-sm">{t('posSettings.dualScreenLayoutSimple')}</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="layoutStyle"
-                        value="full"
-                        checked={hardwareSettings.dualScreen?.layoutStyle === 'full'}
-                        onChange={() => {
-                          const newHardwareSettings = {
-                            ...hardwareSettings,
-                            dualScreen: { ...hardwareSettings.dualScreen!, layoutStyle: 'full' }
-                          }
-                          setHardwareSettings(newHardwareSettings)
-                          handleSave('hardwareSettings', newHardwareSettings)
-                        }}
-                        className="text-primary"
-                      />
-                      <span className="text-sm">{t('posSettings.dualScreenLayoutFull')}</span>
-                    </label>
-                  </div>
-                </div>
-
                 {/* Welcome Text */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenWelcomeText')}</label>
-                  <input
-                    type="text"
-                    value={hardwareSettings.dualScreen?.welcomeText || ''}
-                    onChange={(e) => {
-                      const newHardwareSettings = {
-                        ...hardwareSettings,
-                        dualScreen: { ...hardwareSettings.dualScreen!, welcomeText: e.target.value }
-                      }
-                      setHardwareSettings(newHardwareSettings)
-                    }}
-                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                    className="input"
-                    placeholder="Bubble Tea Malaysia"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenWelcome')}</label>
+                  <input type="text" value={hardwareSettings.dualScreen?.welcomeText || ''} onChange={(e) => {
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, welcomeText: e.target.value } }
+                    setHardwareSettings(newHardwareSettings)
+                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input" placeholder="Welcome!" />
                 </div>
 
-                {/* Show Logo Toggle */}
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                  <span className="text-sm font-medium text-gray-700">{t('posSettings.dualScreenShowLogo')}</span>
-                  <Toggle
-                    enabled={hardwareSettings.dualScreen?.showLogo || false}
-                    onChange={() => {
-                      const newVal = !hardwareSettings.dualScreen?.showLogo
-                      const newHardwareSettings = {
-                        ...hardwareSettings,
-                        dualScreen: { ...hardwareSettings.dualScreen!, showLogo: newVal }
-                      }
+                {/* Media Upload - Images and Videos */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenMedia')}</label>
+                  <p className="text-xs text-gray-500 mb-2">{t('posSettings.dualScreenMediaHint')}</p>
+                  <DualScreenMediaUpload
+                    mediaFiles={hardwareSettings.dualScreen?.mediaFiles || []}
+                    onUpload={(files) => {
+                      const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, mediaFiles: files } }
+                      setHardwareSettings(newHardwareSettings)
+                      handleSave('hardwareSettings', newHardwareSettings)
+                    }}
+                    onRemove={(index) => {
+                      const newFiles = [...(hardwareSettings.dualScreen?.mediaFiles || [])]
+                      newFiles.splice(index, 1)
+                      const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, mediaFiles: newFiles } }
                       setHardwareSettings(newHardwareSettings)
                       handleSave('hardwareSettings', newHardwareSettings)
                     }}
                   />
                 </div>
 
-                {/* Ad Image URL */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenAdImage')}</label>
-                  <input
-                    type="text"
-                    value={hardwareSettings.dualScreen?.adImageUrl || ''}
-                    onChange={(e) => {
-                      const newHardwareSettings = {
-                        ...hardwareSettings,
-                        dualScreen: { ...hardwareSettings.dualScreen!, adImageUrl: e.target.value }
-                      }
-                      setHardwareSettings(newHardwareSettings)
-                    }}
-                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                    className="input"
-                    placeholder="https://example.com/ad-image.png"
-                  />
-                </div>
-
                 {/* Promotions */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenPromotions')}</label>
-                  <p className="text-xs text-gray-500 mb-2">{t('posSettings.dualScreenPromotionsHint')}</p>
-                  <textarea
-                    value={(hardwareSettings.dualScreen?.promotions || []).join('\n')}
-                    onChange={(e) => {
-                      const promotions = e.target.value.split('\n').filter(line => line.trim())
-                      const newHardwareSettings = {
-                        ...hardwareSettings,
-                        dualScreen: { ...hardwareSettings.dualScreen!, promotions }
-                      }
-                      setHardwareSettings(newHardwareSettings)
-                    }}
-                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)}
-                    className="input min-h-[120px]"
-                    placeholder="🧋&#10;🍓&#10;💳&#10;🎁"
-                  />
+                  <textarea value={(hardwareSettings.dualScreen?.promotions || []).join('\n')} onChange={(e) => {
+                    const promotions = e.target.value.split('\n').filter(line => line.trim())
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, promotions } }
+                    setHardwareSettings(newHardwareSettings)
+                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder="🧋" />
                 </div>
+
+                {/* Idle Layout Editor */}
+                <_DualScreenLayoutEditor
+                  title={t('posSettings.idleLayout')}
+                  layout={hardwareSettings.dualScreen?.idleLayout || { columns: [{ width: 100, content: 'media' }] }}
+                  onChange={(idleLayout: Layout) => {
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, idleLayout } }
+                    setHardwareSettings(newHardwareSettings)
+                    handleSave('hardwareSettings', newHardwareSettings)
+                  }}
+                />
+
+                {/* Ordering Layout Editor */}
+                <_DualScreenLayoutEditor
+                  title={t('posSettings.orderingLayout')}
+                  layout={hardwareSettings.dualScreen?.orderingLayout || { columns: [{ width: 100, content: 'order' }] }}
+                  onChange={(orderingLayout: Layout) => {
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, orderingLayout } }
+                    setHardwareSettings(newHardwareSettings)
+                    handleSave('hardwareSettings', newHardwareSettings)
+                  }}
+                />
+
+                {/* Preview */}
+                <DualScreenPreview dualScreen={hardwareSettings.dualScreen} />
               </div>
             )}
           </div>
 
-          {/* Cash Drawer Info */}
           <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">
             💡 Cash drawer connects via RJ11 cable to your printer (not directly to computer)
           </div>
@@ -2138,3 +2123,4 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
     </div>
   )
 }
+
