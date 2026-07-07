@@ -109,7 +109,7 @@ export function Cart({
           </div>
           {discount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
-              <span>{t('pos.discount') || 'Discount'}</span>
+              <span>{t('pos.discount')}</span>
               <span>-{formatCurrency(discount)}</span>
             </div>
           )}
@@ -125,7 +125,7 @@ export function Cart({
             className="w-full py-2 mb-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:bg-gray-50 flex items-center justify-center gap-1"
           >
             <Tag size={14} />
-            {t('pos.addDiscount') || 'Add Discount'}
+            {t('pos.addDiscount')}
           </button>
         )}
 

@@ -355,7 +355,7 @@ const DualScreenPreview: React.FC<{
       <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
         {previewState === 'complete' ? (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-500 to-green-600 text-white">
-            <div className="text-4xl mb-2">✓</div>
+            <div className="text-4xl mb-2">{t('posSettings.checkmark')}</div>
             <div className="text-lg font-bold">{t('posSettings.thankYou')}</div>
             <div className="text-sm opacity-80">{t('posSettings.orderNumber')}</div>
           </div>
@@ -446,7 +446,7 @@ export function POSSettingsPage() {
   const [channelSettings, setChannelSettings] = useState({
     dineIn: {
       enabled: true,
-      name: 'Dine In',
+      name: '',
       icon: '🍵',
       color: '#EC6D88',
       availableHours: '00:00-23:59',
@@ -454,7 +454,7 @@ export function POSSettingsPage() {
     },
     gofood: {
       enabled: true,
-      name: 'GoFood',
+      name: '',
       icon: '🟢',
       color: '#25A549',
       availableHours: '09:00-22:00',
@@ -463,7 +463,7 @@ export function POSSettingsPage() {
     },
     grab: {
       enabled: true,
-      name: 'Grab',
+      name: '',
       icon: '🟡',
       color: '#F88100',
       availableHours: '09:00-22:00',
@@ -472,7 +472,7 @@ export function POSSettingsPage() {
     },
     shopee: {
       enabled: true,
-      name: 'Shopee',
+      name: '',
       icon: '🟠',
       color: '#EE4D2D',
       availableHours: '08:00-22:00',
@@ -1039,12 +1039,14 @@ export function POSSettingsPage() {
             <h3 className="text-lg font-semibold mb-4">{t('posSettings.orderChannels')}</h3>
             <p className="text-sm text-gray-500 mb-4">{t('posSettings.orderChannelsHint')}</p>
             <div className="space-y-3">
-              {Object.entries(channelSettings).map(([key, channel]) => (
+              {Object.entries(channelSettings).map(([key, channel]) => {
+                const channelNameKey = key === 'dineIn' ? 'channelDineInName' : key === 'gofood' ? 'channelGofoodName' : key === 'grab' ? 'channelGrabName' : 'channelShopeeName'
+                return (
                 <div key={key} className="p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{channel.icon}</span>
-                      <span className="font-medium">{channel.name}</span>
+                      <span className="font-medium">{channel.name || t(`posSettings.${channelNameKey}`)}</span>
                     </div>
                     <Toggle
                       enabled={channel.enabled}
@@ -1154,13 +1156,13 @@ export function POSSettingsPage() {
                             min="0"
                             max="100"
                           />
-                          <span className="text-gray-500">%</span>
+                          <span className="text-gray-500">{t('posSettings.percent')}</span>
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
-              ))}
+                )})}
             </div>
           </div>
         </div>
@@ -1198,7 +1200,7 @@ export function POSSettingsPage() {
                     min="0"
                     max="100"
                   />
-                  <span className="text-gray-500">%</span>
+                  <span className="text-gray-500">{t('posSettings.percent')}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -1263,7 +1265,7 @@ export function POSSettingsPage() {
                           }}
                           className="text-red-500 hover:text-red-700 p-2"
                         >
-                          ✕
+                          {t('common.remove')}
                         </button>
                       )}
                     </div>
@@ -1338,7 +1340,7 @@ export function POSSettingsPage() {
                         onMouseUp={() => handleSave('soundSettings', soundSettings)}
                         className="flex-1"
                       />
-                      <span className="text-sm w-12">{soundSettings[sound.key as keyof typeof soundSettings]?.volume ?? 100}%</span>
+                      <span className="text-sm w-12">{soundSettings[sound.key as keyof typeof soundSettings]?.volume ?? 100}{t('posSettings.percent')}</span>
                     </div>
                   </div>
                 ))}
@@ -1505,7 +1507,7 @@ export function POSSettingsPage() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.cashDifferenceLimit')}</label>
                 <div className="flex items-center gap-3">
-                  <span className="text-gray-500">Rp</span>
+                  <span className="text-gray-500">{t('posSettings.currencySymbol')}</span>
                   <input
                     type="number"
                     value={shiftSettings.cashDifferenceLimit}
@@ -1700,7 +1702,7 @@ export function POSSettingsPage() {
                     onBlur={() => handleSave('paymentMethods', paymentMethods)}
                     className="input w-24 text-center"
                   />
-                  <span className="text-gray-500">%</span>
+                  <span className="text-gray-500">{t('posSettings.percent')}</span>
                 </div>
               ))}
             </div>
@@ -1938,7 +1940,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                 <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg text-sm">
                   <span>🖨️</span>
                   <span className="font-medium">{printer}</span>
-                  {isInUse && <span className="text-xs text-green-600">✓ {t('posSettings.inUse')}</span>}
+                  {isInUse && <span className="text-xs text-green-600">{t('posSettings.checkmark')} {t('posSettings.inUse')}</span>}
                 </div>
               )
             })}
@@ -1983,7 +1985,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
           </div>
 
           <div className="p-3 bg-gray-50 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.cashDrawerPulse')}: {hardwareSettings.cashDrawerPulse || 100}ms</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.cashDrawerPulse')}: {hardwareSettings.cashDrawerPulse || 100}{t('posSettings.milliseconds')}</label>
             <input
               type="range" min="50" max="500" step="10"
               value={hardwareSettings.cashDrawerPulse || 100}
@@ -2022,7 +2024,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
           </div>
 
           <div className="p-3 bg-gray-50 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.displayBrightness')}: {hardwareSettings.displayBrightness || 80}%</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.displayBrightness')}: {hardwareSettings.displayBrightness || 80}{t('posSettings.percent')}</label>
             <input
               type="range" min="20" max="100" step="5"
               value={hardwareSettings.displayBrightness || 80}

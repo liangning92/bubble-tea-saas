@@ -134,7 +134,7 @@ export function LoginPage() {
             {/* Header */}
             <div className="mb-6">
               <h2 className="text-lg font-semibold text-gray-900">{t('auth.loginTitle')}</h2>
-              <p className="text-gray-500 text-sm mt-1">{t('auth.loginSubtitle') || 'Welcome back to your workspace'}</p>
+              <p className="text-gray-500 text-sm mt-1">{t('auth.loginSubtitle')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">

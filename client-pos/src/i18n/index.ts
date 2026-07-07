@@ -43,6 +43,9 @@ const resources = {
         add: 'Tambah',
         back: 'Kembali',
         error: 'Gagal',
+        errorPageTitle: 'Terjadi Kesalahan',
+        errorPageMessage: 'Ada kesalahan yang terjadi',
+        reload: 'Muat Ulang',
         loading: 'Memuat...',
         search: 'Cari',
         success: 'Berhasil'
@@ -276,6 +279,11 @@ const resources = {
         expenseRequired: 'Silakan isi kategori dan jumlah',
         expenseCreated: 'Biaya berhasil dicatat',
         expenseFailed: 'Gagal mencatat biaya'
+      },
+      testPage: {
+        environmentOk: 'Jika Anda dapat melihat ini, lingkungan berfungsi dengan benar',
+        testButton: 'Tombol Tes',
+        buttonNormal: 'Tombol berfungsi'
       },
       toolbar: {
         shift: 'Shift',
@@ -582,6 +590,9 @@ const resources = {
         add: 'Add',
         back: 'Back',
         error: 'Error',
+        errorPageTitle: 'Something went wrong',
+        errorPageMessage: 'An error occurred',
+        reload: 'Reload',
         loading: 'Loading...',
         search: 'Search',
         success: 'Success'
@@ -804,6 +815,11 @@ const resources = {
         expenseRequired: 'Please fill in category and amount',
         expenseCreated: 'Expense recorded successfully',
         expenseFailed: 'Failed to record expense'
+      },
+      testPage: {
+        environmentOk: 'If you can see this, the environment is working correctly',
+        testButton: 'Test Button',
+        buttonNormal: 'Button is working'
       },
       toolbar: {
         shift: 'Shift',
@@ -1324,6 +1340,11 @@ const resources = {
         expenseCreated: '费用已记录',
         expenseFailed: '记录费用失败'
       },
+      testPage: {
+        environmentOk: '如果看到这个，说明基本环境正常',
+        testButton: '测试按钮',
+        buttonNormal: '按钮正常'
+      },
       toolbar: {
         shift: '交班',
         suspend: '挂单',
@@ -1604,7 +1625,10 @@ const resources = {
         back: '返回',
         clear: '清除',
         yes: '是',
-        no: '否'
+        no: '否',
+        errorPageTitle: '页面出错了',
+        errorPageMessage: '发生了一个错误',
+        reload: '刷新页面'
       },
       lang: {
         zh: '中',

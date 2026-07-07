@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 
 interface TextInputModalProps {
@@ -22,6 +23,7 @@ export function TextInputModal({
   inputMode = 'text',
   required = false
 }: TextInputModalProps) {
+  const { t } = useTranslation()
   const [input, setInput] = useState(value)
   const [showKeyboard, setShowKeyboard] = useState(inputMode === 'tel' ? false : true)
 
@@ -160,14 +162,14 @@ export function TextInputModal({
         {/* Footer */}
         <div className="flex gap-3 p-4 border-t bg-gray-50">
           <button onClick={onClose} className="flex-1 py-3 border rounded-xl font-medium">
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleConfirm}
             className="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold disabled:bg-gray-300"
             disabled={required && !input.trim()}
           >
-            确认
+            {t('common.confirm')}
           </button>
         </div>
       </div>

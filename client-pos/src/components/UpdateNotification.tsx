@@ -100,7 +100,7 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
       <button
         onClick={handleCheckUpdate}
         className={`flex items-center gap-1 text-gray-500 hover:text-gray-700 text-xs ${className}`}
-        title={t('pos.checkUpdate') || 'Check for updates'}
+        title={t('pos.checkUpdate')}
       >
         <RefreshCw size={14} />
       </button>
@@ -125,7 +125,7 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-gray-900">
-            {t('pos.updateAvailable') || 'Update Available'}
+            {t('pos.updateAvailable')}
           </h3>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
             <X size={18} />
@@ -136,22 +136,21 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
         {status === 'checking' && (
           <div className="flex items-center gap-2 text-gray-600">
             <RefreshCw size={18} className="animate-spin" />
-            <span>{t('pos.checkingUpdate') || 'Checking for updates...'}</span>
+            <span>{t('pos.checkingUpdate')}</span>
           </div>
         )}
 
         {status === 'available' && updateInfo && (
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
-              {t('pos.newVersionReady', { version: updateInfo.version }) ||
-                `Version ${updateInfo.version} is available`}
+              {t('pos.newVersionReady', { version: updateInfo.version })}
             </p>
             <button
               onClick={handleDownload}
               className="w-full py-2 bg-primary text-white rounded-lg font-medium flex items-center justify-center gap-2"
             >
               <Download size={16} />
-              {t('pos.downloadUpdate') || 'Download Update'}
+              {t('pos.downloadUpdate')}
             </button>
           </div>
         )}
@@ -160,7 +159,7 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-gray-600">
               <Download size={18} className="animate-pulse" />
-              <span>{t('pos.downloading') || 'Downloading...'}</span>
+              <span>{t('pos.downloading')}</span>
               <span className="ml-auto font-medium">{progress.toFixed(0)}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
@@ -176,14 +175,14 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-green-600">
               <Check size={18} />
-              <span>{t('pos.updateReady') || 'Update ready to install'}</span>
+              <span>{t('pos.updateReady')}</span>
             </div>
             <button
               onClick={handleInstall}
               className="w-full py-2 bg-green-600 text-white rounded-lg font-medium flex items-center justify-center gap-2"
             >
               <Check size={16} />
-              {t('pos.installUpdate') || 'Install & Restart'}
+              {t('pos.installUpdate')}
             </button>
           </div>
         )}
@@ -191,7 +190,7 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
         {status === 'up-to-date' && (
           <div className="flex items-center gap-2 text-green-600">
             <Check size={18} />
-            <span>{t('pos.upToDate') || 'Already up to date'}</span>
+            <span>{t('pos.upToDate')}</span>
           </div>
         )}
 
@@ -199,13 +198,13 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-red-600">
               <AlertCircle size={18} />
-              <span>{error || 'Update error'}</span>
+              <span>{error || t('pos.updateError')}</span>
             </div>
             <button
               onClick={handleCheckUpdate}
               className="w-full py-2 border border-gray-300 rounded-lg font-medium"
             >
-              {t('pos.retry') || 'Retry'}
+              {t('pos.retry')}
             </button>
           </div>
         )}

@@ -1,9 +1,11 @@
 import React from 'react'
+import { withTranslation } from 'react-i18next'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 
 interface Props {
   children: React.ReactNode
   fallback?: React.ReactNode
+  t: (key: string) => string
 }
 
 interface State {
@@ -53,8 +55,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">页面出错了</h2>
-                <p className="text-sm text-gray-500">Something went wrong</p>
+                <h2 className="text-lg font-semibold text-gray-900">{this.props.t('common.errorPageTitle')}</h2>
+                <p className="text-sm text-gray-500">{this.props.t('common.errorPageMessage')}</p>
               </div>
             </div>
 
@@ -70,14 +72,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                返回
+                {this.props.t('common.back')}
               </button>
               <button
                 onClick={this.handleReload}
                 className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                刷新页面
+                {this.props.t('common.reload')}
               </button>
             </div>
 
@@ -99,3 +101,5 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return this.props.children
   }
 }
+
+export default withTranslation()(ErrorBoundary)

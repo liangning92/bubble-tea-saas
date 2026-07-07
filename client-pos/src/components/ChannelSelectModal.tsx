@@ -159,7 +159,7 @@ export function ChannelSelectModal({
                     activeInput === 'count' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  👥 {t('pos.dineInCount') || '人数'}
+                  👥 {t('pos.dineInCount')}
                 </button>
                 <button
                   onClick={() => setActiveInput('table')}
@@ -167,7 +167,7 @@ export function ChannelSelectModal({
                     activeInput === 'table' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  🪑 {t('pos.tableNumber') || '桌号'}
+                  🪑 {t('pos.tableNumber')}
                 </button>
               </div>
 
