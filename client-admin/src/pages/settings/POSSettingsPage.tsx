@@ -94,7 +94,7 @@ const DualScreenMediaUpload: React.FC<{
           <div className="flex flex-col items-center gap-2">
             <Upload size={24} className="text-gray-400" />
             <span className="text-sm text-gray-500">{t('posSettings.dualScreenUploadHint')}</span>
-            <span className="text-xs text-gray-400">JPG, PNG, GIF, MP4, WebM (max 50MB)</span>
+            <span className="text-xs text-gray-400">{t('posSettings.dualScreenFileTypes')}</span>
           </div>
         )}
       </div>
@@ -121,7 +121,7 @@ const DualScreenMediaUpload: React.FC<{
                 <X size={14} />
               </button>
               {file.isVideo && (
-                <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">VIDEO</span>
+                <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">{t('posSettings.videoLabel')}</span>
               )}
             </div>
           ))}
@@ -181,7 +181,7 @@ const _DualScreenLayoutEditor: React.FC<{
         <div className="flex gap-1">
           {layout.columns.length < 3 && (
             <button onClick={addColumn} className="px-2 py-1 text-xs bg-primary text-white rounded hover:bg-primary/90">
-              + Column
+              {t('posSettings.addColumn')}
             </button>
           )}
         </div>
@@ -228,7 +228,7 @@ const _DualScreenLayoutEditor: React.FC<{
 
       {/* Width sum indicator */}
       <div className="mt-2 text-xs text-gray-500 text-right">
-        Total: {layout.columns.reduce((sum, col) => sum + col.width, 0)}%
+        {t('posSettings.totalWidth', { width: layout.columns.reduce((sum, col) => sum + col.width, 0) })}
       </div>
     </div>
   )
@@ -287,38 +287,38 @@ const DualScreenPreview: React.FC<{
         return (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4">
             <div className="text-3xl mb-2">{currentPromotion}</div>
-            <div className="text-sm text-center">{dualScreen.welcomeText || 'Welcome'}</div>
+            <div className="text-sm text-center">{dualScreen.welcomeText || t('posSettings.welcome')}</div>
           </div>
         )
       case 'welcome':
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-            <span className="text-xl font-bold">{dualScreen.welcomeText || 'Welcome'}</span>
+            <span className="text-xl font-bold">{dualScreen.welcomeText || t('posSettings.welcome')}</span>
           </div>
         )
       case 'order':
         return (
           <div className="w-full h-full flex flex-col bg-gray-50">
-            <div className="bg-primary text-white py-2 px-4 text-center text-sm font-bold">Your Order</div>
+            <div className="bg-primary text-white py-2 px-4 text-center text-sm font-bold">{t('posSettings.yourOrder')}</div>
             <div className="flex-1 p-2 space-y-2 overflow-y-auto">
               <div className="flex justify-between items-center bg-white p-2 rounded text-xs">
                 <div className="flex items-center gap-2">
                   <span>🧋</span>
                   <div>
-                    <div className="font-medium">Brown Sugar</div>
-                    <div className="text-gray-500">Large</div>
+                    <div className="font-medium">{t('posSettings.sampleProductName')}</div>
+                    <div className="text-gray-500">{t('posSettings.sampleSize')}</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-medium">Rp 25K</div>
-                  <div className="text-gray-500">x1</div>
+                  <div className="font-medium">{t('posSettings.samplePrice')}</div>
+                  <div className="text-gray-500">{t('posSettings.sampleQuantity')}</div>
                 </div>
               </div>
             </div>
             <div className="bg-white border-t p-2">
               <div className="flex justify-between text-sm">
-                <span>Total</span>
-                <span className="font-bold text-primary">Rp 25K</span>
+                <span>{t('common.total')}</span>
+                <span className="font-bold text-primary">{t('posSettings.samplePrice')}</span>
               </div>
             </div>
           </div>
@@ -356,8 +356,8 @@ const DualScreenPreview: React.FC<{
         {previewState === 'complete' ? (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-500 to-green-600 text-white">
             <div className="text-4xl mb-2">✓</div>
-            <div className="text-lg font-bold">Thank You!</div>
-            <div className="text-sm opacity-80">Order #12345</div>
+            <div className="text-lg font-bold">{t('posSettings.thankYou')}</div>
+            <div className="text-sm opacity-80">{t('posSettings.orderNumber')}</div>
           </div>
         ) : (
           <div className="w-full h-full flex">
@@ -564,8 +564,8 @@ export function POSSettingsPage() {
 
   // 小票设置
   const [_posReceipt, setPosReceipt] = useState({
-    header: 'Bubble Tea Shop',
-    footer: 'Thank you!',
+    header: t('posSettings.defaultReceiptHeader'),
+    footer: t('posSettings.defaultReceiptFooter'),
     taxRate: 11,
     showLogo: true,
     storeLogo: '',               // 店铺Logo URL
@@ -617,7 +617,7 @@ export function POSSettingsPage() {
     printers: [
       {
         id: 'receipt-1',
-        name: 'Receipt Printer',
+        name: t('posSettings.defaultReceiptPrinterName'),
         type: 'receipt' as PrinterType,
         enabled: true,
         connectionType: 'usb' as const,
@@ -627,7 +627,7 @@ export function POSSettingsPage() {
       },
       {
         id: 'kitchen-1',
-        name: 'Kitchen Printer',
+        name: t('posSettings.defaultKitchenPrinterName'),
         type: 'kitchen' as PrinterType,
         enabled: false,
         connectionType: 'usb' as const,
@@ -637,7 +637,7 @@ export function POSSettingsPage() {
       },
       {
         id: 'label-1',
-        name: 'Label Printer',
+        name: t('posSettings.defaultLabelPrinterName'),
         type: 'label' as PrinterType,
         enabled: false,
         connectionType: 'usb' as const,
@@ -668,7 +668,7 @@ export function POSSettingsPage() {
         ]
       },
       // 共用内容
-      welcomeText: 'Bubble Tea Malaysia',
+      welcomeText: t('posSettings.defaultWelcomeText'),
       promotions: ['🧋', '🍓', '💳', '🎁'],
       mediaFiles: [],
     },
@@ -845,10 +845,10 @@ export function POSSettingsPage() {
                   }}
                   className="input"
                 >
-                  <option value="3">3 {t('posSettings.columns')}</option>
-                  <option value="4">4 {t('posSettings.columns')}</option>
-                  <option value="5">5 {t('posSettings.columns')}</option>
-                  <option value="6">6 {t('posSettings.columns')}</option>
+                  <option value="3">{t('posSettings.three')} {t('posSettings.columns')}</option>
+                  <option value="4">{t('posSettings.four')} {t('posSettings.columns')}</option>
+                  <option value="5">{t('posSettings.five')} {t('posSettings.columns')}</option>
+                  <option value="6">{t('posSettings.six')} {t('posSettings.columns')}</option>
                 </select>
               </div>
               <div>
@@ -986,7 +986,7 @@ export function POSSettingsPage() {
                     }}
                     onBlur={() => handleSave('posLayout', { ...posLayout, hotkeys: posLayout.hotkeys })}
                     className="input w-24 text-center"
-                    placeholder="F1"
+                    placeholder={t('posSettings.hotkeyPlaceholder')}
                   />
                 </div>
               ))}
@@ -1115,7 +1115,7 @@ export function POSSettingsPage() {
                         }}
                         onBlur={() => handleSave('channelSettings', channelSettings)}
                         className="input text-sm"
-                        placeholder="09:00-22:00"
+                        placeholder={t('posSettings.availableHoursPlaceholder')}
                       />
                     </div>
                     <div>
@@ -1365,9 +1365,9 @@ export function POSSettingsPage() {
                     }}
                     className="input"
                   >
-                    <option value="id">Bahasa Indonesia</option>
-                    <option value="en">English</option>
-                    <option value="zh">中文</option>
+                    <option value="id">{t('posSettings.langId')}</option>
+                    <option value="en">{t('posSettings.langEn')}</option>
+                    <option value="zh">{t('posSettings.langZh')}</option>
                   </select>
                 </div>
                 <div>
@@ -1444,7 +1444,7 @@ export function POSSettingsPage() {
                   onChange={(e) => setDisplaySettings({ ...displaySettings, lockScreenPin: e.target.value })}
                   onBlur={() => handleSave('displaySettings', displaySettings)}
                   className="input w-40"
-                  placeholder="****"
+                  placeholder={t('posSettings.pinPlaceholder')}
                   maxLength={6}
                 />
                 <p className="text-xs text-gray-400 mt-1">{t('posSettings.lockScreenPinHint')}</p>
@@ -1740,10 +1740,10 @@ export function POSSettingsPage() {
 type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
 
 const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
-  receipt: 'Receipt Printer',
-  kitchen: 'Kitchen Printer',
-  label: 'Label Printer',
-  kds: 'KDS Display'
+  receipt: 'posSettings.receiptPrinter',
+  kitchen: 'posSettings.kitchenPrinter',
+  label: 'posSettings.labelPrinter',
+  kds: 'posSettings.kdsDisplay'
 }
 
 const PRINTER_TYPE_ICONS: Record<PrinterType, string> = {
@@ -1765,6 +1765,7 @@ function PrinterConfigCard({
   onUpdate: (p: any) => void
   onToggle: () => void
 }) {
+  const { t } = useTranslation()
   const isEnabled = printer.enabled ?? false
   const printerType = printer.type as PrinterType
 
@@ -1774,7 +1775,7 @@ function PrinterConfigCard({
         <div className="flex items-center gap-2">
           <span className="text-2xl">{PRINTER_TYPE_ICONS[printerType]}</span>
           <div>
-            <div className="font-medium">{PRINTER_TYPE_LABELS[printerType]}</div>
+            <div className="font-medium">{t(PRINTER_TYPE_LABELS[printerType])}</div>
             {printer.name && <div className="text-xs text-gray-500">{printer.name}</div>}
           </div>
         </div>
@@ -1785,31 +1786,31 @@ function PrinterConfigCard({
         <div className="space-y-3 mt-4 pt-4 border-t">
           {/* Printer Name */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Printer Name</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.printerName')}</label>
             <input
               type="text"
               value={printer.name || ''}
               onChange={(e) => onUpdate({ ...printer, name: e.target.value })}
               className="input text-sm"
-              placeholder="e.g. EPSON-TM82"
+              placeholder={t('posSettings.printerNamePlaceholder')}
             />
           </div>
 
           {/* Connection Type */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Connection</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.connection')}</label>
             <div className="flex gap-2">
               <button
                 onClick={() => onUpdate({ ...printer, connectionType: 'usb' })}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm border transition-colors ${printer.connectionType === 'usb' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600'}`}
               >
-                🖨️ USB
+                🖨️ {t('posSettings.usbConnection')}
               </button>
               <button
                 onClick={() => onUpdate({ ...printer, connectionType: 'network' })}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm border transition-colors ${printer.connectionType === 'network' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600'}`}
               >
-                🌐 Network
+                🌐 {t('posSettings.networkConnection')}
               </button>
             </div>
           </div>
@@ -1817,14 +1818,14 @@ function PrinterConfigCard({
           {/* USB Printer Selection */}
           {printer.connectionType === 'usb' && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">USB Printer</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.usbPrinter')}</label>
               {detectedPrinters.length > 0 && (
                 <select
                   value={printer.printerName || ''}
                   onChange={(e) => onUpdate({ ...printer, printerName: e.target.value })}
                   className="input text-sm"
                 >
-                  <option value="">-- Select --</option>
+                  <option value="">{t('posSettings.selectPrinter')}</option>
                   {detectedPrinters.map((p, i) => (
                     <option key={i} value={p}>{p}</option>
                   ))}
@@ -1835,7 +1836,7 @@ function PrinterConfigCard({
                 value={printer.printerName || ''}
                 onChange={(e) => onUpdate({ ...printer, printerName: e.target.value })}
                 className="input text-sm mt-2"
-                placeholder="Or enter manually"
+                placeholder={t('posSettings.enterManually')}
               />
             </div>
           )}
@@ -1844,23 +1845,23 @@ function PrinterConfigCard({
           {printer.connectionType === 'network' && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">IP Address</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.ipAddress')}</label>
                 <input
                   type="text"
                   value={printer.printerIp || ''}
                   onChange={(e) => onUpdate({ ...printer, printerIp: e.target.value })}
                   className="input text-sm"
-                  placeholder="192.168.1.100"
+                  placeholder={t('posSettings.ipPlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Port</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.port')}</label>
                 <input
                   type="number"
                   value={printer.printerPort || 9100}
                   onChange={(e) => onUpdate({ ...printer, printerPort: parseInt(e.target.value) || 9100 })}
                   className="input text-sm"
-                  placeholder="9100"
+                  placeholder={t('posSettings.portPlaceholder')}
                 />
               </div>
             </div>
@@ -1869,7 +1870,7 @@ function PrinterConfigCard({
       )}
 
       {!isEnabled && (
-        <p className="text-xs text-gray-400 mt-2">Disabled - enable to configure</p>
+        <p className="text-xs text-gray-400 mt-2">{t('posSettings.disabledEnableConfigure')}</p>
       )}
     </div>
   )
@@ -1913,9 +1914,9 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
         <div className="flex items-start gap-3">
           <div className="text-blue-500 mt-0.5">ℹ️</div>
           <div>
-            <div className="font-medium text-blue-800">Multi-Printer Support</div>
+            <div className="font-medium text-blue-800">{t('posSettings.multiPrinterSupport')}</div>
             <p className="text-sm text-blue-700 mt-1">
-              Configure multiple printers for different purposes. Only enabled printers will be used.
+              {t('posSettings.multiPrinterSupportDesc')}
             </p>
           </div>
         </div>
@@ -1924,10 +1925,10 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
       {detectedPrinters.length > 0 && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Detected USB Printers</h3>
+            <h3 className="text-lg font-semibold">{t('posSettings.detectedUsbPrinters')}</h3>
             <button onClick={onRefreshPrinters} disabled={loadingPrinters} className="btn-secondary flex items-center gap-2">
               <RefreshCw size={16} className={loadingPrinters ? 'animate-spin' : ''} />
-              Refresh
+              {t('posSettings.refresh')}
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1937,19 +1938,19 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                 <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg text-sm">
                   <span>🖨️</span>
                   <span className="font-medium">{printer}</span>
-                  {isInUse && <span className="text-xs text-green-600">✓ In use</span>}
+                  {isInUse && <span className="text-xs text-green-600">✓ {t('posSettings.inUse')}</span>}
                 </div>
               )
             })}
           </div>
           {lastPrinterDetection && (
-            <p className="text-xs text-gray-500 mt-2">Last detected: {new Date(lastPrinterDetection).toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-2">{t('posSettings.lastDetected')}: {new Date(lastPrinterDetection).toLocaleString()}</p>
           )}
         </div>
       )}
 
       <div>
-        <h3 className="text-lg font-semibold mb-4">Printers ({enabledPrinters.length} enabled)</h3>
+        <h3 className="text-lg font-semibold mb-4">{t('posSettings.printersEnabled', { count: enabledPrinters.length })}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {(hardwareSettings.printers || []).map((printer: any, index: number) => (
             <PrinterConfigCard
@@ -2014,8 +2015,8 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                 }}
                 className="input mt-2"
               >
-                <option value="usb">USB Scanner</option>
-                <option value="serial">Serial Scanner</option>
+                <option value="usb">{t('posSettings.usbScanner')}</option>
+                <option value="serial">{t('posSettings.serialScanner')}</option>
               </select>
             )}
           </div>
@@ -2056,7 +2057,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                   <input type="text" value={hardwareSettings.dualScreen?.welcomeText || ''} onChange={(e) => {
                     const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, welcomeText: e.target.value } }
                     setHardwareSettings(newHardwareSettings)
-                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input" placeholder="Welcome!" />
+                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input" placeholder={t('posSettings.welcomePlaceholder')} />
                 </div>
 
                 {/* Media Upload - Images and Videos */}
@@ -2087,7 +2088,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                     const promotions = e.target.value.split('\n').filter(line => line.trim())
                     const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, promotions } }
                     setHardwareSettings(newHardwareSettings)
-                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder="🧋" />
+                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder={t('posSettings.promotionsPlaceholder')} />
                 </div>
 
                 {/* Idle Layout Editor */}
@@ -2119,7 +2120,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
           </div>
 
           <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">
-            💡 Cash drawer connects via RJ11 cable to your printer (not directly to computer)
+            💡 {t('posSettings.cashDrawerRj11Note')}
           </div>
         </div>
       </div>
