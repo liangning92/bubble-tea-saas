@@ -246,7 +246,7 @@ export function ShiftConfigPage() {
                   value={formData.key}
                   onChange={e => setFormData({ ...formData, key: e.target.value })}
                   disabled={!!editingShift}
-                  placeholder="morning"
+                  placeholder={t('staff.shiftKey')}
                   className="w-full p-2 border border-gray-200 rounded-lg disabled:bg-gray-100"
                 />
               </div>
@@ -259,7 +259,7 @@ export function ShiftConfigPage() {
                   type="text"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Morning"
+                  placeholder={t('staff.morningShift')}
                   className="w-full p-2 border border-gray-200 rounded-lg"
                 />
               </div>
@@ -273,7 +273,7 @@ export function ShiftConfigPage() {
                     type="text"
                     value={formData.nameZh}
                     onChange={e => setFormData({ ...formData, nameZh: e.target.value })}
-                    placeholder="早班"
+                    placeholder={t('staff.morningShift')}
                     className="w-full p-2 border border-gray-200 rounded-lg"
                   />
                 </div>
@@ -285,7 +285,7 @@ export function ShiftConfigPage() {
                     type="text"
                     value={formData.nameId}
                     onChange={e => setFormData({ ...formData, nameId: e.target.value })}
-                    placeholder="Pagi"
+                    placeholder={t('staff.morningShift')}
                     className="w-full p-2 border border-gray-200 rounded-lg"
                   />
                 </div>

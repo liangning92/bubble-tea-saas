@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { ArrowLeft, Clock, Calendar, Send } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 interface CorrectionRequest {
   id: string
@@ -68,11 +69,11 @@ export function AttendanceCorrectionPage() {
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
-        alert(response.message || 'Failed to submit correction')
+        alert(response.message || t('attendance.submitFailed'))
       }
     } catch (error: any) {
       console.error('Failed to submit correction:', error)
-      alert(error?.response?.data?.message || 'Failed to submit correction')
+      alert(error?.response?.data?.message || t('attendance.submitFailed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -80,9 +81,9 @@ export function AttendanceCorrectionPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') || 'Pending' },
-      approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') || 'Approved' },
-      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') || 'Rejected' }
+      pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') },
+      approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') }
     }
     const badge = badges[status] || badges.pending
     return (
@@ -90,10 +91,6 @@ export function AttendanceCorrectionPage() {
         {badge.label}
       </span>
     )
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString()
   }
 
   return (
@@ -105,7 +102,7 @@ export function AttendanceCorrectionPage() {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-lg font-bold">{t('attendance.correction') || '考勤纠错'}</h1>
+            <h1 className="text-lg font-bold">{t('attendance.correction')}</h1>
           </div>
         </div>
       </header>
@@ -119,20 +116,20 @@ export function AttendanceCorrectionPage() {
             className="w-full py-4 bg-primary text-white rounded-xl font-medium mb-4 flex items-center justify-center gap-2"
           >
             <Clock size={20} />
-            {t('attendance.newCorrection') || '申请考勤纠错'}
+            {t('attendance.newCorrection')}
           </button>
         )}
 
         {/* Request Form */}
         {showForm && (
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-            <h2 className="font-semibold mb-4">{t('attendance.fillForm') || '填写纠错申请'}</h2>
+            <h2 className="font-semibold mb-4">{t('attendance.fillForm')}</h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Calendar size={14} className="inline mr-1" />
-                  {t('attendance.date') || '日期'}
+                  {t('attendance.date')}
                 </label>
                 <input
                   type="date"
@@ -145,7 +142,7 @@ export function AttendanceCorrectionPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('attendance.originalCheckIn') || '原始签到时间'}
+                    {t('attendance.originalCheckIn')}
                   </label>
                   <input
                     type="time"
@@ -157,7 +154,7 @@ export function AttendanceCorrectionPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('attendance.originalCheckOut') || '原始签退时间'}
+                    {t('attendance.originalCheckOut')}
                   </label>
                   <input
                     type="time"
@@ -172,7 +169,7 @@ export function AttendanceCorrectionPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('attendance.correctCheckIn') || '正确签到时间'}
+                    {t('attendance.correctCheckIn')}
                   </label>
                   <input
                     type="time"
@@ -184,7 +181,7 @@ export function AttendanceCorrectionPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('attendance.correctCheckOut') || '正确签退时间'}
+                    {t('attendance.correctCheckOut')}
                   </label>
                   <input
                     type="time"
@@ -198,12 +195,12 @@ export function AttendanceCorrectionPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('attendance.reason') || '原因'}
+                  {t('attendance.reason')}
                 </label>
                 <textarea
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  placeholder={t('attendance.reasonPlaceholder') || '请说明需要纠错的原因...'}
+                  placeholder={t('attendance.reasonPlaceholder')}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   rows={3}
                 />
@@ -226,7 +223,7 @@ export function AttendanceCorrectionPage() {
                   ) : (
                     <>
                       <Send size={18} />
-                      {t('attendance.submit') || '提交'}
+                      {t('attendance.submit')}
                     </>
                   )}
                 </button>
@@ -238,7 +235,7 @@ export function AttendanceCorrectionPage() {
         {/* Request History */}
         <div className="bg-white rounded-xl shadow-sm">
           <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="font-semibold">{t('attendance.requestHistory') || '申请记录'}</h2>
+            <h2 className="font-semibold">{t('attendance.requestHistory')}</h2>
           </div>
 
           {isLoading ? (
@@ -274,7 +271,7 @@ export function AttendanceCorrectionPage() {
                   <p className="text-sm text-gray-600 mb-1">{req.reason}</p>
                   {req.adminNote && (
                     <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                      {t('attendance.adminNote') || '管理员备注'}: {req.adminNote}
+                      {t('attendance.adminNote')}: {req.adminNote}
                     </p>
                   )}
                 </div>
@@ -291,8 +288,8 @@ export function AttendanceCorrectionPage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Send size={32} className="text-green-600" />
             </div>
-            <h2 className="text-xl font-bold mb-2">{t('attendance.submitSuccess') || '提交成功'}</h2>
-            <p className="text-gray-500">{t('attendance.submitSuccessDesc') || '管理员会尽快处理您的申请'}</p>
+            <h2 className="text-xl font-bold mb-2">{t('attendance.submitSuccess')}</h2>
+            <p className="text-gray-500">{t('attendance.submitSuccessDesc')}</p>
           </div>
         </div>
       )}

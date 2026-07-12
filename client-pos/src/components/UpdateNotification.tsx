@@ -52,7 +52,6 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
 
     // Get current version
     electronAPI.getAppVersion().then((version: string) => {
-      console.log('[Update] Current app version:', version)
     })
   }, [])
 

@@ -61,11 +61,11 @@ export function RegisterMemberPage() {
 
     // 验证必填项
     if (!form.name.trim()) {
-      showToast(t('member.nameRequired') || '请输入姓名', 'error')
+      showToast(t('member.nameRequired'), 'error')
       return
     }
     if (!form.phone.trim()) {
-      showToast(t('member.phoneRequired') || '请输入电话号码', 'error')
+      showToast(t('member.phoneRequired'), 'error')
       return
     }
 
@@ -76,14 +76,14 @@ export function RegisterMemberPage() {
       const responseData = res.data
       if (responseData && responseData.code === 201) {
         setSuccess(true)
-        showToast(t('member.registerSuccess') || '注册成功', 'success')
+        showToast(t('member.registerSuccess'), 'success')
         setTimeout(() => navigate('/'), 2000)
       } else {
-        showToast(responseData?.message || '注册失败', 'error')
+        showToast(responseData?.message || t('member.registerFailed'), 'error')
       }
     } catch (error: any) {
       console.error('Register failed:', error)
-      const errorMsg = error?.response?.data?.message || error?.message || '注册失败'
+      const errorMsg = error?.response?.data?.message || error?.message || t('member.registerFailed')
       showToast(errorMsg, 'error')
     } finally {
       setLoading(false)
@@ -187,15 +187,15 @@ export function RegisterMemberPage() {
         {/* Referral Code Field - 裂变入口 */}
         <div className="mb-6">
           <label className="block text-base font-medium text-gray-700 mb-2">
-            {t('member.referralCode') || '推荐码 (可选)'}
+            {t('member.referralCode')}
           </label>
           <button
             type="button"
-            onClick={() => openInput('referredByPhone', t('member.enterReferralCode') || '输入推荐码', t('member.referralCodePlaceholder') || '朋友推荐码', 'text', false)}
+            onClick={() => openInput('referredByPhone', t('member.enterReferralCode'), t('member.referralCodePlaceholder'), 'text', false)}
             className="w-full p-4 text-lg rounded-xl border-2 border-gray-200 bg-white text-left flex items-center justify-between active:border-pink-500 transition-colors"
           >
             <span className={form.referredByPhone ? 'text-gray-900' : 'text-gray-400'}>
-              {form.referredByPhone || t('member.referralCodePlaceholder') || '有朋友推荐码？输入可获得奖励'}
+              {form.referredByPhone || t('member.referralCodePlaceholder')}
             </span>
             <Gift size={20} className="text-gray-400" />
           </button>

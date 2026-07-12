@@ -106,9 +106,9 @@ export function MainLayout() {
                 }}
                 className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white appearance-none cursor-pointer"
               >
-                <option value="id">🇮🇩 Bahasa Indonesia</option>
-                <option value="en">🇬🇧 English</option>
-                <option value="zh">🇨🇳 中文</option>
+                <option value="id">🇮🇩 {t('lang.idName')}</option>
+                <option value="en">🇬🇧 {t('lang.enName')}</option>
+                <option value="zh">🇨🇳 {t('lang.zhName')}</option>
               </select>
               <Globe size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>

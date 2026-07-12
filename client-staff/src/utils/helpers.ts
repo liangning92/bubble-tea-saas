@@ -7,6 +7,20 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+export function formatCurrencyByLang(amount: number, lang: string = 'id'): string {
+  const localeMap: Record<string, string> = {
+    'id': 'id-ID',
+    'en': 'en-US',
+    'zh': 'zh-CN'
+  }
+  return new Intl.NumberFormat(localeMap[lang] || 'id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount)
+}
+
 export function formatDate(date: Date | string, format: string = 'short'): string {
   const d = typeof date === 'string' ? new Date(date) : date
 

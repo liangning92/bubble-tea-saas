@@ -287,7 +287,7 @@ export function CouponListPage() {
                   value={form.code}
                   onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
                   className="input font-mono"
-                  placeholder="DISCOUNT10"
+                  placeholder={t('marketing.couponCodePlaceholder')}
                   required
                 />
               </div>
@@ -361,7 +361,7 @@ export function CouponListPage() {
                   onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })}
                   className="input"
                   min={0}
-                  placeholder="0 = unlimited"
+                  placeholder={t('marketing.usageLimitPlaceholder')}
                 />
               </div>
               <div className="flex gap-3 pt-4">
@@ -467,7 +467,7 @@ export function CouponListPage() {
                   onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })}
                   className="input"
                   min={0}
-                  placeholder="0 = unlimited"
+                  placeholder={t('marketing.usageLimitPlaceholder')}
                 />
               </div>
               <div className="flex gap-3 pt-4">

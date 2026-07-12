@@ -62,7 +62,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
             <div className="bg-gray-50 rounded-lg p-3 mb-4">
               <p className="text-sm font-mono text-red-600 break-all">
-                {this.state.error?.message || 'Unknown error'}
+                {this.state.error?.message }
               </p>
             </div>
 

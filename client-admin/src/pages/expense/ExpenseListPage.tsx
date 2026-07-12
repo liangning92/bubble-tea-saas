@@ -261,8 +261,10 @@ export function ExpenseListPage() {
 
   const loadRecurringExpenses = async () => {
     try {
-      // Use localStorage for recurring expenses (could be API-backed later)
-      const stored = localStorage.getItem(`recurring_expenses_${user?.storeId}`)
+      // TODO: 后续应迁移到服务端 API，当前使用 localStorage 是临时方案
+      // localStorage 会在浏览器清除或更换设备时丢失数据
+      if (!user?.storeId) return
+      const stored = localStorage.getItem(`recurring_expenses_${user.storeId}`)
       if (stored) {
         setRecurringExpenses(JSON.parse(stored))
       }
@@ -293,7 +295,9 @@ export function ExpenseListPage() {
   }
 
   const saveRecurringExpenses = (items: RecurringExpense[]) => {
-    localStorage.setItem(`recurring_expenses_${user?.storeId}`, JSON.stringify(items))
+    // TODO: 后续应迁移到服务端 API，当前使用 localStorage 是临时方案
+    if (!user?.storeId) return
+    localStorage.setItem(`recurring_expenses_${user.storeId}`, JSON.stringify(items))
     setRecurringExpenses(items)
   }
 

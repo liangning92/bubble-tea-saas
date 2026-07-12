@@ -185,3 +185,8 @@ export const posApi = {
   createExpense: (data: { type: string; category: string; amount: number; description: string; date: string }) =>
     api.post('/expenses', data),
 }
+
+// Shift API - uses admin's /api/shifts endpoint
+export const shiftApi = {
+  list: (storeId?: string) => api.get('/shifts', { params: storeId ? { storeId } : undefined }),
+}

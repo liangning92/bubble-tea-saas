@@ -260,7 +260,7 @@ export function HygieneAreasPage() {
                   value={form.code || ''}
                   onChange={(e) => setForm({ ...form, code: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
                   className="input w-full"
-                  placeholder="e.g., storage_room"
+                  placeholder={t('hygiene.areaNamePlaceholder')}
                 />
               </div>
 

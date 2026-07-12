@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { ArrowLeft, Clock, Calendar, Send, CheckCircle } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 interface OvertimeRequest {
   id: string
@@ -76,9 +77,9 @@ export function OvertimeRequestPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') || 'Pending' },
-      approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') || 'Approved' },
-      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') || 'Rejected' }
+      pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') },
+      approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') }
     }
     const badge = badges[status] || badges.pending
     return (
@@ -86,10 +87,6 @@ export function OvertimeRequestPage() {
         {badge.label}
       </span>
     )
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString()
   }
 
   return (
@@ -101,7 +98,7 @@ export function OvertimeRequestPage() {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-lg font-bold">{t('overtime.title') || '加班申请'}</h1>
+            <h1 className="text-lg font-bold">{t('overtime.title')}</h1>
           </div>
         </div>
       </header>
@@ -115,20 +112,20 @@ export function OvertimeRequestPage() {
             className="w-full py-4 bg-primary text-white rounded-xl font-medium mb-4 flex items-center justify-center gap-2"
           >
             <Clock size={20} />
-            {t('overtime.newRequest') || '申请加班'}
+            {t('overtime.newRequest')}
           </button>
         )}
 
         {/* Request Form */}
         {showForm && (
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-            <h2 className="font-semibold mb-4">{t('overtime.fillForm') || '填写加班申请'}</h2>
+            <h2 className="font-semibold mb-4">{t('overtime.fillForm')}</h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Calendar size={14} className="inline mr-1" />
-                  {t('overtime.date') || '加班日期'}
+                  {t('overtime.date')}
                 </label>
                 <input
                   type="date"
@@ -140,7 +137,7 @@ export function OvertimeRequestPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('overtime.hours') || '加班时数'}
+                  {t('overtime.hours')}
                 </label>
                 <input
                   type="number"
@@ -154,12 +151,12 @@ export function OvertimeRequestPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('overtime.reason') || '加班原因'}
+                  {t('overtime.reason')}
                 </label>
                 <textarea
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  placeholder={t('overtime.reasonPlaceholder') || '请说明加班原因...'}
+                  placeholder={t('overtime.reasonPlaceholder')}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   rows={3}
                 />
@@ -182,7 +179,7 @@ export function OvertimeRequestPage() {
                   ) : (
                     <>
                       <Send size={18} />
-                      {t('overtime.submit') || '提交'}
+                      {t('overtime.submit')}
                     </>
                   )}
                 </button>
@@ -194,7 +191,7 @@ export function OvertimeRequestPage() {
         {/* Request History */}
         <div className="bg-white rounded-xl shadow-sm">
           <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="font-semibold">{t('overtime.history') || '申请记录'}</h2>
+            <h2 className="font-semibold">{t('overtime.history')}</h2>
           </div>
 
           {isLoading ? (
@@ -222,7 +219,7 @@ export function OvertimeRequestPage() {
                   <p className="text-sm text-gray-600 mb-1">{req.reason}</p>
                   {req.adminNote && (
                     <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                      {t('overtime.adminNote') || '管理员备注'}: {req.adminNote}
+                      {t('overtime.adminNote')}: {req.adminNote}
                     </p>
                   )}
                 </div>
@@ -239,8 +236,8 @@ export function OvertimeRequestPage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle size={32} className="text-green-600" />
             </div>
-            <h2 className="text-xl font-bold mb-2">{t('overtime.submitSuccess') || '提交成功'}</h2>
-            <p className="text-gray-500">{t('overtime.submitSuccessDesc') || '管理员会尽快处理您的申请'}</p>
+            <h2 className="text-xl font-bold mb-2">{t('overtime.submitSuccess')}</h2>
+            <p className="text-gray-500">{t('overtime.submitSuccessDesc')}</p>
           </div>
         </div>
       )}

@@ -152,6 +152,7 @@ export function DeliveryHubPage() {
       createdAt: new Date().toISOString(),
       estimatedReadyTime: Math.floor(Math.random() * 20) + 10
     }
+    // 注意: 这是 mock 数据计算，实际 finalAmount 应由服务端根据真实订单数据计算
     order.finalAmount = order.subtotal + order.deliveryFee - order.platformFee
 
     setOrders(prev => [order, ...prev])

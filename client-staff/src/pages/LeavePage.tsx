@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { Calendar, Plus, Clock, XCircle } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -91,14 +92,6 @@ export function LeavePage() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
@@ -180,7 +173,7 @@ export function LeavePage() {
                     <div className="flex items-center gap-2 text-gray-600">
                       <Calendar size={16} />
                       <span>
-                        {formatDate(leave.startDate)} - {formatDate(leave.endDate)}
+                        {formatDate(leave.startDate, 'long')} - {formatDate(leave.endDate, 'long')}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-600">

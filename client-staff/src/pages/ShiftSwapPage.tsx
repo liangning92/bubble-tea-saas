@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { ArrowLeft, Calendar, Send, CheckCircle } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 interface ShiftSwapRequest {
   id: string
@@ -78,9 +79,9 @@ export function ShiftSwapPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') || 'Pending' },
-      approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') || 'Approved' },
-      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') || 'Rejected' }
+      pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') },
+      approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') }
     }
     const badge = badges[status] || badges.pending
     return (
@@ -88,10 +89,6 @@ export function ShiftSwapPage() {
         {badge.label}
       </span>
     )
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString()
   }
 
   return (
@@ -103,7 +100,7 @@ export function ShiftSwapPage() {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-lg font-bold">{t('shiftSwap.title') || '调班申请'}</h1>
+            <h1 className="text-lg font-bold">{t('shiftSwap.title')}</h1>
           </div>
         </div>
       </header>
@@ -117,20 +114,20 @@ export function ShiftSwapPage() {
             className="w-full py-4 bg-primary text-white rounded-xl font-medium mb-4 flex items-center justify-center gap-2"
           >
             <Calendar size={20} />
-            {t('shiftSwap.newRequest') || '申请调班'}
+            {t('shiftSwap.newRequest')}
           </button>
         )}
 
         {/* Request Form */}
         {showForm && (
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-            <h2 className="font-semibold mb-4">{t('shiftSwap.fillForm') || '填写调班申请'}</h2>
+            <h2 className="font-semibold mb-4">{t('shiftSwap.fillForm')}</h2>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('shiftSwap.originalDate') || '原排班日期'}
+                    {t('shiftSwap.originalDate')}
                   </label>
                   <input
                     type="date"
@@ -141,16 +138,16 @@ export function ShiftSwapPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('shiftSwap.originalShift') || '原班次'}
+                    {t('shiftSwap.originalShift')}
                   </label>
                   <select
                     value={formData.originalShift}
                     onChange={(e) => setFormData({ ...formData, originalShift: e.target.value })}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   >
-                    <option value="morning">{t('schedule.morning') || '早班'}</option>
-                    <option value="afternoon">{t('schedule.afternoon') || '中班'}</option>
-                    <option value="evening">{t('schedule.evening') || '晚班'}</option>
+                    <option value="morning">{t('schedule.morning')}</option>
+                    <option value="afternoon">{t('schedule.afternoon')}</option>
+                    <option value="evening">{t('schedule.evening')}</option>
                   </select>
                 </div>
               </div>
@@ -158,7 +155,7 @@ export function ShiftSwapPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('shiftSwap.targetDate') || '目标日期'}
+                    {t('shiftSwap.targetDate')}
                   </label>
                   <input
                     type="date"
@@ -169,28 +166,28 @@ export function ShiftSwapPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('shiftSwap.targetShift') || '目标班次'}
+                    {t('shiftSwap.targetShift')}
                   </label>
                   <select
                     value={formData.targetShift}
                     onChange={(e) => setFormData({ ...formData, targetShift: e.target.value })}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   >
-                    <option value="morning">{t('schedule.morning') || '早班'}</option>
-                    <option value="afternoon">{t('schedule.afternoon') || '中班'}</option>
-                    <option value="evening">{t('schedule.evening') || '晚班'}</option>
+                    <option value="morning">{t('schedule.morning')}</option>
+                    <option value="afternoon">{t('schedule.afternoon')}</option>
+                    <option value="evening">{t('schedule.evening')}</option>
                   </select>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('shiftSwap.reason') || '调班原因'}
+                  {t('shiftSwap.reason')}
                 </label>
                 <textarea
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  placeholder={t('shiftSwap.reasonPlaceholder') || '请说明调班原因...'}
+                  placeholder={t('shiftSwap.reasonPlaceholder')}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   rows={3}
                 />
@@ -213,7 +210,7 @@ export function ShiftSwapPage() {
                   ) : (
                     <>
                       <Send size={18} />
-                      {t('shiftSwap.submit') || '提交'}
+                      {t('shiftSwap.submit')}
                     </>
                   )}
                 </button>
@@ -225,7 +222,7 @@ export function ShiftSwapPage() {
         {/* Request History */}
         <div className="bg-white rounded-xl shadow-sm">
           <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="font-semibold">{t('shiftSwap.history') || '申请记录'}</h2>
+            <h2 className="font-semibold">{t('shiftSwap.history')}</h2>
           </div>
 
           {isLoading ? (
@@ -253,7 +250,7 @@ export function ShiftSwapPage() {
                   {req.reason && <p className="text-sm text-gray-600 mb-1">{req.reason}</p>}
                   {req.adminNote && (
                     <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                      {t('shiftSwap.adminNote') || '管理员备注'}: {req.adminNote}
+                      {t('shiftSwap.adminNote')}: {req.adminNote}
                     </p>
                   )}
                 </div>
@@ -270,8 +267,8 @@ export function ShiftSwapPage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle size={32} className="text-green-600" />
             </div>
-            <h2 className="text-xl font-bold mb-2">{t('shiftSwap.submitSuccess') || '提交成功'}</h2>
-            <p className="text-gray-500">{t('shiftSwap.submitSuccessDesc') || '管理员会尽快处理您的申请'}</p>
+            <h2 className="text-xl font-bold mb-2">{t('shiftSwap.submitSuccess')}</h2>
+            <p className="text-gray-500">{t('shiftSwap.submitSuccessDesc')}</p>
           </div>
         </div>
       )}

@@ -18,42 +18,28 @@ interface ImportResult {
 // 导入模板定义
 const TEMPLATES = {
   products: {
-    name: '商品导入模板',
-    description: '导入商品基本信息',
+    nameKey: 'import.productTemplateName',
+    descriptionKey: 'import.productTemplateDesc',
     fields: ['name', 'category', 'specs', 'price', 'cost', 'status'],
-    sample: [
-      { name: '珍珠奶茶', category: '奶茶', specs: '中杯,大杯', price: '15000,18000', cost: '5000', status: 'active' },
-      { name: '芒果冰沙', category: '冰沙', specs: '小杯,大杯', price: '20000,25000', cost: '6000', status: 'active' }
-    ]
+    sampleKeyPrefix: 'import.sampleProductName'
   },
   inventory: {
-    name: '库存导入模板',
-    description: '导入库存原材料',
+    nameKey: 'import.inventoryTemplateName',
+    descriptionKey: 'import.inventoryTemplateDesc',
     fields: ['name', 'category', 'unit', 'stock', 'cost', 'supplier'],
-    sample: [
-      { name: '珍珠', category: '小料', unit: 'g', stock: '5000', cost: '15000', supplier: '供应商A' },
-      { name: '牛奶', category: '原料', unit: 'ml', stock: '10000', cost: '8000', supplier: '供应商B' }
-    ]
+    sampleKeyPrefix: 'import.sampleMaterial'
   },
   bom: {
-    name: '配方导入模板',
-    description: '导入商品配方(原料配比)',
+    nameKey: 'import.bomTemplateName',
+    descriptionKey: 'import.bomTemplateDesc',
     fields: ['product_name', 'material_name', 'quantity', 'unit'],
-    sample: [
-      { product_name: '珍珠奶茶', material_name: '珍珠', quantity: '30', unit: 'g' },
-      { product_name: '珍珠奶茶', material_name: '牛奶', quantity: '200', unit: 'ml' },
-      { product_name: '珍珠奶茶', material_name: '茶汤', quantity: '150', unit: 'ml' }
-    ]
+    sampleKeyPrefix: 'import.sampleMaterial'
   },
   expenses: {
-    name: '支出导入模板',
-    description: '导入日常支出记录',
+    nameKey: 'import.expenseTemplateName',
+    descriptionKey: 'import.expenseTemplateDesc',
     fields: ['category', 'amount', 'description', 'date', 'type'],
-    sample: [
-      { category: 'rent', amount: '5000000', description: '店铺租金', date: '2024-01-01', type: 'operational' },
-      { category: 'utilities', amount: '800000', description: '电费', date: '2024-01-05', type: 'operational' },
-      { category: 'supplies', amount: '200000', description: '塑料袋采购', date: '2024-01-10', type: 'operational' }
-    ]
+    sampleKeyPrefix: 'import.sampleProductName'
   }
 }
 
@@ -114,7 +100,28 @@ export function ImportPage() {
   const downloadTemplate = (type: ImportType) => {
     const template = TEMPLATES[type]
     const headers = template.fields.join(',')
-    const sampleRows = template.sample.map(row => Object.values(row).join(',')).join('\n')
+    // Generate generic sample data for CSV
+    const sampleData: Record<ImportType, string[][]> = {
+      products: [
+        ['Sample Product 1', 'Beverage', 'S,M,L', '15000,18000,20000', '5000', 'active'],
+        ['Sample Product 2', 'Beverage', 'S,M,L', '12000,15000,18000', '4000', 'active']
+      ],
+      inventory: [
+        ['Tapioca Pearl', 'Topping', 'g', '5000', '15000', 'Supplier A'],
+        ['Milk', 'Raw Material', 'ml', '10000', '8000', 'Supplier B']
+      ],
+      bom: [
+        ['Sample Product 1', 'Tapioca Pearl', '30', 'g'],
+        ['Sample Product 1', 'Milk', '200', 'ml'],
+        ['Sample Product 1', 'Tea Base', '150', 'ml']
+      ],
+      expenses: [
+        ['rent', '5000000', 'Monthly rent', '2024-01-01', 'operational'],
+        ['utilities', '800000', 'Electricity bill', '2024-01-05', 'operational'],
+        ['supplies', '200000', 'Packaging supplies', '2024-01-10', 'operational']
+      ]
+    }
+    const sampleRows = sampleData[type].map(row => row.join(',')).join('\n')
     const csv = headers + '\n' + sampleRows
 
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -136,8 +143,8 @@ export function ImportPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{t('import.title') || 'Data Import'}</h1>
-        <p className="text-sm text-gray-500 mt-1">{t('import.description') || 'Import products, inventory and recipes'}</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t('import.title')}</h1>
+        <p className="text-sm text-gray-500 mt-1">{t('import.description')}</p>
       </div>
 
       {/* 导入类型选择 */}
@@ -152,10 +159,10 @@ export function ImportPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {type === 'products' && (t('import.products') || 'Products')}
-            {type === 'inventory' && (t('import.inventory') || 'Inventory')}
-            {type === 'bom' && (t('import.bom') || 'Recipe')}
-            {type === 'expenses' && (t('import.expenses') || 'Expenses')}
+            {type === 'products' && t('import.products')}
+            {type === 'inventory' && t('import.inventory')}
+            {type === 'bom' && t('import.bom')}
+            {type === 'expenses' && t('import.expenses')}
           </button>
         ))}
       </div>
@@ -171,10 +178,10 @@ export function ImportPage() {
       >
         <Upload size={40} className="mx-auto text-gray-400 mb-4" />
         <p className="text-gray-600 mb-2">
-          {t('import.dragHint') || 'Drag CSV file here, or'}
+          {t('import.dragHint')}
         </p>
         <label className="btn-primary cursor-pointer inline-block">
-          {t('import.selectFile') || 'Select file'}
+          {t('import.selectFile')}
           <input
             type="file"
             accept=".csv"
@@ -182,7 +189,7 @@ export function ImportPage() {
             className="hidden"
           />
         </label>
-        <p className="text-xs text-gray-400 mt-2">CSV格式, UTF-8编码</p>
+        <p className="text-xs text-gray-400 mt-2">{t('import.csvFormatHint')}</p>
       </div>
 
       {/* 文件信息 */}
@@ -207,7 +214,7 @@ export function ImportPage() {
       {/* 预览数据 */}
       {preview.length > 0 && (
         <div className="card mb-6">
-          <h3 className="font-semibold mb-4">{t('import.preview') || 'Data Preview'} ({preview.length} {t('import.rows') || 'rows'})</h3>
+          <h3 className="font-semibold mb-4">{t('import.preview')} ({preview.length} {t('import.rows')})</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -235,7 +242,7 @@ export function ImportPage() {
               disabled={importMutation.isPending}
               className="btn-primary"
             >
-              {importMutation.isPending ? t('import.importing') || 'Importing...' : t('import.startImport') || 'Start Import'}
+              {importMutation.isPending ? t('import.importing') : t('import.startImport')}
             </button>
           </div>
         </div>
@@ -252,12 +259,12 @@ export function ImportPage() {
             )}
             <div>
               <p className="font-medium">
-                {result.success ? (t('import.success') || 'Import successful') : (t('import.failed') || 'Import failed')}
+                {result.success ? t('import.success') : t('import.failed')}
               </p>
               <p className="text-sm text-gray-500">
-                {t('import.total') || 'Total'}: {result.total} |
-                {t('import.imported') || 'Success'}: {result.imported} |
-                {t('import.failed') || 'Failed'}: {result.failed}
+                {t('import.total')}: {result.total} |
+                {t('import.imported')}: {result.imported} |
+                {t('import.failed')}: {result.failed}
               </p>
             </div>
           </div>
@@ -271,21 +278,21 @@ export function ImportPage() {
 
       {/* 下载模板 */}
       <div className="card mt-6">
-        <h3 className="font-semibold mb-4">{t('import.templates') || 'Download Templates'}</h3>
+        <h3 className="font-semibold mb-4">{t('import.templates')}</h3>
         <div className="grid grid-cols-3 gap-4">
           {(['products', 'inventory', 'bom'] as ImportType[]).map(type => (
             <div key={type} className="p-4 border rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">{TEMPLATES[type].name}</p>
-                  <p className="text-sm text-gray-500">{TEMPLATES[type].description}</p>
+                  <p className="font-medium">{t(TEMPLATES[type].nameKey)}</p>
+                  <p className="text-sm text-gray-500">{t(TEMPLATES[type].descriptionKey)}</p>
                 </div>
                 <button
                   onClick={() => downloadTemplate(type)}
                   className="btn-outline text-sm flex items-center gap-1"
                 >
                   <Download size={14} />
-                  {t('import.download') || 'Download'}
+                  {t('import.download')}
                 </button>
               </div>
             </div>

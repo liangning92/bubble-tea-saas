@@ -5,9 +5,9 @@ import { Eye, EyeOff, Loader2, User, Phone, Lock, Store, ArrowLeft, ArrowRight, 
 import { authApi, storeApi } from '../services/api'
 
 const LANGUAGES = [
-  { code: 'zh', label: '中文', flag: '🇨🇳' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'id', label: 'Indonesia', flag:'🇮🇩' }
+  { code: 'zh', labelKey: 'lang.zhName', flag: '🇨🇳' },
+  { code: 'en', labelKey: 'lang.enName', flag: '🇺🇸' },
+  { code: 'id', labelKey: 'lang.idName', flag: '🇮🇩' }
 ]
 
 export function RegisterPage() {
@@ -121,7 +121,7 @@ export function RegisterPage() {
             className="flex items-center gap-2 px-3 py-2 bg-white/80 backdrop-blur rounded-lg shadow-sm hover:bg-white transition-colors"
           >
             <Globe size={18} className="text-primary" />
-            <span className="text-sm font-medium">{currentLang.flag} {currentLang.label}</span>
+            <span className="text-sm font-medium">{currentLang.flag} {t(currentLang.labelKey)}</span>
           </button>
           {showLangMenu && (
             <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg py-2 z-50">
@@ -132,7 +132,7 @@ export function RegisterPage() {
                   className={`w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 ${i18n.language === lang.code ? 'text-primary font-medium' : 'text-gray-700'}`}
                 >
                   <span>{lang.flag}</span>
-                  <span>{lang.label}</span>
+                  <span>{t(lang.labelKey)}</span>
                 </button>
               ))}
             </div>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { BookOpen, RefreshCw, Loader2, CheckCircle, Clock, XCircle, FileText, Download } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 interface Training {
   id: string
@@ -47,7 +48,7 @@ export function TrainingPage() {
     scheduled: t('training.scheduled'),
     in_progress: t('training.inProgress'),
     completed: t('training.completed'),
-    cancelled: t('training.cancelled') || 'Cancelled'
+    cancelled: t('training.cancelled')
   }
 
   const loadData = async () => {
@@ -79,14 +80,6 @@ export function TrainingPage() {
     if (lang === 'zh') return cat.labelZh || cat.label
     if (lang === 'id') return cat.labelId || cat.label
     return cat.label
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
   }
 
   const parseAttachments = ( attachmentsStr?: string) => {

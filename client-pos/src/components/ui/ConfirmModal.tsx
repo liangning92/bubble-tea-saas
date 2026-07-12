@@ -67,14 +67,14 @@ export function ConfirmModal({
               onClick={onClose}
               className="flex-1 py-4 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-[0.98] transition-all text-lg"
             >
-              {cancelText || t('common.cancel', '取消')}
+              {cancelText || t('common.cancel')}
             </button>
           )}
           <button
             onClick={handleConfirm}
             className={`flex-1 py-4 rounded-xl font-bold text-white active:scale-[0.98] transition-all text-lg ${buttonColors[type]}`}
           >
-            {confirmText || t('common.confirm', '确认')}
+            {confirmText || t('common.confirm')}
           </button>
         </div>
       </div>

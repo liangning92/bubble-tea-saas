@@ -279,7 +279,7 @@ export function AttendancePage() {
           className="w-full py-3 border border-gray-200 rounded-xl text-sm font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-2"
         >
           <Edit3 size={18} />
-          {t('attendance.requestCorrection') || '申请考勤纠错'}
+          {t('attendance.requestCorrection')}
         </button>
 
         {/* Overtime Button */}
@@ -288,7 +288,7 @@ export function AttendancePage() {
           className="w-full py-3 border border-gray-200 rounded-xl text-sm font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-6"
         >
           <PlusCircle size={18} />
-          {t('attendance.requestOvertime') || '申请加班'}
+          {t('attendance.requestOvertime')}
         </button>
 
         {/* Monthly History */}

@@ -111,14 +111,11 @@ export function ProductListPage() {
 
   const updateProduct = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => {
-      console.log('updateProduct API called with:', id, data)
       return productApi.update(id, data).then(res => {
-        console.log('updateProduct API response:', res)
         return res
       })
     },
-    onSuccess: (res) => {
-      console.log('Update success callback:', res)
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
       setShowEditModal(false)
       setEditingProduct(null)
@@ -203,9 +200,6 @@ export function ProductListPage() {
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('=== handleEditSubmit called ===')
-    console.log('editingProduct:', editingProduct)
-    console.log('editForm:', editForm)
 
     const price = parseInt(editForm.price) || 0
     const data: any = {
@@ -219,13 +213,10 @@ export function ProductListPage() {
     if (price > 0) {
       data.specs = [{ name: 'Default', price }]
     }
-    console.log('Final data to submit:', data)
 
     if (editingProduct) {
-      console.log('Calling updateProduct.mutate with id:', editingProduct.id)
       updateProduct.mutate({ id: editingProduct.id, data })
     } else {
-      console.log('Calling createProduct.mutate')
       createProduct.mutate({ ...data, storeId: user?.storeId })
     }
   }
@@ -537,7 +528,6 @@ export function ProductListPage() {
                   type="submit"
                   className="btn-primary flex-1"
                   disabled={updateProduct.isPending || createProduct.isPending}
-                  onClick={() => console.log('Submit button clicked, editingProduct:', editingProduct, 'form:', editForm)}
                 >
                   {updateProduct.isPending || createProduct.isPending ? t('common.loading') : t('common.save')}
                 </button>

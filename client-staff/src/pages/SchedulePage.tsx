@@ -177,7 +177,7 @@ export function SchedulePage() {
           className="w-full mt-4 py-3 border border-gray-200 rounded-xl text-sm font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50"
         >
           <Users size={18} />
-          {t('schedule.requestShiftSwap') || '申请调班'}
+          {t('schedule.requestShiftSwap')}
         </button>
 
         {/* Legend */}

@@ -509,6 +509,7 @@ function CountItemInput({
   onUpdate: (qty: number) => void
   isUpdating: boolean
 }) {
+  const { t } = useTranslation()
   const [value, setValue] = useState(item.countedQty?.toString() || '')
   const [showInput, setShowInput] = useState(!item.countedQty)
 
@@ -546,7 +547,7 @@ function CountItemInput({
       <button
         onClick={() => setShowInput(true)}
         className="btn btn-sm btn-ghost"
-        title="修改"
+        title={t('inventory.editItem')}
       >
         <RotateCcw size={14} />
       </button>

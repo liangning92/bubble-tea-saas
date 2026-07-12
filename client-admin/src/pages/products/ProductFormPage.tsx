@@ -89,7 +89,6 @@ export function ProductFormPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: any) => {
-      console.log('Creating product with data:', data)
       return productApi.create(data)
     },
     onSuccess: () => {
@@ -114,8 +113,6 @@ export function ProductFormPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    console.log('Form submitted:', form)
-    console.log('User storeId:', user?.storeId)
 
     // Validation
     if (!form.name.trim()) {

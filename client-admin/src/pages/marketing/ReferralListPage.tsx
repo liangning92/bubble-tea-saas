@@ -276,7 +276,7 @@ export function ReferralListPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.referralCode')} *</label>
-                <input type="text" value={form.referralCode} onChange={e => setForm({ ...form, referralCode: e.target.value.toUpperCase() })} className="input font-mono" placeholder="REFER2024" required />
+                <input type="text" value={form.referralCode} onChange={e => setForm({ ...form, referralCode: e.target.value.toUpperCase() })} className="input font-mono" placeholder={t('marketing.referralCodePlaceholder')} required />
               </div>
 
               {/* Inviter Reward */}

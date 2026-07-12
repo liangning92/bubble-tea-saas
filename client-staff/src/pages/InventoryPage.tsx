@@ -53,14 +53,14 @@ export function InventoryPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const categories = [
-    t('inventory.categoryTea') || '茶叶',
-    t('inventory.categoryMilk') || '奶类',
-    t('inventory.categorySugar') || '糖类',
-    t('inventory.categoryTopping') || '小料',
-    t('inventory.categoryJam') || '果酱',
-    t('inventory.categorySyrup') || '糖浆',
-    t('inventory.categoryPackaging') || '包装',
-    t('inventory.categoryOther') || '其他'
+    t('inventory.categoryTea'),
+    t('inventory.categoryMilk'),
+    t('inventory.categorySugar'),
+    t('inventory.categoryTopping'),
+    t('inventory.categoryJam'),
+    t('inventory.categorySyrup'),
+    t('inventory.categoryPackaging'),
+    t('inventory.categoryOther')
   ]
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export function InventoryPage() {
         setInventory(res.data.list || [])
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.loadFailed') || 'Failed to load inventory')
+      alert(error.message || t('inventory.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -91,7 +91,7 @@ export function InventoryPage() {
 
   const handleStockIn = async () => {
     if (!selectedItem || !stockInQty) {
-      alert(t('inventory.enterQuantity') || 'Please enter quantity')
+      alert(t('inventory.enterQuantity'))
       return
     }
     try {
@@ -104,15 +104,15 @@ export function InventoryPage() {
         note: stockInNote || undefined
       })
       if (res.code === 201) {
-        alert(t('inventory.stockInSuccess') || 'Stock in successful')
+        alert(t('inventory.stockInSuccess'))
         setShowStockInModal(false)
         resetStockInForm()
         loadInventory()
       } else {
-        alert(res.message || t('inventory.stockInFailed') || 'Failed to stock in')
+        alert(res.message || t('inventory.stockInFailed'))
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.stockInFailed') || 'Failed to stock in')
+      alert(error.message || t('inventory.stockInFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -120,7 +120,7 @@ export function InventoryPage() {
 
   const handleStockOut = async () => {
     if (!selectedItem || !stockOutQty) {
-      alert(t('inventory.enterQuantity') || 'Please enter quantity')
+      alert(t('inventory.enterQuantity'))
       return
     }
     try {
@@ -133,15 +133,15 @@ export function InventoryPage() {
         note: stockOutNote || undefined
       })
       if (res.code === 200) {
-        alert(t('inventory.stockOutSuccess') || 'Stock out successful')
+        alert(t('inventory.stockOutSuccess'))
         setShowStockOutModal(false)
         resetStockOutForm()
         loadInventory()
       } else {
-        alert(res.message || t('inventory.stockOutFailed') || 'Failed to stock out')
+        alert(res.message || t('inventory.stockOutFailed'))
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.stockOutFailed') || 'Failed to stock out')
+      alert(error.message || t('inventory.stockOutFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -156,7 +156,7 @@ export function InventoryPage() {
         setShowLogsModal(true)
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.loadLogsFailed') || 'Failed to load stock logs')
+      alert(error.message || t('inventory.loadLogsFailed'))
     }
   }
 
@@ -189,7 +189,7 @@ export function InventoryPage() {
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">{t('inventory.title') || 'Inventory'}</h1>
+          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1>
           <div className="flex gap-2">
             <button
               onClick={() => setShowLowStockOnly(!showLowStockOnly)}
@@ -198,7 +198,7 @@ export function InventoryPage() {
               }`}
             >
               <AlertTriangle className="w-4 h-4 inline mr-1" />
-              {t('inventory.lowStock') || 'Low Stock'}
+              {t('inventory.lowStock')}
             </button>
           </div>
         </div>
@@ -211,7 +211,7 @@ export function InventoryPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('inventory.searchPlaceholder') || 'Search inventory...'}
+              placeholder={t('inventory.searchPlaceholder')}
               className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
@@ -225,7 +225,7 @@ export function InventoryPage() {
               !selectedCategory ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
             }`}
           >
-            {t('inventory.all') || 'All'}
+            {t('inventory.all')}
           </button>
           {categories.map(cat => (
             <button
@@ -246,12 +246,12 @@ export function InventoryPage() {
         {loading ? (
           <div className="text-center py-8 text-gray-500">
             <div className="animate-spin w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-            {t('common.loading') || 'Loading...'}
+            {t('common.loading')}
           </div>
         ) : filteredInventory.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-            <p>{t('inventory.noData') || 'No inventory items'}</p>
+            <p>{t('inventory.noData')}</p>
           </div>
         ) : (
           filteredInventory.map(item => (
@@ -267,7 +267,7 @@ export function InventoryPage() {
                       {item.currentStock.toLocaleString()}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {t('inventory.safetyStock') || 'Safety'}: {item.safetyStock.toLocaleString()}
+                      {t('inventory.safetyStock')}: {item.safetyStock.toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -276,7 +276,7 @@ export function InventoryPage() {
                 {item.currentStock <= item.safetyStock && (
                   <div className="mt-2 flex items-center text-orange-600 text-xs">
                     <AlertTriangle className="w-3 h-3 mr-1" />
-                    {t('inventory.lowStockWarning') || 'Low stock warning'}
+                    {t('inventory.lowStockWarning')}
                   </div>
                 )}
               </div>
@@ -288,14 +288,14 @@ export function InventoryPage() {
                   className="flex-1 py-3 flex items-center justify-center text-green-600 hover:bg-green-50 active:bg-green-100 transition-colors"
                 >
                   <ArrowDownCircle className="w-4 h-4 mr-1.5" />
-                  {t('inventory.stockIn') || 'Stock In'}
+                  {t('inventory.stockIn')}
                 </button>
                 <button
                   onClick={() => openStockOut(item)}
                   className="flex-1 py-3 flex items-center justify-center text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors border-l border-gray-100"
                 >
                   <ArrowUpCircle className="w-4 h-4 mr-1.5" />
-                  {t('inventory.stockOut') || 'Stock Out'}
+                  {t('inventory.stockOut')}
                 </button>
                 <button
                   onClick={() => loadStockLogs(item)}
@@ -314,7 +314,7 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockIn') || 'Stock In'}</h2>
+              <h2 className="text-lg font-semibold">{t('inventory.stockIn')}</h2>
               <button onClick={() => { setShowStockInModal(false); resetStockInForm() }} className="p-2">
                 <X className="w-5 h-5 text-gray-400" />
               </button>
@@ -324,14 +324,14 @@ export function InventoryPage() {
               <p className="font-medium">{selectedItem.name}</p>
               <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
               <p className="text-sm text-gray-500">
-                {t('inventory.currentStock') || 'Current Stock'}: {selectedItem.currentStock.toLocaleString()}
+                {t('inventory.currentStock')}: {selectedItem.currentStock.toLocaleString()}
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.quantity') || 'Quantity'} *
+                  {t('inventory.quantity')} *
                 </label>
                 <input
                   type="number"
@@ -345,7 +345,7 @@ export function InventoryPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.unitCost') || 'Unit Cost (IDR)'}
+                  {t('inventory.unitCost')}
                 </label>
                 <input
                   type="number"
@@ -366,7 +366,7 @@ export function InventoryPage() {
                   value={stockInNote}
                   onChange={(e) => setStockInNote(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('inventory.notePlaceholder') || 'Optional note...'}
+                  placeholder={t('inventory.notePlaceholder')}
                 />
               </div>
             </div>
@@ -376,7 +376,7 @@ export function InventoryPage() {
               disabled={submitting || !stockInQty}
               className="w-full mt-6 py-3 bg-green-500 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed active:bg-green-600 transition-colors"
             >
-              {submitting ? t('common.submitting') || 'Submitting...' : t('inventory.confirmStockIn') || 'Confirm Stock In'}
+              {submitting ? t('common.submitting') : t('inventory.confirmStockIn')}
             </button>
           </div>
         </div>
@@ -387,7 +387,7 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockOut') || 'Stock Out'}</h2>
+              <h2 className="text-lg font-semibold">{t('inventory.stockOut')}</h2>
               <button onClick={() => { setShowStockOutModal(false); resetStockOutForm() }} className="p-2">
                 <X className="w-5 h-5 text-gray-400" />
               </button>
@@ -397,14 +397,14 @@ export function InventoryPage() {
               <p className="font-medium">{selectedItem.name}</p>
               <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
               <p className="text-sm text-gray-500">
-                {t('inventory.currentStock') || 'Current Stock'}: {selectedItem.currentStock.toLocaleString()}
+                {t('inventory.currentStock')}: {selectedItem.currentStock.toLocaleString()}
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.quantity') || 'Quantity'} *
+                  {t('inventory.quantity')} *
                 </label>
                 <input
                   type="number"
@@ -443,7 +443,7 @@ export function InventoryPage() {
                   value={stockOutNote}
                   onChange={(e) => setStockOutNote(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('inventory.notePlaceholder') || 'Optional note...'}
+                  placeholder={t('inventory.notePlaceholder')}
                 />
               </div>
             </div>

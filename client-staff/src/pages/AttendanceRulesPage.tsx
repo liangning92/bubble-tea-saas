@@ -54,9 +54,9 @@ export function AttendanceRulesPage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-primary text-white px-4 py-6 rounded-b-3xl">
-        <h1 className="text-xl font-bold">{t('attendanceRules.title') || '考勤规则'}</h1>
+        <h1 className="text-xl font-bold">{t('attendanceRules.title')}</h1>
         <p className="text-white/80 text-sm mt-1">
-          {t('attendanceRules.description') || '了解门店考勤制度'}
+          {t('attendanceRules.description')}
         </p>
       </div>
 
@@ -70,39 +70,39 @@ export function AttendanceRulesPage() {
                   <Clock className="text-blue-600" size={20} />
                 </div>
                 <div>
-                  <h3 className="font-semibold">{t('attendanceRules.workHours') || '工作时间'}</h3>
+                  <h3 className="font-semibold">{t('attendanceRules.workHours')}</h3>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('attendanceRules.workStartTime') || '上班时间'}</span>
+                  <span className="text-gray-600">{t('attendanceRules.workStartTime')}</span>
                   <span className="font-medium">{rule.workStartTime}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('attendanceRules.workEndTime') || '下班时间'}</span>
+                  <span className="text-gray-600">{t('attendanceRules.workEndTime')}</span>
                   <span className="font-medium">{rule.workEndTime}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">{t('attendanceRules.gracePeriod') || '宽限期'}</span>
-                  <span className="font-medium">{rule.gracePeriod} {t('attendanceRules.minutes') || '分钟'}</span>
+                  <span className="text-gray-600">{t('attendanceRules.gracePeriod')}</span>
+                  <span className="font-medium">{rule.gracePeriod} {t('attendanceRules.minutes')}</span>
                 </div>
               </div>
             </div>
 
             {/* Late Deduction */}
             <div className="bg-white rounded-xl p-4 shadow-sm">
-              <h3 className="font-semibold mb-4">{t('attendanceRules.lateDeduction') || '迟到扣款'}</h3>
+              <h3 className="font-semibold mb-4">{t('attendanceRules.lateDeduction')}</h3>
               <div className="space-y-3">
                 {rule.lateDeductionType === 'fixed' ? (
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-gray-600">{t('attendanceRules.fixedDeduction') || '固定扣款'}</span>
+                    <span className="text-gray-600">{t('attendanceRules.fixedDeduction')}</span>
                     <span className="font-medium text-red-600">
                       Rp {rule.lateDeductionFixed?.toLocaleString() || 0}
                     </span>
                   </div>
                 ) : rule.lateDeductionType === 'daily_rate' ? (
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-gray-600">{t('attendanceRules.dailyRateDeduction') || '按日薪比例扣'}</span>
+                    <span className="text-gray-600">{t('attendanceRules.dailyRateDeduction')}</span>
                     <span className="font-medium text-red-600">
                       {((rule.lateDeductionDailyRate || 0) * 100).toFixed(0)}%
                     </span>
@@ -113,20 +113,20 @@ export function AttendanceRulesPage() {
 
             {/* Absence Deduction */}
             <div className="bg-white rounded-xl p-4 shadow-sm">
-              <h3 className="font-semibold mb-4">{t('attendanceRules.absenceDeduction') || '缺勤扣款'}</h3>
+              <h3 className="font-semibold mb-4">{t('attendanceRules.absenceDeduction')}</h3>
               <div className="space-y-3">
                 {rule.absenceDeductionType === 'fixed' ? (
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-gray-600">{t('attendanceRules.fixedDeduction') || '固定扣款'}</span>
+                    <span className="text-gray-600">{t('attendanceRules.fixedDeduction')}</span>
                     <span className="font-medium text-red-600">
                       Rp {rule.absenceDeductionFixed?.toLocaleString() || 0}
                     </span>
                   </div>
                 ) : rule.absenceDeductionType === 'daily_rate' ? (
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-gray-600">{t('attendanceRules.dailyRateDeduction') || '按日薪比例扣'}</span>
+                    <span className="text-gray-600">{t('attendanceRules.dailyRateDeduction')}</span>
                     <span className="font-medium text-red-600">
-                      {(rule.absenceDeductionFixed || 0) * 100}% 日薪
+                      {(rule.absenceDeductionFixed || 0) * 100}% {t('attendanceRules.dailyRateUnit')}
                     </span>
                   </div>
                 ) : null}
@@ -135,17 +135,17 @@ export function AttendanceRulesPage() {
 
             {/* Overtime */}
             <div className="bg-white rounded-xl p-4 shadow-sm">
-              <h3 className="font-semibold mb-4">{t('attendanceRules.overtimeSettings') || '加班设置'}</h3>
+              <h3 className="font-semibold mb-4">{t('attendanceRules.overtimeSettings')}</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('attendanceRules.overtimeRate') || '加班费率'}</span>
+                  <span className="text-gray-600">{t('attendanceRules.overtimeRate')}</span>
                   <span className="font-medium text-green-600">
                     {rule.overtimeRate}x
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">{t('attendanceRules.minOvertimeHours') || '最小加班时长'}</span>
-                  <span className="font-medium">{rule.overtimeMinHours} {t('attendanceRules.hours') || '小时'}</span>
+                  <span className="text-gray-600">{t('attendanceRules.minOvertimeHours')}</span>
+                  <span className="font-medium">{rule.overtimeMinHours} {t('attendanceRules.hours')}</span>
                 </div>
               </div>
             </div>
@@ -154,7 +154,7 @@ export function AttendanceRulesPage() {
           <div className="bg-white rounded-xl p-8 text-center">
             <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500">
-              {t('attendanceRules.noRules') || '暂无考勤规则'}
+              {t('attendanceRules.noRules')}
             </p>
           </div>
         )}

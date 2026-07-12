@@ -90,7 +90,7 @@ export function CouponEditPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{t('marketing.couponCode')} *</label>
-            <input type="text" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input" placeholder="DISCOUNT10" disabled={isEdit} />
+            <input type="text" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input" placeholder={t('marketing.couponCodePlaceholder')} disabled={isEdit} />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('marketing.couponType')}</label>
@@ -127,7 +127,7 @@ export function CouponEditPage() {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('marketing.usageLimit')}</label>
-            <input type="number" value={form.usageLimit} onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })} className="input" min={0} placeholder="0 = unlimited" />
+            <input type="number" value={form.usageLimit} onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })} className="input" min={0} placeholder={t('marketing.usageLimitPlaceholder')} />
           </div>
           {isEdit && (
             <div>

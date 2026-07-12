@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { ArrowLeft, Megaphone, Calendar, CheckCircle } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 interface Announcement {
   id: string
@@ -76,9 +77,9 @@ export function AnnouncementsPage() {
 
   const getTypeBadge = (type: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      info: { bg: 'bg-blue-100', text: 'text-blue-700', label: t('announcement.info') || 'Info' },
-      urgent: { bg: 'bg-red-100', text: 'text-red-700', label: t('announcement.urgent') || 'Urgent' },
-      event: { bg: 'bg-purple-100', text: 'text-purple-700', label: t('announcement.event') || 'Event' }
+      info: { bg: 'bg-blue-100', text: 'text-blue-700', label: t('announcement.info') },
+      urgent: { bg: 'bg-red-100', text: 'text-red-700', label: t('announcement.urgent') },
+      event: { bg: 'bg-purple-100', text: 'text-purple-700', label: t('announcement.event') }
     }
     const badge = badges[type] || badges.info
     return (
@@ -86,15 +87,6 @@ export function AnnouncementsPage() {
         {badge.label}
       </span>
     )
-  }
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    })
   }
 
   const unreadCount = announcements.filter(a => !a.isRead).length
@@ -108,9 +100,9 @@ export function AnnouncementsPage() {
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1">
-            <h1 className="text-lg font-bold">{t('announcement.title') || 'Announcements'}</h1>
+            <h1 className="text-lg font-bold">{t('announcement.title')}</h1>
             {unreadCount > 0 && (
-              <p className="text-xs text-primary">{unreadCount} {t('announcement.unread') || 'unread'}</p>
+              <p className="text-xs text-primary">{unreadCount} {t('announcement.unread')}</p>
             )}
           </div>
         </div>
@@ -123,7 +115,7 @@ export function AnnouncementsPage() {
         ) : announcements.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center">
             <Megaphone size={48} className="mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-500">{t('announcement.noAnnouncements') || 'No announcements'}</p>
+            <p className="text-gray-500">{t('announcement.noAnnouncements')}</p>
           </div>
         ) : (
           announcements.map((announcement) => (
@@ -156,7 +148,7 @@ export function AnnouncementsPage() {
                 {announcement.isRead && (
                   <div className="flex items-center gap-1 text-green-600">
                     <CheckCircle size={12} />
-                    <span>{t('announcement.read') || 'Read'}</span>
+                    <span>{t('announcement.read')}</span>
                   </div>
                 )}
               </div>

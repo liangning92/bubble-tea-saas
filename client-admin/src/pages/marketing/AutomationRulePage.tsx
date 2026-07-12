@@ -45,7 +45,6 @@ export function AutomationRulePage() {
     // Try to extract array values
     rules = Object.values(rawData).filter(v => Array.isArray(v))[0] || []
   }
-  console.log('Automation rules raw:', rawData, 'parsed:', rules)
 
   const filteredRules = rules.filter(rule => {
     if (filter === 'all') return true

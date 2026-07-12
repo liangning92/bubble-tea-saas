@@ -233,7 +233,6 @@ export function InventoryPage() {
       avgCost: parseInt(selectedItem.avgCost) || 0,
       safetyStock: parseInt(selectedItem.safetyStock) || 0
     }
-    console.log('Updating inventory:', selectedItem.id, data)
     updateItemMutation.mutate({
       id: selectedItem.id,
       data

@@ -6,9 +6,9 @@ import { posApi } from '../services/api'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe } from 'lucide-react'
 
 const LANGUAGES = [
-  { code: 'zh', label: '中文', flag: '🇨🇳' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'id', label: 'Indonesia', flag: '🇮🇩' }
+  { code: 'zh', labelKey: 'lang.zhName', flag: '🇨🇳' },
+  { code: 'en', labelKey: 'lang.enName', flag: '🇺🇸' },
+  { code: 'id', labelKey: 'lang.idName', flag: '🇮🇩' }
 ]
 
 export function LoginPage() {
@@ -26,13 +26,11 @@ export function LoginPage() {
 
   useEffect(() => {
     setMounted(true)
-    // Load saved credentials
+    // Load saved phone number only (never store password)
     const savedPhone = localStorage.getItem('remembered_phone')
-    const savedPassword = localStorage.getItem('remembered_password')
     const savedRemember = localStorage.getItem('remember_me')
-    if (savedRemember === 'true' && savedPhone && savedPassword) {
+    if (savedRemember === 'true' && savedPhone) {
       setPhone(savedPhone)
-      setPassword(savedPassword)
       setRememberMe(true)
     }
   }, [])
@@ -46,15 +44,13 @@ export function LoginPage() {
       const { token, user } = response.data.data
       login(token, user)
 
-      // Handle remember me
+      // Handle remember me - only store phone number, never password
       if (rememberMe) {
         localStorage.setItem('remembered_phone', phone)
-        localStorage.setItem('remembered_password', password)
         localStorage.setItem('remember_me', 'true')
       } else {
         localStorage.removeItem('remembered_phone')
-        localStorage.removeItem('remembered_password')
-        localStorage.setItem('remember_me', 'false')
+        localStorage.removeItem('remember_me')
       }
 
       navigate('/dashboard')
@@ -94,7 +90,7 @@ export function LoginPage() {
               className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <Globe size={16} className="text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">{currentLang.flag} {currentLang.label}</span>
+              <span className="text-sm font-medium text-gray-700">{currentLang.flag} {t(currentLang.labelKey)}</span>
             </button>
             {showLangMenu && (
               <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg py-1 z-50 shadow-lg">
@@ -105,7 +101,7 @@ export function LoginPage() {
                     className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 flex items-center gap-3 ${i18n.language === lang.code ? 'text-primary-hover font-medium' : 'text-gray-700'}`}
                   >
                     <span className="text-lg">{lang.flag}</span>
-                    <span>{lang.label}</span>
+                    <span>{t(lang.labelKey)}</span>
                   </button>
                 ))}
               </div>
@@ -155,7 +151,7 @@ export function LoginPage() {
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="081234567890"
+                    placeholder={t('auth.phonePlaceholder')}
                     className="w-full pl-14 pr-4 py-3.5 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     required
                   />
@@ -173,7 +169,7 @@ export function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder={t('auth.passwordPlaceholder')}
                     className="w-full pl-14 pr-12 py-3.5 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     required
                   />

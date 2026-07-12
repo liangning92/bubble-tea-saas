@@ -53,7 +53,7 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
     try {
       await onPayment(method)
     } catch (err) {
-      setError(t('pos.paymentError') || 'Payment failed. Please try again.')
+      setError(t('pos.paymentError'))
       setIsProcessing(false)
       setSelectedMethod(null)
     }
@@ -67,12 +67,12 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
     const totalSplit = amounts.reduce((sum, item) => sum + item.amount, 0)
 
     if (amounts.length === 0) {
-      setError(t('pos.splitError') || 'Please enter at least one payment amount')
+      setError(t('pos.splitError'))
       return
     }
 
     if (totalSplit < total) {
-      setError(t('pos.splitInsufficient') || 'Total split amount is less than the bill')
+      setError(t('pos.splitInsufficient'))
       return
     }
 
@@ -84,7 +84,7 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
         await onPayment(method, amount)
       }
     } catch (err) {
-      setError(t('pos.paymentError') || 'Payment failed. Please try again.')
+      setError(t('pos.paymentError'))
       setIsProcessing(false)
     }
   }
@@ -120,14 +120,14 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
           onClick={() => setMode('full')}
           className={`flex-1 py-3 text-sm font-medium ${mode === 'full' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`}
         >
-          {t('pos.fullPayment') || 'Full Payment'}
+          {t('pos.fullPayment')}
         </button>
         <button
           onClick={() => setMode('split')}
           className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-1 ${mode === 'split' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`}
         >
           <Split size={16} />
-          {t('pos.splitPayment') || 'Split Payment'}
+          {t('pos.splitPayment')}
         </button>
       </div>
 
@@ -137,7 +137,7 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
         <p className="text-4xl font-bold text-primary">{formatCurrency(total)}</p>
         {mode === 'split' && (
           <p className="text-sm mt-2">
-            {t('pos.remaining') || 'Remaining'}: <span className={getRemaining() > 0 ? 'text-orange-600' : 'text-green-600'}>{formatCurrency(getRemaining())}</span>
+            {t('pos.remaining')}: <span className={getRemaining() > 0 ? 'text-orange-600' : 'text-green-600'}>{formatCurrency(getRemaining())}</span>
           </p>
         )}
       </div>
@@ -184,7 +184,7 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
         <>
           {/* Split Payment */}
           <div className="p-4 space-y-3">
-            <p className="text-sm text-gray-500">{t('pos.splitHint') || 'Enter amount for each payment method'}</p>
+            <p className="text-sm text-gray-500">{t('pos.splitHint')}</p>
 
             {(['cash', 'gopay', 'ovo', 'dana', 'shopeepay'] as PaymentMethod[]).map((method) => (
               <div key={method} className="flex items-center gap-3">
@@ -209,7 +209,7 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
                   }}
                   className="px-3 py-2 text-sm text-primary border border-primary rounded-lg hover:bg-primary/5"
                 >
-                  {t('pos.fill') || 'Fill'}
+                  {t('pos.fill')}
                 </button>
               </div>
             ))}
@@ -222,7 +222,7 @@ export function PaymentModal({ isOpen, total, onClose, onPayment }: PaymentModal
               {isProcessing ? (
                 <Loader2 size={20} className="animate-spin mx-auto" />
               ) : (
-                t('pos.confirmSplit') || 'Confirm Split'
+                t('pos.confirmSplit')
               )}
             </button>
           </div>

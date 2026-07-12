@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { Wallet, RefreshCw, Loader2, ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { formatDate, formatCurrency } from '../utils/helpers'
 
 interface DeductionLog {
   id: string
@@ -60,22 +61,6 @@ export function DepositPage() {
   useEffect(() => {
     loadData()
   }, [user])
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount / 100)
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
 
   const getRemainingAmount = () => {
     if (!deposit) return 0

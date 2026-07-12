@@ -28,7 +28,7 @@ export function KDSConfigPage() {
   const [saved, setSaved] = useState(false)
 
   const handleSave = () => {
-    // Save to localStorage for now (in production would save to server)
+    // TODO: 后续应迁移到服务端 API，当前使用 localStorage 是临时方案
     localStorage.setItem('kds-config', JSON.stringify(config))
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)

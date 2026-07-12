@@ -38,10 +38,10 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
         setExpiresAt(data.expiresAt)
         setRefreshInterval(data.refreshInterval || 300000)
       } else {
-        setError(response.data?.message || 'Failed to generate QR')
+        setError(response.data?.message || t('common.error'))
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Network error')
+      setError(err.response?.data?.message || t('common.error'))
     } finally {
       setIsLoading(false)
     }
@@ -97,7 +97,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
         <div className="bg-primary text-white px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <QrCode size={24} />
-            <span className="font-bold">{t('attendance.qrTitle') || 'Attendance QR'}</span>
+            <span className="font-bold">{t('attendance.qrTitle') }</span>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-white/20 rounded">
             <X size={20} />

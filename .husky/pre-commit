@@ -1,0 +1,15 @@
+#!/bin/sh
+# Pre-commit hook for Bubble Tea SaaS
+# 确保代码提交前通过基础检查
+
+echo "🔍 Running pre-commit checks..."
+
+# 检查 TypeScript 类型
+echo "📦 Checking TypeScript types..."
+cd client-pos && npx tsc --noEmit --skipLibCheck 2>/dev/null || { echo "❌ POS TypeScript check failed"; exit 1; }
+cd ../client-admin && npx tsc --noEmit --skipLibCheck 2>/dev/null || { echo "❌ Admin TypeScript check failed"; exit 1; }
+cd ../client-staff && npx tsc --noEmit --skipLibCheck 2>/dev/null || { echo "❌ Staff TypeScript check failed"; exit 1; }
+cd ..
+
+echo "✅ All TypeScript checks passed"
+echo "✅ Pre-commit checks passed"

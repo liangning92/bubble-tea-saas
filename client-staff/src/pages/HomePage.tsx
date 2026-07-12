@@ -38,7 +38,7 @@ export function HomePage() {
 
   // Load saved language preference
   useEffect(() => {
-    const savedLang = localStorage.getItem('staff-language')
+    const savedLang = localStorage.getItem('bubble-tea-language')
     if (savedLang && savedLang !== i18n.language) {
       i18n.changeLanguage(savedLang)
     }
@@ -82,7 +82,7 @@ export function HomePage() {
 
   const changeLanguage = (langCode: string) => {
     i18n.changeLanguage(langCode)
-    localStorage.setItem('staff-language', langCode)
+    localStorage.setItem('bubble-tea-language', langCode)
     setShowLangMenu(false)
   }
 
@@ -178,12 +178,12 @@ export function HomePage() {
               {todayAttendance ? (
                 <>
                   <p className={`font-bold text-lg ${
-                    todayAttendance.checkOut ? 'text-white/60' : 'text-green-300'
+                    todayAttendance.checkOutTime ? 'text-white/60' : 'text-green-300'
                   }`}>
-                    {todayAttendance.checkOut ? t('home.checkedIn') : t('home.working')}
+                    {todayAttendance.checkOutTime ? t('home.checkedIn') : t('home.working')}
                   </p>
                   <p className="text-white/60 text-sm">
-                    {new Date(todayAttendance.checkIn).toLocaleTimeString('id-ID', {
+                    {new Date(todayAttendance.checkInTime).toLocaleTimeString('id-ID', {
                       hour: '2-digit',
                       minute: '2-digit'
                     })}
@@ -204,35 +204,35 @@ export function HomePage() {
           <button
             onClick={() => navigate('/attendance')}
             className={`p-4 rounded-2xl text-left ${
-              todayAttendance?.checkIn && !todayAttendance?.checkOut
+              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
                 ? 'bg-green-500 text-white'
                 : 'bg-white shadow-sm'
             }`}
           >
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-              todayAttendance?.checkIn && !todayAttendance?.checkOut
+              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
                 ? 'bg-white/20'
                 : 'bg-primary/10'
             }`}>
               <Clock className={`${
-                todayAttendance?.checkIn && !todayAttendance?.checkOut
+                todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
                   ? 'text-white'
                   : 'text-primary'
               }`} size={24} />
             </div>
             <p className={`font-bold ${
-              todayAttendance?.checkIn && !todayAttendance?.checkOut
+              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
                 ? 'text-white'
                 : 'text-gray-900'
             }`}>
-              {todayAttendance?.checkIn && !todayAttendance?.checkOut ? t('attendance.checkOut') : t('attendance.checkIn')}
+              {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('attendance.checkOut') : t('attendance.checkIn')}
             </p>
             <p className={`text-sm ${
-              todayAttendance?.checkIn && !todayAttendance?.checkOut
+              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
                 ? 'text-white/80'
                 : 'text-gray-500'
             }`}>
-              {todayAttendance?.checkIn && !todayAttendance?.checkOut ? t('home.clickToLeave') : t('home.clickToWork')}
+              {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('home.clickToLeave') : t('home.clickToWork')}
             </p>
           </button>
 
@@ -244,8 +244,8 @@ export function HomePage() {
             <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
               <ShieldCheck className="text-purple-600" size={24} />
             </div>
-            <p className="font-bold text-gray-900">{t('attendance.rules') || '考勤规则'}</p>
-            <p className="text-sm text-gray-500">{t('attendance.viewRules') || '查看规则'}</p>
+            <p className="font-bold text-gray-900">{t('attendance.rules')}</p>
+            <p className="text-sm text-gray-500">{t('attendance.viewRules')}</p>
           </button>
 
           {/* Schedule */}
@@ -333,8 +333,8 @@ export function HomePage() {
             <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center mb-3">
               <Package className="text-cyan-600" size={24} />
             </div>
-            <p className="font-bold text-gray-900">{t('inventory.title') || 'Inventory'}</p>
-            <p className="text-sm text-gray-500">{t('inventory.stockInOut') || 'Stock In/Out'}</p>
+            <p className="font-bold text-gray-900">{t('inventory.title')}</p>
+            <p className="text-sm text-gray-500">{t('inventory.stockInOut')}</p>
           </button>
 
           {/* Points */}

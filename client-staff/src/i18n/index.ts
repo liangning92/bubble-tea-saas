@@ -12,6 +12,7 @@ const resources = {
         success: 'Berhasil',
         error: 'Gagal',
         loading: 'Memuat...',
+        submitting: 'Mengirim...',
         days: 'hari',
         hours: 'jam',
         all: 'Semua',
@@ -41,7 +42,9 @@ const resources = {
         rememberMe: 'Ingat saya',
         forgotPassword: 'Lupa kata sandi?',
         phonePlaceholder: 'Contoh: 081234567890',
-        passwordPlaceholder: 'Masukkan kata sandi'
+        passwordPlaceholder: 'Masukkan kata sandi',
+        loginFailed: 'Login gagal',
+        invalidCredentials: 'Kredensial tidak valid'
       },
       attendance: {
         title: 'Absensi',
@@ -79,6 +82,8 @@ const resources = {
         newCorrection: 'Koreksi Baru',
         originalCheckIn: 'Absen Masuk Semula',
         originalCheckOut: 'Absen Pulang Semula',
+        correctCheckIn: 'Absen Masuk Benar',
+        correctCheckOut: 'Absen Pulang Benar',
         reason: 'Alasan',
         reasonPlaceholder: 'Jelaskan alasan...',
         fillForm: 'Isi Formulir',
@@ -89,6 +94,7 @@ const resources = {
         date: 'Tanggal',
         requestHistory: 'Riwayat Pengajuan',
         submit: 'Ajukan',
+        submitFailed: 'Gagal mengajukan',
         submitSuccess: 'Berhasil diajukan',
         submitSuccessDesc: 'Pengajuan Anda telah berhasil dikirim',
         rules: 'Aturan',
@@ -289,6 +295,7 @@ const resources = {
         lateDeduction: 'Potongan Terlambat',
         fixedDeduction: 'Potongan Tetap',
         dailyRateDeduction: 'Potongan Per Hari',
+        dailyRateUnit: 'per hari',
         absenceDeduction: 'Potongan Ketidakhadiran',
         overtimeSettings: 'Pengaturan Lembur',
         overtimeRate: 'Tarif Lembur',
@@ -311,6 +318,7 @@ const resources = {
         redeemFailed: 'Gagal menukar rewards'
       },
       deposit: {
+        deposit: 'Deposit',
         title: 'Deposit',
         noDeposit: 'Belum ada deposit',
         active: 'Aktif',
@@ -336,6 +344,7 @@ const resources = {
         times: 'kali',
         fullRefund: 'Penuh',
         prorataRefund: 'Proporsional',
+        prorata: 'Proporsional',
         noRefund: 'Tanpa Refund',
         monthly: 'Bulanan',
         oneTime: 'Sekali',
@@ -449,6 +458,7 @@ const resources = {
         success: 'Success',
         error: 'Error',
         loading: 'Loading...',
+        submitting: 'Submitting...',
         days: 'days',
         hours: 'hours',
         all: 'All',
@@ -478,7 +488,9 @@ const resources = {
         rememberMe: 'Remember me',
         forgotPassword: 'Forgot password?',
         phonePlaceholder: 'Example: 081234567890',
-        passwordPlaceholder: 'Enter your password'
+        passwordPlaceholder: 'Enter your password',
+        loginFailed: 'Login failed',
+        invalidCredentials: 'Invalid credentials'
       },
       attendance: {
         title: 'Attendance',
@@ -516,6 +528,8 @@ const resources = {
         newCorrection: 'New Correction',
         originalCheckIn: 'Original Check In',
         originalCheckOut: 'Original Check Out',
+        correctCheckIn: 'Correct Check In',
+        correctCheckOut: 'Correct Check Out',
         reason: 'Reason',
         reasonPlaceholder: 'Explain reason...',
         fillForm: 'Fill Form',
@@ -526,6 +540,7 @@ const resources = {
         date: 'Date',
         requestHistory: 'Request History',
         submit: 'Submit',
+        submitFailed: 'Failed to submit',
         submitSuccess: 'Submitted successfully',
         submitSuccessDesc: 'Your request has been submitted',
         rules: 'Rules',
@@ -709,6 +724,7 @@ const resources = {
         lateDeduction: 'Late Deduction',
         fixedDeduction: 'Fixed Deduction',
         dailyRateDeduction: 'Daily Rate Deduction',
+        dailyRateUnit: 'of daily rate',
         absenceDeduction: 'Absence Deduction',
         overtimeSettings: 'Overtime Settings',
         overtimeRate: 'Overtime Rate',
@@ -748,6 +764,7 @@ const resources = {
         redeemFailed: 'Failed to redeem reward'
       },
       deposit: {
+        deposit: 'Deposit',
         title: 'Deposit',
         noDeposit: 'No deposit record',
         active: 'Active',
@@ -773,6 +790,7 @@ const resources = {
         times: 'times',
         fullRefund: 'Full Refund',
         prorataRefund: 'Prorata Refund',
+        prorata: 'Prorata',
         noRefund: 'No Refund',
         monthly: 'Monthly',
         oneTime: 'One-time',
@@ -886,6 +904,7 @@ const resources = {
         success: '成功',
         error: '失败',
         loading: '加载中...',
+        submitting: '提交中...',
         days: '天',
         hours: '小时',
         all: '全部',
@@ -915,7 +934,9 @@ const resources = {
         rememberMe: '记住密码',
         forgotPassword: '忘记密码？',
         phonePlaceholder: '示例: 081234567890',
-        passwordPlaceholder: '输入密码'
+        passwordPlaceholder: '输入密码',
+        loginFailed: '登录失败',
+        invalidCredentials: '账号或密码错误'
       },
       attendance: {
         title: '考勤',
@@ -953,6 +974,8 @@ const resources = {
         newCorrection: '新纠错',
         originalCheckIn: '原签到时间',
         originalCheckOut: '原签退时间',
+        correctCheckIn: '正确签到时间',
+        correctCheckOut: '正确签退时间',
         reason: '原因',
         reasonPlaceholder: '请说明原因...',
         fillForm: '填写表单',
@@ -963,6 +986,7 @@ const resources = {
         date: '日期',
         requestHistory: '申请历史',
         submit: '提交',
+        submitFailed: '提交失败',
         submitSuccess: '提交成功',
         submitSuccessDesc: '您的申请已成功提交',
         rules: '规则',
@@ -1178,6 +1202,7 @@ const resources = {
         lateDeduction: '迟到扣款',
         fixedDeduction: '固定扣款',
         dailyRateDeduction: '按日薪比例扣',
+        dailyRateUnit: '日薪',
         absenceDeduction: '缺勤扣款',
         overtimeSettings: '加班设置',
         overtimeRate: '加班费率',
@@ -1200,6 +1225,7 @@ const resources = {
         redeemFailed: '兑换失败'
       },
       deposit: {
+        deposit: '押金',
         title: '押金',
         noDeposit: '暂无押金记录',
         active: '有效',
@@ -1225,6 +1251,7 @@ const resources = {
         times: '次',
         fullRefund: '全额退款',
         prorataRefund: '按比例退款',
+        prorata: '按比例',
         noRefund: '不退款',
         monthly: '每月',
         oneTime: '一次性',

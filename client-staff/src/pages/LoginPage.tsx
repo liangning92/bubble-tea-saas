@@ -32,13 +32,11 @@ export function LoginPage() {
   const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
 
   useEffect(() => {
-    // Load saved credentials
+    // Load saved phone number only (never store password)
     const savedPhone = localStorage.getItem('remembered_phone')
-    const savedPassword = localStorage.getItem('remembered_password')
     const savedRemember = localStorage.getItem('remember_me')
-    if (savedRemember === 'true' && savedPhone && savedPassword) {
+    if (savedRemember === 'true' && savedPhone) {
       setPhone(savedPhone)
-      setPassword(savedPassword)
       setRememberMe(true)
     }
   }, [])
@@ -53,23 +51,21 @@ export function LoginPage() {
       if (response.code === 200) {
         login(response.data.token, response.data.user)
 
-        // Handle remember me
+        // Handle remember me - only store phone number, never password
         if (rememberMe) {
           localStorage.setItem('remembered_phone', phone)
-          localStorage.setItem('remembered_password', password)
           localStorage.setItem('remember_me', 'true')
         } else {
           localStorage.removeItem('remembered_phone')
-          localStorage.removeItem('remembered_password')
-          localStorage.setItem('remember_me', 'false')
+          localStorage.removeItem('remember_me')
         }
 
         navigate('/', { replace: true })
       } else {
-        setError(response.message || 'Login failed')
+        setError(response.message || t('auth.loginFailed'))
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials')
+      setError(err.response?.data?.message || t('auth.invalidCredentials'))
     } finally {
       setIsLoading(false)
     }

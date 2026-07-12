@@ -95,7 +95,6 @@ export function StaffFormPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: any) => {
-      console.log('Creating staff with data:', data)
       return staffApi.create(data)
     },
     onSuccess: () => {
@@ -119,16 +118,11 @@ export function StaffFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('=== FORM SUBMIT ===')
-    console.log('form:', form)
-    console.log('user:', user)
-    console.log('user?.storeId:', user?.storeId)
 
     const submitData: any = { ...form }
     // Add storeId from current user
     submitData.storeId = user?.storeId
 
-    console.log('submitData before processing:', submitData)
 
     // Convert empty strings to appropriate values
     if (submitData.hourlyRate === '') submitData.hourlyRate = undefined
@@ -136,7 +130,6 @@ export function StaffFormPage() {
     if (submitData.hireDate === '') submitData.hireDate = undefined
     if (submitData.password === '') submitData.password = undefined
 
-    console.log('submitData after processing:', submitData)
 
     // Validation for new staff
     if (!isEdit && !submitData.password) {

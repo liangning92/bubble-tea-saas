@@ -353,7 +353,7 @@ function CategoryEditor({ data, onChange }: { data: CategoryItem[]; onChange: (d
               value={item.value}
               onChange={(e) => updateItem(index, 'value', e.target.value)}
               className="input w-full"
-              placeholder="e.g., food_safety"
+              placeholder={t('hygiene.priorityPlaceholder')}
             />
           </div>
 
@@ -365,7 +365,7 @@ function CategoryEditor({ data, onChange }: { data: CategoryItem[]; onChange: (d
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="Food Safety"
+              placeholder={t('hygiene.priorityCritical')}
             />
           </div>
 
@@ -377,7 +377,7 @@ function CategoryEditor({ data, onChange }: { data: CategoryItem[]; onChange: (d
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="食品安全"
+              placeholder={t('hygiene.priorityCritical')}
             />
           </div>
 
@@ -464,7 +464,7 @@ function PriorityEditor({ data, onChange }: { data: PriorityItem[]; onChange: (d
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="Critical"
+              placeholder={t('hygiene.priorityCritical')}
             />
           </div>
 
@@ -476,7 +476,7 @@ function PriorityEditor({ data, onChange }: { data: PriorityItem[]; onChange: (d
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="紧急"
+              placeholder={t('hygiene.priorityCritical')}
             />
           </div>
 
@@ -535,7 +535,7 @@ function ShiftEditor({ data, onChange }: { data: ShiftItem[]; onChange: (data: S
               value={item.value}
               onChange={(e) => updateItem(index, 'value', e.target.value)}
               className="input w-24"
-              placeholder="morning"
+              placeholder={t('hygiene.morning')}
             />
           </div>
 
@@ -547,7 +547,7 @@ function ShiftEditor({ data, onChange }: { data: ShiftItem[]; onChange: (data: S
               value={item.time}
               onChange={(e) => updateItem(index, 'time', e.target.value)}
               className="input w-32"
-              placeholder="09:00-17:00"
+              placeholder={t('hygiene.timeRangePlaceholder')}
             />
           </div>
 
@@ -559,7 +559,7 @@ function ShiftEditor({ data, onChange }: { data: ShiftItem[]; onChange: (data: S
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="Morning"
+              placeholder={t('hygiene.morning')}
             />
           </div>
 
@@ -571,7 +571,7 @@ function ShiftEditor({ data, onChange }: { data: ShiftItem[]; onChange: (data: S
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="早班"
+              placeholder={t('hygiene.morning')}
             />
           </div>
 
@@ -646,7 +646,7 @@ function EvidenceTypeEditor({ data, onChange }: { data: EvidenceTypeItem[]; onCh
               value={item.value}
               onChange={(e) => updateItem(index, 'value', e.target.value)}
               className="input w-24"
-              placeholder="photo"
+              placeholder={t('hygiene.photoPlaceholder')}
             />
           </div>
 
@@ -658,7 +658,7 @@ function EvidenceTypeEditor({ data, onChange }: { data: EvidenceTypeItem[]; onCh
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="Photo"
+              placeholder={t('hygiene.photoPlaceholder')}
             />
           </div>
 
@@ -670,7 +670,7 @@ function EvidenceTypeEditor({ data, onChange }: { data: EvidenceTypeItem[]; onCh
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="拍照"
+              placeholder={t('hygiene.photoPlaceholder')}
             />
           </div>
 
@@ -742,7 +742,7 @@ function WeekdayEditor({ data, onChange }: { data: WeekdayItem[]; onChange: (dat
               value={item.short}
               onChange={(e) => updateItem(index, 'short', e.target.value)}
               className="input w-16"
-              placeholder="Mon"
+              placeholder={t('hygiene.mon')}
             />
           </div>
 
@@ -754,7 +754,7 @@ function WeekdayEditor({ data, onChange }: { data: WeekdayItem[]; onChange: (dat
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="Monday"
+              placeholder={t('hygiene.dayFullPlaceholder')}
             />
           </div>
 
@@ -766,7 +766,7 @@ function WeekdayEditor({ data, onChange }: { data: WeekdayItem[]; onChange: (dat
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="周一"
+              placeholder={t('hygiene.mon')}
             />
           </div>
 
@@ -841,7 +841,7 @@ function FrequencyEditor({ data, onChange }: { data: FrequencyItem[]; onChange: 
               value={item.value}
               onChange={(e) => updateItem(index, 'value', e.target.value)}
               className="input w-full"
-              placeholder="daily"
+              placeholder={t('hygiene.daily')}
             />
           </div>
 
@@ -853,7 +853,7 @@ function FrequencyEditor({ data, onChange }: { data: FrequencyItem[]; onChange: 
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="Daily"
+              placeholder={t('hygiene.daily')}
             />
           </div>
 
@@ -865,7 +865,7 @@ function FrequencyEditor({ data, onChange }: { data: FrequencyItem[]; onChange: 
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="每日"
+              placeholder={t('hygiene.daily')}
             />
           </div>
 
@@ -940,7 +940,7 @@ function AssignedTypeEditor({ data, onChange }: { data: AssignedTypeItem[]; onCh
               value={item.value}
               onChange={(e) => updateItem(index, 'value', e.target.value)}
               className="input w-full"
-              placeholder="shift"
+              placeholder={t('hygiene.shift')}
             />
           </div>
 
@@ -952,7 +952,7 @@ function AssignedTypeEditor({ data, onChange }: { data: AssignedTypeItem[]; onCh
               value={item.label}
               onChange={(e) => updateItem(index, 'label', e.target.value)}
               className="input w-full"
-              placeholder="By Shift"
+              placeholder={t('hygiene.selectByShift')}
             />
           </div>
 
@@ -964,7 +964,7 @@ function AssignedTypeEditor({ data, onChange }: { data: AssignedTypeItem[]; onCh
               value={item.labelZh}
               onChange={(e) => updateItem(index, 'labelZh', e.target.value)}
               className="input w-full"
-              placeholder="按班次"
+              placeholder={t('hygiene.selectByShift')}
             />
           </div>
 

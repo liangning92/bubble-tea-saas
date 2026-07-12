@@ -88,7 +88,7 @@ function POSAlertsWidget() {
           <AlertTriangle size={24} className={unhandledCount > 0 ? 'text-red-600' : 'text-green-600'} />
         </div>
         <div>
-          <p className="text-sm text-gray-500">{t('dashboard.posAlerts') || 'POS操作预警'}</p>
+          <p className="text-sm text-gray-500">{t('dashboard.posAlerts')}</p>
           <p className="text-2xl font-bold">
             {unhandledCount}
             <span className="text-sm font-normal text-gray-400 ml-1">
@@ -110,7 +110,7 @@ function POSAlertsWidget() {
           <Clock size={24} className="text-blue-600" />
         </div>
         <div>
-          <p className="text-sm text-gray-500">{t('dashboard.posOperations') || '今日操作'}</p>
+          <p className="text-sm text-gray-500">{t('dashboard.posOperations')}</p>
           <p className="text-2xl font-bold">{stats?.todayTotal || 0}</p>
         </div>
       </div>
@@ -121,7 +121,7 @@ function POSAlertsWidget() {
           <ShoppingCart size={24} className={activeSessions.length > 0 ? 'text-orange-600' : 'text-green-600'} />
         </div>
         <div>
-          <p className="text-sm text-gray-500">{t('dashboard.activeSessions') || '进行中会话'}</p>
+          <p className="text-sm text-gray-500">{t('dashboard.activeSessions')}</p>
           <p className="text-2xl font-bold">{activeSessions.length}</p>
           {activeSessions.length > 0 && (
             <p className="text-xs text-orange-500 mt-1">

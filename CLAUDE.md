@@ -301,3 +301,49 @@ Run a workflow to audit all finance module files
 - 用户可以在设置中切换语言，设置保存在浏览器 localStorage
 - fallback 语言是英语 (en)
 - 大拿1号负责【营销管理】模块
+
+---
+
+## 自动化检查机制
+
+### 本地检查脚本
+
+```bash
+# TypeScript 类型检查（所有客户端）
+npm run typecheck
+
+# i18n 检查（检测缺失的翻译 key 和硬编码）
+node scripts/i18n-check.js client-pos
+node scripts/i18n-check.js client-admin
+node scripts/i18n-check.js client-staff
+```
+
+### pre-commit Hook
+
+项目配置了 `.husky/pre-commit` hook，提交前自动运行：
+1. TypeScript 类型检查
+2. 确保构建通过
+
+### ESLint 规则
+
+项目根目录配置了 `.eslintrc.js`，规则包括：
+- `react-hooks/exhaustive-deps`: 检查 useEffect 依赖
+- `@typescript-eslint/no-explicit-any`: 警告 any 类型
+- `no-console`: 生产环境禁止 console.log
+- localStorage 敏感数据限制
+
+### 新问题预防
+
+**提交前必须确保：**
+1. ✅ `npm run typecheck` 通过
+2. ✅ `npm run build` 通过
+3. ✅ 没有新增的 `any` 类型（除非必要）
+4. ✅ 没有硬编码的字符串（使用 i18n）
+5. ✅ useEffect 依赖完整
+
+### CI/CD 检查
+
+每次 PR 必须通过：
+1. TypeScript 类型检查
+2. 构建检查
+3. Playwright 冒烟测试

@@ -31,13 +31,11 @@ export function LoginPage() {
 
   useEffect(() => {
     setMounted(true)
-    // Load saved credentials
+    // Load saved phone number only (never store password)
     const savedPhone = localStorage.getItem('remembered_phone')
-    const savedPassword = localStorage.getItem('remembered_password')
     const savedRemember = localStorage.getItem('remember_me')
-    if (savedRemember === 'true' && savedPhone && savedPassword) {
+    if (savedRemember === 'true' && savedPhone) {
       setPhone(savedPhone)
-      setPassword(savedPassword)
       setRememberMe(true)
     }
   }, [])
@@ -52,21 +50,18 @@ export function LoginPage() {
       const { token, user } = res.data.data
       login(token, user)
 
-      // Handle remember me
+      // Handle remember me - only store phone number, never password
       if (rememberMe) {
         localStorage.setItem('remembered_phone', phone)
-        localStorage.setItem('remembered_password', password)
         localStorage.setItem('remember_me', 'true')
       } else {
         localStorage.removeItem('remembered_phone')
-        localStorage.removeItem('remembered_password')
-        localStorage.setItem('remember_me', 'false')
+        localStorage.removeItem('remember_me')
       }
 
       try {
         const urlChanged = await connectionManager.checkForUrlUpdate()
         if (urlChanged) {
-          console.log('[Login] API URL updated by Admin:', connectionManager.getCurrentUrl())
         }
       } catch {}
 

@@ -199,8 +199,8 @@ export function SalaryListPage() {
         overtime: parseInt(formData.overtime) || 0,
         commission: parseInt(formData.commission) || 0,
         bonus: parseInt(formData.bonus) || 0,
-        deduction: parseInt(formData.deduction) || 0,
-        finalAmount: calculateFinalAmount()
+        deduction: parseInt(formData.deduction) || 0
+        // 注意: finalAmount 由服务端统一计算，不要前端计算后发送
       }
 
       if (editingSalary) {

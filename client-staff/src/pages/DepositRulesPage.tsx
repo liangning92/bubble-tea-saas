@@ -51,9 +51,9 @@ export function DepositRulesPage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-primary text-white px-4 py-6 rounded-b-3xl">
-        <h1 className="text-xl font-bold">{t('deposit.rules') || '押金规则'}</h1>
+        <h1 className="text-xl font-bold">{t('deposit.rules')}</h1>
         <p className="text-white/80 text-sm mt-1">
-          {t('deposit.rulesDescription') || '了解押金扣除和退还规则'}
+          {t('deposit.rulesDescription')}
         </p>
       </div>
 
@@ -76,7 +76,7 @@ export function DepositRulesPage() {
               <div className="space-y-3">
                 {/* Deposit Amount */}
                 <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('deposit.totalAmount') || '押金总额'}</span>
+                  <span className="text-gray-600">{t('deposit.totalAmount')}</span>
                   <span className="font-semibold text-orange-600">
                     Rp {rule.depositAmount.toLocaleString()}
                   </span>
@@ -84,7 +84,7 @@ export function DepositRulesPage() {
 
                 {/* Monthly Deduction */}
                 <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('deposit.monthlyDeduction') || '每月扣款'}</span>
+                  <span className="text-gray-600">{t('deposit.monthlyDeduction')}</span>
                   <span className="font-medium">
                     Rp {rule.monthlyDeduction.toLocaleString()}
                   </span>
@@ -92,23 +92,23 @@ export function DepositRulesPage() {
 
                 {/* Max Deductions */}
                 <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('deposit.maxDeductions') || '最大扣款次数'}</span>
+                  <span className="text-gray-600">{t('deposit.maxDeductions')}</span>
                   <span className="font-medium">
-                    {rule.maxDeductions} {t('deposit.times') || '次'}
+                    {rule.maxDeductions} {t('deposit.times')}
                   </span>
                 </div>
 
                 {/* Deduction Type */}
                 <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('deposit.deductionType') || '扣款方式'}</span>
+                  <span className="text-gray-600">{t('deposit.deductionType')}</span>
                   <span className="font-medium">
-                    {rule.deductionType === 'monthly' ? t('deposit.monthly') : t('deposit.oneTime') || '一次性'}
+                    {rule.deductionType === 'monthly' ? t('deposit.monthly') : t('deposit.oneTime')}
                   </span>
                 </div>
 
                 {/* Refund Type */}
                 <div className="flex justify-between py-2">
-                  <span className="text-gray-600">{t('deposit.refundType') || '退还方式'}</span>
+                  <span className="text-gray-600">{t('deposit.refundType')}</span>
                   <span className="font-medium">
                     {rule.refundType === 'full' ? t('deposit.fullRefund') :
                      rule.refundType === 'prorata' ? t('deposit.prorata') :
@@ -120,7 +120,7 @@ export function DepositRulesPage() {
                 {/* Prorata Percent */}
                 {rule.refundType === 'prorata' && rule.prorataPercent && (
                   <div className="flex justify-between py-2 bg-blue-50 px-3 rounded-lg">
-                    <span className="text-blue-600">{t('deposit.prorataPercent') || '按比例退还'}</span>
+                    <span className="text-blue-600">{t('deposit.prorataPercent')}</span>
                     <span className="font-medium text-blue-600">
                       {(rule.prorataPercent * 100).toFixed(0)}%
                     </span>
@@ -133,18 +133,18 @@ export function DepositRulesPage() {
           <div className="bg-white rounded-xl p-8 text-center">
             <Coins className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500">
-              {t('deposit.noRules') || '暂无押金规则'}
+              {t('deposit.noRules')}
             </p>
           </div>
         )}
 
         {/* Info Box */}
         <div className="bg-blue-50 rounded-xl p-4">
-          <h4 className="font-medium text-blue-800 mb-2">{t('deposit.info') || '温馨提示'}</h4>
+          <h4 className="font-medium text-blue-800 mb-2">{t('deposit.info')}</h4>
           <ul className="text-sm text-blue-700 space-y-1">
-            <li>• {t('deposit.info1') || '押金在离职时退还'}</li>
-            <li>• {t('deposit.info2') || '扣除次数用完后退还剩余押金'}</li>
-            <li>• {t('deposit.info3') || '提前离职可能影响退还比例'}</li>
+            <li>• {t('deposit.info1')}</li>
+            <li>• {t('deposit.info2')}</li>
+            <li>• {t('deposit.info3')}</li>
           </ul>
         </div>
       </div>

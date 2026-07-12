@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { Receipt, Plus, Clock, XCircle, Upload } from 'lucide-react'
+import { formatDate, formatCurrency } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -73,22 +74,6 @@ export function ReimbursementPage() {
       console.error('Failed to cancel reimbursement:', error)
       alert(t('reimbursement.cancelFailed'))
     }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount / 100)
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
   }
 
   const parseReceiptUrls = (receiptUrls?: string) => {
@@ -162,7 +147,7 @@ export function ReimbursementPage() {
 
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Clock size={16} />
-                    <span>{formatDate(item.createdAt)}</span>
+                    <span>{formatDate(item.createdAt, 'long')}</span>
                   </div>
 
                   {item.status === 'pending' && (

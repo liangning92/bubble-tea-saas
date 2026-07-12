@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { Star, Gift, History, Loader2, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { formatDate } from '../utils/helpers'
 
 interface PointLog {
   id: string
@@ -68,14 +69,6 @@ export function StaffPointsPage() {
     } finally {
       setRedeeming(null)
     }
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
   }
 
   if (isLoading) {

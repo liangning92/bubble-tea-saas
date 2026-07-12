@@ -156,7 +156,8 @@ export function SalaryPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">{t('salary.latePenalty')}</span>
                   <span className="font-medium text-red-600">
-                    {formatCurrency(salary.lateDays * 50000)}
+                    {/* latePenalty应由服务端计算，前端不应计算 */}
+                    {salary.latePenalty != null ? formatCurrency(salary.latePenalty) : '--'}
                   </span>
                 </div>
               </div>
