@@ -44,7 +44,14 @@ export function OrderHistoryPage() {
   const loadTodayOrders = useCallback(async () => {
     setIsLoading(true)
     try {
-      const today = new Date().toISOString().split('T')[0]
+      // Always show only today's orders (Jakarta timezone)
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(new Date())
+      const getPart = (type: string) => parts.find(p => p.type === type)?.value || '01'
+      const today = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+
       const res = await posApi.getOrders({ storeId: user?.storeId, date: today })
       setOrders(res.data?.data?.list || [])
     } catch (error) {

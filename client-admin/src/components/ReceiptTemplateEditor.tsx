@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   DndContext,
   DragOverlay,
@@ -61,6 +62,8 @@ export interface BlockConfig {
   // storeInfo
   showPhone?: boolean
   showAddress?: boolean
+  phone?: string
+  address?: string
   // orderInfo
   showDate?: boolean
   showTime?: boolean
@@ -243,6 +246,7 @@ const LivePreview: React.FC<{
   blocks: ReceiptBlock[]
   paperSize: '58mm' | '80mm'
 }> = ({ blocks, paperSize }) => {
+  const { t } = useTranslation()
   const width = paperSize === '58mm' ? '200px' : '280px'
 
   const enabledBlocks = useMemo(
@@ -292,40 +296,40 @@ const LivePreview: React.FC<{
           case 'storeInfo':
             return (
               <div key={block.id} className={`${alignClass} ${sizeClass} text-gray-600 border-b pb-2 mb-2`}>
-                {block.config.showPhone && <div>Tel: 021-123456</div>}
-                {block.config.showAddress && <div>Jl. Sudirman No.1</div>}
+                {block.config.showPhone && <div>Tel: {block.config.phone || '021-123456'}</div>}
+                {block.config.showAddress && <div>{block.config.address || 'Jl. Sudirman No.1'}</div>}
               </div>
             )
           case 'orderInfo':
             return (
               <div key={block.id} className={`${alignClass} ${sizeClass} border-b pb-2 mb-2`}>
-                {block.config.showDate && <div>Date: 2026-07-04</div>}
-                {block.config.showTime && <div>Time: 14:30</div>}
-                {block.config.showCashier && <div>Cashier: Admin</div>}
-                {block.config.showCustomer && <div>Customer: -</div>}
-                {block.config.showChannel && <div>Channel: POS</div>}
+                {block.config.showDate && <div>{t('posSettings.receiptDate')}: 2026-07-04</div>}
+                {block.config.showTime && <div>{t('posSettings.receiptTime')}: 14:30</div>}
+                {block.config.showCashier && <div>{t('posSettings.receiptCashier')}: Admin</div>}
+                {block.config.showCustomer && <div>{t('posSettings.receiptCustomer')}: -</div>}
+                {block.config.showChannel && <div>{t('posSettings.receiptChannel')}: POS</div>}
               </div>
             )
           case 'items':
             return (
               <div key={block.id} className={`border-b pb-2 mb-2 ${sizeClass}`}>
-                <div className={`font-bold mb-1 ${alignClass}`}>Items:</div>
+                <div className={`font-bold mb-1 ${alignClass}`}>{t('posSettings.receiptItems')}</div>
                 <div className="flex justify-between">
-                  <span>珍珠奶茶 (大)</span>
+                  <span>{t('posSettings.receiptSampleProduct')}</span>
                   <span>15,000</span>
                 </div>
                 {block.config.showSugarIce && (
-                  <div className="pl-2 text-gray-500">少冰/正常糖</div>
+                  <div className="pl-2 text-gray-500">{t('posSettings.receiptSampleOption')}</div>
                 )}
                 {block.config.showAddon && (
-                  <div className="pl-2 text-gray-500">+ 珍珠 2,000</div>
+                  <div className="pl-2 text-gray-500">{t('posSettings.receiptSampleAddon')}</div>
                 )}
               </div>
             )
           case 'subtotal':
             return (
               <div key={block.id} className={`flex justify-between ${sizeClass} border-b pb-2 mb-2`}>
-                <span>{block.config.subtotalLabel || 'Subtotal'}</span>
+                <span>{block.config.subtotalLabel || t('posSettings.receiptSubtotal')}</span>
                 <span>35,000</span>
               </div>
             )
@@ -339,7 +343,7 @@ const LivePreview: React.FC<{
           case 'total':
             return (
               <div key={block.id} className={`flex justify-between font-bold ${sizeClass} border-b pb-2 mb-2`}>
-                <span>{block.config.totalLabel || 'TOTAL'}</span>
+                <span>{block.config.totalLabel || t('posSettings.receiptTotal')}</span>
                 <span>38,850</span>
               </div>
             )
@@ -348,13 +352,13 @@ const LivePreview: React.FC<{
               <div key={block.id} className={`border-b pb-2 mb-2 ${sizeClass}`}>
                 {block.config.showMethod && (
                   <div className="flex justify-between">
-                    <span>Cash</span>
+                    <span>{t('posSettings.receiptCash')}</span>
                     <span>50,000</span>
                   </div>
                 )}
                 {block.config.showChange && (
                   <div className="flex justify-between text-gray-500">
-                    <span>Change</span>
+                    <span>{t('posSettings.receiptChange')}</span>
                     <span>11,150</span>
                   </div>
                 )}
@@ -378,7 +382,7 @@ const LivePreview: React.FC<{
                   className="bg-black mx-auto"
                   style={{ width: '120px', height: block.config.height || 40 }}
                 />
-                <div className={`${sizeClass} mt-1`}>BT20260704001</div>
+                <div className={`${sizeClass} mt-1`}>{t('posSettings.receiptBarcode') || 'BT20260704001'}</div>
               </div>
             )
           case 'footer':
@@ -495,6 +499,7 @@ const BlockPropertiesPanel: React.FC<{
   onUpdate: (block: ReceiptBlock) => void
   onClose: () => void
 }> = ({ block, onUpdate, onClose }) => {
+  const { t } = useTranslation()
   const def = BLOCK_DEFINITIONS[block.type]
 
   const updateConfig = (key: string, value: any) => {
@@ -595,7 +600,7 @@ const BlockPropertiesPanel: React.FC<{
               value={block.config.text || ''}
               onChange={(e) => updateConfig('text', e.target.value)}
               className="input mt-1 w-full"
-              placeholder="Store name"
+              placeholder={t('posSettings.receiptStoreNamePlaceholder')}
             />
           </div>
         )}
@@ -716,7 +721,7 @@ const BlockPropertiesPanel: React.FC<{
                 value={block.config.label || ''}
                 onChange={(e) => updateConfig('label', e.target.value)}
                 className="input mt-1 w-full"
-                placeholder="Tax (11%)"
+                placeholder={t('posSettings.receiptTaxPlaceholder')}
               />
             </div>
             <div>
@@ -780,7 +785,7 @@ const BlockPropertiesPanel: React.FC<{
                 value={block.config.footerText || ''}
                 onChange={(e) => updateConfig('footerText', e.target.value)}
                 className="input mt-1 w-full"
-                placeholder="Thank you!"
+                placeholder={t('posSettings.receiptThankYouPlaceholder')}
               />
             </div>
             <div className="flex items-center justify-between">
@@ -826,7 +831,7 @@ const BlockPropertiesPanel: React.FC<{
               onChange={(e) => updateConfig('customText', e.target.value)}
               className="input mt-1 w-full"
               rows={3}
-              placeholder="Enter custom text..."
+              placeholder={t('posSettings.receiptCustomTextPlaceholder')}
             />
           </div>
         )}
@@ -890,6 +895,7 @@ interface ReceiptTemplateEditorProps {
 }
 
 export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ storeId, onSave }) => {
+  const { t } = useTranslation()
 
   const [templates, setTemplates] = useState<any[]>([])
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null)
@@ -1096,7 +1102,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
             className="input w-48"
-            placeholder="Template name"
+            placeholder={t('posSettings.receiptTemplateNamePlaceholder')}
           />
           {templates.find((t) => t.id === currentTemplateId)?.isDefault && (
             <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Default</span>

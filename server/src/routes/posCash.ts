@@ -240,11 +240,12 @@ router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashi
       _sum: { totalAmount: true }
     })
 
-    // 获取挂单数量
+    // 获取今日挂单数量（只统计当前班次开启后的挂单）
     const suspendedOrders = await prisma.order.count({
       where: {
         storeId,
-        status: 'suspended'
+        status: 'suspended',
+        createdAt: { gte: currentShift?.openedAt || today }
       }
     })
 

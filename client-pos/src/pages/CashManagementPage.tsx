@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { posApi } from '../services/api'
+import { posApi, shiftApi } from '../services/api'
 import { formatCurrency } from '../utils/helpers'
 import { showToast } from '../components/ui'
 import { ArrowLeft, DollarSign, CheckCircle, TrendingUp, TrendingDown, RefreshCw, Wallet, Clock, AlertCircle } from 'lucide-react'
@@ -80,6 +80,7 @@ export function CashManagementPage() {
   const [closeAmount, setCloseAmount] = useState('')
   const [closeNote, setCloseNote] = useState('')
   const [selectedShift, setSelectedShift] = useState('morning')
+  const [shiftOptions, setShiftOptions] = useState<{ key: string; name: string }[]>([])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -106,6 +107,29 @@ export function CashManagementPage() {
     loadData()
   }, [loadData])
 
+  // Fetch active shifts from server (matches Admin's shift config)
+  useEffect(() => {
+    const fetchShifts = async () => {
+      try {
+        const res = await shiftApi.list(user?.storeId ?? undefined)
+        if (res.data?.code === 200) {
+          // Filter active shifts only, exclude 'off'
+          const active = (res.data.data || []).filter(
+            (s: any) => s.isActive && s.key !== 'off'
+          )
+          setShiftOptions(active.map((s: any) => ({ key: s.key, name: s.name })))
+          // Set default to first active shift
+          if (active.length > 0 && !active.find((s: any) => s.key === selectedShift)) {
+            setSelectedShift(active[0].key)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch shifts:', error)
+      }
+    }
+    if (user?.storeId) fetchShifts()
+  }, [user?.storeId, selectedShift])
+
   const showSuccess = (message: string) => {
     setSuccessMessage(message)
     setShowSuccessModal(true)
@@ -117,7 +141,7 @@ export function CashManagementPage() {
 
   const handleOpenFloat = async () => {
     if (!floatAmount || parseInt(floatAmount) <= 0) {
-      showToast(t('cash.floatAmountRequired') || 'Please enter a valid amount', 'error')
+      showToast(t('cash.floatAmountRequired'), 'error')
       return
     }
     try {
@@ -125,7 +149,7 @@ export function CashManagementPage() {
         type: 'float',
         amount: Math.round(parseFloat(floatAmount)),
         shift: selectedShift,
-        note: '开班零钱'
+        note: t('cash.floatNote')
       })
       setShowFloatModal(false)
       setFloatAmount('')
@@ -133,20 +157,20 @@ export function CashManagementPage() {
       loadData()
     } catch (error) {
       console.error('Failed to open float:', error)
-      showToast(t('common.error') || 'Operation failed', 'error')
+      showToast(t('common.error'), 'error')
     }
   }
 
   const handleCashIn = async () => {
     if (!cashInAmount || parseInt(cashInAmount) <= 0) {
-      showToast(t('cash.amountRequired') || 'Please enter a valid amount', 'error')
+      showToast(t('cash.amountRequired'), 'error')
       return
     }
     try {
       await posApi.createCashEvent({
         type: 'cash_in',
         amount: Math.round(parseFloat(cashInAmount)),
-        note: cashInNote || '现金存入'
+        note: cashInNote || t('cash.cashIn')
       })
       setShowCashInModal(false)
       setCashInAmount('')
@@ -155,20 +179,20 @@ export function CashManagementPage() {
       loadData()
     } catch (error) {
       console.error('Failed to record cash in:', error)
-      showToast(t('common.error') || 'Operation failed', 'error')
+      showToast(t('common.error'), 'error')
     }
   }
 
   const handleCashOut = async () => {
     if (!cashOutAmount || parseInt(cashOutAmount) <= 0) {
-      showToast(t('cash.amountRequired') || 'Please enter a valid amount', 'error')
+      showToast(t('cash.amountRequired'), 'error')
       return
     }
     try {
       await posApi.createCashEvent({
         type: 'cash_out',
         amount: Math.round(parseFloat(cashOutAmount)),
-        note: cashOutNote || '现金支出'
+        note: cashOutNote || t('cash.cashOut')
       })
       setShowCashOutModal(false)
       setCashOutAmount('')
@@ -177,7 +201,7 @@ export function CashManagementPage() {
       loadData()
     } catch (error) {
       console.error('Failed to record cash out:', error)
-      showToast(t('common.error') || 'Operation failed', 'error')
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -194,7 +218,7 @@ export function CashManagementPage() {
       loadData()
     } catch (error) {
       console.error('Failed to close shift:', error)
-      showToast(t('common.error') || 'Operation failed', 'error')
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -380,9 +404,9 @@ export function CashManagementPage() {
                   onChange={(e) => setSelectedShift(e.target.value)}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                 >
-                  <option value="morning">{t('cash.morningShift')}</option>
-                  <option value="afternoon">{t('cash.afternoonShift')}</option>
-                  <option value="evening">{t('cash.eveningShift')}</option>
+                  {shiftOptions.map(s => (
+                    <option key={s.key} value={s.key}>{s.name}</option>
+                  ))}
                 </select>
               </div>
               <div>

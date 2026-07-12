@@ -1,5 +1,6 @@
 import prisma from '../config/database'
 import { config } from '../config/env'
+import { startOfTodayJakarta } from '../utils/dateUtils'
 import { processOrderReferralRewards } from './ReferralService'
 import { getOrCreatePointsRule, calculatePoints } from './PointsRuleService'
 
@@ -436,13 +437,26 @@ export async function getOrders(params: {
     where.createdAt = {}
     if (startDate) where.createdAt.gte = new Date(startDate)
     if (endDate) where.createdAt.lte = new Date(endDate)
+  } else if (params.startDate) {
+    // 支持从指定时间查到现在（用于班次过滤）
+    where.createdAt = { gte: new Date(params.startDate) }
   } else if (params.date) {
     // Support single date parameter for "show orders on this date"
+    // Parse the date string and compute start/end in Asia/Jakarta timezone
     const dateStr = params.date
-    const startOfDay = new Date(dateStr)
-    startOfDay.setHours(0, 0, 0, 0)
-    const endOfDay = new Date(dateStr)
-    endOfDay.setHours(23, 59, 59, 999)
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date(dateStr + 'T00:00:00'))
+    const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '1')
+    const year = getPart('year')
+    const month = getPart('month') - 1
+    const day = getPart('day')
+    // startOfTodayJakarta gives us midnight WIB of the target date
+    const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0))
+    // Subtract 7 hours to get WIB midnight = UTC previous day 17:00
+    startOfDay.setUTCHours(startOfDay.getUTCHours() - 7)
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1)
     where.createdAt = {
       gte: startOfDay,
       lte: endOfDay

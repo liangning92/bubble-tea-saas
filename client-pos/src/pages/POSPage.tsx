@@ -592,7 +592,7 @@ export function POSPage() {
               specs: p.specs,
               addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
             })))
-            showToast(t('pos.demoMode') || 'Demo Mode - Sample Products', 'info')
+            showToast(t('pos.demoMode'), 'info')
           }
           if (!cancelled) setLoading(false)
         }
@@ -623,7 +623,7 @@ export function POSPage() {
             specs: p.specs,
             addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
           })))
-          showToast(t('pos.demoMode') || 'Demo Mode - Sample Products', 'info')
+          showToast(t('pos.demoMode'), 'info')
           if (!cancelled) setLoading(false)
         }
       }
@@ -655,7 +655,6 @@ export function POSPage() {
           const hasNewer = await productCache.hasNewerProducts(serverTimestamp)
 
           if (hasNewer) {
-            console.log('[ProductSync] New products available, syncing...')
             // Fetch all products
             const res = await fetch(`/api/products?storeId=${storeId}&status=active`, {
               headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -682,7 +681,6 @@ export function POSPage() {
               if (serverTimestamp) {
                 await productCache.saveProductsVersion(serverTimestamp)
               }
-              console.log('[ProductSync] Products synced successfully')
             }
           }
         }
@@ -1006,7 +1004,6 @@ export function POSPage() {
 
         // 检测测试打印机标志
         if (hs.testPrint && hs.testPrint !== hardwareSettings.testPrint) {
-          console.log('[HARDWARE TEST] Test print triggered')
           electronAPI?.sendPrintReceipt?.({
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'Bubble Tea Shop',
@@ -1021,7 +1018,6 @@ export function POSPage() {
 
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
-          console.log('[HARDWARE TEST] Test cash drawer triggered')
           electronAPI?.openCashDrawer?.({ printerName: hs.printerName || undefined })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
@@ -1329,7 +1325,14 @@ export function POSPage() {
     if (!user?.storeId) return
     setOrdersLoading(true)
     try {
-      const res = await posApi.getOrders({ storeId: user.storeId, limit: 20 })
+      // Always show only today's orders (Jakarta timezone)
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(new Date())
+      const getPart = (type: string) => parts.find(p => p.type === type)?.value || '01'
+      const today = `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+      const res = await posApi.getOrders({ storeId: user.storeId, date: today, limit: 20 })
       setOrders(res.data?.data?.list || [])
     } catch (e) {
       console.error('Failed to fetch orders:', e)
@@ -1348,12 +1351,12 @@ export function POSPage() {
         reason: deleteReason,
         staffId: user?.id
       })
-      showToast(t('pos.deleteRequestSubmitted') || 'Delete request submitted', 'success')
+      showToast(t('pos.deleteRequestSubmitted'), 'success')
       setDeleteModalOrder(null)
       setDeleteReason('')
       fetchOrders() // 刷新列表
     } catch (e: any) {
-      showToast(e?.response?.data?.message || t('pos.deleteRequestFailed') || 'Failed to submit request', 'error')
+      showToast(e?.response?.data?.message || t('pos.deleteRequestFailed'), 'error')
     } finally {
       setIsSubmittingDelete(false)
     }
@@ -1416,7 +1419,7 @@ export function POSPage() {
   // 创建费用记录
   const createExpense = async () => {
     if (!expenseCategory || !expenseAmount || !user?.storeId) {
-      showToast(t('pos.expenseRequired') || '请填写费用类别和金额', 'warning')
+      showToast(t('pos.expenseRequired'), 'warning')
       return
     }
     try {
@@ -1429,13 +1432,13 @@ export function POSPage() {
         description: expenseDescription,
         date: today.toISOString()
       })
-      showToast(t('pos.expenseCreated') || '费用已记录', 'success')
+      showToast(t('pos.expenseCreated'), 'success')
       setExpenseCategory('')
       setExpenseAmount('')
       setExpenseDescription('')
       fetchTodayExpenses()
     } catch (e: any) {
-      showToast(e?.response?.data?.message || t('pos.expenseFailed') || '记录费用失败', 'error')
+      showToast(e?.response?.data?.message || t('pos.expenseFailed'), 'error')
     }
   }
 
@@ -1680,6 +1683,8 @@ export function POSPage() {
     setCart([])
     setDiscountAmount(0)
     setMember(null)
+    setDineInCount(1) // 重置堂食人数
+    setCustomerCount(1) // 重置顾客人数
     setOrderSuccess('') // 清除订单成功提示
   }
 
@@ -1744,7 +1749,7 @@ export function POSPage() {
       showToast(`${t('pos.orderSuspended')} (${updated.length})`, 'success')
     } catch (err: any) {
       console.error('Failed to suspend order:', err)
-      showToast(t('common.error') + ': ' + (err?.message || '挂单失败'), 'error')
+      showToast(t('common.error') + ': ' + (err?.message || t('common.error')), 'error')
     }
   }
 
@@ -1833,7 +1838,7 @@ export function POSPage() {
     if (paymentMethod === 'qris' && qrisData.status === 'idle') {
       // Check if online - QRIS requires internet connection
       if (!navigator.onLine) {
-        showToast(t('pos.qrisOfflineNotice') || 'QRIS需要网络连接，请使用现金支付', 'warning')
+        showToast(t('pos.qrisOfflineNotice'), 'warning')
         setIsCheckingOut(false)
         return
       }
@@ -1850,12 +1855,12 @@ export function POSPage() {
           setIsCheckingOut(false)
           return // Wait for webhook or manual confirmation
         } else {
-          showToast(res.data?.error || t('pos.qrisCreateFailed') || '生成二维码失败', 'error')
+          showToast(res.data?.error || t('pos.qrisCreateFailed'), 'error')
           setIsCheckingOut(false)
           return
         }
       } catch (error: any) {
-        showToast(t('pos.qrisOfflineNotice') || 'QRIS暂时不可用，请使用现金支付', 'warning')
+        showToast(t('pos.qrisOfflineNotice'), 'warning')
         setIsCheckingOut(false)
         return
       }
@@ -1864,7 +1869,7 @@ export function POSPage() {
     // QRIS: If already waiting, confirm payment manually
     if (paymentMethod === 'qris' && qrisData.status === 'waiting') {
       // For now, allow manual confirmation after payment is received
-      showToast(t('pos.confirmPaymentManual') || '请确认顾客已付款后再点击', 'info')
+      showToast(t('pos.confirmPaymentManual'), 'info')
       return
     }
 
@@ -1872,12 +1877,12 @@ export function POSPage() {
     if (paymentMethod === 'qris' && qrisData.status !== 'paid') {
       // Handle expired/failed status with user feedback
       if (qrisData.status === 'expired') {
-        showToast(t('pos.qrisExpired') || 'QR码已过期，请重新生成', 'warning')
+        showToast(t('pos.qrisExpired'), 'warning')
         setQrisData({ status: 'idle', qrImage: '', qrString: '', externalId: '' })
         return
       }
       if (qrisData.status === 'failed') {
-        showToast(t('pos.qrisFailed') || 'QR生成失败，请重试', 'error')
+        showToast(t('pos.qrisFailed'), 'error')
         setQrisData({ status: 'idle', qrImage: '', qrString: '', externalId: '' })
         return
       }
@@ -1933,9 +1938,7 @@ export function POSPage() {
       orderNumber: paymentModalOrderNum
     }
     // 所有订单都记录顾客人数
-    console.log('[DEBUG] customerCount:', customerCount, 'dineInCount:', dineInCount, 'orderChannel:', orderChannel)
     orderData.customerCount = customerCount
-    console.log('[DEBUG] orderData.customerCount after assignment:', orderData.customerCount)
     // 堂食时添加用餐人数和桌号
     if (orderChannel.code === 'DINE_IN') {
       orderData.dineInCount = dineInCount
@@ -1950,8 +1953,6 @@ export function POSPage() {
       orderData.note = orderNote
     }
 
-    console.log('[DEBUG] Full orderData before API call:', JSON.stringify(orderData))
-    console.log('[DEBUG] orderData.customerCount at send time:', orderData.customerCount)
     try {
       const res = await posApi.createOrder(orderData)
       const orderNum = res.data?.data?.orderNumber || localId.replace('LOCAL-', '')
@@ -2010,7 +2011,7 @@ export function POSPage() {
       playSoundWithSettings('error', soundSettings.error)
       // 显示服务器返回的具体错误消息（如"库存不足: 生珍珠"）
       const errorMsg = error?.response?.data?.message || error?.message || t('pos.paymentError')
-      showToast(errorMsg + ' - ' + t('pos.orderSavedOffline') || 'Order saved for retry', 'warning')
+      showToast(errorMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
       await db.orders.add({
         localId, storeId: orderData.storeId, staffId: orderData.staffId,
         items: orderData.items, subtotal, ppn: tax, totalAmount: subtotal,
@@ -2149,7 +2150,7 @@ export function POSPage() {
               style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
             >
               {selectedChannel.icon} {t(selectedChannel.nameKey)}
-              {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount') || '人'})`}
+              {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
             </span>
           )}
           <span className={`px-4 py-2 rounded-xl text-base font-medium ${
@@ -2158,7 +2159,7 @@ export function POSPage() {
             'bg-red-500 text-white animate-pulse'
           }`}>
             {connectionStatus === 'connected' ? t('pos.online') :
-             connectionStatus === 'connecting' ? t('pos.connecting') || '连接中...' :
+             connectionStatus === 'connecting' ? t('pos.connecting') :
              t('pos.offline')}
           </span>
         </div>
@@ -2346,7 +2347,7 @@ export function POSPage() {
           <div className="flex-1 overflow-y-auto p-3 bg-gray-100 min-h-0">
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <p className="text-lg font-medium">{t('pos.noProductInCategory') || '此分类暂无产品'}</p>
+                <p className="text-lg font-medium">{t('pos.noProductInCategory')}</p>
               </div>
             ) : (
             <div className={`grid ${gridColsClass} gap-2`}>
@@ -2493,7 +2494,6 @@ export function POSPage() {
                   + {t('pos.discount')}
                 </button>
                 <button onClick={() => {
-                  console.log('[DEBUG] Checkout button clicked', { cartLength: cart.length, isCheckingOut })
                   playSoundWithSettings('keypress', soundSettings.keypress)
                   // 生成不规则订单号（防顾客推断销量）
                   const date = new Date()
@@ -2502,7 +2502,6 @@ export function POSPage() {
                   const orderNum = `${dateStr}${random}`
                   setPaymentModalOrderNum(orderNum)
                   setShowPaymentModal(true)
-                  console.log('[DEBUG] Payment modal should be open now', { showPaymentModal: true })
                 }} className="w-full py-5 bg-primary text-white rounded-xl font-bold text-xl active:scale-95 transition-transform touch-feedback">
                   💰 {t('pos.checkout')}
                 </button>
@@ -2631,7 +2630,7 @@ export function POSPage() {
             <div className="px-4 py-3 bg-blue-50 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">👥</span>
-                <span className="text-sm font-medium text-gray-700">{t('pos.customerCount') || '顾客人数'}</span>
+                <span className="text-sm font-medium text-gray-700">{t('pos.customerCount')}</span>
               </div>
               <span className="text-xl font-bold">{selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount}</span>
             </div>
@@ -2721,22 +2720,22 @@ export function POSPage() {
                 <div className="mb-3">
                   {qrisData.status === 'idle' && (
                     <div className="text-center text-sm text-gray-500 py-4">
-                      {t('pos.qrisInstruction') || '点击下方按钮生成二维码'}
+                      {t('pos.qrisInstruction')}
                     </div>
                   )}
                   {qrisData.status === 'waiting' && qrisData.qrImage && (
                     <div className="flex flex-col items-center">
                       <img src={qrisData.qrImage} alt="QRIS" className="w-48 h-48 mx-auto" />
-                      <p className="text-sm text-gray-500 mt-2">{t('pos.scanToPay') || '请顾客扫描二维码支付'}</p>
+                      <p className="text-sm text-gray-500 mt-2">{t('pos.scanToPay')}</p>
                       <div className="flex items-center gap-2 mt-2 text-yellow-600">
                         <Loader2 size={16} className="animate-spin" />
-                        <span className="text-sm">{t('pos.waitingPayment') || '等待支付中...'}</span>
+                        <span className="text-sm">{t('pos.waitingPayment')}</span>
                       </div>
                     </div>
                   )}
                   {qrisData.status === 'paid' && (
                     <div className="text-center py-4">
-                      <p className="text-green-600 font-bold">{t('pos.paymentReceived') || '已收到付款！'}</p>
+                      <p className="text-green-600 font-bold">{t('pos.paymentReceived')}</p>
                     </div>
                   )}
                 </div>
@@ -2754,7 +2753,7 @@ export function POSPage() {
                 }
                 className="w-full py-4 bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 touch-feedback"
               >
-                {isCheckingOut ? t('common.loading') : (paymentMethod === 'qris' && qrisData.status === 'waiting' ? t('pos.waitingPayment') || '等待支付中...' : t('pos.confirmPayment'))}
+                {isCheckingOut ? t('common.loading') : (paymentMethod === 'qris' && qrisData.status === 'waiting' ? t('pos.waitingPayment') : t('pos.confirmPayment'))}
               </button>
               {paymentSettings.minAmount > 0 && total < paymentSettings.minAmount && (
                 <p className="text-xs text-red-500 mt-1 text-center">
@@ -2967,12 +2966,12 @@ export function POSPage() {
               {!shiftData?.hasOpenShift ? (
                 <>
                   <div className="p-4 bg-blue-50 rounded-xl mb-4">
-                    <p className="text-center text-gray-600 mb-2">{t('pos.noOpenShift') || '尚未开班，请设置开班金额'}</p>
+                    <p className="text-center text-gray-600 mb-2">{t('pos.noOpenShift')}</p>
                   </div>
 
                   {/* 班次选择 */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.selectShift') || '选择班次'}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.selectShift')}</label>
                     <div className="grid grid-cols-3 gap-2">
                       {['morning', 'afternoon', 'evening'].map((shift) => (
                         <button
@@ -2992,11 +2991,11 @@ export function POSPage() {
 
                   {/* 开班金额输入 */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.openFloatAmount') || '开班金额'}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.openFloatAmount')}</label>
                     <input
                       type="number"
                       id="openFloatInput"
-                      placeholder={t('pos.enterOpenFloat') || '输入开班金额'}
+                      placeholder={t('pos.enterOpenFloat')}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl touch-feedback text-lg"
                       defaultValue="50000"
                     />
@@ -3008,7 +3007,7 @@ export function POSPage() {
                       const floatInput = document.getElementById('openFloatInput') as HTMLInputElement
                       const floatAmount = parseInt(floatInput?.value) || 0
                       if (floatAmount <= 0) {
-                        showToast(t('pos.openFloatRequired') || '请输入开班金额', 'error')
+                        showToast(t('pos.openFloatRequired'), 'error')
                         return
                       }
                       try {
@@ -3016,15 +3015,15 @@ export function POSPage() {
                           openFloat: floatAmount,
                           shift: selectedShiftType || 'morning'
                         })
-                        showToast(t('pos.shiftOpened') || '开班成功', 'success')
+                        showToast(t('pos.shiftOpened'), 'success')
                         fetchShiftData()
                       } catch (e) {
-                        showToast(t('pos.shiftOpenFailed') || '开班失败', 'error')
+                        showToast(t('pos.shiftOpenFailed'), 'error')
                       }
                     }}
                     className="w-full py-4 bg-green-500 text-white rounded-xl font-bold touch-feedback text-lg"
                   >
-                    {t('pos.confirmOpenShift') || '确认开班'}
+                    {t('pos.confirmOpenShift')}
                   </button>
                 </>
               ) : (
@@ -3101,7 +3100,7 @@ export function POSPage() {
                       )}
                       {shiftData?.todayOrderAmount > 0 && (
                         <div className="p-3 bg-orange-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.todaySales') || '今日销售额'}</p>
+                          <p className="text-xs text-gray-500">{t('pos.todaySales')}</p>
                           <p className="font-bold text-orange-600">{formatCurrency(shiftData?.todayOrderAmount || 0)}</p>
                         </div>
                       )}
@@ -3174,7 +3173,7 @@ export function POSPage() {
 
                   {/* 实际现金输入 */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.actualCash') || '实际现金'}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.actualCash')}</label>
                     <div
                       className="w-full px-4 py-3 border-2 border-primary/30 bg-primary/5 rounded-xl text-lg font-bold text-center cursor-pointer"
                       onClick={() => setShiftInputTarget('actualCash')}
@@ -3183,7 +3182,7 @@ export function POSPage() {
                     </div>
                     {shiftData?.expectedCash && (
                       <p className="text-xs text-gray-500 mt-1">
-                        {t('pos.expectedHint') || '应收'} {formatCurrency(shiftData.expectedCash)}
+                        {t('pos.expectedHint')} {formatCurrency(shiftData.expectedCash)}
                       </p>
                     )}
                   </div>
@@ -3418,7 +3417,7 @@ export function POSPage() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setDeleteModalOrder(null)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[80]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
-              <h3 className="font-bold">{t('pos.requestDelete') || 'Request Delete Order'}</h3>
+              <h3 className="font-bold">{t('pos.requestDelete')}</h3>
               <button onClick={() => setDeleteModalOrder(null)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
                 <X size={20} />
               </button>
@@ -3429,13 +3428,13 @@ export function POSPage() {
                 <p className="text-sm text-gray-500">{formatCurrency(deleteModalOrder.finalAmount || deleteModalOrder.totalAmount)}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">{t('pos.deleteReason') || 'Reason for deletion'}</label>
+                <label className="block text-sm font-medium mb-2">{t('pos.deleteReason')}</label>
                 <textarea
                   value={deleteReason}
                   onChange={e => setDeleteReason(e.target.value)}
                   className="w-full p-3 border rounded-lg"
                   rows={3}
-                  placeholder={t('pos.enterDeleteReason') || 'Please enter the reason for deletion request...'}
+                  placeholder={t('pos.deleteReasonPlaceholder')}
                 />
               </div>
               <button
@@ -3448,7 +3447,7 @@ export function POSPage() {
                 ) : (
                   <RotateCcw size={20} />
                 )}
-                {t('pos.submitDeleteRequest') || 'Submit Request'}
+                {t('pos.submitDeleteRequest')}
               </button>
             </div>
           </div>
@@ -3477,7 +3476,7 @@ export function POSPage() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
-              <h3 className="font-bold">{t('pos.expense') || '费用记录'}</h3>
+              <h3 className="font-bold">{t('pos.expense')}</h3>
               <button onClick={() => setShowExpenseModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
                 <X size={20} />
               </button>
@@ -3485,11 +3484,11 @@ export function POSPage() {
             <div className="p-4 space-y-4">
               {/* 今日费用汇总 */}
               <div className="bg-red-50 rounded-xl p-3">
-                <p className="text-sm text-gray-500">{t('pos.todayExpenses') || '今日费用'}</p>
+                <p className="text-sm text-gray-500">{t('pos.todayExpenses')}</p>
                 <p className="font-bold text-red-600 text-xl">
                   {formatCurrency(todayExpenses.reduce((sum: number, e: any) => sum + e.amount, 0))}
                 </p>
-                <p className="text-xs text-gray-500">{todayExpenses.length} {t('pos.expenseItems') || '笔记录'}</p>
+                <p className="text-xs text-gray-500">{todayExpenses.length} {t('pos.expenseItems')}</p>
               </div>
 
               {/* 今日费用列表 */}
@@ -3509,31 +3508,31 @@ export function POSPage() {
 
               {/* 新增费用表单 */}
               <div className="border-t pt-4">
-                <p className="font-medium mb-3">{t('pos.addExpense') || '新增费用'}</p>
+                <p className="font-medium mb-3">{t('pos.addExpense')}</p>
 
                 {/* 费用类别 */}
                 <div className="mb-3">
-                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseCategory') || '类别'}</label>
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseCategory')}</label>
                   <select
                     value={expenseCategory}
                     onChange={(e) => setExpenseCategory(e.target.value)}
                     className="w-full px-3 py-2 border rounded-xl"
                   >
-                    <option value="">{t('pos.selectCategory') || '选择类别'}</option>
-                    <option value="supplies">{t('pos.expenseSupplies') || '物资采购'}</option>
-                    <option value="utilities">{t('pos.expenseUtilities') || '水电费'}</option>
-                    <option value="rent">{t('pos.expenseRent') || '租金'}</option>
-                    <option value="transport">{t('pos.expenseTransport') || '交通费'}</option>
-                    <option value="packaging">{t('pos.expensePackaging') || '包装费'}</option>
-                    <option value="cleaning">{t('pos.expenseCleaning') || '清洁用品'}</option>
-                    <option value="maintenance">{t('pos.expenseMaintenance') || '设备维护'}</option>
-                    <option value="other">{t('pos.expenseOther') || '其他'}</option>
+                    <option value="">{t('pos.selectCategory')}</option>
+                    <option value="supplies">{t('pos.expenseSupplies')}</option>
+                    <option value="utilities">{t('pos.expenseUtilities')}</option>
+                    <option value="rent">{t('pos.expenseRent')}</option>
+                    <option value="transport">{t('pos.expenseTransport')}</option>
+                    <option value="packaging">{t('pos.expensePackaging')}</option>
+                    <option value="cleaning">{t('pos.expenseCleaning')}</option>
+                    <option value="maintenance">{t('pos.expenseMaintenance')}</option>
+                    <option value="other">{t('pos.expenseOther')}</option>
                   </select>
                 </div>
 
                 {/* 金额 */}
                 <div className="mb-3">
-                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseAmount') || '金额'}</label>
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseAmount')}</label>
                   <input
                     type="number"
                     value={expenseAmount}
@@ -3545,12 +3544,12 @@ export function POSPage() {
 
                 {/* 备注 */}
                 <div className="mb-4">
-                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseNote') || '备注'}</label>
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseNote')}</label>
                   <input
                     type="text"
                     value={expenseDescription}
                     onChange={(e) => setExpenseDescription(e.target.value)}
-                    placeholder={t('pos.expenseNotePlaceholder') || '可选备注'}
+                    placeholder={t('pos.expenseNotePlaceholder')}
                     className="w-full px-3 py-2 border rounded-xl"
                   />
                 </div>
@@ -3560,7 +3559,7 @@ export function POSPage() {
                   onClick={createExpense}
                   className="w-full py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
                 >
-                  {t('pos.saveExpense') || '记录费用'}
+                  {t('pos.saveExpense')}
                 </button>
               </div>
             </div>
@@ -3579,7 +3578,7 @@ export function POSPage() {
               </button>
             </div>
             <div className="p-4 space-y-4">
-              <p className="text-center text-gray-600">{t('pos.logoutConfirm') || 'Are you sure you want to logout?'}</p>
+              <p className="text-center text-gray-600">{t('pos.logoutConfirm')}</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowLogoutModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback">{t('common.cancel')}</button>
                 <button onClick={() => { setShowLogoutModal(false); logout() }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
@@ -3597,8 +3596,8 @@ export function POSPage() {
               <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Lock size={32} className="text-primary" />
               </div>
-              <h2 className="text-xl font-bold text-gray-900">{t('pos.locked') || 'Screen Locked'}</h2>
-              <p className="text-sm text-gray-500 mt-1">{t('pos.enterPinToUnlock') || 'Enter PIN to unlock'}</p>
+              <h2 className="text-xl font-bold text-gray-900">{t('pos.locked')}</h2>
+              <p className="text-sm text-gray-500 mt-1">{t('pos.enterPinToUnlock')}</p>
             </div>
             {displaySettings.lockScreenPin ? (
               <div className="space-y-4">
@@ -3607,7 +3606,7 @@ export function POSPage() {
                   value={lockPin}
                   onChange={(e) => { setLockPin(e.target.value); setLockError(false) }}
                   onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-                  placeholder="****"
+                  placeholder={t('pos.pinPlaceholder')}
                   className={`w-full px-4 py-3 text-center text-2xl tracking-widest border rounded-xl ${lockError ? 'border-red-500' : 'border-gray-300'}`}
                   maxLength={6}
                   autoFocus
