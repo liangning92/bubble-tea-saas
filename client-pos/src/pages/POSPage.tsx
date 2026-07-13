@@ -1351,12 +1351,12 @@ export function POSPage() {
         reason: deleteReason,
         staffId: user?.id
       })
-      showToast(t('pos.deleteRequestSubmitted'), 'success')
+      showToast(t('orders.deleteRequestSubmitted'), 'success')
       setDeleteModalOrder(null)
       setDeleteReason('')
       fetchOrders() // 刷新列表
     } catch (e: any) {
-      showToast(e?.response?.data?.message || t('pos.deleteRequestFailed'), 'error')
+      showToast(e?.response?.data?.message || t('orders.deleteRequestFailed'), 'error')
     } finally {
       setIsSubmittingDelete(false)
     }
@@ -2630,7 +2630,7 @@ export function POSPage() {
             <div className="px-4 py-3 bg-blue-50 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">👥</span>
-                <span className="text-sm font-medium text-gray-700">{t('pos.customerCount')}</span>
+                <span className="text-sm font-medium text-gray-700">{t('settings.customerCount')}</span>
               </div>
               <span className="text-xl font-bold">{selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount}</span>
             </div>
@@ -3112,13 +3112,13 @@ export function POSPage() {
                       )}
                       {shiftSettings.summaryItems?.customerCount && (
                         <div className="p-3 bg-teal-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.customerCount')}</p>
+                          <p className="text-xs text-gray-500">{t('settings.customerCount')}</p>
                           <p className="font-bold text-teal-600">{shiftData?.customerCount || 0}</p>
                         </div>
                       )}
                       {shiftSettings.summaryItems?.qrisSales && (
                         <div className="p-3 bg-indigo-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.qrisSales')}</p>
+                          <p className="text-xs text-gray-500">{t('settings.qrisSales')}</p>
                           <p className="font-bold text-indigo-600">{formatCurrency(shiftData?.qrisSales || 0)}</p>
                         </div>
                       )}
@@ -3130,25 +3130,25 @@ export function POSPage() {
                     <div className="grid grid-cols-2 gap-3 mb-4">
                       {shiftSettings.summaryItems?.dineInCount && (
                         <div className="p-3 bg-pink-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.dineInOrders')}</p>
+                          <p className="text-xs text-gray-500">{t('settings.dineInOrders')}</p>
                           <p className="font-bold text-pink-600">{shiftData?.dineInCount || 0}</p>
                         </div>
                       )}
                       {shiftSettings.summaryItems?.gofoodCount && (
                         <div className="p-3 bg-yellow-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.gofoodOrders')}</p>
+                          <p className="text-xs text-gray-500">{t('settings.gofoodOrders')}</p>
                           <p className="font-bold text-yellow-600">{shiftData?.gofoodCount || 0}</p>
                         </div>
                       )}
                       {shiftSettings.summaryItems?.grabCount && (
                         <div className="p-3 bg-green-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.grabOrders')}</p>
+                          <p className="text-xs text-gray-500">{t('settings.grabOrders')}</p>
                           <p className="font-bold text-green-600">{shiftData?.grabCount || 0}</p>
                         </div>
                       )}
                       {shiftSettings.summaryItems?.shopeeCount && (
                         <div className="p-3 bg-orange-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.shopeeOrders')}</p>
+                          <p className="text-xs text-gray-500">{t('settings.shopeeOrders')}</p>
                           <p className="font-bold text-orange-600">{shiftData?.shopeeCount || 0}</p>
                         </div>
                       )}
@@ -3417,7 +3417,7 @@ export function POSPage() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setDeleteModalOrder(null)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[80]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
-              <h3 className="font-bold">{t('pos.requestDelete')}</h3>
+              <h3 className="font-bold">{t('orders.requestDelete')}</h3>
               <button onClick={() => setDeleteModalOrder(null)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
                 <X size={20} />
               </button>
@@ -3428,13 +3428,13 @@ export function POSPage() {
                 <p className="text-sm text-gray-500">{formatCurrency(deleteModalOrder.finalAmount || deleteModalOrder.totalAmount)}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">{t('pos.deleteReason')}</label>
+                <label className="block text-sm font-medium mb-2">{t('orders.deleteReason')}</label>
                 <textarea
                   value={deleteReason}
                   onChange={e => setDeleteReason(e.target.value)}
                   className="w-full p-3 border rounded-lg"
                   rows={3}
-                  placeholder={t('pos.deleteReasonPlaceholder')}
+                  placeholder={t('orders.deleteReasonPlaceholder')}
                 />
               </div>
               <button
@@ -3447,7 +3447,7 @@ export function POSPage() {
                 ) : (
                   <RotateCcw size={20} />
                 )}
-                {t('pos.submitDeleteRequest')}
+                {t('orders.submitDeleteRequest')}
               </button>
             </div>
           </div>
@@ -3627,7 +3627,7 @@ export function POSPage() {
                   onClick={() => setShowLogoutModal(true)}
                   className="w-full py-3 bg-gray-500 text-white rounded-xl font-bold touch-feedback"
                 >
-                  {t('common.logout') || 'Logout'}
+                  {t('pos.logout')}
                 </button>
               </div>
             )}

@@ -149,7 +149,7 @@ export function CashManagementPage() {
         type: 'float',
         amount: Math.round(parseFloat(floatAmount)),
         shift: selectedShift,
-        note: t('cash.floatNote')
+        note: t('cash.note')
       })
       setShowFloatModal(false)
       setFloatAmount('')

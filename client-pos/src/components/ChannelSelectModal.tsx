@@ -116,8 +116,8 @@ export function ChannelSelectModal({
         {/* Header */}
         <div className="bg-primary text-white px-5 py-4 flex justify-between items-center">
           <div>
-            <h2 className="text-xl font-bold">{t('pos.selectChannel')}</h2>
-            <p className="text-xs text-white/70">{t('pos.selectChannelHint')}</p>
+            <h2 className="text-xl font-bold">{t('settings.selectChannel')}</h2>
+            <p className="text-xs text-white/70">{t('settings.selectChannelHint')}</p>
           </div>
           <button
             onClick={onConfirm}
@@ -238,7 +238,7 @@ export function ChannelSelectModal({
             disabled={!selectedChannel || (selectedChannel.code === 'DINE_IN' && dineInCount < 1)}
             className="w-full py-4 bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 active:bg-primary/90 transition-colors"
           >
-            {t('pos.confirmChannel')}
+            {t('settings.confirmChannel')}
           </button>
         </div>
       </div>

@@ -125,7 +125,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
                 onClick={loadQR}
                 className="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm"
               >
-                {t('common.retry') || 'Retry'}
+                {t('pos.retry')}
               </button>
             </div>
           ) : qrDataUrl ? (
