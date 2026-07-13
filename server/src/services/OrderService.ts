@@ -266,7 +266,6 @@ async function deductInventoryRecursive(
   }
 
   // finished_goods - skip (not used as raw material)
-  console.log('Skipping finished_goods inventory:', inventoryId, inv.name)
   return { success: true }
 }
 
@@ -530,10 +529,6 @@ async function getChannelPrice(channelId: string, productId: string, defaultPric
 // Create new order
 export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   // DEBUG: log taxEnabled value
-  console.log(`[createOrder] taxEnabled=${data.taxEnabled} (type=${typeof data.taxEnabled}), storeId=${data.storeId}`)
-  console.log(`[createOrder] totalAmount=${data.items?.reduce((s: number, i: any) => s + i.unitPrice * i.quantity, 0)}`)
-  console.log(`[createOrder] RECEIVED customerCount=${data.customerCount}`)
-  console.log(`[createOrder] RECEIVED full data:`, JSON.stringify(data))
 
   // Get channel info for pricing lookup
   const channel = data.channelId
@@ -602,7 +597,6 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   const orderNumber = data.orderNumber || await generateOrderNumber(data.storeId)
 
   // Create order with transaction
-  console.log(`[createOrder] Starting transaction for orderNumber: ${orderNumber}, customerCount: ${data.customerCount}`)
   const order = await prisma.$transaction(async (tx) => {
     // Use pre-generated order number
 
@@ -687,7 +681,6 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     return { ...newOrder, lowStockWarnings: inventoryResult.lowStockWarnings }
   })
 
-  console.log(`[createOrder] Transaction SUCCESS, order.id=${order.id}, orderNumber=${order.orderNumber}`)
 
   // Process referral rewards AFTER transaction (skip for suspended orders)
   if (data.memberId && data.status !== 'suspended') {
@@ -696,7 +689,6 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     })
   }
 
-  console.log(`[createOrder] Returning order result, grandTotal=${grandTotal}`)
   return {
     ...order,
     ppnAmount,

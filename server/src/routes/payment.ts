@@ -38,7 +38,6 @@ router.post('/qris/create', async (req: Request, res: Response) => {
 router.post('/qris/webhook', async (req: Request, res: Response) => {
   try {
     const payload = req.body
-    console.log('QRIS webhook received:', payload)
 
     const result = await handleQrisWebhook({
       external_id: payload.external_id,

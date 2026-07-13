@@ -43,7 +43,6 @@ router.post('/printers', async (req: Request, res: Response) => {
     detectedPrinters = printers
     lastDetectionTime = new Date()
     
-    console.log(`[Hardware] Printers updated from store ${storeId}:`, printers)
     
     res.json({
       success: true,

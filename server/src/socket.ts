@@ -45,7 +45,6 @@ class SocketManager {
 
     // Connection handler
     this.io.on('connection', (socket: Socket) => {
-      console.log(`Socket connected: ${socket.id}`)
 
       const user = socket.data.user
       if (user) {
@@ -58,7 +57,6 @@ class SocketManager {
       })
     })
 
-    console.log('Socket.IO initialized')
     return this.io
   }
 
@@ -98,7 +96,6 @@ class SocketManager {
       storeId: user.storeId
     })
 
-    console.log(`User ${user.id} connected from store ${user.storeId}`)
   }
 
   private handleDisconnect(socket: Socket) {
@@ -130,7 +127,6 @@ class SocketManager {
       this.connectedUsers.delete(socket.id)
     }
 
-    console.log(`Socket disconnected: ${socket.id}`)
   }
 
   // Emit new order to store (for KDS)

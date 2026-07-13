@@ -42,17 +42,6 @@ router.post('/events', authenticate, authorize('admin', 'manager', 'cashier'), a
     const staffId = req.user!.staffId || ''
     const { type, amount, paymentMethod, orderId, note, shift } = req.body
 
-    console.log('[POS-CASH] Creating cash event:', {
-      storeId,
-      staffId,
-      type,
-      amount,
-      paymentMethod,
-      orderId,
-      userStoreId: req.user!.storeId,
-      userRole: req.user!.role
-    })
-
     const event = await prisma.cashEvent.create({
       data: {
         storeId,
@@ -66,7 +55,6 @@ router.post('/events', authenticate, authorize('admin', 'manager', 'cashier'), a
       }
     })
 
-    console.log('[POS-CASH] Cash event created:', event)
     res.status(201).json({ code: 201, data: event })
   } catch (error) {
     console.error('Create cash event error:', error)
@@ -140,7 +128,6 @@ router.get('/balance', authenticate, authorize('admin', 'manager', 'cashier'), a
 router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    console.log('[POS-CASH] shifts/current called with storeId:', storeId, 'user:', req.user!.role)
 
     // 计算今日开始时间（使用 Asia/Jakarta 时区，确保跨环境一致性）
     // startOfTodayJakarta() 返回今天 00:00 WIB = 昨天 17:00 UTC
@@ -319,7 +306,6 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
     const staffId = req.user!.staffId || ''
     const { openFloat, shift } = req.body
 
-    console.log('[POS-CASH] shift/open called:', { storeId, staffId, openFloat, shift, userRole: req.user!.role })
 
     // 检查是否有未关闭的班次
     const openShift = await prisma.shiftSession.findFirst({

@@ -29,7 +29,6 @@ const executors: Record<string, ActionExecutor> = {
       }
     })
 
-    console.log(`[ActionExecutor] Sent coupon ${couponId} to member ${ctx.memberId}`)
   },
 
   // Send message to member
@@ -48,7 +47,6 @@ const executors: Record<string, ActionExecutor> = {
         channel || 'sms',
         templateId
       )
-      console.log(`[ActionExecutor] Sent message to member ${ctx.memberId}:`, result.success ? 'success' : 'failed')
     } catch (error) {
       console.error(`[ActionExecutor] Failed to send message to member ${ctx.memberId}:`, error)
     }
@@ -77,7 +75,6 @@ const executors: Record<string, ActionExecutor> = {
       }
     })
 
-    console.log(`[ActionExecutor] Added ${points} points to member ${ctx.memberId}`)
   },
 
   // Remove points from member
@@ -103,7 +100,6 @@ const executors: Record<string, ActionExecutor> = {
       }
     })
 
-    console.log(`[ActionExecutor] Removed ${points} points from member ${ctx.memberId}`)
   }
 }
 

@@ -169,8 +169,6 @@ router.get('/:id/cost', authenticate, authorize('admin', 'manager'), async (req:
 // POST /api/products
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createProductSchema), async (req: AuthRequest, res) => {
   try {
-    console.log('=== CREATE PRODUCT REQUEST ===')
-    console.log('body:', JSON.stringify(req.body, null, 2))
     const product = await ProductService.createProduct(req.body)
 
     res.status(201).json({
@@ -190,7 +188,6 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    console.log('PUT /api/products/:id called with:', id, req.body)
     const product = await ProductService.updateProduct(id, req.body)
 
     res.json({

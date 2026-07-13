@@ -37,7 +37,6 @@ export async function setAutomationTime(storeId: string, time: string): Promise<
  * 执行营销自动化检查
  */
 async function runMarketingAutomation() {
-  console.log('[MarketingScheduler] Running marketing automation...')
 
   try {
     const stores = await prisma.store.findMany({
@@ -81,7 +80,6 @@ async function runMarketingAutomation() {
       }
     }
 
-    console.log('[MarketingScheduler] Marketing automation completed')
   } catch (error) {
     console.error('[MarketingScheduler] Error running marketing automation:', error)
   }
@@ -92,11 +90,9 @@ async function runMarketingAutomation() {
  */
 export function startMarketingScheduler() {
   if (schedulerInterval) {
-    console.log('[MarketingScheduler] Already running')
     return
   }
 
-  console.log('[MarketingScheduler] Starting marketing automation scheduler')
 
   schedulerInterval = setInterval(async () => {
     const now = new Date()
@@ -135,7 +131,6 @@ export function stopMarketingScheduler() {
   if (schedulerInterval) {
     clearInterval(schedulerInterval)
     schedulerInterval = null
-    console.log('[MarketingScheduler] Stopped')
   }
 }
 

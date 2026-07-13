@@ -358,7 +358,6 @@ export async function createProduct(data: CreateProductData) {
 
 // Update product
 export async function updateProduct(productId: string, data: Partial<CreateProductData>) {
-  console.log('ProductService.updateProduct called:', productId, data)
   return prisma.$transaction(async (tx) => {
     // Update product basic info
     const updateData: any = {}

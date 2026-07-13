@@ -230,7 +230,6 @@ interface WhatsAppProvider {
 // Mock SMS Provider (for development/testing)
 class MockSMSProvider implements SMSProvider {
   async send(phone: string, message: string): Promise<SendMessageResult> {
-    console.log(`[MockSMS] Sending to ${phone}: ${message.substring(0, 50)}...`)
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 100))
     return {
@@ -244,7 +243,6 @@ class MockSMSProvider implements SMSProvider {
 // Mock WhatsApp Provider
 class MockWhatsAppProvider implements WhatsAppProvider {
   async send(phone: string, templateName: string, variables: Record<string, string>): Promise<SendMessageResult> {
-    console.log(`[MockWhatsApp] Sending to ${phone} with template ${templateName}`)
     await new Promise(resolve => setTimeout(resolve, 100))
     return {
       success: true,
