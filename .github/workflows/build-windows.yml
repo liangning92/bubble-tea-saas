@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., 1.0.0)'
+        description: 'Version (空=自动日期, 例: 2024.07.14)'
         required: false
-        default: '1.0.0'
+        default: ''
 
 permissions:
   contents: write
@@ -28,6 +28,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Set version
+        id: version
+        run: |
+          $version = "${{ inputs.version }}"
+          if (-not $version) {
+            $version = Get-Date -Format "yyyy.MM.dd"
+          }
+          Write-Host "Building version: $version"
+          Write-Host "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Install dependencies
         run: npm install
@@ -53,8 +63,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ github.event.inputs.version || '1.0.0' }}
-          name: Bubble Tea POS v${{ github.event.inputs.version || '1.0.0' }}
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: Bubble Tea POS v${{ steps.version.outputs.VERSION }}
           draft: false
           files: |
             release/win-unpacked/**
