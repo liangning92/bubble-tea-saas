@@ -30,24 +30,22 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        env:
-          YARN_GITHUB_CONTEXT_NO_SSH: true
-        run: yarn install --frozen-lockfile || yarn install
+        run: npm install
 
       - name: Generate Prisma client
-        run: yarn run db:generate
+        run: npm run db:generate
 
       - name: Build server
-        run: yarn run build:server
+        run: npm run build:server
 
       - name: Build admin
-        run: yarn run build:admin
+        run: npm run build:admin
 
       - name: Build POS
-        run: yarn run build:pos
+        run: npm run build:pos
 
       - name: Compile Electron
-        run: yarn run electron:compile
+        run: npm run electron:compile
 
       - name: Build Windows executable
         run: npx electron-builder --config electron-builder.json --win --publish never
