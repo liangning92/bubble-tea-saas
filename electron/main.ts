@@ -170,7 +170,9 @@ function startApiServer(): Promise<void> {
       NODE_ENV: 'production',
       PORT: String(API_PORT),
       // Use app data directory for database
-      DATABASE_URL: `file:${dbPath}`
+      DATABASE_URL: `file:${dbPath}`,
+      // Point to unpacked node_modules where @prisma/client resides
+      NODE_PATH: path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
     }
 
     log('[API] Starting server from:', serverPath)

@@ -9,9 +9,14 @@
   "files": [
     "server/dist/**/*",
     "server/node_modules/**/*",
+    "node_modules/.prisma/client/index.js",
+    "node_modules/.prisma/client/default.js",
+    "node_modules/.prisma/client/package.json",
+    "node_modules/.prisma/client/schema.prisma",
+    "node_modules/.prisma/client/libquery_engine-*",
+    "node_modules/.prisma/client/index.d.ts",
     "node_modules/**/*",
-    "node_modules/.prisma/**/*",
-    "node_modules/@prisma/**/*",
+    "!node_modules/@prisma/client/**/*",
     "!server/node_modules/.prisma/client/*.map",
     "!server/node_modules/.prisma/client/edge.js",
     "!server/node_modules/.prisma/client/edge.d.ts",
@@ -40,14 +45,17 @@
   "asar": true,
   "asarUnpack": [
     "**/*.node",
-    "node_modules/@prisma/client/**/*",
-    "server/node_modules/@prisma/client/**/*",
     "server/prisma/seed.db"
   ],
   "extraResources": [
     {
+      "from": "node_modules/@prisma/client",
+      "to": "app.asar.unpacked/node_modules/@prisma/client",
+      "filter": ["**/*"]
+    },
+    {
       "from": "node_modules/.prisma/client",
-      "to": "app.asar.unpacked/.prisma/client",
+      "to": "app.asar.unpacked/node_modules/@prisma/client/.prisma/client",
       "filter": ["**/*"]
     }
   ],
