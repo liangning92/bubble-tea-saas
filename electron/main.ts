@@ -30,21 +30,24 @@ function getResourcePath(relative: string): string {
   if (isDev) {
     return path.join(__dirname, '..', relative)
   }
-  return path.join(process.resourcesPath, relative)
+  // In production, use app.asar path
+  return path.join(app.getAppPath(), relative)
 }
 
 function getServerPath(): string {
   if (isDev) {
     return path.join(__dirname, '..', 'server')
   }
-  return path.join(process.resourcesPath, 'server')
+  // In production, app is inside app.asar
+  return path.join(app.getAppPath(), 'server')
 }
 
 function getPosBuildPath(): string {
   if (isDev) {
     return path.join(__dirname, '..', 'client-pos', 'dist')
   }
-  return path.join(process.resourcesPath, 'client-pos')
+  // In production, client-pos is inside app.asar
+  return path.join(app.getAppPath(), 'client-pos')
 }
 
 // ============================================================================
@@ -99,39 +102,26 @@ async function initDatabase(): Promise<void> {
   if (!fs.existsSync(dbFile)) {
     log('[DB] First run - copying seed database...')
     try {
-      // Try to copy from bundled seed (may be in asar or asar.unpacked)
-      let bundledDb = path.join(getServerPath(), 'prisma', 'seed.db')
-
-      // If not found, check asar.unpacked directory (for unpacked files)
-      if (!fs.existsSync(bundledDb)) {
-        const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db')
-        if (fs.existsSync(unpackedPath)) {
-          bundledDb = unpackedPath
-        }
-      }
-
-      // Also check if we're running from asar and file exists there
-      if (!fs.existsSync(bundledDb)) {
-        const asarInternalPath = path.join(process.resourcesPath, 'app.asar', 'server', 'prisma', 'seed.db')
-        if (fs.existsSync(asarInternalPath)) {
-          bundledDb = asarInternalPath
-        }
-      }
+      // Seed database is in server/prisma/seed.db inside asar
+      const bundledDb = path.join(getServerPath(), 'prisma', 'seed.db')
 
       if (fs.existsSync(bundledDb)) {
         fs.copyFileSync(bundledDb, dbFile)
         log('[DB] Seed database copied from:', bundledDb)
       } else {
-        // Run prisma db push to create tables
-        log('[DB] Running Prisma db push...')
-        const result = spawn('npx', ['prisma', 'db', 'push', '--skip-generate'], {
-          cwd: getServerPath(),
-          env: {
-            ...process.env,
-            DATABASE_URL: `file:${dbFile}`
-          },
-          stdio: 'pipe'
-        })
+        logError('[DB] Seed database not found at:', bundledDb)
+        // Create empty file to prevent repeated attempts
+        fs.writeFileSync(dbFile, '')
+      }
+    } catch (err: any) {
+      logError('[DB] Database init error:', err.message)
+      // Create empty file to prevent repeated attempts
+      fs.writeFileSync(dbFile, '')
+    }
+  } else {
+    log('[DB] Database already exists at:', dbFile)
+  }
+}
 
         let output = ''
         result.stdout?.on('data', (d: Buffer) => { output += d.toString() })
