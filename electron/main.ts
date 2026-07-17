@@ -46,8 +46,8 @@ function getPosBuildPath(): string {
   if (isDev) {
     return path.join(__dirname, '..', 'client-pos', 'dist')
   }
-  // In production, client-pos is inside app.asar
-  return path.join(app.getAppPath(), 'client-pos')
+  // In production, client-pos/dist is inside app.asar
+  return path.join(app.getAppPath(), 'client-pos', 'dist')
 }
 
 // ============================================================================

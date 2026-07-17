@@ -15,6 +15,12 @@ function autoDetectApiUrl(): string {
     return '/api'
   }
 
+  // Electron app (file:// protocol) or other local file access: use local API server
+  // When loaded via file://, hostname is empty string
+  if (!host || host === 'file') {
+    return '/api'
+  }
+
   // Remote access via cloudflare tunnel → use api.aicube.online/api
   return 'https://api.aicube.online/api'
 }
