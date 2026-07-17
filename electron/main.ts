@@ -123,32 +123,6 @@ async function initDatabase(): Promise<void> {
   }
 }
 
-        let output = ''
-        result.stdout?.on('data', (d: Buffer) => { output += d.toString() })
-        result.stderr?.on('data', (d: Buffer) => { output += d.toString() })
-
-        const code = await new Promise<number>((resolve) => {
-          result.on('close', resolve)
-        })
-
-        if (code === 0) {
-          log('[DB] Database initialized successfully')
-        } else {
-          logError('[DB] Database init output:', output.substring(0, 200))
-          // Create empty database file anyway
-          fs.writeFileSync(dbFile, '')
-        }
-      }
-    } catch (err: any) {
-      logError('[DB] Database init error:', err.message)
-      // Create empty file to prevent repeated attempts
-      fs.writeFileSync(dbFile, '')
-    }
-  } else {
-    log('[DB] Database already exists at:', dbFile)
-  }
-}
-
 function startApiServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     const serverPath = getServerPath()
@@ -346,7 +320,7 @@ function setupIpcHandlers() {
 
 async function createWindow() {
   const posBuildPath = getPosBuildPath()
-  
+
   // In production, serve from built files
   const indexPath = isDev
     ? 'http://localhost:6063'
