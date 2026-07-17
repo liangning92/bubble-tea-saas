@@ -99,11 +99,28 @@ async function initDatabase(): Promise<void> {
   if (!fs.existsSync(dbFile)) {
     log('[DB] First run - copying seed database...')
     try {
-      // Try to copy from bundled seed, or initialize via Prisma
-      const bundledDb = path.join(getServerPath(), 'prisma', 'seed.db')
+      // Try to copy from bundled seed (may be in asar or asar.unpacked)
+      let bundledDb = path.join(getServerPath(), 'prisma', 'seed.db')
+
+      // If not found, check asar.unpacked directory (for unpacked files)
+      if (!fs.existsSync(bundledDb)) {
+        const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db')
+        if (fs.existsSync(unpackedPath)) {
+          bundledDb = unpackedPath
+        }
+      }
+
+      // Also check if we're running from asar and file exists there
+      if (!fs.existsSync(bundledDb)) {
+        const asarInternalPath = path.join(process.resourcesPath, 'app.asar', 'server', 'prisma', 'seed.db')
+        if (fs.existsSync(asarInternalPath)) {
+          bundledDb = asarInternalPath
+        }
+      }
+
       if (fs.existsSync(bundledDb)) {
         fs.copyFileSync(bundledDb, dbFile)
-        log('[DB] Seed database copied successfully')
+        log('[DB] Seed database copied from:', bundledDb)
       } else {
         // Run prisma db push to create tables
         log('[DB] Running Prisma db push...')
@@ -158,7 +175,7 @@ function startApiServer(): Promise<void> {
 
     log('[API] Starting server from:', serverPath)
 
-    apiServerProcess = spawn('node', ['src/index.js'], {
+    apiServerProcess = spawn('node', ['dist/index.js'], {
       cwd: serverPath,
       env,
       stdio: ['ignore', 'pipe', 'pipe']

@@ -8,8 +8,24 @@
   },
   "files": [
     "server/dist/**/*",
-    "server/node_modules/.prisma/**/*",
-    "server/node_modules/@prisma/**/*",
+    "server/node_modules/**/*",
+    "node_modules/**/*",
+    "node_modules/.prisma/**/*",
+    "node_modules/@prisma/**/*",
+    "!server/node_modules/.prisma/client/*.map",
+    "!server/node_modules/.prisma/client/edge.js",
+    "!server/node_modules/.prisma/client/edge.d.ts",
+    "!server/node_modules/.prisma/client/index-browser.js",
+    "!server/node_modules/.prisma/client/wasm.js",
+    "!server/node_modules/.prisma/client/wasm.d.ts",
+    "!server/node_modules/.prisma/client/deno/**/*",
+    "!node_modules/.prisma/client/*.map",
+    "!node_modules/.prisma/client/edge.js",
+    "!node_modules/.prisma/client/edge.d.ts",
+    "!node_modules/.prisma/client/index-browser.js",
+    "!node_modules/.prisma/client/wasm.js",
+    "!node_modules/.prisma/client/wasm.d.ts",
+    "!node_modules/.prisma/client/deno/**/*",
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
@@ -24,8 +40,16 @@
   "asar": true,
   "asarUnpack": [
     "**/*.node",
-    "**/node_modules/.prisma/**/*",
-    "**/node_modules/@prisma/client/**/*"
+    "node_modules/@prisma/client/**/*",
+    "server/node_modules/@prisma/client/**/*",
+    "server/prisma/seed.db"
+  ],
+  "extraResources": [
+    {
+      "from": "node_modules/.prisma/client",
+      "to": "app.asar.unpacked/.prisma/client",
+      "filter": ["**/*"]
+    }
   ],
   "npmRebuild": true,
   "win": {
