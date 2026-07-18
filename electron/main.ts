@@ -6,6 +6,45 @@ import http from 'http'
 import { printReceipt, printReceiptRaw, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
 
 // ============================================================================
+// Global Error Handlers - MUST be at the top
+// ============================================================================
+
+// Get crash log directory - use safe fallback before app is ready
+function getCrashLogPath(): string {
+  const logName = `crash-${Date.now()}.log`
+  try {
+    if (app.isReady()) {
+      return path.join(app.getPath('userData'), 'logs', logName)
+    }
+  } catch {}
+  // Fallback to temp directory before app is ready
+  return path.join(process.env.TEMP || '/tmp', 'bubble-tea-pos-logs', logName)
+}
+
+// Catch unhandled exceptions
+process.on('uncaughtException', (error) => {
+  console.error('[FATAL] Uncaught exception:', error.message)
+  console.error('[FATAL] Stack:', error.stack)
+  try {
+    const crashLog = getCrashLogPath()
+    const logDir = path.dirname(crashLog)
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+    fs.writeFileSync(crashLog, `[FATAL] ${new Date().toISOString()}\n${error.message}\n${error.stack}\n`)
+  } catch (e) {}
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled rejection at:', promise, 'reason:', reason)
+  try {
+    const crashLog = getCrashLogPath()
+    const logDir = path.dirname(crashLog)
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+    fs.writeFileSync(crashLog, `[FATAL] ${new Date().toISOString()}\nUnhandled rejection: ${reason}\n`)
+  } catch (e) {}
+})
+
+// ============================================================================
 // Constants
 // ============================================================================
 
