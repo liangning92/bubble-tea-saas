@@ -48,18 +48,7 @@
     "**/*.node",
     "server/prisma/seed.db"
   ],
-  "extraResources": [
-    {
-      "from": "node_modules/@prisma/client",
-      "to": "app.asar.unpacked/node_modules/@prisma/client",
-      "filter": ["**/*"]
-    },
-    {
-      "from": "node_modules/.prisma/client",
-      "to": "app.asar.unpacked/node_modules/@prisma/client/.prisma/client",
-      "filter": ["**/*"]
-    }
-  ],
+  "extraResources": [],
   "npmRebuild": true,
   "win": {
     "target": [
