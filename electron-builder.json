@@ -17,6 +17,7 @@
     "node_modules/.prisma/client/index.d.ts",
     "node_modules/**/*",
     "!node_modules/@prisma/client/**/*",
+    "server/node_modules/@prisma/**/*",
     "!server/node_modules/.prisma/client/*.map",
     "!server/node_modules/.prisma/client/edge.js",
     "!server/node_modules/.prisma/client/edge.d.ts",
