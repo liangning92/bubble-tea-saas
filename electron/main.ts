@@ -54,14 +54,35 @@ function getPosBuildPath(): string {
 // Logging
 // ============================================================================
 
+function getLogPath(): string {
+  return path.join(app.getPath('userData'), 'logs', `pos-${new Date().toISOString().split('T')[0]}.log`)
+}
+
+function ensureLogDir() {
+  const logDir = path.join(app.getPath('userData'), 'logs')
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true })
+  }
+}
+
 function log(...args: any[]) {
   const ts = new Date().toISOString().substring(11, 19)
-  console.log(`[${ts}]`, ...args)
+  const msg = `[${ts}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`
+  console.log(msg)
+  try {
+    ensureLogDir()
+    fs.appendFileSync(getLogPath(), msg + '\n')
+  } catch {}
 }
 
 function logError(...args: any[]) {
   const ts = new Date().toISOString().substring(11, 19)
-  console.error(`[${ts}] ERROR:`, ...args)
+  const msg = `[${ts}] ERROR: ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`
+  console.error(msg)
+  try {
+    ensureLogDir()
+    fs.appendFileSync(getLogPath(), msg + '\n')
+  } catch {}
 }
 
 // ============================================================================
@@ -410,9 +431,13 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(async () => {
+    log('[APP] ====================')
     log('[APP] Starting...')
+    log('[APP] isDev:', isDev)
     log('[APP] User data:', app.getPath('userData'))
     log('[APP] Version:', app.getVersion())
+    log('[APP] App path:', app.getAppPath())
+    log('[APP] ====================')
 
     // Ensure data directory exists
     const dataDir = path.join(app.getPath('userData'), 'data')
