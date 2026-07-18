@@ -13,6 +13,24 @@ const isDev = !app.isPackaged
 const API_PORT = 7072
 const POS_PORT = 6063
 
+// ============================================================================
+// Handle command line arguments (for debugging)
+// ============================================================================
+
+const args = process.argv.slice(2)
+if (args.includes('--disable-gpu')) {
+  app.disableHardwareAcceleration()
+  console.log('[ARGS] GPU disabled')
+}
+if (args.includes('--no-sandbox')) {
+  app.commandLine.appendSwitch('no-sandbox')
+  console.log('[ARGS] Sandbox disabled')
+}
+if (args.includes('--enable-logging')) {
+  app.commandLine.appendSwitch('enable-logging')
+  console.log('[ARGS] Logging enabled')
+}
+
 
 
 // ============================================================================
