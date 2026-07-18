@@ -353,8 +353,37 @@ async function createWindow() {
     mainWindow.webContents.openDevTools()
   } else {
     // In production, load from built files
-    await mainWindow.loadFile(path.join(posBuildPath, 'index.html'))
+    try {
+      await mainWindow.loadFile(path.join(posBuildPath, 'index.html'))
+      log('[WINDOW] loadFile succeeded')
+    } catch (err: any) {
+      logError('[WINDOW] loadFile failed:', err.message)
+      // Try to show error in window
+      mainWindow.loadURL(`data:text/html,<html><body style="background:#1a1a1a;color:white;font-family:monospace;padding:40px"><h2>Bubble Tea POS - Load Error</h2><pre>${err.message}</pre><p>Path: ${path.join(posBuildPath, 'index.html')}</p></body></html>`)
+    }
   }
+
+  // Allow opening DevTools with F12 in production (for debugging)
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'F12') {
+      mainWindow?.webContents.toggleDevTools()
+    }
+  })
+
+  // Log page errors
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    logError('[WINDOW] Renderer process gone:', details.reason)
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    logError('[WINDOW] Failed to load:', errorCode, errorDescription)
+  })
+
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 2) { // Error level
+      logError('[CONSOLE ERROR]', message, 'at', sourceId, 'line', line)
+    }
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null
