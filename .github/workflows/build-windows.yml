@@ -31,7 +31,17 @@ jobs:
 
       - name: Set version
         id: version
-        run: echo "VERSION=$(Get-Date -Format 'yyyy.MM.dd')" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+        run: |
+          $date = Get-Date -Format 'yyyy.MM.dd'
+          $runNum = $env:GITHUB_RUN_NUMBER
+          $version = "$date.$runNum"
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          echo "VERSION_STR=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
+
+      - name: Update package.json version
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          (Get-Content package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
 
       - name: Install dependencies
         run: npm install
