@@ -180,9 +180,15 @@ function startApiServer(): Promise<void> {
 
     log('[API] Starting server from:', serverPath)
 
+    // In packaged Electron app, add app directory to PATH so node can be found
+    const fullEnv = {
+      ...env,
+      PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}`
+    }
+
     apiServerProcess = spawn('node', ['dist/index.js'], {
       cwd: serverPath,
-      env,
+      env: fullEnv,
       stdio: ['ignore', 'pipe', 'pipe']
     })
 
