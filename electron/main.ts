@@ -3,6 +3,7 @@ import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
+import os from 'os'
 import { printReceipt, printReceiptRaw, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
 
 // ============================================================================
@@ -18,7 +19,10 @@ function getCrashLogPath(): string {
     }
   } catch {}
   // Fallback to temp directory before app is ready
-  return path.join(process.env.TEMP || '/tmp', 'bubble-tea-pos-logs', logName)
+  // Use os.tmpdir() for cross-platform compatibility
+  const tmpDir = os.tmpdir()
+  const logDir = path.join(tmpDir, 'bubble-tea-pos-logs')
+  return path.join(logDir, logName)
 }
 
 // Catch unhandled exceptions
