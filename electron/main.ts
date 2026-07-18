@@ -358,7 +358,8 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      webSecurity: true
     },
     autoHideMenuBar: true,
     fullscreen: false,
@@ -374,13 +375,57 @@ async function createWindow() {
     mainWindow.webContents.openDevTools()
   } else {
     // In production, load from built files
+    const indexPath = path.join(posBuildPath, 'index.html')
+    log('[WINDOW] Loading index from:', indexPath)
+    log('[WINDOW] File exists:', fs.existsSync(indexPath))
+
     try {
-      await mainWindow.loadFile(path.join(posBuildPath, 'index.html'))
+      await mainWindow.loadFile(indexPath)
       log('[WINDOW] loadFile succeeded')
     } catch (err: any) {
       logError('[WINDOW] loadFile failed:', err.message)
-      // Try to show error in window
-      mainWindow.loadURL(`data:text/html,<html><body style="background:#1a1a1a;color:white;font-family:monospace;padding:40px"><h2>Bubble Tea POS - Load Error</h2><pre>${err.message}</pre><p>Path: ${path.join(posBuildPath, 'index.html')}</p></body></html>`)
+      // Show error page with details
+      const errorHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bubble Tea POS - Load Error</title>
+  <style>
+    body { background: #1a1a1a; color: #eee; font-family: 'Consolas', monospace; padding: 40px; margin: 0; }
+    h2 { color: #ff6b6b; margin: 0 0 20px 0; }
+    .error { background: #2d2d2d; padding: 20px; border-radius: 8px; margin: 10px 0; }
+    .label { color: #888; display: inline-block; width: 100px; }
+    .value { color: #4ecdc4; }
+    pre { background: #000; padding: 15px; border-radius: 4px; overflow-x: auto; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h2>❌ Bubble Tea POS - Load Error</h2>
+  <div class="error">
+    <div><span class="label">Path:</span><span class="value">${indexPath.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>
+    <div><span class="label">Exists:</span><span class="value">${fs.existsSync(indexPath)}</span></div>
+    <div><span class="label">Error:</span><span class="value">${err.message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>
+  </div>
+  <div class="error">
+    <h3>Possible causes:</h3>
+    <ul>
+      <li>Missing or corrupted installation</li>
+      <li>Antivirus blocking file access</li>
+      <li>Installation in read-only directory</li>
+    </ul>
+  </div>
+  <div class="error">
+    <h3>Try:</h3>
+    <ul>
+      <li>Run as Administrator</li>
+      <li>Reinstall the application</li>
+      <li>Check Windows Event Viewer for errors</li>
+    </ul>
+  </div>
+</body>
+</html>`
+      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`)
     }
   }
 
