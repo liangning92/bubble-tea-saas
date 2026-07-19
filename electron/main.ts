@@ -205,9 +205,57 @@ async function initDatabase(): Promise<void> {
   }
 }
 
+// Extract server from asar to temp directory for execution
+function extractServerFromAsar(): string {
+  const serverSrc = getServerPath() // app.asar/server
+  const serverUnpackedSrc = path.join(process.resourcesPath, 'app.asar.unpacked', 'server')
+  const serverDest = path.join(os.tmpdir(), 'bubble-tea-pos-server')
+
+  // Check if already extracted
+  if (fs.existsSync(path.join(serverDest, 'dist', 'index.js'))) {
+    log('[API] Using existing extracted server at:', serverDest)
+    return serverDest
+  }
+
+  log('[API] Extracting server from asar to:', serverDest)
+
+  // Remove existing directory if present
+  if (fs.existsSync(serverDest)) {
+    fs.rmSync(serverDest, { recursive: true })
+  }
+
+  // Copy server from asar to temp directory
+  function copyDir(src: string, dest: string) {
+    fs.mkdirSync(dest, { recursive: true })
+    const entries = fs.readdirSync(src, { withFileTypes: true })
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name)
+      const destPath = path.join(dest, entry.name)
+      if (entry.isDirectory()) {
+        copyDir(srcPath, destPath)
+      } else {
+        fs.copyFileSync(srcPath, destPath)
+      }
+    }
+  }
+
+  // Copy main server files from asar
+  copyDir(serverSrc, serverDest)
+
+  // Copy unpacked node_modules (which contains .prisma and @prisma/client)
+  if (fs.existsSync(serverUnpackedSrc)) {
+    log('[API] Copying unpacked modules from:', serverUnpackedSrc)
+    copyDir(serverUnpackedSrc, serverDest)
+  }
+
+  log('[API] Server extracted successfully')
+  return serverDest
+}
+
 function startApiServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const serverPath = getServerPath()
+    // Extract server from asar to temp directory (Node can't run from inside asar)
+    const serverPath = extractServerFromAsar()
     const userDataPath = app.getPath('userData')
     const dbPath = path.join(userDataPath, 'data', 'dev.db')
 
@@ -216,9 +264,7 @@ function startApiServer(): Promise<void> {
       NODE_ENV: 'production',
       PORT: String(API_PORT),
       // Use app data directory for database
-      DATABASE_URL: `file:${dbPath}`,
-      // Point to unpacked node_modules where @prisma/client resides
-      NODE_PATH: path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+      DATABASE_URL: `file:${dbPath}`
     }
 
     log('[API] Starting server from:', serverPath)
@@ -426,7 +472,8 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: true
+      // Disabled for file:// protocol loading - can cause white screen on Windows
+      webSecurity: false
     },
     autoHideMenuBar: true,
     fullscreen: false,
