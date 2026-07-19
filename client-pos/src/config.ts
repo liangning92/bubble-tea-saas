@@ -3,6 +3,10 @@
 
 const API_URL_KEY = 'pos-api-url'
 
+// API URLs for different modes
+const LOCAL_API_URL = 'http://localhost:7072/api'
+const CLOUD_API_URL = 'https://api.aicube.online/api'
+
 // Default to relative path (uses Vite proxy in dev)
 const DEFAULT_API_URL = '/api'
 
@@ -45,3 +49,6 @@ export function clearApiUrl(): void {
 export function isDefaultApiUrl(): boolean {
   return !localStorage.getItem(API_URL_KEY)
 }
+
+// Export URL constants for use in other modules
+export { LOCAL_API_URL, CLOUD_API_URL }
