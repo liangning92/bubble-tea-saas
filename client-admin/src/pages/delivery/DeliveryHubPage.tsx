@@ -43,8 +43,13 @@ const PLATFORM_CONFIG: Record<string, { name: string; color: string; bgColor: st
 }
 
 const MOCK_PRODUCTS = ['珍奶', '椰果', '芒果冰沙', '绿茶', '芋头', '茉莉花茶']
-const MOCK_NAMES = ['Ahmad Wijaya', 'Siti Nurhaliza', 'Budi Santoso', 'Dewi Lestari', 'Rudi Hermawan']
-const MOCK_STREETS = ['Jl. Sudirman No. 123', 'Jl. Thamrin No. 45', 'Jl. Gatot Subroto', 'Jl. Asia Afrika']
+const MOCK_NAMES = ['Customer A', 'Customer B', 'Customer C', 'Customer D', 'Customer E']
+const MOCK_STREETS = [
+  'Jl. Utama No.' + Math.floor(Math.random() * 999 + 1),
+  'Jl. Besar No.' + Math.floor(Math.random() * 999 + 1),
+  'Jl. Kecil No.' + Math.floor(Math.random() * 999 + 1),
+  'Jl. Raya No.' + Math.floor(Math.random() * 999 + 1)
+]
 
 export function DeliveryHubPage() {
   const { t } = useTranslation()
@@ -70,7 +75,7 @@ export function DeliveryHubPage() {
           platformOrderId: 'GF-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
           customerName: 'Ahmad Wijaya',
           customerPhone: '081234567890',
-          deliveryAddress: 'Jl. Sudirman No. 123, Jakarta Selatan',
+          deliveryAddress: 'Jl. Utama No.' + Math.floor(Math.random() * 999 + 1),
           items: [
             { productName: '珍珠奶茶', specName: '大杯', quantity: 2, notes: '少冰' },
             { productName: '椰果奶茶', specName: '中杯', quantity: 1 }
@@ -89,7 +94,7 @@ export function DeliveryHubPage() {
           platformOrderId: 'GR-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
           customerName: 'Siti Nurhaliza',
           customerPhone: '081234567891',
-          deliveryAddress: 'Jl. Thamrin No. 45, Jakarta Pusat',
+          deliveryAddress: 'Jl. Besar No.' + Math.floor(Math.random() * 999 + 1),
           items: [
             { productName: '芒果冰沙', specName: '大杯', quantity: 1 }
           ],

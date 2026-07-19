@@ -296,16 +296,16 @@ const LivePreview: React.FC<{
           case 'storeInfo':
             return (
               <div key={block.id} className={`${alignClass} ${sizeClass} text-gray-600 border-b pb-2 mb-2`}>
-                {block.config.showPhone && <div>Tel: {block.config.phone || '021-123456'}</div>}
-                {block.config.showAddress && <div>{block.config.address || 'Jl. Sudirman No.1'}</div>}
+                {block.config.showPhone && <div>Tel: {block.config.phone || t('posSettings.receiptSamplePhone')}</div>}
+                {block.config.showAddress && <div>{block.config.address || t('posSettings.receiptSampleAddress')}</div>}
               </div>
             )
           case 'orderInfo':
             return (
               <div key={block.id} className={`${alignClass} ${sizeClass} border-b pb-2 mb-2`}>
-                {block.config.showDate && <div>{t('posSettings.receiptDate')}: 2026-07-04</div>}
-                {block.config.showTime && <div>{t('posSettings.receiptTime')}: 14:30</div>}
-                {block.config.showCashier && <div>{t('posSettings.receiptCashier')}: Admin</div>}
+                {block.config.showDate && <div>{t('posSettings.receiptDate')}: {new Date().toLocaleDateString('id-ID')}</div>}
+                {block.config.showTime && <div>{t('posSettings.receiptTime')}: {new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</div>}
+                {block.config.showCashier && <div>{t('posSettings.receiptCashier')}: {t('posSettings.receiptSampleCashier')}</div>}
                 {block.config.showCustomer && <div>{t('posSettings.receiptCustomer')}: -</div>}
                 {block.config.showChannel && <div>{t('posSettings.receiptChannel')}: POS</div>}
               </div>
@@ -704,8 +704,8 @@ const BlockPropertiesPanel: React.FC<{
                 onChange={(e) => updateConfig('itemFormat', e.target.value)}
                 className="input mt-1 w-full"
               >
-                <option value="standard">Standard</option>
-                <option value="compact">Compact</option>
+                <option value="standard">{t('posSettings.formatStandard')}</option>
+                <option value="compact">{t('posSettings.formatCompact')}</option>
               </select>
             </div>
           </>
@@ -759,8 +759,8 @@ const BlockPropertiesPanel: React.FC<{
                 onChange={(e) => updateConfig('barcodeType', e.target.value)}
                 className="input mt-1 w-full"
               >
-                <option value="code128">Code 128</option>
-                <option value="code39">Code 39</option>
+                <option value="code128">{t('posSettings.barcodeCode128')}</option>
+                <option value="code39">{t('posSettings.barcodeCode39')}</option>
               </select>
             </div>
             <div>
@@ -815,9 +815,9 @@ const BlockPropertiesPanel: React.FC<{
               onChange={(e) => updateConfig('dividerStyle', e.target.value)}
               className="input mt-1 w-full"
             >
-              <option value="line">Solid Line</option>
-              <option value="dashed">Dashed Line</option>
-              <option value="space">Space</option>
+              <option value="line">{t('posSettings.dividerSolid')}</option>
+              <option value="dashed">{t('posSettings.dividerDashed')}</option>
+              <option value="space">{t('posSettings.dividerSpace')}</option>
             </select>
           </div>
         )}
@@ -987,7 +987,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
   const handleSave = async () => {
     if (!templateName.trim()) {
-      alert('Please enter a template name')
+      alert(t('posSettings.templateNameRequired'))
       return
     }
 
@@ -1014,7 +1014,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
       await loadTemplates()
     } catch (err) {
       console.error('Failed to save template:', err)
-      alert('Failed to save template')
+      alert(t('posSettings.saveTemplateFailed'))
     } finally {
       setSaving(false)
     }
@@ -1087,7 +1087,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-gray-500">{t('common.loading')}</div>
       </div>
     )
   }
@@ -1157,7 +1157,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
               <div className="space-y-2 min-h-[200px]">
                 {blocks.length === 0 ? (
                   <div className="text-center text-gray-400 py-8 text-sm">
-                    Click a block from the left to add it
+                    {t('posSettings.clickBlockToAdd')}
                   </div>
                 ) : (
                   blocks.map((block) => (
