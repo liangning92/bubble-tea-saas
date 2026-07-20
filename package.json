@@ -1,6 +1,6 @@
 {
   "name": "bubble-tea-saas",
-  "version": "2026.07.17",
+  "version": "2026.07.20.1503",
   "private": true,
   "description": "Bubble Tea SaaS POS System - Indonesia Market",
   "workspaces": [
@@ -42,7 +42,8 @@
     "i18n:check": "npm run i18n:check:pos && npm run i18n:check:admin && npm run i18n:check:staff",
     "check": "npm run typecheck && npm run build",
     "lint": "npm run lint --workspaces --if-present",
-    "electron:build": "npm run db:generate && npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
+    "electron:build": "npm run version:update && npm run db:generate && npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
+    "version:update": "node scripts/update-version.js",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run build:pos && npm run build:server && npm run electron:compile && electron .",
     "electron:start": "npm run electron:compile && electron ."
