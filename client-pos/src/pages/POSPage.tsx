@@ -716,13 +716,10 @@ export function POSPage() {
     // Guard: only load when storeId is available (not during initial loading with 'default')
     if (!user?.storeId) return
     const storeId = user.storeId
-    const token = useAuthStore.getState().token
-    fetch(`/api/config?storeId=${storeId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
-      .then(r => r.json())
-      .then(data => {
-        const configs = data?.data || {}
+    // Use configured API URL for cloud sync
+    posApi.getConfigs(storeId)
+      .then(res => {
+        const configs = res.data?.data || {}
 
         // 店铺信息 - Admin保存为storeInfo对象
         const storeInfoData = configs.storeInfo || {}
@@ -997,12 +994,8 @@ export function POSPage() {
     const pollHardwareConfig = async () => {
       if (!user?.storeId) return
       try {
-        const token = useAuthStore.getState().token
-        const res = await fetch(`/api/config?storeId=${user.storeId}&category=pos`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
-        const data = await res.json()
-        const configs = data?.data || {}
+        const res = await posApi.getConfigs(user.storeId, 'pos')
+        const configs = res.data?.data || {}
         const hs = configs.hardwareSettings
         if (!hs) return
 

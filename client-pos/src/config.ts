@@ -19,10 +19,11 @@ function autoDetectApiUrl(): string {
     return '/api'
   }
 
-  // Electron app (file:// protocol) or other local file access: use local API server
+  // Electron app (file:// protocol) or other local file access: use cloud API
   // When loaded via file://, hostname is empty string
+  // This enables: offline PIN unlock, Admin config sync, cloud sync
   if (!host || host === 'file') {
-    return LOCAL_API_URL  // http://localhost:7072 - local server running in Electron
+    return CLOUD_API_URL  // https://api.aicube.online/api
   }
 
   // Remote access via cloudflare tunnel → use api.aicube.online/api
