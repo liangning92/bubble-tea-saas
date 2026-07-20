@@ -53,10 +53,5 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Bubble Tea POS"
-  },
-  "publish": {
-    "provider": "github",
-    "owner": "liangning92",
-    "repo": "bubble-tea-saas"
   }
 }

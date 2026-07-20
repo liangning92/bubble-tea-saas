@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendKitchenOrder: (data: any) => ipcRenderer.invoke('print-kitchen', data),
   openCashDrawer: (data?: { printerHost?: string; printerPort?: number }) =>
     ipcRenderer.invoke('open-cash-drawer', data || {}),
+  listPrinters: () => ipcRenderer.invoke('list-printers'),
 
   // Config
   setApiUrl: (url: string) => ipcRenderer.invoke('set-api-url', url),

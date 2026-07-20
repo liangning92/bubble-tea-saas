@@ -33,8 +33,8 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
       if (newStatus === 'available' || newStatus === 'downloaded' || newStatus === 'error') {
         setIsVisible(true)
       }
-      if (newStatus === 'up-to-date') {
-        // Auto-hide after 3 seconds
+      if (newStatus === 'not-available') {
+        // Auto-hide after 3 seconds when no update available
         setTimeout(() => setIsVisible(false), 3000)
       }
     })
