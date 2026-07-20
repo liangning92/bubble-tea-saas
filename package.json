@@ -1,6 +1,6 @@
 {
   "name": "bubble-tea-saas",
-  "version": "2026.07.20.2242",
+  "version": "2026.07.20.2320",
   "private": true,
   "description": "Bubble Tea SaaS POS System - Indonesia Market",
   "workspaces": [
@@ -54,10 +54,18 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "electron-updater": "^6.8.9",
     "node-thermal-printer": "^4.6.0",
     "pdfkit": "^0.19.1",
     "socket.io": "^4.8.3",
     "xlsx": "^0.18.5"
+  },
+  "build": {
+    "publish": {
+      "provider": "github",
+      "owner": "liangning92",
+      "repo": "bubble-tea-saas"
+    }
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
