@@ -257,6 +257,16 @@ function extractServerFromAsar(): string {
     copyDir(rootModulesSrc, destModulesDest)
   }
 
+  // Fix npm workspaces path issue: .prisma is hoisted to root but @prisma/client expects it inside
+  // Copy node_modules/.prisma to node_modules/@prisma/client/.prisma
+  const srcPrismaClient = path.join(destModulesDest, '@prisma', 'client')
+  const destPrismaInClient = path.join(srcPrismaClient, '.prisma')
+  if (fs.existsSync(path.join(destModulesDest, '.prisma', 'client'))) {
+    log('[API] Fixing .prisma path for @prisma/client compatibility')
+    fs.mkdirSync(path.join(srcPrismaClient, '.prisma'), { recursive: true })
+    copyDir(path.join(destModulesDest, '.prisma', 'client'), destPrismaInClient)
+  }
+
   log('[API] Server extracted successfully')
   return serverDest
 }
