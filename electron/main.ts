@@ -248,6 +248,16 @@ function extractServerFromAsar(): string {
     copyDir(serverUnpackedSrc, serverDest)
   }
 
+  // Copy @prisma/client from root node_modules (hoisted by npm workspaces)
+  // @prisma/client is in app.asar/node_modules/@prisma/client, not in server/
+  const rootNodeModulesPath = path.join(app.getAppPath(), 'node_modules', '@prisma', 'client')
+  if (fs.existsSync(rootNodeModulesPath)) {
+    const destNodeModules = path.join(serverDest, 'node_modules')
+    const destPrismaPath = path.join(destNodeModules, '@prisma', 'client')
+    log('[API] Copying @prisma/client from root node_modules:', rootNodeModulesPath)
+    copyDir(rootNodeModulesPath, destPrismaPath)
+  }
+
   log('[API] Server extracted successfully')
   return serverDest
 }
