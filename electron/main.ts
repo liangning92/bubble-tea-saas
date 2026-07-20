@@ -5,7 +5,6 @@ import fs from 'fs'
 import http from 'http'
 import os from 'os'
 import { printReceipt, printReceiptRaw, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
-import { autoUpdater } from 'electron-updater'
 
 // ============================================================================
 // Global Error Handlers - MUST be at the top
@@ -451,68 +450,16 @@ function setupIpcHandlers() {
     return app.getVersion()
   })
 
-  // Update handlers - real implementation with electron-updater
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
-
-  // Set GitHub feed URL explicitly
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'liangning92',
-    repo: 'bubble-tea-saas'
-  })
-
-  autoUpdater.on('checking-for-update', () => {
-    log('[UPDATE] Checking for updates...')
-    mainWindow?.webContents.send('update-status', 'checking')
-  })
-
-  autoUpdater.on('update-available', (info) => {
-    log('[UPDATE] Update available:', info.version)
-    mainWindow?.webContents.send('update-status', 'available', info)
-  })
-
-  autoUpdater.on('update-not-available', () => {
-    log('[UPDATE] No updates available')
-    mainWindow?.webContents.send('update-status', 'not-available')
-  })
-
-  autoUpdater.on('download-progress', (progress) => {
-    mainWindow?.webContents.send('update-progress', progress.percent)
-  })
-
-  autoUpdater.on('update-downloaded', () => {
-    log('[UPDATE] Update downloaded')
-    mainWindow?.webContents.send('update-status', 'downloaded')
-  })
-
-  autoUpdater.on('error', (err) => {
-    logError('[UPDATE] Error:', err.message)
-    mainWindow?.webContents.send('update-error', err.message)
-  })
-
+  // Update handlers - stub implementation (auto-update disabled for stability)
   ipcMain.handle('check-for-updates', async () => {
-    try {
-      const result = await autoUpdater.checkForUpdates()
-      return { updateAvailable: !!result?.updateInfo, version: result?.updateInfo?.version }
-    } catch (err: any) {
-      logError('[UPDATE] Check failed:', err.message)
-      return { updateAvailable: false, error: err.message }
-    }
+    return { updateAvailable: false }
   })
 
   ipcMain.handle('download-update', async () => {
-    try {
-      await autoUpdater.downloadUpdate()
-      return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err.message }
-    }
+    return { success: false, error: 'Auto-update disabled' }
   })
 
-  ipcMain.handle('install-update', async () => {
-    autoUpdater.quitAndInstall()
-  })
+  ipcMain.handle('install-update', async () => {})
 
   ipcMain.on('update-status', () => {})
   ipcMain.on('update-progress', () => {})
@@ -690,16 +637,6 @@ if (!gotTheLock) {
     // Setup IPC then create window
     setupIpcHandlers()
     await createWindow()
-
-    // Check for updates after window is ready (skip in dev mode)
-    if (!isDev) {
-      setTimeout(() => {
-        log('[UPDATE] Checking for updates after startup...')
-        autoUpdater.checkForUpdates().catch((err) => {
-          logError('[UPDATE] Startup check failed:', err.message)
-        })
-      }, 5000) // Wait 5 seconds for app to fully initialize
-    }
   })
 
   app.on('window-all-closed', () => {
