@@ -33,8 +33,7 @@
     "**/*.node",
     "server/prisma/seed.db",
     "node_modules/.prisma/**/*",
-    "node_modules/@prisma/client/**/*",
-    "server/node_modules/**/*"
+    "node_modules/@prisma/client/**/*"
   ],
   "npmRebuild": true,
   "win": {
