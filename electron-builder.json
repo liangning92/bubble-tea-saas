@@ -54,5 +54,9 @@
     "createStartMenuShortcut": true,
     "shortcutName": "Bubble Tea POS"
   },
-  "publish": null
+  "publish": {
+    "provider": "github",
+    "owner": "liangning92",
+    "repo": "bubble-tea-saas"
+  }
 }
