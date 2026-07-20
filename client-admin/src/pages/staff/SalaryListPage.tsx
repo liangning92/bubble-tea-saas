@@ -470,7 +470,7 @@ export function SalaryListPage() {
                     value={formData.baseSalary}
                     onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
                     className="flex-1 w-full p-3 border border-gray-200 rounded-xl"
-                    placeholder="0"
+                    placeholder={t('common.placeholderZero')}
                     min="0"
                   />
                   <button
@@ -495,7 +495,7 @@ export function SalaryListPage() {
                   value={formData.overtime}
                   onChange={(e) => setFormData({ ...formData, overtime: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  placeholder="0"
+                  placeholder={t('common.placeholderZero')}
                   min="0"
                 />
               </div>
@@ -510,7 +510,7 @@ export function SalaryListPage() {
                   value={formData.commission}
                   onChange={(e) => setFormData({ ...formData, commission: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  placeholder="0"
+                  placeholder={t('common.placeholderZero')}
                   min="0"
                 />
               </div>
@@ -525,7 +525,7 @@ export function SalaryListPage() {
                   value={formData.bonus}
                   onChange={(e) => setFormData({ ...formData, bonus: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  placeholder="0"
+                  placeholder={t('common.placeholderZero')}
                   min="0"
                 />
               </div>
@@ -540,7 +540,7 @@ export function SalaryListPage() {
                   value={formData.deduction}
                   onChange={(e) => setFormData({ ...formData, deduction: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  placeholder="0"
+                  placeholder={t('common.placeholderZero')}
                   min="0"
                 />
               </div>

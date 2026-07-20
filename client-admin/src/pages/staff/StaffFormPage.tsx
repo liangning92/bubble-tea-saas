@@ -402,7 +402,7 @@ export function StaffFormPage() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="input w-full"
-                  placeholder="******"
+                  placeholder={t('common.placeholderPassword')}
                 />
               </div>
               <div>
@@ -412,7 +412,7 @@ export function StaffFormPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="input w-full"
-                  placeholder="******"
+                  placeholder={t('common.placeholderPassword')}
                 />
               </div>
               {resetError && (

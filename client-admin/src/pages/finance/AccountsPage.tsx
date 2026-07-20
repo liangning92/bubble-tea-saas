@@ -546,7 +546,7 @@ export function AccountsPage() {
                   value={formData.code}
                   onChange={e => setFormData({ ...formData, code: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="1001"
+                  placeholder={t('common.placeholderAccountCode')}
                   required
                 />
               </div>

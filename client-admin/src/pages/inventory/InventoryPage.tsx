@@ -526,17 +526,17 @@ export function InventoryPage() {
                     value={addForm.avgCost}
                     onChange={(e) => setAddForm({...addForm, avgCost: e.target.value})}
                     className="input w-full"
-                    placeholder="0"
+                    placeholder={t('common.placeholderZero')}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">{t('inventory.safetyStock') || 'Safety Stock'}</label>
+                  <label className="block text-sm font-medium mb-1">{t('inventory.safetyStock')}</label>
                   <input
                     type="number"
                     value={addForm.safetyStock}
                     onChange={(e) => setAddForm({...addForm, safetyStock: e.target.value})}
                     className="input w-full"
-                    placeholder="0"
+                    placeholder={t('common.placeholderZero')}
                   />
                 </div>
               </div>

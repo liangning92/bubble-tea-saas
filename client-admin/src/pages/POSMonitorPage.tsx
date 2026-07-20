@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { posActionLogApi } from '../services/api'
 import {
@@ -17,20 +18,20 @@ import {
 } from 'lucide-react'
 
 const ACTION_LABELS: Record<string, string> = {
-  login: '登录',
-  logout: '退出',
-  cart_add: '加商品',
-  cart_update: '修改商品',
-  cart_clear: '清空购物车',
-  checkout_start: '开始结账',
-  checkout_complete: '结账完成',
-  order_created: '创建订单',
-  suspend: '挂单',
-  resume: '取单',
-  member_add: '添加会员',
-  member_remove: '移除会员',
-  shift_open: '开班',
-  shift_close: '交班',
+  login: 'login',
+  logout: 'logout',
+  cart_add: 'cartAdd',
+  cart_update: 'cartUpdate',
+  cart_clear: 'cartClear',
+  checkout_start: 'checkoutStart',
+  checkout_complete: 'checkoutComplete',
+  order_created: 'orderCreated',
+  suspend: 'suspend',
+  resume: 'resume',
+  member_add: 'memberAdd',
+  member_remove: 'memberRemove',
+  shift_open: 'shiftOpen',
+  shift_close: 'shiftClose',
 }
 
 const ACTION_ICONS: Record<string, React.ReactNode> = {
@@ -51,11 +52,12 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
+  const { t } = useTranslation()
   if (severity === 'critical') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">
         <ShieldAlert size={12} />
-        严重
+        {t('posMonitor.severityCritical')}
       </span>
     )
   }
@@ -63,19 +65,20 @@ function SeverityBadge({ severity }: { severity: string }) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">
         <AlertTriangle size={12} />
-        警告
+        {t('posMonitor.severityWarning')}
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
       <Info size={12} />
-      信息
+      {t('posMonitor.severityInfo')}
     </span>
   )
 }
 
 export function POSMonitorPage() {
+  const { t } = useTranslation()
   const [filter, setFilter] = useState({
     severity: '',
     action: '',
@@ -154,8 +157,8 @@ export function POSMonitorPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">POS 操作监控</h1>
-          <p className="text-sm text-gray-500 mt-1">收银员操作审计与预警</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('posMonitor.pageTitle')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('posMonitor.pageSubtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-gray-600">
@@ -165,11 +168,11 @@ export function POSMonitorPage() {
               onChange={(e) => setAutoRefresh(e.target.checked)}
               className="rounded border-gray-300"
             />
-            自动刷新 (15s)
+            {t('posMonitor.autoRefresh')}
           </label>
           <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
             <RefreshCw size={16} />
-            刷新
+            {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -181,7 +184,7 @@ export function POSMonitorPage() {
             <ShieldAlert size={20} className="text-red-600" />
           </div>
           <div>
-            <p className="text-sm text-gray-500">严重预警</p>
+            <p className="text-sm text-gray-500">{t('posMonitor.criticalAlerts')}</p>
             <p className="text-xl font-bold text-red-600">{stats?.criticalCount || 0}</p>
           </div>
         </div>
@@ -190,7 +193,7 @@ export function POSMonitorPage() {
             <AlertTriangle size={20} className="text-orange-600" />
           </div>
           <div>
-            <p className="text-sm text-gray-500">警告</p>
+            <p className="text-sm text-gray-500">{t('posMonitor.warnings')}</p>
             <p className="text-xl font-bold text-orange-600">{stats?.warningCount || 0}</p>
           </div>
         </div>
@@ -199,7 +202,7 @@ export function POSMonitorPage() {
             <Activity size={20} className="text-blue-600" />
           </div>
           <div>
-            <p className="text-sm text-gray-500">今日操作</p>
+            <p className="text-sm text-gray-500">{t('posMonitor.todayOperations')}</p>
             <p className="text-xl font-bold text-blue-600">{stats?.todayTotal || 0}</p>
           </div>
         </div>
@@ -208,7 +211,7 @@ export function POSMonitorPage() {
             <ShoppingCart size={20} className={activeSessions.length > 0 ? 'text-orange-600' : 'text-green-600'} />
           </div>
           <div>
-            <p className="text-sm text-gray-500">未结账会话</p>
+            <p className="text-sm text-gray-500">{t('posMonitor.unpaidSessions')}</p>
             <p className="text-xl font-bold">{activeSessions.length}</p>
           </div>
         </div>
@@ -219,7 +222,7 @@ export function POSMonitorPage() {
         <div className="card border-orange-200 bg-orange-50/50 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle size={18} className="text-orange-600" />
-            <h3 className="font-semibold text-orange-800">进行中的未结账会话</h3>
+            <h3 className="font-semibold text-orange-800">{t('posMonitor.activeSessionsTitle')}</h3>
           </div>
           <div className="space-y-2">
             {activeSessions.map((session: any) => (
@@ -229,13 +232,13 @@ export function POSMonitorPage() {
                   <div>
                     <p className="font-medium">{session.staffName}</p>
                     <p className="text-xs text-gray-500">
-                      最后操作: {session.lastAction} · {formatTime(session.lastActionAt)}
+                      {t('posMonitor.lastAction')}: {session.lastAction} · {formatTime(session.lastActionAt)}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium text-orange-600">
-                    {session.itemCount} 件商品未结账
+                    {session.itemCount} {t('posMonitor.itemsUnpaid')}
                   </span>
                   <SeverityBadge severity="warning" />
                 </div>
@@ -250,7 +253,7 @@ export function POSMonitorPage() {
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Filter size={16} className="text-gray-400" />
-            <span className="text-sm font-medium text-gray-700">筛选:</span>
+            <span className="text-sm font-medium text-gray-700">{t('posMonitor.filter')}:</span>
           </div>
 
           <select
@@ -258,9 +261,9 @@ export function POSMonitorPage() {
             onChange={(e) => setFilter({ ...filter, dateRange: e.target.value, page: 1 })}
             className="input w-32"
           >
-            <option value="today">今日</option>
-            <option value="week">本周</option>
-            <option value="month">本月</option>
+            <option value="today">{t('posMonitor.today')}</option>
+            <option value="week">{t('posMonitor.week')}</option>
+            <option value="month">{t('posMonitor.month')}</option>
           </select>
 
           <select
@@ -268,10 +271,10 @@ export function POSMonitorPage() {
             onChange={(e) => setFilter({ ...filter, severity: e.target.value, page: 1 })}
             className="input w-32"
           >
-            <option value="">全部严重度</option>
-            <option value="critical">严重</option>
-            <option value="warning">警告</option>
-            <option value="info">信息</option>
+            <option value="">{t('posMonitor.allSeverities')}</option>
+            <option value="critical">{t('posMonitor.severityCritical')}</option>
+            <option value="warning">{t('posMonitor.severityWarning')}</option>
+            <option value="info">{t('posMonitor.severityInfo')}</option>
           </select>
 
           <select
@@ -279,9 +282,9 @@ export function POSMonitorPage() {
             onChange={(e) => setFilter({ ...filter, action: e.target.value, page: 1 })}
             className="input w-40"
           >
-            <option value="">全部操作</option>
-            {Object.entries(ACTION_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
+            <option value="">{t('posMonitor.allActions')}</option>
+            {Object.entries(ACTION_LABELS).map(([key]) => (
+              <option key={key} value={key}>{t(`posMonitor.action${key.charAt(0).toUpperCase() + key.slice(1)}`)}</option>
             ))}
           </select>
 
@@ -290,7 +293,7 @@ export function POSMonitorPage() {
               onClick={() => setFilter({ ...filter, severity: '', action: '', page: 1 })}
               className="text-sm text-red-500 hover:text-red-700"
             >
-              清除筛选
+              {t('posMonitor.clearFilters')}
             </button>
           )}
         </div>
@@ -299,8 +302,8 @@ export function POSMonitorPage() {
       {/* Logs Table */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">操作日志</h2>
-          <span className="text-sm text-gray-500">{logs.length} 条记录</span>
+          <h2 className="text-lg font-semibold">{t('posMonitor.operationLogs')}</h2>
+          <span className="text-sm text-gray-500">{logs.length} {t('posMonitor.records')}</span>
         </div>
 
         {isLoading ? (
@@ -310,7 +313,7 @@ export function POSMonitorPage() {
         ) : logs.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Activity size={40} className="mx-auto mb-3 text-gray-300" />
-            <p>暂无操作记录</p>
+            <p>{t('posMonitor.noRecords')}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -331,7 +334,7 @@ export function POSMonitorPage() {
                     <span className="font-medium text-sm">{log.staffName}</span>
                     <span className="text-gray-400">·</span>
                     <span className="text-sm text-gray-600">
-                      {ACTION_LABELS[log.action] || log.action}
+                      {t(`posMonitor.action${log.action.charAt(0).toUpperCase() + log.action.slice(1)}`)}
                     </span>
                     <SeverityBadge severity={log.severity} />
                   </div>
@@ -359,17 +362,17 @@ export function POSMonitorPage() {
               disabled={filter.page === 1}
               className="btn-secondary disabled:opacity-50"
             >
-              上一页
+              {t('common.previousPage')}
             </button>
             <span className="text-sm text-gray-500">
-              第 {filter.page} / {data?.data?.data?.totalPages || 1} 页
+              {t('common.pageOf', { current: filter.page, total: data?.data?.data?.totalPages || 1 })}
             </span>
             <button
               onClick={() => setFilter({ ...filter, page: filter.page + 1 })}
               disabled={filter.page >= (data?.data?.data?.totalPages || 1)}
               className="btn-secondary disabled:opacity-50"
             >
-              下一页
+              {t('common.nextPage')}
             </button>
           </div>
         )}

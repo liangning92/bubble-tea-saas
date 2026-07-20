@@ -100,7 +100,7 @@ export function RecipeEditPage() {
       alert(t('bom.saveSuccess'))
     },
     onError: (error: any) => {
-      alert(error?.response?.data?.message || error.message || 'Save failed')
+      alert(error?.response?.data?.message || error.message || t('common.saveFailed'))
     }
   })
 
@@ -449,7 +449,7 @@ export function RecipeEditPage() {
                       value={item.quantityStr}
                       onChange={(e) => handleQuantityChange(index, e.target.value)}
                       className={`input w-full text-right ${item.error ? 'input-error' : ''}`}
-                      placeholder="0"
+                      placeholder={t('common.placeholderZero')}
                       inputMode="decimal"
                       style={{ appearance: 'textfield' }}
                     />

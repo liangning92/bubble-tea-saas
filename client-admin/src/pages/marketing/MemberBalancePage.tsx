@@ -278,7 +278,7 @@ export function MemberBalancePage() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="input"
-                  placeholder="100000"
+                  placeholder={t('marketing.addBalancePlaceholder')}
                   min="1000"
                 />
               </div>
@@ -320,7 +320,7 @@ export function MemberBalancePage() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="input"
-                  placeholder="10000"
+                  placeholder={t('marketing.deductBalancePlaceholder')}
                   min="1000"
                 />
               </div>

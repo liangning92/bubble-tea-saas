@@ -208,7 +208,6 @@ async function initDatabase(): Promise<void> {
 // Extract server from asar to temp directory for execution
 function extractServerFromAsar(): string {
   const serverSrc = getServerPath() // app.asar/server
-  const serverUnpackedSrc = path.join(process.resourcesPath, 'app.asar.unpacked', 'server')
   const serverDest = path.join(os.tmpdir(), 'bubble-tea-pos-server')
 
   // Check if already extracted
@@ -226,6 +225,7 @@ function extractServerFromAsar(): string {
 
   // Copy server from asar to temp directory
   function copyDir(src: string, dest: string) {
+    if (!fs.existsSync(src)) return
     fs.mkdirSync(dest, { recursive: true })
     const entries = fs.readdirSync(src, { withFileTypes: true })
     for (const entry of entries) {
@@ -242,12 +242,6 @@ function extractServerFromAsar(): string {
   // Copy main server files from asar
   copyDir(serverSrc, serverDest)
 
-  // Copy unpacked node_modules (which contains .prisma and @prisma/client)
-  if (fs.existsSync(serverUnpackedSrc)) {
-    log('[API] Copying unpacked modules from:', serverUnpackedSrc)
-    copyDir(serverUnpackedSrc, serverDest)
-  }
-
   log('[API] Server extracted successfully')
   return serverDest
 }
@@ -259,15 +253,21 @@ function startApiServer(): Promise<void> {
     const userDataPath = app.getPath('userData')
     const dbPath = path.join(userDataPath, 'data', 'dev.db')
 
+    // NODE_PATH points to asar.unpacked where @prisma/client and native modules are
+    const nodePath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+
     const env = {
       ...process.env,
       NODE_ENV: 'production',
       PORT: String(API_PORT),
       // Use app data directory for database
-      DATABASE_URL: `file:${dbPath}`
+      DATABASE_URL: `file:${dbPath}`,
+      // Point to unpacked node_modules for native modules
+      NODE_PATH: nodePath
     }
 
     log('[API] Starting server from:', serverPath)
+    log('[API] NODE_PATH:', nodePath)
 
     // In packaged Electron app, add app directory to PATH so node can be found
     const fullEnv = {

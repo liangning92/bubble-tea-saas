@@ -530,7 +530,7 @@ export function FixedAssetsPage() {
                     setDisposeData({ ...disposeData, saleValue: num.toLocaleString('id-ID') })
                   }}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="0"
+                  placeholder={t('common.placeholderZero')}
                 />
               </div>
 

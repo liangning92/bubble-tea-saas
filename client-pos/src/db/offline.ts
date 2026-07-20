@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie'
 import { connectionManager } from '../services/ConnectionManager'
+import { CLOUD_API_URL } from '../config'
 
 export interface LocalProduct {
   id: string
@@ -155,7 +156,7 @@ export class SyncManager {
           // Update status to syncing
           await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1 })
 
-          const apiUrl = connectionManager.getCurrentUrl()
+          const apiUrl = CLOUD_API_URL
           const response = await fetch(`${apiUrl}/orders`, {
             method: 'POST',
             headers: {
