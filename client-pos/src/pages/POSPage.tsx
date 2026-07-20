@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { posApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
 import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
-import { db, syncManager, productCache, LocalProduct } from '../db/offline'
+import { db, syncManager, productCache, LocalProduct, getLockScreenPin, saveLockScreenPin } from '../db/offline'
 import { connectionManager } from '../services/ConnectionManager'
 import { formatCurrency, playSound, playSoundWithSettings } from '../utils/helpers'
 import { showToast, ConfirmModal } from '../components/ui'
@@ -950,6 +950,10 @@ export function POSPage() {
             ...prev,
             ...configs.displaySettings
           }))
+          // 离线解锁：保存 lockScreenPin 到本地
+          if (configs.displaySettings.lockScreenPin) {
+            saveLockScreenPin(configs.displaySettings.lockScreenPin)
+          }
         }
 
         // 声音设置 - 合并默认值
@@ -1288,10 +1292,19 @@ export function POSPage() {
   }, [displaySettings.autoLockMinutes])
 
   // 解锁处理 - 如果设置了PIN则必须输入正确才能解锁
-  const handleUnlock = () => {
+  const handleUnlock = async () => {
     if (displaySettings.lockScreenPin) {
       // 有设置PIN时，必须验证
-      if (lockPin !== displaySettings.lockScreenPin) {
+      // 离线时使用本地 PIN 验证
+      const isOnline = navigator.onLine
+      let storedPin = displaySettings.lockScreenPin
+
+      if (!isOnline) {
+        // 离线时从本地获取 PIN
+        storedPin = await getLockScreenPin() || ''
+      }
+
+      if (lockPin !== storedPin) {
         setLockError(true)
         setLockPin('')
         return

@@ -430,3 +430,15 @@ export class ProductCache {
 }
 
 export const productCache = new ProductCache()
+
+// Lock Screen PIN - stored locally for offline unlock
+const LOCK_SCREEN_PIN_KEY = 'lockScreenPin'
+
+export async function saveLockScreenPin(pin: string): Promise<void> {
+  await db.config.put({ key: LOCK_SCREEN_PIN_KEY, value: pin, updatedAt: new Date() })
+}
+
+export async function getLockScreenPin(): Promise<string | null> {
+  const config = await db.config.get(LOCK_SCREEN_PIN_KEY)
+  return config?.value || null
+}
