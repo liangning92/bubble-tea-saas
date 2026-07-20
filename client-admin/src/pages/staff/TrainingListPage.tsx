@@ -280,21 +280,21 @@ export function TrainingListPage() {
                     value={cat.label}
                     onChange={(e) => handleCategoryChange(index, 'label', e.target.value)}
                     className="input text-sm"
-                    placeholder={t('staff.labelEn')}
+                    placeholder="Label (EN)"
                   />
                   <input
                     type="text"
                     value={cat.labelZh || ''}
                     onChange={(e) => handleCategoryChange(index, 'labelZh', e.target.value)}
                     className="input text-sm"
-                    placeholder={t('staff.labelZh')}
+                    placeholder="中文"
                   />
                   <input
                     type="text"
                     value={cat.labelId || ''}
                     onChange={(e) => handleCategoryChange(index, 'labelId', e.target.value)}
                     className="input text-sm"
-                    placeholder={t('staff.labelId')}
+                    placeholder="Bahasa"
                   />
                   <button onClick={() => handleRemoveCategory(index)} className="p-2 hover:bg-gray-100 rounded text-red-500">
                     <Trash2 size={16} />

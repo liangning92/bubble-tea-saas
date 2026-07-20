@@ -7,17 +7,17 @@
  * - Automatic reconnection with exponential backoff
  * - Offline-first operation
  * - Persists last working URL
- * - Dual mode: cloud API (online) + local API (offline)
  */
 
-import { getApiUrl, setApiUrl, LOCAL_API_URL, CLOUD_API_URL } from '../config'
+import { getApiUrl, setApiUrl } from '../config'
 
 const CONNECTIVITY_CHECK_KEY = 'pos-connectivity-check'
 const WORKING_URL_KEY = 'pos-working-url'
 const FALLBACK_URLS_KEY = 'pos-fallback-urls'
 
-// Default mode: try local first (offline-first), fallback to cloud (online sync)
-const DEFAULT_FALLBACKS: string[] = [CLOUD_API_URL]
+// Default fallback URLs (can be extended)
+// Note: URLs should be configured by user, not hardcoded
+const DEFAULT_FALLBACKS: string[] = []
 
 // Connection states
 export type ConnectionState =
@@ -72,9 +72,7 @@ class ConnectionManagerClass {
         this.workingUrl = savedWorkingUrl
         this.currentUrl = savedWorkingUrl
       } else {
-        // Default to local API (for Electron packaged app)
         this.currentUrl = getApiUrl()
-        this.workingUrl = this.currentUrl
       }
 
       // Load fallback URLs
@@ -86,9 +84,6 @@ class ConnectionManagerClass {
             this.fallbackUrls = [...DEFAULT_FALLBACKS, ...parsed]
           }
         } catch {}
-      } else {
-        // No saved fallbacks, use default: cloud API as primary, local as fallback
-        this.fallbackUrls = [CLOUD_API_URL]
       }
     } catch {}
   }

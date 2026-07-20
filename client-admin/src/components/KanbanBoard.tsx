@@ -46,7 +46,6 @@ export function KanbanBoard({ columns: initialColumns, onItemMove, onItemClick, 
 
   const handleDrop = (e: React.DragEvent, targetColumnId: string) => {
     e.preventDefault()
-    e.stopPropagation()
     if (!draggedItem || draggedItem.sourceColumn === targetColumnId) {
       setDraggedItem(null)
       setDragOverColumn(null)

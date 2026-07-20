@@ -1,13 +1,13 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'
+import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
 import './index.css'
 import './i18n'
+import { connectionManager } from './services/ConnectionManager'
 
-// Create query client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -17,26 +17,18 @@ const queryClient = new QueryClient({
   }
 })
 
-// Log startup
-console.log('[POS] Starting application...')
-console.log('[POS] Root element:', document.getElementById('root'))
+// Initialize ConnectionManager for smart API reconnection
+// This runs in the background and manages API connectivity
+connectionManager.startHealthCheck(30000)  // Check every 30 seconds
 
-// Render app
-const rootElement = document.getElementById('root')
-if (rootElement) {
-  console.log('[POS] Rendering React app...')
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <HashRouter>
-            <App />
-          </HashRouter>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </React.StrictMode>
-  )
-  console.log('[POS] Render called')
-} else {
-  console.error('[POS] Root element not found!')
-}
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  </React.StrictMode>
+)

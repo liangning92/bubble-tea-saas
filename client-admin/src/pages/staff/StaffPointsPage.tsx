@@ -263,7 +263,7 @@ export function StaffPointsPage() {
                   onChange={(e) => setFormData({ ...formData, points: e.target.value })}
                   className="input"
                   min="1"
-                  placeholder={t('staff.enterPointsPlaceholder')}
+                  placeholder="Enter points"
                 />
               </div>
               <div>
@@ -315,7 +315,7 @@ export function StaffPointsPage() {
                   value={formData.points}
                   onChange={(e) => setFormData({ ...formData, points: e.target.value })}
                   className="input"
-                  placeholder={t('staff.enterPointsWithSignPlaceholder')}
+                  placeholder="Enter + or - points"
                 />
                 <p className="text-xs text-gray-500 mt-1">{t('staff.pointsHint')}</p>
               </div>

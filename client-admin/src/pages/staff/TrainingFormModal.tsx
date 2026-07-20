@@ -118,7 +118,6 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
     handleFileUpload(e.dataTransfer.files)
   }, [handleFileUpload])
 
@@ -129,7 +128,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.staffId || !form.title || !form.provider) {
-      alert(t('common.requiredFields'))
+      alert('Please fill required fields')
       return
     }
 
@@ -227,7 +226,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="input"
-              placeholder={t('staff.trainingNamePlaceholder')}
+              placeholder="e.g. Basic Barista Training"
               required
             />
           </div>
@@ -240,7 +239,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
                 value={form.provider}
                 onChange={(e) => setForm({ ...form, provider: e.target.value })}
                 className="input"
-                placeholder={t('staff.locationPlaceholder')}
+                placeholder="e.g. Head Office"
                 required
               />
             </div>
@@ -276,7 +275,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
                 className="input"
                 min="0"
                 max="100"
-                placeholder={t('staff.passingScorePlaceholder')}
+                placeholder="0-100"
               />
             </div>
             <div>
@@ -288,7 +287,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
                 className="input"
                 min="0"
                 max="100"
-                placeholder={t('staff.defaultScorePlaceholder')}
+                placeholder="70"
               />
             </div>
           </div>
@@ -300,7 +299,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               value={form.certificate}
               onChange={(e) => setForm({ ...form, certificate: e.target.value })}
               className="input"
-              placeholder={t('staff.certificateNumberPlaceholder')}
+              placeholder="Certificate number (optional)"
             />
           </div>
 
@@ -311,7 +310,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="input"
               rows={3}
-              placeholder={t('staff.notesPlaceholder')}
+              placeholder="Additional notes..."
             />
           </div>
 
@@ -322,7 +321,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary cursor-pointer"
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              onClick={(e) => { e.stopPropagation(); document.getElementById('training-attachments')?.click() }}
+              onClick={() => document.getElementById('training-attachments')?.click()}
             >
               <input
                 type="file"
@@ -330,7 +329,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
                 className="hidden"
                 accept=".pdf,application/pdf"
                 multiple
-                onChange={(e) => { handleFileUpload(e.target.files); e.target.value = '' }}
+                onChange={(e) => handleFileUpload(e.target.files)}
               />
               {isUploading ? (
                 <div className="text-primary">{t('common.loading')}...</div>

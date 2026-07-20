@@ -531,7 +531,7 @@ function CountItemInput({
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
           className="input input-sm w-20"
           min={0}
-          placeholder={t('common.placeholderZero')}
+          placeholder="0"
           disabled={isUpdating}
         />
         <button onClick={handleSubmit} disabled={isUpdating} className="btn btn-sm btn-primary">

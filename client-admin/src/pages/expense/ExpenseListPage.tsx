@@ -676,7 +676,7 @@ export function ExpenseListPage() {
               className="hidden"
             />
             <button
-              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }}
+              onClick={() => fileInputRef.current?.click()}
               className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-sm"
             >
               <Upload size={18} />
@@ -1018,7 +1018,7 @@ export function ExpenseListPage() {
                     }
                   }}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  placeholder={t('common.placeholderZero')}
+                  placeholder="0"
                 />
               </div>
 

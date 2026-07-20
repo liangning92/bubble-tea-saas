@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi } from '../../services/api'
@@ -40,32 +40,30 @@ const DualScreenMediaUpload: React.FC<{
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
-    await uploadFiles(Array.from(files), mediaFiles)
-    e.target.value = '' // reset input
+    await uploadFiles(Array.from(files))
   }
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
     setDragOver(false)
     const files = e.dataTransfer.files
     if (files.length === 0) return
-    await uploadFiles(Array.from(files), mediaFiles)
-  }, [mediaFiles])
+    await uploadFiles(Array.from(files))
+  }
 
-  const uploadFiles = useCallback(async (files: File[], currentMediaFiles: MediaFile[]) => {
+  const uploadFiles = async (files: File[]) => {
     setUploading(true)
     try {
       const response = await uploadApi.uploadDualScreen(files)
       const newFiles = response.data.data.files || []
-      onUpload([...currentMediaFiles, ...newFiles])
+      onUpload([...mediaFiles, ...newFiles])
     } catch (error) {
       console.error('Upload failed:', error)
       alert(t('common.error'))
     } finally {
       setUploading(false)
     }
-  }, [])
+  }
 
   return (
     <div className="space-y-3">
@@ -77,7 +75,7 @@ const DualScreenMediaUpload: React.FC<{
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={(e) => { e.stopPropagation(); document.getElementById('dualScreenFileInput')?.click() }}
+        onClick={() => document.getElementById('dualScreenFileInput')?.click()}
       >
         <input
           type="file"

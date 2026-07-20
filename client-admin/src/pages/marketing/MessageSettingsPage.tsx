@@ -495,7 +495,7 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="input"
-              placeholder={t('marketing.channelNamePlaceholder')}
+              placeholder="e.g., Main SMS Channel"
               required
             />
           </div>
@@ -509,21 +509,21 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
                   value={form.config.accountSid || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, accountSid: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.accountSidPlaceholder')}
+                  placeholder="Account SID"
                 />
                 <input
                   type="text"
                   value={form.config.authToken || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, authToken: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.authTokenPlaceholder')}
+                  placeholder="Auth Token"
                 />
                 <input
                   type="text"
                   value={form.config.fromNumber || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, fromNumber: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.fromPhonePlaceholder')}
+                  placeholder="From Phone Number"
                 />
               </>
             )}
@@ -534,14 +534,14 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
                   value={form.config.phoneNumberId || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, phoneNumberId: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.phoneNumberIdPlaceholder')}
+                  placeholder="Phone Number ID"
                 />
                 <input
                   type="text"
                   value={form.config.accessToken || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, accessToken: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.accessTokenPlaceholder')}
+                  placeholder="Access Token"
                 />
               </>
             )}
@@ -552,14 +552,14 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
                   value={form.config.apiKey || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, apiKey: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.apiKeyPlaceholder')}
+                  placeholder="API Key"
                 />
                 <input
                   type="text"
                   value={form.config.apiSecret || ''}
                   onChange={(e) => setForm({ ...form, config: { ...form.config, apiSecret: e.target.value } })}
                   className="input"
-                  placeholder={t('marketing.apiSecretPlaceholder')}
+                  placeholder="API Secret"
                 />
               </>
             )}
@@ -701,7 +701,7 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="input"
-                placeholder={t('marketing.templateNamePlaceholder')}
+                placeholder="e.g., Birthday SMS"
                 required
               />
             </div>
@@ -715,7 +715,7 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
                 value={form.subject}
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
                 className="input"
-                placeholder={t('marketing.subjectPlaceholder')}
+                placeholder="Email/WhatsApp subject (optional)"
               />
             </div>
           )}
@@ -727,7 +727,7 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
               onChange={(e) => setForm({ ...form, body: e.target.value })}
               className="input"
               rows={5}
-              placeholder={t('marketing.messageTemplatePlaceholder')}
+              placeholder="Enter your message template..."
               required
             />
             <p className="text-xs text-gray-500 mt-1">

@@ -125,7 +125,7 @@ function POSAlertsWidget() {
           <p className="text-2xl font-bold">{activeSessions.length}</p>
           {activeSessions.length > 0 && (
             <p className="text-xs text-orange-500 mt-1">
-              {activeSessions[0]?.staffName} - {activeSessions[0]?.itemCount || 0}{t('dashboard.itemsUnpaid')}
+              {activeSessions[0]?.staffName} - {activeSessions[0]?.itemCount || 0}件商品未结账
             </p>
           )}
         </div>

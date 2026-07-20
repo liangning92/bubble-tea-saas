@@ -352,7 +352,7 @@ export function ReferralListPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.maxUsage')}</label>
-                  <input type="number" value={form.maxUsageCount} onChange={e => setForm({ ...form, maxUsageCount: Number(e.target.value) })} className="input" min={0} placeholder={t('marketing.unlimitedPlaceholder')} />
+                  <input type="number" value={form.maxUsageCount} onChange={e => setForm({ ...form, maxUsageCount: Number(e.target.value) })} className="input" min={0} placeholder="0 = unlimited" />
                 </div>
               </div>
 

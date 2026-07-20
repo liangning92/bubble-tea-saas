@@ -133,7 +133,7 @@ export function ProductFormPage() {
     }
 
     if (!user?.storeId) {
-      alert(t('common.storeIdNotFound'))
+      alert('Store ID not found. Please login again.')
       return
     }
 
@@ -198,7 +198,6 @@ export function ProductFormPage() {
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
     setDragActive(false)
     handleImageUpload(e.dataTransfer.files)
   }, [handleImageUpload])
@@ -406,7 +405,7 @@ export function ProductFormPage() {
                         type="file"
                         accept="image/*"
                         multiple
-                        onChange={(e) => { handleImageUpload(e.target.files); e.target.value = '' }}
+                        onChange={(e) => handleImageUpload(e.target.files)}
                         className="hidden"
                       />
                     </label>
@@ -425,7 +424,7 @@ export function ProductFormPage() {
                     type="file"
                     accept="image/*"
                     multiple
-                    onChange={(e) => { handleImageUpload(e.target.files); e.target.value = '' }}
+                    onChange={(e) => handleImageUpload(e.target.files)}
                     className="hidden"
                     disabled={isUploading}
                   />

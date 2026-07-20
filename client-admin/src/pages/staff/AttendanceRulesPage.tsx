@@ -287,7 +287,7 @@ export function AttendanceRulesPage() {
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="input"
-                  placeholder={t('staff.attendanceRuleNamePlaceholder')}
+                  placeholder="e.g. Standard Hours"
                 />
               </div>
 
@@ -339,7 +339,7 @@ export function AttendanceRulesPage() {
                     value={formData.lateDeductionFixed}
                     onChange={e => setFormData({ ...formData, lateDeductionFixed: e.target.value })}
                     className="input"
-                    placeholder={t('staff.deductionPerLatePlaceholder')}
+                    placeholder="Deduction per late (Rp)"
                   />
                 )}
               </div>
@@ -361,7 +361,7 @@ export function AttendanceRulesPage() {
                     value={formData.absenceDeductionFixed}
                     onChange={e => setFormData({ ...formData, absenceDeductionFixed: e.target.value })}
                     className="input"
-                    placeholder={t('staff.deductionPerAbsencePlaceholder')}
+                    placeholder="Deduction per absence (Rp)"
                   />
                 )}
               </div>
@@ -383,7 +383,7 @@ export function AttendanceRulesPage() {
                     value={formData.sickLeaveDeductionFixed}
                     onChange={e => setFormData({ ...formData, sickLeaveDeductionFixed: e.target.value })}
                     className="input"
-                    placeholder={t('staff.deductionPerSickPlaceholder')}
+                    placeholder="Deduction per sick day (Rp)"
                   />
                 )}
               </div>

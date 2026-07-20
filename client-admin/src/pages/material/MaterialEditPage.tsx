@@ -88,11 +88,11 @@ export function MaterialEditPage() {
       </button>
 
       <div className="card">
-        <h2 className="text-lg font-semibold mb-6">{t('material.editMaterial')}</h2>
+        <h2 className="text-lg font-semibold mb-6">编辑原料</h2>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.name')} *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">名称 *</label>
             <input
               type="text"
               value={form.name}
@@ -104,7 +104,7 @@ export function MaterialEditPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.category')} *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">分类 *</label>
               <select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -116,7 +116,7 @@ export function MaterialEditPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.type')} *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">类型 *</label>
               <select
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
@@ -130,26 +130,26 @@ export function MaterialEditPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.unit')} *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">单位 *</label>
             <select
               value={form.unit}
               onChange={(e) => setForm({ ...form, unit: e.target.value })}
               className="input w-full"
             >
-              <option value="kg">{t('material.unitKg')}</option>
-              <option value="g">{t('material.unitG')}</option>
-              <option value="ml">{t('material.unitMl')}</option>
-              <option value="L">{t('material.unitL')}</option>
-              <option value="个">{t('material.unitPiece')}</option>
-              <option value="瓶">{t('material.unitBottle')}</option>
-              <option value="袋">{t('material.unitBag')}</option>
-              <option value="箱">{t('material.unitBox')}</option>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="ml">ml</option>
+              <option value="L">L</option>
+              <option value="个">个</option>
+              <option value="瓶">瓶</option>
+              <option value="袋">袋</option>
+              <option value="箱">箱</option>
             </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.avgCostPerUnit')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">均价(分/unit)</label>
               <input
                 type="number"
                 value={form.avgCost}
@@ -158,7 +158,7 @@ export function MaterialEditPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.concentrateRatio')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">浓缩比例</label>
               <input
                 type="number"
                 value={form.concentrateRatio}
@@ -166,12 +166,13 @@ export function MaterialEditPage() {
                 className="input w-full"
                 step="0.1"
               />
+              <p className="text-xs text-gray-500 mt-1">如：茶叶浓缩10倍则填10</p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.safetyStock')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">安全库存</label>
               <input
                 type="number"
                 value={form.safetyStock}
@@ -180,7 +181,7 @@ export function MaterialEditPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.minStock')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">最低库存</label>
               <input
                 type="number"
                 value={form.minStock}
@@ -189,7 +190,7 @@ export function MaterialEditPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.maxStock')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">最高库存</label>
               <input
                 type="number"
                 value={form.maxStock}
@@ -200,13 +201,13 @@ export function MaterialEditPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('material.shelfLife')}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">保质期(天)</label>
             <input
               type="number"
               value={form.shelfLife}
               onChange={(e) => setForm({ ...form, shelfLife: parseInt(e.target.value) || 0 })}
               className="input w-full"
-              placeholder={t('material.shelfLifePlaceholder')}
+              placeholder="0表示不限"
             />
           </div>
 

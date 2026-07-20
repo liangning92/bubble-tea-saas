@@ -200,7 +200,6 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
     // Create preview URLs
     const urls = selectedFiles.map(file => URL.createObjectURL(file))
     setPreviewUrls(urls)
-    e.target.value = '' // reset input to allow re-upload of same file
   }
 
   const handleSubmit = async () => {

@@ -92,7 +92,6 @@ export function ImportPage() {
   // 拖放处理
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    e.stopPropagation()
     setDragActive(false)
     handleFile(e.dataTransfer.files)
   }, [handleFile])
@@ -186,7 +185,7 @@ export function ImportPage() {
           <input
             type="file"
             accept=".csv"
-            onChange={(e) => { handleFile(e.target.files); e.target.value = '' }}
+            onChange={(e) => handleFile(e.target.files)}
             className="hidden"
           />
         </label>
