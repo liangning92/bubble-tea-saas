@@ -455,6 +455,13 @@ function setupIpcHandlers() {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
+  // Set GitHub feed URL explicitly
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'liangning92',
+    repo: 'bubble-tea-saas'
+  })
+
   autoUpdater.on('checking-for-update', () => {
     log('[UPDATE] Checking for updates...')
     mainWindow?.webContents.send('update-status', 'checking')
