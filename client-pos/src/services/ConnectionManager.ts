@@ -119,7 +119,8 @@ class ConnectionManagerClass {
 
   // Get current API URL
   getCurrentUrl(): string {
-    return this.currentUrl
+    // Fallback to getApiUrl() if currentUrl is empty (initial state)
+    return this.currentUrl || getApiUrl()
   }
 
   // Get connection state
