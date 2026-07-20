@@ -1,6 +1,6 @@
 {
   "name": "bubble-tea-saas",
-  "version": "2026.07.20.1938",
+  "version": "2026.07.20.1948",
   "private": true,
   "description": "Bubble Tea SaaS POS System - Indonesia Market",
   "workspaces": [
@@ -63,6 +63,7 @@
     "@playwright/test": "^1.61.1",
     "electron": "^33.4.0",
     "electron-builder": "^26.0.12",
+    "electron-updater": "^6.8.9",
     "typescript": "^5.8.3",
     "vercel": "^54.14.0"
   }
