@@ -248,14 +248,13 @@ function extractServerFromAsar(): string {
     copyDir(serverUnpackedSrc, serverDest)
   }
 
-  // Copy @prisma/client from root node_modules (hoisted by npm workspaces)
-  // @prisma/client is in app.asar/node_modules/@prisma/client, not in server/
-  const rootNodeModulesPath = path.join(app.getAppPath(), 'node_modules', '@prisma', 'client')
-  if (fs.existsSync(rootNodeModulesPath)) {
-    const destNodeModules = path.join(serverDest, 'node_modules')
-    const destPrismaPath = path.join(destNodeModules, '@prisma', 'client')
-    log('[API] Copying @prisma/client from root node_modules:', rootNodeModulesPath)
-    copyDir(rootNodeModulesPath, destPrismaPath)
+  // Copy ALL root node_modules (hoisted dependencies like express, cors, bcryptjs, etc.)
+  // server/node_modules only has non-hoisted packages, but npm workspaces hoists most to root
+  const rootModulesSrc = path.join(app.getAppPath(), 'node_modules')
+  const destModulesDest = path.join(serverDest, 'node_modules')
+  if (fs.existsSync(rootModulesSrc)) {
+    log('[API] Copying all root node_modules to server directory')
+    copyDir(rootModulesSrc, destModulesDest)
   }
 
   log('[API] Server extracted successfully')
