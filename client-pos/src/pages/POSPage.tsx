@@ -398,7 +398,7 @@ export function POSPage() {
         name: 'Receipt Printer',
         enabled: true,
         connectionType: 'usb' as 'usb' | 'network',
-        printerName: '',
+        printerName: 'XPrinter',  // 默认打印机名称
         printerIp: '192.168.1.100',
         printerPort: 9100,
       },
@@ -408,7 +408,7 @@ export function POSPage() {
         name: 'Kitchen Printer',
         enabled: false,
         connectionType: 'usb' as 'usb' | 'network',
-        printerName: '',
+        printerName: 'XPrinter',  // 默认打印机名称
         printerIp: '192.168.1.100',
         printerPort: 9100,
       },
@@ -418,7 +418,7 @@ export function POSPage() {
         name: 'Label Printer',
         enabled: false,
         connectionType: 'usb' as 'usb' | 'network',
-        printerName: '',
+        printerName: 'XPrinter',  // 默认打印机名称
         printerIp: '192.168.1.100',
         printerPort: 9100,
       },
@@ -426,7 +426,7 @@ export function POSPage() {
     // Legacy fields for backward compatibility
     printerConnectionType: 'usb',
     printerType: 'escpos',
-    printerName: '',
+    printerName: 'XPrinter',  // 默认打印机名称
     printerIp: '192.168.1.100',
     printerPort: 9100,
     // Other hardware settings
@@ -532,7 +532,7 @@ export function POSPage() {
     const loadProducts = async () => {
       if (navigator.onLine) {
         try {
-          const res = await fetch(`/api/products?storeId=${storeId}&status=active`, {
+          const res = await fetch(`${connectionManager.getCurrentUrl()}/products?storeId=${storeId}&status=active`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           const data = await res.json()
@@ -643,7 +643,7 @@ export function POSPage() {
 
       try {
         // Check if server has newer products
-        const versionRes = await fetch(`/api/products/pos/version?storeId=${storeId}`, {
+        const versionRes = await fetch(`${connectionManager.getCurrentUrl()}/products/pos/version?storeId=${storeId}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
 
@@ -656,7 +656,7 @@ export function POSPage() {
 
           if (hasNewer) {
             // Fetch all products
-            const res = await fetch(`/api/products?storeId=${storeId}&status=active`, {
+            const res = await fetch(`${connectionManager.getCurrentUrl()}/products?storeId=${storeId}&status=active`, {
               headers: token ? { Authorization: `Bearer ${token}` } : {}
             })
             const data = await res.json()
@@ -1034,7 +1034,7 @@ export function POSPage() {
     const storeId = user?.storeId || 'default'
     const token = useAuthStore.getState().token
 
-    fetch(`/api/channels?storeId=${storeId}`, {
+    fetch(`${connectionManager.getCurrentUrl()}/channels?storeId=${storeId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
       .then(r => r.json())
@@ -1999,12 +1999,18 @@ export function POSPage() {
 
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
-        electronAPI?.openCashDrawer?.({ printerName: hardwareSettings.printerName || undefined })
+        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: hardwareSettings.printerName || undefined })
+        if (!drawerResult?.success) {
+          showToast(t('pos.cashDrawerFailed') || '钱箱打开失败', 'error')
+        }
       }
 
       electronAPI?.sendOrderComplete(orderNum)
       // 打印小票
-      printReceipt(orderNum, orderData)
+      const printResult = await printReceipt(orderNum, orderData)
+      if (!printResult) {
+        showToast(t('pos.printFailed') || '小票打印失败', 'error')
+      }
       // 打印厨房单
       printKitchenOrder(orderNum, cart)
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
@@ -2015,9 +2021,20 @@ export function POSPage() {
       showToast(`${t('pos.orderSuccess')} #${orderNum}`, 'success')
     } catch (error: any) {
       playSoundWithSettings('error', soundSettings.error)
-      // 显示服务器返回的具体错误消息（如"库存不足: 生珍珠"）
-      const errorMsg = error?.response?.data?.message || error?.message || t('pos.paymentError')
-      showToast(errorMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
+      // 解析服务端错误码并翻译
+      const rawMsg = error?.response?.data?.message || error?.message || ''
+      let displayMsg = rawMsg
+      if (rawMsg.startsWith('INVENTORY_INSUFFICIENT:')) {
+        const parts = rawMsg.split(':')
+        // parts: [INVENTORY_INSUFFICIENT, itemName, available, needed]
+        const itemName = parts[1] || ''
+        const available = parts[2] || '0'
+        const needed = parts[3] || '0'
+        displayMsg = t('pos.inventoryInsufficient', { item: itemName, available, needed })
+      } else {
+        displayMsg = rawMsg || t('pos.paymentError')
+      }
+      showToast(displayMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
       await db.orders.add({
         localId, storeId: orderData.storeId, staffId: orderData.staffId,
         items: orderData.items, subtotal, ppn: tax, totalAmount: subtotal,
@@ -2036,20 +2053,20 @@ export function POSPage() {
   // This is called via ref callback at the end of handleCheckout definition
 
   // 打印小票
-  const printReceipt = (orderNum: string, orderData: any) => {
+  const printReceipt = async (orderNum: string, orderData: any): Promise<boolean> => {
     if (!electronAPI?.sendPrintReceipt) {
-      return
+      return false
     }
     // Find enabled receipt printer
     const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
     if (!receiptPrinter) {
-      return
+      return false
     }
     const printerName = receiptPrinter.connectionType === 'network'
       ? undefined
       : receiptPrinter.printerName || undefined
     try {
-      electronAPI.sendPrintReceipt({
+      const result = await electronAPI.sendPrintReceipt({
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
@@ -2102,14 +2119,11 @@ export function POSPage() {
             change,
           }
         } : {})
-      }, (result: any) => {
-        if (result?.success) {
-        } else {
-          console.warn('Print failed:', result?.error)
-        }
       })
+      return result?.success ?? false
     } catch (err) {
       console.warn('Print error:', err)
+      return false
     }
   }
 

@@ -310,7 +310,7 @@ export async function deductInventory(storeId: string, orderId: string, items: a
         if (!result.success) {
           if (result.insufficientStock) {
             const { name, available, needed } = result.insufficientStock
-            errors.push(`库存不足: ${name} (可用: ${available}, 需要: ${needed})`)
+            errors.push(`INVENTORY_INSUFFICIENT:${name}:${available}:${needed}`)
           } else {
             errors.push(result.error || 'Unknown error')
           }
