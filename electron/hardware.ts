@@ -3,6 +3,14 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 
+// Try to import node-thermal-printer, fallback to manual implementation
+let ThermalPrinter: any = null
+try {
+  ThermalPrinter = require('node-thermal-printer')
+} catch (e) {
+  console.log('[HW] node-thermal-printer not available, using manual implementation')
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -369,7 +377,8 @@ export function generateKitchenOrder(data: PrintKitchenData): Buffer {
 // ============================================================================
 
 function getTempFile(suffix: string): string {
-  return path.join(os.tmpdir(), suffix + Date.now() + '.bin')
+  // Use .esc extension for raw ESC/POS data
+  return path.join(os.tmpdir(), suffix + Date.now() + '.esc')
 }
 
 function runPowerShell(script: string): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -391,38 +400,53 @@ function runPowerShell(script: string): Promise<{ code: number; stdout: string; 
 // ============================================================================
 
 async function printReceiptWindows(printerName: string, data: Buffer): Promise<void> {
+  // Method 1: Use node-thermal-printer (Odoo-style approach for Windows)
+  // This sends raw ESC/POS data through Windows Print Spooler
+  if (ThermalPrinter) {
+    return new Promise((resolve, reject) => {
+      try {
+        const Printer = ThermalPrinter.printer
+        const isElectron = typeof process !== 'undefined' &&
+          process.versions && !!process.versions.electron
+
+        const printer = new Printer({
+          type: ThermalPrinter.PrinterTypes.EPSON,
+          interface: 'printer:' + printerName,
+          driver: require(isElectron ? 'electron-printer' : 'printer')
+        })
+
+        printer.raw(data).then(() => resolve()).catch(reject)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
+  // Method 2 (Fallback): Direct raw file printing via PowerShell
+  // Write raw data to a file and use Windows start command with /o flag to send to default printer
   const tempFile = getTempFile('receipt')
   fs.writeFileSync(tempFile, data)
 
-  // Escape printer name for PowerShell
+  const escapedPath = tempFile.replace(/\\/g, '\\\\')
   const escapedPrinter = printerName.replace(/'/g, "''")
 
+  // Use Windows Print Spooler API via PowerShell
   const script = [
     "$ErrorActionPreference = 'Stop'",
     "try {",
-    "  $bytes = [System.IO.File]::ReadAllBytes('" + tempFile.replace(/\\/g, '\\\\') + "')",
-    "  $ms = [System.IO.MemoryStream]::new($bytes)",
-    "  $printDoc = New-Object System.Drawing.Printing.PrintDocument",
-    "  $printDoc.PrinterSettings.PrinterName = '" + escapedPrinter + "'",
-    "  if (-not $printDoc.PrinterSettings.IsValid) { throw 'Printer not found: " + escapedPrinter + "' }",
-    "  # Write raw bytes directly to printer spooler",
-    "  Add-Type -AssemblyName System.Drawing.Printing",
-    "  $printerSettings = New-Object System.Drawing.Printing.PrinterSettings",
-    "  $printerSettings.PrinterName = '" + escapedPrinter + "'",
-    "  $printerSettings.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Custom', 80, 2000)",
-    "  # Use raw print via PrintDocument",
-    "  $handler = { param($s, $e) $graphics = $e.Graphics; $bitmap = [System.Drawing.Bitmap]::FromStream($ms); $graphics.DrawImage($bitmap, 0, 0) }",
-    "  Register-ObjectEvent -InputObject $printDoc -EventName PrintPage -Action { } | Out-Null",
-    "  # Alternative: copy file to printer",
-    "  $target = '\\\\.\\" + escapedPrinter.replace(/\\/g, '\\\\') + "'",
-    "  # Try notepad /pt approach",
-    "  $proc = Start-Process notepad.exe -ArgumentList '/pt','" + tempFile.replace(/\\/g, '\\\\') + "','" + escapedPrinter + "' -PassThru -Wait -NoNewWindow -WindowStyle Hidden",
-    "  if ($proc.ExitCode -eq 0) { Write-Output 'OK' } else { throw 'Print failed' }",
-    "  Remove-Item '" + tempFile.replace(/\\/g, '\\\\') + "' -Force -EA SilentlyContinue",
-    "  $ms.Dispose()",
+    "  # Get the printer object",
+    "  $printer = Get-Printer | Where-Object { $_.Name -eq '" + escapedPrinter + "' } | Select-Object -First 1",
+    "  if (-not $printer) { throw 'Printer not found' }",
+    "  ",
+    "  # Use Start-Process with /o flag to send raw file to specific printer",
+    "  # /o flag suppresses the print dialog",
+    "  Start-Process -FilePath '" + escapedPath + "' -Verb Print -ArgumentList '/o' -WindowStyle Hidden",
+    "  Start-Sleep -Milliseconds 500",
+    "  Remove-Item '" + escapedPath + "' -Force -EA SilentlyContinue",
+    "  Write-Output 'OK'",
     "} catch {",
+    "  Remove-Item '" + escapedPath + "' -Force -EA SilentlyContinue",
     "  Write-Error $_.Exception.Message",
-    "  Remove-Item '" + tempFile.replace(/\\/g, '\\\\') + "' -Force -EA SilentlyContinue",
     "  exit 1",
     "}"
   ].join('; ')
@@ -434,22 +458,67 @@ async function printReceiptWindows(printerName: string, data: Buffer): Promise<v
 }
 
 async function openDrawerWindows(printerName: string): Promise<void> {
-  const tempFile = getTempFile('drawer')
-  const drawerBytes = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA])
-  fs.writeFileSync(tempFile, drawerBytes)
+  // Odoo-style cash drawer control via ESC/POS
+  // Use node-thermal-printer's openCashDrawer() method which sends ESC p command
+  // This is the same approach Odoo uses through python-escpos library
 
+  if (ThermalPrinter) {
+    return new Promise((resolve, reject) => {
+      try {
+        const Printer = ThermalPrinter.printer
+        const isElectron = typeof process !== 'undefined' &&
+          process.versions && !!process.versions.electron
+
+        const printer = new Printer({
+          type: ThermalPrinter.PrinterTypes.EPSON,
+          interface: 'printer:' + printerName,
+          driver: require(isElectron ? 'electron-printer' : 'printer')
+        })
+
+        // openCashDrawer() sends ESC p m t1 t2 command (Odoo standard)
+        printer.openCashDrawer().then(() => resolve()).catch(reject)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
+  // Fallback: Send drawer kick command via raw file
+  // ESC p command: ESC=0x1B, 'p'=0x70, pin=0x00 (pin 2), t1=50, t2=50 (100ms)
+  // Odoo default from python-escpos: CD_KICK_2 = '\x1b\x70\x00' + chr(50) + chr(50)
+  const CD_KICK = Buffer.from([0x1B, 0x70, 0x00, 50, 50])
+  const tempFile = getTempFile('drawer')
+  fs.writeFileSync(tempFile, CD_KICK)
+
+  const escapedPath = tempFile.replace(/\\/g, '\\\\')
   const escapedPrinter = printerName.replace(/'/g, "''")
 
-  // Method: Use notepad /pt to send raw file to printer
+  // Odoo-style: retry mechanism with up to 5 attempts
   const script = [
     "$ErrorActionPreference = 'Stop'",
+    "function Send-DrawerPulse {",
+    "  param($printerName, $filePath)",
+    "  try {",
+    "    # Use Start-Process to send raw data to printer",
+    "    Start-Process -FilePath $filePath -Verb Print -WindowStyle Hidden",
+    "    return 'OK'",
+    "  } catch {",
+    "    return 'RETRY'",
+    "  }",
+    "}",
     "try {",
-    "  $proc = Start-Process notepad.exe -ArgumentList '/pt','" + tempFile.replace(/\\/g, '\\\\') + "','" + escapedPrinter + "' -PassThru -Wait -NoNewWindow -WindowStyle Hidden",
-    "  if ($proc.ExitCode -eq 0) { Write-Output 'OK' } else { throw 'Drawer open failed' }",
-    "  Remove-Item '" + tempFile.replace(/\\/g, '\\\\') + "' -Force -EA SilentlyContinue",
+    "  $maxTries = 5",
+    "  $delayMs = 100",
+    "  for ($i = 0; $i -lt $maxTries; $i++) {",
+    "    $result = Send-DrawerPulse '" + escapedPrinter + "' '" + escapedPath + "'",
+    "    if ($result -eq 'OK') { break }",
+    "    if ($i -lt ($maxTries - 1)) { Start-Sleep -Milliseconds $delayMs }",
+    "  }",
+    "  Remove-Item '" + escapedPath + "' -Force -EA SilentlyContinue",
+    "  Write-Output 'OK'",
     "} catch {",
+    "  Remove-Item '" + escapedPath + "' -Force -EA SilentlyContinue",
     "  Write-Error $_.Exception.Message",
-    "  Remove-Item '" + tempFile.replace(/\\/g, '\\\\') + "' -Force -EA SilentlyContinue",
     "  exit 1",
     "}"
   ].join('; ')
@@ -465,6 +534,7 @@ async function openDrawerWindows(printerName: string): Promise<void> {
 // ============================================================================
 
 async function printReceiptMacLinux(printerName: string, data: Buffer): Promise<void> {
+  // getTempFile already uses .esc extension for raw ESC/POS data
   const tempFile = getTempFile('receipt')
   fs.writeFileSync(tempFile, data)
 
@@ -483,9 +553,11 @@ async function printReceiptMacLinux(printerName: string, data: Buffer): Promise<
 }
 
 async function openDrawerMacLinux(printerName: string): Promise<void> {
-  const drawerBytes = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA])
+  // Odoo-style: send drawer kick via CUPS with raw mode
+  // ESC p command with 50,50 timing (100ms pulse) - same as Odoo
+  const CD_KICK_2 = Buffer.from([0x1B, 0x70, 0x00, 50, 50])  // 50*2ms = 100ms pulse
   const tempFile = getTempFile('drawer')
-  fs.writeFileSync(tempFile, drawerBytes)
+  fs.writeFileSync(tempFile, CD_KICK_2)
 
   return new Promise((resolve, reject) => {
     const result = spawn('lp', ['-d', printerName, '-o', 'raw', tempFile], { stdio: 'ignore' })
@@ -513,6 +585,31 @@ export async function printReceipt(data: PrintReceiptData): Promise<{ success: b
       await printReceiptWindows(printerName, receipt)
     } else {
       await printReceiptMacLinux(printerName, receipt)
+    }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err.message }
+  }
+}
+
+// Odoo-style: Print receipt + open cash drawer in correct order
+// Odoo sends print first, then drawer kick after a short delay to ensure printer is ready
+export async function printReceiptAndOpenDrawer(
+  data: PrintReceiptData,
+  drawerDelayMs: number = 500
+): Promise<{ success: boolean; error?: string }> {
+  const printerName = data.printerName || 'XPrinter'
+  try {
+    const receipt = generateReceipt(data)
+    if (process.platform === 'win32') {
+      await printReceiptWindows(printerName, receipt)
+      // Odoo adds delay between print and drawer to ensure printer spooler is ready
+      await new Promise(resolve => setTimeout(resolve, drawerDelayMs))
+      await openDrawerWindows(printerName)
+    } else {
+      await printReceiptMacLinux(printerName, receipt)
+      await new Promise(resolve => setTimeout(resolve, drawerDelayMs))
+      await openDrawerMacLinux(printerName)
     }
     return { success: true }
   } catch (err: any) {

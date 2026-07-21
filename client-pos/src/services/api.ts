@@ -18,7 +18,6 @@ connectionManager.addListener((event: ConnectionEvent) => {
     if (event.url) {
       api.defaults.baseURL = event.url
       setApiUrl(event.url)
-      console.log('[API] Updated baseURL to:', event.url)
     }
   }
 })
@@ -66,14 +65,6 @@ api.interceptors.request.use((config) => {
 })
 
 export default api
-
-// 添加请求拦截器来调试
-api.interceptors.request.use((config) => {
-  if (config.url?.includes('orders') && config.method === 'post') {
-    console.log('[API Request]', config.url, 'data:', JSON.stringify(config.data));
-  }
-  return config;
-});
 
 export const posApi = {
   // Products (cached for offline)

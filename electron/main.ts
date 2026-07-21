@@ -1,4 +1,15 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, screen } from 'electron'
+
+// ============================================================================
+// HIGH DPI FIX: Enable per-monitor-v2 DPI awareness for sharp text
+// ============================================================================
+// This is the same approach VS Code, Discord, and other Electron apps use
+// per-monitor-v2 tells Windows to let the app handle DPI for each monitor
+// Must be BEFORE app.whenReady()
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2')
+  console.log('[DPI] Per-monitor-v2 DPI awareness enabled')
+}
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs'
@@ -518,22 +529,41 @@ async function createWindow() {
   log('[WINDOW] Creating with index:', indexPath)
   log('[WINDOW] Dev mode:', isDev)
 
+  // Get screen info for proper DPI handling
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
+  const scaleFactor = primaryDisplay.scaleFactor
+
+  log('[WINDOW] Screen work area:', screenWidth, 'x', screenHeight)
+  log('[WINDOW] Scale factor:', scaleFactor)
+
+  // POS window size - use base resolution
+  // BrowserWindow uses DIP, Chromium will handle DPI scaling
+  // This should render at native resolution without blur IF system DPI is set correctly
+  const windowWidth = 1024
+  const windowHeight = 768
+
+  log('[WINDOW] Window size:', windowWidth, 'x', windowHeight)
+
   mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 768,
+    width: windowWidth,
+    height: windowHeight,
     title: 'Bubble Tea POS',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      // Disabled for file:// protocol loading - can cause white screen on Windows
-      webSecurity: false
+      // Only disable webSecurity in dev mode for local file loading
+      webSecurity: isDev ? false : true,
     },
     autoHideMenuBar: true,
     fullscreen: false,
-    resizable: false
+    resizable: false,
   })
+
+  // Center window on screen
+  mainWindow.center()
 
   // Remove menu bar
   mainWindow.setMenu(null)

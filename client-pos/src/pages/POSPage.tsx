@@ -2012,7 +2012,6 @@ export function POSPage() {
         }
       }
 
-      electronAPI?.sendOrderComplete(orderNum)
       // 打印小票
       const printResult = await printReceipt(orderNum, orderData)
       if (!printResult) {
