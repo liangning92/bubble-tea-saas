@@ -425,6 +425,7 @@ const SortableBlock: React.FC<{
   onDelete: () => void
   onDuplicate: () => void
 }> = ({ block, isSelected, onSelect, onDelete, onDuplicate }) => {
+  const { t } = useTranslation()
   const def = BLOCK_DEFINITIONS[block.type]
 
   const {
@@ -463,7 +464,7 @@ const SortableBlock: React.FC<{
       <span className="flex-1 font-medium text-sm">{def.label}</span>
 
       {!block.enabled && (
-        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">Disabled</span>
+        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{t('posSettings.blockDisabled')}</span>
       )}
 
       <div className="flex items-center gap-1">
@@ -473,7 +474,7 @@ const SortableBlock: React.FC<{
             onDuplicate()
           }}
           className="p-1 text-gray-400 hover:text-gray-600 rounded"
-          title="Duplicate"
+          title={t('posSettings.blockDuplicate')}
         >
           <Copy size={14} />
         </button>
@@ -483,7 +484,7 @@ const SortableBlock: React.FC<{
             onDelete()
           }}
           className="p-1 text-gray-400 hover:text-red-500 rounded"
-          title="Delete"
+          title={t('posSettings.blockDelete')}
         >
           <Trash2 size={14} />
         </button>
@@ -521,7 +522,7 @@ const BlockPropertiesPanel: React.FC<{
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className="text-lg">{def.icon}</span>
-          <h3 className="font-semibold">{def.label} Properties</h3>
+          <h3 className="font-semibold">{def.label} {t('posSettings.blockProperties')}</h3>
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
           ✕
@@ -1049,7 +1050,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
   const handleDelete = async () => {
     if (!currentTemplateId) return
-    if (!confirm('Delete this template?')) return
+    if (!confirm(t('posSettings.templateDeleteConfirm'))) return
 
     try {
       await ReceiptTemplateApi.delete(currentTemplateId)
@@ -1119,21 +1120,21 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
             placeholder={t('posSettings.receiptTemplateNamePlaceholder')}
           />
           {templates.find((t) => t.id === currentTemplateId)?.isDefault && (
-            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Default</span>
+            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">{t('posSettings.templateDefault')}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('posSettings.templateSaving') : t('common.save')}
           </button>
           <button onClick={handleSetDefault} className="btn-secondary flex items-center gap-2">
             <Star size={16} />
-            Set Default
+            {t('posSettings.templateSetDefault')}
           </button>
           {currentTemplateId && (
             <button onClick={handleDelete} className="btn-secondary text-red-500 flex items-center gap-2">
               <Trash2 size={16} />
-              Delete
+              {t('common.delete')}
             </button>
           )}
         </div>
@@ -1145,7 +1146,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
         <div className="bg-gray-50 rounded-lg p-3">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <Palette size={14} />
-            Blocks
+            {t('posSettings.templateBlocks')}
           </h3>
           <div className="space-y-1">
             {BLOCK_TYPES.map((type) => (
@@ -1158,7 +1159,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
         <div className="col-span-2 bg-gray-50 rounded-lg p-3">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <Settings2 size={14} />
-            Template Canvas
+            {t('posSettings.templateCanvas')}
           </h3>
 
           <DndContext
@@ -1211,7 +1212,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
             <div className="bg-gray-50 rounded-lg p-3">
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                 <Eye size={14} />
-                Preview
+                {t('posSettings.templatePreview')}
               </h3>
               <div className="flex justify-center">
                 <LivePreview blocks={blocks} paperSize={paperSize} />
