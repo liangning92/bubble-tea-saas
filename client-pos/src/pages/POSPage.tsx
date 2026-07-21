@@ -12,6 +12,7 @@ import { AnnouncementBanner } from '../components/AnnouncementBanner'
 import { ChannelSelectModal } from '../components/ChannelSelectModal'
 import { AttendanceQR } from '../components/ui/AttendanceQR'
 import { UpdateNotification } from '../components/UpdateNotification'
+import { useHardwareManager } from '../hooks/useHardwareManager'
 import { useCartStore, useProductStore, useOrderStore, useUiStore } from '../stores'
 import {
   Wifi, WifiOff, X, CheckCircle, Search, Loader2,
@@ -187,6 +188,9 @@ export function POSPage() {
   const [posSessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8))
   // 追踪是否有未完成的 checkout（用于检测飞单）
   const hasCheckoutCompleteRef = useRef(false)
+
+  // 硬件管理 - 打印机检测和钱箱控制
+  useHardwareManager()
 
   // 弹窗 - 使用uiStore
   const {
@@ -1001,11 +1005,12 @@ export function POSPage() {
 
         // 检测测试打印机标志
         if (hs.testPrint && hs.testPrint !== hardwareSettings.testPrint) {
+          const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
           electronAPI?.sendPrintReceipt?.({
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'Bubble Tea Shop',
             footer: posReceipt.footer || 'Test Print',
-            printerName: hs.printerName || undefined,
+            printerName: receiptPrinter?.printerName || 'XPrinter',
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
             subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test'
           })
@@ -1015,7 +1020,8 @@ export function POSPage() {
 
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
-          electronAPI?.openCashDrawer?.({ printerName: hs.printerName || undefined })
+          const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
+          electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || 'XPrinter' })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -1999,7 +2005,8 @@ export function POSPage() {
 
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
-        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: hardwareSettings.printerName || undefined })
+        const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
+        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || 'XPrinter' })
         if (!drawerResult?.success) {
           showToast(t('pos.cashDrawerFailed') || '钱箱打开失败', 'error')
         }

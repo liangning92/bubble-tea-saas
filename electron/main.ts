@@ -519,8 +519,8 @@ async function createWindow() {
   log('[WINDOW] Dev mode:', isDev)
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1024,
+    height: 768,
     title: 'Bubble Tea POS',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -532,7 +532,7 @@ async function createWindow() {
     },
     autoHideMenuBar: true,
     fullscreen: false,
-    resizable: true
+    resizable: false
   })
 
   // Remove menu bar
