@@ -1729,7 +1729,7 @@ export function POSPage() {
         storeId: user?.storeId || 'default',
         staffId: user?.staff?.id || 'default',
         channelId: selectedChannel?.id || 'POS',
-        channelName: selectedChannel ? t(selectedChannel.nameKey) : 'POS',
+        channelName: selectedChannel?.code || selectedChannel?.id || 'POS',  // Use code for consistency
         items: cart.map(item => ({
           productId: item.productId,
           productName: item.productName,

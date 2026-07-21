@@ -17,28 +17,67 @@ interface UpdateInfo {
 
 type UpdateStatus = 'checking' | 'available' | 'up-to-date' | 'downloading' | 'downloaded' | 'error'
 
-interface ElectronAPI {
-  sendOrderUpdate: (orderData: any) => void
-  sendOrderClear: () => void
-  sendOrderComplete: (orderNumber: string) => void
-  openCashDrawer: (data?: any) => void  // 打开钱箱
-  sendPrintReceipt: (data: any, callback?: (result: any) => void) => void  // 打印小票
-  onOrderUpdate: (callback: (orderData: any) => void) => void
-  onOrderClear: (callback: () => void) => void
-  onOrderComplete: (callback: (orderNumber: string) => void) => void
+interface PrinterListResult {
+  printers: string[]
+}
 
-  // 自动更新
-  checkForUpdates: () => Promise<any>
-  downloadUpdate: () => Promise<boolean>
+interface CashDrawerResult {
+  success: boolean
+  error?: string
+}
+
+interface PrintReceiptData {
+  orderNum: string
+  header: string
+  footer: string
+  printerName?: string
+  items: Array<{
+    productName: string
+    specName: string
+    quantity: number
+    unitPrice: number
+    addons: Array<{ name: string; price: number }>
+  }>
+  subtotal: number
+  tax: number
+  total: number
+  paymentMethod: string
+  cashierName?: string
+  orderDate?: string
+  customerName?: string
+  paymentReceived?: number
+  change?: number
+}
+
+interface PrintResult {
+  success: boolean
+  error?: string
+}
+
+interface ElectronAPI {
+  // Hardware
+  sendPrintReceipt: (data: PrintReceiptData) => Promise<PrintResult>
+  sendKitchenOrder: (data: any) => Promise<PrintResult>
+  openCashDrawer: (data?: { printerName?: string }) => Promise<CashDrawerResult>
+  listPrinters: () => Promise<PrinterListResult>
+
+  // Config
+  setApiUrl: (url: string) => Promise<{ success: boolean }>
+  getApiUrl: () => Promise<{ url: string }>
+
+  // Updates
+  checkForUpdates: () => Promise<{ updateAvailable: boolean }>
+  downloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
   getAppVersion: () => Promise<string>
-  onUpdateStatus: (callback: (status: UpdateStatus, info?: UpdateInfo) => void) => void
-  onUpdateProgress: (callback: (progress: UpdateProgress) => void) => void
+
+  // Event listeners for updates
+  onUpdateStatus: (callback: (status: string, info?: any) => void) => void
+  onUpdateProgress: (callback: (progress: number) => void) => void
   onUpdateError: (callback: (error: string) => void) => void
 
-  // API URL 配置（供主进程/升级使用）
-  getApiUrl: () => Promise<string>
-  setApiUrl: (url: string) => Promise<boolean>
+  // Platform info
+  platform: string
 }
 
 declare global {
