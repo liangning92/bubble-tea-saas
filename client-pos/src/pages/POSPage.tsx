@@ -25,6 +25,23 @@ import {
 // Electron API
 const electronAPI = (window as any).electronAPI
 
+// Helper to get available printer name from settings
+function getPrinterName(printerSettings: { printerName?: string; printers?: Array<{ type: string; enabled: boolean; printerName?: string }> }, type: 'receipt' | 'kitchen' = 'receipt'): string {
+  // 1. First try: use configured printer for this type
+  if (printerSettings?.printers) {
+    const configured = printerSettings.printers.find(p => p.type === type && p.enabled && p.printerName)
+    if (configured?.printerName) {
+      return configured.printerName
+    }
+  }
+  // 2. Fallback: use legacy printerName field
+  if (printerSettings?.printerName) {
+    return printerSettings.printerName
+  }
+  // 3. Last resort: empty string (system default)
+  return ''
+}
+
 // 语言选项
 const LANGS = [
   { code: 'zh', nextCode: 'en', labelKey: 'lang.zh' },
@@ -402,7 +419,7 @@ export function POSPage() {
         name: 'Receipt Printer',
         enabled: true,
         connectionType: 'usb' as 'usb' | 'network',
-        printerName: 'XPrinter',  // 默认打印机名称
+        printerName: '',  // 从硬件设置读取
         printerIp: '192.168.1.100',
         printerPort: 9100,
       },
@@ -412,7 +429,7 @@ export function POSPage() {
         name: 'Kitchen Printer',
         enabled: false,
         connectionType: 'usb' as 'usb' | 'network',
-        printerName: 'XPrinter',  // 默认打印机名称
+        printerName: '',  // 从硬件设置读取
         printerIp: '192.168.1.100',
         printerPort: 9100,
       },
@@ -422,7 +439,7 @@ export function POSPage() {
         name: 'Label Printer',
         enabled: false,
         connectionType: 'usb' as 'usb' | 'network',
-        printerName: 'XPrinter',  // 默认打印机名称
+        printerName: '',  // 从硬件设置读取
         printerIp: '192.168.1.100',
         printerPort: 9100,
       },
@@ -430,7 +447,7 @@ export function POSPage() {
     // Legacy fields for backward compatibility
     printerConnectionType: 'usb',
     printerType: 'escpos',
-    printerName: 'XPrinter',  // 默认打印机名称
+    printerName: '',  // 从硬件设置读取
     printerIp: '192.168.1.100',
     printerPort: 9100,
     // Other hardware settings
@@ -1010,7 +1027,7 @@ export function POSPage() {
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'Bubble Tea Shop',
             footer: posReceipt.footer || 'Test Print',
-            printerName: receiptPrinter?.printerName || 'XPrinter',
+            printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt'),
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
             subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test'
           })
@@ -1021,7 +1038,7 @@ export function POSPage() {
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
           const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-          electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || 'XPrinter' })
+          electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt') })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -2006,7 +2023,7 @@ export function POSPage() {
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
         const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || 'XPrinter' })
+        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt') })
         if (!drawerResult?.success) {
           showToast(t('pos.cashDrawerFailed') || '钱箱打开失败', 'error')
         }
@@ -2118,7 +2135,7 @@ export function POSPage() {
             total,
             discount: discountAmount,
             paymentMethod: t(paymentMethods.find(m => m.id === paymentMethod)?.labelKey || 'pos.paymentCash') || paymentMethod,
-            cashierName: '',
+            cashierName: user?.staff?.name || '',
             customerName: member?.name || '',
             orderDate: undefined,
             paidAmount: paidAmount ? parseInt(paidAmount) : 0,

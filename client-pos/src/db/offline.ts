@@ -20,6 +20,7 @@ export interface LocalOrder {
   storeId: string
   staffId: string
   memberId?: string
+  channelId?: string  // 订单渠道：DINE_IN, GOFOOD, GRAB, SHOPEE, POS
   items: any[]
   subtotal: number
   ppn: number
@@ -165,7 +166,7 @@ export class SyncManager {
             body: JSON.stringify({
               storeId: order.storeId,
               staffId: order.staffId,
-              channelId: 'POS',
+              channelId: order.channelId || 'POS',
               memberId: order.memberId,
               items: order.items,
               subtotal: order.subtotal,
