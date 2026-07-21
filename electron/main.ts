@@ -7,6 +7,11 @@ import os from 'os'
 import { printReceipt, printReceiptRaw, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
 
 // ============================================================================
+// DEBUG: Module load marker - if you see this in console, module loaded OK
+// ============================================================================
+console.log('[MAIN] Module starting, isDev:', !app.isPackaged)
+
+// ============================================================================
 // Global Error Handlers - MUST be at the top
 // ============================================================================
 
@@ -224,28 +229,47 @@ function extractServerFromAsar(): string {
     fs.rmSync(serverDest, { recursive: true })
   }
 
-  // Copy server from asar to temp directory
-  function copyDir(src: string, dest: string) {
-    fs.mkdirSync(dest, { recursive: true })
-    const entries = fs.readdirSync(src, { withFileTypes: true })
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name)
-      const destPath = path.join(dest, entry.name)
-      if (entry.isDirectory()) {
-        copyDir(srcPath, destPath)
-      } else {
-        fs.copyFileSync(srcPath, destPath)
+  // Copy server from asar to temp directory (with error handling)
+  function copyDir(src: string, dest: string): boolean {
+    try {
+      if (!fs.existsSync(src)) {
+        logError('[API] Source does not exist:', src)
+        return false
       }
+      fs.mkdirSync(dest, { recursive: true })
+      const entries = fs.readdirSync(src, { withFileTypes: true })
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name)
+        const destPath = path.join(dest, entry.name)
+        try {
+          if (entry.isDirectory()) {
+            copyDir(srcPath, destPath)
+          } else {
+            fs.copyFileSync(srcPath, destPath)
+          }
+        } catch (err: any) {
+          logError('[API] Failed to copy:', srcPath, err.message)
+        }
+      }
+      return true
+    } catch (err: any) {
+      logError('[API] copyDir failed:', src, err.message)
+      return false
     }
   }
 
   // Copy main server files from asar
-  copyDir(serverSrc, serverDest)
+  if (!copyDir(serverSrc, serverDest)) {
+    logError('[API] Failed to extract server from:', serverSrc)
+    throw new Error('Server extraction failed - source not found')
+  }
 
   // Copy unpacked node_modules (which contains .prisma and @prisma/client)
   if (fs.existsSync(serverUnpackedSrc)) {
     log('[API] Copying unpacked modules from:', serverUnpackedSrc)
-    copyDir(serverUnpackedSrc, serverDest)
+    if (!copyDir(serverUnpackedSrc, serverDest)) {
+      logError('[API] Failed to copy unpacked modules')
+    }
   }
 
   // Copy ALL root node_modules (hoisted dependencies like express, cors, bcryptjs, etc.)
@@ -254,7 +278,9 @@ function extractServerFromAsar(): string {
   const destModulesDest = path.join(serverDest, 'node_modules')
   if (fs.existsSync(rootModulesSrc)) {
     log('[API] Copying all root node_modules to server directory')
-    copyDir(rootModulesSrc, destModulesDest)
+    if (!copyDir(rootModulesSrc, destModulesDest)) {
+      logError('[API] Failed to copy root node_modules')
+    }
   }
 
   // Fix npm workspaces path issue: .prisma is hoisted to root but @prisma/client expects it inside
@@ -264,7 +290,9 @@ function extractServerFromAsar(): string {
   if (fs.existsSync(path.join(destModulesDest, '.prisma', 'client'))) {
     log('[API] Fixing .prisma path for @prisma/client compatibility')
     fs.mkdirSync(path.join(srcPrismaClient, '.prisma'), { recursive: true })
-    copyDir(path.join(destModulesDest, '.prisma', 'client'), destPrismaInClient)
+    if (!copyDir(path.join(destModulesDest, '.prisma', 'client'), destPrismaInClient)) {
+      logError('[API] Failed to copy .prisma to @prisma/client')
+    }
   }
 
   log('[API] Server extracted successfully')
@@ -273,8 +301,16 @@ function extractServerFromAsar(): string {
 
 function startApiServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Extract server from asar to temp directory (Node can't run from inside asar)
-    const serverPath = extractServerFromAsar()
+    console.log('[API] Starting server extraction...')
+    let serverPath: string
+    try {
+      serverPath = extractServerFromAsar()
+      console.log('[API] Server extraction returned:', serverPath)
+    } catch (err) {
+      console.error('[API] extractServerFromAsar FAILED:', err)
+      reject(err)
+      return
+    }
     const userDataPath = app.getPath('userData')
     const dbPath = path.join(userDataPath, 'data', 'dev.db')
 
@@ -624,7 +660,12 @@ if (!gotTheLock) {
     }
 
     // Initialize database (create tables if needed)
-    await initDatabase()
+    try {
+      await initDatabase()
+    } catch (err) {
+      logError('[APP] Database init failed:', err)
+      // Continue anyway - app can still run without database
+    }
 
     // Start API server first
     try {
@@ -635,7 +676,15 @@ if (!gotTheLock) {
 
     // Setup IPC then create window
     setupIpcHandlers()
-    await createWindow()
+    try {
+      await createWindow()
+    } catch (err) {
+      logError('[APP] Create window failed:', err)
+      // Show error and exit
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      console.error('[FATAL] Failed to create window:', errorMsg)
+      app.quit()
+    }
   })
 
   app.on('window-all-closed', () => {
