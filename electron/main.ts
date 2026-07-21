@@ -100,8 +100,8 @@ function getServerPath(): string {
   if (isDev) {
     return path.join(__dirname, '..', 'server')
   }
-  // In production, server is in app.asar.unpacked
-  return path.join(process.resourcesPath, 'app.asar.unpacked', 'server')
+  // In production, app is inside app.asar
+  return path.join(app.getAppPath(), 'server')
 }
 
 function getPosBuildPath(): string {
@@ -208,8 +208,8 @@ async function initDatabase(): Promise<void> {
 
 // Extract server from asar to temp directory for execution
 function extractServerFromAsar(): string {
-  const serverInAsar = path.join(app.getAppPath(), 'server') // app.asar/server (has dist)
-  const serverInUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'server') // unpacked (has node_modules, prisma)
+  const serverSrc = getServerPath() // app.asar/server
+  const serverUnpackedSrc = path.join(process.resourcesPath, 'app.asar.unpacked', 'server')
   const serverDest = path.join(os.tmpdir(), 'bubble-tea-pos-server')
 
   // Check if already extracted
@@ -240,15 +240,13 @@ function extractServerFromAsar(): string {
     }
   }
 
-  // Copy main server files from asar (dist, config, routes, etc.)
-  if (fs.existsSync(serverInAsar)) {
-    copyDir(serverInAsar, serverDest)
-  }
+  // Copy main server files from asar
+  copyDir(serverSrc, serverDest)
 
   // Copy unpacked node_modules (which contains .prisma and @prisma/client)
-  if (fs.existsSync(serverInUnpacked)) {
-    log('[API] Copying unpacked modules from:', serverInUnpacked)
-    copyDir(serverInUnpacked, serverDest)
+  if (fs.existsSync(serverUnpackedSrc)) {
+    log('[API] Copying unpacked modules from:', serverUnpackedSrc)
+    copyDir(serverUnpackedSrc, serverDest)
   }
 
   // Copy ALL root node_modules (hoisted dependencies like express, cors, bcryptjs, etc.)
@@ -453,13 +451,6 @@ function setupIpcHandlers() {
     return app.getVersion()
   })
 
-  // Set update feed URL (electron-updater auto-detects from package.json build.publish, but explicit is safer)
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'liangning92',
-    repo: 'bubble-tea-saas'
-  })
-
   // Auto-updater event listeners
   autoUpdater.on('checking-for-update', () => {
     log('[UPDATE] Checking for updates...')
@@ -550,7 +541,7 @@ async function createWindow() {
     },
     autoHideMenuBar: true,
     fullscreen: false,
-    resizable: false
+    resizable: true
   })
 
   // Remove menu bar

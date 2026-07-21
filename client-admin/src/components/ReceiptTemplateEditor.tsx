@@ -530,10 +530,10 @@ const BlockPropertiesPanel: React.FC<{
 
       {/* Common style properties */}
       <div className="space-y-4 border-b pb-4 mb-4">
-        <h4 className="text-sm font-medium text-gray-700">Style</h4>
+        <h4 className="text-sm font-medium text-gray-700">{t('posSettings.blockStyle')}</h4>
 
         <div className="flex items-center justify-between">
-          <span className="text-sm">Bold</span>
+          <span className="text-sm">{t('posSettings.blockBold')}</span>
           <button
             onClick={() => updateStyle('bold', !block.style.bold)}
             className={`w-10 h-6 rounded-full transition-colors relative ${
@@ -549,7 +549,7 @@ const BlockPropertiesPanel: React.FC<{
         </div>
 
         <div>
-          <label className="text-sm text-gray-600">Alignment</label>
+          <label className="text-sm text-gray-600">{t('posSettings.blockAlignment')}</label>
           <div className="flex gap-2 mt-1">
             {(['left', 'center', 'right'] as const).map((align) => (
               <button
@@ -561,14 +561,14 @@ const BlockPropertiesPanel: React.FC<{
                     : 'border-gray-200 text-gray-600'
                 }`}
               >
-                {align.charAt(0).toUpperCase() + align.slice(1)}
+                {align === 'left' ? t('posSettings.blockAlignLeft') : align === 'center' ? t('posSettings.blockAlignCenter') : t('posSettings.blockAlignRight')}
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <label className="text-sm text-gray-600">Font Size</label>
+          <label className="text-sm text-gray-600">{t('posSettings.blockFontSize')}</label>
           <div className="flex gap-2 mt-1">
             {(['small', 'normal', 'large'] as const).map((size) => (
               <button
@@ -580,7 +580,7 @@ const BlockPropertiesPanel: React.FC<{
                     : 'border-gray-200 text-gray-600'
                 }`}
               >
-                {size.charAt(0).toUpperCase() + size.slice(1)}
+                {size === 'small' ? t('posSettings.blockFontSmall') : size === 'normal' ? t('posSettings.blockFontNormal') : t('posSettings.blockFontLarge')}
               </button>
             ))}
           </div>
@@ -589,12 +589,12 @@ const BlockPropertiesPanel: React.FC<{
 
       {/* Block-specific properties */}
       <div className="space-y-4">
-        <h4 className="text-sm font-medium text-gray-700">Settings</h4>
+        <h4 className="text-sm font-medium text-gray-700">{t('posSettings.blockSettings')}</h4>
 
         {/* Header */}
         {block.type === 'header' && (
           <div>
-            <label className="text-sm text-gray-600">Text</label>
+            <label className="text-sm text-gray-600">{t('posSettings.blockText')}</label>
             <input
               type="text"
               value={block.config.text || ''}
@@ -608,7 +608,7 @@ const BlockPropertiesPanel: React.FC<{
         {/* Logo */}
         {block.type === 'logo' && (
           <div>
-            <label className="text-sm text-gray-600">Width (px)</label>
+            <label className="text-sm text-gray-600">{t('posSettings.blockWidthPx')}</label>
             <input
               type="number"
               value={block.config.width || 120}
@@ -622,7 +622,7 @@ const BlockPropertiesPanel: React.FC<{
         {block.type === 'storeInfo' && (
           <>
             <div className="flex items-center justify-between">
-              <span className="text-sm">Show Phone</span>
+              <span className="text-sm">{t('posSettings.blockShowPhone')}</span>
               <button
                 onClick={() => updateConfig('showPhone', !block.config.showPhone)}
                 className={`w-10 h-6 rounded-full transition-colors relative ${
@@ -637,7 +637,7 @@ const BlockPropertiesPanel: React.FC<{
               </button>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm">Show Address</span>
+              <span className="text-sm">{t('posSettings.blockShowAddress')}</span>
               <button
                 onClick={() => updateConfig('showAddress', !block.config.showAddress)}
                 className={`w-10 h-6 rounded-full transition-colors relative ${
@@ -657,9 +657,17 @@ const BlockPropertiesPanel: React.FC<{
         {/* Order Info */}
         {block.type === 'orderInfo' && (
           <>
-            {(['showDate', 'showTime', 'showCashier', 'showCustomer', 'showChannel'] as const).map((key) => (
+            {(['showDate', 'showTime', 'showCashier', 'showCustomer', 'showChannel'] as const).map((key) => {
+              const labels: Record<string, string> = {
+                showDate: t('posSettings.blockShowDate'),
+                showTime: t('posSettings.blockShowTime'),
+                showCashier: t('posSettings.blockShowCashier'),
+                showCustomer: t('posSettings.blockShowCustomer'),
+                showChannel: t('posSettings.blockShowChannel'),
+              }
+              return (
               <div key={key} className="flex items-center justify-between">
-                <span className="text-sm capitalize">{key.replace('show', '')}</span>
+                <span className="text-sm">{labels[key]}</span>
                 <button
                   onClick={() => updateConfig(key, !block.config[key])}
                   className={`w-10 h-6 rounded-full transition-colors relative ${
@@ -673,16 +681,22 @@ const BlockPropertiesPanel: React.FC<{
                   />
                 </button>
               </div>
-            ))}
+            )})}
           </>
         )}
 
         {/* Items */}
         {block.type === 'items' && (
           <>
-            {(['showAddon', 'showNote', 'showSugarIce'] as const).map((key) => (
+            {(['showAddon', 'showNote', 'showSugarIce'] as const).map((key) => {
+              const labels: Record<string, string> = {
+                showAddon: t('posSettings.receiptSampleAddon'),
+                showNote: t('posSettings.blockNote') || 'Note',
+                showSugarIce: t('posSettings.blockSugarIce') || 'Sugar/Ice',
+              }
+              return (
               <div key={key} className="flex items-center justify-between">
-                <span className="text-sm capitalize">{key.replace('show', '')}</span>
+                <span className="text-sm">{labels[key]}</span>
                 <button
                   onClick={() => updateConfig(key, !block.config[key])}
                   className={`w-10 h-6 rounded-full transition-colors relative ${
@@ -696,9 +710,9 @@ const BlockPropertiesPanel: React.FC<{
                   />
                 </button>
               </div>
-            ))}
+            )})}
             <div>
-              <label className="text-sm text-gray-600">Item Format</label>
+              <label className="text-sm text-gray-600">{t('posSettings.blockItemFormat')}</label>
               <select
                 value={block.config.itemFormat || 'standard'}
                 onChange={(e) => updateConfig('itemFormat', e.target.value)}
@@ -715,7 +729,7 @@ const BlockPropertiesPanel: React.FC<{
         {block.type === 'tax' && (
           <>
             <div>
-              <label className="text-sm text-gray-600">Label</label>
+              <label className="text-sm text-gray-600">{t('posSettings.blockLabel')}</label>
               <input
                 type="text"
                 value={block.config.label || ''}
@@ -725,7 +739,7 @@ const BlockPropertiesPanel: React.FC<{
               />
             </div>
             <div>
-              <label className="text-sm text-gray-600">Rate (%)</label>
+              <label className="text-sm text-gray-600">{t('posSettings.blockRatePercent')}</label>
               <input
                 type="number"
                 value={block.config.rate || 11}
@@ -739,7 +753,7 @@ const BlockPropertiesPanel: React.FC<{
         {/* QR Code */}
         {block.type === 'qrCode' && (
           <div>
-            <label className="text-sm text-gray-600">Size (px)</label>
+            <label className="text-sm text-gray-600">{t('posSettings.blockSizePx')}</label>
             <input
               type="number"
               value={block.config.size || 80}
@@ -753,7 +767,7 @@ const BlockPropertiesPanel: React.FC<{
         {block.type === 'barcode' && (
           <>
             <div>
-              <label className="text-sm text-gray-600">Barcode Type</label>
+              <label className="text-sm text-gray-600">{t('posSettings.blockBarcodeType')}</label>
               <select
                 value={block.config.barcodeType || 'code128'}
                 onChange={(e) => updateConfig('barcodeType', e.target.value)}
@@ -764,7 +778,7 @@ const BlockPropertiesPanel: React.FC<{
               </select>
             </div>
             <div>
-              <label className="text-sm text-gray-600">Height (px)</label>
+              <label className="text-sm text-gray-600">{t('posSettings.blockHeightPx')}</label>
               <input
                 type="number"
                 value={block.config.height || 40}
@@ -779,7 +793,7 @@ const BlockPropertiesPanel: React.FC<{
         {block.type === 'footer' && (
           <>
             <div>
-              <label className="text-sm text-gray-600">Footer Text</label>
+              <label className="text-sm text-gray-600">{t('posSettings.blockFooterText')}</label>
               <input
                 type="text"
                 value={block.config.footerText || ''}
@@ -789,7 +803,7 @@ const BlockPropertiesPanel: React.FC<{
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm">Show Divider</span>
+              <span className="text-sm">{t('posSettings.blockShowDivider')}</span>
               <button
                 onClick={() => updateConfig('showDivider', !block.config.showDivider)}
                 className={`w-10 h-6 rounded-full transition-colors relative ${
@@ -809,7 +823,7 @@ const BlockPropertiesPanel: React.FC<{
         {/* Divider */}
         {block.type === 'divider' && (
           <div>
-            <label className="text-sm text-gray-600">Style</label>
+            <label className="text-sm text-gray-600">{t('posSettings.blockStyle')}</label>
             <select
               value={block.config.dividerStyle || 'line'}
               onChange={(e) => updateConfig('dividerStyle', e.target.value)}
@@ -838,7 +852,7 @@ const BlockPropertiesPanel: React.FC<{
 
         {/* Enabled toggle */}
         <div className="flex items-center justify-between pt-2 border-t">
-          <span className="text-sm font-medium">Enabled</span>
+          <span className="text-sm font-medium">{t('posSettings.blockEnabled')}</span>
           <button
             onClick={() => onUpdate({ ...block, enabled: !block.enabled })}
             className={`w-10 h-6 rounded-full transition-colors relative ${
