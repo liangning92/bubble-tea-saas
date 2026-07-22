@@ -18,6 +18,7 @@ try {
 // Constants - MUST be defined early for logging
 // ============================================================================
 const isDev = !app.isPackaged
+const UPDATE_CHECK_INTERVAL = 1000 * 60 * 60 // Check every 1 hour
 
 // ============================================================================
 // HIGH DPI FIX: Enable per-monitor-v2 DPI awareness for sharp text
@@ -107,6 +108,7 @@ if (args.includes('--enable-logging')) {
 
 let mainWindow: BrowserWindow | null = null
 let apiServerProcess: ChildProcess | null = null
+let updateInterval: NodeJS.Timeout | null = null
 
 // ============================================================================
 // Paths
@@ -508,7 +510,19 @@ function setupIpcHandlers() {
 
   // Auto-updater handlers (electron-updater integration)
   if (autoUpdater && !isDev) {
+    // Configure for GitHub Releases
     autoUpdater.autoUpdater.autoDownload = false
+    autoUpdater.autoUpdater.autoUpdater.autoInstallOnAppQuit = true
+
+    // Set feed URL for GitHub releases
+    autoUpdater.autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'liangning92',
+      repo: 'bubble-tea-saas'
+    })
+
+    // Start periodic update check after window is ready
+    // (updateInterval is declared in Global State section)
 
     autoUpdater.on('checking-for-update', () => {
       log('[UPDATER] Checking for updates...')
@@ -719,7 +733,22 @@ async function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    // Clear update interval when window closes
+    if (updateInterval) {
+      clearInterval(updateInterval)
+      updateInterval = null
+    }
   })
+
+  // Start periodic update check (every hour) after window is ready
+  if (autoUpdater && !isDev) {
+    // Check immediately on startup
+    autoUpdater.autoUpdater.checkForUpdates().catch(() => {})
+    // Then check every hour
+    updateInterval = setInterval(() => {
+      autoUpdater.autoUpdater.checkForUpdates().catch(() => {})
+    }, UPDATE_CHECK_INTERVAL)
+  }
 
   log('[WINDOW] Ready')
 }
