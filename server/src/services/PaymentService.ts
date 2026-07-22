@@ -280,7 +280,11 @@ export async function createQrisPayment(storeId: string, orderId: string, amount
   }
 
   const externalId = `QRIS-${orderId}-${Date.now()}`
-  const callbackUrl = `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/payments/qris/webhook`
+  const apiBaseUrl = process.env.API_BASE_URL
+  if (!apiBaseUrl) {
+    return { success: false, error: 'API_BASE_URL environment variable not configured' }
+  }
+  const callbackUrl = `${apiBaseUrl}/api/payments/qris/webhook`
 
   try {
     const response = await fetch('https://api.xendit.co/qr_codes', {

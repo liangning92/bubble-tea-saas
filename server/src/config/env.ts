@@ -35,7 +35,13 @@ export const config: Config = {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   },
 
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000',
+  corsOrigin: (() => {
+    const origin = process.env.CORS_ORIGIN
+    if (!origin && process.env.NODE_ENV === 'production') {
+      throw new Error('CORS_ORIGIN environment variable is required in production')
+    }
+    return origin || 'http://localhost:5173,http://localhost:3000'
+  })(),
 
   indonesia: {
     timezone: process.env.DEFAULT_TIMEZONE || 'Asia/Jakarta',
