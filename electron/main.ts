@@ -6,6 +6,14 @@ import http from 'http'
 import os from 'os'
 import { printReceipt, printReceiptRaw, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
 
+// Electron auto-updater for online updates
+let autoUpdater: any = null
+try {
+  autoUpdater = require('electron-updater').autoUpdater
+} catch (e) {
+  log('[UPDATER] electron-updater not available, auto-update disabled')
+}
+
 // ============================================================================
 // Constants - MUST be defined early for logging
 // ============================================================================
@@ -498,15 +506,73 @@ function setupIpcHandlers() {
     return app.getVersion()
   })
 
-  // Update handlers (stub - real implementation would use electron-updater)
-  ipcMain.handle('check-for-updates', async () => {
-    return { updateAvailable: false }
-  })
+  // Auto-updater handlers (electron-updater integration)
+  if (autoUpdater && !isDev) {
+    autoUpdater.autoUpdater.autoDownload = false
 
-  ipcMain.handle('download-update', async () => {})
-  ipcMain.handle('install-update', async () => {
-    app.quit()
-  })
+    autoUpdater.on('checking-for-update', () => {
+      log('[UPDATER] Checking for updates...')
+    })
+
+    autoUpdater.on('update-available', (info: any) => {
+      log('[UPDATER] Update available:', info.version)
+      mainWindow?.webContents.send('update-status', 'available', info)
+    })
+
+    autoUpdater.on('update-not-available', (info: any) => {
+      log('[UPDATER] No update available, current:', info.version)
+      mainWindow?.webContents.send('update-status', 'up-to-date', info)
+    })
+
+    autoUpdater.on('download-progress', (progress: any) => {
+      mainWindow?.webContents.send('update-progress', progress.percent)
+    })
+
+    autoUpdater.on('update-downloaded', (info: any) => {
+      log('[UPDATER] Update downloaded:', info.version)
+      mainWindow?.webContents.send('update-status', 'downloaded', info)
+    })
+
+    autoUpdater.on('error', (err: any) => {
+      logError('[UPDATER] Error:', err.message)
+      mainWindow?.webContents.send('update-error', err.message)
+    })
+
+    ipcMain.handle('check-for-updates', async () => {
+      try {
+        const result = await autoUpdater.checkForUpdates()
+        return { updateAvailable: !!result?.updateInfo }
+      } catch (err: any) {
+        logError('[UPDATER] Check failed:', err.message)
+        return { updateAvailable: false, error: err.message }
+      }
+    })
+
+    ipcMain.handle('download-update', async () => {
+      try {
+        autoUpdater.downloadUpdate()
+        return { success: true }
+      } catch (err: any) {
+        logError('[UPDATER] Download failed:', err.message)
+        return { success: false, error: err.message }
+      }
+    })
+
+    ipcMain.handle('install-update', async () => {
+      autoUpdater.quitAndInstall()
+    })
+  } else {
+    // Dev mode or no auto-updater - stub handlers
+    ipcMain.handle('check-for-updates', async () => {
+      return { updateAvailable: false }
+    })
+    ipcMain.handle('download-update', async () => {
+      return { success: false, error: 'Auto-update not available in dev mode' }
+    })
+    ipcMain.handle('install-update', async () => {
+      app.quit()
+    })
+  }
 
   ipcMain.on('update-status', () => {})
   ipcMain.on('update-progress', () => {})
