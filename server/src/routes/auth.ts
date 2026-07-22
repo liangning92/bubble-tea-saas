@@ -2,12 +2,22 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
+import rateLimit from 'express-rate-limit'
 import prisma from '../config/database'
 import { config } from '../config/env'
 import { authenticate, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 
 const router = Router()
+
+// Rate limiter for auth endpoints - prevent brute force attacks
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { error: 'Too many login attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 // Validation schemas
 const registerSchema = z.object({
@@ -24,7 +34,7 @@ const loginSchema = z.object({
 })
 
 // POST /api/auth/register
-router.post('/register', validateBody(registerSchema), async (req, res) => {
+router.post('/register', authLimiter, validateBody(registerSchema), async (req, res) => {
   try {
     const { phone, password, name, storeId, role } = req.body
 
@@ -105,7 +115,7 @@ router.post('/register', validateBody(registerSchema), async (req, res) => {
 })
 
 // POST /api/auth/login
-router.post('/login', validateBody(loginSchema), async (req, res) => {
+router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) => {
   try {
     const { phone, password } = req.body
 
