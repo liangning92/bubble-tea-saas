@@ -1,15 +1,4 @@
 import { app, BrowserWindow, ipcMain, shell, screen } from 'electron'
-
-// ============================================================================
-// HIGH DPI FIX: Enable per-monitor-v2 DPI awareness for sharp text
-// ============================================================================
-// This is the same approach VS Code, Discord, and other Electron apps use
-// per-monitor-v2 tells Windows to let the app handle DPI for each monitor
-// Must be BEFORE app.whenReady()
-if (process.platform === 'win32') {
-  app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2')
-  console.log('[DPI] Per-monitor-v2 DPI awareness enabled')
-}
 import { spawn, ChildProcess } from 'child_process'
 import path from 'path'
 import fs from 'fs'
@@ -18,9 +7,22 @@ import os from 'os'
 import { printReceipt, printReceiptRaw, openCashDrawerWindows, listPrinters, PrintReceiptData, printKitchenOrder, PrintKitchenData, generateReceiptFromTemplate, PrintReceiptFromTemplate } from './hardware.js'
 
 // ============================================================================
-// DEBUG: Module load marker - if you see this in console, module loaded OK
+// Constants - MUST be defined early for logging
 // ============================================================================
-console.log('[MAIN] Module starting, isDev:', !app.isPackaged)
+const isDev = !app.isPackaged
+
+// ============================================================================
+// HIGH DPI FIX: Enable per-monitor-v2 DPI awareness for sharp text
+// ============================================================================
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2')
+  if (isDev) console.log('[DPI] Per-monitor-v2 DPI awareness enabled')
+}
+
+// ============================================================================
+// DEBUG: Module load marker
+// ============================================================================
+if (isDev) console.log('[MAIN] Module starting, isDev:', isDev)
 
 // ============================================================================
 // Global Error Handlers - MUST be at the top
@@ -68,7 +70,6 @@ process.on('unhandledRejection', (reason, promise) => {
 // Constants
 // ============================================================================
 
-const isDev = !app.isPackaged
 const API_PORT = 7072
 const POS_PORT = 6063
 
@@ -79,15 +80,15 @@ const POS_PORT = 6063
 const args = process.argv.slice(2)
 if (args.includes('--disable-gpu')) {
   app.disableHardwareAcceleration()
-  console.log('[ARGS] GPU disabled')
+  if (isDev) console.log('[ARGS] GPU disabled')
 }
 if (args.includes('--no-sandbox')) {
   app.commandLine.appendSwitch('no-sandbox')
-  console.log('[ARGS] Sandbox disabled')
+  if (isDev) console.log('[ARGS] Sandbox disabled')
 }
 if (args.includes('--enable-logging')) {
   app.commandLine.appendSwitch('enable-logging')
-  console.log('[ARGS] Logging enabled')
+  if (isDev) console.log('[ARGS] Logging enabled')
 }
 
 

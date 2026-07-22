@@ -2,6 +2,7 @@ import * as HygieneService from './HygieneService'
 
 // 调度器定时检查间隔 (毫秒)
 const CHECK_INTERVAL = 60 * 1000 // 1分钟
+const isDev = process.env.NODE_ENV !== 'production'
 
 let schedulerInterval: NodeJS.Timeout | null = null
 
@@ -11,11 +12,11 @@ let schedulerInterval: NodeJS.Timeout | null = null
  */
 export function startHygieneScheduler() {
   if (schedulerInterval) {
-    console.log('[Scheduler] Hygiene scheduler already running')
+    if (isDev) console.log('[Scheduler] Hygiene scheduler already running')
     return
   }
 
-  console.log('[Scheduler] Starting hygiene task scheduler (every 60s)')
+  if (isDev) console.log('[Scheduler] Starting hygiene task scheduler (every 60s)')
 
   // 立即执行一次
   processHygieneTasks()
@@ -31,7 +32,7 @@ export function stopHygieneScheduler() {
   if (schedulerInterval) {
     clearInterval(schedulerInterval)
     schedulerInterval = null
-    console.log('[Scheduler] Hygiene scheduler stopped')
+    if (isDev) console.log('[Scheduler] Hygiene scheduler stopped')
   }
 }
 
@@ -41,7 +42,7 @@ export function stopHygieneScheduler() {
 async function processHygieneTasks() {
   try {
     const count = await HygieneService.processDueTemplates()
-    if (count > 0) {
+    if (isDev && count > 0) {
       console.log(`[Scheduler] Created ${count} hygiene tasks`)
     }
   } catch (error) {

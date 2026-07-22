@@ -8,7 +8,7 @@ let ThermalPrinter: any = null
 try {
   ThermalPrinter = require('node-thermal-printer')
 } catch (e) {
-  console.log('[HW] node-thermal-printer not available, using manual implementation')
+  // Silent fallback - thermal printer is optional
 }
 
 // ============================================================================
