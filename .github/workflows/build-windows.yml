@@ -45,7 +45,10 @@ jobs:
           (Get-Content package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
 
       - name: Install dependencies
-        run: npm install --force
+        run: |
+          Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
+          Get-ChildItem -Recurse -Directory -Name node_modules | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          npm install --force
 
       - name: Generate Prisma client
         run: npm run db:generate
