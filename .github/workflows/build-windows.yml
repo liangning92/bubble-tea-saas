@@ -47,8 +47,8 @@ jobs:
       - name: Install dependencies
         run: |
           Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
-          Get-ChildItem -Recurse -Directory -Name node_modules | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-          npm install --force
+          Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
+          npm install --force --prefer-offline=false
 
       - name: Generate Prisma client
         run: npm run db:generate

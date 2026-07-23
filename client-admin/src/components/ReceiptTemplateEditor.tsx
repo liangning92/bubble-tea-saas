@@ -122,7 +122,7 @@ export interface ReceiptTemplate {
 
 // ============ DEFAULT BLOCKS ============
 
-export const BLOCK_DEFINITIONS: Record<
+const BLOCK_DEFINITIONS: Record<
   BlockType,
   { label: string; icon: string; defaultConfig: BlockConfig }
 > = {
@@ -196,6 +196,31 @@ export const BLOCK_DEFINITIONS: Record<
     icon: '✏️',
     defaultConfig: { customText: '' },
   },
+}
+
+// Get block definition with translated label
+function getBlockDef(t: typeof useTranslation.prototype.t, type: BlockType) {
+  const def = BLOCK_DEFINITIONS[type]
+  const labelKeyMap: Record<BlockType, string> = {
+    logo: 'blockLogo',
+    header: 'blockHeader',
+    storeInfo: 'blockStoreInfo',
+    orderInfo: 'blockOrderInfo',
+    items: 'blockItems',
+    subtotal: 'blockSubtotal',
+    tax: 'blockTax',
+    total: 'blockTotal',
+    paymentInfo: 'blockPaymentInfo',
+    qrCode: 'blockQrCode',
+    barcode: 'blockBarcode',
+    footer: 'blockFooter',
+    divider: 'blockDivider',
+    customText: 'blockCustomText',
+  }
+  return {
+    ...def,
+    label: t(`posSettings.${labelKeyMap[type]}`),
+  }
 }
 
 const BLOCK_TYPES = Object.keys(BLOCK_DEFINITIONS) as BlockType[]
@@ -426,7 +451,7 @@ const SortableBlock: React.FC<{
   onDuplicate: () => void
 }> = ({ block, isSelected, onSelect, onDelete, onDuplicate }) => {
   const { t } = useTranslation()
-  const def = BLOCK_DEFINITIONS[block.type]
+  const def = getBlockDef(t, block.type)
 
   const {
     attributes,
