@@ -199,7 +199,7 @@ const BLOCK_DEFINITIONS: Record<
 }
 
 // Get block definition with translated label
-function getBlockDef(t: typeof useTranslation.prototype.t, type: BlockType) {
+function getBlockDef(t: (key: string) => string, type: BlockType) {
   const def = BLOCK_DEFINITIONS[type]
   const labelKeyMap: Record<BlockType, string> = {
     logo: 'blockLogo',
@@ -526,7 +526,7 @@ const BlockPropertiesPanel: React.FC<{
   onClose: () => void
 }> = ({ block, onUpdate, onClose }) => {
   const { t } = useTranslation()
-  const def = BLOCK_DEFINITIONS[block.type]
+  const def = getBlockDef(t, block.type)
 
   const updateConfig = (key: string, value: any) => {
     onUpdate({
@@ -900,7 +900,8 @@ const BlockPropertiesPanel: React.FC<{
 // ============ PALETTE ITEM ============
 
 const PaletteItem: React.FC<{ type: BlockType; onAdd: () => void }> = ({ type, onAdd }) => {
-  const def = BLOCK_DEFINITIONS[type]
+  const { t } = useTranslation()
+  const def = getBlockDef(t, type)
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `palette-${type}`,
