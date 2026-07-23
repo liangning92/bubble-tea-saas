@@ -13,6 +13,7 @@ release/
 e2e/
 electron/
 playwright.config.ts
+!src/hooks/*.ts
 *.ts
 !*.config.ts
 pnpm-lock.yaml
