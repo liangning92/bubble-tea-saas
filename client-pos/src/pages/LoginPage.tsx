@@ -56,11 +56,20 @@ export function LoginPage() {
 
       navigate('/dashboard')
     } catch (err: any) {
-      // Check if network error - try offline login
+      // Check if network error (server unreachable) - try offline login
+      // axios error codes: ECONNREFUSED, NETWORK_ERROR, ETIMEDOUT, etc.
+      // Also check !navigator.onLine for browser offline state
       const isNetworkError = !navigator.onLine ||
+        err.code === 'ECONNREFUSED' ||
+        err.code === 'ECONNRESET' ||
         err.code === 'NETWORK_ERROR' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ENOTFOUND' ||
         err.message?.includes('Network') ||
-        err.message?.includes('fetch')
+        err.message?.includes('fetch') ||
+        err.message?.includes('Failed to fetch') ||
+        err.message?.includes('Network Error') ||
+        (!err.response && err.message)
 
       if (isNetworkError) {
         const offlineResult = await loginOffline(phone, password)
