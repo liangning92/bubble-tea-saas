@@ -443,3 +443,42 @@ export async function getLockScreenPin(): Promise<string | null> {
   const config = await db.config.get(LOCK_SCREEN_PIN_KEY)
   return config?.value || null
 }
+
+// Offline Credentials - stored for offline login
+const OFFLINE_CREDS_KEY = 'offlineCredentials'
+
+export interface OfflineCredentials {
+  phone: string
+  passwordHash: string
+  user: {
+    id: string
+    phone: string
+    role: string
+    storeId: string | null
+    staff: { id: string; name: string; employeeNumber?: string; position?: string } | null
+  }
+  token: string
+  cachedAt: Date
+}
+
+export async function saveOfflineCredentials(creds: OfflineCredentials): Promise<void> {
+  await db.config.put({
+    key: OFFLINE_CREDS_KEY,
+    value: JSON.stringify(creds),
+    updatedAt: new Date()
+  })
+}
+
+export async function getOfflineCredentials(): Promise<OfflineCredentials | null> {
+  const config = await db.config.get(OFFLINE_CREDS_KEY)
+  if (!config?.value) return null
+  try {
+    return JSON.parse(config.value)
+  } catch {
+    return null
+  }
+}
+
+export async function clearOfflineCredentials(): Promise<void> {
+  await db.config.delete(OFFLINE_CREDS_KEY)
+}

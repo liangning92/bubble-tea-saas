@@ -29,7 +29,13 @@ const resources = {
         noAccount: 'Belum punya akun?',
         createAccount: 'Daftar',
         copyright: '© 2026 Bubble Tea POS System',
-        login: 'Masuk'
+        login: 'Masuk',
+        offlineLogin: 'Masuk Offline',
+        offlineLoginFailed: 'Login offline gagal. Periksa koneksi internet.',
+        offlineCredentialsNotFound: 'Kredensial tidak ditemukan. Silakan masuk online terlebih dahulu.',
+        offlinePasswordChanged: 'Kata sandi telah berubah. Silakan masuk online.',
+        loginWithOfflineMode: 'Masuk dengan mode offline',
+        offlineSessionNote: 'Sesi offline - beberapa fitur mungkin terbatas'
       },
       common: {
         cancel: 'Batal',
@@ -594,7 +600,13 @@ const resources = {
         noAccount: "Don't have an account?",
         createAccount: 'Sign up',
         copyright: '© 2026 Bubble Tea POS System',
-        login: 'Login'
+        login: 'Login',
+        offlineLogin: 'Offline Login',
+        offlineLoginFailed: 'Offline login failed. Please check your internet connection.',
+        offlineCredentialsNotFound: 'No cached credentials. Please login online at least once.',
+        offlinePasswordChanged: 'Password changed online. Please login online.',
+        loginWithOfflineMode: 'Login with offline mode',
+        offlineSessionNote: 'Offline session - some features may be limited'
       },
       common: {
         cancel: 'Cancel',
@@ -1153,7 +1165,13 @@ const resources = {
         noAccount: '还没有账号？',
         createAccount: '注册',
         copyright: '© 2026 Bubble Tea POS System',
-        login: '登录'
+        login: '登录',
+        offlineLogin: '离线登录',
+        offlineLoginFailed: '离线登录失败，请检查网络连接',
+        offlineCredentialsNotFound: '未找到缓存凭据，请先联网登录',
+        offlinePasswordChanged: '密码已修改，请联网登录',
+        loginWithOfflineMode: '离线模式登录',
+        offlineSessionNote: '离线会话 - 部分功能可能受限'
       },
       pos: {
         title: '收银',

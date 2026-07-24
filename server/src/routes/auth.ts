@@ -170,7 +170,8 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
             employeeNumber: user.staff.employeeNumber,
             position: user.staff.position
           } : null
-        }
+        },
+        passwordHash: user.password
       },
       timestamp: new Date().toISOString()
     })

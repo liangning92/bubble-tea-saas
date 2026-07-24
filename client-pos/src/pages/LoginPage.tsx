@@ -14,7 +14,7 @@ const LANGUAGES = [
 export function LoginPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const { login, loginOffline } = useAuthStore()
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -40,9 +40,10 @@ export function LoginPage() {
     setLoading(true)
     setError('')
     try {
+      // Try online login first
       const response = await posApi.login(phone, password)
-      const { token, user } = response.data.data
-      login(token, user)
+      const { token, user, passwordHash } = response.data.data
+      await login(token, user, passwordHash)
 
       // Handle remember me - only store phone number, never password
       if (rememberMe) {
@@ -55,7 +56,27 @@ export function LoginPage() {
 
       navigate('/dashboard')
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.loginFailed'))
+      // Check if network error - try offline login
+      const isNetworkError = !navigator.onLine ||
+        err.code === 'NETWORK_ERROR' ||
+        err.message?.includes('Network') ||
+        err.message?.includes('fetch')
+
+      if (isNetworkError) {
+        const offlineResult = await loginOffline(phone, password)
+        if (offlineResult.success) {
+          navigate('/dashboard')
+          return
+        }
+        // Offline login failed - show specific error
+        if (offlineResult.error === 'offlineCredentialsNotFound') {
+          setError(t('auth.offlineCredentialsNotFound'))
+        } else {
+          setError(t('auth.offlineLoginFailed'))
+        }
+      } else {
+        setError(err.response?.data?.message || t('auth.loginFailed'))
+      }
     } finally {
       setLoading(false)
     }
