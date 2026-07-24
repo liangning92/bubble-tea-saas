@@ -62,7 +62,13 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
     setStatus('checking')
     setError(null)
     try {
-      await electronAPI.checkForUpdates()
+      const result = await electronAPI.checkForUpdates()
+      if (!result?.updateAvailable) {
+        setStatus('up-to-date')
+        setIsVisible(true)
+        // Auto-hide after 3 seconds when no update available
+        setTimeout(() => setIsVisible(false), 3000)
+      }
     } catch (err: any) {
       setError(err.message || 'Check failed')
       setStatus('error')
@@ -74,8 +80,10 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
     if (!electronAPI) return
 
     setStatus('downloading')
+    setError(null)
     try {
       await electronAPI.downloadUpdate()
+      // Status will be updated via onUpdateStatus event listener
     } catch (err: any) {
       setError(err.message || 'Download failed')
       setStatus('error')
