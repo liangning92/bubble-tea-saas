@@ -2089,7 +2089,7 @@ export function POSPage() {
       ? undefined
       : receiptPrinter.printerName || undefined
     try {
-      const result = await electronAPI.sendPrintReceipt({
+      const result = await electronAPI?.sendPrintReceipt({
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
@@ -2162,7 +2162,7 @@ export function POSPage() {
       ? undefined
       : kitchenPrinter.printerName || undefined
     try {
-      electronAPI.sendKitchenOrder({ orderNum, printerName, items })
+      electronAPI?.sendKitchenOrder?.({ orderNum, printerName, items })
     } catch (err) {
       console.warn('Kitchen print error:', err)
     }
