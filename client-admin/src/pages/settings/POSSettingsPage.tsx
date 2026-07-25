@@ -698,8 +698,11 @@ export function POSSettingsPage() {
 
   // ========== LOAD SAVED CONFIG ==========
   useEffect(() => {
+    console.log('[Admin] posConfig loaded:', posConfig?.data)
+    console.log('[Admin] user.storeId:', user?.storeId)
     if (posConfig?.data) {
       const configs = posConfig.data
+      console.log('[Admin] configs.hardwareSettings:', configs.hardwareSettings)
       // Load posLayout
       if (configs.posLayout) {
         setPosLayout(prev => ({ ...prev, ...configs.posLayout }))
@@ -764,11 +767,13 @@ export function POSSettingsPage() {
   // ========== SAVE MUTATION ==========
   const saveConfigMutation = useMutation({
     mutationFn: (data: { key: string; value: any }) => {
-      console.log('[Admin] Saving config:', { storeId: user?.storeId, key: data.key, value: data.value })
-      return configApi.set(user?.storeId || '', data.key, data.value, 'pos')
+      const currentStoreId = user?.storeId || ''
+      console.log('[Admin] Saving config:', { storeId: currentStoreId, key: data.key })
+      console.log('[Admin] Saving value:', JSON.stringify(data.value).substring(0, 200))
+      return configApi.set(currentStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config'] })
+      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId] })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
     },
