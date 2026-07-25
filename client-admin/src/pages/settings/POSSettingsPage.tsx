@@ -750,8 +750,9 @@ export function POSSettingsPage() {
       }
       // Load hardware settings
       if (configs.hardwareSettings) {
+        console.log('[Admin] Loading hw:', configs.hardwareSettings)
         const migrated = migratePrinterConfig(configs.hardwareSettings)
-        // 直接使用加载的配置，不要合并旧值
+        console.log('[Admin] Migrated:', migrated)
         setHardwareSettings(migrated)
       }
     }
