@@ -387,10 +387,13 @@ export function POSSettingsPage() {
   // ========== DATA LOADING ==========
   // 确保 queryKey 和实际请求的 storeId 一致
   const queryStoreId = user?.storeId || ''
+  console.log('[Admin] queryStoreId:', queryStoreId)
   const { data: posConfig, isLoading } = useQuery({
     queryKey: ['config', queryStoreId],
-    queryFn: () => configApi.get(queryStoreId || undefined),
-    enabled: !!user?.storeId  // 只有 storeId 存在时才查询
+    queryFn: () => {
+      console.log('[Admin] configApi.get called with:', queryStoreId)
+      return configApi.get(queryStoreId || undefined)
+    }
   })
 
   // ========== STATE WITH DEFAULT VALUES ==========
