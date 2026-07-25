@@ -477,7 +477,7 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     })
   }
 
-  // 方法2: 使用 Windows Out-Printer (正确方式)
+  // 方法2: 使用 Windows Out-Printer
   return new Promise((resolve, reject) => {
     const text = generateReceiptText(data)
     const printerName = data.printerName || ''
@@ -489,19 +489,28 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     fs.writeFileSync(tempFile, text, { encoding: 'latin1' })
     const escapedFile = tempFile.replace(/'/g, "''")
 
+    console.log('[PRINT] Printer name:', printerName)
+    console.log('[PRINT] Temp file:', tempFile)
+
     let psCommand: string
     if (printerName) {
       const escapedPrinter = printerName.replace(/'/g, "''")
       psCommand = `Out-Printer -Name "${escapedPrinter}" -FilePath "${escapedFile}"`
+      console.log('[PRINT] Using named printer command')
     } else {
       psCommand = `Get-Content "${escapedFile}" | Out-Printer`
+      console.log('[PRINT] Using default printer command')
     }
+
+    console.log('[PRINT] PowerShell command:', psCommand)
 
     execChild(`powershell -Command "${psCommand}"`, { timeout: 30000 }, (error: any) => {
       try { fs.unlinkSync(tempFile) } catch (e) {}
       if (error) {
+        console.log('[PRINT] PowerShell error:', error.message)
         reject(error)
       } else {
+        console.log('[PRINT] Print command completed successfully')
         resolve()
       }
     })
