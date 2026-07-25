@@ -75,13 +75,14 @@ function showErrorPage(mainWindow: BrowserWindow, title: string, message: string
 // 禁用硬件加速 - 防止某些电脑白屏
 app.disableHardwareAcceleration()
 
-// 添加 Chromium 启动参数，解决触屏/显卡问题
-app.commandLine.appendSwitch('disable-gpu')
-app.commandLine.appendSwitch('disable-software-rasterizer')
-app.commandLine.appendSwitch('disable-accelerated-2d-canvas')
+// 只保留必要的参数，不要过度禁用 GPU（会导致字体渲染变差）
 app.commandLine.appendSwitch('no-sandbox')
 app.commandLine.appendSwitch('disable-dev-shm-usage')
-app.commandLine.appendSwitch('disable-gpu-compositing')
+
+// 添加字体渲染优化
+app.commandLine.appendSwitch('enable-font-antialiasing')
+app.commandLine.appendSwitch('subpixel-font-rendering')
+app.commandLine.appendSwitch('enable-gpu-rasterization')
 
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
@@ -383,8 +384,12 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     // 网络打印作为备选
     const printerHost = data.printerHost || process.env.PRINTER_HOST || '192.168.1.100'
     const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-    printViaNetwork(text, printerHost, printerPort)
-    return { success: true }
+    try {
+      await printViaNetwork(text, printerHost, printerPort)
+      return { success: true }
+    } catch (netError: any) {
+      return { success: false, error: netError.message }
+    }
   } catch (error: any) {
     console.error('[PRINT ERROR]', error)
     return { success: false, error: error.message }
@@ -435,16 +440,26 @@ async function printViaWindows(text: string, printerName?: string): Promise<void
 /**
  * 网络打印
  */
-function printViaNetwork(text: string, host: string, port: number): void {
+function printViaNetwork(text: string, host: string, port: number): Promise<void> {
   const net = require('net')
-  const client = new net.Socket()
-  client.connect(port, host, () => {
-    client.write(Buffer.from(text, 'latin1'))
-    client.end()
-    console.log('[PRINT] Network print sent to', host + ':' + port)
-  })
-  client.on('error', (err: any) => {
-    console.error('[PRINT ERROR]', err.message)
+  return new Promise((resolve, reject) => {
+    const client = new net.Socket()
+    const timeout = setTimeout(() => {
+      client.destroy()
+      reject(new Error('Network print timeout'))
+    }, 5000)
+    client.connect(port, host, () => {
+      clearTimeout(timeout)
+      client.write(Buffer.from(text, 'latin1'))
+      client.end()
+      console.log('[PRINT] Network print sent to', host + ':' + port)
+      resolve()
+    })
+    client.on('error', (err: any) => {
+      clearTimeout(timeout)
+      console.error('[PRINT ERROR]', err.message)
+      reject(err)
+    })
   })
 }
 
@@ -471,8 +486,12 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
     // 网络作为备选
     const printerHost = data?.printerHost || process.env.PRINTER_HOST || '192.168.1.100'
     const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-    openCashDrawerViaNetwork(printerHost, printerPort)
-    return { success: true }
+    try {
+      await openCashDrawerViaNetwork(printerHost, printerPort)
+      return { success: true }
+    } catch (netError: any) {
+      return { success: false, error: netError.message }
+    }
   } catch (error: any) {
     console.error('[CASH DRAWER ERROR]', error)
     return { success: false, error: error.message }
@@ -517,18 +536,28 @@ async function openCashDrawerViaWindows(printerName?: string): Promise<void> {
 /**
  * 网络打开钱箱
  */
-function openCashDrawerViaNetwork(host: string, port: number): void {
+function openCashDrawerViaNetwork(host: string, port: number): Promise<void> {
   const net = require('net')
   // ESC/POS 钱箱命令
   const cashDrawerCommand = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32])
-  const client = new net.Socket()
-  client.connect(port, host, () => {
-    client.write(cashDrawerCommand)
-    client.end()
-    console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port)
-  })
-  client.on('error', (err: any) => {
-    console.error('[CASH DRAWER ERROR]', err.message)
+  return new Promise((resolve, reject) => {
+    const client = new net.Socket()
+    const timeout = setTimeout(() => {
+      client.destroy()
+      reject(new Error('Cash drawer network timeout'))
+    }, 5000)
+    client.connect(port, host, () => {
+      clearTimeout(timeout)
+      client.write(cashDrawerCommand)
+      client.end()
+      console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port)
+      resolve()
+    })
+    client.on('error', (err: any) => {
+      clearTimeout(timeout)
+      console.error('[CASH DRAWER ERROR]', err.message)
+      reject(err)
+    })
   })
 }
 

@@ -93,16 +93,14 @@ function setupIpcHandlers() {
         await autoUpdater.checkForUpdates()
       } catch (error: any) {
         log('warn', 'Check for updates failed:', error.message)
-        // Still send current status even if check fails
-        sendToRenderer('update-status', 'up-to-date', { version: currentVersion })
+        // Don't send 'up-to-date' here - the 'error' event already sends update-error
+        // Sending 'up-to-date' would override the error status in the UI
       }
 
       return { current: currentVersion, latest: currentVersion }
     } catch (error: any) {
       log('error', 'Check failed:', error.message)
-      sendToRenderer('update-status', 'up-to-date', {
-        version: app.getVersion()
-      })
+      // Don't send 'up-to-date' - let the error event handle it
       return null
     }
   })

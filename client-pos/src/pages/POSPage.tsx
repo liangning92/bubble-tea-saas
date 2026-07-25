@@ -2067,6 +2067,8 @@ export function POSPage() {
         status: 'pending', syncAttempts: 0, createdAt: new Date()
       })
       // Don't show success banner - order is pending sync
+      // 清空购物车让用户可以开始新的订单
+      clearCart()
       setIsCheckingOut(false)
       setShowPaymentModal(false)
     }

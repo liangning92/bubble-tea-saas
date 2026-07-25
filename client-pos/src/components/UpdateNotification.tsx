@@ -33,7 +33,7 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
       if (newStatus === 'available' || newStatus === 'downloaded' || newStatus === 'error') {
         setIsVisible(true)
       }
-      if (newStatus === 'not-available') {
+      if (newStatus === 'up-to-date') {
         // Auto-hide after 3 seconds when no update available
         setTimeout(() => setIsVisible(false), 3000)
       }
@@ -46,6 +46,7 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
 
     // Listen for errors
     electronAPI.onUpdateError((err: string) => {
+      setStatus('error')
       setError(err)
       setIsVisible(true)
     })
@@ -61,14 +62,11 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
 
     setStatus('checking')
     setError(null)
+    // Don't check return value - status updates come via onUpdateStatus events
+    // The checkForUpdates() returns { current, latest } but does NOT have updateAvailable
     try {
-      const result = await electronAPI.checkForUpdates()
-      if (!result?.updateAvailable) {
-        setStatus('up-to-date')
-        setIsVisible(true)
-        // Auto-hide after 3 seconds when no update available
-        setTimeout(() => setIsVisible(false), 3000)
-      }
+      await electronAPI.checkForUpdates()
+      // Status will be updated via onUpdateStatus event listener
     } catch (err: any) {
       setError(err.message || 'Check failed')
       setStatus('error')
@@ -121,7 +119,10 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
         onClick={handleCheckUpdate}
         className={`flex items-center gap-1 text-gray-500 hover:text-gray-700 text-xs ${className}`}
       >
-        <RefreshCw size={14} className={status === 'checking' ? 'animate-spin' : ''} />
+        {status === 'checking' && <RefreshCw size={14} className="animate-spin" />}
+        {status === 'up-to-date' && <Check size={14} className="text-green-500" />}
+        {status === 'error' && <AlertCircle size={14} className="text-red-500" />}
+        {status === 'available' && <Download size={14} className="text-blue-500" />}
       </button>
     )
   }
