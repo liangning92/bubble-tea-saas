@@ -701,6 +701,8 @@ export function POSSettingsPage() {
 
   // ========== LOAD SAVED CONFIG ==========
   useEffect(() => {
+    console.log('[Admin] posConfig:', posConfig)
+    console.log('[Admin] posConfig?.data:', posConfig?.data)
     if (posConfig?.data) {
       const configs = posConfig.data
       // Load posLayout
