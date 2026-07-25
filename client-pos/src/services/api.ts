@@ -165,6 +165,8 @@ export const posApi = {
   requestHardwareDetect: (storeId: string) =>
     api.post('/hardware/detect', { storeId }),
   getHardwareDetectStatus: () => api.get('/hardware/detect'),
+  syncPrinters: (printers: string[], storeId: string) =>
+    api.post('/hardware/printers', { printers, storeId }),
   requestTestPrint: (printerName: string, storeId: string) =>
     api.post('/hardware/test-print', { printerName, storeId }),
   requestTestDrawer: (printerName: string, storeId: string) =>

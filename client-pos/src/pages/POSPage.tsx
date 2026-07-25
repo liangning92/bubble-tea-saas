@@ -545,6 +545,31 @@ export function POSPage() {
     }
   }, [])
 
+  // 自动检测打印机并同步到服务器
+  useEffect(() => {
+    const storeId = user?.storeId
+    if (!storeId) return
+
+    const detectAndSyncPrinters = async () => {
+      // 检测 Windows 打印机列表
+      if (electronAPI?.listPrinters) {
+        try {
+          const result = await electronAPI.listPrinters()
+          if (result?.printers?.length > 0) {
+            console.log('[POS] Detected printers:', result.printers)
+            // 同步到服务器，供 Admin 使用
+            await posApi.syncPrinters(result.printers, storeId)
+            console.log('[POS] Printers synced to server')
+          }
+        } catch (err) {
+          console.warn('[POS] Failed to detect printers:', err)
+        }
+      }
+    }
+
+    detectAndSyncPrinters()
+  }, [user?.storeId])
+
   useEffect(() => {
     const storeId = user?.storeId || 'default'
     const token = useAuthStore.getState().token
@@ -2079,12 +2104,16 @@ export function POSPage() {
 
   // 打印小票
   const printReceipt = async (orderNum: string, orderData: any): Promise<boolean> => {
+    console.log('[POS PAGE] printReceipt called, electronAPI exists:', !!electronAPI?.sendPrintReceipt)
     if (!electronAPI?.sendPrintReceipt) {
+      console.log('[POS PAGE] electronAPI.sendPrintReceipt not available')
       return false
     }
     // Find enabled receipt printer
     const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
+    console.log('[POS PAGE] receiptPrinter:', receiptPrinter)
     if (!receiptPrinter) {
+      console.log('[POS PAGE] No receipt printer found')
       return false
     }
     const isNetworkPrinter = receiptPrinter.connectionType === 'network'
