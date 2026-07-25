@@ -706,12 +706,10 @@ export function POSSettingsPage() {
   useEffect(() => {
     console.log('[Admin] posConfig:', posConfig)
     console.log('[Admin] posConfig?.data:', posConfig?.data)
-    if (posConfig?.data) {
-      const configs = posConfig.data
-      // Load posLayout
-      if (configs.posLayout) {
-        setPosLayout(prev => ({ ...prev, ...configs.posLayout }))
-      }
+    // API返回格式: { code: 200, data: { configKey: configValue }, timestamp }
+    // axios将响应放在response.data中，所以posConfig.data是{code, data, timestamp}，需要posConfig.data.data获取实际配置
+    if (posConfig?.data?.data) {
+      const configs = posConfig.data.data
       // Load toolbar settings
       if (configs.toolbarSettings) {
         setToolbarSettings(prev => ({
