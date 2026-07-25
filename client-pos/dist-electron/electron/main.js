@@ -341,6 +341,12 @@ electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
  * 打印小票 - Windows原生打印 或 网络打印
  */
 electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
+    console.log('[PRINT] print-receipt called with:', JSON.stringify({
+        printerName: data?.printerName,
+        printerHost: data?.printerHost,
+        printerPort: data?.printerPort,
+        hasItems: !!data?.items?.length
+    }));
     try {
         console.log('[PRINT] Preparing to print receipt');
         // USB 打印机：优先使用 Windows 原生打印
