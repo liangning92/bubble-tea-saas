@@ -1,6 +1,19 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
+import fs from 'fs'
+import { exec as execChild } from 'child_process'
+
+// Odoo-style thermal printer support
+let ThermalPrinter: any = null
+let ElectronPrinter: any = null
+try {
+  ThermalPrinter = require('node-thermal-printer')
+  ElectronPrinter = require('electron-printer')
+  console.log('[PRINTER] node-thermal-printer and electron-printer loaded')
+} catch (e: any) {
+  console.log('[PRINTER] Thermal printer libs not available:', e?.message)
+}
 
 // 检测 WebView2 是否可用
 function checkWebView2(): boolean {
@@ -436,37 +449,50 @@ function printViaNetwork(text: string, host: string, port: number): Promise<void
 }
 
 /**
- * Windows 原生打印 - 通过 RAW 端口直接发送 ESC/POS 数据
+ * Windows 原生打印 - Odoo风格使用 node-thermal-printer + electron-printer
  */
 async function printViaWindowsRaw(data: any): Promise<void> {
-  const { exec } = require('child_process')
-  const fs = require('fs')
-  const os = require('os')
-  const path = require('path')
+  // 方法1: 使用 node-thermal-printer + electron-printer (Odoo风格)
+  if (ThermalPrinter && ElectronPrinter) {
+    return new Promise((resolve, reject) => {
+      try {
+        const Printer = ThermalPrinter.printer
+        const printerName = data.printerName || ''
+        const printer = new Printer({
+          type: ThermalPrinter.PrinterTypes.EPSON,
+          interface: 'printer:' + printerName,
+          driver: ElectronPrinter
+        })
+        const text = generateReceiptText(data)
+        printer.raw(text).then(() => resolve()).catch(reject)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
 
+  // 方法2: 使用 Windows Out-Printer (正确方式)
   return new Promise((resolve, reject) => {
-    // 生成临时文件
     const text = generateReceiptText(data)
+    const printerName = data.printerName || ''
+    const os = require('os')
+    const path = require('path')
     const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`)
 
     // 使用 latin1 编码（ESC/POS 打印机常用）
     fs.writeFileSync(tempFile, text, { encoding: 'latin1' })
+    const escapedFile = tempFile.replace(/'/g, "''")
 
-    const printerName = data.printerName || ''
-    let cmd: string
-
+    let psCommand: string
     if (printerName) {
-      // 指定打印机 - 获取其 RAW 端口并直接发送
-      const escapedFile = tempFile.replace(/'/g, "''")
       const escapedPrinter = printerName.replace(/'/g, "''")
-      cmd = `powershell -Command "try { $p = Get-Printer -Name '${escapedPrinter}' -ErrorAction Stop; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
+      psCommand = `Out-Printer -Name "${escapedPrinter}" -FilePath "${escapedFile}"`
     } else {
-      // 默认打印机 - 获取默认打印机
-      const escapedFile = tempFile.replace(/'/g, "''")
-      cmd = `powershell -Command "try { $p = Get-Printer | Where-Object { $_.Default } | Select-Object -First 1; if (-not $p) { $p = Get-Printer | Select-Object -First 1 }; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
+      psCommand = `Get-Content "${escapedFile}" | Out-Printer`
     }
 
-    exec(cmd, { timeout: 30000 }, (error: any) => {
+    execChild(`powershell -Command "${psCommand}"`, { timeout: 30000 }, (error: any) => {
+      try { fs.unlinkSync(tempFile) } catch (e) {}
       if (error) {
         reject(error)
       } else {

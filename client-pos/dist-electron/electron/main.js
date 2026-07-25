@@ -6,6 +6,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
+const fs_1 = __importDefault(require("fs"));
+const child_process_1 = require("child_process");
+// Odoo-style thermal printer support
+let ThermalPrinter = null;
+let ElectronPrinter = null;
+try {
+    ThermalPrinter = require('node-thermal-printer');
+    ElectronPrinter = require('electron-printer');
+    console.log('[PRINTER] node-thermal-printer and electron-printer loaded');
+}
+catch (e) {
+    console.log('[PRINTER] Thermal printer libs not available:', e?.message);
+}
 // 检测 WebView2 是否可用
 function checkWebView2() {
     try {
@@ -74,15 +87,13 @@ function showErrorPage(mainWindow, title, message, details) {
 </html>`;
     mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
 }
-// 禁用硬件加速 - 防止某些电脑白屏
-electron_1.app.disableHardwareAcceleration();
-// 添加 Chromium 启动参数，解决触屏/显卡问题
-electron_1.app.commandLine.appendSwitch('disable-gpu');
-electron_1.app.commandLine.appendSwitch('disable-software-rasterizer');
-electron_1.app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
-electron_1.app.commandLine.appendSwitch('no-sandbox');
-electron_1.app.commandLine.appendSwitch('disable-dev-shm-usage');
-electron_1.app.commandLine.appendSwitch('disable-gpu-compositing');
+// 保持 GPU 硬件加速，确保 DPI scaling 正常工作
+// 注意：不要调用 disableHardwareAcceleration()，会导致窗口显示问题
+// Windows DPI 设置 - 让窗口正确适配不同分辨率
+electron_1.app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2');
+// 仅在必要时使用这些参数（解决特定显卡问题）
+// app.commandLine.appendSwitch('disable-gpu')  // 已禁用 - 会导致显示问题
+// app.commandLine.appendSwitch('disable-software-rasterizer')  // 已禁用 - 会导致显示问题
 // 窗口引用
 let mainWindow = null;
 let customerWindow = null;
@@ -108,13 +119,8 @@ function getResourcePath(relativePath) {
  * 创建主窗口（收银界面）
  */
 function createMainWindow() {
-    const { width, height } = electron_1.screen.getPrimaryDisplay().workAreaSize;
     mainWindow = new electron_1.BrowserWindow({
-        width: Math.floor(width * 0.6),
-        height,
-        x: 0,
-        y: 0,
-        fullscreen: false,
+        fullscreen: true, // 全屏显示
         webPreferences: {
             preload: getResourcePath('dist-electron/electron/preload.js'),
             contextIsolation: true,
@@ -336,24 +342,40 @@ electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
  */
 electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
     try {
-        const text = generateReceiptText(data);
         console.log('[PRINT] Preparing to print receipt');
-        // Windows 原生打印（使用 PowerShell，不需要网络或驱动）
+        // USB 打印机：优先使用 Windows 原生打印
+        // 网络打印机：通过 RAW 端口打印
         if (process.platform === 'win32') {
             try {
-                await printViaWindows(text, data.printerName);
-                console.log('[PRINT] Windows native print successful');
+                await printViaWindowsRaw(data);
+                console.log('[PRINT] Windows print successful');
                 return { success: true };
             }
             catch (winError) {
-                console.log('[PRINT] Windows native print failed:', winError.message);
+                console.log('[PRINT] Windows print failed:', winError.message);
+                // Windows 打印失败后尝试网络打印（如果是网络打印机）
+                const printerHost = data.printerHost || process.env.PRINTER_HOST;
+                if (printerHost) {
+                    try {
+                        const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
+                        const text = generateReceiptText(data);
+                        await printViaNetwork(text, printerHost, printerPort);
+                        console.log('[PRINT] Network print successful');
+                        return { success: true };
+                    }
+                    catch (netError) {
+                        console.log('[PRINT] Network print also failed:', netError.message);
+                        return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` };
+                    }
+                }
                 return { success: false, error: winError.message };
             }
         }
-        // 网络打印作为备选
+        // 非 Windows 平台：尝试网络打印
         const printerHost = data.printerHost || process.env.PRINTER_HOST || '192.168.1.100';
         const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
-        printViaNetwork(text, printerHost, printerPort);
+        const text = generateReceiptText(data);
+        await printViaNetwork(text, printerHost, printerPort);
         return { success: true };
     }
     catch (error) {
@@ -362,80 +384,130 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
     }
 });
 /**
- * Windows 原生打印（使用 PowerShell Out-Printer）
- * 不需要网络，不需要驱动，只需要打印机在 Windows 中已添加
+ * 网络打印 - 直接发送 ESC/POS 命令到打印机
  */
-async function printViaWindows(text, printerName) {
-    const { exec } = require('child_process');
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
+function printViaNetwork(text, host, port) {
+    const net = require('net');
     return new Promise((resolve, reject) => {
-        const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`);
-        // 使用 latin1 编码（ESC/POS 打印机常用）
-        fs.writeFileSync(tempFile, text, { encoding: 'latin1' });
-        let psCommand;
-        if (printerName) {
-            // 发送到指定打印机
-            psCommand = `Out-Printer -Name "${printerName}" -FilePath "${tempFile}"`;
-        }
-        else {
-            // 使用默认打印机
-            psCommand = `Get-Content "${tempFile}" | Out-Printer`;
-        }
-        exec(`powershell -Command "${psCommand}"`, (error) => {
-            try {
-                fs.unlinkSync(tempFile);
-            }
-            catch (e) {
-                // 忽略删除错误
-            }
-            if (error) {
-                reject(error);
-                return;
-            }
-            resolve();
+        const client = new net.Socket();
+        const timeout = setTimeout(() => {
+            client.destroy();
+            reject(new Error('Network print timeout'));
+        }, 10000); // 10秒超时
+        client.connect(port, host, () => {
+            clearTimeout(timeout);
+            // 发送 latin1 编码的原始 ESC/POS 数据
+            const buffer = Buffer.from(text, 'latin1');
+            client.write(buffer, 'latin1', (err) => {
+                if (err) {
+                    client.end();
+                    reject(err);
+                }
+                else {
+                    client.end();
+                    console.log('[PRINT] Data sent to', host + ':' + port);
+                    resolve();
+                }
+            });
+        });
+        client.on('error', (err) => {
+            clearTimeout(timeout);
+            console.error('[PRINT] Network error:', err.message);
+            reject(err);
         });
     });
 }
 /**
- * 网络打印
+ * Windows 原生打印 - Odoo风格使用 node-thermal-printer + electron-printer
  */
-function printViaNetwork(text, host, port) {
-    const net = require('net');
-    const client = new net.Socket();
-    client.connect(port, host, () => {
-        client.write(Buffer.from(text, 'latin1'));
-        client.end();
-        console.log('[PRINT] Network print sent to', host + ':' + port);
-    });
-    client.on('error', (err) => {
-        console.error('[PRINT ERROR]', err.message);
+async function printViaWindowsRaw(data) {
+    // 方法1: 使用 node-thermal-printer + electron-printer (Odoo风格)
+    if (ThermalPrinter && ElectronPrinter) {
+        return new Promise((resolve, reject) => {
+            try {
+                const Printer = ThermalPrinter.printer;
+                const printerName = data.printerName || '';
+                const printer = new Printer({
+                    type: ThermalPrinter.PrinterTypes.EPSON,
+                    interface: 'printer:' + printerName,
+                    driver: ElectronPrinter
+                });
+                const text = generateReceiptText(data);
+                printer.raw(text).then(() => resolve()).catch(reject);
+            }
+            catch (err) {
+                reject(err);
+            }
+        });
+    }
+    // 方法2: 使用 Windows Out-Printer (正确方式)
+    return new Promise((resolve, reject) => {
+        const text = generateReceiptText(data);
+        const printerName = data.printerName || '';
+        const os = require('os');
+        const path = require('path');
+        const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`);
+        // 使用 latin1 编码（ESC/POS 打印机常用）
+        fs_1.default.writeFileSync(tempFile, text, { encoding: 'latin1' });
+        const escapedFile = tempFile.replace(/'/g, "''");
+        let psCommand;
+        if (printerName) {
+            const escapedPrinter = printerName.replace(/'/g, "''");
+            psCommand = `Out-Printer -Name "${escapedPrinter}" -FilePath "${escapedFile}"`;
+        }
+        else {
+            psCommand = `Get-Content "${escapedFile}" | Out-Printer`;
+        }
+        (0, child_process_1.exec)(`powershell -Command "${psCommand}"`, { timeout: 30000 }, (error) => {
+            try {
+                fs_1.default.unlinkSync(tempFile);
+            }
+            catch (e) { }
+            if (error) {
+                reject(error);
+            }
+            else {
+                resolve();
+            }
+        });
     });
 }
 /**
- * 打开钱箱 - Windows原生 或 网络
- * 钱箱通常连接到打印机，命令发送到打印机
+ * 打开钱箱 - USB打印机优先Windows原生，网络打印机用网络
  */
 electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
     try {
         console.log('[CASH DRAWER] Opening drawer');
-        // Windows 原生打印钱箱命令
+        // USB 打印机：使用 Windows 原生方式
         if (process.platform === 'win32') {
             try {
                 await openCashDrawerViaWindows(data.printerName);
-                console.log('[CASH DRAWER] Windows native drawer opened');
+                console.log('[CASH DRAWER] Windows drawer successful');
                 return { success: true };
             }
             catch (winError) {
-                console.log('[CASH DRAWER] Windows native failed:', winError.message);
+                console.log('[CASH DRAWER] Windows drawer failed:', winError.message);
+                // Windows 失败后尝试网络（如果是网络打印机）
+                const printerHost = data?.printerHost || process.env.PRINTER_HOST;
+                if (printerHost) {
+                    try {
+                        const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
+                        await openCashDrawerViaNetwork(printerHost, printerPort);
+                        console.log('[CASH DRAWER] Network drawer successful');
+                        return { success: true };
+                    }
+                    catch (netError) {
+                        console.log('[CASH DRAWER] Network also failed:', netError.message);
+                        return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` };
+                    }
+                }
                 return { success: false, error: winError.message };
             }
         }
-        // 网络作为备选
+        // 非 Windows：尝试网络钱箱
         const printerHost = data?.printerHost || process.env.PRINTER_HOST || '192.168.1.100';
         const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
-        openCashDrawerViaNetwork(printerHost, printerPort);
+        await openCashDrawerViaNetwork(printerHost, printerPort);
         return { success: true };
     }
     catch (error) {
@@ -444,35 +516,41 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
     }
 });
 /**
- * Windows 原生打开钱箱
+ * Windows 原生打开钱箱 - 通过 RAW 端口发送钱箱命令
  */
 async function openCashDrawerViaWindows(printerName) {
     const { exec } = require('child_process');
     const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    // ESC/POS 钱箱弹出命令: ESC p m t1 t2
+    // 标准: 0x1B 0x70 0x00 0x32 0x32 (50ms脉冲)
+    const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]);
+    const tempFile = path.join(os.tmpdir(), `drawer_${Date.now()}.bin`);
+    fs.writeFileSync(tempFile, cashDrawerCmd);
+    const escapedFile = tempFile.replace(/'/g, "''");
+    let cmd;
+    if (printerName) {
+        // 指定了打印机名称 - 使用该打印机
+        const escapedPrinter = printerName.replace(/'/g, "''");
+        cmd = `powershell -Command "try { $p = Get-Printer -Name '${escapedPrinter}' -ErrorAction Stop; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`;
+    }
+    else {
+        // 没有指定打印机 - 获取默认打印机
+        cmd = `powershell -Command "try { $p = Get-Printer | Where-Object { $_.Default } | Select-Object -First 1; if (-not $p) { $p = Get-Printer | Select-Object -First 1 }; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`;
+    }
     return new Promise((resolve, reject) => {
-        // ESC/POS 钱箱弹出命令: ESC p 0 50 50
-        // m=0(钱箱1), t1=50(100ms脉冲), t2=50(100ms间隔)
-        const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]);
-        const tempFile = path_1.default.join(os.tmpdir(), `drawer_${Date.now()}.bin`);
-        require('fs').writeFileSync(tempFile, cashDrawerCmd);
-        // 使用默认打印机或指定打印机
-        let psCommand;
-        if (printerName) {
-            psCommand = `Out-Printer -Name "${printerName}" -FilePath "${tempFile}"`;
-        }
-        else {
-            psCommand = `Get-Content "${tempFile}" | Out-Printer`;
-        }
-        exec(`powershell -Command "${psCommand}"`, (error) => {
+        exec(cmd, { timeout: 10000 }, (error) => {
             try {
-                require('fs').unlinkSync(tempFile);
+                fs.unlinkSync(tempFile);
             }
             catch (e) { }
             if (error) {
                 reject(error);
-                return;
             }
-            resolve();
+            else {
+                resolve();
+            }
         });
     });
 }
@@ -483,14 +561,24 @@ function openCashDrawerViaNetwork(host, port) {
     const net = require('net');
     // ESC/POS 钱箱命令
     const cashDrawerCommand = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]);
-    const client = new net.Socket();
-    client.connect(port, host, () => {
-        client.write(cashDrawerCommand);
-        client.end();
-        console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port);
-    });
-    client.on('error', (err) => {
-        console.error('[CASH DRAWER ERROR]', err.message);
+    return new Promise((resolve, reject) => {
+        const client = new net.Socket();
+        const timeout = setTimeout(() => {
+            client.destroy();
+            reject(new Error('Cash drawer network timeout'));
+        }, 5000);
+        client.connect(port, host, () => {
+            clearTimeout(timeout);
+            client.write(cashDrawerCommand);
+            client.end();
+            console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port);
+            resolve();
+        });
+        client.on('error', (err) => {
+            clearTimeout(timeout);
+            console.error('[CASH DRAWER ERROR]', err.message);
+            reject(err);
+        });
     });
 }
 /**

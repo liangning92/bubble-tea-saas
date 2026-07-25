@@ -84,16 +84,14 @@ function setupIpcHandlers() {
             }
             catch (error) {
                 log('warn', 'Check for updates failed:', error.message);
-                // Still send current status even if check fails
-                sendToRenderer('update-status', 'up-to-date', { version: currentVersion });
+                // Don't send 'up-to-date' here - the 'error' event already sends update-error
+                // Sending 'up-to-date' would override the error status in the UI
             }
             return { current: currentVersion, latest: currentVersion };
         }
         catch (error) {
             log('error', 'Check failed:', error.message);
-            sendToRenderer('update-status', 'up-to-date', {
-                version: electron_1.app.getVersion()
-            });
+            // Don't send 'up-to-date' - let the error event handle it
             return null;
         }
     });
@@ -133,9 +131,18 @@ function checkForUpdatesOnStart() {
     log('info', 'Checking for updates on startup...');
     // Delay initial check by 5 seconds to let app fully start
     setTimeout(() => {
-        sendToRenderer('update-status', 'checking');
-        autoUpdater.checkForUpdates().catch((err) => {
+        // 不要在这里发送 'checking' 状态 - autoUpdater.checkForUpdates() 内部会发送
+        // 添加超时处理 - 如果 30 秒后还没返回，认为检查失败
+        const timeout = setTimeout(() => {
+            log('warn', 'Check for updates timeout');
+            sendToRenderer('update-error', 'Check timeout - please try again');
+        }, 30000);
+        autoUpdater.checkForUpdates()
+            .catch((err) => {
             log('warn', 'Initial check failed:', err.message);
+        })
+            .finally(() => {
+            clearTimeout(timeout);
         });
     }, 5000);
 }

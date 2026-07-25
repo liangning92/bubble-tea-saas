@@ -2087,15 +2087,20 @@ export function POSPage() {
     if (!receiptPrinter) {
       return false
     }
-    const printerName = receiptPrinter.connectionType === 'network'
+    const isNetworkPrinter = receiptPrinter.connectionType === 'network'
+    const printerName = isNetworkPrinter
       ? undefined
       : receiptPrinter.printerName || undefined
+    const printerHost = isNetworkPrinter ? receiptPrinter.printerIp : undefined
+    const printerPort = isNetworkPrinter ? (receiptPrinter.printerPort || 9100) : undefined
     try {
       const result = await electronAPI?.sendPrintReceipt({
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
         printerName,
+        printerHost,
+        printerPort,
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,
@@ -2160,11 +2165,14 @@ export function POSPage() {
     if (!electronAPI?.sendKitchenOrder) {
       return
     }
-    const printerName = kitchenPrinter.connectionType === 'network'
+    const isNetworkKitchenPrinter = kitchenPrinter.connectionType === 'network'
+    const printerName = isNetworkKitchenPrinter
       ? undefined
       : kitchenPrinter.printerName || undefined
+    const printerHost = isNetworkKitchenPrinter ? kitchenPrinter.printerIp : undefined
+    const printerPort = isNetworkKitchenPrinter ? (kitchenPrinter.printerPort || 9100) : undefined
     try {
-      electronAPI?.sendKitchenOrder?.({ orderNum, printerName, items })
+      electronAPI?.sendKitchenOrder?.({ orderNum, printerName, printerHost, printerPort, items })
     } catch (err) {
       console.warn('Kitchen print error:', err)
     }
