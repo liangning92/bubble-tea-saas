@@ -477,7 +477,7 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     })
   }
 
-  // 方法2: 使用 Windows 打印命令 - 直接调用 powershell.exe 而不是 cmd
+  // 方法2: 使用 notepad 打印（最简单可靠的方式）
   return new Promise((resolve, reject) => {
     const text = generateReceiptText(data)
     const printerName = data.printerName || ''
@@ -485,45 +485,39 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     const path = require('path')
     const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`)
 
-    // 检查文件是否写入成功
+    // 写入临时文件
     try {
-      fs.writeFileSync(tempFile, text, { encoding: 'latin1' })
-      console.log('[PRINT] Temp file written:', tempFile)
-      // 验证文件存在
-      if (!fs.existsSync(tempFile)) {
-        reject(new Error('Failed to create temp file'))
-        return
-      }
-    } catch (fileError: any) {
-      console.log('[PRINT] File write error:', fileError.message)
-      reject(fileError)
+      fs.writeFileSync(tempFile, text, { encoding: 'utf8' })
+      console.log('[PRINT] Temp file:', tempFile)
+    } catch (err: any) {
+      console.log('[PRINT] Write file error:', err.message)
+      reject(err)
       return
     }
 
-    const escapedFile = tempFile.replace(/'/g, "''")
-    console.log('[PRINT] Printer name:', printerName)
-
-    // 使用 Start-Process 执行 PowerShell 命令
-    let psCommand: string
+    // 使用 notepad /p 打印 - 这会自动使用默认打印机
+    // /p = print, /h = 横向打印
+    let cmd: string
     if (printerName) {
-      // 验证打印机是否存在
-      const checkPrinter = `if (Get-Printer -Name '${printerName.replace(/'/g, "''")}') { Write-Output 'PRINTER_EXISTS' } else { Write-Output 'PRINTER_NOT_FOUND' }`
-      psCommand = `Start-Process -FilePath powershell.exe -ArgumentList '-Command "Out-Printer -Name \\"${printerName}\\" -FilePath \\"${escapedFile}\\"" -Wait -NoNewWindow' -WindowStyle Hidden`
+      // 查找并使用指定打印机
+      cmd = `powershell -Command "try { $printer = Get-Printer -Name '${printerName.replace(/'/g, "''")} -ErrorAction Stop; if ($printer) { Start-Process -FilePath notepad.exe -ArgumentList '/p","${tempFile.replace(/\\/g, '\\\\')}" -Verb Print -WindowStyle Hidden -Wait; Remove-Item '${tempFile.replace(/'/g, "''")}' -Force } } catch { Write-Output 'Printer not found: ${printerName}' }"`
     } else {
-      psCommand = `Start-Process -FilePath powershell.exe -ArgumentList '-Command "Get-Content \\"${escapedFile}\\" | Out-Printer"' -Wait -NoNewWindow -WindowStyle Hidden`
+      // 使用默认打印机
+      cmd = `notepad /p "${tempFile}"`
     }
 
-    console.log('[PRINT] Executing:', psCommand)
+    console.log('[PRINT] Printer:', printerName || 'default')
+    console.log('[PRINT] Command:', cmd)
 
-    execChild(psCommand, { timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
+    execChild(cmd, { timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
       console.log('[PRINT] stdout:', stdout)
       console.log('[PRINT] stderr:', stderr)
       try { fs.unlinkSync(tempFile) } catch (e) {}
       if (error) {
-        console.log('[PRINT] Exec error:', error.message)
+        console.log('[PRINT] Error:', error.message)
         reject(error)
       } else {
-        console.log('[PRINT] Print command completed')
+        console.log('[PRINT] Done')
         resolve()
       }
     })
