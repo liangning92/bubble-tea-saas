@@ -62,14 +62,21 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
 
     setStatus('checking')
     setError(null)
-    // Don't check return value - status updates come via onUpdateStatus events
-    // The checkForUpdates() returns { current, latest } but does NOT have updateAvailable
+
+    // 添加超时处理 - 如果 30 秒后还没返回，认为检查失败
+    const timeout = setTimeout(() => {
+      setError('Check timeout - please try again')
+      setStatus('error')
+    }, 30000)
+
     try {
       await electronAPI.checkForUpdates()
       // Status will be updated via onUpdateStatus event listener
     } catch (err: any) {
       setError(err.message || 'Check failed')
       setStatus('error')
+    } finally {
+      clearTimeout(timeout)
     }
   }
 

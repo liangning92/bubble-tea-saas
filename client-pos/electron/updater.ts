@@ -147,10 +147,20 @@ export function checkForUpdatesOnStart() {
 
   // Delay initial check by 5 seconds to let app fully start
   setTimeout(() => {
-    sendToRenderer('update-status', 'checking')
-    autoUpdater.checkForUpdates().catch((err: any) => {
-      log('warn', 'Initial check failed:', err.message)
-    })
+    // 不要在这里发送 'checking' 状态 - autoUpdater.checkForUpdates() 内部会发送
+    // 添加超时处理 - 如果 30 秒后还没返回，认为检查失败
+    const timeout = setTimeout(() => {
+      log('warn', 'Check for updates timeout')
+      sendToRenderer('update-error', 'Check timeout - please try again')
+    }, 30000)
+
+    autoUpdater.checkForUpdates()
+      .catch((err: any) => {
+        log('warn', 'Initial check failed:', err.message)
+      })
+      .finally(() => {
+        clearTimeout(timeout)
+      })
   }, 5000)
 }
 
