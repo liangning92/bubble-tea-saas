@@ -701,11 +701,8 @@ export function POSSettingsPage() {
 
   // ========== LOAD SAVED CONFIG ==========
   useEffect(() => {
-    console.log('[Admin] posConfig loaded:', posConfig?.data)
-    console.log('[Admin] user.storeId:', user?.storeId)
     if (posConfig?.data) {
       const configs = posConfig.data
-      console.log('[Admin] configs.hardwareSettings:', configs.hardwareSettings)
       // Load posLayout
       if (configs.posLayout) {
         setPosLayout(prev => ({ ...prev, ...configs.posLayout }))
@@ -771,8 +768,6 @@ export function POSSettingsPage() {
   const saveConfigMutation = useMutation({
     mutationFn: (data: { key: string; value: any }) => {
       const currentStoreId = user?.storeId || ''
-      console.log('[Admin] Saving config:', { storeId: currentStoreId, key: data.key })
-      console.log('[Admin] Saving value:', JSON.stringify(data.value).substring(0, 200))
       return configApi.set(currentStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
@@ -787,7 +782,6 @@ export function POSSettingsPage() {
   })
 
   const handleSave = (key: string, value: any) => {
-    console.log('[Admin] handleSave called:', { key, value, storeId: user?.storeId })
     saveConfigMutation.mutate({ key, value })
   }
 
@@ -1913,7 +1907,6 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
     const printers = [...(hardwareSettings.printers || [])]
     printers[index] = updated
     const newSettings = { ...hardwareSettings, printers }
-    console.log('[HardwareTab] updatePrinter:', newSettings)
     setHardwareSettings(newSettings)
     handleSave('hardwareSettings', newSettings)
   }
