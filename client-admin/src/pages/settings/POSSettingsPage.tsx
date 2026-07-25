@@ -384,15 +384,13 @@ export function POSSettingsPage() {
   const [activeSubTab, setActiveSubTab] = useState<POSSubTab>('layout')
   const [showSuccess, setShowSuccess] = useState(false)
 
-  // DEBUG: Check storeId immediately
-  console.log('[DEBUG] POSSettingsPage render, user:', JSON.stringify(user))
-  console.log('[DEBUG] user?.storeId:', user?.storeId)
-  alert('POSSettingsPage user.storeId: ' + user?.storeId)
-
   // ========== DATA LOADING ==========
+  // 确保 queryKey 和实际请求的 storeId 一致
+  const queryStoreId = user?.storeId || ''
   const { data: posConfig, isLoading } = useQuery({
-    queryKey: ['config', user?.storeId || 'default'],
-    queryFn: () => configApi.get(user?.storeId || undefined)
+    queryKey: ['config', queryStoreId],
+    queryFn: () => configApi.get(queryStoreId || undefined),
+    enabled: !!user?.storeId  // 只有 storeId 存在时才查询
   })
 
   // ========== STATE WITH DEFAULT VALUES ==========
@@ -778,7 +776,7 @@ export function POSSettingsPage() {
       return configApi.set(currentStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId] })
+      queryClient.invalidateQueries({ queryKey: ['config', queryStoreId] })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
     },
