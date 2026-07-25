@@ -775,6 +775,7 @@ export function POSSettingsPage() {
   })
 
   const handleSave = (key: string, value: any) => {
+    console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
     saveConfigMutation.mutate({ key, value })
   }
 
