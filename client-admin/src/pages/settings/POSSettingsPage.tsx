@@ -763,16 +763,23 @@ export function POSSettingsPage() {
 
   // ========== SAVE MUTATION ==========
   const saveConfigMutation = useMutation({
-    mutationFn: (data: { key: string; value: any }) =>
-      configApi.set(user?.storeId || '', data.key, data.value, 'pos'),
+    mutationFn: (data: { key: string; value: any }) => {
+      console.log('[Admin] Saving config:', { storeId: user?.storeId, key: data.key, value: data.value })
+      return configApi.set(user?.storeId || '', data.key, data.value, 'pos')
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['config'] })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
+    },
+    onError: (error: any) => {
+      console.error('Save config error:', error)
+      alert('保存失败: ' + (error?.message || '未知错误'))
     }
   })
 
   const handleSave = (key: string, value: any) => {
+    console.log('[Admin] handleSave called:', { key, value, storeId: user?.storeId })
     saveConfigMutation.mutate({ key, value })
   }
 
@@ -1898,6 +1905,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
     const printers = [...(hardwareSettings.printers || [])]
     printers[index] = updated
     const newSettings = { ...hardwareSettings, printers }
+    console.log('[HardwareTab] updatePrinter:', newSettings)
     setHardwareSettings(newSettings)
     handleSave('hardwareSettings', newSettings)
   }

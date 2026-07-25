@@ -446,7 +446,7 @@ async function printViaWindowsRaw(data) {
             }
         });
     }
-    // 方法2: 使用 Windows Out-Printer (正确方式)
+    // 方法2: 使用 Windows Out-Printer
     return new Promise((resolve, reject) => {
         const text = generateReceiptText(data);
         const printerName = data.printerName || '';
@@ -456,23 +456,30 @@ async function printViaWindowsRaw(data) {
         // 使用 latin1 编码（ESC/POS 打印机常用）
         fs_1.default.writeFileSync(tempFile, text, { encoding: 'latin1' });
         const escapedFile = tempFile.replace(/'/g, "''");
+        console.log('[PRINT] Printer name:', printerName);
+        console.log('[PRINT] Temp file:', tempFile);
         let psCommand;
         if (printerName) {
             const escapedPrinter = printerName.replace(/'/g, "''");
             psCommand = `Out-Printer -Name "${escapedPrinter}" -FilePath "${escapedFile}"`;
+            console.log('[PRINT] Using named printer command');
         }
         else {
             psCommand = `Get-Content "${escapedFile}" | Out-Printer`;
+            console.log('[PRINT] Using default printer command');
         }
+        console.log('[PRINT] PowerShell command:', psCommand);
         (0, child_process_1.exec)(`powershell -Command "${psCommand}"`, { timeout: 30000 }, (error) => {
             try {
                 fs_1.default.unlinkSync(tempFile);
             }
             catch (e) { }
             if (error) {
+                console.log('[PRINT] PowerShell error:', error.message);
                 reject(error);
             }
             else {
+                console.log('[PRINT] Print command completed successfully');
                 resolve();
             }
         });

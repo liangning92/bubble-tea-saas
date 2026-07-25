@@ -762,10 +762,12 @@ export function POSPage() {
     // Guard: only load when storeId is available (not during initial loading with 'default')
     if (!user?.storeId) return
     const storeId = user.storeId
+    console.log('[POS] Loading config for storeId:', storeId)
     // Use configured API URL for cloud sync
     posApi.getConfigs(storeId)
       .then(res => {
         const configs = res.data?.data || {}
+        console.log('[POS] Loaded configs:', Object.keys(configs))
 
         // 店铺信息 - Admin保存为storeInfo对象
         const storeInfoData = configs.storeInfo || {}
@@ -867,6 +869,7 @@ export function POSPage() {
 
         // 硬件设置（打印机、钱箱）- Admin保存完整结构，合并默认值
         if (configs.hardwareSettings) {
+          console.log('[POS] hardwareSettings from server:', configs.hardwareSettings)
           const hw = configs.hardwareSettings
           const newDualScreen: DualScreenConfig = hw.dualScreen ? {
             enabled: hw.dualScreen.enabled ?? false,
