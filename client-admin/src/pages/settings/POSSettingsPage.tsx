@@ -751,15 +751,8 @@ export function POSSettingsPage() {
       // Load hardware settings
       if (configs.hardwareSettings) {
         const migrated = migratePrinterConfig(configs.hardwareSettings)
-        setHardwareSettings(prev => ({
-          ...prev,
-          ...migrated,
-          // Deep merge dualScreen object
-          dualScreen: {
-            ...prev.dualScreen,
-            ...(migrated.dualScreen || {}),
-          }
-        }))
+        // 直接使用加载的配置，不要合并旧值
+        setHardwareSettings(migrated)
       }
     }
   }, [posConfig])
