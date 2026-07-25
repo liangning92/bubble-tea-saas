@@ -1897,15 +1897,17 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
   const updatePrinter = (index: number, updated: any) => {
     const printers = [...(hardwareSettings.printers || [])]
     printers[index] = updated
-    setHardwareSettings({ ...hardwareSettings, printers })
-    handleSave('hardwareSettings', { ...hardwareSettings, printers })
+    const newSettings = { ...hardwareSettings, printers }
+    setHardwareSettings(newSettings)
+    handleSave('hardwareSettings', newSettings)
   }
 
   const togglePrinter = (index: number) => {
     const printers = [...(hardwareSettings.printers || [])]
     printers[index] = { ...printers[index], enabled: !printers[index].enabled }
-    setHardwareSettings({ ...hardwareSettings, printers })
-    handleSave('hardwareSettings', { ...hardwareSettings, printers })
+    const newSettings = { ...hardwareSettings, printers }
+    setHardwareSettings(newSettings)
+    handleSave('hardwareSettings', newSettings)
   }
 
   const enabledPrinters = (hardwareSettings.printers || []).filter((p: any) => p.enabled)
