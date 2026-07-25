@@ -477,7 +477,7 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     })
   }
 
-  // 方法2: 使用 Windows Out-Printer
+  // 方法2: 使用 Windows 打印命令 - 直接调用 powershell.exe 而不是 cmd
   return new Promise((resolve, reject) => {
     const text = generateReceiptText(data)
     const printerName = data.printerName || ''
@@ -485,32 +485,45 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     const path = require('path')
     const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`)
 
-    // 使用 latin1 编码（ESC/POS 打印机常用）
-    fs.writeFileSync(tempFile, text, { encoding: 'latin1' })
-    const escapedFile = tempFile.replace(/'/g, "''")
-
-    console.log('[PRINT] Printer name:', printerName)
-    console.log('[PRINT] Temp file:', tempFile)
-
-    let psCommand: string
-    if (printerName) {
-      const escapedPrinter = printerName.replace(/'/g, "''")
-      psCommand = `Out-Printer -Name "${escapedPrinter}" -FilePath "${escapedFile}"`
-      console.log('[PRINT] Using named printer command')
-    } else {
-      psCommand = `Get-Content "${escapedFile}" | Out-Printer`
-      console.log('[PRINT] Using default printer command')
+    // 检查文件是否写入成功
+    try {
+      fs.writeFileSync(tempFile, text, { encoding: 'latin1' })
+      console.log('[PRINT] Temp file written:', tempFile)
+      // 验证文件存在
+      if (!fs.existsSync(tempFile)) {
+        reject(new Error('Failed to create temp file'))
+        return
+      }
+    } catch (fileError: any) {
+      console.log('[PRINT] File write error:', fileError.message)
+      reject(fileError)
+      return
     }
 
-    console.log('[PRINT] PowerShell command:', psCommand)
+    const escapedFile = tempFile.replace(/'/g, "''")
+    console.log('[PRINT] Printer name:', printerName)
 
-    execChild(`powershell -Command "${psCommand}"`, { timeout: 30000 }, (error: any) => {
+    // 使用 Start-Process 执行 PowerShell 命令
+    let psCommand: string
+    if (printerName) {
+      // 验证打印机是否存在
+      const checkPrinter = `if (Get-Printer -Name '${printerName.replace(/'/g, "''")}') { Write-Output 'PRINTER_EXISTS' } else { Write-Output 'PRINTER_NOT_FOUND' }`
+      psCommand = `Start-Process -FilePath powershell.exe -ArgumentList '-Command "Out-Printer -Name \\"${printerName}\\" -FilePath \\"${escapedFile}\\"" -Wait -NoNewWindow' -WindowStyle Hidden`
+    } else {
+      psCommand = `Start-Process -FilePath powershell.exe -ArgumentList '-Command "Get-Content \\"${escapedFile}\\" | Out-Printer"' -Wait -NoNewWindow -WindowStyle Hidden`
+    }
+
+    console.log('[PRINT] Executing:', psCommand)
+
+    execChild(psCommand, { timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
+      console.log('[PRINT] stdout:', stdout)
+      console.log('[PRINT] stderr:', stderr)
       try { fs.unlinkSync(tempFile) } catch (e) {}
       if (error) {
-        console.log('[PRINT] PowerShell error:', error.message)
+        console.log('[PRINT] Exec error:', error.message)
         reject(error)
       } else {
-        console.log('[PRINT] Print command completed successfully')
+        console.log('[PRINT] Print command completed')
         resolve()
       }
     })
