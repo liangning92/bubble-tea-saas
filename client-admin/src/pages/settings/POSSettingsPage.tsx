@@ -384,6 +384,11 @@ export function POSSettingsPage() {
   const [activeSubTab, setActiveSubTab] = useState<POSSubTab>('layout')
   const [showSuccess, setShowSuccess] = useState(false)
 
+  // DEBUG: Check storeId immediately
+  console.log('[DEBUG] POSSettingsPage render, user:', JSON.stringify(user))
+  console.log('[DEBUG] user?.storeId:', user?.storeId)
+  alert('POSSettingsPage user.storeId: ' + user?.storeId)
+
   // ========== DATA LOADING ==========
   const { data: posConfig, isLoading } = useQuery({
     queryKey: ['config', user?.storeId || 'default'],
