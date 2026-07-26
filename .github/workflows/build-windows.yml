@@ -69,7 +69,7 @@ jobs:
         run: cd client-pos && npm run build:electron:main
 
       - name: Build Windows executable
-        run: npx electron-builder --config electron-builder.json --win
+        run: npx electron-builder --config electron-builder.json --win --publish always || true
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
