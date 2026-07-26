@@ -54,6 +54,7 @@ jobs:
           git add package.json
           git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
           git tag "v${{ steps.version.outputs.VERSION }}"
+          git push origin master --tags
 
       - name: Install dependencies
         run: |
