@@ -455,29 +455,10 @@ function printViaNetwork(text: string, host: string, port: number): Promise<void
 }
 
 /**
- * Windows 原生打印 - Odoo风格使用 node-thermal-printer + electron-printer
+ * Windows 原生打印 - 使用 Windows print 命令
  */
 async function printViaWindowsRaw(data: any): Promise<void> {
-  // 方法1: 使用 node-thermal-printer + electron-printer (Odoo风格)
-  if (ThermalPrinter && ElectronPrinter) {
-    return new Promise((resolve, reject) => {
-      try {
-        const Printer = ThermalPrinter.printer
-        const printerName = data.printerName || ''
-        const printer = new Printer({
-          type: ThermalPrinter.PrinterTypes.EPSON,
-          interface: 'printer:' + printerName,
-          driver: ElectronPrinter
-        })
-        const text = generateReceiptText(data)
-        printer.raw(text).then(() => resolve()).catch(reject)
-      } catch (err) {
-        reject(err)
-      }
-    })
-  }
-
-  // 方法2: 使用 notepad 打印（最简单可靠的方式）
+  // 直接使用 Windows print 命令
   return new Promise((resolve, reject) => {
     const text = generateReceiptText(data)
     const printerName = data.printerName || ''
@@ -495,15 +476,13 @@ async function printViaWindowsRaw(data: any): Promise<void> {
       return
     }
 
-    // 使用 notepad /p 打印 - 这会自动使用默认打印机
-    // /p = print, /h = 横向打印
+    // 使用 print /D:printerName 直接打印到指定打印机
     let cmd: string
     if (printerName) {
-      // 查找并使用指定打印机
-      cmd = `powershell -Command "try { $printer = Get-Printer -Name '${printerName.replace(/'/g, "''")} -ErrorAction Stop; if ($printer) { Start-Process -FilePath notepad.exe -ArgumentList '/p","${tempFile.replace(/\\/g, '\\\\')}" -Verb Print -WindowStyle Hidden -Wait; Remove-Item '${tempFile.replace(/'/g, "''")}' -Force } } catch { Write-Output 'Printer not found: ${printerName}' }"`
+      cmd = `print /D:"${printerName}" "${tempFile}"`
     } else {
       // 使用默认打印机
-      cmd = `notepad /p "${tempFile}"`
+      cmd = `print "${tempFile}"`
     }
 
     console.log('[PRINT] Printer:', printerName || 'default')

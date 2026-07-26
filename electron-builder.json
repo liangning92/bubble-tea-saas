@@ -19,6 +19,7 @@
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
+    "client-pos/dist-electron/**/*",
     "dist-electron/**/*",
     "shared/**/*",
     "!**/node_modules/**/printer/**/*",
@@ -26,7 +27,7 @@
     "!**/node_modules/.cache/**/*"
   ],
   "extraMetadata": {
-    "main": "dist-electron/main.js"
+    "main": "client-pos/dist-electron/electron/main.js"
   },
   "asar": true,
   "asarUnpack": [

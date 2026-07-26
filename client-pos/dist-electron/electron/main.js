@@ -424,62 +424,50 @@ function printViaNetwork(text, host, port) {
     });
 }
 /**
- * Windows 原生打印 - Odoo风格使用 node-thermal-printer + electron-printer
+ * Windows 原生打印 - 使用 Windows print 命令
  */
 async function printViaWindowsRaw(data) {
-    // 方法1: 使用 node-thermal-printer + electron-printer (Odoo风格)
-    if (ThermalPrinter && ElectronPrinter) {
-        return new Promise((resolve, reject) => {
-            try {
-                const Printer = ThermalPrinter.printer;
-                const printerName = data.printerName || '';
-                const printer = new Printer({
-                    type: ThermalPrinter.PrinterTypes.EPSON,
-                    interface: 'printer:' + printerName,
-                    driver: ElectronPrinter
-                });
-                const text = generateReceiptText(data);
-                printer.raw(text).then(() => resolve()).catch(reject);
-            }
-            catch (err) {
-                reject(err);
-            }
-        });
-    }
-    // 方法2: 使用 Windows Out-Printer
+    // 直接使用 Windows print 命令
     return new Promise((resolve, reject) => {
         const text = generateReceiptText(data);
         const printerName = data.printerName || '';
         const os = require('os');
         const path = require('path');
         const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`);
-        // 使用 latin1 编码（ESC/POS 打印机常用）
-        fs_1.default.writeFileSync(tempFile, text, { encoding: 'latin1' });
-        const escapedFile = tempFile.replace(/'/g, "''");
-        console.log('[PRINT] Printer name:', printerName);
-        console.log('[PRINT] Temp file:', tempFile);
-        let psCommand;
+        // 写入临时文件
+        try {
+            fs_1.default.writeFileSync(tempFile, text, { encoding: 'utf8' });
+            console.log('[PRINT] Temp file:', tempFile);
+        }
+        catch (err) {
+            console.log('[PRINT] Write file error:', err.message);
+            reject(err);
+            return;
+        }
+        // 使用 print /D:printerName 直接打印到指定打印机
+        let cmd;
         if (printerName) {
-            const escapedPrinter = printerName.replace(/'/g, "''");
-            psCommand = `Out-Printer -Name "${escapedPrinter}" -FilePath "${escapedFile}"`;
-            console.log('[PRINT] Using named printer command');
+            cmd = `print /D:"${printerName}" "${tempFile}"`;
         }
         else {
-            psCommand = `Get-Content "${escapedFile}" | Out-Printer`;
-            console.log('[PRINT] Using default printer command');
+            // 使用默认打印机
+            cmd = `print "${tempFile}"`;
         }
-        console.log('[PRINT] PowerShell command:', psCommand);
-        (0, child_process_1.exec)(`powershell -Command "${psCommand}"`, { timeout: 30000 }, (error) => {
+        console.log('[PRINT] Printer:', printerName || 'default');
+        console.log('[PRINT] Command:', cmd);
+        (0, child_process_1.exec)(cmd, { timeout: 30000 }, (error, stdout, stderr) => {
+            console.log('[PRINT] stdout:', stdout);
+            console.log('[PRINT] stderr:', stderr);
             try {
                 fs_1.default.unlinkSync(tempFile);
             }
             catch (e) { }
             if (error) {
-                console.log('[PRINT] PowerShell error:', error.message);
+                console.log('[PRINT] Error:', error.message);
                 reject(error);
             }
             else {
-                console.log('[PRINT] Print command completed successfully');
+                console.log('[PRINT] Done');
                 resolve();
             }
         });
