@@ -77,7 +77,16 @@ jobs:
       - name: Compile Electron
         run: cd client-pos && npm run build:electron:main
 
-      - name: Build and Publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --config electron-builder.json --win --publish always
+      - name: Build Electron
+        run: npx electron-builder --config electron-builder.json --win
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: Bubble Tea POS v${{ steps.version.outputs.VERSION }}
+          draft: false
+          files: |
+            release/win-unpacked/**
+            release/*.exe
+          overwrite: true
