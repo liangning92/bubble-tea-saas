@@ -47,6 +47,14 @@ jobs:
           $version = "${{ steps.version.outputs.VERSION }}"
           (Get-Content package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
 
+      - name: Create git tag
+        run: |
+          git config --global user.name "CI Bot"
+          git config --global user.email "ci@bubble-tea.local"
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git tag "v${{ steps.version.outputs.VERSION }}"
+
       - name: Install dependencies
         run: |
           Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
