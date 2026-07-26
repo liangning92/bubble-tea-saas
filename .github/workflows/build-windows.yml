@@ -66,9 +66,7 @@ jobs:
         run: cd client-pos && npm run build:electron:main
 
       - name: Build Windows executable
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --config electron-builder.json --win --publish always
+        run: npx electron-builder --config electron-builder.json --win
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
