@@ -33,11 +33,14 @@ jobs:
       - name: Set version
         id: version
         run: |
-          $date = Get-Date -Format 'yyyy.MM.dd'
+          $year = Get-Date -Format 'yyyy'
+          $month = Get-Date -Format 'MM'
+          $day = Get-Date -Format 'dd'
           $runNum = $env:GITHUB_RUN_NUMBER
-          $version = "$date.$runNum"
+          # Use year.month.runNum format (3 segments for semver)
+          $version = "$year.$month.$runNum"
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-          echo "VERSION_STR=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
+          echo "VERSION_STR=$year.$month.$day.$runNum" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Update package.json version
         run: |
