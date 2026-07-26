@@ -61,13 +61,7 @@
     "socket.io": "^4.8.3",
     "xlsx": "^0.18.5"
   },
-  "build": {
-    "publish": {
-      "provider": "github",
-      "owner": "liangning92",
-      "repo": "bubble-tea-saas"
-    }
-  },
+  "build": {},
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "electron": "^33.4.0",
