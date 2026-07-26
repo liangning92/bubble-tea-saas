@@ -63,7 +63,7 @@ jobs:
         run: npm run build:pos
 
       - name: Compile Electron
-        run: npm run electron:compile
+        run: cd client-pos && npm run build:electron:main
 
       - name: Build Windows executable
         env:
