@@ -85,15 +85,12 @@ function showErrorPage(mainWindow: BrowserWindow, title: string, message: string
   mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
 }
 
-// 保持 GPU 硬件加速，确保 DPI scaling 正常工作
-// 注意：不要调用 disableHardwareAcceleration()，会导致窗口显示问题
+// 禁用硬件加速 - 防止某些电脑白屏
+// 在某些旧显卡或驱动不兼容的电脑上，开启硬件加速会导致白屏
+app.disableHardwareAcceleration()
 
 // Windows DPI 设置 - 让窗口正确适配不同分辨率
 app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2')
-
-// 仅在必要时使用这些参数（解决特定显卡问题）
-// app.commandLine.appendSwitch('disable-gpu')  // 已禁用 - 会导致显示问题
-// app.commandLine.appendSwitch('disable-software-rasterizer')  // 已禁用 - 会导致显示问题
 
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
