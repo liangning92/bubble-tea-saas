@@ -89,6 +89,14 @@ function showErrorPage(mainWindow: BrowserWindow, title: string, message: string
 // 在某些旧显卡或驱动不兼容的电脑上，开启硬件加速会导致白屏
 app.disableHardwareAcceleration()
 
+// 添加 Chromium 启动参数，解决触屏/显卡问题
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+app.commandLine.appendSwitch('disable-accelerated-2d-canvas')
+app.commandLine.appendSwitch('no-sandbox')
+app.commandLine.appendSwitch('disable-dev-shm-usage')
+app.commandLine.appendSwitch('disable-gpu-compositing')
+
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
 let customerWindow: BrowserWindow | null = null
