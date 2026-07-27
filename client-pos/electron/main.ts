@@ -89,9 +89,6 @@ function showErrorPage(mainWindow: BrowserWindow, title: string, message: string
 // 在某些旧显卡或驱动不兼容的电脑上，开启硬件加速会导致白屏
 app.disableHardwareAcceleration()
 
-// Windows DPI 设置 - 让窗口正确适配不同分辨率
-app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2')
-
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
 let customerWindow: BrowserWindow | null = null
