@@ -34,10 +34,10 @@ jobs:
         id: version
         run: |
           $year = Get-Date -Format 'yyyy'
-          $month = Get-Date -Format 'MM'
+          $month = Get-Date -Format 'M'
           $day = Get-Date -Format 'dd'
           $runNum = $env:GITHUB_RUN_NUMBER
-          # Use year.month.runNum format (3 segments for semver)
+          # Use year.month.runNum format (3 segments for semver, no leading zeros)
           $version = "$year.$month.$runNum"
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
           echo "VERSION_STR=$year.$month.$day.$runNum" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
