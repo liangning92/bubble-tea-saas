@@ -34,7 +34,7 @@ jobs:
         id: version
         run: |
           $year = Get-Date -Format 'yyyy'
-          $month = Get-Date -Format 'M'
+          $month = [int](Get-Date -Format 'MM')
           $day = Get-Date -Format 'dd'
           $runNum = $env:GITHUB_RUN_NUMBER
           # Use year.month.runNum format (3 segments for semver, no leading zeros)
