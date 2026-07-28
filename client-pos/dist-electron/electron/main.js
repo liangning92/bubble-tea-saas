@@ -87,13 +87,16 @@ function showErrorPage(mainWindow, title, message, details) {
 </html>`;
     mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
 }
-// 保持 GPU 硬件加速，确保 DPI scaling 正常工作
-// 注意：不要调用 disableHardwareAcceleration()，会导致窗口显示问题
-// Windows DPI 设置 - 让窗口正确适配不同分辨率
-electron_1.app.commandLine.appendSwitch('dpi-awareness', 'per-monitor-v2');
-// 仅在必要时使用这些参数（解决特定显卡问题）
-// app.commandLine.appendSwitch('disable-gpu')  // 已禁用 - 会导致显示问题
-// app.commandLine.appendSwitch('disable-software-rasterizer')  // 已禁用 - 会导致显示问题
+// 禁用硬件加速 - 防止某些电脑白屏
+// 在某些旧显卡或驱动不兼容的电脑上，开启硬件加速会导致白屏
+electron_1.app.disableHardwareAcceleration();
+// 添加 Chromium 启动参数，解决触屏/显卡问题
+electron_1.app.commandLine.appendSwitch('disable-gpu');
+electron_1.app.commandLine.appendSwitch('disable-software-rasterizer');
+electron_1.app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
+electron_1.app.commandLine.appendSwitch('no-sandbox');
+electron_1.app.commandLine.appendSwitch('disable-dev-shm-usage');
+electron_1.app.commandLine.appendSwitch('disable-gpu-compositing');
 // 窗口引用
 let mainWindow = null;
 let customerWindow = null;
