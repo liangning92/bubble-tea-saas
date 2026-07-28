@@ -29,7 +29,7 @@
   "extraMetadata": {
     "main": "client-pos/dist-electron/electron/main.js"
   },
-  "asar": true,
+  "asar": false,
   "asarUnpack": [
     "**/*.node",
     "server/prisma/seed.db",

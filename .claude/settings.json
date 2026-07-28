@@ -1,3 +1,11 @@
 {
-  "autoMemoryEnabled": true
+  "autoMemoryEnabled": true,
+  "permissions": {
+    "ask": [
+      "Bash(*build*)",
+      "Bash(*workflow run*)",
+      "Bash(gh workflow *)",
+      "Bash(electron-builder *)"
+    ]
+  }
 }

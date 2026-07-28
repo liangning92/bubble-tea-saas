@@ -54,8 +54,9 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "electron-updater": "^6.8.9",
+    "asar": "^3.2.0",
     "electron-printer": "^0.0.5",
+    "electron-updater": "^6.8.9",
     "node-thermal-printer": "^4.6.0",
     "pdfkit": "^0.19.1",
     "socket.io": "^4.8.3",
