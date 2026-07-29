@@ -87,6 +87,5 @@ jobs:
           name: Bubble Tea POS v${{ steps.version.outputs.VERSION }}
           draft: false
           files: |
-            release/win-unpacked/**
             release/*.exe
             release/latest.yml
