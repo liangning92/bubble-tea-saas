@@ -6,6 +6,7 @@
 
 | 日期 | Issue ID | 问题名称 | 状态 | 修复方式 |
 |------|----------|----------|------|----------|
+| 2026-07-30 | [github-action-002](github-action-002.md) | Release 上传 win-unpacked 超时/404 | ✅ 已修复 | 移除 win-unpacked，只上传 exe + latest.yml |
 | 2026-07-29 | [github-action-001](github-action-001.md) | GitHub Actions 构建失败 - overwrite参数无效 | ✅ 已修复 | 移除 action-gh-release@v1 的 overwrite 参数 |
 | 2026-07-26 | [white-screen-001](white-screen-001.md) | POS 白屏问题 | ✅ 已修复 | 禁用硬件加速 + Chromium 参数调整 |
 | 2026-07-27 | [semver-001](semver-001.md) | 版本号格式不规范 | ✅ 已修复 | 使用3段式 semver，移除月份前导零 |
@@ -17,10 +18,10 @@
 
 | 状态 | 数量 |
 |------|------|
-| 已修复 | 4 |
+| 已修复 | 5 |
 | 进行中 | 0 |
 | 待处理 | 0 |
-| **总计** | **4** |
+| **总计** | **5** |
 
 ---
 
@@ -42,7 +43,7 @@ docs/issues/
 
 | 类别 | 数量 | Issue IDs |
 |------|------|-----------|
-| github-action | 1 | github-action-001 |
+| github-action | 2 | github-action-001, github-action-002 |
 | white-screen | 1 | white-screen-001 |
 | semver | 1 | semver-001 |
 | electron | 1 | electron-publish-001 |
