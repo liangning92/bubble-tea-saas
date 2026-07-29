@@ -109,8 +109,9 @@ const isDev = process.env.NODE_ENV !== 'production' && !electron_1.app.isPackage
 function getResourcePath(relativePath) {
     if (electron_1.app.isPackaged) {
         // 打包后：app.getAppPath() 返回包含 resources/app 的目录
-        // 结构: resources/app/dist/index.html
-        return path_1.default.join(electron_1.app.getAppPath(), relativePath);
+        // 结构: resources/app/client-pos/dist/index.html
+        // electron-builder.json 的 files 配置把 client-pos/ 目录内容打包进去
+        return path_1.default.join(electron_1.app.getAppPath(), 'client-pos', relativePath);
     }
     else {
         // 开发模式：使用 __dirname
@@ -122,8 +123,14 @@ function getResourcePath(relativePath) {
  * 创建主窗口（收银界面）
  */
 function createMainWindow() {
+    const { width, height } = electron_1.screen.getPrimaryDisplay().workAreaSize;
     mainWindow = new electron_1.BrowserWindow({
-        fullscreen: true, // 全屏显示
+        width: Math.floor(width * 0.6),
+        height,
+        x: 0,
+        y: 0,
+        fullscreen: false,
+        resizable: true,
         webPreferences: {
             preload: getResourcePath('dist-electron/electron/preload.js'),
             contextIsolation: true,

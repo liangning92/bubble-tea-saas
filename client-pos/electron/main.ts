@@ -111,8 +111,9 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
     // 打包后：app.getAppPath() 返回包含 resources/app 的目录
-    // 结构: resources/app/dist/index.html
-    return path.join(app.getAppPath(), relativePath)
+    // 结构: resources/app/client-pos/dist/index.html
+    // electron-builder.json 的 files 配置把 client-pos/ 目录内容打包进去
+    return path.join(app.getAppPath(), 'client-pos', relativePath)
   } else {
     // 开发模式：使用 __dirname
     // __dirname = 项目根目录/dist-electron/electron
