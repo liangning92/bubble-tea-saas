@@ -124,8 +124,14 @@ function getResourcePath(relativePath: string): string {
  * 创建主窗口（收银界面）
  */
 function createMainWindow() {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize
   mainWindow = new BrowserWindow({
-    fullscreen: true,  // 全屏显示
+    width: Math.floor(width * 0.6),
+    height,
+    x: 0,
+    y: 0,
+    fullscreen: false,
+    resizable: true,
     webPreferences: {
       preload: getResourcePath('dist-electron/electron/preload.js'),
       contextIsolation: true,
