@@ -204,7 +204,16 @@ class ConnectionManagerClass {
       const storeId = state.user.storeId
 
       // Use absolute URL to avoid /api/api/... double-prefix issue
-      const baseUrl = this.currentUrl.startsWith('http') ? this.currentUrl : window.location.origin
+      // When file:// protocol, window.location.origin is "null"/"file://", so use getApiUrl() instead
+      let baseUrl: string
+      if (this.currentUrl.startsWith('http')) {
+        baseUrl = this.currentUrl
+      } else if (window.location.origin && window.location.origin.startsWith('http')) {
+        baseUrl = window.location.origin
+      } else {
+        // file:// protocol or invalid origin - use configured API URL
+        baseUrl = getApiUrl().replace(/\/api$/, '')
+      }
       const response = await fetch(`${baseUrl}/api/config/${storeId}/pos_api_url`, {
         headers: {
           Authorization: `Bearer ${state.token}`

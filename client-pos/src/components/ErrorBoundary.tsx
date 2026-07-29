@@ -37,7 +37,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (window.history.length > 1) {
       window.history.back()
     } else {
-      window.location.href = '/'
+      // Use HashRouter-compatible navigation
+      window.location.href = '/#/'
     }
   }
 

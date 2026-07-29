@@ -17,39 +17,21 @@ related-issues:
 
 ## 白屏原因完整列表
 
-| # | 原因 | 症状 | 解决方案 | 状态 |
-|---|------|------|----------|------|
-| 1 | 硬件加速 | 旧显卡/驱动不兼容 | `disableHardwareAcceleration()` | ✅ 已有 |
-| 2 | 文件路径错误 | index.html 找不到 | `app.getAppPath() + 'client-pos'` | ✅ 刚修复 |
-| 3 | file:// 协议问题 | Electron 4+ 安全策略阻止 | 使用 `loadFile()` 或自定义协议 | ⚠️ 待验证 |
-| 4 | partition 设置 | 隔离 session 导致协议失败 | 移除 partition | ⚠️ 待检查 |
-| 5 | WebView2 缺失 | Windows 缺少 WebView2 | 安装 WebView2 | ⚠️ 待验证 |
-| 6 | 渲染进程崩溃 | JS 错误导致崩溃 | 添加 DevTools 诊断 | ⚠️ 待添加 |
-| 7 | asar 打包问题 | 路径解析失败 | 检查 `app.getAppPath()` 返回值 | ⚠️ 待验证 |
+| # | 原因 | 解决方案 | 状态 |
+|---|------|----------|------|
+| 1 | 硬件加速 | `disableHardwareAcceleration()` | ✅ 已有 |
+| 2 | 文件路径错误 | `app.getAppPath() + 'client-pos'` | ✅ 已修复 |
+| 3 | ErrorBoundary `window.location.href` | 改为 `/#/` | ✅ 已修复 |
+| 4 | ConnectionManager `window.location.origin` | 添加 file:// 协议处理 | ✅ 已修复 |
+| 5 | file:// 协议问题 | 使用 `loadFile()` | ✅ 已使用 |
+| 6 | React 渲染错误 | ErrorBoundary + 诊断窗口 | ✅ 已添加 |
+| 7 | WebView2 缺失 | 用户需安装 | ⚠️ 待验证 |
+| 8 | API 请求失败 | CLOUD_API_URL | ✅ 已配置 |
 
-## 路径配置关键点
+## 已修复的问题详情
 
-### Electron 路径属性对照表
-
-| 属性 | 开发环境 | 打包环境 (asar=false) | 打包环境 (asar=true) |
-|------|---------|----------------------|---------------------|
-| `app.getAppPath()` | 项目目录 | `resources/app/` | `resources/app.asar` |
-| `process.resourcesPath` | node_modules/electron/dist/Resources | `resources/` | `resources/` |
-| `__dirname` | dist-electron/electron | 指向 asar 内目录 | 指向 asar 内目录 |
-
-### electron-builder files 配置与路径对应关系
-
-```json
-{
-  "files": [
-    "client-pos/dist/**/*",      // → resources/app/client-pos/dist/
-    "client-pos/dist-electron/**/*"  // → resources/app/client-pos/dist-electron/
-  ]
-}
-```
-
-### getResourcePath() 修复
-
+### 1. getResourcePath() 文件路径修复
+**文件：** `client-pos/electron/main.ts`
 ```typescript
 function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
@@ -61,27 +43,62 @@ function getResourcePath(relativePath: string): string {
 }
 ```
 
-## file:// 协议问题分析
-
-### 问题原因
-Electron 4.x+ 强化了安全策略，`file://` 协议默认被阻止。
-
-### 解决方案
-使用 `mainWindow.loadFile()` 而不是 `loadURL('file://...')`。
-
-当前代码已使用 `loadFile()`：
+### 2. ErrorBoundary 导航修复
+**文件：** `client-pos/src/components/ErrorBoundary.tsx`
 ```typescript
-mainWindow.loadFile(indexPath)
+// 修复前
+window.location.href = '/'
+
+// 修复后
+window.location.href = '/#/'
 ```
 
-这应该是正确的，但需要确认 `indexPath` 是否正确。
+### 3. ConnectionManager API URL 修复
+**文件：** `client-pos/src/services/ConnectionManager.ts`
+```typescript
+// 修复前
+const baseUrl = this.currentUrl.startsWith('http') ? this.currentUrl : window.location.origin
+
+// 修复后
+let baseUrl: string
+if (this.currentUrl.startsWith('http')) {
+  baseUrl = this.currentUrl
+} else if (window.location.origin && window.location.origin.startsWith('http')) {
+  baseUrl = window.location.origin
+} else {
+  // file:// protocol - 使用配置的 API URL
+  baseUrl = getApiUrl().replace(/\/api$/, '')
+}
+```
+
+### 4. 诊断窗口
+**文件：** `client-pos/electron/main.ts`
+- 打开诊断窗口显示路径信息
+- 加载成功则关闭诊断窗口
+- 加载失败则保持诊断窗口打开
+
+## electron-builder 配置
+
+```json
+{
+  "asar": false,
+  "files": [
+    "client-pos/dist/**/*",
+    "client-pos/dist-electron/**/*"
+  ],
+  "extraMetadata": {
+    "main": "client-pos/dist-electron/electron/main.js"
+  }
+}
+```
 
 ## 待验证项
 
-- [ ] `app.getAppPath()` 在打包后的实际返回值
-- [ ] `index.html` 是否存在于正确位置
-- [ ] `loadFile()` 是否正常工作
-- [ ] 是否有其他 JS 错误
+- [ ] 构建后 `app.getAppPath()` 的实际返回值
+- [ ] 构建后 `index.html` 是否存在于正确位置
+- [ ] 诊断窗口是否正常显示
+- [ ] API 请求是否正常
+- [ ] 渲染是否成功
 
 ## 学习资源
 
