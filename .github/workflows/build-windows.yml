@@ -90,4 +90,3 @@ jobs:
             release/win-unpacked/**
             release/*.exe
             release/latest.yml
-          overwrite: true
