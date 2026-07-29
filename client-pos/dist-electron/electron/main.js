@@ -218,6 +218,22 @@ pre{background:#2d2d2d;padding:10px;border-radius:5px}
         // 监听页面加载成功
         mainWindow.webContents.on('did-finish-load', () => {
             console.log('[Electron] Page finished loading');
+            // 页面加载成功，但可能是白屏（React渲染失败）
+            // 等待2秒后检查窗口是否还是空白
+            const win = mainWindow;
+            setTimeout(() => {
+                if (win && !win.isDestroyed()) {
+                    win.webContents.executeJavaScript(`
+            document.body.innerHTML.length < 100 ||
+            document.querySelector('#root')?.innerHTML === '' ||
+            document.querySelector('#root')?.children.length === 0
+          `).then(isBlank => {
+                        if (isBlank) {
+                            console.error('[Electron] Page appears blank - React may have failed to render');
+                        }
+                    }).catch(() => { });
+                }
+            }, 2000);
         });
         // 监听页面加载失败
         mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
@@ -231,10 +247,22 @@ pre{background:#2d2d2d;padding:10px;border-radius:5px}
             if (mainWindow)
                 showErrorPage(mainWindow, '渲染进程异常', '应用程序渲染进程意外退出。', `详情: ${JSON.stringify(details)}`);
         });
-        // 监听控制台消息（来自渲染进程）
+        // 监听控制台消息（来自渲染进程）- 捕获所有级别
         mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-            if (level >= 2) { // Error level
-                console.error('[Renderer Error]', message, 'at', sourceId, 'line', line);
+            const levelNames = ['debug', 'info', 'warn', 'error'];
+            const levelName = levelNames[level] || `level${level}`;
+            console.log(`[Renderer ${levelName}] ${message} (${sourceId}:${line})`);
+            // React 常见错误关键字
+            const errorPatterns = [
+                'Error:', 'Cannot', 'undefined', 'null is not',
+                'is not a function', 'is not defined', 'Failed to',
+                'SyntaxError', 'TypeError', 'ReferenceError'
+            ];
+            const isLikelyError = level >= 2 ||
+                errorPatterns.some(p => message.includes(p));
+            if (isLikelyError && mainWindow && !mainWindow.isDestroyed()) {
+                // 显示渲染错误
+                console.error(`[Renderer Error Detected] ${message}`);
             }
         });
         // 监听渲染进程崩溃
