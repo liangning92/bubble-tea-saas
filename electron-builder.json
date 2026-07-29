@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.bubbletea.pos",
-  "productName": "Bubble Tea POS",
+  "productName": "BubbleTeaPOS",
   "directories": {
     "output": "release",
     "buildResources": "build"
@@ -44,7 +44,7 @@
         "arch": ["x64"]
       }
     ],
-    "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
+    "artifactName": "${productName}-${version}-Windows-x64.${ext}"
   },
   "nsis": {
     "oneClick": false,
@@ -53,6 +53,6 @@
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Bubble Tea POS"
+    "shortcutName": "BubbleTeaPOS"
   }
 }
