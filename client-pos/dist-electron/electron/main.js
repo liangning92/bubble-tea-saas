@@ -156,24 +156,64 @@ function createMainWindow() {
         const preloadExists = fs.existsSync(preloadPath);
         console.log('[Electron] Index exists:', indexExists);
         console.log('[Electron] Preload exists:', preloadExists);
-        // 如果文件不存在，显示错误
-        if (!indexExists) {
-            showErrorPage(mainWindow, '文件未找到', '应用程序文件不完整，请重新安装。', `路径: ${indexPath}`);
-            return;
+        // 诊断信息
+        const diagnosticInfo = {
+            'app.getAppPath()': electron_1.app.getAppPath(),
+            '__dirname': __dirname,
+            'indexPath': indexPath,
+            'preloadPath': preloadPath,
+            'indexPath 存在': indexExists,
+            'preloadPath 存在': preloadExists,
+            'indexPath 目录': fs.existsSync(path_1.default.dirname(indexPath)) ? '存在' : '不存在',
+            'isDev': isDev,
+            'isPackaged': electron_1.app.isPackaged,
+            'NODE_ENV': process.env.NODE_ENV || 'undefined'
+        };
+        const diagnosticText = Object.entries(diagnosticInfo)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join('\n');
+        // 创建诊断窗口（独立窗口，即使主窗口白屏也能看到）
+        const diagWindow = new electron_1.BrowserWindow({
+            width: 600,
+            height: 400,
+            title: '诊断信息 - Bubble Tea POS',
+            alwaysOnTop: true
+        });
+        const dir = path_1.default.dirname(indexPath);
+        let dirContents = '无法读取';
+        try {
+            if (fs.existsSync(dir)) {
+                dirContents = fs.readdirSync(dir).slice(0, 30).join('\n');
+            }
         }
-        // 如果 preload 不存在，显示错误
-        if (!preloadExists) {
-            showErrorPage(mainWindow, '配置文件缺失', '应用程序配置不完整，请重新安装。', `路径: ${preloadPath}`);
-            return;
-        }
+        catch (e) { }
+        diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>诊断信息</title>
+<style>
+body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:20px}
+pre{background:#2d2d2d;padding:10px;border-radius:5px}
+.key{color:#9cdcfe}
+.status-ok{color:#4ec9b0}
+.status-error{color:#f44747}
+</style>
+</head>
+<body>
+<h2 style="color:#569cd6">路径诊断信息</h2>
+<pre>${diagnosticText.replace(/\n/g, '\n')}</pre>
+<h3 style="color:#569cd6">${dir} 目录内容</h3>
+<pre>${dirContents}</pre>
+<p style="color:#808080">如果看到这个窗口，说明主窗口加载可能有问题</p>
+</body>
+</html>`)}`);
         // 尝试加载页面
         mainWindow.loadFile(indexPath).then(() => {
             console.log('[Electron] Successfully loaded index.html');
+            // 加载成功后关闭诊断窗口
+            diagWindow.close();
         }).catch((err) => {
             console.error('[Electron] Failed to load index:', err);
-            if (mainWindow) {
-                showErrorPage(mainWindow, '页面加载失败', '无法加载主界面，可能缺少必要的运行时组件。', `错误: ${err.message}\n路径: ${indexPath}`);
-            }
+            // 诊断窗口已经打开，显示了路径信息
         });
         // 监听页面加载成功
         mainWindow.webContents.on('did-finish-load', () => {
