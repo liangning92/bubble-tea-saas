@@ -98,7 +98,8 @@ router.post('/full', async (req: Request, res: Response) => {
     const addons = (addonsData.data || []) as any[]
 
     // Write to local database in a transaction
-    await prisma.$transaction(async (tx) => {
+    // Prisma $transaction returns whatever the callback returns
+    const syncResult = await prisma.$transaction(async (tx) => {
       // Clear existing data first (in case of re-sync)
       // Order matters: drop children before parents
       await tx.spec.deleteMany()
@@ -228,8 +229,8 @@ router.post('/full', async (req: Request, res: Response) => {
         }
       }
 
-      // Attach counts to tx for response
-      ;(tx as any)._syncMeta = { specCount, addonRelationCount }
+      // Return counts from transaction - Prisma $transaction returns this value
+      return { specCount, addonRelationCount }
     })
 
     return res.json({
@@ -238,8 +239,8 @@ router.post('/full', async (req: Request, res: Response) => {
         storeName: store.name || 'My Store',
         categories: categories.length,
         products: products.length,
-        specs: 0,
-        addons: 0,
+        specs: syncResult.specCount,
+        addons: syncResult.addonRelationCount,
       }
     })
   } catch (err: any) {
