@@ -44,8 +44,20 @@ function checkWebView2(): boolean {
   }
 }
 
+// 获取日志文件路径
+function getLogPath(): string {
+  return path.join(app.getPath('userData'), 'logs', 'main.log')
+}
+
+// 获取日志目录路径
+function getLogDir(): string {
+  return path.join(app.getPath('userData'), 'logs')
+}
+
 // 显示错误信息页面（同步版本，不依赖窗口加载）
 function showErrorPageSync(title: string, message: string, details?: string): void {
+  const logPath = getLogPath()
+  const logDir = getLogDir()
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -55,9 +67,12 @@ function showErrorPageSync(title: string, message: string, details?: string): vo
     body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     h2 { color: #d32f2f; margin-top: 0; }
-    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
-    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
+    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-all; }
+    .log-path { background: #fff3e0; padding: 10px 15px; border-radius: 4px; margin-top: 10px; font-size: 13px; word-break: break-all; font-family: monospace; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; }
     .btn:hover { background: #1565c0; }
+    .btn-log { background: #388e3c; }
+    .btn-log:hover { background: #2e7d32; }
   </style>
 </head>
 <body>
@@ -65,6 +80,8 @@ function showErrorPageSync(title: string, message: string, details?: string): vo
     <h2>⚠️ ${title}</h2>
     <p>${message}</p>
     ${details ? `<div class="details"><strong>详细信息：</strong><br>${details}</div>` : ''}
+    <div class="log-path"><strong>📋 日志文件位置：</strong><br>${logPath}</div>
+    <button class="btn btn-log" onclick="require('electron').shell.openPath('${logDir.replace(/\\/g, '\\\\')}')">📂 打开日志文件夹</button>
     <button class="btn" onclick="window.close()">关闭程序</button>
   </div>
 </body>
@@ -76,6 +93,8 @@ function showErrorPageSync(title: string, message: string, details?: string): vo
 
 // 显示错误信息页面
 function showErrorPage(mainWindow: BrowserWindow, title: string, message: string, details?: string) {
+  const logPath = getLogPath()
+  const logDir = getLogDir()
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -85,9 +104,12 @@ function showErrorPage(mainWindow: BrowserWindow, title: string, message: string
     body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; color: #333; }
     .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     h2 { color: #d32f2f; margin-top: 0; }
-    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
-    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
+    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-all; }
+    .log-path { background: #fff3e0; padding: 10px 15px; border-radius: 4px; margin-top: 10px; font-size: 13px; word-break: break-all; font-family: monospace; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; }
     .btn:hover { background: #1565c0; }
+    .btn-log { background: #388e3c; }
+    .btn-log:hover { background: #2e7d32; }
   </style>
 </head>
 <body>
@@ -95,6 +117,8 @@ function showErrorPage(mainWindow: BrowserWindow, title: string, message: string
     <h2>⚠️ ${title}</h2>
     <p>${message}</p>
     ${details ? `<div class="details"><strong>详细信息：</strong><br>${details}</div>` : ''}
+    <div class="log-path"><strong>📋 日志文件位置：</strong><br>${logPath}</div>
+    <button class="btn btn-log" onclick="require('electron').shell.openPath('${logDir.replace(/\\\\/g, '\\\\\\\\')}')">📂 打开日志文件夹</button>
     <button class="btn" onclick="window.close()">关闭程序</button>
   </div>
 </body>

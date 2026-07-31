@@ -47,6 +47,7 @@
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "BubbleTeaPOS"
+    "shortcutName": "BubbleTeaPOS",
+    "include": "client-pos/installer.nsh"
   }
 }
