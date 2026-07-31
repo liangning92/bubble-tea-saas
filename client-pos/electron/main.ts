@@ -3,6 +3,23 @@ import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 import fs from 'fs'
 import { exec as execChild, fork } from 'child_process'
+import log from 'electron-log/main'
+
+// 初始化 electron-log（文件日志）
+// 日志路径：{userData}/logs/main.log
+log.initialize()
+log.transports.file.level = 'info'
+log.transports.console.level = 'debug'
+log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB per file
+
+// 全局未捕获异常处理器（防止白屏后完全崩溃）
+process.on('uncaughtException', (error) => {
+  log.error('[FATAL] Uncaught exception:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.error('[FATAL] Unhandled rejection:', reason)
+})
 
 // Odoo-style thermal printer support
 let ThermalPrinter: any = null
@@ -140,46 +157,48 @@ function startLocalServer(): void {
     'seed.db'
   )
 
+  log.log(`[Server] App version: ${app.getVersion()}, userData: ${userDataDir}`)
+
   // 确保数据库目录存在
   try {
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true })
-      console.log('[Server] Created data directory:', dbDir)
+      log.log('[Server] Created data directory:', dbDir)
     }
   } catch (e) {
-    console.error('[Server] Failed to create data directory:', e)
+    log.error('[Server] Failed to create data directory:', e)
     return
   }
 
   // 首次安装：从 seed.db 模板复制用户数据库
   if (!fs.existsSync(userDbPath)) {
-    console.log('[Server] User database not found, initializing from seed...')
+    log.log('[Server] User database not found, initializing from seed...')
 
     const seedExists = fs.existsSync(seedTemplatePath)
-    console.log('[Server] Seed template path:', seedTemplatePath)
-    console.log('[Server] Seed template exists:', seedExists)
+    log.log('[Server] Seed template path:', seedTemplatePath)
+    log.log('[Server] Seed template exists:', seedExists)
 
     if (seedExists) {
       try {
         fs.copyFileSync(seedTemplatePath, userDbPath)
-        console.log('[Server] Seed copied to user database:', userDbPath)
+        log.log('[Server] Seed copied to user database:', userDbPath)
       } catch (copyErr) {
-        console.error('[Server] Failed to copy seed.db:', copyErr)
+        log.error('[Server] Failed to copy seed.db:', copyErr)
         // 继续尝试启动，Prisma 会尝试创建表（可能失败但至少能运行部分功能）
       }
     } else {
-      console.warn('[Server] Seed template not found at expected path, will try to start anyway')
-      console.warn('[Server] If startup fails, please reinstall the application')
+      log.warn('[Server] Seed template not found at expected path, will try to start anyway')
+      log.warn('[Server] If startup fails, please reinstall the application')
     }
   } else {
-    console.log('[Server] User database already exists:', userDbPath)
+    log.log('[Server] User database already exists:', userDbPath)
   }
 
   // 服务器可执行文件路径
   const serverPath = path.join(app.getAppPath(), 'server', 'dist', 'index.js')
-  console.log('[Server] Server path:', serverPath)
-  console.log('[Server] Database path:', userDbPath)
-  console.log('[Server] Starting local API server...')
+  log.log('[Server] Server path:', serverPath)
+  log.log('[Server] Database path:', userDbPath)
+  log.log('[Server] Starting local API server...')
 
   // fork Express 服务器
   serverProcess = fork(serverPath, [], {
@@ -195,19 +214,19 @@ function startLocalServer(): void {
   })
 
   serverProcess.on('message', (msg) => {
-    console.log('[Server]', msg)
+    log.log('[Server]', msg)
   })
 
   serverProcess.stdout?.on('data', (data: Buffer) => {
-    console.log('[Server stdout]', data.toString().trim())
+    log.log('[Server stdout]', data.toString().trim())
   })
 
   serverProcess.stderr?.on('data', (data: Buffer) => {
-    console.error('[Server stderr]', data.toString().trim())
+    log.error('[Server stderr]', data.toString().trim())
   })
 
   serverProcess.on('error', (err: Error) => {
-    console.error('[Server] Failed to start:', err.message)
+    log.error('[Server] Failed to start:', err.message)
   })
 
   serverProcess.on('exit', (code: number, signal: string) => {

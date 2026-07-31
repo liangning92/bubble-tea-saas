@@ -8,6 +8,20 @@ const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = require("child_process");
+const main_1 = __importDefault(require("electron-log/main"));
+// 初始化 electron-log（文件日志）
+// 日志路径：{userData}/logs/main.log
+main_1.default.initialize();
+main_1.default.transports.file.level = 'info';
+main_1.default.transports.console.level = 'debug';
+main_1.default.transports.file.maxSize = 5 * 1024 * 1024; // 5MB per file
+// 全局未捕获异常处理器（防止白屏后完全崩溃）
+process.on('uncaughtException', (error) => {
+    main_1.default.error('[FATAL] Uncaught exception:', error);
+});
+process.on('unhandledRejection', (reason) => {
+    main_1.default.error('[FATAL] Unhandled rejection:', reason);
+});
 // Odoo-style thermal printer support
 let ThermalPrinter = null;
 let ElectronPrinter = null;
@@ -129,46 +143,47 @@ function startLocalServer() {
     // app.asar.unpacked 相对于 resourcesPath
     const resourcesPath = process.resourcesPath;
     const seedTemplatePath = path_1.default.join(resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db');
+    main_1.default.log(`[Server] App version: ${electron_1.app.getVersion()}, userData: ${userDataDir}`);
     // 确保数据库目录存在
     try {
         if (!fs_1.default.existsSync(dbDir)) {
             fs_1.default.mkdirSync(dbDir, { recursive: true });
-            console.log('[Server] Created data directory:', dbDir);
+            main_1.default.log('[Server] Created data directory:', dbDir);
         }
     }
     catch (e) {
-        console.error('[Server] Failed to create data directory:', e);
+        main_1.default.error('[Server] Failed to create data directory:', e);
         return;
     }
     // 首次安装：从 seed.db 模板复制用户数据库
     if (!fs_1.default.existsSync(userDbPath)) {
-        console.log('[Server] User database not found, initializing from seed...');
+        main_1.default.log('[Server] User database not found, initializing from seed...');
         const seedExists = fs_1.default.existsSync(seedTemplatePath);
-        console.log('[Server] Seed template path:', seedTemplatePath);
-        console.log('[Server] Seed template exists:', seedExists);
+        main_1.default.log('[Server] Seed template path:', seedTemplatePath);
+        main_1.default.log('[Server] Seed template exists:', seedExists);
         if (seedExists) {
             try {
                 fs_1.default.copyFileSync(seedTemplatePath, userDbPath);
-                console.log('[Server] Seed copied to user database:', userDbPath);
+                main_1.default.log('[Server] Seed copied to user database:', userDbPath);
             }
             catch (copyErr) {
-                console.error('[Server] Failed to copy seed.db:', copyErr);
+                main_1.default.error('[Server] Failed to copy seed.db:', copyErr);
                 // 继续尝试启动，Prisma 会尝试创建表（可能失败但至少能运行部分功能）
             }
         }
         else {
-            console.warn('[Server] Seed template not found at expected path, will try to start anyway');
-            console.warn('[Server] If startup fails, please reinstall the application');
+            main_1.default.warn('[Server] Seed template not found at expected path, will try to start anyway');
+            main_1.default.warn('[Server] If startup fails, please reinstall the application');
         }
     }
     else {
-        console.log('[Server] User database already exists:', userDbPath);
+        main_1.default.log('[Server] User database already exists:', userDbPath);
     }
     // 服务器可执行文件路径
     const serverPath = path_1.default.join(electron_1.app.getAppPath(), 'server', 'dist', 'index.js');
-    console.log('[Server] Server path:', serverPath);
-    console.log('[Server] Database path:', userDbPath);
-    console.log('[Server] Starting local API server...');
+    main_1.default.log('[Server] Server path:', serverPath);
+    main_1.default.log('[Server] Database path:', userDbPath);
+    main_1.default.log('[Server] Starting local API server...');
     // fork Express 服务器
     serverProcess = (0, child_process_1.fork)(serverPath, [], {
         execPath: process.execPath,
@@ -182,16 +197,16 @@ function startLocalServer() {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
     serverProcess.on('message', (msg) => {
-        console.log('[Server]', msg);
+        main_1.default.log('[Server]', msg);
     });
     serverProcess.stdout?.on('data', (data) => {
-        console.log('[Server stdout]', data.toString().trim());
+        main_1.default.log('[Server stdout]', data.toString().trim());
     });
     serverProcess.stderr?.on('data', (data) => {
-        console.error('[Server stderr]', data.toString().trim());
+        main_1.default.error('[Server stderr]', data.toString().trim());
     });
     serverProcess.on('error', (err) => {
-        console.error('[Server] Failed to start:', err.message);
+        main_1.default.error('[Server] Failed to start:', err.message);
     });
     serverProcess.on('exit', (code, signal) => {
         console.log(`[Server] Process exited with code ${code}, signal ${signal}`);
