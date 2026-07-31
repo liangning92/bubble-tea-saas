@@ -9,7 +9,7 @@ const CLOUD_API = 'https://api.aicube.online'
 
 // POST /api/sync/connect
 // Body: { phone: string, password: string }
-// Returns: { storeId, storeName, tenantId } or error
+// Returns: { storeId, storeName, tenantId, token } or error
 router.post('/connect', async (req: Request, res: Response) => {
   try {
     const { phone, password } = req.body
@@ -17,23 +17,41 @@ router.post('/connect', async (req: Request, res: Response) => {
       return res.status(400).json({ code: 400, message: 'Phone and password required' })
     }
 
-    // Call cloud API to login
-    const cloudRes = await fetch(`${CLOUD_API}/api/auth/login`, {
+    // Step 1: Call cloud API to login
+    const loginRes = await fetch(`${CLOUD_API}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, password })
     })
-    const cloudData = await cloudRes.json() as { token?: string; storeId?: string; storeName?: string; tenantId?: string; role?: string; message?: string }
+    const loginData = await loginRes.json() as any
 
-    if (!cloudRes.ok || !cloudData.token) {
-      return res.status(401).json({ code: 401, message: cloudData.message || 'Invalid credentials' })
+    // Cloud returns: { code, data: { token, user: { storeId } } }
+    if (!loginRes.ok || !loginData?.data?.token) {
+      return res.status(401).json({ code: 401, message: loginData?.message || 'Invalid credentials' })
     }
 
-    const { token, storeId, storeName, tenantId, role } = cloudData
+    const token = loginData.data.token as string
+    const storeId = loginData.data.user?.storeId as string
+
+    if (!storeId) {
+      return res.status(401).json({ code: 401, message: 'Account not linked to any store' })
+    }
+
+    // Step 2: Get store details (storeName, tenantId)
+    const storeRes = await fetch(`${CLOUD_API}/api/stores/${storeId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const storeInfo = storeRes.ok ? (await storeRes.json()) as any : null
+    const store = storeInfo?.data || {}
 
     return res.json({
       code: 200,
-      data: { storeId, storeName, tenantId, role, token }
+      data: {
+        storeId,
+        storeName: store.name || 'My Store',
+        tenantId: store.tenantId || 'default-tenant',
+        token,
+      }
     })
   } catch (err: any) {
     return res.status(500).json({ code: 500, message: err.message || 'Connection failed' })
@@ -55,47 +73,43 @@ router.post('/full', async (req: Request, res: Response) => {
       'Authorization': `Bearer ${token}`
     }
 
-    // Fetch all data in parallel
-    const [storeRes, categoriesRes, productsRes, specsRes, addonsRes, configRes] = await Promise.all([
+    // Fetch all data (products/pos includes nested specs and addons)
+    const [storeRes, categoriesRes, productsRes, addonsRes] = await Promise.all([
       fetch(`${CLOUD_API}/api/stores/${storeId}`, { headers }).catch(() => null),
       fetch(`${CLOUD_API}/api/categories?storeId=${storeId}`, { headers }).catch(() => null),
       fetch(`${CLOUD_API}/api/products/pos?storeId=${storeId}`, { headers }).catch(() => null),
-      fetch(`${CLOUD_API}/api/specs?storeId=${storeId}`, { headers }).catch(() => null),
       fetch(`${CLOUD_API}/api/addons?storeId=${storeId}`, { headers }).catch(() => null),
-      fetch(`${CLOUD_API}/api/config/${storeId}`, { headers }).catch(() => null),
     ])
 
-    // Parse responses
     const storeData = storeRes ? await storeRes.json() : null
     const categoriesData = categoriesRes ? await categoriesRes.json() : { data: [] }
-    const productsData = productsRes ? await productsRes.json() : { data: [] }
-    const specsData = specsRes ? await specsRes.json() : { data: [] }
+    const productsData = productsRes ? await productsRes.json() : { data: { list: [] } }
     const addonsData = addonsRes ? await addonsRes.json() : { data: [] }
-    const configData = configRes ? await configRes.json() : { data: {} }
 
-    const store = storeData?.data || storeData as any || {}
+    const store = storeData?.data || {}
+    // products/pos returns { data: { list: [...] } }
+    const products = (productsData.data?.list || []) as any[]
     const categories = (categoriesData.data || []) as any[]
-    const products = (productsData.data || []) as any[]
-    const specs = (specsData.data || []) as any[]
     const addons = (addonsData.data || []) as any[]
-    const configs = (configData.data || {}) as Record<string, any>
 
     // Write to local database in a transaction
     await prisma.$transaction(async (tx) => {
       // Clear existing data first (in case of re-sync)
+      await tx.spec.deleteMany()
+      await tx.productAddon.deleteMany()
+      await tx.product.deleteMany()
+      await tx.addon.deleteMany()
+      await tx.category.deleteMany()
+      await tx.config.deleteMany()
       await tx.store.deleteMany()
       await tx.tenant.deleteMany()
       await tx.user.deleteMany()
-      await tx.category.deleteMany()
-      await tx.product.deleteMany()
-      await tx.addon.deleteMany()
-      await tx.config.deleteMany()
 
       // Create Tenant
       const tenant = await tx.tenant.create({
         data: {
-          id: store?.tenantId || 'default-tenant',
-          name: store?.tenantName || store?.name || 'My Store',
+          id: store.tenantId || 'default-tenant',
+          name: store.tenantName || store.name || 'My Store',
         }
       })
 
@@ -104,27 +118,13 @@ router.post('/full', async (req: Request, res: Response) => {
         data: {
           id: storeId,
           tenantId: tenant.id,
-          name: store?.name || 'My Store',
-          address: store?.address || '',
-          phone: store?.phone || '',
+          name: store.name || 'My Store',
+          address: store.address || '',
+          phone: store.phone || '',
         }
       })
 
-      // Create Config entries
-      for (const [key, value] of Object.entries(configs)) {
-        if (value !== undefined && value !== null) {
-          await tx.config.create({
-            data: {
-              storeId,
-              key,
-              value: String(value),
-              category: 'pos',
-            }
-          })
-        }
-      }
-
-      // Create Categories
+      // Create Categories (schema: id, storeId, name, code?, sortOrder)
       for (const cat of categories) {
         await tx.category.create({
           data: {
@@ -134,27 +134,30 @@ router.post('/full', async (req: Request, res: Response) => {
             code: cat.code || cat.name?.substring(0, 3).toUpperCase() || 'MISC',
             sortOrder: cat.sortOrder || 0,
           }
-        })
+        }).catch(() => {}) // Ignore if cloud returns duplicate category names
       }
 
-      // Create Addons
+      // Create Addons (schema: id, storeId, name, price(Int cents), priceAdjustment(Int), isFree)
       for (const addon of addons) {
         await tx.addon.create({
           data: {
             id: addon.id,
             storeId,
             name: addon.name,
-            price: Math.round((addon.price || 0) * 100), // convert to cents
-            priceAdjustment: Math.round((addon.priceAdjustment || 0) * 100),
+            price: Math.round((addon.price || 0)),           // already in cents from cloud
+            priceAdjustment: Math.round((addon.priceAdjustment || 0)),
             isFree: addon.isFree || false,
           }
-        })
+        }).catch(() => {})
       }
 
-      // Create Products with their Specs and Addon relations
+      // Create Products with nested Specs and Addon relations
+      let specCount = 0
+      let addonRelationCount = 0
+
       for (const product of products) {
-        // Generate a unique product code
-        const productCode = product.sku || product.code || `PROD-${product.id?.substring(0, 8).toUpperCase() || Math.random().toString(36).substring(2, 10).toUpperCase()}`
+        // Generate unique product code
+        const productCode = product.code || product.sku || `PROD-${product.id?.substring(0, 8).toUpperCase()}`
 
         await tx.product.create({
           data: {
@@ -166,51 +169,61 @@ router.post('/full', async (req: Request, res: Response) => {
             description: product.description || '',
             image: product.image || '',
             status: product.status || 'active',
-            costPrice: Math.round((product.costPrice || 0) * 100),
+            costPrice: Math.round((product.costPrice || 0)),
             sortOrder: product.sortOrder || 0,
-            tags: product.tags || '[]',
+            tags: typeof product.tags === 'string' ? product.tags : JSON.stringify(product.tags || []),
           }
-        })
+        }).catch(() => {})
 
-        // Create Specs for this product
-        if (specs && specs.length > 0) {
-          const productSpecs = specs.filter((s: any) => s.productId === product.id)
-          for (const spec of productSpecs) {
+        // Create Specs nested inside product (cloud returns specs array per product)
+        // Cloud schema: { id, name, price, isDefault }
+        // Local schema: { id, productId, name, price(Int), priceAdjustment(Int), isDefault }
+        if (product.specs && Array.isArray(product.specs)) {
+          for (const spec of product.specs) {
             await tx.spec.create({
               data: {
                 id: spec.id,
                 productId: product.id,
                 name: spec.name,
-                price: Math.round((spec.price || 0) * 100), // cents
-                priceAdjustment: Math.round((spec.priceAdjustment || 0) * 100),
+                price: Math.round((spec.price || 0)),
+                priceAdjustment: Math.round((spec.priceAdjustment || 0)),
                 isDefault: spec.isDefault || false,
               }
-            })
+            }).catch(() => {})
+            specCount++
           }
         }
 
         // Create Product-Addon relations
-        if (product.addonIds && product.addonIds.length > 0) {
-          for (const addonId of product.addonIds) {
+        // Cloud returns addons array: [{ id, name, price, isFree }]
+        if (product.addons && Array.isArray(product.addons)) {
+          for (const pa of product.addons) {
             await tx.productAddon.create({
               data: {
                 productId: product.id,
-                addonId,
+                addonId: pa.id,
+                priceOverride: pa.price != null ? Math.round(pa.price) : null,
               }
-            }).catch(() => {}) // Ignore if already exists
+            }).catch(() => {})
+            addonRelationCount++
           }
         }
       }
+
+      // Store counts for response
+      ;(tx as any)._syncCounts = { specCount, addonRelationCount }
     })
+
+    const counts = (prisma as any)._syncCounts || {}
 
     return res.json({
       code: 200,
       data: {
-        storeName: store?.name || 'My Store',
+        storeName: store.name || 'My Store',
         categories: categories.length,
         products: products.length,
-        specs: specs.length,
-        addons: addons.length,
+        specs: counts.specCount || 0,
+        addons: counts.addonRelationCount || 0,
       }
     })
   } catch (err: any) {
