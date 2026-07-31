@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 import fs from 'fs'
-import { exec as execChild } from 'child_process'
+import { exec as execChild, fork } from 'child_process'
 
 // Odoo-style thermal printer support
 let ThermalPrinter: any = null
@@ -101,6 +101,134 @@ app.commandLine.appendSwitch('disable-gpu-compositing')
 let mainWindow: BrowserWindow | null = null
 let customerWindow: BrowserWindow | null = null
 
+// 本地 Express 服务器进程（用于打包后的桌面版本）
+let serverProcess: ReturnType<typeof fork> | null = null
+
+/**
+ * 启动本地 Express API 服务器（fork child process）
+ *
+ * 数据库初始化策略（单门店离线安装）：
+ * 1. 用户数据库路径：{userData}/data/dev.db（用户可写）
+ * 2. 如果不存在，从打包资源复制 seed.db（包含完整表结构）
+ * 3. fork Express 服务器，DATABASE_URL 指向用户目录
+ *
+ * seed.db 打包位置（asarUnpack）：
+ *   {resourcesPath}/app.asar.unpacked/server/prisma/seed.db
+ *
+ * 多门店支持：
+ * 数据库里 Tenant → Store 表已存在，但默认创建单门店实例。
+ * Admin UI 通过切换 storeId 支持多门店管理（同一数据库内）。
+ */
+function startLocalServer(): void {
+  if (!app.isPackaged) {
+    console.log('[Server] Dev mode - skipping local server start')
+    return
+  }
+
+  const userDataDir = app.getPath('userData')
+  const dbDir = path.join(userDataDir, 'data')
+  const userDbPath = path.join(dbDir, 'dev.db')
+
+  // 打包资源路径（asarUnpack 后的位置）
+  // app.asar.unpacked 相对于 resourcesPath
+  const resourcesPath = process.resourcesPath
+  const seedTemplatePath = path.join(
+    resourcesPath,
+    'app.asar.unpacked',
+    'server',
+    'prisma',
+    'seed.db'
+  )
+
+  // 确保数据库目录存在
+  try {
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true })
+      console.log('[Server] Created data directory:', dbDir)
+    }
+  } catch (e) {
+    console.error('[Server] Failed to create data directory:', e)
+    return
+  }
+
+  // 首次安装：从 seed.db 模板复制用户数据库
+  if (!fs.existsSync(userDbPath)) {
+    console.log('[Server] User database not found, initializing from seed...')
+
+    const seedExists = fs.existsSync(seedTemplatePath)
+    console.log('[Server] Seed template path:', seedTemplatePath)
+    console.log('[Server] Seed template exists:', seedExists)
+
+    if (seedExists) {
+      try {
+        fs.copyFileSync(seedTemplatePath, userDbPath)
+        console.log('[Server] Seed copied to user database:', userDbPath)
+      } catch (copyErr) {
+        console.error('[Server] Failed to copy seed.db:', copyErr)
+        // 继续尝试启动，Prisma 会尝试创建表（可能失败但至少能运行部分功能）
+      }
+    } else {
+      console.warn('[Server] Seed template not found at expected path, will try to start anyway')
+      console.warn('[Server] If startup fails, please reinstall the application')
+    }
+  } else {
+    console.log('[Server] User database already exists:', userDbPath)
+  }
+
+  // 服务器可执行文件路径
+  const serverPath = path.join(app.getAppPath(), 'server', 'dist', 'index.js')
+  console.log('[Server] Server path:', serverPath)
+  console.log('[Server] Database path:', userDbPath)
+  console.log('[Server] Starting local API server...')
+
+  // fork Express 服务器
+  serverProcess = fork(serverPath, [], {
+    execPath: process.execPath,
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      PORT: '7072',
+      // 覆盖数据库路径为用户可写目录
+      DATABASE_URL: `file:${userDbPath}`
+    },
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+  })
+
+  serverProcess.on('message', (msg) => {
+    console.log('[Server]', msg)
+  })
+
+  serverProcess.stdout?.on('data', (data: Buffer) => {
+    console.log('[Server stdout]', data.toString().trim())
+  })
+
+  serverProcess.stderr?.on('data', (data: Buffer) => {
+    console.error('[Server stderr]', data.toString().trim())
+  })
+
+  serverProcess.on('error', (err: Error) => {
+    console.error('[Server] Failed to start:', err.message)
+  })
+
+  serverProcess.on('exit', (code: number, signal: string) => {
+    console.log(`[Server] Process exited with code ${code}, signal ${signal}`)
+    serverProcess = null
+  })
+
+  console.log('[Server] Local API server started (PID:', serverProcess.pid, ')')
+}
+
+/**
+ * 关闭本地服务器（应用退出时）
+ */
+function stopLocalServer(): void {
+  if (serverProcess) {
+    console.log('[Server] Shutting down local server...')
+    serverProcess.kill('SIGTERM')
+    serverProcess = null
+  }
+}
+
 // 开发模式检测
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 
@@ -141,9 +269,10 @@ function createMainWindow() {
     title: 'Bubble Tea POS'
   })
 
-  // 加载主界面
+  // 加载主界面（服务器启动后才加载，确保 API 可用）
   if (isDev) {
     mainWindow.loadURL('http://localhost:6063')
+    mainWindow.webContents.openDevTools()
   } else {
     const indexPath = getResourcePath('dist/index.html')
     const preloadPath = getResourcePath('dist-electron/electron/preload.js')
@@ -790,32 +919,42 @@ function formatDateTime(): string {
 
 // 应用启动
 app.whenReady().then(() => {
-  console.log('[Electron] App ready, creating windows...')
+  console.log('[Electron] App ready, starting up...')
 
-  try {
-    createMainWindow()
-    console.log('[Electron] Main window created')
-  } catch (e) {
-    console.error('[Electron] Failed to create main window:', e)
-  }
+  // 先启动本地服务器（仅打包模式）
+  startLocalServer()
 
-  try {
-    createCustomerWindow()
-    console.log('[Electron] Customer window created')
-  } catch (e) {
-    console.warn('[Electron] Failed to create customer window:', e)
-  }
+  // 等待服务器启动后再创建窗口
+  // 开发模式不需要启动服务器（vite dev server 已运行）
+  const serverStartupDelay = app.isPackaged ? 2000 : 0
 
-  if (mainWindow) {
-    setupUpdater(mainWindow)
-    // 延迟 10 秒后检查更新，不阻塞启动
-    setTimeout(() => {
-      checkForUpdatesOnStart()
-    }, 10000)
-  }
+  setTimeout(() => {
+    try {
+      createMainWindow()
+      console.log('[Electron] Main window created')
+    } catch (e) {
+      console.error('[Electron] Failed to create main window:', e)
+    }
+
+    try {
+      createCustomerWindow()
+      console.log('[Electron] Customer window created')
+    } catch (e) {
+      console.warn('[Electron] Failed to create customer window:', e)
+    }
+
+    if (mainWindow) {
+      setupUpdater(mainWindow)
+      // 延迟 10 秒后检查更新，不阻塞启动
+      setTimeout(() => {
+        checkForUpdatesOnStart()
+      }, 10000)
+    }
+  }, serverStartupDelay)
 })
 
 app.on('window-all-closed', () => {
+  stopLocalServer()
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -826,4 +965,9 @@ app.on('activate', () => {
     createMainWindow()
     createCustomerWindow()
   }
+})
+
+// 确保退出时关闭服务器
+app.on('before-quit', () => {
+  stopLocalServer()
 })

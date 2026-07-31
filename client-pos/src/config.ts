@@ -13,21 +13,22 @@ const DEFAULT_API_URL = '/api'
 // Auto-detect API URL based on current host
 function autoDetectApiUrl(): string {
   const host = window.location.hostname
+  const protocol = window.location.protocol
 
   // Local development: use Vite proxy
   if (host === 'localhost' || host === '127.0.0.1') {
     return '/api'
   }
 
-  // Electron app (file:// protocol) or other local file access: use cloud API
-  // When loaded via file://, hostname is empty string
-  // This enables: offline PIN unlock, Admin config sync, cloud sync
-  if (!host || host === 'file') {
-    return CLOUD_API_URL  // https://api.aicube.online/api
+  // Packaged Electron app (file:// protocol): use local server first
+  // This gives full offline capability - the local Express server
+  // is forked at app startup and serves all API requests
+  if (!host || host === 'file' || protocol === 'file:') {
+    return LOCAL_API_URL  // http://localhost:7072/api
   }
 
-  // Remote access via cloudflare tunnel → use api.aicube.online/api
-  return 'https://api.aicube.online/api'
+  // Remote access via cloudflare tunnel → use cloud API
+  return CLOUD_API_URL  // https://api.aicube.online/api
 }
 
 export function getApiUrl(): string {

@@ -9,12 +9,7 @@
   "files": [
     "server/dist/**/*",
     "server/node_modules/**/*",
-    "node_modules/.prisma/client/index.js",
-    "node_modules/.prisma/client/default.js",
-    "node_modules/.prisma/client/package.json",
-    "node_modules/.prisma/client/schema.prisma",
     "node_modules/.prisma/**/*",
-    "node_modules/**/*",
     "node_modules/@prisma/client/**/*",
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
@@ -22,8 +17,6 @@
     "client-pos/dist-electron/**/*",
     "dist-electron/**/*",
     "shared/**/*",
-    "!**/node_modules/**/printer/**/*",
-    "!**/node_modules/**/node-thermal-printer/**/*",
     "!**/node_modules/.cache/**/*"
   ],
   "extraMetadata": {
