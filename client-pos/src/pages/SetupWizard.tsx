@@ -10,7 +10,7 @@ export function SetupWizard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState<'login' | 'syncing' | 'done'>('login')
-  const [syncResult, setSyncResult] = useState<{ storeName: string; products: number } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ storeName: string; categories: number; products: number; specs: number; addons: number } | null>(null)
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -142,9 +142,27 @@ export function SetupWizard() {
             <p className="text-gray-600 text-sm mb-1">
               门店：<strong>{syncResult.storeName}</strong>
             </p>
-            <p className="text-gray-500 text-xs mb-6">
-              已同步 {syncResult.products} 个产品
-            </p>
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+              <p className="text-xs text-gray-500 mb-2">已同步数据：</p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">分类</span>
+                  <span className="font-medium text-gray-800">{syncResult.categories}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">产品</span>
+                  <span className="font-medium text-gray-800">{syncResult.products}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">规格</span>
+                  <span className="font-medium text-gray-800">{syncResult.specs}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">加料</span>
+                  <span className="font-medium text-gray-800">{syncResult.addons}</span>
+                </div>
+              </div>
+            </div>
             <button
               onClick={handleDone}
               className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition-colors"
