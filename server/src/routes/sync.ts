@@ -101,7 +101,8 @@ router.post('/full', async (req: Request, res: Response) => {
     // Prisma $transaction returns whatever the callback returns
     const syncResult = await prisma.$transaction(async (tx) => {
       // Clear existing data first (in case of re-sync)
-      // Order matters: drop children before parents
+      // SQLite FK constraints can cause issues with delete order, so disable FK checks during clear
+      await tx.$executeRaw`PRAGMA foreign_keys = OFF`
       await tx.spec.deleteMany()
       await tx.productAddon.deleteMany()
       await tx.product.deleteMany()
@@ -111,6 +112,7 @@ router.post('/full', async (req: Request, res: Response) => {
       await tx.user.deleteMany()
       await tx.store.deleteMany()
       await tx.tenant.deleteMany()
+      await tx.$executeRaw`PRAGMA foreign_keys = ON`
 
       // Create Tenant
       const tenant = await tx.tenant.create({
