@@ -8,6 +8,9 @@ import { RegisterMemberPage } from './pages/RegisterMemberPage'
 import { ScanPage } from './pages/ScanPage'
 import { HygieneTasksPage } from './pages/HygieneTasksPage'
 import { useAuthStore } from './stores/auth'
+import { SetupWizard } from './pages/SetupWizard'
+import { useEffect, useState } from 'react'
+import { checkSyncStatus } from './services/syncApi'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -16,8 +19,24 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const [checked, setChecked] = useState(false)
+  const [needsSetup, setNeedsSetup] = useState(false)
+
+  useEffect(() => {
+    checkSyncStatus().then(data => {
+      setNeedsSetup(!data.isSetUp)
+      setChecked(true)
+    }).catch(() => {
+      setNeedsSetup(true)
+      setChecked(true)
+    })
+  }, [])
+
+  if (!checked) return null
+
   return (
     <Routes>
+      {needsSetup && <Route path="/setup" element={<SetupWizard />} />}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/register-member" element={<RegisterMemberPage />} />
@@ -42,13 +61,16 @@ function App() {
         </ProtectedRoute>
       } />
       <Route
-        path="/*"
+        path={needsSetup ? '/*' : '/'}
         element={
+          needsSetup ? <Navigate to="/setup" replace /> :
           <ProtectedRoute>
             <POSPage />
           </ProtectedRoute>
         }
       />
+      {needsSetup && <Route path="/" element={<Navigate to="/setup" replace />} />}
+      {!needsSetup && <Route path="/setup" element={<Navigate to="/" replace />} />}
     </Routes>
   )
 }
