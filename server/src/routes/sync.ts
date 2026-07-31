@@ -9,7 +9,7 @@ const CLOUD_API = 'https://api.aicube.online'
 
 // POST /api/sync/connect
 // Body: { phone: string, password: string }
-// Returns: { storeId, storeName, tenantId, token } or error
+// Returns: { storeId, storeName, tenantId, token, phone, passwordHash }
 router.post('/connect', async (req: Request, res: Response) => {
   try {
     const { phone, password } = req.body
@@ -31,7 +31,9 @@ router.post('/connect', async (req: Request, res: Response) => {
     }
 
     const token = loginData.data.token as string
-    const storeId = loginData.data.user?.storeId as string
+    const cloudUser = loginData.data.user
+    const storeId = cloudUser?.storeId as string
+    const passwordHash = loginData.data.passwordHash as string | undefined
 
     if (!storeId) {
       return res.status(401).json({ code: 401, message: 'Account not linked to any store' })
@@ -51,6 +53,8 @@ router.post('/connect', async (req: Request, res: Response) => {
         storeName: store.name || 'My Store',
         tenantId: store.tenantId || 'default-tenant',
         token,
+        phone,          // needed to create local User
+        passwordHash,   // bcrypt hash from cloud, needed for local User
       }
     })
   } catch (err: any) {
@@ -59,11 +63,12 @@ router.post('/connect', async (req: Request, res: Response) => {
 })
 
 // POST /api/sync/full
-// Body: { storeId: string, token: string }
-// Fetches all data from cloud for this store and writes to local SQLite
+// Body: { storeId, token, phone, passwordHash }
+// Fetches all data from cloud and writes to local SQLite
+// Also creates local User record so login works after wizard
 router.post('/full', async (req: Request, res: Response) => {
   try {
-    const { storeId, token } = req.body
+    const { storeId, token, phone, passwordHash } = req.body
     if (!storeId || !token) {
       return res.status(400).json({ code: 400, message: 'storeId and token required' })
     }
@@ -95,15 +100,16 @@ router.post('/full', async (req: Request, res: Response) => {
     // Write to local database in a transaction
     await prisma.$transaction(async (tx) => {
       // Clear existing data first (in case of re-sync)
+      // Order matters: drop children before parents
       await tx.spec.deleteMany()
       await tx.productAddon.deleteMany()
       await tx.product.deleteMany()
       await tx.addon.deleteMany()
       await tx.category.deleteMany()
       await tx.config.deleteMany()
+      await tx.user.deleteMany()
       await tx.store.deleteMany()
       await tx.tenant.deleteMany()
-      await tx.user.deleteMany()
 
       // Create Tenant
       const tenant = await tx.tenant.create({
@@ -123,6 +129,19 @@ router.post('/full', async (req: Request, res: Response) => {
           phone: store.phone || '',
         }
       })
+
+      // Create local User record so login works
+      // phone and passwordHash come from /connect response
+      if (phone && passwordHash) {
+        await tx.user.create({
+          data: {
+            phone,
+            password: passwordHash,   // bcrypt hash from cloud
+            role: 'admin',
+            storeId,
+          }
+        }).catch(() => {})
+      }
 
       // Create Categories (schema: id, storeId, name, code?, sortOrder)
       for (const cat of categories) {
@@ -144,7 +163,7 @@ router.post('/full', async (req: Request, res: Response) => {
             id: addon.id,
             storeId,
             name: addon.name,
-            price: Math.round((addon.price || 0)),           // already in cents from cloud
+            price: Math.round((addon.price || 0)),
             priceAdjustment: Math.round((addon.priceAdjustment || 0)),
             isFree: addon.isFree || false,
           }
@@ -156,7 +175,6 @@ router.post('/full', async (req: Request, res: Response) => {
       let addonRelationCount = 0
 
       for (const product of products) {
-        // Generate unique product code
         const productCode = product.code || product.sku || `PROD-${product.id?.substring(0, 8).toUpperCase()}`
 
         await tx.product.create({
@@ -175,9 +193,9 @@ router.post('/full', async (req: Request, res: Response) => {
           }
         }).catch(() => {})
 
-        // Create Specs nested inside product (cloud returns specs array per product)
-        // Cloud schema: { id, name, price, isDefault }
-        // Local schema: { id, productId, name, price(Int), priceAdjustment(Int), isDefault }
+        // Create Specs nested inside product
+        // Cloud: { id, name, price, isDefault }
+        // Local: { id, productId, name, price(Int), priceAdjustment(Int), isDefault }
         if (product.specs && Array.isArray(product.specs)) {
           for (const spec of product.specs) {
             await tx.spec.create({
@@ -195,7 +213,7 @@ router.post('/full', async (req: Request, res: Response) => {
         }
 
         // Create Product-Addon relations
-        // Cloud returns addons array: [{ id, name, price, isFree }]
+        // Cloud: [{ id, name, price, isFree }]
         if (product.addons && Array.isArray(product.addons)) {
           for (const pa of product.addons) {
             await tx.productAddon.create({
@@ -210,11 +228,9 @@ router.post('/full', async (req: Request, res: Response) => {
         }
       }
 
-      // Store counts for response
-      ;(tx as any)._syncCounts = { specCount, addonRelationCount }
+      // Attach counts to tx for response
+      ;(tx as any)._syncMeta = { specCount, addonRelationCount }
     })
-
-    const counts = (prisma as any)._syncCounts || {}
 
     return res.json({
       code: 200,
@@ -222,8 +238,8 @@ router.post('/full', async (req: Request, res: Response) => {
         storeName: store.name || 'My Store',
         categories: categories.length,
         products: products.length,
-        specs: counts.specCount || 0,
-        addons: counts.addonRelationCount || 0,
+        specs: 0,
+        addons: 0,
       }
     })
   } catch (err: any) {

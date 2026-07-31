@@ -18,12 +18,12 @@ export function SetupWizard() {
     setLoading(true)
 
     try {
-      // Step 1: Connect to cloud and get storeId + token
+      // Step 1: Connect to cloud and get storeId + token + passwordHash
       const connResult = await syncConnect(phone, password)
 
-      // Step 2: Full sync
+      // Step 2: Full sync (creates local User so login works)
       setStep('syncing')
-      const fullResult = await syncFull(connResult.storeId, connResult.token)
+      const fullResult = await syncFull(connResult.storeId, connResult.token, connResult.phone, connResult.passwordHash)
 
       setSyncResult(fullResult)
       setStep('done')
