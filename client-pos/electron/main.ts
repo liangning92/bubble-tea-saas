@@ -115,8 +115,6 @@ function getResourcePath(relativePath: string): string {
     // electron-builder.json 的 files 配置把 client-pos/ 目录内容打包进去
     return path.join(app.getAppPath(), 'client-pos', relativePath)
   } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
     // 开发模式：使用 __dirname
     // __dirname = 项目根目录/dist-electron/electron
     return path.join(__dirname, '..', '..', relativePath)
@@ -146,10 +144,7 @@ function createMainWindow() {
   // 加载主界面
   if (isDev) {
     mainWindow.loadURL('http://localhost:6063')
-    mainWindow.webContents.openDevTools()
   } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
     const indexPath = getResourcePath('dist/index.html')
     const preloadPath = getResourcePath('dist-electron/electron/preload.js')
     const fs = require('fs')
@@ -335,8 +330,6 @@ function createCustomerWindow() {
   if (isDev) {
     customerWindow.loadURL('http://localhost:6063/customer-display')
   } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
     customerWindow.loadFile(getResourcePath('dist/index.html'), {
       hash: '/customer-display'
     }).catch((err) => {
@@ -392,8 +385,6 @@ ipcMain.handle('list-printers', async () => {
         } else if (trimmed.startsWith('{')) {
           printers = [JSON.parse(trimmed).Name]
         } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
           // Plain text, one printer per line
           printers = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
         }
@@ -525,8 +516,6 @@ function printViaNetwork(text: string, host: string, port: number): Promise<void
           client.end()
           reject(err)
         } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
           client.end()
           console.log('[PRINT] Data sent to', host + ':' + port)
           resolve()
@@ -569,8 +558,6 @@ async function printViaWindowsRaw(data: any): Promise<void> {
     if (printerName) {
       cmd = `print /D:"${printerName}" "${tempFile}"`
     } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
       // 使用默认打印机
       cmd = `print "${tempFile}"`
     }
@@ -586,8 +573,6 @@ async function printViaWindowsRaw(data: any): Promise<void> {
         console.log('[PRINT] Error:', error.message)
         reject(error)
       } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
         console.log('[PRINT] Done')
         resolve()
       }
@@ -661,8 +646,6 @@ async function openCashDrawerViaWindows(printerName?: string): Promise<void> {
     const escapedPrinter = printerName.replace(/'/g, "''")
     cmd = `powershell -Command "try { $p = Get-Printer -Name '${escapedPrinter}' -ErrorAction Stop; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
   } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
     // 没有指定打印机 - 获取默认打印机
     cmd = `powershell -Command "try { $p = Get-Printer | Where-Object { $_.Default } | Select-Object -First 1; if (-not $p) { $p = Get-Printer | Select-Object -First 1 }; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
   }
@@ -673,8 +656,6 @@ async function openCashDrawerViaWindows(printerName?: string): Promise<void> {
       if (error) {
         reject(error)
       } else {
-    // 生产模式也打开 DevTools 以便诊断白屏问题
-    mainWindow.webContents.openDevTools()
         resolve()
       }
     })
