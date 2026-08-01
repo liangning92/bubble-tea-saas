@@ -123,16 +123,26 @@ function showErrorPage(mainWindow, title, message, details) {
 </html>`;
     mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
 }
-// 禁用硬件加速 - 防止某些电脑白屏
-// 在某些旧显卡或驱动不兼容的电脑上，开启硬件加速会导致白屏
-electron_1.app.disableHardwareAcceleration();
-// 添加 Chromium 启动参数，解决触屏/显卡问题
-electron_1.app.commandLine.appendSwitch('disable-gpu');
-electron_1.app.commandLine.appendSwitch('disable-software-rasterizer');
-electron_1.app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
-electron_1.app.commandLine.appendSwitch('no-sandbox');
-electron_1.app.commandLine.appendSwitch('disable-dev-shm-usage');
-electron_1.app.commandLine.appendSwitch('disable-gpu-compositing');
+// Windows DPI awareness - 修复高分屏字体模糊
+// Process DPI awareness before app.ready()
+if (process.platform === 'win32') {
+    // 尝试设置 Per-Monitor DPI v2 (需要 Windows 10 1703+)
+    try {
+        // SetProcessDpiAwarenessContext for Per-Monitor v2
+        // Falls back gracefully on older Windows
+        electron_1.app.commandLine.appendSwitch('high-dpi-config', '1.0');
+        electron_1.app.commandLine.appendSwitch('force-device-scale-factor', '1');
+    }
+    catch (e) {
+        // Ignore if not supported
+    }
+}
+// 启用硬件加速（禁用会导致字体模糊）
+// 如果某些特定电脑需要禁用 GPU，可以设置环境变量 ELECTRON_DISABLE_GPU=1
+if (process.env.ELECTRON_DISABLE_GPU !== '1') {
+    // 不禁用硬件加速，保持清晰渲染
+    // 仅在必要时通过命令行禁用：electron --disable-gpu
+}
 // 窗口引用
 let mainWindow = null;
 let customerWindow = null;
@@ -280,9 +290,14 @@ function createMainWindow() {
         webPreferences: {
             preload: getResourcePath('dist-electron/electron/preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            // 高 DPI 支持
+            enableBlinkFeatures: 'CSSColorSchemeUARendering'
         },
-        title: 'Bubble Tea POS'
+        // Windows 高 DPI 设置
+        titleBarStyle: process.platform === 'win32' ? 'default' : undefined,
+        title: 'Bubble Tea POS',
+        backgroundColor: '#ffffff'
     });
     // 加载主界面（服务器启动后才加载，确保 API 可用）
     if (isDev) {

@@ -8,7 +8,9 @@
   },
   "files": [
     "client-pos/dist",
-    "client-pos/dist-electron"
+    "client-pos/dist-electron",
+    "server/dist",
+    "server/prisma/seed.db"
   ],
   "extraMetadata": {
     "main": "client-pos/dist-electron/electron/main.js"
@@ -18,7 +20,10 @@
     "**/*.node",
     "server/prisma/seed.db",
     "node_modules/.prisma/**/*",
-    "node_modules/@prisma/client/**/*"
+    "node_modules/@prisma/client/**/*",
+    "node_modules/node-thermal-printer/**/*",
+    "node_modules/electron-printer/**/*",
+    "node_modules/printer/**/*"
   ],
   "npmRebuild": false,
   "win": {
@@ -39,5 +44,9 @@
     "createStartMenuShortcut": true,
     "shortcutName": "BubbleTeaPOS",
     "include": "client-pos/installer.nsh"
+  },
+  "publish": {
+    "provider": "generic",
+    "url": "https://api.aicube.online/updates/"
   }
 }
