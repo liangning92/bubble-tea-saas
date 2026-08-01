@@ -234,8 +234,8 @@ function startLocalServer(): void {
   log.log('[Server] Starting local API server...')
 
   // fork Express 服务器
+  // 注意：Electron 内置 Node.js 运行时，所以用 process.execPath 即可运行 server/index.js
   serverProcess = fork(serverPath, [], {
-    execPath: process.execPath,
     env: {
       ...process.env,
       NODE_ENV: 'production',

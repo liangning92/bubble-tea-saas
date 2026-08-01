@@ -1,18 +1,13 @@
 node_modules/
-dist/
 .env
-*.log
-.DS_Store
-*.db
-*.db-journal
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# Client build outputs - explicitly ignored by path
+client-pos/dist/
+client-pos/dist-electron/
+client-admin/dist/
+client-staff/dist/
 
-# Build
+# Build artifacts
 build/
 .cache/
 
@@ -34,7 +29,6 @@ backups/
 client-pos/release/
 win-unpacked/
 
-dist-electron/
 release/
 *.log
 npm-debug.log*

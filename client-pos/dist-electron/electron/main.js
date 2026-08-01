@@ -217,8 +217,8 @@ function startLocalServer() {
     main_1.default.log('[Server] Database path:', userDbPath);
     main_1.default.log('[Server] Starting local API server...');
     // fork Express 服务器
+    // 注意：Electron 内置 Node.js 运行时，所以用 process.execPath 即可运行 server/index.js
     serverProcess = (0, child_process_1.fork)(serverPath, [], {
-        execPath: process.execPath,
         env: {
             ...process.env,
             NODE_ENV: 'production',
