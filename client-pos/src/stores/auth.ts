@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import bcrypt from 'bcryptjs'
 import { saveOfflineCredentials, clearOfflineCredentials, getOfflineCredentials, OfflineCredentials } from '../db/offline'
+import { clearApiUrl } from '../config'
+import { connectionManager } from '../services/ConnectionManager'
 
 interface User {
   id: string
@@ -46,6 +48,8 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         set({ token: null, user: null, isAuthenticated: false })
         clearOfflineCredentials()
+        clearApiUrl()
+        connectionManager.reset()
       },
 
       loginOffline: async (phone: string, password: string) => {
