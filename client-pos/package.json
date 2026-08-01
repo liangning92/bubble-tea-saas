@@ -58,8 +58,8 @@
     },
     "npmRebuild": false,
     "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
+      "client-pos/dist/**/*",
+      "client-pos/dist-electron/**/*",
       "server/dist/**/*",
       "server/prisma/seed.db",
       "node_modules/**/*"
