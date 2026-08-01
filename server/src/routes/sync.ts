@@ -97,155 +97,159 @@ router.post('/full', async (req: Request, res: Response) => {
     const categories = (categoriesData.data || []) as any[]
     const addons = (addonsData.data || []) as any[]
 
-    // Write to local database in a transaction
-    // Prisma $transaction returns whatever the callback returns
-    const syncResult = await prisma.$transaction(async (tx) => {
-      // Clear existing data first (in case of re-sync)
-      // SQLite FK constraints cause issues with delete order, use SET in transaction
-      await tx.$executeRaw`SET foreign_keys = OFF`
-      await tx.spec.deleteMany()
-      await tx.productAddon.deleteMany()
-      await tx.product.deleteMany()
-      await tx.addon.deleteMany()
-      await tx.category.deleteMany()
-      await tx.config.deleteMany()
-      await tx.staff.deleteMany()
-      await tx.user.deleteMany()
-      await tx.store.deleteMany()
-      await tx.tenant.deleteMany()
-      await tx.$executeRaw`SET foreign_keys = ON`
+    // SQLite FK constraints cause issues with delete order,
+    // so disable FK checks before clearing and re-enable after
+    let fkDisabled = false
+    try {
+      await prisma.$executeRaw`PRAGMA foreign_keys = OFF`
+      fkDisabled = true
 
-      // Create Tenant
-      const tenant = await tx.tenant.create({
-        data: {
-          id: store.tenantId || 'default-tenant',
-          name: store.tenantName || store.name || 'My Store',
+      const syncResult = await prisma.$transaction(async (tx) => {
+        // Clear existing data first (in case of re-sync)
+        // Order matters: children before parents, then junction tables
+        await tx.spec.deleteMany()
+        await tx.productAddon.deleteMany()
+        await tx.product.deleteMany()
+        await tx.addon.deleteMany()
+        await tx.category.deleteMany()
+        await tx.config.deleteMany()
+        await tx.staff.deleteMany()
+        await tx.user.deleteMany()
+        await tx.store.deleteMany()
+        await tx.tenant.deleteMany()
+
+        // Create Tenant
+        const tenant = await tx.tenant.create({
+          data: {
+            id: store.tenantId || 'default-tenant',
+            name: store.tenantName || store.name || 'My Store',
+          }
+        })
+
+        // Create Store
+        await tx.store.create({
+          data: {
+            id: storeId,
+            tenantId: tenant.id,
+            name: store.name || 'My Store',
+            address: store.address || '',
+            phone: store.phone || '',
+          }
+        })
+
+        // Create local User record so login works after wizard
+        // phone and passwordHash come from /connect response
+        if (phone && passwordHash) {
+          await tx.user.create({
+            data: {
+              phone,
+              password: passwordHash,   // bcrypt hash from cloud
+              role: 'admin',
+              storeId,
+            }
+          }).catch(() => {})
         }
+
+        // Create Categories
+        for (const cat of categories) {
+          await tx.category.create({
+            data: {
+              id: cat.id,
+              storeId,
+              name: cat.name,
+              code: cat.code || cat.name?.substring(0, 3).toUpperCase() || 'MISC',
+              sortOrder: cat.sortOrder || 0,
+            }
+          }).catch(() => {})
+        }
+
+        // Create Addons
+        for (const addon of addons) {
+          await tx.addon.create({
+            data: {
+              id: addon.id,
+              storeId,
+              name: addon.name,
+              price: Math.round((addon.price || 0)),
+              priceAdjustment: Math.round((addon.priceAdjustment || 0)),
+              isFree: addon.isFree || false,
+            }
+          }).catch(() => {})
+        }
+
+        // Create Products with nested Specs and Addon relations
+        let specCount = 0
+        let addonRelationCount = 0
+
+        for (const product of products) {
+          const productCode = product.code || product.sku || `PROD-${product.id?.substring(0, 8).toUpperCase()}`
+
+          await tx.product.create({
+            data: {
+              id: product.id,
+              storeId,
+              code: productCode,
+              categoryId: product.categoryId,
+              name: product.name,
+              description: product.description || '',
+              image: product.image || '',
+              status: product.status || 'active',
+              costPrice: Math.round((product.costPrice || 0)),
+              sortOrder: product.sortOrder || 0,
+              tags: typeof product.tags === 'string' ? product.tags : JSON.stringify(product.tags || []),
+            }
+          }).catch(() => {})
+
+          // Create Specs nested inside product
+          if (product.specs && Array.isArray(product.specs)) {
+            for (const spec of product.specs) {
+              await tx.spec.create({
+                data: {
+                  id: spec.id,
+                  productId: product.id,
+                  name: spec.name,
+                  price: Math.round((spec.price || 0)),
+                  priceAdjustment: Math.round((spec.priceAdjustment || 0)),
+                  isDefault: spec.isDefault || false,
+                }
+              }).catch(() => {})
+              specCount++
+            }
+          }
+
+          // Create Product-Addon relations
+          if (product.addons && Array.isArray(product.addons)) {
+            for (const pa of product.addons) {
+              await tx.productAddon.create({
+                data: {
+                  productId: product.id,
+                  addonId: pa.id,
+                  priceOverride: pa.price != null ? Math.round(pa.price) : null,
+                }
+              }).catch(() => {})
+              addonRelationCount++
+            }
+          }
+        }
+
+        return { specCount, addonRelationCount }
       })
 
-      // Create Store
-      await tx.store.create({
+      return res.json({
+        code: 200,
         data: {
-          id: storeId,
-          tenantId: tenant.id,
-          name: store.name || 'My Store',
-          address: store.address || '',
-          phone: store.phone || '',
+          storeName: store.name || 'My Store',
+          categories: categories.length,
+          products: products.length,
+          specs: syncResult.specCount,
+          addons: syncResult.addonRelationCount,
         }
       })
-
-      // Create local User record so login works
-      // phone and passwordHash come from /connect response
-      if (phone && passwordHash) {
-        await tx.user.create({
-          data: {
-            phone,
-            password: passwordHash,   // bcrypt hash from cloud
-            role: 'admin',
-            storeId,
-          }
-        }).catch(() => {})
+    } finally {
+      if (fkDisabled) {
+        await prisma.$executeRaw`PRAGMA foreign_keys = ON`.catch(() => {})
       }
-
-      // Create Categories (schema: id, storeId, name, code?, sortOrder)
-      for (const cat of categories) {
-        await tx.category.create({
-          data: {
-            id: cat.id,
-            storeId,
-            name: cat.name,
-            code: cat.code || cat.name?.substring(0, 3).toUpperCase() || 'MISC',
-            sortOrder: cat.sortOrder || 0,
-          }
-        }).catch(() => {}) // Ignore if cloud returns duplicate category names
-      }
-
-      // Create Addons (schema: id, storeId, name, price(Int cents), priceAdjustment(Int), isFree)
-      for (const addon of addons) {
-        await tx.addon.create({
-          data: {
-            id: addon.id,
-            storeId,
-            name: addon.name,
-            price: Math.round((addon.price || 0)),
-            priceAdjustment: Math.round((addon.priceAdjustment || 0)),
-            isFree: addon.isFree || false,
-          }
-        }).catch(() => {})
-      }
-
-      // Create Products with nested Specs and Addon relations
-      let specCount = 0
-      let addonRelationCount = 0
-
-      for (const product of products) {
-        const productCode = product.code || product.sku || `PROD-${product.id?.substring(0, 8).toUpperCase()}`
-
-        await tx.product.create({
-          data: {
-            id: product.id,
-            storeId,
-            code: productCode,
-            categoryId: product.categoryId,
-            name: product.name,
-            description: product.description || '',
-            image: product.image || '',
-            status: product.status || 'active',
-            costPrice: Math.round((product.costPrice || 0)),
-            sortOrder: product.sortOrder || 0,
-            tags: typeof product.tags === 'string' ? product.tags : JSON.stringify(product.tags || []),
-          }
-        }).catch(() => {})
-
-        // Create Specs nested inside product
-        // Cloud: { id, name, price, isDefault }
-        // Local: { id, productId, name, price(Int), priceAdjustment(Int), isDefault }
-        if (product.specs && Array.isArray(product.specs)) {
-          for (const spec of product.specs) {
-            await tx.spec.create({
-              data: {
-                id: spec.id,
-                productId: product.id,
-                name: spec.name,
-                price: Math.round((spec.price || 0)),
-                priceAdjustment: Math.round((spec.priceAdjustment || 0)),
-                isDefault: spec.isDefault || false,
-              }
-            }).catch(() => {})
-            specCount++
-          }
-        }
-
-        // Create Product-Addon relations
-        // Cloud: [{ id, name, price, isFree }]
-        if (product.addons && Array.isArray(product.addons)) {
-          for (const pa of product.addons) {
-            await tx.productAddon.create({
-              data: {
-                productId: product.id,
-                addonId: pa.id,
-                priceOverride: pa.price != null ? Math.round(pa.price) : null,
-              }
-            }).catch(() => {})
-            addonRelationCount++
-          }
-        }
-      }
-
-      // Return counts from transaction - Prisma $transaction returns this value
-      return { specCount, addonRelationCount }
-    })
-
-    return res.json({
-      code: 200,
-      data: {
-        storeName: store.name || 'My Store',
-        categories: categories.length,
-        products: products.length,
-        specs: syncResult.specCount,
-        addons: syncResult.addonRelationCount,
-      }
-    })
+    }
   } catch (err: any) {
     console.error('Sync full error:', err)
     return res.status(500).json({ code: 500, message: err.message || 'Sync failed' })
