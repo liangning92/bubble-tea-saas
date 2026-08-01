@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Wifi, WifiOff, AlertCircle, CheckCircle } from 'lucide-react'
-import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
+import { Loader2, Wifi, WifiOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, User, Phone, Lock, Store, Eye, EyeOff } from 'lucide-react'
+import { syncConnect, syncFull, checkSyncStatus, registerStore } from '../services/syncApi'
 
 export function SetupWizard() {
   const navigate = useNavigate()
@@ -9,7 +9,7 @@ export function SetupWizard() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [step, setStep] = useState<'login' | 'syncing' | 'done'>('login')
+  const [step, setStep] = useState<'login' | 'register' | 'syncing' | 'done'>('login')
   const [syncResult, setSyncResult] = useState<{ storeName: string; categories: number; products: number; specs: number; addons: number } | null>(null)
 
   const handleConnect = async (e: React.FormEvent) => {
@@ -18,10 +18,8 @@ export function SetupWizard() {
     setLoading(true)
 
     try {
-      // Step 1: Connect to cloud and get storeId + token + passwordHash
       const connResult = await syncConnect(phone, password)
 
-      // Step 2: Full sync (creates local User so login works)
       setStep('syncing')
       const fullResult = await syncFull(connResult.storeId, connResult.token, connResult.phone, connResult.passwordHash)
 
@@ -30,6 +28,28 @@ export function SetupWizard() {
     } catch (err: any) {
       setError(err.message || 'Connection failed. Check your internet.')
       setStep('login')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Registration state
+  const [regForm, setRegForm] = useState({ name: '', phone: '', password: '', storeName: '' })
+  const [showPassword, setShowPassword] = useState(false)
+  const [regStep, setRegStep] = useState(1)
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await registerStore(regForm.name, regForm.phone, regForm.password, regForm.storeName)
+      // Auto-fill login after register
+      setPhone(regForm.phone)
+      setPassword(regForm.password)
+      setStep('login')
+    } catch (err: any) {
+      setError(err.message || 'Registration failed')
     } finally {
       setLoading(false)
     }
@@ -115,6 +135,139 @@ export function SetupWizard() {
               <WifiOff size={14} />
               <span>离线模式：安装后需联网设置一次，之后可完全离线使用</span>
             </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+              <span className="text-xs text-gray-400">还没有账户？</span>
+              <button
+                type="button"
+                onClick={() => { setStep('register'); setRegStep(1); setError(''); }}
+                className="text-xs text-pink-500 font-medium ml-1 hover:underline"
+              >
+                立即创建门店账户 ➜
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Register Step */}
+        {step === 'register' && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <button
+              onClick={() => setStep('login')}
+              className="flex items-center gap-1 text-gray-400 hover:text-gray-600 text-sm mb-4 transition-colors"
+            >
+              <ArrowLeft size={16} /> 返回登录
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <User className="text-pink-500" size={20} />
+              <h2 className="font-semibold text-gray-800">创建新门店账户</h2>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-600 text-xs">
+                {error}
+              </div>
+            )}
+
+            {regStep === 1 && (
+              <form onSubmit={(e) => { e.preventDefault(); if (regForm.name && regForm.phone && regForm.password) setRegStep(2); }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+                  <div className="relative">
+                    <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={regForm.name}
+                      onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
+                      placeholder="您的姓名"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">手机号</label>
+                  <div className="relative">
+                    <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={regForm.phone}
+                      onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
+                      placeholder="0812xxxxxxxx"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={regForm.password}
+                      onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
+                      placeholder="至少6位"
+                      className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+                      required
+                      minLength={6}
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-pink-500 hover:bg-pink-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                >
+                  下一步 <ArrowRight size={18} />
+                </button>
+              </form>
+            )}
+
+            {regStep === 2 && (
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">门店名称</label>
+                  <div className="relative">
+                    <Store size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={regForm.storeName}
+                      onChange={(e) => setRegForm({ ...regForm, storeName: e.target.value })}
+                      placeholder="我的奶茶店（选填）"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">不填则默认使用"姓名+的奶茶店"</p>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600 space-y-1">
+                  <div className="flex justify-between"><span className="text-gray-400">姓名:</span><span>{regForm.name}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">手机:</span><span>{regForm.phone}</span></div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setRegStep(1)}
+                    className="flex-1 bg-gray-100 text-gray-700 font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <ArrowLeft size={18} /> 返回
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-pink-500 hover:bg-pink-600 disabled:bg-pink-300 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {loading ? <Loader2 className="animate-spin" size={18} /> : null}
+                    {loading ? '创建中...' : '创建账户 ➜'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 

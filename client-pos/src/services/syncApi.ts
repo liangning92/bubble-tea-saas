@@ -19,6 +19,36 @@ export interface SyncFullResult {
   addons: number
 }
 
+export async function registerStore(name: string, phone: string, password: string, storeName: string) {
+  // Step 1: Create store via API
+  const storeRes = await fetch(`${API_BASE}/api/stores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: storeName || name + "'s Store" })
+  })
+  const storeData = await storeRes.json()
+  if (!storeRes.ok) {
+    throw new Error(storeData.message || 'Failed to create store')
+  }
+  const storeId = storeData.data?.id
+  if (!storeId) {
+    throw new Error('Failed to create store: no storeId returned')
+  }
+
+  // Step 2: Register user with store
+  const regRes = await fetch(`${API_BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, password, name, storeId, role: 'admin' })
+  })
+  const regData = await regRes.json()
+
+  if (regRes.ok || regData.code === 201 || regData.token) {
+    return { success: true }
+  }
+  throw new Error(regData.message || 'Registration failed')
+}
+
 export async function checkSyncStatus(): Promise<{ isSetUp: boolean }> {
   const res = await fetch(`${API_BASE}/api/sync/status`)
   const data = await res.json()
