@@ -54,7 +54,7 @@ export function LoginPage() {
         localStorage.removeItem('remember_me')
       }
 
-      navigate('/dashboard')
+      navigate('/')
     } catch (err: any) {
       // Check if network error (server unreachable) - try offline login
       // axios error codes: ECONNREFUSED, NETWORK_ERROR, ETIMEDOUT, etc.
@@ -74,7 +74,7 @@ export function LoginPage() {
       if (isNetworkError) {
         const offlineResult = await loginOffline(phone, password)
         if (offlineResult.success) {
-          navigate('/dashboard')
+          navigate('/')
           return
         }
         // Offline login failed - show specific error
