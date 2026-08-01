@@ -46,6 +46,7 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
           (Get-Content package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
+          (Get-Content client-pos/package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content client-pos/package.json
 
       - name: Create git tag
         run: |
@@ -78,7 +79,7 @@ jobs:
         run: cd client-pos && npm run build:electron:main
 
       - name: Build Electron
-        run: npx electron-builder --config electron-builder.json --win --publish never
+        run: npx electron-builder --config client-pos/package.json --win --publish never
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
