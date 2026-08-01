@@ -60,9 +60,18 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "server/dist/**/*",
+      "server/prisma/seed.db",
       "node_modules/**/*"
     ],
-    "asar": false,
+    "extraMetadata": {
+      "main": "dist-electron/electron/main.js"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "server/prisma/seed.db"
+    ],
     "win": {
       "target": [
         {
@@ -87,6 +96,10 @@
       "deleteAppDataOnUninstall": true,
       "include": "installer.nsh",
       "guid": "7d0ef5b8-459f-4c20-a9ca-64d072057da3"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://api.aicube.online/updates/"
     }
   }
 }

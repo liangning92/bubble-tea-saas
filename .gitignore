@@ -1,7 +1,7 @@
 node_modules/
 .env
 
-# Client build outputs - explicitly ignored by path
+# Client build outputs
 client-pos/dist/
 client-pos/dist-electron/
 client-admin/dist/
@@ -13,6 +13,13 @@ build/
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
+server/prisma/prisma/      # Prisma Client generated code
+
+# Local dev databases (but NOT seed.db - it's packaged in installer)
+server/*.db
+server/.*.db
+server/prisma/*.db
+!server/prisma/seed.db      # seed.db is packaged in installer
 
 # Docker
 .docker/
@@ -28,7 +35,7 @@ backups/
 *.sql.gz*
 client-pos/release/
 win-unpacked/
-
 release/
 *.log
 npm-debug.log*
+.DS_Store
