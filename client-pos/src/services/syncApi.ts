@@ -1,6 +1,14 @@
 /// <reference types="vite/client" />
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:7072'
+// Use the same API URL configuration as the rest of the POS app.
+// In packaged mode (file://), getApiUrl() returns CLOUD_API_URL (api.aicube.online).
+// This ensures SetupWizard works in the packaged app, not just dev mode.
+import { getApiUrl } from '../config'
+
+function getSyncApiBase(): string {
+  // Remove /api suffix to get base URL for sync endpoints
+  return getApiUrl().replace(/\/api$/, '')
+}
 
 export interface SyncConnectResult {
   storeId: string
@@ -20,13 +28,13 @@ export interface SyncFullResult {
 }
 
 export async function checkSyncStatus(): Promise<{ isSetUp: boolean }> {
-  const res = await fetch(`${API_BASE}/api/sync/status`)
+  const res = await fetch(`${getSyncApiBase()}/api/sync/status`)
   const data = await res.json()
   return data.data
 }
 
 export async function syncConnect(phone: string, password: string): Promise<SyncConnectResult> {
-  const res = await fetch(`${API_BASE}/api/sync/connect`, {
+  const res = await fetch(`${getSyncApiBase()}/api/sync/connect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone, password })
@@ -44,7 +52,7 @@ export async function syncFull(
   phone: string,
   passwordHash: string
 ): Promise<SyncFullResult> {
-  const res = await fetch(`${API_BASE}/api/sync/full`, {
+  const res = await fetch(`${getSyncApiBase()}/api/sync/full`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ storeId, token, phone, passwordHash })
