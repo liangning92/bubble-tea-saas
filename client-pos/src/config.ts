@@ -20,11 +20,11 @@ function autoDetectApiUrl(): string {
     return '/api'
   }
 
-  // Packaged Electron app (file:// protocol): use local server first
-  // This gives full offline capability - the local Express server
-  // is forked at app startup and serves all API requests
+  // Packaged Electron app (file:// protocol): use cloud API
+  // The Windows installer does NOT bundle a local server.
+  // All API calls go directly to the cloud.
   if (!host || host === 'file' || protocol === 'file:') {
-    return LOCAL_API_URL  // http://localhost:7072/api
+    return CLOUD_API_URL  // https://api.aicube.online/api
   }
 
   // Remote access via cloudflare tunnel → use cloud API

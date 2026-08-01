@@ -15,9 +15,10 @@ const CONNECTIVITY_CHECK_KEY = 'pos-connectivity-check'
 const WORKING_URL_KEY = 'pos-working-url'
 const FALLBACK_URLS_KEY = 'pos-fallback-urls'
 
-// Default fallback URLs (can be extended)
-// Note: URLs should be configured by user, not hardcoded
-const DEFAULT_FALLBACKS: string[] = []
+// Default fallback URLs
+const DEFAULT_FALLBACKS: string[] = [
+  'https://api.aicube.online',
+]
 
 // Connection states
 export type ConnectionState =
