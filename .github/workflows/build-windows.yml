@@ -79,7 +79,7 @@ jobs:
         run: cd client-pos && npm run build:electron:main
 
       - name: Build Electron
-        run: npx electron-builder --config client-pos/package.json --win --publish never
+        run: npx electron-builder --config "${{ github.workspace }}\client-pos\package.json" --win --publish never
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
