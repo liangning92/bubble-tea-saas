@@ -28,9 +28,27 @@ export interface SyncFullResult {
 }
 
 export async function checkSyncStatus(): Promise<{ isSetUp: boolean }> {
-  const res = await fetch(`${getSyncApiBase()}/api/sync/status`)
-  const data = await res.json()
-  return data.data
+  // Retry up to 5 times with exponential backoff, in case server is still starting
+  const maxRetries = 5
+  const baseDelay = 500 // ms
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${getSyncApiBase()}/api/sync/status`, {
+        signal: AbortSignal.timeout(3000) // 3s per attempt
+      })
+      const data = await res.json()
+      return data.data
+    } catch {
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt)
+        await new Promise(r => setTimeout(r, delay))
+      }
+    }
+  }
+
+  // All retries exhausted — treat as not set up (shows SetupWizard)
+  return { isSetUp: false }
 }
 
 export async function syncConnect(phone: string, password: string): Promise<SyncConnectResult> {
