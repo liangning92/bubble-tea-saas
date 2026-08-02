@@ -7,7 +7,7 @@
   "directories": {
     "output": "client-pos/release"
   },
-  "npmRebuild": false,
+  "npmRebuild": true,
   "files": [
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
@@ -20,7 +20,6 @@
   },
   "asar": true,
   "asarUnpack": [
-    "**/*.node",
     "server/prisma/seed.db"
   ],
   "win": {
@@ -28,21 +27,8 @@
       {
         "target": "portable",
         "arch": ["x64"]
-      },
-      {
-        "target": "nsis",
-        "arch": ["x64"]
       }
     ]
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true,
-    "deleteAppDataOnUninstall": true,
-    "include": "client-pos/installer.nsh",
-    "guid": "7d0ef5b8-459f-4c20-a9ca-64d072057da3"
   },
   "publish": {
     "provider": "github",
