@@ -61,7 +61,10 @@ jobs:
           git push origin master --tags
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
+          Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
+          npm install --force --prefer-offline=false
 
       - name: Generate Prisma client
         run: npm run db:generate
