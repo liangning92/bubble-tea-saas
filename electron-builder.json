@@ -1,38 +1,53 @@
 {
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.bubbletea.pos",
   "productName": "BubbleTeaPOS",
-  "artifactName": "${productName}.${ext}",
-  "electronVersion": "28.3.3",
-  "app": "client-pos",
   "directories": {
-    "output": "client-pos/release"
+    "output": "release",
+    "buildResources": "build"
   },
-  "npmRebuild": true,
   "files": [
+    "server/dist/**/*",
+    "server/node_modules/**/*",
+    "node_modules/.prisma/**/*",
+    "node_modules/@prisma/client/**/*",
+    "node_modules/electron-log/**/*",
+    "server/prisma/schema.prisma",
+    "server/prisma/seed.db",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
-    "server/dist/**/*",
-    "server/prisma/seed.db",
-    "client-pos/node_modules/**/*"
+    "dist-electron/**/*",
+    "shared/**/*",
+    "!**/node_modules/.cache/**/*"
   ],
   "extraMetadata": {
     "main": "client-pos/dist-electron/electron/main.js"
   },
-  "asar": true,
+  "asar": false,
   "asarUnpack": [
-    "server/prisma/seed.db"
+    "**/*.node",
+    "server/prisma/seed.db",
+    "node_modules/.prisma/**/*",
+    "node_modules/@prisma/client/**/*"
   ],
+  "npmRebuild": true,
   "win": {
     "target": [
       {
-        "target": "portable",
+        "target": "nsis",
         "arch": ["x64"]
       }
-    ]
+    ],
+    "artifactName": "${productName}-${version}-Windows-x64.${ext}"
   },
-  "publish": {
-    "provider": "github",
-    "owner": "liangning92",
-    "repo": "bubble-tea-saas"
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "BubbleTeaPOS",
+    "include": "client-pos/installer.nsh"
   }
 }
