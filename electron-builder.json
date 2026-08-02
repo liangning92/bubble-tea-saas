@@ -3,19 +3,20 @@
   "productName": "BubbleTeaPOS",
   "artifactName": "${productName}.${ext}",
   "electronVersion": "28.3.3",
+  "app": "client-pos",
   "directories": {
-    "output": "release"
+    "output": "client-pos/release"
   },
   "npmRebuild": false,
   "files": [
-    "dist/**/*",
-    "dist-electron/**/*",
+    "client-pos/dist/**/*",
+    "client-pos/dist-electron/**/*",
     "server/dist/**/*",
     "server/prisma/seed.db",
-    "node_modules/**/*"
+    "client-pos/node_modules/**/*"
   ],
   "extraMetadata": {
-    "main": "dist-electron/electron/main.js"
+    "main": "client-pos/dist-electron/electron/main.js"
   },
   "asar": true,
   "asarUnpack": [
@@ -40,11 +41,12 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "deleteAppDataOnUninstall": true,
-    "include": "installer.nsh",
+    "include": "client-pos/installer.nsh",
     "guid": "7d0ef5b8-459f-4c20-a9ca-64d072057da3"
   },
   "publish": {
-    "provider": "generic",
-    "url": "https://api.aicube.online/updates/"
+    "provider": "github",
+    "owner": "liangning92",
+    "repo": "bubble-tea-saas"
   }
 }

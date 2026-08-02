@@ -79,7 +79,7 @@ jobs:
         run: cd client-pos && npm run build:electron:main
 
       - name: Build Electron
-        run: npx electron-builder --config "${{ github.workspace }}\client-pos\electron-builder.json" --win --publish never
+        run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -88,5 +88,5 @@ jobs:
           name: Bubble Tea POS v${{ steps.version.outputs.VERSION }}
           draft: false
           files: |
-            release/*.exe
-            release/latest.yml
+            client-pos/release/*.exe
+            client-pos/release/latest.yml
