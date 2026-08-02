@@ -377,23 +377,47 @@ function createMainWindow() {
         dirContents = fs.readdirSync(dir).slice(0, 30).join('\n')
       }
     } catch (e) {}
+
+    // 读取最近的错误日志（electron-log）
+    const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
+    let recentLogs = '无日志文件'
+    try {
+      if (fs.existsSync(logPath)) {
+        const logContent = fs.readFileSync(logPath, 'utf-8')
+        const logLines = logContent.split('\n').filter(Boolean).slice(-30)
+        recentLogs = logLines.map((line: string) => {
+          if (line.includes('[error]') || line.includes('[FATAL]')) {
+            return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>'
+          } else if (line.includes('[warn]')) {
+            return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>'
+          }
+          return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>'
+        }).join('\n')
+      }
+    } catch (e) { recentLogs = '读取失败: ' + String(e) }
+
+    const logPathDisplay = logPath.replace(/</g, '&lt;')
     diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>诊断信息</title>
+<head><meta charset="UTF-8"><title>诊断信息 - Bubble Tea POS</title>
 <style>
-body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:20px}
-pre{background:#2d2d2d;padding:10px;border-radius:5px}
+body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
+pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto}
 .key{color:#9cdcfe}
 .status-ok{color:#4ec9b0}
 .status-error{color:#f44747}
+h3{margin-top:16px;color:#569cd6}
+.log-section{max-height:200px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
 </style>
 </head>
 <body>
-<h2 style="color:#569cd6">路径诊断信息</h2>
-<pre>${diagnosticText.replace(/\n/g, '\n')}</pre>
-<h3 style="color:#569cd6">${dir} 目录内容</h3>
-<pre>${dirContents}</pre>
-<p style="color:#808080">如果看到这个窗口，说明主窗口加载可能有问题</p>
+<h2 style="color:#569cd6">🚨 启动诊断 - 白屏时必看</h2>
+<pre>${diagnosticText.replace(/</g, '&lt;')}</pre>
+<h3>${dir.replace(/</g, '&lt;')} 目录内容</h3>
+<pre>${dirContents.replace(/</g, '&lt;')}</pre>
+<h3>📋 最近运行日志 (${logPathDisplay})</h3>
+<div class="log-section"><pre>${recentLogs}</pre></div>
+<p style="color:#808080;margin-top:16px">如果这个窗口没自动关闭，说明主窗口加载失败。请截图发给我分析。</p>
 </body>
 </html>`)}`)
 
