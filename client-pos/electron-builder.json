@@ -1,0 +1,50 @@
+{
+  "appId": "com.bubbletea.pos",
+  "productName": "BubbleTeaPOS",
+  "artifactName": "${productName}.${ext}",
+  "electronVersion": "28.3.3",
+  "directories": {
+    "output": "release"
+  },
+  "npmRebuild": false,
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "server/dist/**/*",
+    "server/prisma/seed.db",
+    "node_modules/**/*"
+  ],
+  "extraMetadata": {
+    "main": "dist-electron/electron/main.js"
+  },
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node",
+    "server/prisma/seed.db"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      },
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "deleteAppDataOnUninstall": true,
+    "include": "installer.nsh",
+    "guid": "7d0ef5b8-459f-4c20-a9ca-64d072057da3"
+  },
+  "publish": {
+    "provider": "generic",
+    "url": "https://api.aicube.online/updates/"
+  }
+}
