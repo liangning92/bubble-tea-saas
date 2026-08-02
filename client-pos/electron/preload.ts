@@ -71,6 +71,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('get-app-version')
   },
 
+  getLogEntries: () => {
+    return ipcRenderer.invoke('get-log-entries')
+  },
+
   // 监听更新状态变化
   onUpdateStatus: (callback: (status: string, info?: any) => void) => {
     ipcRenderer.on('update-status', (_event, status, info) => callback(status, info))

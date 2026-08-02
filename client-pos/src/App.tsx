@@ -3,6 +3,7 @@ import { POSPage } from './pages/POSPage'
 import { LoginPage } from './pages/LoginPage'
 import { OrderHistoryPage } from './pages/OrderHistoryPage'
 import { CashManagementPage } from './pages/CashManagementPage'
+import { DiagnosticsPage } from './pages/DiagnosticsPage'
 import { CustomerDisplayPage } from './pages/CustomerDisplayPage'
 import { RegisterMemberPage } from './pages/RegisterMemberPage'
 import { ScanPage } from './pages/ScanPage'
@@ -58,6 +59,11 @@ function App() {
       <Route path="/tasks" element={
         <ProtectedRoute>
           <HygieneTasksPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/diagnostics" element={
+        <ProtectedRoute>
+          <DiagnosticsPage />
         </ProtectedRoute>
       } />
       <Route

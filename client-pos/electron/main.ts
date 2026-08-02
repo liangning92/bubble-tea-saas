@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 import fs from 'fs'
@@ -605,6 +605,29 @@ ipcMain.handle('get-api-url', () => {
   return '/api'
 })
 
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
+
+ipcMain.handle('get-log-entries', () => {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
+    const fs = require('fs')
+    if (fs.existsSync(logPath)) {
+      const content = fs.readFileSync(logPath, 'utf-8')
+      const entries = content.split('\n').filter(Boolean).slice(-100).map((line: string) => {
+        const match = line.match(/^\[(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\]\s*\[(\w+)\]\s*(.*)$/)
+        if (match) {
+          return { timestamp: match[1], level: match[2].toLowerCase(), message: match[3] }
+        }
+        return { timestamp: '', level: 'info', message: line }
+      })
+      return JSON.stringify(entries)
+    }
+  } catch (e) {}
+  return '[]'
+})
+
 ipcMain.handle('set-api-url', (_event, url: string) => {
   const fs = require('fs')
   const configPath = path.join(app.getPath('userData'), 'api-config.json')
@@ -977,6 +1000,13 @@ function formatDateTime(): string {
 // 应用启动
 app.whenReady().then(() => {
   console.log('[Electron] App ready, starting up...')
+
+  // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
+  globalShortcut.register('CommandOrControl+Shift+D', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(`window.location.hash = '#/diagnostics'`)
+    }
+  })
 
   // 先启动本地服务器（仅打包模式）
   startLocalServer()

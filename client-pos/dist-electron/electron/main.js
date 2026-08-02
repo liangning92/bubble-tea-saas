@@ -554,6 +554,28 @@ electron_1.ipcMain.handle('get-api-url', () => {
     catch (e) { }
     return '/api';
 });
+electron_1.ipcMain.handle('get-app-version', () => {
+    return electron_1.app.getVersion();
+});
+electron_1.ipcMain.handle('get-log-entries', () => {
+    try {
+        const logPath = path_1.default.join(electron_1.app.getPath('userData'), 'logs', 'main.log');
+        const fs = require('fs');
+        if (fs.existsSync(logPath)) {
+            const content = fs.readFileSync(logPath, 'utf-8');
+            const entries = content.split('\n').filter(Boolean).slice(-100).map((line) => {
+                const match = line.match(/^\[(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\]\s*\[(\w+)\]\s*(.*)$/);
+                if (match) {
+                    return { timestamp: match[1], level: match[2].toLowerCase(), message: match[3] };
+                }
+                return { timestamp: '', level: 'info', message: line };
+            });
+            return JSON.stringify(entries);
+        }
+    }
+    catch (e) { }
+    return '[]';
+});
 electron_1.ipcMain.handle('set-api-url', (_event, url) => {
     const fs = require('fs');
     const configPath = path_1.default.join(electron_1.app.getPath('userData'), 'api-config.json');
@@ -906,6 +928,12 @@ function formatDateTime() {
 // 应用启动
 electron_1.app.whenReady().then(() => {
     console.log('[Electron] App ready, starting up...');
+    // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
+    electron_1.globalShortcut.register('CommandOrControl+Shift+D', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.executeJavaScript(`window.location.hash = '#/diagnostics'`);
+        }
+    });
     // 先启动本地服务器（仅打包模式）
     startLocalServer();
     // 等待服务器启动后再创建窗口

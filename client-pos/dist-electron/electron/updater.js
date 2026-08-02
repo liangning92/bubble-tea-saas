@@ -25,9 +25,12 @@ function setupUpdater(window) {
     // Configure auto-updater
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-    // Tell electron-updater where to find updates (generic provider)
-    // This URL must match the 'publish.url' in package.json build config
-    autoUpdater.setFeedUrl('https://api.aicube.online/updates/');
+    // Tell electron-updater where to find updates (GitHub Releases)
+    autoUpdater.setFeedUrl({
+        provider: 'github',
+        owner: 'liangning92',
+        repo: 'bubble-tea-saas'
+    });
     // Set up event listeners
     autoUpdater.on('checking-for-update', () => {
         log('info', 'Checking for update...');

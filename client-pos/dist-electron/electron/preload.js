@@ -58,6 +58,9 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     getAppVersion: () => {
         return electron_1.ipcRenderer.invoke('get-app-version');
     },
+    getLogEntries: () => {
+        return electron_1.ipcRenderer.invoke('get-log-entries');
+    },
     // 监听更新状态变化
     onUpdateStatus: (callback) => {
         electron_1.ipcRenderer.on('update-status', (_event, status, info) => callback(status, info));
