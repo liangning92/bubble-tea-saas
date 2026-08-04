@@ -10,22 +10,16 @@
     "server/dist/**/*",
     "server/node_modules/**/*",
     "server/uploads/**/*",
-    "node_modules/.prisma/client/index.js",
-    "node_modules/.prisma/client/default.js",
-    "node_modules/.prisma/client/package.json",
-    "node_modules/.prisma/client/schema.prisma",
-    "node_modules/.prisma/**/*",
-    "node_modules/**/*",
-    "node_modules/@prisma/client/**/*",
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
     "dist-electron/**/*",
     "shared/**/*",
+    "!**/*.map",
+    "!**/node_modules/.cache/**/*",
     "!**/node_modules/**/printer/**/*",
-    "!**/node_modules/**/node-thermal-printer/**/*",
-    "!**/node_modules/.cache/**/*"
+    "!**/node_modules/**/node-thermal-printer/**/*"
   ],
   "extraMetadata": {
     "main": "client-pos/dist-electron/electron/main.js"
@@ -34,11 +28,11 @@
   "asarUnpack": [
     "**/*.node",
     "server/prisma/seed.db",
-    "server/dist/**/*",
-    "server/node_modules/.prisma/**/*",
-    "server/node_modules/@prisma/client/**/*",
-    "node_modules/.prisma/**/*",
-    "node_modules/@prisma/client/**/*",
+    "/server/dist/**/*",
+    "/server/node_modules/.prisma/**/*",
+    "/server/node_modules/@prisma/client/**/*",
+    "/node_modules/.prisma/**/*",
+    "/node_modules/@prisma/client/**/*",
     "node_modules/electron-log/**/*",
     "node_modules/electron-updater/**/*",
     "node_modules/electron-printer/**/*"
