@@ -9,6 +9,7 @@
   "files": [
     "server/dist/**/*",
     "server/node_modules/**/*",
+    "server/uploads/**/*",
     "node_modules/.prisma/**/*",
     "node_modules/@prisma/client/**/*",
     "node_modules/electron-log/**/*",
