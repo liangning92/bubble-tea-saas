@@ -8,6 +8,7 @@ const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = require("child_process");
+const net_1 = __importDefault(require("net"));
 const main_1 = __importDefault(require("electron-log/main"));
 // 初始化 electron-log（文件日志）
 // 日志路径：{userData}/logs/main.log
@@ -260,6 +261,32 @@ function startLocalServer() {
         serverProcess = null;
     });
     console.log('[Server] Local API server started (PID:', serverProcess.pid, ')');
+}
+/**
+ * 等待端口可用（轮询检测）
+ */
+function waitForPort(port, timeoutMs = 30000) {
+    const startTime = Date.now();
+    return new Promise((resolve, reject) => {
+        const check = () => {
+            const client = new net_1.default.Socket();
+            client.connect(port, '127.0.0.1', () => {
+                client.destroy();
+                main_1.default.log(`[Server] Port ${port} is ready`);
+                resolve();
+            });
+            client.on('error', () => {
+                client.destroy();
+                if (Date.now() - startTime > timeoutMs) {
+                    reject(new Error(`Port ${port} did not become available within ${timeoutMs}ms`));
+                }
+                else {
+                    setTimeout(check, 500);
+                }
+            });
+        };
+        check();
+    });
 }
 /**
  * 关闭本地服务器（应用退出时）
@@ -978,33 +1005,47 @@ electron_1.app.whenReady().then(() => {
         }
     });
     // 先启动本地服务器（仅打包模式）
-    startLocalServer();
-    // 等待服务器启动后再创建窗口
-    // 开发模式不需要启动服务器（vite dev server 已运行）
-    const serverStartupDelay = electron_1.app.isPackaged ? 2000 : 0;
-    setTimeout(() => {
-        try {
+    if (electron_1.app.isPackaged) {
+        startLocalServer();
+        // 等待服务器 port 7072 可用后再创建窗口
+        waitForPort(7072, 30000).then(() => {
+            main_1.default.log('[Electron] Server is ready, creating windows...');
+            try {
+                createMainWindow();
+                console.log('[Electron] Main window created');
+            }
+            catch (e) {
+                console.error('[Electron] Failed to create main window:', e);
+            }
+            try {
+                createCustomerWindow();
+                console.log('[Electron] Customer window created');
+            }
+            catch (e) {
+                console.warn('[Electron] Failed to create customer window:', e);
+            }
+            if (mainWindow) {
+                (0, updater_1.setupUpdater)(mainWindow);
+                setTimeout(() => (0, updater_1.checkForUpdatesOnStart)(), 10000);
+            }
+        }).catch((err) => {
+            main_1.default.error('[Electron] Server failed to start:', err.message);
+            // 即使服务器启动失败也创建主窗口，显示错误页
             createMainWindow();
-            console.log('[Electron] Main window created');
-        }
-        catch (e) {
-            console.error('[Electron] Failed to create main window:', e);
-        }
-        try {
-            createCustomerWindow();
-            console.log('[Electron] Customer window created');
-        }
-        catch (e) {
-            console.warn('[Electron] Failed to create customer window:', e);
-        }
+            if (mainWindow) {
+                showErrorPage(mainWindow, '服务器启动失败', '本地 API 服务器未能成功启动，应用程序无法正常工作。', `错误：${err.message}\n\n请尝试重新安装应用程序。\n如果问题持续，请查看日志文件获取详细信息。`);
+            }
+        });
+    }
+    else {
+        // 开发模式：直接创建窗口（vite dev server 已运行）
+        createMainWindow();
+        createCustomerWindow();
         if (mainWindow) {
             (0, updater_1.setupUpdater)(mainWindow);
-            // 延迟 10 秒后检查更新，不阻塞启动
-            setTimeout(() => {
-                (0, updater_1.checkForUpdatesOnStart)();
-            }, 10000);
+            setTimeout(() => (0, updater_1.checkForUpdatesOnStart)(), 10000);
         }
-    }, serverStartupDelay);
+    }
 });
 electron_1.app.on('window-all-closed', () => {
     stopLocalServer();
