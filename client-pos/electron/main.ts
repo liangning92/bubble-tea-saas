@@ -562,9 +562,11 @@ function createCustomerWindow() {
   if (isDev) {
     customerWindow.loadURL('http://localhost:6063/customer-display')
   } else {
-    customerWindow.loadFile(getResourcePath('dist/index.html'), {
-      hash: '/customer-display'
-    }).catch((err) => {
+    // 注意：loadFile 的 hash 参数不生效，必须用 loadURL + file:// + hash
+    const indexPath = getResourcePath('dist/index.html')
+    const fileUrl = 'file://' + indexPath.replace(/\\/g, '/') + '#/customer-display'
+    console.log('[Electron] Customer display loading:', fileUrl)
+    customerWindow.loadURL(fileUrl).catch((err) => {
       console.error('[Electron] Customer display load failed:', err)
     })
   }
