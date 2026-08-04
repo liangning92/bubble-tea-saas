@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
 import path from 'path'
+import os from 'os'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 import fs from 'fs'
 import { exec as execChild, fork } from 'child_process'
@@ -155,6 +156,56 @@ let customerWindow: BrowserWindow | null = null
 let serverProcess: ReturnType<typeof fork> | null = null
 
 /**
+ * 从 asar 提取服务器到临时目录，使 Node.js fork() 可以执行
+ *
+ * Node.js 的 fork() 无法直接执行 asar 归档内的 JS 文件
+ *（asar 是一个只读的压缩归档，fork 需要真实的文件系统路径）
+ *
+ * 解决方案：将 server 目录从 asar 复制到 os.tmpdir()，然后 fork 临时目录中的文件
+ * 已提取的服务器会被缓存（下次启动直接使用），避免重复复制
+ *
+ * 临时目录：os.tmpdir()/bubble-tea-pos-server/
+ */
+function extractServerFromAsar(): string {
+  const serverDest = path.join(os.tmpdir(), 'bubble-tea-pos-server')
+
+  // 检查是否已提取（缓存命中）
+  if (fs.existsSync(path.join(serverDest, 'dist', 'index.js'))) {
+    log.log('[Server] Using cached extracted server at:', serverDest)
+    return serverDest
+  }
+
+  log.log('[Server] Extracting server from asar to:', serverDest)
+
+  // 删除旧目录（如果存在）
+  if (fs.existsSync(serverDest)) {
+    fs.rmSync(serverDest, { recursive: true })
+  }
+
+  // 递归复制目录
+  function copyDir(src: string, dest: string): void {
+    fs.mkdirSync(dest, { recursive: true })
+    const entries = fs.readdirSync(src, { withFileTypes: true })
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name)
+      const destPath = path.join(dest, entry.name)
+      if (entry.isDirectory()) {
+        copyDir(srcPath, destPath)
+      } else {
+        fs.copyFileSync(srcPath, destPath)
+      }
+    }
+  }
+
+  // 从 asar 内部复制 server（app.getAppPath() 在 asar:true 时指向 app.asar）
+  const serverSrc = path.join(app.getAppPath(), 'server')
+  copyDir(serverSrc, serverDest)
+  log.log('[Server] Server extracted successfully')
+
+  return serverDest
+}
+
+/**
  * 启动本地 Express API 服务器（fork child process）
  *
  * 数据库初始化策略（单门店离线安装）：
@@ -227,15 +278,16 @@ function startLocalServer(): void {
     log.log('[Server] User database already exists:', userDbPath)
   }
 
-  // 服务器可执行文件路径
-  const serverPath = path.join(app.getAppPath(), 'server', 'dist', 'index.js')
-  log.log('[Server] Server path:', serverPath)
+  // 从 asar 提取服务器到临时目录（asar 内 JS 无法被 fork 直接执行）
+  const serverPath = extractServerFromAsar()
+  const serverEntry = path.join(serverPath, 'dist', 'index.js')
+  log.log('[Server] Server path:', serverEntry)
   log.log('[Server] Database path:', userDbPath)
   log.log('[Server] Starting local API server...')
 
   // fork Express 服务器
   // 注意：不传 execPath - Electron 主进程本身就是 Node.js，fork() 会复用当前运行时
-  serverProcess = fork(serverPath, [], {
+  serverProcess = fork(serverEntry, [], {
     env: {
       ...process.env,
       NODE_ENV: 'production',
