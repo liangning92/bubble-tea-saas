@@ -39,3 +39,4 @@ release/
 *.log
 npm-debug.log*
 .DS_Store
+client-pos/dist-electron/

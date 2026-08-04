@@ -157,7 +157,7 @@ let serverProcess = null;
  * 3. fork Express 服务器，DATABASE_URL 指向用户目录
  *
  * seed.db 打包位置（asarUnpack）：
- *   {resourcesPath}/app.asar.unpacked/server/prisma/seed.db
+ *   {resourcesPath}/app/server/prisma/seed.db  (asar:false 模式)
  *
  * 多门店支持：
  * 数据库里 Tenant → Store 表已存在，但默认创建单门店实例。
@@ -173,8 +173,9 @@ function startLocalServer() {
     const userDbPath = path_1.default.join(dbDir, 'dev.db');
     // 打包资源路径（asarUnpack 后的位置）
     // app.asar.unpacked 相对于 resourcesPath
+    // asar: false 时文件直接放在 resources/app/，不是 resources/app.asar.unpacked/
     const resourcesPath = process.resourcesPath;
-    const seedTemplatePath = path_1.default.join(resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db');
+    const seedTemplatePath = path_1.default.join(resourcesPath, 'app', 'server', 'prisma', 'seed.db');
     main_1.default.log(`[Server] App version: ${electron_1.app.getVersion()}, userData: ${userDataDir}`);
     // 确保数据库目录存在
     try {
