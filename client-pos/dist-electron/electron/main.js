@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
-const os_1 = __importDefault(require("os"));
 const updater_1 = require("./updater");
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = require("child_process");
@@ -150,48 +149,19 @@ let customerWindow = null;
 // 本地 Express 服务器进程（用于打包后的桌面版本）
 let serverProcess = null;
 /**
- * 从 asar 提取服务器到临时目录，使 Node.js fork() 可以执行
+ * 获取服务器入口文件的真实路径（asarUnpack 后的路径）
  *
- * Node.js 的 fork() 无法直接执行 asar 归档内的 JS 文件
- *（asar 是一个只读的压缩归档，fork 需要真实的文件系统路径）
+ * 打包后 server/dist/** 被解压到 app.asar.unpacked/server/dist/
+ * process.resourcesPath 指向 resources/ 目录
+ * 真实路径：process.resourcesPath + /app.asar.unpacked/server/dist/index.js
  *
- * 解决方案：将 server 目录从 asar 复制到 os.tmpdir()，然后 fork 临时目录中的文件
- * 已提取的服务器会被缓存（下次启动直接使用），避免重复复制
- *
- * 临时目录：os.tmpdir()/bubble-tea-pos-server/
+ * 注意：app.getAppPath() 在 asar:true 时返回 app.asar（归档文件本身），
+ * 不是目录，所以不能直接用它拼接路径读取 asar 内部文件。
  */
-function extractServerFromAsar() {
-    const serverDest = path_1.default.join(os_1.default.tmpdir(), 'bubble-tea-pos-server');
-    // 检查是否已提取（缓存命中）
-    if (fs_1.default.existsSync(path_1.default.join(serverDest, 'dist', 'index.js'))) {
-        main_1.default.log('[Server] Using cached extracted server at:', serverDest);
-        return serverDest;
-    }
-    main_1.default.log('[Server] Extracting server from asar to:', serverDest);
-    // 删除旧目录（如果存在）
-    if (fs_1.default.existsSync(serverDest)) {
-        fs_1.default.rmSync(serverDest, { recursive: true });
-    }
-    // 递归复制目录
-    function copyDir(src, dest) {
-        fs_1.default.mkdirSync(dest, { recursive: true });
-        const entries = fs_1.default.readdirSync(src, { withFileTypes: true });
-        for (const entry of entries) {
-            const srcPath = path_1.default.join(src, entry.name);
-            const destPath = path_1.default.join(dest, entry.name);
-            if (entry.isDirectory()) {
-                copyDir(srcPath, destPath);
-            }
-            else {
-                fs_1.default.copyFileSync(srcPath, destPath);
-            }
-        }
-    }
-    // 从 asar 内部复制 server（app.getAppPath() 在 asar:true 时指向 app.asar）
-    const serverSrc = path_1.default.join(electron_1.app.getAppPath(), 'server');
-    copyDir(serverSrc, serverDest);
-    main_1.default.log('[Server] Server extracted successfully');
-    return serverDest;
+function getServerEntryPath() {
+    // process.resourcesPath 在打包后指向 resources/
+    // asarUnpack 的文件在 resources/app.asar.unpacked/
+    return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'dist', 'index.js');
 }
 /**
  * 启动本地 Express API 服务器（fork child process）
@@ -256,9 +226,8 @@ function startLocalServer() {
     else {
         main_1.default.log('[Server] User database already exists:', userDbPath);
     }
-    // 从 asar 提取服务器到临时目录（asar 内 JS 无法被 fork 直接执行）
-    const serverPath = extractServerFromAsar();
-    const serverEntry = path_1.default.join(serverPath, 'dist', 'index.js');
+    // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
+    const serverEntry = getServerEntryPath();
     main_1.default.log('[Server] Server path:', serverEntry);
     main_1.default.log('[Server] Database path:', userDbPath);
     main_1.default.log('[Server] Starting local API server...');

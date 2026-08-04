@@ -34,6 +34,7 @@
   "asarUnpack": [
     "**/*.node",
     "server/prisma/seed.db",
+    "server/dist/**/*",
     "node_modules/.prisma/**/*",
     "node_modules/@prisma/client/**/*",
     "node_modules/electron-log/**/*",
