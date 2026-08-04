@@ -36,6 +36,27 @@
     "node_modules/electron-updater/**/*",
     "node_modules/electron-printer/**/*"
   ],
+  "files": [
+    "server/dist/**/*",
+    "server/node_modules/**/*",
+    "server/uploads/**/*",
+    "node_modules/.prisma/client/query_engine-windows.dll.node",
+    "node_modules/.prisma/client/schema.prisma",
+    "node_modules/.prisma/client/**/*.js",
+    "node_modules/.prisma/client/**/*.d.ts",
+    "node_modules/.prisma/client/package.json",
+    "node_modules/@prisma/client/**/*",
+    "node_modules/electron-log/**/*",
+    "node_modules/electron-updater/**/*",
+    "node_modules/electron-printer/**/*",
+    "server/prisma/schema.prisma",
+    "server/prisma/seed.db",
+    "client-pos/dist/**/*",
+    "client-pos/dist-electron/**/*",
+    "dist-electron/**/*",
+    "shared/**/*",
+    "!**/node_modules/.cache/**/*"
+  ],
   "npmRebuild": true,
   "win": {
     "target": [
