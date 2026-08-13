@@ -227,6 +227,9 @@ function startLocalServer() {
     else {
         main_1.default.log('[Server] User database already exists:', userDbPath);
     }
+    // 计算 node_modules 路径（asarUnpack 后根 node_modules 在同一目录）
+    const unpackedRoot = path_1.default.join(resourcesPath, 'app.asar.unpacked', 'node_modules');
+    main_1.default.log('[Server] NODE_PATH:', unpackedRoot);
     // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
     const serverEntry = getServerEntryPath();
     main_1.default.log('[Server] Server path:', serverEntry);
@@ -240,7 +243,9 @@ function startLocalServer() {
             NODE_ENV: 'production',
             PORT: '7072',
             // 覆盖数据库路径为用户可写目录
-            DATABASE_URL: `file:${userDbPath}`
+            DATABASE_URL: `file:${userDbPath}`,
+            // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
+            NODE_PATH: unpackedRoot
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
