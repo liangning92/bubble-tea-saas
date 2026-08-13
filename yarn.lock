@@ -2816,7 +2816,7 @@ bser@2.1.1:
     zustand "^4.5.0"
 
 "bubble-tea-pos@file:/Users/liangning/Desktop/Claude_Work/bubble-tea-saas/client-pos":
-  version "2.0.6"
+  version "2026.8.177"
   resolved "file:client-pos"
   dependencies:
     "@tanstack/react-query" "^5.17.0"
@@ -2828,7 +2828,6 @@ bser@2.1.1:
     dexie-react-hooks "^1.1.7"
     electron-log "^5.4.4"
     electron-updater "^6.8.9"
-    esbuild "^0.28.1"
     i18next "^23.8.0"
     lucide-react "^0.312.0"
     qrcode "^1.5.4"
