@@ -63,12 +63,12 @@
     "socket.io": "^4.8.3",
     "xlsx": "^0.18.5"
   },
-  "build": {},
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "electron": "^33.4.0",
     "electron-builder": "^26.0.12",
     "typescript": "^5.8.3",
     "vercel": "^54.14.0"
-  }
+  },
+  "main": "client-pos/dist-electron/electron/main.js"
 }

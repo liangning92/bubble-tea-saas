@@ -18,96 +18,343 @@
     "!**/*.map",
     "!**/node_modules/.cache/**/*",
     "!**/node_modules/**/printer/**/*",
-    "!**/node_modules/**/node-thermal-printer/**/*",
+    "!**/node_modules/**/node-thermal-printer/**/*"
+  ],
+  "extraResources": [
     {
-      "from": "node_modules",
-      "to": "node_modules",
-      "filter": [
-        "express/**/*",
-        "cors/**/*",
-        "socket.io/**/*",
-        "helmet/**/*",
-        "jsonwebtoken/**/*",
-        "morgan/**/*",
-        "multer/**/*",
-        "bcryptjs/**/*",
-        "zod/**/*",
-        "date-fns/**/*",
-        "xlsx/**/*",
-        "uuid/**/*",
-        "dotenv/**/*",
-        "express-validator/**/*",
-        "express-rate-limit/**/*",
-        "accepts/**/*",
-        "array-flatten/**/*",
-        "base64id/**/*",
-        "body-parser/**/*",
-        "bytes/**/*",
-        "call-bind/**/*",
-        "content-disposition/**/*",
-        "content-type/**/*",
-        "cookie/**/*",
-        "cookie-signature/**/*",
-        "debug/**/*",
-        "depd/**/*",
-        "destroy/**/*",
-        "ee-first/**/*",
-        "encodeurl/**/*",
-        "es-define-property/**/*",
-        "es-errors/**/*",
-        "escape-html/**/*",
-        "etag/**/*",
-        "finalhandler/**/*",
-        "forwarded/**/*",
-        "fresh/**/*",
-        "function-bind/**/*",
-        "get-intrinsic/**/*",
-        "has-symbols/**/*",
-        "has-proto/**/*",
-        "hasown/**/*",
-        "http-errors/**/*",
-        "iconv-lite/**/*",
-        "inherits/**/*",
-        "ipaddr.js/**/*",
-        "is-generator-function/**/*",
-        "lodash/**/*",
-        "media-typer/**/*",
-        "merge-descriptors/**/*",
-        "methods/**/*",
-        "mime-db/**/*",
-        "mime-types/**/*",
-        "ms/**/*",
-        "negotiator/**/*",
-        "object-inspect/**/*",
-        "on-finished/**/*",
-        "parseurl/**/*",
-        "path-to-regexp/**/*",
-        "proxy-addr/**/*",
-        "q/**/*",
-        "qs/**/*",
-        "range-parser/**/*",
-        "raw-body/**/*",
-        "safe-buffer/**/*",
-        "safer-buffer/**/*",
-        "send/**/*",
-        "serve-static/**/*",
-        "setprototypeof/**/*",
-        "side-channel/**/*",
-        "statuses/**/*",
-        "toidentifier/**/*",
-        "type-is/**/*",
-        "unpipe/**/*",
-        "vary/**/*",
-        "engine.io/**/*",
-        "engine.io-parser/**/*",
-        "socket.io-parser/**/*",
-        "ws/**/*",
-        "@socket.io/**/*",
-        "@prisma/client/**/*",
-        ".prisma/**/*",
-        "electron-log/**/*",
-        "electron-updater/**/*"
-      ]
+      "from": "node_modules/express",
+      "to": "express",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/cors",
+      "to": "cors",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/socket.io",
+      "to": "socket.io",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/engine.io",
+      "to": "engine.io",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/engine.io-parser",
+      "to": "engine.io-parser",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/socket.io-parser",
+      "to": "socket.io-parser",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/ws",
+      "to": "ws",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/helmet",
+      "to": "helmet",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/jsonwebtoken",
+      "to": "jsonwebtoken",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/morgan",
+      "to": "morgan",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/multer",
+      "to": "multer",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/bcryptjs",
+      "to": "bcryptjs",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/zod",
+      "to": "zod",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/date-fns",
+      "to": "date-fns",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/xlsx",
+      "to": "xlsx",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/uuid",
+      "to": "uuid",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/dotenv",
+      "to": "dotenv",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/express-validator",
+      "to": "express-validator",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/express-rate-limit",
+      "to": "express-rate-limit",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/accepts",
+      "to": "accepts",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/array-flatten",
+      "to": "array-flatten",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/base64id",
+      "to": "base64id",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/body-parser",
+      "to": "body-parser",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/bytes",
+      "to": "bytes",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/content-disposition",
+      "to": "content-disposition",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/content-type",
+      "to": "content-type",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/cookie",
+      "to": "cookie",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/debug",
+      "to": "debug",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/depd",
+      "to": "depd",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/ee-first",
+      "to": "ee-first",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/encodeurl",
+      "to": "encodeurl",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/escape-html",
+      "to": "escape-html",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/etag",
+      "to": "etag",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/finalhandler",
+      "to": "finalhandler",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/forwarded",
+      "to": "forwarded",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/fresh",
+      "to": "fresh",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/http-errors",
+      "to": "http-errors",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/iconv-lite",
+      "to": "iconv-lite",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/inherits",
+      "to": "inherits",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/lodash",
+      "to": "lodash",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/media-typer",
+      "to": "media-typer",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/merge-descriptors",
+      "to": "merge-descriptors",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/methods",
+      "to": "methods",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/mime-db",
+      "to": "mime-db",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/mime-types",
+      "to": "mime-types",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/ms",
+      "to": "ms",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/negotiator",
+      "to": "negotiator",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/on-finished",
+      "to": "on-finished",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/parseurl",
+      "to": "parseurl",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/path-to-regexp",
+      "to": "path-to-regexp",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/proxy-addr",
+      "to": "proxy-addr",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/qs",
+      "to": "qs",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/range-parser",
+      "to": "range-parser",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/raw-body",
+      "to": "raw-body",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/safe-buffer",
+      "to": "safe-buffer",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/send",
+      "to": "send",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/serve-static",
+      "to": "serve-static",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/setprototypeof",
+      "to": "setprototypeof",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/statuses",
+      "to": "statuses",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/toidentifier",
+      "to": "toidentifier",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/type-is",
+      "to": "type-is",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/unpipe",
+      "to": "unpipe",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/vary",
+      "to": "vary",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/@prisma/client",
+      "to": "@prisma/client",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/.prisma/client",
+      "to": ".prisma/client",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/electron-log",
+      "to": "electron-log",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "node_modules/electron-updater",
+      "to": "electron-updater",
+      "filter": ["**/*"]
     }
   ],
   "extraMetadata": {
@@ -116,92 +363,7 @@
   "asar": true,
   "asarUnpack": [
     "**/*.node",
-    "server/prisma/seed.db",
-    "/server/dist/**/*",
-    "/node_modules/express/**/*",
-    "/node_modules/cors/**/*",
-    "/node_modules/socket.io/**/*",
-    "/node_modules/socket.io-parser/**/*",
-    "/node_modules/engine.io/**/*",
-    "/node_modules/engine.io-parser/**/*",
-    "/node_modules/ws/**/*",
-    "/node_modules/helmet/**/*",
-    "/node_modules/jsonwebtoken/**/*",
-    "/node_modules/morgan/**/*",
-    "/node_modules/multer/**/*",
-    "/node_modules/bcryptjs/**/*",
-    "/node_modules/zod/**/*",
-    "/node_modules/date-fns/**/*",
-    "/node_modules/xlsx/**/*",
-    "/node_modules/uuid/**/*",
-    "/node_modules/dotenv/**/*",
-    "/node_modules/express-validator/**/*",
-    "/node_modules/express-rate-limit/**/*",
-    "/node_modules/accepts/**/*",
-    "/node_modules/array-flatten/**/*",
-    "/node_modules/base64id/**/*",
-    "/node_modules/body-parser/**/*",
-    "/node_modules/bytes/**/*",
-    "/node_modules/call-bind/**/*",
-    "/node_modules/content-disposition/**/*",
-    "/node_modules/content-type/**/*",
-    "/node_modules/cookie/**/*",
-    "/node_modules/cookie-signature/**/*",
-    "/node_modules/debug/**/*",
-    "/node_modules/depd/**/*",
-    "/node_modules/destroy/**/*",
-    "/node_modules/ee-first/**/*",
-    "/node_modules/encodeurl/**/*",
-    "/node_modules/es-define-property/**/*",
-    "/node_modules/es-errors/**/*",
-    "/node_modules/escape-html/**/*",
-    "/node_modules/etag/**/*",
-    "/node_modules/finalhandler/**/*",
-    "/node_modules/forwarded/**/*",
-    "/node_modules/fresh/**/*",
-    "/node_modules/function-bind/**/*",
-    "/node_modules/get-intrinsic/**/*",
-    "/node_modules/has-symbols/**/*",
-    "/node_modules/has-proto/**/*",
-    "/node_modules/hasown/**/*",
-    "/node_modules/http-errors/**/*",
-    "/node_modules/iconv-lite/**/*",
-    "/node_modules/inherits/**/*",
-    "/node_modules/ipaddr.js/**/*",
-    "/node_modules/is-generator-function/**/*",
-    "/node_modules/lodash/**/*",
-    "/node_modules/media-typer/**/*",
-    "/node_modules/merge-descriptors/**/*",
-    "/node_modules/methods/**/*",
-    "/node_modules/mime-db/**/*",
-    "/node_modules/mime-types/**/*",
-    "/node_modules/ms/**/*",
-    "/node_modules/negotiator/**/*",
-    "/node_modules/object-inspect/**/*",
-    "/node_modules/on-finished/**/*",
-    "/node_modules/parseurl/**/*",
-    "/node_modules/path-to-regexp/**/*",
-    "/node_modules/proxy-addr/**/*",
-    "/node_modules/q/**/*",
-    "/node_modules/qs/**/*",
-    "/node_modules/range-parser/**/*",
-    "/node_modules/raw-body/**/*",
-    "/node_modules/safe-buffer/**/*",
-    "/node_modules/safer-buffer/**/*",
-    "/node_modules/send/**/*",
-    "/node_modules/serve-static/**/*",
-    "/node_modules/setprototypeof/**/*",
-    "/node_modules/side-channel/**/*",
-    "/node_modules/statuses/**/*",
-    "/node_modules/toidentifier/**/*",
-    "/node_modules/type-is/**/*",
-    "/node_modules/unpipe/**/*",
-    "/node_modules/vary/**/*",
-    "/node_modules/.prisma/**/*",
-    "/node_modules/@prisma/client/**/*",
-    "/node_modules/electron-log/**/*",
-    "/node_modules/electron-updater/**/*",
-    "/node_modules/electron-printer/**/*"
+    "server/prisma/seed.db"
   ],
   "npmRebuild": true,
   "win": {

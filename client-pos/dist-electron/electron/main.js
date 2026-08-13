@@ -227,8 +227,8 @@ function startLocalServer() {
     else {
         main_1.default.log('[Server] User database already exists:', userDbPath);
     }
-    // 计算 node_modules 路径（asarUnpack 后根 node_modules 在同一目录）
-    const unpackedRoot = path_1.default.join(resourcesPath, 'app.asar.unpacked', 'node_modules');
+    // extraResources 的 node_modules 直接在 resourcesPath/ 下（不在 app.asar.unpacked/）
+    const unpackedRoot = resourcesPath;
     main_1.default.log('[Server] NODE_PATH:', unpackedRoot);
     // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
     const serverEntry = getServerEntryPath();
