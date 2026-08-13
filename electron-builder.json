@@ -31,7 +31,7 @@
   "asarUnpack": [
     "**/*.node",
     "server/prisma/seed.db",
-    "server/dist/**/*",
+    "/server/dist/**/*",
     "server/node_modules/**/*",
     "node_modules/**/*",
     "node_modules/.prisma/**/*",
