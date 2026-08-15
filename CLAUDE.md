@@ -37,6 +37,29 @@
 
 **例外：** 用户明确说了"开始构建"、"现在构建"、"推送"等指令，则不需要再次确认。
 
+### 打包前验证（强制）
+
+**每次执行 `electron:build` 之前，必须运行两个检查脚本：**
+
+```bash
+# 1. 安全审查（发现 FAIL 必须修复）
+bash scripts/security-review.sh
+
+# 2. 打包配置验证（发现 FAIL 必须修复）
+bash scripts/packaging-validate.sh
+
+# 3. 两个脚本都 PASS 后 → 报告给梁宁 → 等待授权 → 打包
+```
+
+对应文档：
+- 安全审查：`docs/SECURITY-REVIEW-CHECKLIST.md`
+- 打包验证：`scripts/packaging-validate.sh`（覆盖 Prisma 引擎、asarUnpack、编译产物等）
+
+**发现 FAIL 时的处理：**
+1. 脚本已列出具体文件和行号，直接修复
+2. 修复后重新运行脚本验证
+3. 两个脚本都 PASS 才能报告授权请求
+
 **违反后果：** 未经授权构建/推送 = 严重违规，必须立即回滚并通知用户。
 
 ## 项目概述
@@ -220,6 +243,8 @@ git add -A && git commit -m "backup before [操作描述]"
 | 服务端构建 | `cd server && npm run build` | 修复构建错误，直到通过 |
 | Admin 构建 | `cd client-admin && npm run build` | 修复构建错误，直到通过 |
 | POS 构建 | `cd client-pos && npm run build` | 修复构建错误，直到通过 |
+| **安全审查** | `bash scripts/security-review.sh` | **FAIL 必须修复，WARN 建议修复** |
+| **打包配置验证** | `bash scripts/packaging-validate.sh` | **FAIL 必须修复，WARN 建议修复** |
 
 ### 检查流程
 
