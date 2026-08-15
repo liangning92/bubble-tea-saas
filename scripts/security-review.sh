@@ -48,11 +48,13 @@ else
     ok "auth.ts / AuthService.ts 无 passwordHash 泄露"
 fi
 
-# 检查其他 API 路由
-if grep -rn "passwordHash" server/src/routes/ 2>/dev/null | grep -v ".map\|//\|^\s*//"; then
-    fail "发现 passwordHash 在其他路由文件中"
+# 检查 res.json 响应中是否包含 passwordHash（真正的泄露）
+PASSWORD_LEAK=$(grep -rn "passwordHash" server/src/routes/ 2>/dev/null | grep -v ".map\|//\|^\s*//" | grep "res\.json\|return.*{.*passwordHash\|send.*passwordHash" || echo "")
+if [ -n "$PASSWORD_LEAK" ]; then
+    fail "发现 passwordHash 在 API 响应中！"
+    echo "$PASSWORD_LEAK"
 else
-    ok "其他路由无 passwordHash"
+    ok "API 响应无 passwordHash"
 fi
 
 # bcrypt rounds

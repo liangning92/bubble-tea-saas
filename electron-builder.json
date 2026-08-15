@@ -13,7 +13,7 @@
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
-    "dist-electron/**/*",
+
     "shared/**/*",
     "!**/*.map",
     "!**/node_modules/.cache/**/*",
@@ -362,8 +362,9 @@
   },
   "asar": true,
   "asarUnpack": [
-    "**/*.node",
-    "server/prisma/seed.db"
+    "/**/*.node",
+    "/server/prisma/seed.db",
+    "/node_modules/.prisma/client/libquery_engine-*.node"
   ],
   "npmRebuild": true,
   "win": {
