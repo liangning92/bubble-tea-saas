@@ -13,7 +13,6 @@
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
-
     "shared/**/*",
     "!**/*.map",
     "!**/node_modules/.cache/**/*",
@@ -23,338 +22,472 @@
   "extraResources": [
     {
       "from": "node_modules/express",
-      "to": "express",
-      "filter": ["**/*"]
+      "to": "node_modules/express",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/cors",
-      "to": "cors",
-      "filter": ["**/*"]
+      "to": "node_modules/cors",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/socket.io",
-      "to": "socket.io",
-      "filter": ["**/*"]
+      "to": "node_modules/socket.io",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/engine.io",
-      "to": "engine.io",
-      "filter": ["**/*"]
+      "to": "node_modules/engine.io",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/engine.io-parser",
-      "to": "engine.io-parser",
-      "filter": ["**/*"]
+      "to": "node_modules/engine.io-parser",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/socket.io-parser",
-      "to": "socket.io-parser",
-      "filter": ["**/*"]
+      "to": "node_modules/socket.io-parser",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/ws",
-      "to": "ws",
-      "filter": ["**/*"]
+      "to": "node_modules/ws",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/helmet",
-      "to": "helmet",
-      "filter": ["**/*"]
+      "to": "node_modules/helmet",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/jsonwebtoken",
-      "to": "jsonwebtoken",
-      "filter": ["**/*"]
+      "to": "node_modules/jsonwebtoken",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/morgan",
-      "to": "morgan",
-      "filter": ["**/*"]
+      "to": "node_modules/morgan",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/multer",
-      "to": "multer",
-      "filter": ["**/*"]
+      "to": "node_modules/multer",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/bcryptjs",
-      "to": "bcryptjs",
-      "filter": ["**/*"]
+      "to": "node_modules/bcryptjs",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/zod",
-      "to": "zod",
-      "filter": ["**/*"]
+      "to": "node_modules/zod",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/date-fns",
-      "to": "date-fns",
-      "filter": ["**/*"]
+      "to": "node_modules/date-fns",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/xlsx",
-      "to": "xlsx",
-      "filter": ["**/*"]
+      "to": "node_modules/xlsx",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/uuid",
-      "to": "uuid",
-      "filter": ["**/*"]
+      "to": "node_modules/uuid",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/dotenv",
-      "to": "dotenv",
-      "filter": ["**/*"]
+      "to": "node_modules/dotenv",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/express-validator",
-      "to": "express-validator",
-      "filter": ["**/*"]
+      "to": "node_modules/express-validator",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/express-rate-limit",
-      "to": "express-rate-limit",
-      "filter": ["**/*"]
+      "to": "node_modules/express-rate-limit",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/accepts",
-      "to": "accepts",
-      "filter": ["**/*"]
+      "to": "node_modules/accepts",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/array-flatten",
-      "to": "array-flatten",
-      "filter": ["**/*"]
+      "to": "node_modules/array-flatten",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/base64id",
-      "to": "base64id",
-      "filter": ["**/*"]
+      "to": "node_modules/base64id",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/body-parser",
-      "to": "body-parser",
-      "filter": ["**/*"]
+      "to": "node_modules/body-parser",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/bytes",
-      "to": "bytes",
-      "filter": ["**/*"]
+      "to": "node_modules/bytes",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/content-disposition",
-      "to": "content-disposition",
-      "filter": ["**/*"]
+      "to": "node_modules/content-disposition",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/content-type",
-      "to": "content-type",
-      "filter": ["**/*"]
+      "to": "node_modules/content-type",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/cookie",
-      "to": "cookie",
-      "filter": ["**/*"]
+      "to": "node_modules/cookie",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/debug",
-      "to": "debug",
-      "filter": ["**/*"]
+      "to": "node_modules/debug",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/depd",
-      "to": "depd",
-      "filter": ["**/*"]
+      "to": "node_modules/depd",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/ee-first",
-      "to": "ee-first",
-      "filter": ["**/*"]
+      "to": "node_modules/ee-first",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/encodeurl",
-      "to": "encodeurl",
-      "filter": ["**/*"]
+      "to": "node_modules/encodeurl",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/escape-html",
-      "to": "escape-html",
-      "filter": ["**/*"]
+      "to": "node_modules/escape-html",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/etag",
-      "to": "etag",
-      "filter": ["**/*"]
+      "to": "node_modules/etag",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/finalhandler",
-      "to": "finalhandler",
-      "filter": ["**/*"]
+      "to": "node_modules/finalhandler",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/forwarded",
-      "to": "forwarded",
-      "filter": ["**/*"]
+      "to": "node_modules/forwarded",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/fresh",
-      "to": "fresh",
-      "filter": ["**/*"]
+      "to": "node_modules/fresh",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/http-errors",
-      "to": "http-errors",
-      "filter": ["**/*"]
+      "to": "node_modules/http-errors",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/iconv-lite",
-      "to": "iconv-lite",
-      "filter": ["**/*"]
+      "to": "node_modules/iconv-lite",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/inherits",
-      "to": "inherits",
-      "filter": ["**/*"]
+      "to": "node_modules/inherits",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/lodash",
-      "to": "lodash",
-      "filter": ["**/*"]
+      "to": "node_modules/lodash",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/media-typer",
-      "to": "media-typer",
-      "filter": ["**/*"]
+      "to": "node_modules/media-typer",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/merge-descriptors",
-      "to": "merge-descriptors",
-      "filter": ["**/*"]
+      "to": "node_modules/merge-descriptors",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/methods",
-      "to": "methods",
-      "filter": ["**/*"]
+      "to": "node_modules/methods",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/mime-db",
-      "to": "mime-db",
-      "filter": ["**/*"]
+      "to": "node_modules/mime-db",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/mime-types",
-      "to": "mime-types",
-      "filter": ["**/*"]
+      "to": "node_modules/mime-types",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/ms",
-      "to": "ms",
-      "filter": ["**/*"]
+      "to": "node_modules/ms",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/negotiator",
-      "to": "negotiator",
-      "filter": ["**/*"]
+      "to": "node_modules/negotiator",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/on-finished",
-      "to": "on-finished",
-      "filter": ["**/*"]
+      "to": "node_modules/on-finished",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/parseurl",
-      "to": "parseurl",
-      "filter": ["**/*"]
+      "to": "node_modules/parseurl",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/path-to-regexp",
-      "to": "path-to-regexp",
-      "filter": ["**/*"]
+      "to": "node_modules/path-to-regexp",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/proxy-addr",
-      "to": "proxy-addr",
-      "filter": ["**/*"]
+      "to": "node_modules/proxy-addr",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/qs",
-      "to": "qs",
-      "filter": ["**/*"]
+      "to": "node_modules/qs",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/range-parser",
-      "to": "range-parser",
-      "filter": ["**/*"]
+      "to": "node_modules/range-parser",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/raw-body",
-      "to": "raw-body",
-      "filter": ["**/*"]
+      "to": "node_modules/raw-body",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/safe-buffer",
-      "to": "safe-buffer",
-      "filter": ["**/*"]
+      "to": "node_modules/safe-buffer",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/send",
-      "to": "send",
-      "filter": ["**/*"]
+      "to": "node_modules/send",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/serve-static",
-      "to": "serve-static",
-      "filter": ["**/*"]
+      "to": "node_modules/serve-static",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/setprototypeof",
-      "to": "setprototypeof",
-      "filter": ["**/*"]
+      "to": "node_modules/setprototypeof",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/statuses",
-      "to": "statuses",
-      "filter": ["**/*"]
+      "to": "node_modules/statuses",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/toidentifier",
-      "to": "toidentifier",
-      "filter": ["**/*"]
+      "to": "node_modules/toidentifier",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/type-is",
-      "to": "type-is",
-      "filter": ["**/*"]
+      "to": "node_modules/type-is",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/unpipe",
-      "to": "unpipe",
-      "filter": ["**/*"]
+      "to": "node_modules/unpipe",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/vary",
-      "to": "vary",
-      "filter": ["**/*"]
+      "to": "node_modules/vary",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/@prisma/client",
-      "to": "@prisma/client",
-      "filter": ["**/*"]
+      "to": "node_modules/@prisma/client",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/.prisma/client",
       "to": ".prisma/client",
-      "filter": ["**/*"]
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/electron-log",
-      "to": "electron-log",
-      "filter": ["**/*"]
+      "to": "node_modules/electron-log",
+      "filter": [
+        "**/*"
+      ]
     },
     {
       "from": "node_modules/electron-updater",
-      "to": "electron-updater",
-      "filter": ["**/*"]
+      "to": "node_modules/electron-updater",
+      "filter": [
+        "**/*"
+      ]
     }
   ],
   "extraMetadata": {
@@ -372,7 +505,9 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
     "artifactName": "${productName}-${version}-Windows-x64.${ext}"
