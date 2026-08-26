@@ -470,7 +470,7 @@
     },
     {
       "from": "node_modules/.prisma/client",
-      "to": ".prisma/client",
+      "to": "node_modules/.prisma/client",
       "filter": [
         "**/*"
       ]
