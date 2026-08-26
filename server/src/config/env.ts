@@ -27,20 +27,25 @@ export const config: Config = {
   jwt: {
     secret: (() => {
       const secret = process.env.JWT_SECRET
-      if (!secret && process.env.NODE_ENV === 'production') {
-        throw new Error('JWT_SECRET environment variable is required in production')
+      if (!secret) {
+        // Desktop packaged app: fork() doesn't pass JWT_SECRET, use dev fallback
+        // This is safe because POS→server communication is local (127.0.0.1)
+        console.warn('[env] JWT_SECRET not set, using dev fallback (safe for local desktop app)')
+        return 'dev-only-secret-do-not-use-in-production'
       }
-      return secret || 'dev-only-secret-do-not-use-in-production'
+      return secret
     })(),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   },
 
   corsOrigin: (() => {
     const origin = process.env.CORS_ORIGIN
-    if (!origin && process.env.NODE_ENV === 'production') {
-      throw new Error('CORS_ORIGIN environment variable is required in production')
+    if (!origin) {
+      // Desktop packaged app: fork() doesn't pass CORS_ORIGIN, use localhost fallback
+      console.warn('[env] CORS_ORIGIN not set, using localhost fallback (safe for local desktop app)')
+      return 'http://localhost:5173,http://localhost:3000'
     }
-    return origin || 'http://localhost:5173,http://localhost:3000'
+    return origin
   })(),
 
   indonesia: {

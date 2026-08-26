@@ -153,8 +153,7 @@ router.post('/login', authLimiter, (0, validation_1.validateBody)(loginSchema), 
                         employeeNumber: user.staff.employeeNumber,
                         position: user.staff.position
                     } : null
-                },
-                passwordHash: user.password
+                }
             },
             timestamp: new Date().toISOString()
         });
