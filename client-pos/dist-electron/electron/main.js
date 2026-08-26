@@ -64,12 +64,14 @@ function showErrorPageSync(title, message, details) {
   <meta charset="UTF-8">
   <title>${title}</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    h2 { color: #d32f2f; margin-top: 0; }
-    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-all; }
-    .log-path { background: #fff3e0; padding: 10px 15px; border-radius: 4px; margin-top: 10px; font-size: 13px; word-break: break-all; font-family: monospace; }
-    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; color: #333; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+    .container { width: 100%; max-width: 900px; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #d32f2f; margin-top: 0; font-size: 24px; }
+    .message { font-size: 18px; line-height: 1.6; margin: 20px 0; }
+    .details { background: #f9f9f9; padding: 20px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-word; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+    .log-path { background: #fff3e0; padding: 15px 20px; border-radius: 4px; margin-top: 15px; font-size: 14px; word-break: break-all; font-family: monospace; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; font-size: 14px; }
     .btn:hover { background: #1565c0; }
     .btn-log { background: #388e3c; }
     .btn-log:hover { background: #2e7d32; }
@@ -78,7 +80,7 @@ function showErrorPageSync(title, message, details) {
 <body>
   <div class="container">
     <h2>⚠️ ${title}</h2>
-    <p>${message}</p>
+    <p class="message">${message}</p>
     ${details ? `<div class="details"><strong>详细信息：</strong><br>${details}</div>` : ''}
     <div class="log-path"><strong>📋 日志文件位置：</strong><br>${logPath}</div>
     <button class="btn btn-log" onclick="require('electron').shell.openPath('${logDir.replace(/\\/g, '\\\\')}')">📂 打开日志文件夹</button>
@@ -100,12 +102,14 @@ function showErrorPage(mainWindow, title, message, details) {
   <meta charset="UTF-8">
   <title>${title}</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    h2 { color: #d32f2f; margin-top: 0; }
-    .details { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-all; }
-    .log-path { background: #fff3e0; padding: 10px 15px; border-radius: 4px; margin-top: 10px; font-size: 13px; word-break: break-all; font-family: monospace; }
-    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; color: #333; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+    .container { width: 100%; max-width: 900px; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #d32f2f; margin-top: 0; font-size: 24px; }
+    .message { font-size: 18px; line-height: 1.6; margin: 20px 0; }
+    .details { background: #f9f9f9; padding: 20px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-word; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+    .log-path { background: #fff3e0; padding: 15px 20px; border-radius: 4px; margin-top: 15px; font-size: 14px; word-break: break-all; font-family: monospace; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; font-size: 14px; }
     .btn:hover { background: #1565c0; }
     .btn-log { background: #388e3c; }
     .btn-log:hover { background: #2e7d32; }
