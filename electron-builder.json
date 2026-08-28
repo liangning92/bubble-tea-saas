@@ -21,6 +21,13 @@
   ],
   "extraResources": [
     {
+      "from": "server/dist",
+      "to": "app.asar.unpacked/server/dist",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
       "from": "node_modules/express",
       "to": "node_modules/express",
       "filter": [
@@ -496,8 +503,6 @@
   "asar": true,
   "asarUnpack": [
     "/**/*.node",
-    "server/prisma/seed.db",
-    "server/dist/**/*",
     "node_modules/.prisma/client/libquery_engine-*.node"
   ],
   "npmRebuild": true,
