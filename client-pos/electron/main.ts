@@ -424,8 +424,8 @@ function createMainWindow() {
 
     // 创建诊断窗口（独立窗口，即使主窗口白屏也能看到）
     const diagWindow = new BrowserWindow({
-      width: 600,
-      height: 400,
+      width: 900,
+      height: 650,
       title: '诊断信息 - Bubble Tea POS',
       alwaysOnTop: true
     })
@@ -461,12 +461,12 @@ function createMainWindow() {
 <head><meta charset="UTF-8"><title>诊断信息 - Bubble Tea POS</title>
 <style>
 body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
-pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto}
+pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto;word-wrap:break-word;white-space:pre-wrap}
 .key{color:#9cdcfe}
 .status-ok{color:#4ec9b0}
 .status-error{color:#f44747}
 h3{margin-top:16px;color:#569cd6}
-.log-section{max-height:200px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
+.log-section{max-height:500px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
 </style>
 </head>
 <body>
