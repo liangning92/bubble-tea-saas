@@ -1,4 +1,26 @@
 "use strict";
+// 最早期的启动调试（写入 TEMP 目录，因为 userData 路径可能还不存在）
+const path = require('path');
+const os = require('os');
+const fs_1 = require('fs');
+try {
+  const tmpLog = path.join(os.tmpdir(), 'bubbleteapos-startup.log');
+  const startupDebug = [
+    '=== BubbleTeaPOS Startup Debug ===',
+    'Timestamp: ' + new Date().toISOString(),
+    'isPackaged: ' + (typeof process !== 'undefined' && process.release ? process.release.name : 'unknown'),
+    'execPath: ' + (process.execPath || 'unknown'),
+    'resourcesPath: ' + (process.resourcesPath || 'unknown'),
+    'app.getPath exists: ' + (typeof require !== 'undefined' ? 'yes' : 'no'),
+    'CWD: ' + process.cwd(),
+    '.argv: ' + JSON.stringify(process.argv)
+  ].join('\n');
+  fs_1.writeFileSync(tmpLog, startupDebug);
+  console.log('[STARTUP] Debug log written to:', tmpLog);
+} catch(e) {
+  console.error('[STARTUP] Debug log failed:', e.message);
+}
+
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
