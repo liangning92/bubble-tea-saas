@@ -523,7 +523,8 @@
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "BubbleTeaPOS",
-    "include": "client-pos/installer.nsh"
+    "shortcutName": "BTPS",
+    "include": "client-pos/installer.nsh",
+    "unicode": true
   }
 }
