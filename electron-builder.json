@@ -7,7 +7,6 @@
     "buildResources": "build"
   },
   "files": [
-    "server/dist/**/*",
     "server/uploads/**/*",
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
