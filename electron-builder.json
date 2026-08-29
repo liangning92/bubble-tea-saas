@@ -27,13 +27,6 @@
       ]
     },
     {
-      "from": "node_modules/express",
-      "to": "node_modules/express",
-      "filter": [
-        "**/*"
-      ]
-    },
-    {
       "from": "node_modules/cookie-signature",
       "to": "node_modules/cookie-signature",
       "filter": [
@@ -516,7 +509,15 @@
   "asar": true,
   "asarUnpack": [
     "/**/*.node",
-    "node_modules/.prisma/client/libquery_engine-*.node"
+    "node_modules/.prisma/client/libquery_engine-*.node",
+    "node_modules/express/**/*",
+    "node_modules/debug/**/*",
+    "node_modules/path-to-regexp/**/*",
+    "node_modules/cors/**/*",
+    "node_modules/cookie/**/*",
+    "node_modules/cookie-signature/**/*",
+    "node_modules/merge-descriptors/**/*",
+    "node_modules/utils-merge/**/*"
   ],
   "npmRebuild": true,
   "win": {
