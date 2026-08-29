@@ -66,6 +66,12 @@ jobs:
           Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
           npm install --force --prefer-offline=false
 
+      - name: Install server dependencies (standalone, no workspace hoisting)
+        run: |
+          Remove-Item -Force server/package-lock.json -ErrorAction SilentlyContinue
+          Remove-Item -Force server/node_modules -Recurse -ErrorAction SilentlyContinue
+          cd server && npm install && cd ..
+
       - name: Generate Prisma client
         run: npm run db:generate
 

@@ -27,469 +27,469 @@
       ]
     },
     {
-      "from": "node_modules/express",
+      "from": "server/node_modules/express",
       "to": "app.asar.unpacked/node_modules/express",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/cors",
+      "from": "server/node_modules/cors",
       "to": "app.asar.unpacked/node_modules/cors",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/cookie",
+      "from": "server/node_modules/cookie",
       "to": "app.asar.unpacked/node_modules/cookie",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/cookie-signature",
+      "from": "server/node_modules/cookie-signature",
       "to": "app.asar.unpacked/node_modules/cookie-signature",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/debug",
+      "from": "server/node_modules/debug",
       "to": "app.asar.unpacked/node_modules/debug",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/path-to-regexp",
+      "from": "server/node_modules/path-to-regexp",
       "to": "app.asar.unpacked/node_modules/path-to-regexp",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/merge-descriptors",
+      "from": "server/node_modules/merge-descriptors",
       "to": "app.asar.unpacked/node_modules/merge-descriptors",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/utils-merge",
+      "from": "server/node_modules/utils-merge",
       "to": "app.asar.unpacked/node_modules/utils-merge",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/accepts",
+      "from": "server/node_modules/accepts",
       "to": "app.asar.unpacked/node_modules/accepts",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/array-flatten",
+      "from": "server/node_modules/array-flatten",
       "to": "app.asar.unpacked/node_modules/array-flatten",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/body-parser",
+      "from": "server/node_modules/body-parser",
       "to": "app.asar.unpacked/node_modules/body-parser",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/bytes",
+      "from": "server/node_modules/bytes",
       "to": "app.asar.unpacked/node_modules/bytes",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/content-disposition",
+      "from": "server/node_modules/content-disposition",
       "to": "app.asar.unpacked/node_modules/content-disposition",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/content-type",
+      "from": "server/node_modules/content-type",
       "to": "app.asar.unpacked/node_modules/content-type",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/depd",
+      "from": "server/node_modules/depd",
       "to": "app.asar.unpacked/node_modules/depd",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/encodeurl",
+      "from": "server/node_modules/encodeurl",
       "to": "app.asar.unpacked/node_modules/encodeurl",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/escape-html",
+      "from": "server/node_modules/escape-html",
       "to": "app.asar.unpacked/node_modules/escape-html",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/etag",
+      "from": "server/node_modules/etag",
       "to": "app.asar.unpacked/node_modules/etag",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/finalhandler",
+      "from": "server/node_modules/finalhandler",
       "to": "app.asar.unpacked/node_modules/finalhandler",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/forwarded",
+      "from": "server/node_modules/forwarded",
       "to": "app.asar.unpacked/node_modules/forwarded",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/fresh",
+      "from": "server/node_modules/fresh",
       "to": "app.asar.unpacked/node_modules/fresh",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/http-errors",
+      "from": "server/node_modules/http-errors",
       "to": "app.asar.unpacked/node_modules/http-errors",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/inherits",
+      "from": "server/node_modules/inherits",
       "to": "app.asar.unpacked/node_modules/inherits",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/media-typer",
+      "from": "server/node_modules/media-typer",
       "to": "app.asar.unpacked/node_modules/media-typer",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/methods",
+      "from": "server/node_modules/methods",
       "to": "app.asar.unpacked/node_modules/methods",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/mime-db",
+      "from": "server/node_modules/mime-db",
       "to": "app.asar.unpacked/node_modules/mime-db",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/mime-types",
+      "from": "server/node_modules/mime-types",
       "to": "app.asar.unpacked/node_modules/mime-types",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/ms",
+      "from": "server/node_modules/ms",
       "to": "app.asar.unpacked/node_modules/ms",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/negotiator",
+      "from": "server/node_modules/negotiator",
       "to": "app.asar.unpacked/node_modules/negotiator",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/on-finished",
+      "from": "server/node_modules/on-finished",
       "to": "app.asar.unpacked/node_modules/on-finished",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/parseurl",
+      "from": "server/node_modules/parseurl",
       "to": "app.asar.unpacked/node_modules/parseurl",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/proxy-addr",
+      "from": "server/node_modules/proxy-addr",
       "to": "app.asar.unpacked/node_modules/proxy-addr",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/qs",
+      "from": "server/node_modules/qs",
       "to": "app.asar.unpacked/node_modules/qs",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/range-parser",
+      "from": "server/node_modules/range-parser",
       "to": "app.asar.unpacked/node_modules/range-parser",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/raw-body",
+      "from": "server/node_modules/raw-body",
       "to": "app.asar.unpacked/node_modules/raw-body",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/safe-buffer",
+      "from": "server/node_modules/safe-buffer",
       "to": "app.asar.unpacked/node_modules/safe-buffer",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/send",
+      "from": "server/node_modules/send",
       "to": "app.asar.unpacked/node_modules/send",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/serve-static",
+      "from": "server/node_modules/serve-static",
       "to": "app.asar.unpacked/node_modules/serve-static",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/setprototypeof",
+      "from": "server/node_modules/setprototypeof",
       "to": "app.asar.unpacked/node_modules/setprototypeof",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/statuses",
+      "from": "server/node_modules/statuses",
       "to": "app.asar.unpacked/node_modules/statuses",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/toidentifier",
+      "from": "server/node_modules/toidentifier",
       "to": "app.asar.unpacked/node_modules/toidentifier",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/type-is",
+      "from": "server/node_modules/type-is",
       "to": "app.asar.unpacked/node_modules/type-is",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/unpipe",
+      "from": "server/node_modules/unpipe",
       "to": "app.asar.unpacked/node_modules/unpipe",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/vary",
+      "from": "server/node_modules/vary",
       "to": "app.asar.unpacked/node_modules/vary",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/socket.io",
+      "from": "server/node_modules/socket.io",
       "to": "app.asar.unpacked/node_modules/socket.io",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/engine.io",
+      "from": "server/node_modules/engine.io",
       "to": "app.asar.unpacked/node_modules/engine.io",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/engine.io-parser",
+      "from": "server/node_modules/engine.io-parser",
       "to": "app.asar.unpacked/node_modules/engine.io-parser",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/socket.io-parser",
+      "from": "server/node_modules/socket.io-parser",
       "to": "app.asar.unpacked/node_modules/socket.io-parser",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/ws",
+      "from": "server/node_modules/ws",
       "to": "app.asar.unpacked/node_modules/ws",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/helmet",
+      "from": "server/node_modules/helmet",
       "to": "app.asar.unpacked/node_modules/helmet",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/jsonwebtoken",
+      "from": "server/node_modules/jsonwebtoken",
       "to": "app.asar.unpacked/node_modules/jsonwebtoken",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/morgan",
+      "from": "server/node_modules/morgan",
       "to": "app.asar.unpacked/node_modules/morgan",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/multer",
+      "from": "server/node_modules/multer",
       "to": "app.asar.unpacked/node_modules/multer",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/bcryptjs",
+      "from": "server/node_modules/bcryptjs",
       "to": "app.asar.unpacked/node_modules/bcryptjs",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/zod",
+      "from": "server/node_modules/zod",
       "to": "app.asar.unpacked/node_modules/zod",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/date-fns",
+      "from": "server/node_modules/date-fns",
       "to": "app.asar.unpacked/node_modules/date-fns",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/xlsx",
+      "from": "server/node_modules/xlsx",
       "to": "app.asar.unpacked/node_modules/xlsx",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/uuid",
+      "from": "server/node_modules/uuid",
       "to": "app.asar.unpacked/node_modules/uuid",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/dotenv",
+      "from": "server/node_modules/dotenv",
       "to": "app.asar.unpacked/node_modules/dotenv",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/base64id",
+      "from": "server/node_modules/base64id",
       "to": "app.asar.unpacked/node_modules/base64id",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/ee-first",
+      "from": "server/node_modules/ee-first",
       "to": "app.asar.unpacked/node_modules/ee-first",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/iconv-lite",
+      "from": "server/node_modules/iconv-lite",
       "to": "app.asar.unpacked/node_modules/iconv-lite",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/lodash",
+      "from": "server/node_modules/lodash",
       "to": "app.asar.unpacked/node_modules/lodash",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/@prisma/client",
+      "from": "server/node_modules/@prisma/client",
       "to": "app.asar.unpacked/node_modules/@prisma/client",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/.prisma/client",
+      "from": "server/node_modules/.prisma/client",
       "to": "app.asar.unpacked/node_modules/.prisma/client",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/electron-log",
+      "from": "server/node_modules/electron-log",
       "to": "app.asar.unpacked/node_modules/electron-log",
       "filter": [
         "**/*"
       ]
     },
     {
-      "from": "node_modules/electron-updater",
+      "from": "server/node_modules/electron-updater",
       "to": "app.asar.unpacked/node_modules/electron-updater",
       "filter": [
         "**/*"
