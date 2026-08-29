@@ -34,6 +34,13 @@
       ]
     },
     {
+      "from": "node_modules/cookie-signature",
+      "to": "node_modules/cookie-signature",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
       "from": "node_modules/cors",
       "to": "node_modules/cors",
       "filter": [
@@ -162,6 +169,20 @@
     {
       "from": "node_modules/accepts",
       "to": "node_modules/accepts",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "node_modules/utils-merge",
+      "to": "node_modules/utils-merge",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "node_modules/setprototypeof",
+      "to": "node_modules/setprototypeof",
       "filter": [
         "**/*"
       ]
@@ -421,13 +442,6 @@
     {
       "from": "node_modules/serve-static",
       "to": "node_modules/serve-static",
-      "filter": [
-        "**/*"
-      ]
-    },
-    {
-      "from": "node_modules/setprototypeof",
-      "to": "node_modules/setprototypeof",
       "filter": [
         "**/*"
       ]
