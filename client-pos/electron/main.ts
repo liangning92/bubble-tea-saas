@@ -160,25 +160,34 @@ let customerWindow: BrowserWindow | null = null
 let serverProcess: ReturnType<typeof fork> | null = null
 
 /**
- * 获取服务器入口文件的真实路径（asarUnpack 后的路径）
+ * 获取服务器入口文件的真实路径
  *
- * 打包后 server/dist/** 被解压到 app.asar.unpacked/server/dist/
- * process.resourcesPath 指向 resources/ 目录
- * 真实路径：process.resourcesPath + /app.asar.unpacked/server/dist/index.js
+ * asar:true  -> server 在 app.asar.unpacked/server/dist/index.js
+ * asar:false -> server 在 server/dist/index.js（extraResources 直接在 resources/ 下）
  *
- * 注意：app.getAppPath() 在 asar:true 时返回 app.asar（归档文件本身），
- * 不是目录，所以不能直接用它拼接路径读取 asar 内部文件。
+ * 检测方法：app.getAppPath() 末尾是 .asar 则为 asar 模式
  */
 function getServerEntryPath(): string {
-  // process.resourcesPath 在打包后指向 resources/
-  // asarUnpack 的文件在 resources/app.asar.unpacked/
-  return path.join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'server',
-    'dist',
-    'index.js'
-  )
+  const isAsar = app.getAppPath().endsWith('.asar')
+  if (isAsar) {
+    // asar: true — server 在 app.asar.unpacked 下
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'dist', 'index.js')
+  } else {
+    // asar: false — server 直接在 resources/server/dist 下（extraResources）
+    return path.join(process.resourcesPath, 'server', 'dist', 'index.js')
+  }
+}
+
+/**
+ * 获取 seed 数据库模板路径
+ */
+function getSeedTemplatePath(): string {
+  const isAsar = app.getAppPath().endsWith('.asar')
+  if (isAsar) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db')
+  } else {
+    return path.join(process.resourcesPath, 'server', 'prisma', 'seed.db')
+  }
 }
 
 /**
@@ -206,16 +215,8 @@ function startLocalServer(): void {
   const dbDir = path.join(userDataDir, 'data')
   const userDbPath = path.join(dbDir, 'dev.db')
 
-  // 打包资源路径（asarUnpack 后的位置）
-  // app.asar.unpacked 相对于 resourcesPath
-  const resourcesPath = process.resourcesPath
-  const seedTemplatePath = path.join(
-    resourcesPath,
-    'app.asar.unpacked',
-    'server',
-    'prisma',
-    'seed.db'
-  )
+  // seed 模板路径（asar 模式自适应）
+  const seedTemplatePath = getSeedTemplatePath()
 
   log.log(`[Server] App version: ${app.getVersion()}, userData: ${userDataDir}`)
 
@@ -254,8 +255,8 @@ function startLocalServer(): void {
     log.log('[Server] User database already exists:', userDbPath)
   }
 
-  // extraResources 的 node_modules 直接在 resourcesPath/ 下（不在 app.asar.unpacked/）
-  const unpackedRoot = resourcesPath
+  // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
+  const unpackedRoot = process.resourcesPath
   log.log('[Server] NODE_PATH:', unpackedRoot)
 
   // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）

@@ -1,26 +1,4 @@
 "use strict";
-// 最早期的启动调试（写入 TEMP 目录，因为 userData 路径可能还不存在）
-const path = require('path');
-const os = require('os');
-const fs_1 = require('fs');
-try {
-  const tmpLog = path.join(os.tmpdir(), 'bubbleteapos-startup.log');
-  const startupDebug = [
-    '=== BubbleTeaPOS Startup Debug ===',
-    'Timestamp: ' + new Date().toISOString(),
-    'isPackaged: ' + (typeof process !== 'undefined' && process.release ? process.release.name : 'unknown'),
-    'execPath: ' + (process.execPath || 'unknown'),
-    'resourcesPath: ' + (process.resourcesPath || 'unknown'),
-    'app.getPath exists: ' + (typeof require !== 'undefined' ? 'yes' : 'no'),
-    'CWD: ' + process.cwd(),
-    '.argv: ' + JSON.stringify(process.argv)
-  ].join('\n');
-  fs_1.writeFileSync(tmpLog, startupDebug);
-  console.log('[STARTUP] Debug log written to:', tmpLog);
-} catch(e) {
-  console.error('[STARTUP] Debug log failed:', e.message);
-}
-
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -176,19 +154,35 @@ let customerWindow = null;
 // 本地 Express 服务器进程（用于打包后的桌面版本）
 let serverProcess = null;
 /**
- * 获取服务器入口文件的真实路径（asarUnpack 后的路径）
+ * 获取服务器入口文件的真实路径
  *
- * 打包后 server/dist/** 被解压到 app.asar.unpacked/server/dist/
- * process.resourcesPath 指向 resources/ 目录
- * 真实路径：process.resourcesPath + /app.asar.unpacked/server/dist/index.js
+ * asar:true  -> server 在 app.asar.unpacked/server/dist/index.js
+ * asar:false -> server 在 server/dist/index.js（extraResources 直接在 resources/ 下）
  *
- * 注意：app.getAppPath() 在 asar:true 时返回 app.asar（归档文件本身），
- * 不是目录，所以不能直接用它拼接路径读取 asar 内部文件。
+ * 检测方法：app.getAppPath() 末尾是 .asar 则为 asar 模式
  */
 function getServerEntryPath() {
-    // process.resourcesPath 在打包后指向 resources/
-    // asarUnpack 的文件在 resources/app.asar.unpacked/
-    return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'dist', 'index.js');
+    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
+    if (isAsar) {
+        // asar: true — server 在 app.asar.unpacked 下
+        return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'dist', 'index.js');
+    }
+    else {
+        // asar: false — server 直接在 resources/server/dist 下（extraResources）
+        return path_1.default.join(process.resourcesPath, 'server', 'dist', 'index.js');
+    }
+}
+/**
+ * 获取 seed 数据库模板路径
+ */
+function getSeedTemplatePath() {
+    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
+    if (isAsar) {
+        return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db');
+    }
+    else {
+        return path_1.default.join(process.resourcesPath, 'server', 'prisma', 'seed.db');
+    }
 }
 /**
  * 启动本地 Express API 服务器（fork child process）
@@ -213,10 +207,8 @@ function startLocalServer() {
     const userDataDir = electron_1.app.getPath('userData');
     const dbDir = path_1.default.join(userDataDir, 'data');
     const userDbPath = path_1.default.join(dbDir, 'dev.db');
-    // 打包资源路径（asarUnpack 后的位置）
-    // app.asar.unpacked 相对于 resourcesPath
-    const resourcesPath = process.resourcesPath;
-    const seedTemplatePath = path_1.default.join(resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db');
+    // seed 模板路径（asar 模式自适应）
+    const seedTemplatePath = getSeedTemplatePath();
     main_1.default.log(`[Server] App version: ${electron_1.app.getVersion()}, userData: ${userDataDir}`);
     // 确保数据库目录存在
     try {
@@ -253,8 +245,8 @@ function startLocalServer() {
     else {
         main_1.default.log('[Server] User database already exists:', userDbPath);
     }
-    // extraResources 的 node_modules 直接在 resourcesPath/ 下（不在 app.asar.unpacked/）
-    const unpackedRoot = resourcesPath;
+    // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
+    const unpackedRoot = process.resourcesPath;
     main_1.default.log('[Server] NODE_PATH:', unpackedRoot);
     // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
     const serverEntry = getServerEntryPath();
@@ -408,8 +400,8 @@ function createMainWindow() {
             .join('\n');
         // 创建诊断窗口（独立窗口，即使主窗口白屏也能看到）
         const diagWindow = new electron_1.BrowserWindow({
-            width: 600,
-            height: 400,
+            width: 900,
+            height: 650,
             title: '诊断信息 - Bubble Tea POS',
             alwaysOnTop: true
         });
@@ -448,12 +440,12 @@ function createMainWindow() {
 <head><meta charset="UTF-8"><title>诊断信息 - Bubble Tea POS</title>
 <style>
 body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
-pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto}
+pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto;word-wrap:break-word;white-space:pre-wrap}
 .key{color:#9cdcfe}
 .status-ok{color:#4ec9b0}
 .status-error{color:#f44747}
 h3{margin-top:16px;color:#569cd6}
-.log-section{max-height:200px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
+.log-section{max-height:500px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
 </style>
 </head>
 <body>

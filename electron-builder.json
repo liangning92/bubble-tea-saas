@@ -526,13 +526,5 @@
     "shortcutName": "BTPS",
     "include": "client-pos/installer.nsh",
     "unicode": true
-  },
-  "extraDependencies": [
-    "utils-merge",
-    "merge-descriptors",
-    "cookie-signature",
-    "setprototypeof",
-    "has",
-    "path-to-regexp"
-  ]
+  }
 }
