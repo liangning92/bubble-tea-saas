@@ -79,10 +79,7 @@ jobs:
         env:
           DATABASE_URL: "file:./prisma/dev.db"
         run: |
-          cd server
-          npx prisma db push --accept-data-loss
-          # seed.db 是新用户安装的模板，必须与 dev.db 保持同步
-          Copy-Item prisma/dev.db prisma/seed.db
+          cd server; npx prisma db push --accept-data-loss; Copy-Item prisma\dev.db prisma\seed.db
 
       - name: Build server
         run: npm run build:server
