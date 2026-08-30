@@ -19,7 +19,7 @@ jobs:
         run: |
           $version = "${{ inputs.version }}"
           Write-Host "Downloading v${version} using gh cli..."
-          gh release download "v${version}" --repo liangning92/bubble-tea-saas --pattern "*.exe" --dir . -cl Unix 2>&1
+          gh release download "v${version}" --repo liangning92/bubble-tea-saas --pattern "*.exe" --dir . 2>&1
           Write-Host "Files downloaded:"
           Get-ChildItem *.exe | Select-Object Name, Length
 
