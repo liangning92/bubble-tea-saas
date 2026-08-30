@@ -14,79 +14,114 @@ jobs:
     timeout-minutes: 30
     
     steps:
-      - name: Download EXE
+      - name: Download EXE using gh cli
         shell: pwsh
         run: |
           $version = "${{ inputs.version }}"
-          $url = "https://github.com/liangning92/bubble-tea-saas/releases/download/v${version}/BTPS-${version}-Windows-x64.exe"
-          Write-Host "Downloading: $url"
-          curl -L -o BTPS.exe $url
-          Write-Host "Download complete"
-          Get-Item BTPS.exe | Select-Object Name, Length
+          Write-Host "Downloading v${version} using gh cli..."
+          gh release download "v${version}" --repo liangning92/bubble-tea-saas --pattern "*.exe" --dir . -cl Unix 2>&1
+          Write-Host "Files downloaded:"
+          Get-ChildItem *.exe | Select-Object Name, Length
+
+      - name: Check EXE file
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem *.exe | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "No .exe found!"
+            exit 1
+          }
+          Write-Host "EXE: $($exe.Name), Size: $($exe.Length) bytes"
+          if ($exe.Length -lt 1000) {
+            Write-Host "ERROR: EXE is too small, likely download failed"
+            exit 1
+          }
+
+      - name: Extract EXE (NSIS is a compressed archive)
+        shell: pwsh
+        run: |
+          7z x -o:app BTPS*.exe -y | Out-Null
+          Write-Host "Extracted contents:"
+          Get-ChildItem app -Recurse | Format-Table Name, Length -AutoSize
+
+      - name: Find seed.db in extracted contents
+        shell: pwsh
+        run: |
+          $dbs = Get-ChildItem . -Recurse -Filter "seed.db" -File -EA SilentlyContinue
+          foreach ($db in $dbs) {
+            Write-Host "Found: $($db.FullName)"
+          }
+
+      - name: Check asar unpack
+        shell: pwsh
+        run: |
+          $asarUnpacked = Get-ChildItem . -Recurse -Directory -Filter "*.unpacked" -EA SilentlyContinue
+          foreach ($dir in $asarUnpacked) {
+            Write-Host "Unpacked: $($dir.FullName)"
+            Get-ChildItem $dir -Recurse -File | Select-Object -First 5 FullName
+          }
 
       - name: Install EXE silently
         shell: pwsh
         run: |
-          Write-Host "Installing..."
-          Start-Process -FilePath "./BTPS.exe" -ArgumentList "/S" -Wait
-          Write-Host "Install complete"
-          Start-Sleep 3
+          $exePath = Get-ChildItem . -Filter "BTPS*.exe" | Select-Object -First 1 | ForEach-Object { $_.FullName }
+          Write-Host "Installing from: $exePath"
+          try {
+            Start-Process -FilePath $exePath -ArgumentList "/S","/D=C:\BTPS" -Wait -NoNewWindow
+            Write-Host "Install completed"
+          } catch {
+            Write-Host "Install failed (may require GUI): $_"
+            Write-Host "Trying alternative extraction..."
+          }
 
       - name: Find installed app
         shell: pwsh
         run: |
           $appPaths = @(
+            "C:\BTPS",
             "$env:LOCALAPPDATA\Programs\bubble-tea-saas",
             "$env:ProgramFiles\bubble-tea-saas",
             "$env:ProgramFiles\BTPS"
           )
+          $found = $false
           foreach ($p in $appPaths) {
             if (Test-Path $p) {
-              Write-Host "Found app at: $p"
-              Get-ChildItem $p -Recurse -Filter "*.exe" | Select-Object FullName
+              Write-Host "Found: $p"
+              Get-ChildItem $p -Recurse -Filter "*.exe" | ForEach-Object { Write-Host "EXE: $($_.FullName)"; $found = $true }
             }
           }
-
-      - name: Check asar contents
-        shell: pwsh
-        run: |
-          # Find app.asar and check contents
-          $appDataPath = "$env:LOCALAPPDATA\bubble-tea-saas"
-          if (Test-Path $appDataPath) {
-            Write-Host "App data path: $appDataPath"
-            Get-ChildItem $appDataPath -Recurse -Include *.asar,*.db | Select-Object FullName, Length
-          } else {
-            Write-Host "App data path not found at $appDataPath"
+          if (-not $found) {
+            Write-Host "App not found in standard locations"
           }
 
-      - name: Test if app launches without immediate crash
+      - name: Test app startup
         shell: pwsh
         run: |
-          $exePath = "$env:LOCALAPPDATA\Programs\bubble-tea-saas\BTPS.exe"
-          if (-not (Test-Path $exePath)) {
-            $exePath = "$env:ProgramFiles\bubble-tea-saas\BTPS.exe"
+          $possiblePaths = @(
+            "C:\BTPS\BTPS.exe",
+            "$env:LOCALAPPDATA\Programs\bubble-tea-saas\BTPS.exe",
+            "$env:ProgramFiles\bubble-tea-saas\BTPS.exe"
+          )
+          $exePath = $null
+          foreach ($p in $possiblePaths) {
+            if (Test-Path $p) { $exePath = $p; break }
           }
-          if (-not (Test-Path $exePath)) {
-            Write-Host "EXE not found at expected paths"
+          
+          if (-not $exePath) {
+            Write-Host "Could not find installed .exe to test"
             exit 1
           }
           
-          Write-Host "Starting: $exePath"
+          Write-Host "Testing: $exePath"
           $errLog = "$env:TEMP\btp_err.log"
           $proc = Start-Process -FilePath $exePath -PassThru -RedirectStandardError $errLog
-          
-          Write-Host "Waiting 15 seconds..."
           Start-Sleep 15
           
           if ($proc.HasExited) {
-            Write-Host "FAIL: App exited with code $($proc.ExitCode)"
-            if (Test-Path $errLog) {
-              Write-Host "Error output:"
-              Get-Content $errLog | Select-Object -First 10
-            }
+            Write-Host "RESULT: App exited (code: $($proc.ExitCode))"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 10 }
             exit 1
           } else {
-            Write-Host "SUCCESS: App is still running (PID: $($proc.Id))"
-            Write-Host "Stopping process..."
+            Write-Host "RESULT: App is running (PID: $($proc.Id)) - SUCCESS"
             Stop-Process $proc.Id -Force -EA SilentlyContinue
           }
