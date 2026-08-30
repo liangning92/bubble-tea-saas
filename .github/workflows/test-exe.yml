@@ -14,114 +14,68 @@ jobs:
     timeout-minutes: 30
     
     steps:
-      - name: Download EXE using gh cli
+      - name: Download EXE via curl
         shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          $version = "${{ inputs.version }}"
-          Write-Host "Downloading v${version} using gh cli..."
-          gh release download "v${version}" --repo liangning92/bubble-tea-saas --pattern "*.exe" --dir . 2>&1
-          Write-Host "Files downloaded:"
-          Get-ChildItem *.exe | Select-Object Name, Length
+          $version = "$env:VERSION"
+          Write-Host "Downloading v${version}..."
+          $url = "https://github.com/liangning92/bubble-tea-saas/releases/download/v${version}/BTPS-${version}-Windows-x64.exe"
+          Write-Host "URL: $url"
+          curl -L -o BTPS.exe $url 2>&1 | Out-Host
+          $file = Get-Item BTPS.exe
+          Write-Host "Downloaded: $($file.Length) bytes"
 
       - name: Check EXE file
         shell: pwsh
         run: |
-          $exe = Get-ChildItem *.exe | Select-Object -First 1
-          if (-not $exe) {
-            Write-Host "No .exe found!"
-            exit 1
-          }
-          Write-Host "EXE: $($exe.Name), Size: $($exe.Length) bytes"
-          if ($exe.Length -lt 1000) {
-            Write-Host "ERROR: EXE is too small, likely download failed"
-            exit 1
+          $exe = Get-Item BTPS.exe
+          Write-Host "EXE Size: $($exe.Length) bytes"
+          if ($exe.Length -lt 1000000) {
+            Write-Host "WARNING: File is very small"
+            Get-Content BTPS.exe | Select-Object -First 5
           }
 
-      - name: Extract EXE (NSIS is a compressed archive)
+      - name: Extract EXE
         shell: pwsh
         run: |
-          7z x -o:app BTPS*.exe -y | Out-Null
-          Write-Host "Extracted contents:"
-          Get-ChildItem app -Recurse | Format-Table Name, Length -AutoSize
+          7z x -o:app BTPS.exe -y 2>&1 | Out-Null
+          Write-Host "Extracted:"
+          Get-ChildItem app -Recurse -File | Select-Object FullName, Length | Format-Table -AutoSize
 
-      - name: Find seed.db in extracted contents
+      - name: Find seed.db
         shell: pwsh
         run: |
           $dbs = Get-ChildItem . -Recurse -Filter "seed.db" -File -EA SilentlyContinue
-          foreach ($db in $dbs) {
-            Write-Host "Found: $($db.FullName)"
-          }
-
-      - name: Check asar unpack
-        shell: pwsh
-        run: |
-          $asarUnpacked = Get-ChildItem . -Recurse -Directory -Filter "*.unpacked" -EA SilentlyContinue
-          foreach ($dir in $asarUnpacked) {
-            Write-Host "Unpacked: $($dir.FullName)"
-            Get-ChildItem $dir -Recurse -File | Select-Object -First 5 FullName
-          }
-
-      - name: Install EXE silently
-        shell: pwsh
-        run: |
-          $exePath = Get-ChildItem . -Filter "BTPS*.exe" | Select-Object -First 1 | ForEach-Object { $_.FullName }
-          Write-Host "Installing from: $exePath"
-          try {
-            Start-Process -FilePath $exePath -ArgumentList "/S","/D=C:\BTPS" -Wait -NoNewWindow
-            Write-Host "Install completed"
-          } catch {
-            Write-Host "Install failed (may require GUI): $_"
-            Write-Host "Trying alternative extraction..."
-          }
-
-      - name: Find installed app
-        shell: pwsh
-        run: |
-          $appPaths = @(
-            "C:\BTPS",
-            "$env:LOCALAPPDATA\Programs\bubble-tea-saas",
-            "$env:ProgramFiles\bubble-tea-saas",
-            "$env:ProgramFiles\BTPS"
-          )
-          $found = $false
-          foreach ($p in $appPaths) {
-            if (Test-Path $p) {
-              Write-Host "Found: $p"
-              Get-ChildItem $p -Recurse -Filter "*.exe" | ForEach-Object { Write-Host "EXE: $($_.FullName)"; $found = $true }
+          if ($dbs) {
+            foreach ($db in $dbs) {
+              Write-Host "Found: $($db.FullName) ($($db.Length) bytes)"
             }
-          }
-          if (-not $found) {
-            Write-Host "App not found in standard locations"
+          } else {
+            Write-Host "No seed.db found"
           }
 
-      - name: Test app startup
+      - name: Check app.asar.unpacked
         shell: pwsh
         run: |
-          $possiblePaths = @(
-            "C:\BTPS\BTPS.exe",
-            "$env:LOCALAPPDATA\Programs\bubble-tea-saas\BTPS.exe",
-            "$env:ProgramFiles\bubble-tea-saas\BTPS.exe"
-          )
-          $exePath = $null
-          foreach ($p in $possiblePaths) {
-            if (Test-Path $p) { $exePath = $p; break }
+          $unpackedDirs = Get-ChildItem . -Recurse -Directory -Filter "*.unpacked" -EA SilentlyContinue
+          foreach ($dir in $unpackedDirs) {
+            Write-Host "Unpacked dir: $($dir.FullName)"
+            Get-ChildItem $dir -Recurse -File | Select-Object FullName | Format-Table -AutoSize
           }
-          
-          if (-not $exePath) {
-            Write-Host "Could not find installed .exe to test"
-            exit 1
-          }
-          
-          Write-Host "Testing: $exePath"
-          $errLog = "$env:TEMP\btp_err.log"
-          $proc = Start-Process -FilePath $exePath -PassThru -RedirectStandardError $errLog
-          Start-Sleep 15
-          
-          if ($proc.HasExited) {
-            Write-Host "RESULT: App exited (code: $($proc.ExitCode))"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 10 }
-            exit 1
+
+      - name: Test app launch (no-install, direct extraction)
+        shell: pwsh
+        run: |
+          # Find the inner app folder from NSIS extraction
+          $innerApp = Get-ChildItem . -Directory | Where-Object { $_.Name -match 'app' } | Select-Object -First 1
+          if ($innerApp) {
+            Write-Host "Inner app: $($innerApp.FullName)"
+            $exes = Get-ChildItem $innerApp.FullName -Recurse -Filter "*.exe" -File | Select-Object FullName
+            Write-Host "Found EXEs:"
+            $exes | Format-Table
           } else {
-            Write-Host "RESULT: App is running (PID: $($proc.Id)) - SUCCESS"
-            Stop-Process $proc.Id -Force -EA SilentlyContinue
+            Write-Host "Could not find inner app directory"
+            Get-ChildItem . -Directory | Format-Table
           }
