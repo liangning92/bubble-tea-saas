@@ -75,6 +75,9 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
+      - name: Sync Prisma schema to database
+        run: cd server && npx prisma db push --accept-data-loss
+
       - name: Build server
         run: npm run build:server
 
