@@ -76,6 +76,8 @@ jobs:
         run: npm run db:generate
 
       - name: Sync Prisma schema to database
+        env:
+          DATABASE_URL: "file:./prisma/dev.db"
         run: |
           cd server
           npx prisma db push --accept-data-loss
