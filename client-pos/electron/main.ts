@@ -580,19 +580,34 @@ h3{margin-top:16px;color:#569cd6}
 
 /**
  * 创建副屏窗口（顾客展示）
+ * 双屏兼容：使用最右边的屏幕（排除主窗口所在屏）
  */
 function createCustomerWindow() {
-  const displays = screen.getAllDisplays()
-  const externalDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0)
+  const allDisplays = screen.getAllDisplays()
 
-  const targetDisplay = externalDisplay || displays[0]
-  const { width, height } = targetDisplay.bounds
+  // 找最左边的屏幕（主窗口所在屏）
+  const leftmostDisplay = allDisplays.reduce((leftmost, current) =>
+    current.bounds.x < leftmost.bounds.x ? current : leftmost
+  )
+
+  // 副屏：用最右边的屏幕（通常是外接的顾客展示屏）
+  const rightmostDisplay = allDisplays.reduce((rightmost, current) =>
+    current.bounds.x > rightmost.bounds.x ? current : rightmost
+  )
+
+  // 如果最右边的屏幕就是主屏（只有一个屏幕），则用第二个屏幕
+  const targetDisplay = (rightmostDisplay.bounds.x !== leftmostDisplay.bounds.x ||
+    rightmostDisplay.bounds.y !== leftmostDisplay.bounds.y)
+    ? rightmostDisplay
+    : (allDisplays.find(d => d !== leftmostDisplay) || allDisplays[0])
+
+  const { width, height, x: screenX, y: screenY } = targetDisplay.workArea
 
   customerWindow = new BrowserWindow({
     width,
     height,
-    x: externalDisplay ? targetDisplay.bounds.x : width,
-    y: externalDisplay ? targetDisplay.bounds.y : 0,
+    x: screenX,
+    y: screenY,
     fullscreen: true,
     webPreferences: {
       preload: getResourcePath('dist-electron/electron/preload.js'),
