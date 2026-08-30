@@ -9,87 +9,96 @@ on:
         default: '2026.8.207'
 
 jobs:
-  extract-test:
+  build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     
     steps:
-      - name: Download EXE
-        run: |
-          VERSION="${{ inputs.version }}"
-          echo "Downloading v${VERSION}..."
-          curl -L -o BTPS.exe "https://github.com/liangning92/bubble-tea-saas/releases/download/v${VERSION}/BTPS-${VERSION}-Windows-x64.exe"
-          ls -lh BTPS.exe
-          file BTPS.exe
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Extract NSIS installer
-        run: |
-          mkdir -p app
-          7z x -oapp BTPS.exe -y | tail -5
-          echo "=== Extracted contents ==="
-          find app -type f | head -30
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-      - name: Find seed.db
+      - name: Install dependencies
         run: |
-          echo "=== Searching for seed.db ==="
-          find . -name "seed.db" -type f 2>/dev/null | while read f; do
-            echo "Found: $f ($(du -h "$f" | cut -f1))"
-          done
-          
-          echo ""
-          echo "=== Checking asar.unpacked directories ==="
-          find . -name "*.unpacked" -type d 2>/dev/null | head -10
-          
-          echo ""
-          echo "=== Checking for HygieneTemplate in seed.db ==="
-          find . -name "seed.db" -type f 2>/dev/null | while read f; do
-            echo "--- $f ---"
-            if command -v sqlite3 &>/dev/null; then
-              sqlite3 "$f" "PRAGMA table_info(HygieneTemplate);" 2>/dev/null | grep -i execution || echo "No executionTimes column"
-            else
-              echo "(sqlite3 not available)"
-            fi
-          done
+          npm install --force 2>&1 | tail -5
 
-      - name: Verify asarUnpack fix
+      - name: Install server dependencies
         run: |
-          echo "=== Checking if seed.db is in asar.unpacked ==="
-          if find . -path "*/app.asar.unpacked/*/seed.db" -type f 2>/dev/null | grep -q .; then
-            echo "SUCCESS: seed.db found in app.asar.unpacked (asarUnpack fix working)"
-            find . -path "*/app.asar.unpacked/*/seed.db" -type f -exec ls -lh {} \;
-          else
-            echo "FAIL: seed.db NOT in app.asar.unpacked"
-            echo "This means asarUnpack fix is not working"
-            find . -name "seed.db" -type f 2>/dev/null | while read f; do
-              echo "seed.db is at: $f (not in asar.unpacked)"
-            done
-            exit 1
-          fi
+          cd server && npm install 2>&1 | tail -5 && cd ..
+
+      - name: Generate Prisma client
+        run: npm run db:generate 2>&1 | tail -5
+
+      - name: Sync Prisma schema
+        env:
+          DATABASE_URL: "file:./seed.db"
+        run: |
+          cd server/prisma
+          npx prisma db push --accept-data-loss 2>&1 | tail -10
+          cd ../..
+          ls -la server/prisma/seed.db
 
       - name: Verify seed.db has executionTimes
         run: |
-          SEED_IN_UNPACKED=$(find . -path "*/app.asar.unpacked/*/seed.db" -type f 2>/dev/null | head -1)
-          if [ -z "$SEED_IN_UNPACKED" ]; then
-            echo "FAIL: No seed.db found in asar.unpacked"
+          echo "=== Checking HygieneTemplate columns ==="
+          sqlite3 server/prisma/seed.db "PRAGMA table_info(HygieneTemplate);" | grep -i execution
+
+      - name: Build Electron app
+        run: |
+          npm run build:electron 2>&1 | tail -20
+
+      - name: Package with electron-builder
+        run: |
+          npx electron-builder --win --dir 2>&1 | tail -20
+          ls -la dist/win-unpacked/*.exe 2>/dev/null || ls -la dist/ 2>/dev/null
+
+      - name: Extract and verify asar contents
+        run: |
+          # Find the built exe
+          EXE=$(find dist -name "*.exe" -type f | head -1)
+          echo "Found EXE: $EXE"
+          
+          # Extract NSIS
+          mkdir -p extracted
+          7z x -oextracted "$EXE" -y | tail -5
+          
+          # Check asar
+          echo "=== Checking asar ==="
+          find extracted -name "*.asar" -type f | head -5
+          
+          # Check asar.unpacked
+          echo "=== Checking asar.unpacked ==="
+          find extracted -name "*.unpacked" -type d | head -5
+          
+          # Find seed.db
+          echo "=== Checking for seed.db ==="
+          find extracted -name "seed.db" -type f | while read f; do
+            echo "Found: $f ($(du -h "$f" | cut -f1))"
+          done
+          
+          echo "=== Verifying asarUnpack ==="
+          if find extracted -path "*/app.asar.unpacked/*/seed.db" -type f 2>/dev/null | grep -q .; then
+            echo "SUCCESS: seed.db is in asar.unpacked"
+          else
+            echo "FAIL: seed.db is NOT in asar.unpacked"
+            echo "Only seed.db locations:"
+            find extracted -name "seed.db" -type f 2>/dev/null
             exit 1
           fi
-          
-          echo "Checking: $SEED_IN_UNPACKED"
-          if command -v sqlite3 &>/dev/null; then
-            RESULT=$(sqlite3 "$SEED_IN_UNPACKED" "PRAGMA table_info(HygieneTemplate);" 2>/dev/null | grep -i executionTimes)
-            if [ -n "$RESULT" ]; then
-              echo "SUCCESS: executionTimes column found in HygieneTemplate"
-              echo "$RESULT"
-            else
-              echo "FAIL: executionTimes column NOT found in HygieneTemplate"
-              echo "Current columns:"
-              sqlite3 "$SEED_IN_UNPACKED" "PRAGMA table_info(HygieneTemplate);" 2>/dev/null
-              exit 1
-            fi
+
+      - name: Verify executionTimes column in packaged seed.db
+        run: |
+          SEED=$(find . -path "*/app.asar.unpacked/*/seed.db" -type f 2>/dev/null | head -1)
+          if [ -n "$SEED" ]; then
+            echo "Checking: $SEED"
+            sqlite3 "$SEED" "PRAGMA table_info(HygieneTemplate);" | grep -i execution
+            echo "Full schema:"
+            sqlite3 "$SEED" "PRAGMA table_info(HygieneTemplate);"
           else
-            echo "sqlite3 not available, checking file size instead"
-            ls -lh "$SEED_IN_UNPACKED"
-            if [ $(stat -c%s "$SEED_IN_UNPACKED") -gt 1000 ]; then
-              echo "seed.db has content ($(stat -c%s "$SEED_IN_UNPACKED") bytes)"
-            fi
+            echo "seed.db not found"
+            exit 1
           fi
