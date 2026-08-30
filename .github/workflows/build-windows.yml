@@ -77,10 +77,10 @@ jobs:
 
       - name: Sync Prisma schema to database
         env:
-          DATABASE_URL: "file:./prisma/prisma/seed.db"
+          DATABASE_URL: "file:./seed.db"
         run: |
           $repoRoot = $PWD.Path
-          Set-Location "$repoRoot\server"
+          Set-Location "$repoRoot\server\prisma"
           npx prisma db push --accept-data-loss
 
       - name: Build server
