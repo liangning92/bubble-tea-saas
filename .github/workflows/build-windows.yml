@@ -77,7 +77,7 @@ jobs:
 
       - name: Sync Prisma schema to database
         env:
-          DATABASE_URL: "file:./prisma/seed.db"
+          DATABASE_URL: "file:./prisma/prisma/seed.db"
         run: |
           $repoRoot = $PWD.Path
           Set-Location "$repoRoot\server"
