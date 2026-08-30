@@ -1,7 +1,7 @@
 {
   "name": "bubble-tea-pos",
   "private": true,
-  "version": "2026.8.207",
+  "version": "2026.8.208",
   "description": "Bubble Tea POS System",
   "author": "Bubble Tea Team",
   "main": "dist-electron/electron/main.js",
