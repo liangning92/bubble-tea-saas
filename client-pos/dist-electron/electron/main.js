@@ -344,12 +344,16 @@ function getResourcePath(relativePath) {
  * 创建主窗口（收银界面）
  */
 function createMainWindow() {
-    const { width, height } = electron_1.screen.getPrimaryDisplay().workAreaSize;
+    // 双屏兼容：显式找最左边的屏幕作为主屏（点单系统）
+    // 不依赖 getPrimaryDisplay()（用户可能把外接屏设为主屏）
+    const allDisplays = electron_1.screen.getAllDisplays();
+    const leftmostDisplay = allDisplays.reduce((leftmost, current) => current.bounds.x < leftmost.bounds.x ? current : leftmost);
+    const { width, height, x: screenX, y: screenY } = leftmostDisplay.workArea;
     mainWindow = new electron_1.BrowserWindow({
         width: Math.floor(width * 0.6),
         height,
-        x: 0,
-        y: 0,
+        x: screenX,
+        y: screenY,
         fullscreen: false,
         resizable: true,
         webPreferences: {
