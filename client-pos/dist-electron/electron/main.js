@@ -185,6 +185,72 @@ function getSeedTemplatePath() {
     }
 }
 /**
+ * 获取 Prisma schema 路径（asar/unpack 兼容）
+ */
+function getPrismaSchemaPath() {
+    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
+    if (isAsar) {
+        return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'schema.prisma');
+    }
+    else {
+        return path_1.default.join(process.resourcesPath, 'server', 'prisma', 'schema.prisma');
+    }
+}
+/**
+ * 同步检查并修复用户数据库 schema
+ * 等待 prisma db push 完成后再继续（同步阻塞）
+ * 这确保数据库 schema 在服务器启动前就已更新
+ */
+async function ensureSchemaUpToDate(userDbPath) {
+    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
+    const prismaBin = isAsar
+        ? path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', '.bin', 'prisma')
+        : path_1.default.join(process.resourcesPath, 'server', 'node_modules', '.bin', 'prisma');
+    const schemaPath = getPrismaSchemaPath();
+    if (!fs_1.default.existsSync(schemaPath)) {
+        main_1.default.warn('[Schema] schema.prisma not found, skipping db sync');
+        return;
+    }
+    main_1.default.log('[Schema] Checking database schema...');
+    return new Promise((resolve) => {
+        let childExited = false;
+        const child = (0, child_process_1.spawn)(prismaBin, ['db', 'push', '--accept-data-loss', '--schema', schemaPath], {
+            env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
+            stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+        });
+        let stderrData = '';
+        child.stderr?.on('data', (d) => {
+            const msg = d.toString();
+            stderrData += msg;
+            if (msg.includes('The column') || msg.includes('Your database is now in sync') || msg.includes('error')) {
+                main_1.default.log('[Prisma]', msg.trim());
+            }
+        });
+        child.on('close', (code) => {
+            childExited = true;
+            if (code === 0 || stderrData.includes('Your database is now in sync')) {
+                main_1.default.log('[Schema] Database schema is up to date');
+            }
+            else {
+                main_1.default.warn('[Schema] db push returned code', code, '- continuing anyway');
+            }
+            resolve();
+        });
+        child.on('error', (err) => {
+            main_1.default.warn('[Schema] Could not run prisma db push:', err.message, '- continuing anyway');
+            resolve();
+        });
+        // 超时保护：60秒
+        setTimeout(() => {
+            if (!childExited) {
+                child.kill();
+                main_1.default.warn('[Schema] db push timed out after 60s, continuing anyway');
+                resolve();
+            }
+        }, 60000);
+    });
+}
+/**
  * 启动本地 Express API 服务器（fork child process）
  *
  * 数据库初始化策略（单门店离线安装）：
@@ -199,7 +265,7 @@ function getSeedTemplatePath() {
  * 数据库里 Tenant → Store 表已存在，但默认创建单门店实例。
  * Admin UI 通过切换 storeId 支持多门店管理（同一数据库内）。
  */
-function startLocalServer() {
+async function startLocalServer() {
     if (!electron_1.app.isPackaged) {
         console.log('[Server] Dev mode - skipping local server start');
         return;
@@ -245,6 +311,10 @@ function startLocalServer() {
     else {
         main_1.default.log('[Server] User database already exists:', userDbPath);
     }
+    // 关键：自动检测并修复数据库 schema（新增列/表缺失时自动 db push）
+    // 这确保从旧版本升级的用户不需要手动清理数据库
+    // 同步等待完成：schema 必须先更新，服务器才能安全启动
+    await ensureSchemaUpToDate(userDbPath);
     // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
     const unpackedRoot = process.resourcesPath;
     main_1.default.log('[Server] NODE_PATH:', unpackedRoot);
@@ -1031,7 +1101,7 @@ function formatDateTime() {
     return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 // 应用启动
-electron_1.app.whenReady().then(() => {
+electron_1.app.whenReady().then(async () => {
     console.log('[Electron] App ready, starting up...');
     // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
     electron_1.globalShortcut.register('CommandOrControl+Shift+D', () => {
@@ -1041,9 +1111,11 @@ electron_1.app.whenReady().then(() => {
     });
     // 先启动本地服务器（仅打包模式）
     if (electron_1.app.isPackaged) {
-        startLocalServer();
+        // 启动服务器并等待 schema 同步完成
+        await startLocalServer();
         // 等待服务器 port 7072 可用后再创建窗口
-        waitForPort(7072, 30000).then(() => {
+        try {
+            await waitForPort(7072, 30000);
             main_1.default.log('[Electron] Server is ready, creating windows...');
             try {
                 createMainWindow();
@@ -1063,14 +1135,15 @@ electron_1.app.whenReady().then(() => {
                 (0, updater_1.setupUpdater)(mainWindow);
                 setTimeout(() => (0, updater_1.checkForUpdatesOnStart)(), 10000);
             }
-        }).catch((err) => {
+        }
+        catch (err) {
             main_1.default.error('[Electron] Server failed to start:', err.message);
             // 即使服务器启动失败也创建主窗口，显示错误页
             createMainWindow();
             if (mainWindow) {
                 showErrorPage(mainWindow, '服务器启动失败', '本地 API 服务器未能成功启动，应用程序无法正常工作。', `错误：${err.message}\n\n请尝试重新安装应用程序。\n如果问题持续，请查看日志文件获取详细信息。`);
             }
-        });
+        }
     }
     else {
         // 开发模式：直接创建窗口（vite dev server 已运行）

@@ -203,11 +203,11 @@ function getPrismaSchemaPath(): string {
 }
 
 /**
- * 同步检查用户数据库 schema 是否与 schema.prisma 一致
- * 如果数据库缺少列，自动运行 prisma db push 修复
- * 这确保即使用户是从旧版本升级，数据库 schema 也会自动更新
+ * 同步检查并修复用户数据库 schema
+ * 等待 prisma db push 完成后再继续（同步阻塞）
+ * 这确保数据库 schema 在服务器启动前就已更新
  */
-function ensureSchemaUpToDate(userDbPath: string): void {
+async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
   const isAsar = app.getAppPath().endsWith('.asar')
   const prismaBin = isAsar
     ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', '.bin', 'prisma')
@@ -221,35 +221,47 @@ function ensureSchemaUpToDate(userDbPath: string): void {
 
   log.log('[Schema] Checking database schema...')
 
-  const child = spawn(prismaBin, ['db', 'push', '--accept-data-loss', '--schema', schemaPath], {
-    env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
-    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
-    timeout: 30000
-  } as any)
+  return new Promise((resolve) => {
+    let childExited = false
 
-  let stderrData = ''
+    const child = spawn(prismaBin, ['db', 'push', '--accept-data-loss', '--schema', schemaPath], {
+      env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+    })
 
-  child.stderr?.on('data', (d: Buffer) => {
-    const msg = d.toString()
-    stderrData += msg
-    // 只记录关键信息
-    if (msg.includes('The column') || msg.includes('Your database is now in sync') || msg.includes('error')) {
-      log.log('[Prisma]', msg.trim())
-    }
-  })
+    let stderrData = ''
 
-  child.on('close', (code: number | null) => {
-    if (code === 0) {
-      log.log('[Schema] Database schema is up to date')
-    } else if (stderrData.includes('already in sync') || stderrData.includes('Your database is now in sync')) {
-      log.log('[Schema] Database schema is up to date')
-    } else {
-      log.warn('[Schema] db push returned code', code, '- continuing anyway')
-    }
-  })
+    child.stderr?.on('data', (d: Buffer) => {
+      const msg = d.toString()
+      stderrData += msg
+      if (msg.includes('The column') || msg.includes('Your database is now in sync') || msg.includes('error')) {
+        log.log('[Prisma]', msg.trim())
+      }
+    })
 
-  child.on('error', (err: Error) => {
-    log.warn('[Schema] Could not run prisma db push:', err.message, '- continuing anyway')
+    child.on('close', (code: number | null) => {
+      childExited = true
+      if (code === 0 || stderrData.includes('Your database is now in sync')) {
+        log.log('[Schema] Database schema is up to date')
+      } else {
+        log.warn('[Schema] db push returned code', code, '- continuing anyway')
+      }
+      resolve()
+    })
+
+    child.on('error', (err: Error) => {
+      log.warn('[Schema] Could not run prisma db push:', err.message, '- continuing anyway')
+      resolve()
+    })
+
+    // 超时保护：60秒
+    setTimeout(() => {
+      if (!childExited) {
+        child.kill()
+        log.warn('[Schema] db push timed out after 60s, continuing anyway')
+        resolve()
+      }
+    }, 60000)
   })
 }
 
@@ -268,7 +280,7 @@ function ensureSchemaUpToDate(userDbPath: string): void {
  * 数据库里 Tenant → Store 表已存在，但默认创建单门店实例。
  * Admin UI 通过切换 storeId 支持多门店管理（同一数据库内）。
  */
-function startLocalServer(): void {
+async function startLocalServer(): Promise<void> {
   if (!app.isPackaged) {
     console.log('[Server] Dev mode - skipping local server start')
     return
@@ -320,7 +332,8 @@ function startLocalServer(): void {
 
   // 关键：自动检测并修复数据库 schema（新增列/表缺失时自动 db push）
   // 这确保从旧版本升级的用户不需要手动清理数据库
-  ensureSchemaUpToDate(userDbPath)
+  // 同步等待完成：schema 必须先更新，服务器才能安全启动
+  await ensureSchemaUpToDate(userDbPath)
 
   // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
   const unpackedRoot = process.resourcesPath
@@ -1173,7 +1186,7 @@ function formatDateTime(): string {
 }
 
 // 应用启动
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   console.log('[Electron] App ready, starting up...')
 
   // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
@@ -1185,10 +1198,12 @@ app.whenReady().then(() => {
 
   // 先启动本地服务器（仅打包模式）
   if (app.isPackaged) {
-    startLocalServer()
+    // 启动服务器并等待 schema 同步完成
+    await startLocalServer()
 
     // 等待服务器 port 7072 可用后再创建窗口
-    waitForPort(7072, 30000).then(() => {
+    try {
+      await waitForPort(7072, 30000)
       log.log('[Electron] Server is ready, creating windows...')
       try {
         createMainWindow()
@@ -1206,7 +1221,7 @@ app.whenReady().then(() => {
         setupUpdater(mainWindow)
         setTimeout(() => checkForUpdatesOnStart(), 10000)
       }
-    }).catch((err) => {
+    } catch (err: any) {
       log.error('[Electron] Server failed to start:', err.message)
       // 即使服务器启动失败也创建主窗口，显示错误页
       createMainWindow()
@@ -1215,7 +1230,7 @@ app.whenReady().then(() => {
           '本地 API 服务器未能成功启动，应用程序无法正常工作。',
           `错误：${err.message}\n\n请尝试重新安装应用程序。\n如果问题持续，请查看日志文件获取详细信息。`)
       }
-    })
+    }
   } else {
     // 开发模式：直接创建窗口（vite dev server 已运行）
     createMainWindow()

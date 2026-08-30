@@ -26,7 +26,7 @@ function setupUpdater(window) {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     // Tell electron-updater where to find updates (GitHub Releases)
-    autoUpdater.setFeedUrl({
+    autoUpdater.setFeedURL({
         provider: 'github',
         owner: 'liangning92',
         repo: 'bubble-tea-saas'
