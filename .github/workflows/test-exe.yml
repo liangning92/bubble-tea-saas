@@ -9,73 +9,87 @@ on:
         default: '2026.8.207'
 
 jobs:
-  test:
-    runs-on: windows-latest
-    timeout-minutes: 30
+  extract-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     steps:
-      - name: Download EXE via curl
-        shell: pwsh
-        env:
-          VERSION: ${{ inputs.version }}
+      - name: Download EXE
         run: |
-          $version = "$env:VERSION"
-          Write-Host "Downloading v${version}..."
-          $url = "https://github.com/liangning92/bubble-tea-saas/releases/download/v${version}/BTPS-${version}-Windows-x64.exe"
-          Write-Host "URL: $url"
-          curl -L -o BTPS.exe $url 2>&1 | Out-Host
-          $file = Get-Item BTPS.exe
-          Write-Host "Downloaded: $($file.Length) bytes"
+          VERSION="${{ inputs.version }}"
+          echo "Downloading v${VERSION}..."
+          curl -L -o BTPS.exe "https://github.com/liangning92/bubble-tea-saas/releases/download/v${VERSION}/BTPS-${VERSION}-Windows-x64.exe"
+          ls -lh BTPS.exe
+          file BTPS.exe
 
-      - name: Check EXE file
-        shell: pwsh
+      - name: Extract NSIS installer
         run: |
-          $exe = Get-Item BTPS.exe
-          Write-Host "EXE Size: $($exe.Length) bytes"
-          if ($exe.Length -lt 1000000) {
-            Write-Host "WARNING: File is very small"
-            Get-Content BTPS.exe | Select-Object -First 5
-          }
-
-      - name: Extract EXE
-        shell: pwsh
-        run: |
-          7z x -o:app BTPS.exe -y 2>&1 | Out-Null
-          Write-Host "Extracted:"
-          Get-ChildItem app -Recurse -File | Select-Object FullName, Length | Format-Table -AutoSize
+          mkdir -p app
+          7z x -oapp BTPS.exe -y | tail -5
+          echo "=== Extracted contents ==="
+          find app -type f | head -30
 
       - name: Find seed.db
-        shell: pwsh
         run: |
-          $dbs = Get-ChildItem . -Recurse -Filter "seed.db" -File -EA SilentlyContinue
-          if ($dbs) {
-            foreach ($db in $dbs) {
-              Write-Host "Found: $($db.FullName) ($($db.Length) bytes)"
-            }
-          } else {
-            Write-Host "No seed.db found"
-          }
+          echo "=== Searching for seed.db ==="
+          find . -name "seed.db" -type f 2>/dev/null | while read f; do
+            echo "Found: $f ($(du -h "$f" | cut -f1))"
+          done
+          
+          echo ""
+          echo "=== Checking asar.unpacked directories ==="
+          find . -name "*.unpacked" -type d 2>/dev/null | head -10
+          
+          echo ""
+          echo "=== Checking for HygieneTemplate in seed.db ==="
+          find . -name "seed.db" -type f 2>/dev/null | while read f; do
+            echo "--- $f ---"
+            if command -v sqlite3 &>/dev/null; then
+              sqlite3 "$f" "PRAGMA table_info(HygieneTemplate);" 2>/dev/null | grep -i execution || echo "No executionTimes column"
+            else
+              echo "(sqlite3 not available)"
+            fi
+          done
 
-      - name: Check app.asar.unpacked
-        shell: pwsh
+      - name: Verify asarUnpack fix
         run: |
-          $unpackedDirs = Get-ChildItem . -Recurse -Directory -Filter "*.unpacked" -EA SilentlyContinue
-          foreach ($dir in $unpackedDirs) {
-            Write-Host "Unpacked dir: $($dir.FullName)"
-            Get-ChildItem $dir -Recurse -File | Select-Object FullName | Format-Table -AutoSize
-          }
+          echo "=== Checking if seed.db is in asar.unpacked ==="
+          if find . -path "*/app.asar.unpacked/*/seed.db" -type f 2>/dev/null | grep -q .; then
+            echo "SUCCESS: seed.db found in app.asar.unpacked (asarUnpack fix working)"
+            find . -path "*/app.asar.unpacked/*/seed.db" -type f -exec ls -lh {} \;
+          else
+            echo "FAIL: seed.db NOT in app.asar.unpacked"
+            echo "This means asarUnpack fix is not working"
+            find . -name "seed.db" -type f 2>/dev/null | while read f; do
+              echo "seed.db is at: $f (not in asar.unpacked)"
+            done
+            exit 1
+          fi
 
-      - name: Test app launch (no-install, direct extraction)
-        shell: pwsh
+      - name: Verify seed.db has executionTimes
         run: |
-          # Find the inner app folder from NSIS extraction
-          $innerApp = Get-ChildItem . -Directory | Where-Object { $_.Name -match 'app' } | Select-Object -First 1
-          if ($innerApp) {
-            Write-Host "Inner app: $($innerApp.FullName)"
-            $exes = Get-ChildItem $innerApp.FullName -Recurse -Filter "*.exe" -File | Select-Object FullName
-            Write-Host "Found EXEs:"
-            $exes | Format-Table
-          } else {
-            Write-Host "Could not find inner app directory"
-            Get-ChildItem . -Directory | Format-Table
-          }
+          SEED_IN_UNPACKED=$(find . -path "*/app.asar.unpacked/*/seed.db" -type f 2>/dev/null | head -1)
+          if [ -z "$SEED_IN_UNPACKED" ]; then
+            echo "FAIL: No seed.db found in asar.unpacked"
+            exit 1
+          fi
+          
+          echo "Checking: $SEED_IN_UNPACKED"
+          if command -v sqlite3 &>/dev/null; then
+            RESULT=$(sqlite3 "$SEED_IN_UNPACKED" "PRAGMA table_info(HygieneTemplate);" 2>/dev/null | grep -i executionTimes)
+            if [ -n "$RESULT" ]; then
+              echo "SUCCESS: executionTimes column found in HygieneTemplate"
+              echo "$RESULT"
+            else
+              echo "FAIL: executionTimes column NOT found in HygieneTemplate"
+              echo "Current columns:"
+              sqlite3 "$SEED_IN_UNPACKED" "PRAGMA table_info(HygieneTemplate);" 2>/dev/null
+              exit 1
+            fi
+          else
+            echo "sqlite3 not available, checking file size instead"
+            ls -lh "$SEED_IN_UNPACKED"
+            if [ $(stat -c%s "$SEED_IN_UNPACKED") -gt 1000 ]; then
+              echo "seed.db has content ($(stat -c%s "$SEED_IN_UNPACKED") bytes)"
+            fi
+          fi
