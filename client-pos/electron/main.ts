@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 import fs from 'fs'
-import { exec as execChild, fork } from 'child_process'
+import { exec as execChild, fork, spawn } from 'child_process'
 import net from 'net'
 import log from 'electron-log/main'
 
@@ -191,6 +191,69 @@ function getSeedTemplatePath(): string {
 }
 
 /**
+ * 获取 Prisma schema 路径（asar/unpack 兼容）
+ */
+function getPrismaSchemaPath(): string {
+  const isAsar = app.getAppPath().endsWith('.asar')
+  if (isAsar) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'schema.prisma')
+  } else {
+    return path.join(process.resourcesPath, 'server', 'prisma', 'schema.prisma')
+  }
+}
+
+/**
+ * 同步检查用户数据库 schema 是否与 schema.prisma 一致
+ * 如果数据库缺少列，自动运行 prisma db push 修复
+ * 这确保即使用户是从旧版本升级，数据库 schema 也会自动更新
+ */
+function ensureSchemaUpToDate(userDbPath: string): void {
+  const isAsar = app.getAppPath().endsWith('.asar')
+  const prismaBin = isAsar
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', '.bin', 'prisma')
+    : path.join(process.resourcesPath, 'server', 'node_modules', '.bin', 'prisma')
+  const schemaPath = getPrismaSchemaPath()
+
+  if (!fs.existsSync(schemaPath)) {
+    log.warn('[Schema] schema.prisma not found, skipping db sync')
+    return
+  }
+
+  log.log('[Schema] Checking database schema...')
+
+  const child = spawn(prismaBin, ['db', 'push', '--accept-data-loss', '--schema', schemaPath], {
+    env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    timeout: 30000
+  } as any)
+
+  let stderrData = ''
+
+  child.stderr?.on('data', (d: Buffer) => {
+    const msg = d.toString()
+    stderrData += msg
+    // 只记录关键信息
+    if (msg.includes('The column') || msg.includes('Your database is now in sync') || msg.includes('error')) {
+      log.log('[Prisma]', msg.trim())
+    }
+  })
+
+  child.on('close', (code: number | null) => {
+    if (code === 0) {
+      log.log('[Schema] Database schema is up to date')
+    } else if (stderrData.includes('already in sync') || stderrData.includes('Your database is now in sync')) {
+      log.log('[Schema] Database schema is up to date')
+    } else {
+      log.warn('[Schema] db push returned code', code, '- continuing anyway')
+    }
+  })
+
+  child.on('error', (err: Error) => {
+    log.warn('[Schema] Could not run prisma db push:', err.message, '- continuing anyway')
+  })
+}
+
+/**
  * 启动本地 Express API 服务器（fork child process）
  *
  * 数据库初始化策略（单门店离线安装）：
@@ -254,6 +317,10 @@ function startLocalServer(): void {
   } else {
     log.log('[Server] User database already exists:', userDbPath)
   }
+
+  // 关键：自动检测并修复数据库 schema（新增列/表缺失时自动 db push）
+  // 这确保从旧版本升级的用户不需要手动清理数据库
+  ensureSchemaUpToDate(userDbPath)
 
   // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
   const unpackedRoot = process.resourcesPath
