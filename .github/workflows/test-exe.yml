@@ -1,0 +1,92 @@
+name: Test Windows EXE
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to test (e.g. 2026.8.207)'
+        required: true
+        default: '2026.8.207'
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Download EXE
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $url = "https://github.com/liangning92/bubble-tea-saas/releases/download/v${version}/BTPS-${version}-Windows-x64.exe"
+          Write-Host "Downloading: $url"
+          curl -L -o BTPS.exe $url
+          Write-Host "Download complete"
+          Get-Item BTPS.exe | Select-Object Name, Length
+
+      - name: Install EXE silently
+        shell: pwsh
+        run: |
+          Write-Host "Installing..."
+          Start-Process -FilePath "./BTPS.exe" -ArgumentList "/S" -Wait
+          Write-Host "Install complete"
+          Start-Sleep 3
+
+      - name: Find installed app
+        shell: pwsh
+        run: |
+          $appPaths = @(
+            "$env:LOCALAPPDATA\Programs\bubble-tea-saas",
+            "$env:ProgramFiles\bubble-tea-saas",
+            "$env:ProgramFiles\BTPS"
+          )
+          foreach ($p in $appPaths) {
+            if (Test-Path $p) {
+              Write-Host "Found app at: $p"
+              Get-ChildItem $p -Recurse -Filter "*.exe" | Select-Object FullName
+            }
+          }
+
+      - name: Check asar contents
+        shell: pwsh
+        run: |
+          # Find app.asar and check contents
+          $appDataPath = "$env:LOCALAPPDATA\bubble-tea-saas"
+          if (Test-Path $appDataPath) {
+            Write-Host "App data path: $appDataPath"
+            Get-ChildItem $appDataPath -Recurse -Include *.asar,*.db | Select-Object FullName, Length
+          } else {
+            Write-Host "App data path not found at $appDataPath"
+          }
+
+      - name: Test if app launches without immediate crash
+        shell: pwsh
+        run: |
+          $exePath = "$env:LOCALAPPDATA\Programs\bubble-tea-saas\BTPS.exe"
+          if (-not (Test-Path $exePath)) {
+            $exePath = "$env:ProgramFiles\bubble-tea-saas\BTPS.exe"
+          }
+          if (-not (Test-Path $exePath)) {
+            Write-Host "EXE not found at expected paths"
+            exit 1
+          }
+          
+          Write-Host "Starting: $exePath"
+          $errLog = "$env:TEMP\btp_err.log"
+          $proc = Start-Process -FilePath $exePath -PassThru -RedirectStandardError $errLog
+          
+          Write-Host "Waiting 15 seconds..."
+          Start-Sleep 15
+          
+          if ($proc.HasExited) {
+            Write-Host "FAIL: App exited with code $($proc.ExitCode)"
+            if (Test-Path $errLog) {
+              Write-Host "Error output:"
+              Get-Content $errLog | Select-Object -First 10
+            }
+            exit 1
+          } else {
+            Write-Host "SUCCESS: App is still running (PID: $($proc.Id))"
+            Write-Host "Stopping process..."
+            Stop-Process $proc.Id -Force -EA SilentlyContinue
+          }
