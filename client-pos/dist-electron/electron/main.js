@@ -623,11 +623,14 @@ function createCustomerWindow() {
     const leftmostDisplay = allDisplays.reduce((leftmost, current) => current.bounds.x < leftmost.bounds.x ? current : leftmost);
     // 副屏：用最右边的屏幕（通常是外接的顾客展示屏）
     const rightmostDisplay = allDisplays.reduce((rightmost, current) => current.bounds.x > rightmost.bounds.x ? current : rightmost);
-    // 如果最右边的屏幕就是主屏（只有一个屏幕），则用第二个屏幕
-    const targetDisplay = (rightmostDisplay.bounds.x !== leftmostDisplay.bounds.x ||
-        rightmostDisplay.bounds.y !== leftmostDisplay.bounds.y)
-        ? rightmostDisplay
-        : (allDisplays.find(d => d !== leftmostDisplay) || allDisplays[0]);
+    // 如果最右边的屏幕就是主屏（只有一个屏幕），则跳过副屏创建
+    const isSameDisplay = rightmostDisplay.bounds.x === leftmostDisplay.bounds.x &&
+        rightmostDisplay.bounds.y === leftmostDisplay.bounds.y;
+    if (isSameDisplay) {
+        console.log('[Electron] Only one display found, skipping customer window');
+        return;
+    }
+    const targetDisplay = rightmostDisplay;
     const { width, height, x: screenX, y: screenY } = targetDisplay.workArea;
     customerWindow = new electron_1.BrowserWindow({
         width,
