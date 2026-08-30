@@ -12,12 +12,18 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
  * 创建主窗口（收银界面）
  */
 function createMainWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    // 双屏兼容：显式找最左边的屏幕作为主屏（点单系统）
+    const allDisplays = screen.getAllDisplays();
+    const leftmostDisplay = allDisplays.reduce((leftmost, current) =>
+        current.bounds.x < leftmost.bounds.x ? current : leftmost
+    );
+    const { width, height, x: screenX, y: screenY } = leftmostDisplay.workArea;
+
     mainWindow = new BrowserWindow({
         width: Math.floor(width * 0.6), // 主屏占60%
         height,
-        x: 0,
-        y: 0,
+        x: screenX,
+        y: screenY,
         fullscreen: false, // Windows触屏机可全屏
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -47,15 +53,30 @@ function createMainWindow() {
  * 创建副屏窗口（顾客展示）
  */
 function createCustomerWindow() {
-    const displays = screen.getAllDisplays();
-    const externalDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0);
-    const targetDisplay = externalDisplay || displays[0];
-    const { width, height } = targetDisplay.bounds;
+    const allDisplays = screen.getAllDisplays();
+
+    // 找最左边的屏幕（主窗口所在屏）
+    const leftmostDisplay = allDisplays.reduce((leftmost, current) =>
+        current.bounds.x < leftmost.bounds.x ? current : leftmost
+    );
+
+    // 副屏：用最右边的屏幕（通常是外接的顾客展示屏）
+    const rightmostDisplay = allDisplays.reduce((rightmost, current) =>
+        current.bounds.x > rightmost.bounds.x ? current : rightmost
+    );
+
+    const targetDisplay = (rightmostDisplay.bounds.x !== leftmostDisplay.bounds.x ||
+        rightmostDisplay.bounds.y !== leftmostDisplay.bounds.y)
+        ? rightmostDisplay
+        : (allDisplays.find(d => d !== leftmostDisplay) || allDisplays[0]);
+
+    const { width, height, x: screenX, y: screenY } = targetDisplay.workArea;
+
     customerWindow = new BrowserWindow({
         width,
         height,
-        x: externalDisplay ? targetDisplay.bounds.x : width, // 副屏在第二显示器
-        y: externalDisplay ? targetDisplay.bounds.y : 0,
+        x: screenX,
+        y: screenY,
         fullscreen: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
