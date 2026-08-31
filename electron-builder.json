@@ -42,7 +42,8 @@
   "asarUnpack": [
     "/**/*.node",
     "node_modules/.prisma/client/libquery_engine-*.node",
-    "server/prisma/seed.db"
+    "server/prisma/seed.db",
+    "server/prisma/schema.prisma"
   ],
   "npmRebuild": true,
   "win": {

@@ -1103,6 +1103,27 @@ function formatDateTime() {
     const seconds = String(now.getSeconds()).padStart(2, '0');
     return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
+// 单例锁：确保只有一个实例运行
+const gotTheLock = electron_1.app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    console.log('[Electron] Another instance is already running. Quitting.');
+    electron_1.app.quit();
+}
+// second-instance 事件在任何时候都可能触发，在 whenReady 之前也会
+// 所以这里使用延迟引用 mainWindow（whenReady 里才创建）
+electron_1.app.on('second-instance', () => {
+    // 延迟聚焦到主窗口（等待 whenReady 完成）
+    setTimeout(() => {
+        const { BrowserWindow } = require('electron');
+        const wins = BrowserWindow.getAllWindows();
+        if (wins.length > 0) {
+            const win = wins[0];
+            if (win.isMinimized())
+                win.restore();
+            win.focus();
+        }
+    }, 1000);
+});
 // 应用启动
 electron_1.app.whenReady().then(async () => {
     console.log('[Electron] App ready, starting up...');
