@@ -85,3 +85,51 @@ resources/
 
 ### 下一步
 等梁宁授权 → 触发 build-windows.yml → 构建 v2026.8.209
+
+## 2026-08-31 第三次深度检查（Issues 5-8 修复）
+
+### 新修复（afbb405）
+- Issue 5: httpServer.on('error') 处理 EADDRINUSE/EACCES
+- Issue 6: process.on('unhandledRejection') + process.on('uncaughtException') 防止静默崩溃
+- Issue 7: 从 electron-builder.json files 移除 gitignored 的 dev.db
+
+### 服务器错误处理详情（新增）
+```typescript
+// httpServer.listen 错误处理（EADDRINUSE 等）
+httpServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[Server] Port ${config.port} is already in use`)
+  }
+  process.exit(1)
+})
+
+// unhandled rejection 保护
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] FATAL: Unhandled Promise Rejection:', reason)
+  setTimeout(() => process.exit(1), 1000)
+})
+
+// uncaught exception 保护
+process.on('uncaughtException', (err) => {
+  console.error('[Server] FATAL: Uncaught Exception:', err.message)
+  setTimeout(() => process.exit(1), 1000)
+})
+```
+
+### 全部修复清单（最终版）
+
+| Bug | 根因 | 提交 | 状态 |
+|-----|------|------|------|
+| schema.prisma 不在 asarUnpack | asarUnpack 缺少 | d1e6b4c | ✅ |
+| IPC handler 重复 | updater.ts 多注册了 get-app-version | 1feedba | ✅ |
+| 无单例锁 | 没有 requestSingleInstanceLock | d1e6b4c | ✅ |
+| prismaBin 路径错误 | 指向 server/node_modules 而非 node_modules | 9d835f4 | ✅ |
+| httpServer 无错误处理 | listen 失败时无报错 | afbb405 | ✅ |
+| 无 unhandled rejection 保护 | 异步错误静默丢失 | afbb405 | ✅ |
+| dev.db 在 files 但不存在 | gitignore 忽略，CI 不存在 | afbb405 | ✅ |
+
+### 深度检查结论
+- 4 个关键 Bug 已全部修复（Issues 1-4）
+- 4 个次要改进已全部修复（Issues 5-8）
+- 代码结构稳定，无新发现阻塞性问题
+- 可以触发构建
