@@ -78,6 +78,43 @@ const httpServer = http.createServer(app)
 // Socket.IO Setup
 socketManager.initialize(httpServer)
 
+// ============================================================
+// Global Error Handlers (must be before any async operations)
+// ============================================================
+
+// Unhandled Promise rejection → crash with details instead of silent death
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+  const message = reason instanceof Error ? reason.message : String(reason)
+  const stack = reason instanceof Error ? reason.stack : undefined
+  console.error('[Server] FATAL: Unhandled Promise Rejection:')
+  console.error('[Server] Reason:', message)
+  if (stack) {
+    console.error('[Server] Stack:', stack)
+  }
+  console.error('[Server] Promise:', promise)
+  // Give logs time to flush before exiting
+  setTimeout(() => process.exit(1), 1000)
+})
+
+// Uncaught exception → crash with details
+process.on('uncaughtException', (err: Error) => {
+  console.error('[Server] FATAL: Uncaught Exception:')
+  console.error('[Server] Message:', err.message)
+  console.error('[Server] Stack:', err.stack)
+  setTimeout(() => process.exit(1), 1000)
+})
+
+// HTTP Server error handler (e.g. EADDRINUSE)
+httpServer.on('error', (err: NodeJS.ErrnoException) => {
+  console.error('[Server] HTTP server error:', err.message)
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[Server] Port ${config.port} is already in use. Please close other applications using this port.`)
+  } else if (err.code === 'EACCES') {
+    console.error(`[Server] Port ${config.port} requires elevated permissions.`)
+  }
+  process.exit(1)
+})
+
 // Security & Logging Middlewares
 app.use(helmet())
 app.use(cors({

@@ -9,7 +9,6 @@
   "files": [
     "server/uploads/**/*",
     "server/prisma/schema.prisma",
-    "server/prisma/dev.db",
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
