@@ -135,10 +135,6 @@ function setupIpcHandlers() {
     autoUpdater.quitAndInstall(false, true)
   })
 
-  // Get current version
-  ipcMain.handle('get-app-version', () => {
-    return app.getVersion()
-  })
 }
 
 /**

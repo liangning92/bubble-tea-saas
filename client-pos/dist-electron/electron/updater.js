@@ -121,10 +121,6 @@ function setupIpcHandlers() {
         log('info', 'Installing update and restarting...');
         autoUpdater.quitAndInstall(false, true);
     });
-    // Get current version
-    electron_1.ipcMain.handle('get-app-version', () => {
-        return electron_1.app.getVersion();
-    });
 }
 /**
  * Check for updates automatically (call on app start in packaged mode)
