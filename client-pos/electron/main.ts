@@ -209,8 +209,10 @@ function getPrismaSchemaPath(): string {
  */
 async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
   const isAsar = app.getAppPath().endsWith('.asar')
+  // extraResources 复制 server/node_modules → app.asar.unpacked/node_modules
+  // prisma CLI 在 app.asar.unpacked/node_modules/.bin/prisma（不在 server/node_modules/.bin）
   const prismaBin = isAsar
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', '.bin', 'prisma')
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '.bin', 'prisma')
     : path.join(process.resourcesPath, 'server', 'node_modules', '.bin', 'prisma')
   const schemaPath = getPrismaSchemaPath()
 
