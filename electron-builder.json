@@ -53,6 +53,13 @@
       "filter": [
         "**/*"
       ]
+    },
+    {
+      "from": "node_modules/.bin",
+      "to": "app.asar.unpacked/node_modules/.bin",
+      "filter": [
+        "**/*"
+      ]
     }
   ],
   "extraMetadata": {

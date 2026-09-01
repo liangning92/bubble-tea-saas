@@ -3,8 +3,8 @@ CRCCheck off
 
 !macro customInstall
   # 启用 Windows LongPaths 支持（解除260字符路径限制）
-  # 这对 Electron 应用的深层目录结构至关重要
-  WriteRegDWORD HKLM "SYSTEM\CurrentControlSet\Control\FileSystem" "LongPathsEnabled" 1
+  # 使用 HKCU（当前用户注册表），无需管理员权限
+  WriteRegDWORD HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\FileSystem" "LongPathsEnabled" 1
 
   # 创建桌面快捷方式：打开日志文件夹
   CreateShortcut "$DESKTOP\BTPS 日志.lnk" "explorer.exe" "$APPDATA\BubbleTeaPOS\logs"

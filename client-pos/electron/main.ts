@@ -195,9 +195,13 @@ function getServerEntryPath(): string {
  * 获取 seed 数据库模板路径
  */
 function getSeedTemplatePath(): string {
-  const isAsar = app.getAppPath().endsWith('.asar')
-  if (isAsar) {
-    return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db')
+  // seed.db 位于 asar 内部 app.getAppPath()/server/prisma/seed.db
+  // extraResources 已将 server/uploads 复制到 asar.unpacked，但 prisma 文件由 asarUnpack 提取
+  // 为确保兼容性，优先使用 app.getAppPath()（asar 内部），备用 asar.unpacked
+  if (app.isPackaged) {
+    const asarPath = path.join(app.getAppPath(), 'server', 'prisma', 'seed.db')
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db')
+    return fs.existsSync(asarPath) ? asarPath : (fs.existsSync(unpackedPath) ? unpackedPath : asarPath)
   } else {
     return path.join(process.resourcesPath, 'server', 'prisma', 'seed.db')
   }
@@ -207,8 +211,8 @@ function getSeedTemplatePath(): string {
  * 获取 Prisma schema 路径（asar/unpack 兼容）
  */
 function getPrismaSchemaPath(): string {
-  const isAsar = app.getAppPath().endsWith('.asar')
-  if (isAsar) {
+  // schema.prisma 由 asarUnpack 提取到 asar.unpacked/server/prisma/schema.prisma
+  if (app.isPackaged) {
     return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'schema.prisma')
   } else {
     return path.join(process.resourcesPath, 'server', 'prisma', 'schema.prisma')
@@ -221,10 +225,8 @@ function getPrismaSchemaPath(): string {
  * 这确保数据库 schema 在服务器启动前就已更新
  */
 async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
-  const isAsar = app.getAppPath().endsWith('.asar')
-  // extraResources 复制 server/node_modules → app.asar.unpacked/node_modules
-  // prisma CLI 在 app.asar.unpacked/node_modules/.bin/prisma（不在 server/node_modules/.bin）
-  const prismaBin = isAsar
+  // prisma CLI 在 app.asar.unpacked/node_modules/.bin/prisma
+  const prismaBin = app.isPackaged
     ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '.bin', 'prisma')
     : path.join(process.resourcesPath, 'server', 'node_modules', '.bin', 'prisma')
   const schemaPath = getPrismaSchemaPath()
@@ -350,8 +352,8 @@ async function startLocalServer(): Promise<void> {
   // 同步等待完成：schema 必须先更新，服务器才能安全启动
   await ensureSchemaUpToDate(userDbPath)
 
-  // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
-  const unpackedRoot = process.resourcesPath
+  // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
+  const unpackedRoot = path.join(process.resourcesPath, 'app.asar.unpacked')
   log.log('[Server] NODE_PATH:', unpackedRoot)
 
   // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
