@@ -77,7 +77,7 @@ jobs:
         run: |
           $repoRoot = $PWD.Path
           Set-Location "$repoRoot\server\prisma"
-          npx prisma db push --accept-data-loss
+          node ../node_modules/.bin/prisma db push --accept-data-loss
 
       - name: Build server
         run: npm run build:server

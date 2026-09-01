@@ -13,13 +13,15 @@ log.transports.file.level = 'info'
 log.transports.console.level = 'debug'
 log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB per file
 
-// 全局未捕获异常处理器（防止白屏后完全崩溃）
+// 全局未捕获异常处理器（防止静默崩溃）
 process.on('uncaughtException', (error) => {
   log.error('[FATAL] Uncaught exception:', error)
+  setTimeout(() => process.exit(1), 1000)
 })
 
 process.on('unhandledRejection', (reason) => {
   log.error('[FATAL] Unhandled rejection:', reason)
+  setTimeout(() => process.exit(1), 1000)
 })
 
 // Odoo-style thermal printer support
@@ -483,6 +485,7 @@ function createMainWindow() {
       preload: getResourcePath('dist-electron/electron/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       // 高 DPI 支持
       enableBlinkFeatures: 'CSSColorSchemeUARendering'
     },
@@ -715,7 +718,8 @@ function createCustomerWindow() {
     webPreferences: {
       preload: getResourcePath('dist-electron/electron/preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     },
     title: 'Customer Display',
     alwaysOnTop: true
@@ -841,6 +845,17 @@ ipcMain.handle('get-log-entries', () => {
 
 ipcMain.handle('set-api-url', (_event, url: string) => {
   const fs = require('fs')
+  // 验证 URL 格式：只允许 /api 相对路径或明确的 http/https URL
+  const isValidUrl = typeof url === 'string' && (
+    url === '/api' ||
+    url.startsWith('/api?') ||
+    url.startsWith('/api/') ||
+    /^https?:\/\/[^/]+\/api\/?/.test(url)
+  )
+  if (!isValidUrl) {
+    console.error('[API URL] Invalid URL rejected:', url)
+    return false
+  }
   const configPath = path.join(app.getPath('userData'), 'api-config.json')
   try {
     fs.writeFileSync(configPath, JSON.stringify({ apiUrl: url }, null, 2))
