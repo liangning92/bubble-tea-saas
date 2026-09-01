@@ -501,8 +501,11 @@
   },
   "asar": true,
   "asarUnpack": [
-    "/**/*.node",
-    "node_modules/.prisma/client/libquery_engine-*.node"
+    "**/*.node",
+    "node_modules/.prisma/client/**/*",
+    "node_modules/@prisma/client/**/*",
+    "server/prisma/seed.db",
+    "server/prisma/schema.prisma"
   ],
   "npmRebuild": true,
   "win": {

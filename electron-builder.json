@@ -32,6 +32,27 @@
       "filter": [
         "**/*"
       ]
+    },
+    {
+      "from": "server/uploads",
+      "to": "app.asar.unpacked/server/uploads",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "node_modules/.prisma",
+      "to": "app.asar.unpacked/node_modules/.prisma",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "node_modules/@prisma/client",
+      "to": "app.asar.unpacked/node_modules/@prisma/client",
+      "filter": [
+        "**/*"
+      ]
     }
   ],
   "extraMetadata": {
@@ -39,8 +60,9 @@
   },
   "asar": true,
   "asarUnpack": [
-    "/**/*.node",
-    "node_modules/.prisma/client/libquery_engine-*.node",
+    "**/*.node",
+    "node_modules/.prisma/client/**/*",
+    "node_modules/@prisma/client/**/*",
     "server/prisma/seed.db",
     "server/prisma/schema.prisma"
   ],

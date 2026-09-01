@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, globalShortcut } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } from 'electron'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 import fs from 'fs'
@@ -33,14 +33,25 @@ try {
   console.log('[PRINTER] Thermal printer libs not available:', e?.message)
 }
 
-// 检测 WebView2 是否可用
+// 检测 WebView2 是否可用（Windows only）
 function checkWebView2(): boolean {
+  if (process.platform !== 'win32') return true
   try {
-    // 尝试创建一个隐藏窗口测试 WebView2
-    const testWindow = new BrowserWindow({ show: false, webPreferences: {} })
-    testWindow.close()
-    return true
-  } catch (e) {
+    // 检查注册表键：Everett 存储（WebView2 安装后写入）
+    const regKey = 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+    const { execSync } = require('child_process')
+    const result = execSync(
+      `reg query "${regKey}" /v pv 2>nul`,
+      { encoding: 'utf8', timeout: 5000 }
+    )
+    const match = result.match(/pv\s+REG_SZ\s+(\d+\.\d+\.\d+)/)
+    if (match) {
+      console.log('[WebView2] Runtime version:', match[1])
+      return true
+    }
+    return false
+  } catch {
+    // 注册表键不存在 = WebView2 未安装
     return false
   }
 }
@@ -347,6 +358,10 @@ async function startLocalServer(): Promise<void> {
   log.log('[Server] Database path:', userDbPath)
   log.log('[Server] Starting local API server...')
 
+  // asar 模式下 uploads 在 app.asar.unpacked/server/uploads
+  const uploadsPath = path.join(unpackedRoot, 'server', 'uploads')
+  log.log('[Server] Uploads path:', uploadsPath)
+
   // fork Express 服务器
   // 注意：不传 execPath - Electron 主进程本身就是 Node.js，fork() 会复用当前运行时
   serverProcess = fork(serverEntry, [], {
@@ -356,6 +371,8 @@ async function startLocalServer(): Promise<void> {
       PORT: '7072',
       // 覆盖数据库路径为用户可写目录
       DATABASE_URL: `file:${userDbPath}`,
+      // uploads 目录路径（asar 模式下在 asar.unpacked 下）
+      UPLOADS_PATH: uploadsPath,
       // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
       NODE_PATH: unpackedRoot
     },
@@ -1216,6 +1233,19 @@ app.on('second-instance', () => {
 // 应用启动
 app.whenReady().then(async () => {
   console.log('[Electron] App ready, starting up...')
+
+  // WebView2 检查（仅 Windows，Electron 28+ 已内置 WebView2 但旧系统可能缺失）
+  if (process.platform === 'win32') {
+    const webview2Available = checkWebView2()
+    console.log('[Electron] WebView2 available:', webview2Available)
+    if (!webview2Available) {
+      const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。'
+      console.error('[Electron] WebView2 MISSING:', msg)
+      dialog.showErrorBox('缺少 WebView2 运行时', msg)
+      app.quit()
+      return
+    }
+  }
 
   // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
   globalShortcut.register('CommandOrControl+Shift+D', () => {

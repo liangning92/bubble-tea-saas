@@ -26,10 +26,13 @@ export function setupUpdater(window: BrowserWindow) {
   autoUpdater.autoInstallOnAppQuit = true
 
   // Tell electron-updater where to find updates (GitHub Releases)
+  // Read from env vars (set in electron-builder extraMetadata or CI environment)
+  const owner = process.env.UPDATER_OWNER || 'liangning92'
+  const repo = process.env.UPDATER_REPO || 'bubble-tea-saas'
   autoUpdater.setFeedURL({
     provider: 'github',
-    owner: 'liangning92',
-    repo: 'bubble-tea-saas'
+    owner,
+    repo
   })
 
   // Set up event listeners

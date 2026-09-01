@@ -51,29 +51,17 @@ jobs:
           (Get-Content package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
           (Get-Content client-pos/package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content client-pos/package.json
 
-      - name: Commit version bump and create tag
-        run: |
-          git config --global user.name "CI Bot"
-          git config --global user.email "ci@bubble-tea.local"
-          git add package.json client-pos/package.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
-          git tag "v${{ steps.version.outputs.VERSION }}"
-          git push origin master --tags
-
       - name: Install dependencies
         run: |
           Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
           Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
           npm install --force --prefer-offline=false
 
-      - name: Install server dependencies (standalone, no workspace hoisting)
+      - name: Generate Prisma client (in server directory so .prisma/client is created there)
         run: |
-          Remove-Item -Force server/package-lock.json -ErrorAction SilentlyContinue
-          Remove-Item -Force server/node_modules -Recurse -ErrorAction SilentlyContinue
-          cd server && npm install && cd ..
-
-      - name: Generate Prisma client
-        run: npm run db:generate
+          cd server
+          npx prisma generate
+          cd ..
 
       - name: Sync Prisma schema to database
         env:

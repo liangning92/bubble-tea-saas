@@ -46,13 +46,13 @@ if [ ! -f "$CONFIG" ]; then
 else
     ok "electron-builder.json 存在"
 
-    # 1a. asarUnpack 有 leading /
+    # 1a. asarUnpack 无前导 / (glob 模式不能有前导 /)
     UNPACK_PATTERNS=$(cat $CONFIG | python3 -c "import json,sys; d=json.load(sys.stdin); print('\n'.join(d.get('asarUnpack',[])))" 2>/dev/null || echo "")
-    if echo "$UNPACK_PATTERNS" | grep -v "^/" | grep -q "seed.db\|*.node"; then
-        fail "asarUnpack patterns 缺少 leading / (seed.db 或 *.node)"
-        echo "        当前: $(echo "$UNPACK_PATTERNS" | grep -v "^/" | head -3)"
+    if echo "$UNPACK_PATTERNS" | grep -q "^/"; then
+        fail "asarUnpack patterns 有前导 / (glob 模式不支持)"
+        echo "        当前: $(echo "$UNPACK_PATTERNS" | grep "^/" | head -3)"
     else
-        ok "asarUnpack patterns 有 leading /"
+        ok "asarUnpack patterns 无前导 / (glob 语法正确)"
     fi
 
     # 1b. files[] 包含 dist-electron
