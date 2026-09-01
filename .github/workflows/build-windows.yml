@@ -57,11 +57,19 @@ jobs:
           Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
           npm install --force --prefer-offline=false
 
-      - name: Generate Prisma client (in server directory so .prisma/client is created there)
+      - name: Install server dependencies (populate server/node_modules/.bin/prisma)
+        run: |
+          Remove-Item -Force server/package-lock.json -ErrorAction SilentlyContinue
+          Remove-Item -Force server/node_modules -Recurse -ErrorAction SilentlyContinue
+          cd server
+          npm install
+          Set-Location ..
+
+      - name: Generate Prisma client
         run: |
           cd server
-          npx prisma generate
-          cd ..
+          node node_modules/.bin/prisma generate
+          Set-Location ..
 
       - name: Sync Prisma schema to database
         env:
