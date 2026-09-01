@@ -12,6 +12,7 @@
     "server/prisma/seed.db",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
+    "client-admin/dist/**/*",
     "shared/**/*",
     "!**/*.map",
     "!**/node_modules/.cache/**/*",
@@ -54,13 +55,6 @@
         "**/*"
       ]
     },
-    {
-      "from": "node_modules/.bin",
-      "to": "app.asar.unpacked/node_modules/.bin",
-      "filter": [
-        "**/*"
-      ]
-    }
   ],
   "extraMetadata": {
     "main": "client-pos/dist-electron/electron/main.js"
