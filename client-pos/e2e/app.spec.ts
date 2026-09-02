@@ -18,7 +18,8 @@ test.describe('POS App E2E', () => {
       if (msg.type() === 'error') errors.push(msg.text())
     })
 
-    const page = app.window()!
+    const windows = await app.windows()
+    const page = windows[0]
     await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(5000)
 
@@ -81,7 +82,8 @@ test.describe('POS App E2E', () => {
       if (msg.type() === 'error') errors.push(msg.text())
     })
 
-    const page = app.window()!
+    const windows = await app.windows()
+    const page = windows[0]
     await page.waitForLoadState('domcontentloaded')
     await page.waitForTimeout(3000)
 
