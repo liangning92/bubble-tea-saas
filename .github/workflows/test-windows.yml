@@ -28,40 +28,36 @@ jobs:
       - name: Smoke test
         shell: pwsh
         run: |
-          $exe = Get-ChildItem client-pos/dist/ -Recurse -Filter "*.exe" | Select-Object -First 1
-          if (-not $exe) { Write-Error "No exe found in dist/"; exit 1 }
+          $exe = Get-ChildItem client-pos/dist -Recurse -Filter "*.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "No exe found"; exit 1 }
           $exePath = $exe.FullName
-          Write-Host "Testing: $exePath ($([math]::Round($exe.Length/1MB,1) MB)"
+          $sizeMB = [math]::Round($exe.Length / 1MB, 1)
+          Write-Host "Testing: $exePath (${sizeMB} MB)"
           $port = 9222
           $errLog = "$env:TEMP\electron_err.log"
-          $outLog = "$env:TEMP\electron_out.log"
-
-          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
+          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
           Write-Host "Process: $($proc.Id)"
           Start-Sleep 8
 
           if ($proc.HasExited) {
             Write-Error "CRASH: exited with code $($proc.ExitCode)"
             if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
-            if (Test-Path $outLog) { Get-Content $outLog | Select-Object -First 20 }
             exit 1
           }
 
-          Write-Host "App running (PID: $($proc.Id))"
-
+          Write-Host "App still running after 8s"
           try {
             $r = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 5 -ErrorAction Stop
-            Write-Host "DevTools: HTTP $($r.StatusCode)"
+            Write-Host "DevTools HTTP: $($r.StatusCode)"
           } catch {
-            Write-Warning "DevTools not responding (this is OK if app has no renderer): $_"
+            Write-Host "DevTools not responding (no renderer): $_"
           }
 
-          Write-Host "App alive for 8+ seconds - PASS"
+          Write-Host "PASSED: App launched and survived 8 seconds"
           Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
-          Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
 
       - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: client-pos/dist/
+          path: client-pos/dist
