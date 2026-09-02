@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-windows:
+  build:
     runs-on: windows-latest
+    outputs:
+      exePath: ${{ steps.find.outputs.exePath }}
 
     steps:
       - uses: actions/checkout@v4
@@ -26,29 +28,43 @@ jobs:
           npm run build
           npm run build:electron:main
 
-      - name: Build Electron app (portable dir)
+      - name: Build Electron unpacked
         run: |
           cd client-pos
           npx electron-builder --win dir
 
-      - name: List build output
-        run: |
-          Get-ChildItem client-pos/dist/ -Recurse -File | Select-Object FullName, @{N="SizeMB";E={[math]::Round($_.Length/1MB,2)}} | Format-Table -AutoSize
-
       - name: Find exe
+        id: find
+        shell: pwsh
         run: |
           $exe = Get-ChildItem client-pos/dist/ -Recurse -Filter "*.exe" | Select-Object -First 1
-          if ($exe) {
-            Write-Host "Found: $($exe.FullName)"
-            Write-Host "##vso[task.setvariable variable=exePath;isOutput=true]$($exe.FullName)"
-          } else {
-            Write-Error "FAIL: No exe found"
-            exit 1
-          }
+          if (-not $exe) { Write-Error "No exe found"; exit 1 }
+          Write-Host "Found: $($exe.FullName)"
+          Write-Host "##vso[task.setvariable variable=exePath;isOutput=true]$($exe.FullName)"
 
-      - name: Smoke test - Launch app
+  test:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
         run: |
-          $exePath = Get-ChildItem client-pos/dist/ -Recurse -Filter "*.exe" | Select-Object -First 1 | ForEach-Object { $_.FullName }
+          npm install -g @playwright/test
+          npx playwright install chromium
+
+      - name: Start app and run Playwright tests
+        shell: pwsh
+        env:
+          APP_URL: "http://localhost:9222"
+        run: |
+          $exePath = "${{ needs.build.outputs.exePath }}"
           Write-Host "Testing: $exePath"
           $port = 9222
           $errLog = "$env:TEMP\electron_err.log"
@@ -56,23 +72,39 @@ jobs:
 
           $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
           Write-Host "Started process $($proc.Id)"
-          Start-Sleep -Seconds 10
+          Start-Sleep 5
 
           if ($proc.HasExited) {
-            Write-Error "CRASH: App exited with code $($proc.ExitCode)"
+            Write-Error "App crashed on startup with code $($proc.ExitCode)"
             if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
             exit 1
           }
 
           try {
-            $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 5 -ErrorAction Stop
-            if ($response.StatusCode -eq 200) {
-              Write-Host "OK: App is running, DevTools responding"
-            }
+            $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 10 -ErrorAction Stop
+            Write-Host "DevTools: HTTP $($response.StatusCode)"
           } catch {
-            Write-Warning "DevTools not responding: $_"
+            Write-Error "DevTools not responding: $_"
+            Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
           }
 
-          Write-Host "OK: App started successfully"
+          # Run Playwright tests
+          Copy-Item -Recurse client-pos/e2e .
+          Copy-Item client-pos/playwright.config.ts .
+          $env:APP_URL = "http://localhost:$port"
+          npx playwright test --reporter=list 2>&1 | Tee-Object -Variable testOutput
+          $testResult = $LASTEXITCODE
+          Write-Host $testOutput
+
+          if ($proc.HasExited) {
+            Write-Error "App crashed during tests with code $($proc.ExitCode)"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
+            $testResult = 1
+          }
+
           Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
           Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
+
+          if ($testResult -ne 0) { exit 1 }
+          Write-Host "All Playwright tests passed"
