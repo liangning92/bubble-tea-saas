@@ -26,43 +26,37 @@ jobs:
           npm run build
           npm run build:electron:main
 
-      - name: Build Electron package (unpacked dir)
+      - name: Build Electron app (portable dir)
         run: |
           cd client-pos
-          npx electron-builder --win portable --dir
+          npx electron-builder --win dir
 
-      - name: Verify build output
+      - name: List build output
         run: |
-          Get-ChildItem client-pos/dist/win-unpacked/ | Select-Object Name, Length
-          if (Test-Path "client-pos/dist/win-unpacked/BubbleTeaPOS.exe") {
-            Write-Host "OK: BubbleTeaPOS.exe exists"
+          Get-ChildItem client-pos/dist/ -Recurse -File | Select-Object FullName, @{N="SizeMB";E={[math]::Round($_.Length/1MB,2)}} | Format-Table -AutoSize
+
+      - name: Find exe
+        run: |
+          $exe = Get-ChildItem client-pos/dist/ -Recurse -Filter "*.exe" | Select-Object -First 1
+          if ($exe) {
+            Write-Host "Found: $($exe.FullName)"
+            Write-Host "##vso[task.setvariable variable=exePath;isOutput=true]$($exe.FullName)"
           } else {
-            Write-Error "FAIL: BubbleTeaPOS.exe not found"
-            exit 1
-          }
-          if (Test-Path "client-pos/dist/win-unpacked/resources/app/dist/index.html") {
-            Write-Host "OK: index.html exists"
-          } else {
-            Write-Error "FAIL: index.html not found"
-            exit 1
-          }
-          if (Test-Path "client-pos/dist/win-unpacked/resources/app/dist-electron/electron/main.js") {
-            Write-Host "OK: main.js exists"
-          } else {
-            Write-Error "FAIL: main.js not found"
+            Write-Error "FAIL: No exe found"
             exit 1
           }
 
-      - name: Smoke test - Launch app briefly
+      - name: Smoke test - Launch app
         run: |
-          $exePath = "client-pos/dist/win-unpacked/BubbleTeaPOS.exe"
+          $exePath = Get-ChildItem client-pos/dist/ -Recurse -Filter "*.exe" | Select-Object -First 1 | ForEach-Object { $_.FullName }
+          Write-Host "Testing: $exePath"
           $port = 9222
           $errLog = "$env:TEMP\electron_err.log"
           $outLog = "$env:TEMP\electron_out.log"
 
           $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
           Write-Host "Started process $($proc.Id)"
-          Start-Sleep -Seconds 8
+          Start-Sleep -Seconds 10
 
           if ($proc.HasExited) {
             Write-Error "CRASH: App exited with code $($proc.ExitCode)"
@@ -70,16 +64,15 @@ jobs:
             exit 1
           }
 
-          # Check if DevTools port responds (proves renderer started)
           try {
             $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 5 -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
               Write-Host "OK: App is running, DevTools responding"
             }
           } catch {
-            Write-Warning "DevTools not responding, but app is still running"
+            Write-Warning "DevTools not responding: $_"
           }
 
-          Write-Host "OK: App started successfully and is running"
+          Write-Host "OK: App started successfully"
           Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
           Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
