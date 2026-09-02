@@ -6,9 +6,6 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    outputs:
-      exePath: ${{ steps.find.outputs.exePath }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -19,28 +16,20 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
-          cd client-pos
-          npm install
+          cd client-pos && npm install
 
-      - name: Build POS
+      - name: Build
         run: |
           cd client-pos
           npm run build
           npm run build:electron:main
-
-      - name: Build Electron unpacked
-        run: |
-          cd client-pos
           npx electron-builder --win dir
 
-      - name: Find exe
-        id: find
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem client-pos/dist/ -Recurse -Filter "*.exe" | Select-Object -First 1
-          if (-not $exe) { Write-Error "No exe found"; exit 1 }
-          Write-Host "Found: $($exe.FullName)"
-          Write-Host "##vso[task.setvariable variable=exePath;isOutput=true]$($exe.FullName)"
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: client-pos/dist/
 
   test:
     needs: build
@@ -49,6 +38,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - uses: actions/setup-node@v4
         with:
@@ -59,24 +53,24 @@ jobs:
           npm install -g @playwright/test
           npx playwright install chromium
 
-      - name: Start app and run Playwright tests
+      - name: Start app and run tests
         shell: pwsh
         env:
           APP_URL: "http://localhost:9222"
         run: |
-          $exePath = "${{ needs.build.outputs.exePath }}"
+          $exe = Get-ChildItem dist/ -Recurse -Filter "*.exe" | Select-Object -First 1
+          $exePath = $exe.FullName
           Write-Host "Testing: $exePath"
           $port = 9222
           $errLog = "$env:TEMP\electron_err.log"
-          $outLog = "$env:TEMP\electron_out.log"
 
-          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog -RedirectStandardOutput $outLog
+          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
           Write-Host "Started process $($proc.Id)"
-          Start-Sleep 5
+          Start-Sleep 6
 
           if ($proc.HasExited) {
-            Write-Error "App crashed on startup with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
+            Write-Error "App crashed with code $($proc.ExitCode)"
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 15 }
             exit 1
           }
 
@@ -89,22 +83,18 @@ jobs:
             exit 1
           }
 
-          # Run Playwright tests
           Copy-Item -Recurse client-pos/e2e .
           Copy-Item client-pos/playwright.config.ts .
-          $env:APP_URL = "http://localhost:$port"
           npx playwright test --reporter=list 2>&1 | Tee-Object -Variable testOutput
           $testResult = $LASTEXITCODE
           Write-Host $testOutput
 
           if ($proc.HasExited) {
             Write-Error "App crashed during tests with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 20 }
+            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 15 }
             $testResult = 1
           }
 
           Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
-          Remove-Item $errLog,$outLog -ErrorAction SilentlyContinue
-
           if ($testResult -ne 0) { exit 1 }
           Write-Host "All Playwright tests passed"
