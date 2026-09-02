@@ -53,55 +53,18 @@ jobs:
           npm install @playwright/test
           npx playwright install chromium
 
-      - name: Start app and run tests
+      - name: Run Playwright Electron tests
         shell: pwsh
+        env:
+          ELECTRON_EXE: ${{ github.workspace }}\dist\win-unpacked\bubble-tea-pos.exe
         run: |
           $exe = Get-ChildItem dist/ -Recurse -Filter "*.exe" | Select-Object -First 1
-          $exePath = $exe.FullName
-          Write-Host "Testing: $exePath"
-          $port = 9222
-          $errLog = "$env:TEMP\electron_err.log"
-
-          $proc = Start-Process $exePath -ArgumentList "--disable-gpu","--no-sandbox","--remote-debugging-port=$port" -PassThru -RedirectStandardError $errLog
-          Write-Host "Started process $($proc.Id)"
-          Start-Sleep 8
-
-          if ($proc.HasExited) {
-            Write-Error "App crashed with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 15 }
-            exit 1
-          }
-
-          # Get the page URL from DevTools
-          try {
-            $response = Invoke-WebRequest "http://localhost:$port/json" -TimeoutSec 10 -ErrorAction Stop
-            Write-Host "DevTools: HTTP $($response.StatusCode)"
-            $json = $response.Content | ConvertFrom-Json
-            Write-Host "Targets count: $($json.Count)"
-            if ($json.Count -gt 0) {
-              Write-Host "Page URL: $($json[0].url)"
-              Write-Host "WebSocket URL: $($json[0].webSocketDebuggerUrl)"
-              $env:ELECTRON_WS_URL = $json[0].webSocketDebuggerUrl
-            }
-          } catch {
-            Write-Error "DevTools /json failed: $_"
-          }
-
-          # Copy test files
+          Write-Host "Testing: $($exe.FullName)"
+          $env:ELECTRON_EXE = $exe.FullName
           Copy-Item -Recurse client-pos/e2e .
           Copy-Item client-pos/playwright.config.ts .
-
-          # Run Playwright
           npx playwright test --reporter=list 2>&1 | Tee-Object -Variable testOutput
           $testResult = $LASTEXITCODE
           Write-Host $testOutput
-
-          if ($proc.HasExited) {
-            Write-Error "App crashed during tests with code $($proc.ExitCode)"
-            if (Test-Path $errLog) { Get-Content $errLog | Select-Object -First 15 }
-            $testResult = 1
-          }
-
-          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
           if ($testResult -ne 0) { exit 1 }
           Write-Host "All Playwright tests passed"

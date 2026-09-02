@@ -8,14 +8,14 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
+    baseURL: process.env.APP_URL || 'http://localhost:9222',
     trace: 'on-first-retry',
   },
   projects: [
     {
-      name: 'electron',
-      use: {
-        ...devices['Desktop Chrome'],
-      },
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
+  webServer: undefined,
 })
