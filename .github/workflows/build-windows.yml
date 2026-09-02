@@ -68,7 +68,7 @@ jobs:
       - name: Generate Prisma client
         run: |
           cd server
-          node node_modules/.bin/prisma generate
+          npx prisma generate
           Set-Location ..
 
       - name: Sync Prisma schema to database
