@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Playwright
         run: |
-          npm install -g @playwright/test
+          npm install @playwright/test
           npx playwright install chromium
 
       - name: Start app and run tests
