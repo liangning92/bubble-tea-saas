@@ -479,6 +479,12 @@ function getResourcePath(relativePath: string): string {
     // 打包后：app.getAppPath() 返回包含 resources/app 的目录
     // 结构: resources/app/client-pos/dist/index.html
     // electron-builder.json 的 files 配置把 client-pos/ 目录内容打包进去
+    // 但 dist-electron 在 asarUnpack 中，所以实际在 app.asar.unpacked 下
+    // sandbox: true 时 preload 必须使用 unpacked 路径
+    if (relativePath.startsWith('dist-electron')) {
+      // dist-electron 在 asarUnpack 中，使用 unpacked 路径
+      return path.join(process.resourcesPath, 'app.asar.unpacked', 'client-pos', relativePath)
+    }
     return path.join(app.getAppPath(), 'client-pos', relativePath)
   } else {
     // 开发模式：使用 __dirname
