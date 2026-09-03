@@ -343,9 +343,13 @@ async function startLocalServer() {
     await ensureSchemaUpToDate(userDbPath);
     // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
     const unpackedRoot = path_1.default.join(process.resourcesPath, 'app.asar.unpacked');
-    // server 模块实际在 app.asar.unpacked/server/node_modules
+    // server 模块在 app.asar.unpacked/server/node_modules
+    // @prisma/client 和 .prisma 在 app.asar.unpacked/node_modules
+    // NODE_PATH 需要包含两者才能让 prisma 和服务器正确加载模块
     const serverModulesPath = path_1.default.join(unpackedRoot, 'server', 'node_modules');
-    main_1.default.log('[Server] NODE_PATH:', serverModulesPath);
+    const prismaModulesPath = path_1.default.join(unpackedRoot, 'node_modules');
+    const nodePath = `${serverModulesPath}${path_1.default.delimiter}${prismaModulesPath}`;
+    main_1.default.log('[Server] NODE_PATH:', nodePath);
     // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
     const serverEntry = getServerEntryPath();
     main_1.default.log('[Server] Server path:', serverEntry);
@@ -356,9 +360,9 @@ async function startLocalServer() {
     main_1.default.log('[Server] Uploads path:', uploadsPath);
     // fork Express 服务器
     // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
-    const nodePath = process.execPath; // Electron 自带 node
+    const nodeExecPath = process.execPath; // Electron 自带 node
     serverProcess = (0, child_process_1.fork)(serverEntry, [], {
-        execPath: nodePath,
+        execPath: nodeExecPath,
         env: {
             ...process.env,
             NODE_ENV: 'production',
@@ -368,7 +372,8 @@ async function startLocalServer() {
             // uploads 目录路径（asar 模式下在 asar.unpacked 下）
             UPLOADS_PATH: uploadsPath,
             // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
-            NODE_PATH: serverModulesPath
+            // 需要同时包含 server/node_modules 和根目录的 node_modules（prisma 相关）
+            NODE_PATH: nodePath
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
