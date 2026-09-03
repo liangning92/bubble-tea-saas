@@ -260,7 +260,7 @@ export async function getInventoryStats(storeId: string) {
 
 // Get stock in logs
 export async function getStockInLogs(storeId: string, inventoryId?: string) {
-  const where: any = {}
+  const where: any = { storeId }
   if (inventoryId) where.inventoryId = inventoryId
 
   const logs = await prisma.stockInLog.findMany({
@@ -278,7 +278,7 @@ export async function getStockInLogs(storeId: string, inventoryId?: string) {
 
 // Get stock out logs
 export async function getStockOutLogs(storeId: string, inventoryId?: string) {
-  const where: any = {}
+  const where: any = { storeId }
   if (inventoryId) where.inventoryId = inventoryId
 
   const logs = await prisma.stockOutLog.findMany({
@@ -366,7 +366,7 @@ export async function deleteInventory(inventoryId: string) {
 }
 // Get batch list
 export async function getBatches(storeId: string, inventoryId?: string) {
-  const where: any = { inventoryId }
+  const where: any = { storeId }
   if (inventoryId) where.inventoryId = inventoryId
 
   return prisma.batch.findMany({

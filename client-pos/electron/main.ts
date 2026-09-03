@@ -225,10 +225,17 @@ function getPrismaSchemaPath(): string {
  * 这确保数据库 schema 在服务器启动前就已更新
  */
 async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
-  // prisma CLI 在 app.asar.unpacked/node_modules/.bin/prisma
-  const prismaBin = app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '.bin', 'prisma')
-    : path.join(process.resourcesPath, 'server', 'node_modules', '.bin', 'prisma')
+  // 获取 server/node_modules 的基础路径（不含 .bin）
+  const serverModulesPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules')
+    : path.join(process.resourcesPath, 'server', 'node_modules')
+
+  // 定位 node 可执行文件（跨平台）
+  const nodeBin = process.execPath
+
+  // prisma CLI 入口脚本（避免使用 .bin/prisma shell 脚本，它包含硬编码的开发机路径）
+  // pnpm 安装时路径: node_modules/.pnpm/prisma@x.x.x/node_modules/prisma/build/index.js
+  const prismaCliPath = path.join(serverModulesPath, '.pnpm', 'prisma@5.22.0', 'node_modules', 'prisma', 'build', 'index.js')
   const schemaPath = getPrismaSchemaPath()
 
   if (!fs.existsSync(schemaPath)) {
@@ -236,12 +243,19 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
     return
   }
 
+  if (!fs.existsSync(prismaCliPath)) {
+    log.warn('[Schema] prisma CLI not found at', prismaCliPath, '- skipping db sync')
+    return
+  }
+
   log.log('[Schema] Checking database schema...')
+  log.log('[Schema] Prisma CLI:', prismaCliPath)
 
   return new Promise((resolve) => {
     let childExited = false
 
-    const child = spawn(prismaBin, ['db', 'push', '--accept-data-loss', '--schema', schemaPath], {
+    // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
+    const child = spawn(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
       env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
       stdio: ['ignore', 'pipe', 'pipe', 'pipe']
     })
@@ -354,7 +368,9 @@ async function startLocalServer(): Promise<void> {
 
   // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
   const unpackedRoot = path.join(process.resourcesPath, 'app.asar.unpacked')
-  log.log('[Server] NODE_PATH:', unpackedRoot)
+  // server 模块实际在 app.asar.unpacked/server/node_modules
+  const serverModulesPath = path.join(unpackedRoot, 'server', 'node_modules')
+  log.log('[Server] NODE_PATH:', serverModulesPath)
 
   // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
   const serverEntry = getServerEntryPath()
@@ -367,8 +383,10 @@ async function startLocalServer(): Promise<void> {
   log.log('[Server] Uploads path:', uploadsPath)
 
   // fork Express 服务器
-  // 注意：不传 execPath - Electron 主进程本身就是 Node.js，fork() 会复用当前运行时
+  // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
+  const nodePath = process.execPath // Electron 自带 node
   serverProcess = fork(serverEntry, [], {
+    execPath: nodePath,
     env: {
       ...process.env,
       NODE_ENV: 'production',
@@ -378,7 +396,7 @@ async function startLocalServer(): Promise<void> {
       // uploads 目录路径（asar 模式下在 asar.unpacked 下）
       UPLOADS_PATH: uploadsPath,
       // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
-      NODE_PATH: unpackedRoot
+      NODE_PATH: serverModulesPath
     },
     stdio: ['pipe', 'pipe', 'pipe', 'ipc']
   })

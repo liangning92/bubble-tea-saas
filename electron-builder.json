@@ -10,6 +10,7 @@
     "server/uploads/**/*",
     "server/prisma/schema.prisma",
     "server/prisma/seed.db",
+    "server/node_modules/**/*",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
     "client-admin/dist/**/*",
@@ -64,6 +65,7 @@
     "**/*.node",
     "node_modules/.prisma/client/**/*",
     "node_modules/@prisma/client/**/*",
+    "server/node_modules/**/*",
     "server/prisma/seed.db",
     "server/prisma/schema.prisma"
   ],

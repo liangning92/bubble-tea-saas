@@ -124,7 +124,11 @@ app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 // Serve uploaded files
-app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
+// UPLOADS_PATH: set by Electron main process when forking this server
+// In asar: app.asar.unpacked/server/uploads (via extraResources)
+// In dev: project root/server/uploads (fallback)
+const uploadsPath = process.env.UPLOADS_PATH || path_1.default.join(__dirname, '../uploads');
+app.use('/uploads', express_1.default.static(uploadsPath));
 // Health Check
 app.get('/health', (req, res) => {
     res.json({

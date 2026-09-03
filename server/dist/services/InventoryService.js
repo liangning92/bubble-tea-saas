@@ -231,7 +231,7 @@ async function getInventoryStats(storeId) {
 }
 // Get stock in logs
 async function getStockInLogs(storeId, inventoryId) {
-    const where = {};
+    const where = { storeId };
     if (inventoryId)
         where.inventoryId = inventoryId;
     const logs = await database_1.default.stockInLog.findMany({
@@ -247,7 +247,7 @@ async function getStockInLogs(storeId, inventoryId) {
 }
 // Get stock out logs
 async function getStockOutLogs(storeId, inventoryId) {
-    const where = {};
+    const where = { storeId };
     if (inventoryId)
         where.inventoryId = inventoryId;
     const logs = await database_1.default.stockOutLog.findMany({
@@ -305,7 +305,7 @@ async function deleteInventory(inventoryId) {
 }
 // Get batch list
 async function getBatches(storeId, inventoryId) {
-    const where = { inventoryId };
+    const where = { storeId };
     if (inventoryId)
         where.inventoryId = inventoryId;
     return database_1.default.batch.findMany({

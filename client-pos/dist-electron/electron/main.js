@@ -16,12 +16,14 @@ main_1.default.initialize();
 main_1.default.transports.file.level = 'info';
 main_1.default.transports.console.level = 'debug';
 main_1.default.transports.file.maxSize = 5 * 1024 * 1024; // 5MB per file
-// 全局未捕获异常处理器（防止白屏后完全崩溃）
+// 全局未捕获异常处理器（防止静默崩溃）
 process.on('uncaughtException', (error) => {
     main_1.default.error('[FATAL] Uncaught exception:', error);
+    setTimeout(() => process.exit(1), 1000);
 });
 process.on('unhandledRejection', (reason) => {
     main_1.default.error('[FATAL] Unhandled rejection:', reason);
+    setTimeout(() => process.exit(1), 1000);
 });
 // Odoo-style thermal printer support
 let ThermalPrinter = null;
@@ -34,15 +36,24 @@ try {
 catch (e) {
     console.log('[PRINTER] Thermal printer libs not available:', e?.message);
 }
-// 检测 WebView2 是否可用
+// 检测 WebView2 是否可用（Windows only）
 function checkWebView2() {
-    try {
-        // 尝试创建一个隐藏窗口测试 WebView2
-        const testWindow = new electron_1.BrowserWindow({ show: false, webPreferences: {} });
-        testWindow.close();
+    if (process.platform !== 'win32')
         return true;
+    try {
+        // 检查注册表键：Everett 存储（WebView2 安装后写入）
+        const regKey = 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+        const { execSync } = require('child_process');
+        const result = execSync(`reg query "${regKey}" /v pv 2>nul`, { encoding: 'utf8', timeout: 5000 });
+        const match = result.match(/pv\s+REG_SZ\s+(\d+\.\d+\.\d+)/);
+        if (match) {
+            console.log('[WebView2] Runtime version:', match[1]);
+            return true;
+        }
+        return false;
     }
-    catch (e) {
+    catch {
+        // 注册表键不存在 = WebView2 未安装
         return false;
     }
 }
@@ -176,9 +187,13 @@ function getServerEntryPath() {
  * 获取 seed 数据库模板路径
  */
 function getSeedTemplatePath() {
-    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
-    if (isAsar) {
-        return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db');
+    // seed.db 位于 asar 内部 app.getAppPath()/server/prisma/seed.db
+    // extraResources 已将 server/uploads 复制到 asar.unpacked，但 prisma 文件由 asarUnpack 提取
+    // 为确保兼容性，优先使用 app.getAppPath()（asar 内部），备用 asar.unpacked
+    if (electron_1.app.isPackaged) {
+        const asarPath = path_1.default.join(electron_1.app.getAppPath(), 'server', 'prisma', 'seed.db');
+        const unpackedPath = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db');
+        return fs_1.default.existsSync(asarPath) ? asarPath : (fs_1.default.existsSync(unpackedPath) ? unpackedPath : asarPath);
     }
     else {
         return path_1.default.join(process.resourcesPath, 'server', 'prisma', 'seed.db');
@@ -188,8 +203,8 @@ function getSeedTemplatePath() {
  * 获取 Prisma schema 路径（asar/unpack 兼容）
  */
 function getPrismaSchemaPath() {
-    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
-    if (isAsar) {
+    // schema.prisma 由 asarUnpack 提取到 asar.unpacked/server/prisma/schema.prisma
+    if (electron_1.app.isPackaged) {
         return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'schema.prisma');
     }
     else {
@@ -202,19 +217,30 @@ function getPrismaSchemaPath() {
  * 这确保数据库 schema 在服务器启动前就已更新
  */
 async function ensureSchemaUpToDate(userDbPath) {
-    const isAsar = electron_1.app.getAppPath().endsWith('.asar');
-    const prismaBin = isAsar
-        ? path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', '.bin', 'prisma')
-        : path_1.default.join(process.resourcesPath, 'server', 'node_modules', '.bin', 'prisma');
+    // 获取 server/node_modules 的基础路径（不含 .bin）
+    const serverModulesPath = electron_1.app.isPackaged
+        ? path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules')
+        : path_1.default.join(process.resourcesPath, 'server', 'node_modules');
+    // 定位 node 可执行文件（跨平台）
+    const nodeBin = process.execPath;
+    // prisma CLI 入口脚本（避免使用 .bin/prisma shell 脚本，它包含硬编码的开发机路径）
+    // pnpm 安装时路径: node_modules/.pnpm/prisma@x.x.x/node_modules/prisma/build/index.js
+    const prismaCliPath = path_1.default.join(serverModulesPath, '.pnpm', 'prisma@5.22.0', 'node_modules', 'prisma', 'build', 'index.js');
     const schemaPath = getPrismaSchemaPath();
     if (!fs_1.default.existsSync(schemaPath)) {
         main_1.default.warn('[Schema] schema.prisma not found, skipping db sync');
         return;
     }
+    if (!fs_1.default.existsSync(prismaCliPath)) {
+        main_1.default.warn('[Schema] prisma CLI not found at', prismaCliPath, '- skipping db sync');
+        return;
+    }
     main_1.default.log('[Schema] Checking database schema...');
+    main_1.default.log('[Schema] Prisma CLI:', prismaCliPath);
     return new Promise((resolve) => {
         let childExited = false;
-        const child = (0, child_process_1.spawn)(prismaBin, ['db', 'push', '--accept-data-loss', '--schema', schemaPath], {
+        // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
+        const child = (0, child_process_1.spawn)(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
             env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
             stdio: ['ignore', 'pipe', 'pipe', 'pipe']
         });
@@ -315,25 +341,34 @@ async function startLocalServer() {
     // 这确保从旧版本升级的用户不需要手动清理数据库
     // 同步等待完成：schema 必须先更新，服务器才能安全启动
     await ensureSchemaUpToDate(userDbPath);
-    // unpackedRoot 始终为 process.resourcesPath（asar:true/unpacked 都指向 resources/）
-    const unpackedRoot = process.resourcesPath;
-    main_1.default.log('[Server] NODE_PATH:', unpackedRoot);
+    // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
+    const unpackedRoot = path_1.default.join(process.resourcesPath, 'app.asar.unpacked');
+    // server 模块实际在 app.asar.unpacked/server/node_modules
+    const serverModulesPath = path_1.default.join(unpackedRoot, 'server', 'node_modules');
+    main_1.default.log('[Server] NODE_PATH:', serverModulesPath);
     // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
     const serverEntry = getServerEntryPath();
     main_1.default.log('[Server] Server path:', serverEntry);
     main_1.default.log('[Server] Database path:', userDbPath);
     main_1.default.log('[Server] Starting local API server...');
+    // asar 模式下 uploads 在 app.asar.unpacked/server/uploads
+    const uploadsPath = path_1.default.join(unpackedRoot, 'server', 'uploads');
+    main_1.default.log('[Server] Uploads path:', uploadsPath);
     // fork Express 服务器
-    // 注意：不传 execPath - Electron 主进程本身就是 Node.js，fork() 会复用当前运行时
+    // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
+    const nodePath = process.execPath; // Electron 自带 node
     serverProcess = (0, child_process_1.fork)(serverEntry, [], {
+        execPath: nodePath,
         env: {
             ...process.env,
             NODE_ENV: 'production',
             PORT: '7072',
             // 覆盖数据库路径为用户可写目录
             DATABASE_URL: `file:${userDbPath}`,
+            // uploads 目录路径（asar 模式下在 asar.unpacked 下）
+            UPLOADS_PATH: uploadsPath,
             // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
-            NODE_PATH: unpackedRoot
+            NODE_PATH: serverModulesPath
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
@@ -430,6 +465,7 @@ function createMainWindow() {
             preload: getResourcePath('dist-electron/electron/preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            sandbox: true,
             // 高 DPI 支持
             enableBlinkFeatures: 'CSSColorSchemeUARendering'
         },
@@ -641,7 +677,8 @@ function createCustomerWindow() {
         webPreferences: {
             preload: getResourcePath('dist-electron/electron/preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            sandbox: true
         },
         title: 'Customer Display',
         alwaysOnTop: true
@@ -756,6 +793,15 @@ electron_1.ipcMain.handle('get-log-entries', () => {
 });
 electron_1.ipcMain.handle('set-api-url', (_event, url) => {
     const fs = require('fs');
+    // 验证 URL 格式：只允许 /api 相对路径或明确的 http/https URL
+    const isValidUrl = typeof url === 'string' && (url === '/api' ||
+        url.startsWith('/api?') ||
+        url.startsWith('/api/') ||
+        /^https?:\/\/[^/]+\/api\/?/.test(url));
+    if (!isValidUrl) {
+        console.error('[API URL] Invalid URL rejected:', url);
+        return false;
+    }
     const configPath = path_1.default.join(electron_1.app.getPath('userData'), 'api-config.json');
     try {
         fs.writeFileSync(configPath, JSON.stringify({ apiUrl: url }, null, 2));
@@ -1127,6 +1173,18 @@ electron_1.app.on('second-instance', () => {
 // 应用启动
 electron_1.app.whenReady().then(async () => {
     console.log('[Electron] App ready, starting up...');
+    // WebView2 检查（仅 Windows，Electron 28+ 已内置 WebView2 但旧系统可能缺失）
+    if (process.platform === 'win32') {
+        const webview2Available = checkWebView2();
+        console.log('[Electron] WebView2 available:', webview2Available);
+        if (!webview2Available) {
+            const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。';
+            console.error('[Electron] WebView2 MISSING:', msg);
+            electron_1.dialog.showErrorBox('缺少 WebView2 运行时', msg);
+            electron_1.app.quit();
+            return;
+        }
+    }
     // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
     electron_1.globalShortcut.register('CommandOrControl+Shift+D', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
