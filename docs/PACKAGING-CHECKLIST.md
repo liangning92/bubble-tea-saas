@@ -16,6 +16,7 @@
 | 2026-09-03 | getResourcePath 路径错误 | preload 加载失败 | 🔴 高 | ✅ 已修复 |
 | 2026-09-03 | InventoryService storeId 未过滤 | 可访问其他门店数据 | 🔴 高 | ✅ 已修复 |
 | 2026-09-04 | 检查清单创建 | - | - | 文档 |
+| 2026-09-04 | asarUnpack 路径错误 | dist-electron 提取到错误位置 | 🔴 高 | ✅ 已修复 |
 
 ---
 
@@ -41,7 +42,7 @@
 ✅ server/node_modules/**/*          # 服务器依赖
 ✅ server/prisma/seed.db
 ✅ server/prisma/schema.prisma
-✅ dist-electron/**/*                # 必须包含！sandbox 需要
+✅ client-pos/dist-electron/**/*     # 必须包含完整路径！sandbox 需要
 
 # extraResources - 额外资源复制
 ✅ server/dist → app.asar.unpacked/server/dist
