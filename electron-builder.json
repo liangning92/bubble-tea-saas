@@ -68,7 +68,7 @@
     "server/node_modules/**/*",
     "server/prisma/seed.db",
     "server/prisma/schema.prisma",
-    "dist-electron/**/*"
+    "client-pos/dist-electron/**/*"
   ],
   "npmRebuild": true,
   "win": {
