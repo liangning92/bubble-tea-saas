@@ -6,16 +6,16 @@
 
 ## 📋 问题历史记录
 
-| 日期 | 问题 | 严重度 | 状态 |
-|------|------|--------|------|
-| 2026-09-03 | Prisma CLI 路径错误 (.bin/prisma 是 shell 脚本) | 🔴 高 | ✅ 已修复 |
-| 2026-09-03 | Prisma CLI 用 shell 执行，Windows 不兼容 | 🔴 高 | ✅ 已修复 |
-| 2026-09-03 | fork() 未指定 execPath | 🔴 高 | ✅ 已修复 |
-| 2026-09-03 | NODE_PATH 只有 server/node_modules，缺少根目录 node_modules | 🔴 高 | ✅ 已修复 |
-| 2026-09-03 | dist-electron 未在 asarUnpack，sandbox 下 preload 失败 | 🔴 高 | ✅ 已修复 |
-| 2026-09-03 | getResourcePath 对 dist-electron 返回 asar 路径 | 🔴 高 | ✅ 已修复 |
-| 2026-09-03 | InventoryService storeId 未过滤（安全漏洞） | 🔴 高 | ✅ 已修复 |
-| 2026-09-04 | 检查清单创建 | - | 文档 |
+| 日期 | 问题 | 错误日志 | 严重度 | 状态 |
+|------|------|----------|--------|------|
+| 2026-09-03 | Prisma CLI 路径错误 | `spawn ...\.bin\prisma ENOENT` | 🔴 高 | ✅ 已修复 |
+| 2026-09-03 | Prisma CLI 用 shell 执行 | shell 脚本含 Mac 硬编码路径 | 🔴 高 | ✅ 已修复 |
+| 2026-09-03 | fork() 未指定 execPath | 服务器进程无法启动 | 🔴 高 | ✅ 已修复 |
+| 2026-09-03 | NODE_PATH 只有一半 | `Cannot find module 'express'` | 🔴 高 | ✅ 已修复 |
+| 2026-09-03 | dist-electron 未 asarUnpack | preload failed (sandbox) | 🔴 高 | ✅ 已修复 |
+| 2026-09-03 | getResourcePath 路径错误 | preload 加载失败 | 🔴 高 | ✅ 已修复 |
+| 2026-09-03 | InventoryService storeId 未过滤 | 可访问其他门店数据 | 🔴 高 | ✅ 已修复 |
+| 2026-09-04 | 检查清单创建 | - | - | 文档 |
 
 ---
 
@@ -228,17 +228,38 @@ fi
 [Server] Port 7072 is ready
 ```
 
-### 4.2 常见错误识别
+### 4.2 实际错误日志（用户报告）
+
+```
+# 错误1: Prisma CLI 路径错误
+[warn] [Schema] Could not run prisma db push: spawn ...\app.asar.unpacked\node_modules\.bin\prisma ENOENT
+
+# 错误2: Prisma db push 返回错误码
+[warn] [Schema] db push returned code -4058 - continuing anyway
+
+# 错误3: 服务器启动超时
+[error] [Electron] Server failed to start: Port 7072 did not become available within 30000ms
+
+# 错误4: JWT_SECRET 警告（正常）
+[error] [Server stderr] [env] JWI_SECRET not set, using dev fallback (safe for local desktop app)
+
+# 错误5: CORS_ORIGIN 警告（正常）
+[error] [Server stderr] [env] CORS_ORIGIN not set, using localhost fallback (safe for local desktop app)
+```
+
+### 4.3 常见错误识别
 
 | 错误日志 | 原因 | 检查项 |
 |---------|------|--------|
-| `spawn prisma ENOENT` | prisma 路径错误 | 检查 asarUnpack server/node_modules |
-| `Cannot find module 'express'` | NODE_PATH 错误 | NODE_PATH 必须包含两个路径 |
-| `preload failed: sandbox` | preload 在 asar 内 | dist-electron 必须在 asarUnpack |
-| `Port 7072 timeout` | 服务器启动失败 | 检查 stderr 日志 |
+| `spawn ...\.bin\prisma ENOENT` | prisma 路径指向了 shell 脚本 | 代码必须用 `.pnpm/prisma@5.22.0/.../index.js` |
+| `spawn prisma ENOENT` | prisma 路径完全错误 | 检查 asarUnpack server/node_modules |
+| `db push returned code -4058` | Windows 文件找不到 (ERROR_FILE_NOT_FOUND) | 检查 schema.prisma 和 seed.db 路径 |
+| `Port 7072 timeout` | 服务器启动失败 | 检查 stderr 日志，查找真正原因 |
+| `Cannot find module 'express'` | NODE_PATH 错误 | NODE_PATH 必须包含 server/node_modules |
 | `[warn] JWT_SECRET not set` | 正常 fallback | 仅警告，非致命 |
+| `[warn] CORS_ORIGIN not set` | 正常 fallback | 仅警告，非致命 |
 
-### 4.3 验证命令 (Windows PowerShell)
+### 4.4 验证命令 (Windows PowerShell)
 
 ```powershell
 # 检查 Node 进程
