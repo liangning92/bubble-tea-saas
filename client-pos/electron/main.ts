@@ -401,7 +401,9 @@ async function startLocalServer(): Promise<void> {
       UPLOADS_PATH: uploadsPath,
       // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
       // 需要同时包含 server/node_modules 和根目录的 node_modules（prisma 相关）
-      NODE_PATH: nodePath
+      NODE_PATH: nodePath,
+      // CORS: 允许所有来源，因为 Electron app 从 file:// 加载
+      CORS_ORIGIN: '*'
     },
     stdio: ['pipe', 'pipe', 'pipe', 'ipc']
   })
