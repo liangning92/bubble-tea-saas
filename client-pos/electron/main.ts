@@ -234,8 +234,8 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
   const nodeBin = process.execPath
 
   // prisma CLI 入口脚本（避免使用 .bin/prisma shell 脚本，它包含硬编码的开发机路径）
-  // pnpm 安装时路径: node_modules/.pnpm/prisma@x.x.x/node_modules/prisma/build/index.js
-  const prismaCliPath = path.join(serverModulesPath, '.pnpm', 'prisma@5.22.0', 'node_modules', 'prisma', 'build', 'index.js')
+  // npm 安装时路径: server/node_modules/prisma/build/index.js
+  const prismaCliPath = path.join(serverModulesPath, 'prisma', 'build', 'index.js')
   const schemaPath = getPrismaSchemaPath()
 
   if (!fs.existsSync(schemaPath)) {
