@@ -70,7 +70,7 @@
     "server/prisma/schema.prisma",
     "client-pos/dist-electron/**/*"
   ],
-  "npmRebuild": true,
+  "npmRebuild": false,
   "win": {
     "target": [
       {
