@@ -255,9 +255,10 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
     let childExited = false
 
     // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
+    // 注意：stdout 设为 'ignore' 避免 Prisma 退出后 pipe 断开导致 EPIPE 错误
     const child = spawn(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
       env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+      stdio: ['ignore', 'ignore', 'pipe', 'pipe']
     })
 
     let stderrData = ''
