@@ -1,6 +1,9 @@
 import dotenv from 'dotenv'
 
-dotenv.config()
+// Only load .env in development mode, not production
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config()
+}
 
 interface Config {
   nodeEnv: string

@@ -257,7 +257,7 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
     // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
     // 注意：stdout 设为 'ignore' 避免 Prisma 退出后 pipe 断开导致 EPIPE 错误
     const child = spawn(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
-      env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
+      env: { ...process.env, DATABASE_URL: `file:"${userDbPath}"`, NODE_ENV: 'production' },
       stdio: ['ignore', 'ignore', 'pipe', 'pipe']
     })
 
@@ -397,7 +397,8 @@ async function startLocalServer(): Promise<void> {
       NODE_ENV: 'production',
       PORT: '7072',
       // 覆盖数据库路径为用户可写目录
-      DATABASE_URL: `file:${userDbPath}`,
+      // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
+      DATABASE_URL: `file:"${userDbPath}"`,
       // uploads 目录路径（asar 模式下在 asar.unpacked 下）
       UPLOADS_PATH: uploadsPath,
       // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
