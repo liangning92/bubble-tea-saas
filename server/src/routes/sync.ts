@@ -2,7 +2,12 @@ import { Router, Request, Response } from 'express'
 import { PrismaClient } from '@prisma/client'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = new PrismaClient({
+  transactionOptions: {
+    maxWait: 5000,  // 5s max wait
+    timeout: 10000   // 10s max query
+  }
+})
 
 // CLOUD API base URL
 const CLOUD_API = 'https://api.aicube.online'
