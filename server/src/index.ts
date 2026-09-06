@@ -75,8 +75,12 @@ import { socketManager } from './socket'
 const app = express()
 const httpServer = http.createServer(app)
 
+console.log('[Server] Starting initialization...')
+
 // Socket.IO Setup
+console.log('[Server] Initializing Socket.IO...')
 socketManager.initialize(httpServer)
+console.log('[Server] Socket.IO initialized')
 
 // ============================================================
 // Global Error Handlers (must be before any async operations)
@@ -234,6 +238,7 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // Start Server with Socket.IO
+console.log('[Server] About to listen on port', config.port)
 httpServer.listen(config.port, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
@@ -259,10 +264,14 @@ httpServer.listen(config.port, '0.0.0.0', () => {
   `)
 
   // 启动卫生任务调度器
+  console.log('[Server] Starting hygiene scheduler...')
   startHygieneScheduler()
+  console.log('[Server] Hygiene scheduler started')
 
   // 启动营销自动化调度器
+  console.log('[Server] Starting marketing scheduler...')
   startMarketingScheduler()
+  console.log('[Server] Marketing scheduler started')
 })
 
 export default app
