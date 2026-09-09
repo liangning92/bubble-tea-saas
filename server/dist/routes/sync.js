@@ -3,7 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
+const prisma = new client_1.PrismaClient({
+    transactionOptions: {
+        maxWait: 5000, // 5s max wait
+        timeout: 10000 // 10s max query
+    }
+});
 // CLOUD API base URL
 const CLOUD_API = 'https://api.aicube.online';
 // POST /api/sync/connect

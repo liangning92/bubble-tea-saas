@@ -78,8 +78,11 @@ const notFound_1 = require("./middlewares/notFound");
 const socket_1 = require("./socket");
 const app = (0, express_1.default)();
 const httpServer = http_1.default.createServer(app);
+console.log('[Server] Starting initialization...');
 // Socket.IO Setup
+console.log('[Server] Initializing Socket.IO...');
 socket_1.socketManager.initialize(httpServer);
+console.log('[Server] Socket.IO initialized');
 // ============================================================
 // Global Error Handlers (must be before any async operations)
 // ============================================================
@@ -226,6 +229,7 @@ app.use('/api/sync', sync_1.default);
 app.use(notFound_1.notFoundHandler);
 app.use(errorHandler_1.errorHandler);
 // Start Server with Socket.IO
+console.log('[Server] About to listen on port', env_1.config.port);
 httpServer.listen(env_1.config.port, '0.0.0.0', () => {
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
@@ -250,9 +254,13 @@ httpServer.listen(env_1.config.port, '0.0.0.0', () => {
 ╚═══════════════════════════════════════════════════════════╝
   `);
     // 启动卫生任务调度器
+    console.log('[Server] Starting hygiene scheduler...');
     (0, SchedulerService_1.startHygieneScheduler)();
+    console.log('[Server] Hygiene scheduler started');
     // 启动营销自动化调度器
+    console.log('[Server] Starting marketing scheduler...');
     (0, MarketingSchedulerService_1.startMarketingScheduler)();
+    console.log('[Server] Marketing scheduler started');
 });
 exports.default = app;
 //# sourceMappingURL=index.js.map

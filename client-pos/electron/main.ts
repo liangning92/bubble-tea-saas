@@ -231,7 +231,24 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
     : path.join(process.resourcesPath, 'server', 'node_modules')
 
   // 定位 node 可执行文件（跨平台）
-  const nodeBin = process.execPath
+  // 注意：Electron 打包后 process.execPath 是 Electron/BTPS.exe，不是独立的 node.exe
+  // 不能用 Electron 主程序来执行 node 脚本，必须找正确的 node 路径
+  // Windows 打包后 node.exe 位于 resources/app.asar.unpacked/node_modules/electron/dist/node.exe
+  // 或者使用 electron 提供的特殊方法：直接用 process.execPath + --eval 风格
+  // 最简单方案：用 process.execPath 带上 script 参数（electron fork 的标准用法）
+  let nodeBin = process.execPath
+  if (process.platform === 'win32') {
+    // 尝试找 electron 目录下的 node.exe（electron-builder 打包时带）
+    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron', 'dist')
+    const electronNodeExe = path.join(electronDir, 'node.exe')
+    if (fs.existsSync(electronNodeExe)) {
+      nodeBin = electronNodeExe
+      log.log('[Schema] Using electron bundled node:', nodeBin)
+    } else {
+      // 备用：直接用 process.execPath（Electron 本身包含 Node.js）
+      log.log('[Schema] electron node.exe not found, using process.execPath as fallback')
+    }
+  }
 
   // prisma CLI 入口脚本（避免使用 .bin/prisma shell 脚本，它包含硬编码的开发机路径）
   // npm 安装时路径: server/node_modules/prisma/build/index.js
@@ -250,6 +267,8 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
 
   log.log('[Schema] Checking database schema...')
   log.log('[Schema] Prisma CLI:', prismaCliPath)
+  log.log('[Schema] Database:', userDbPath)
+  log.log('[Schema] Node binary:', nodeBin)
 
   return new Promise((resolve) => {
     let childExited = false
@@ -257,41 +276,50 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
     // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
     // 注意：stdout 设为 'ignore' 避免 Prisma 退出后 pipe 断开导致 EPIPE 错误
     const child = spawn(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
-      env: { ...process.env, DATABASE_URL: `file:"${userDbPath}"`, NODE_ENV: 'production' },
-      stdio: ['ignore', 'ignore', 'pipe', 'pipe']
+      env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe']
     })
 
+    let stdoutData = ''
     let stderrData = ''
+
+    child.stdout?.on('data', (d: Buffer) => {
+      const msg = d.toString()
+      stdoutData += msg
+      log.log('[Prisma stdout]', msg.trim())
+    })
 
     child.stderr?.on('data', (d: Buffer) => {
       const msg = d.toString()
       stderrData += msg
-      if (msg.includes('The column') || msg.includes('Your database is now in sync') || msg.includes('error')) {
-        log.log('[Prisma]', msg.trim())
-      }
+      log.log('[Prisma stderr]', msg.trim())
     })
 
-    child.on('close', (code: number | null) => {
+    child.on('close', (code: number | null, signal: string | null) => {
       childExited = true
+      log.log('[Schema] db push finished with code:', code, 'signal:', signal)
       if (code === 0 || stderrData.includes('Your database is now in sync')) {
         log.log('[Schema] Database schema is up to date')
+      } else if (code === null && signal === 'SIGTERM') {
+        // 超时被杀，不算错
+        log.warn('[Schema] db push timed out (SIGTERM), continuing anyway')
       } else {
-        log.warn('[Schema] db push returned code', code, '- continuing anyway')
+        log.error('[Schema] db push FAILED with code', code, '- continuing anyway')
+        log.error('[Schema] Last stderr:', stderrData.slice(-500))
       }
       resolve()
     })
 
     child.on('error', (err: Error) => {
-      log.warn('[Schema] Could not run prisma db push:', err.message, '- continuing anyway')
+      log.error('[Schema] Could not run prisma db push:', err.message, '- continuing anyway')
       resolve()
     })
 
     // 超时保护：60秒
     setTimeout(() => {
       if (!childExited) {
-        child.kill()
-        log.warn('[Schema] db push timed out after 60s, continuing anyway')
-        resolve()
+        log.warn('[Schema] db push timed out after 60s, killing...')
+        child.kill('SIGTERM')
       }
     }, 60000)
   })
@@ -317,6 +345,57 @@ async function startLocalServer(): Promise<void> {
     console.log('[Server] Dev mode - skipping local server start')
     return
   }
+
+  // ─── 关键修复：启动前清理残留进程 ───────────────────────────────
+  // 场景：上次应用被强制 kill，或 SIGTERM 未能干净杀死 serverProcess
+  // 导致端口 7072 被僵尸进程占用，新实例卡在 waitForPort 超时
+  try {
+    const { execSync } = require('child_process')
+    if (process.platform === 'win32') {
+      // Windows: 查找占用 7072 端口的进程并强制结束
+      const result = execSync(
+        `netstat -ano | findstr :7072 | findstr LISTENING`,
+        { encoding: 'utf8', windowsHide: true }
+      )
+      const lines = result.trim().split('\n')
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/)
+        const localAddr = parts[1] || ''
+        if (!localAddr.includes(':7072')) continue
+        const pid = parts[parts.length - 1]
+        if (!pid || pid === '0') continue
+        console.log(`[Server] Killing residual process PID=${pid} holding port 7072`)
+        try {
+          execSync(`taskkill /F /PID ${pid}`, { windowsHide: true })
+          console.log(`[Server] Residual process ${pid} killed`)
+        } catch (killErr: any) {
+          console.warn(`[Server] Failed to kill PID ${pid}:`, killErr.message)
+        }
+      }
+    } else {
+      // macOS/Linux: 用 lsof 找到占用 7072 的进程
+      const result = execSync(
+        `lsof -ti:7072 2>/dev/null || true`,
+        { encoding: 'utf8' }
+      )
+      const pids = result.trim().split('\n').filter(Boolean)
+      for (const pid of pids) {
+        console.log(`[Server] Killing residual process PID=${pid} holding port 7072`)
+        try {
+          process.kill(parseInt(pid), 'SIGKILL')
+          console.log(`[Server] Residual process ${pid} killed`)
+        } catch (killErr: any) {
+          console.warn(`[Server] Failed to kill PID ${pid}:`, killErr.message)
+        }
+      }
+    }
+    // 等待系统释放端口
+    await new Promise(r => setTimeout(r, 1000))
+  } catch (cleanupErr) {
+    // 端口未被占用 → 忽略错误
+    console.log('[Server] No residual process on port 7072, proceeding...')
+  }
+  // ─── 清理完毕 ────────────────────────────────────────────────
 
   const userDataDir = app.getPath('userData')
   const dbDir = path.join(userDataDir, 'data')
@@ -389,7 +468,23 @@ async function startLocalServer(): Promise<void> {
 
   // fork Express 服务器
   // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
-  const nodeExecPath = process.execPath // Electron 自带 node
+  // Windows 上 process.execPath 是 BTPS.exe（Electron 主程序），不是 node.exe
+  // electron-builder 打包后 node.exe 位于 app.asar.unpacked/node_modules/electron/dist/
+  let nodeExecPath = process.execPath
+  if (process.platform === 'win32') {
+    // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
+    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
+    const electronNodeExe = path.join(electronDir, 'node.exe')
+    if (fs.existsSync(electronNodeExe)) {
+      nodeExecPath = electronNodeExe
+      log.log('[Server] Using electron bundled node:', nodeExecPath)
+    } else {
+      log.log('[Server] electron node.exe not found at', electronDir, '- using process.execPath as fallback:', nodeExecPath)
+    }
+  }
+  log.log('[Server] Node exec path:', nodeExecPath)
+  log.log('[Server] Server entry:', serverEntry)
+  log.log('[Server] Exists:', fs.existsSync(serverEntry))
   serverProcess = fork(serverEntry, [], {
     execPath: nodeExecPath,
     env: {
@@ -398,7 +493,7 @@ async function startLocalServer(): Promise<void> {
       PORT: '7072',
       // 覆盖数据库路径为用户可写目录
       // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
-      DATABASE_URL: `file:"${userDbPath}"`,
+      DATABASE_URL: `file:${userDbPath}`,
       // uploads 目录路径（asar 模式下在 asar.unpacked 下）
       UPLOADS_PATH: uploadsPath,
       // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
@@ -1307,7 +1402,13 @@ app.whenReady().then(async () => {
   // 先启动本地服务器（仅打包模式）
   if (app.isPackaged) {
     // 启动服务器并等待 schema 同步完成
-    await startLocalServer()
+    // 注意：即使这里抛异常，也不应该导致整个 app 退出
+    try {
+      await startLocalServer()
+    } catch (err: any) {
+      log.error('[Electron] startLocalServer() threw:', err.message, err.stack)
+      // 不退出，继续尝试启动窗口和服务器
+    }
 
     // 等待服务器 port 7072 可用后再创建窗口
     try {

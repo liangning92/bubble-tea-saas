@@ -81,3 +81,29 @@ export async function syncFull(
   }
   return data.data
 }
+
+export interface LocalSetupResult {
+  storeId: string
+  storeName: string
+  phone: string
+  categories: number
+  products: number
+}
+
+// POST /api/setup/local — creates local store, admin user, and sample products
+export async function localSetup(
+  storeName: string,
+  phone: string,
+  password: string
+): Promise<LocalSetupResult> {
+  const res = await fetch(`${getSyncApiBase()}/api/setup/local`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeName, phone, password })
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data.message || 'Local setup failed')
+  }
+  return data.data
+}

@@ -79,6 +79,11 @@ jobs:
           Set-Location "$repoRoot\server\prisma"
           npx prisma db push --accept-data-loss
 
+      - name: Seed database with sample data
+        run: |
+          cd server
+          npm run db:seed
+
       - name: Build server
         run: npm run build:server
 
