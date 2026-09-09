@@ -80,6 +80,8 @@ jobs:
           npx prisma db push --accept-data-loss
 
       - name: Seed database with sample data
+        env:
+          DATABASE_URL: "file:./seed.db"
         run: |
           cd server
           npm run db:seed
