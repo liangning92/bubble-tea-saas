@@ -81,7 +81,7 @@ jobs:
 
       - name: Seed database with sample data
         env:
-          DATABASE_URL: "file:./seed.db"
+          DATABASE_URL: "file:./prisma/seed.db"
         run: |
           cd server
           npm run db:seed
