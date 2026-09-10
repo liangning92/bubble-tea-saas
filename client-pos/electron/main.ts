@@ -11,6 +11,7 @@ import log from 'electron-log/main'
 log.initialize()
 log.transports.file.level = 'info'
 log.transports.console.level = 'debug'
+log.transports.console.handleErrors = false
 log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB per file
 
 // 全局未捕获异常处理器（防止静默崩溃）
