@@ -79,12 +79,7 @@ jobs:
           Set-Location "$repoRoot\server\prisma"
           npx prisma db push --accept-data-loss
 
-      - name: Seed database with sample data
-        env:
-          DATABASE_URL: "file:./prisma/seed.db"
-        run: |
-          cd server
-          npm run db:seed || echo "Seed failed (non-critical), continuing..."
+
 
       - name: Build server
         run: npm run build:server
