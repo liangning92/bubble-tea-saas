@@ -11,11 +11,14 @@ import log from 'electron-log/main'
 log.initialize()
 log.transports.file.level = 'info'
 log.transports.console.level = 'debug'
-log.transports.console.handleErrors = false
 log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB per file
 
 // 全局未捕获异常处理器（防止静默崩溃）
+// EPIPE/ECONNRESET 来自 electron-log console transport，asar 打包后 Electron 没有控制台窗口，不影响功能
 process.on('uncaughtException', (error) => {
+  if (error.message.includes('EPIPE') || error.message.includes('ECONNRESET')) {
+    return // 忽略 pipe 断裂，不退出
+  }
   log.error('[FATAL] Uncaught exception:', error)
   setTimeout(() => process.exit(1), 1000)
 })
