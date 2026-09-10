@@ -233,13 +233,11 @@ async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
   // 定位 node 可执行文件（跨平台）
   // 注意：Electron 打包后 process.execPath 是 Electron/BTPS.exe，不是独立的 node.exe
   // 不能用 Electron 主程序来执行 node 脚本，必须找正确的 node 路径
-  // Windows 打包后 node.exe 位于 resources/app.asar.unpacked/node_modules/electron/dist/node.exe
-  // 或者使用 electron 提供的特殊方法：直接用 process.execPath + --eval 风格
-  // 最简单方案：用 process.execPath 带上 script 参数（electron fork 的标准用法）
+  // Windows 打包后 node.exe 位于 resources/app.asar.unpacked/server/node_modules/electron/dist/node.exe
   let nodeBin = process.execPath
   if (process.platform === 'win32') {
-    // 尝试找 electron 目录下的 node.exe（electron-builder 打包时带）
-    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron', 'dist')
+    // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
+    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
     const electronNodeExe = path.join(electronDir, 'node.exe')
     if (fs.existsSync(electronNodeExe)) {
       nodeBin = electronNodeExe
