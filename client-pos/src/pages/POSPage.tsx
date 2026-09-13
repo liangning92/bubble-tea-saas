@@ -352,7 +352,7 @@ export function POSPage() {
 
   // 店铺信息
   const [storeInfo, setStoreInfo] = useState({
-    storeName: 'Bubble Tea Shop',
+    storeName: 'YOUME',
     address: '',
     phone: '',
     openingHours: ''
@@ -360,7 +360,7 @@ export function POSPage() {
 
   // 小票设置
   const [posReceipt, setPosReceipt] = useState({
-    header: 'Bubble Tea Shop',
+    header: 'YOUME',
     footer: 'Thank you!',
     taxRate: 11,
     showLogo: true,
@@ -462,10 +462,10 @@ export function POSPage() {
     dualScreen: {
       enabled: false,
       layoutStyle: 'full' as 'simple' | 'full',
-      welcomeText: 'Bubble Tea Malaysia',
+      welcomeText: 'YOUME',
       showLogo: false,
       adImageUrl: '',
-      promotions: ['🧋', '🍓', '💳', '🎁'],
+      promotions: ['✨', '🍓', '💳', '🎁'],
     },
     testPrint: null as number | null,
     testCashDrawer: null as number | null,
@@ -880,7 +880,7 @@ export function POSPage() {
           const newDualScreen: DualScreenConfig = hw.dualScreen ? {
             enabled: hw.dualScreen.enabled ?? false,
             layoutStyle: hw.dualScreen.layoutStyle || 'full',
-            welcomeText: hw.dualScreen.welcomeText || 'Bubble Tea Malaysia',
+            welcomeText: hw.dualScreen.welcomeText || 'YOUME',
             showLogo: hw.dualScreen.showLogo ?? false,
             adImageUrl: hw.dualScreen.adImageUrl || '',
             promotions: hw.dualScreen.promotions || ['🧋', '🍓', '💳', '🎁'],
@@ -2169,7 +2169,7 @@ export function POSPage() {
           data: {
             header: posReceipt.header,
             footer: posReceipt.footer,
-            storeName: 'Bubble Tea Shop',
+            storeName: 'YOUME',
             storePhone: posReceipt.storePhone,
             storeAddress: posReceipt.storeAddress,
             items: cart.map(item => ({

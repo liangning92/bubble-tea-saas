@@ -134,7 +134,7 @@ const BLOCK_DEFINITIONS: Record<
   header: {
     label: 'Header',
     icon: '📝',
-    defaultConfig: { text: 'Bubble Tea Shop' },
+    defaultConfig: { text: 'YOUME' },
   },
   storeInfo: {
     label: 'Store Info',

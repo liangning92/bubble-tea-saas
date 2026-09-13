@@ -42,7 +42,7 @@ export function SetupWizard() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="text-5xl mb-2">🧋</div>
+          <img src="/youme-logo.png" alt="YOUME" className="w-32 h-16 object-contain mb-2" />
           <h1 className="text-2xl font-bold text-gray-800">BubbleTeaPOS</h1>
           <p className="text-gray-500 text-sm mt-1">首次设置 · First Setup</p>
         </div>

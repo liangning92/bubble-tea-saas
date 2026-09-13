@@ -145,7 +145,7 @@ export function RegisterPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-primary mx-auto mb-4 rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-4xl">🧋</span>
+              <img src="/youme-logo.png" alt="YOUME" className="w-24 h-12 object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">{t('auth.createAccount')}</h1>
             <p className="text-gray-500 mt-1">{t('auth.registerSubtitle')}</p>

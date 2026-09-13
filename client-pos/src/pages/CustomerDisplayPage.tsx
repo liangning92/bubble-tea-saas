@@ -47,7 +47,7 @@ interface DualScreenConfig {
 }
 
 // Default promotions
-const DEFAULT_PROMOTIONS = ['🧋', '🍓', '💳', '🎁']
+const DEFAULT_PROMOTIONS = ['✨', '🍓', '💳', '🎁']
 
 // Default layouts
 const DEFAULT_IDLE_LAYOUT: Layout = {
@@ -77,7 +77,7 @@ export function CustomerDisplayPage() {
     enabled: false,
     idleLayout: DEFAULT_IDLE_LAYOUT,
     orderingLayout: DEFAULT_ORDERING_LAYOUT,
-    welcomeText: 'Bubble Tea Malaysia',
+    welcomeText: 'YOUME',
     mediaFiles: [],
     promotions: DEFAULT_PROMOTIONS,
   })
@@ -224,7 +224,7 @@ export function CustomerDisplayPage() {
               {orderData?.items.map((item) => (
                 <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">🧋</span>
+                    <span className="text-2xl">✨</span>
                     <div>
                       <p className="font-bold">{item.productName}</p>
                       <p className="text-gray-500 text-sm">{item.specName}</p>
@@ -272,7 +272,7 @@ export function CustomerDisplayPage() {
       case 'logo':
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <span className="text-8xl">🧋</span>
+            <img src="/youme-logo-dark.png" alt="YOUME" className="w-64 h-32 object-contain" />
           </div>
         )
       default:

@@ -303,7 +303,7 @@ const DualScreenPreview: React.FC<{
             <div className="flex-1 p-2 space-y-2 overflow-y-auto">
               <div className="flex justify-between items-center bg-white p-2 rounded text-xs">
                 <div className="flex items-center gap-2">
-                  <span>🧋</span>
+                  <span>✨</span>
                   <div>
                     <div className="font-medium">{t('posSettings.sampleProductName')}</div>
                     <div className="text-gray-500">{t('posSettings.sampleSize')}</div>
@@ -326,7 +326,7 @@ const DualScreenPreview: React.FC<{
       case 'logo':
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <span className="text-6xl">🧋</span>
+            <img src="/youme-logo.png" alt="YOUME" className="h-20 w-auto object-contain" />
           </div>
         )
       default:
@@ -688,7 +688,7 @@ export function POSSettingsPage() {
       },
       // 共用内容
       welcomeText: t('posSettings.defaultWelcomeText'),
-      promotions: ['🧋', '🍓', '💳', '🎁'],
+      promotions: ['✨', '🍓', '💳', '🎁'],
       mediaFiles: [],
     },
   }))

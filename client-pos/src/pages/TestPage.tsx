@@ -6,7 +6,7 @@ export function TestPage() {
 
   return (
     <div style={{ padding: 20, fontSize: 18 }}>
-      <h1>🧋 POS Test</h1>
+      <h1>YOUME POS Test</h1>
       <p>{t('testPage.environmentOk')}</p>
       <button onClick={() => alert(t('testPage.buttonNormal'))}>{t('testPage.testButton')}</button>
     </div>

@@ -45,7 +45,7 @@ export function WelcomePage() {
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
-              <span className="text-xl">🧋</span>
+              <img src="/youme-logo.png" alt="YOUME" className="h-8 w-auto" />
             </div>
             <span className="text-xl font-bold text-gray-900">{t('welcome.appName')}</span>
           </div>

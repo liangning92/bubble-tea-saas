@@ -55,10 +55,11 @@ export function MainLayout() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-border">
           {sidebarOpen && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-white font-bold text-sm">🧋</span>
-              </div>
-              <span className="font-semibold text-gray-900">Bubble Tea</span>
+              <img
+                src={sidebarOpen ? "/youme-logo-dark.png" : "/youme-logo-light.png"}
+                alt="YOUME"
+                className="h-10 w-auto object-contain"
+              />
             </div>
           )}
           <button
