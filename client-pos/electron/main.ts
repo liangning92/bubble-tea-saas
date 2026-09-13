@@ -31,15 +31,13 @@ process.on('unhandledRejection', (reason) => {
   setTimeout(() => process.exit(1), 1000)
 })
 
-// Odoo-style thermal printer support
-let ThermalPrinter: any = null
-let ElectronPrinter: any = null
+// electron-pos-printer for Windows USB/network thermal printers
+let PosPrinter: any = null
 try {
-  ThermalPrinter = require('node-thermal-printer')
-  ElectronPrinter = require('electron-printer')
-  console.log('[PRINTER] node-thermal-printer and electron-printer loaded')
+  PosPrinter = require('electron-pos-printer').PosPrinter
+  console.log('[PRINTER] electron-pos-printer loaded')
 } catch (e: any) {
-  console.log('[PRINTER] Thermal printer libs not available:', e?.message)
+  console.log('[PRINTER] electron-pos-printer not available:', e?.message)
 }
 
 // 检测 WebView2 是否可用（Windows only）
@@ -1005,53 +1003,50 @@ ipcMain.on('order-complete', (_event, orderNumber) => {
 })
 
 /**
- * 打印小票 - Windows原生打印 或 网络打印
+ * 打印小票 - 使用 electron-pos-printer (Windows 打印 API)
  */
 ipcMain.handle('print-receipt', async (_event, data) => {
-  console.log('[PRINT] print-receipt called with:', JSON.stringify({
-    printerName: data?.printerName,
-    printerHost: data?.printerHost,
-    printerPort: data?.printerPort,
-    hasItems: !!data?.items?.length
-  }))
   try {
-    console.log('[PRINT] Preparing to print receipt')
+    const printerName = data.printerName || ''
+    writeCrash(`[PRINT] print-receipt printer=${printerName}`)
 
-    // USB 打印机：优先使用 Windows 原生打印
-    // 网络打印机：通过 RAW 端口打印
-    if (process.platform === 'win32') {
+    if (!printerName) {
+      return { success: false, error: 'No printer name provided' }
+    }
+
+    // 如果有模板块，使用 PosPrinter 格式化打印（走 Windows 打印 API）
+    if (data.blocks && data.blocks.length > 0) {
       try {
-        await printViaWindowsRaw(data)
-        console.log('[PRINT] Windows print successful')
+        await PosPrinter.print(data.blocks, {
+          printerName: printerName,
+          silent: false,
+          preview: false,
+        })
+        writeCrash('[PRINT] PosPrinter.print success')
         return { success: true }
-      } catch (winError: any) {
-        console.log('[PRINT] Windows print failed:', winError.message)
-        // Windows 打印失败后尝试网络打印（如果是网络打印机）
-        const printerHost = data.printerHost || process.env.PRINTER_HOST
-        if (printerHost) {
-          try {
-            const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-            const text = generateReceiptText(data)
-            await printViaNetwork(text, printerHost, printerPort)
-            console.log('[PRINT] Network print successful')
-            return { success: true }
-          } catch (netError: any) {
-            console.log('[PRINT] Network print also failed:', netError.message)
-            return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` }
-          }
-        }
-        return { success: false, error: winError.message }
+      } catch (printErr: any) {
+        writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}`)
+        return { success: false, error: printErr.message }
       }
     }
 
-    // 非 Windows 平台：尝试网络打印
-    const printerHost = data.printerHost || process.env.PRINTER_HOST || '192.168.1.100'
-    const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
+    // 否则使用纯文本 + sendRawCommand 发送 ESC/POS 原始命令
     const text = generateReceiptText(data)
-    await printViaNetwork(text, printerHost, printerPort)
-    return { success: true }
+    const encoder = new TextEncoder()
+    const initCmd = Buffer.from([0x1B, 0x40])  // ESC @
+    const cutCmd = Buffer.from([0x1D, 0x56, 0x00])  // GS V 0 (full cut)
+    const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd])
+
+    try {
+      await PosPrinter.sendRawCommand(printerName, rawBytes)
+      writeCrash('[PRINT] sendRawCommand success')
+      return { success: true }
+    } catch (rawErr: any) {
+      writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}`)
+      return { success: false, error: rawErr.message }
+    }
   } catch (error: any) {
-    console.error('[PRINT ERROR]', error)
+    writeCrash(`[PRINT] print-receipt error: ${error.message}`)
     return { success: false, error: error.message }
   }
 })
@@ -1144,116 +1139,37 @@ async function printViaWindowsRaw(data: any): Promise<void> {
 /**
  * 打开钱箱 - USB打印机优先Windows原生，网络打印机用网络
  */
+/**
+ * 打开钱箱 - 使用 electron-pos-printer 的 sendRawCommand (Windows 打印 API)
+ */
 ipcMain.handle('open-cash-drawer', async (_event, data) => {
   try {
-    console.log('[CASH DRAWER] Opening drawer')
+    const printerName = data.printerName || ''
+    writeCrash(`[CASH DRAWER] Opening drawer printer=${printerName}`)
 
-    // USB 打印机：使用 Windows 原生方式
-    if (process.platform === 'win32') {
-      try {
-        await openCashDrawerViaWindows(data.printerName)
-        console.log('[CASH DRAWER] Windows drawer successful')
-        return { success: true }
-      } catch (winError: any) {
-        console.log('[CASH DRAWER] Windows drawer failed:', winError.message)
-        // Windows 失败后尝试网络（如果是网络打印机）
-        const printerHost = data?.printerHost || process.env.PRINTER_HOST
-        if (printerHost) {
-          try {
-            const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-            await openCashDrawerViaNetwork(printerHost, printerPort)
-            console.log('[CASH DRAWER] Network drawer successful')
-            return { success: true }
-          } catch (netError: any) {
-            console.log('[CASH DRAWER] Network also failed:', netError.message)
-            return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` }
-          }
-        }
-        return { success: false, error: winError.message }
-      }
+    if (!printerName) {
+      return { success: false, error: 'No printer name provided' }
     }
 
-    // 非 Windows：尝试网络钱箱
-    const printerHost = data?.printerHost || process.env.PRINTER_HOST || '192.168.1.100'
-    const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-    await openCashDrawerViaNetwork(printerHost, printerPort)
-    return { success: true }
+    // ESC/POS 钱箱命令: ESC p m t1 t2
+    // pin=2, onTime=50ms, offTime=50ms => 0x1B 0x70 0x00 0x19 0x32
+    // onTime = 50/2 = 25 = 0x19, offTime clamped to 255
+    const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0x32])
+
+    try {
+      await PosPrinter.sendRawCommand(printerName, drawerCmd)
+      writeCrash('[CASH DRAWER] sendRawCommand success')
+      return { success: true }
+    } catch (drawerErr: any) {
+      writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}`)
+      return { success: false, error: drawerErr.message }
+    }
   } catch (error: any) {
-    console.error('[CASH DRAWER ERROR]', error)
+    writeCrash(`[CASH DRAWER] error: ${error.message}`)
     return { success: false, error: error.message }
   }
 })
 
-/**
- * Windows 原生打开钱箱 - 通过 RAW 端口发送钱箱命令
- */
-async function openCashDrawerViaWindows(printerName?: string): Promise<void> {
-  const { exec } = require('child_process')
-  const os = require('os')
-  const path = require('path')
-  const fs = require('fs')
-
-  // ESC/POS 钱箱弹出命令: ESC p m t1 t2
-  // 标准: 0x1B 0x70 0x00 0x32 0x32 (50ms脉冲)
-  const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32])
-  const tempFile = path.join(os.tmpdir(), `drawer_${Date.now()}.bin`)
-  fs.writeFileSync(tempFile, cashDrawerCmd)
-
-  const escapedFile = tempFile.replace(/'/g, "''")
-
-  let cmd: string
-  if (printerName) {
-    // 指定了打印机名称 - 使用该打印机
-    const escapedPrinter = printerName.replace(/'/g, "''")
-    cmd = `powershell -Command "try { $p = Get-Printer -Name '${escapedPrinter}' -ErrorAction Stop; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
-  } else {
-    // 没有指定打印机 - 获取默认打印机
-    cmd = `powershell -Command "try { $p = Get-Printer | Where-Object { $_.Default } | Select-Object -First 1; if (-not $p) { $p = Get-Printer | Select-Object -First 1 }; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
-  }
-
-  return new Promise((resolve, reject) => {
-    exec(cmd, { timeout: 10000 }, (error: any) => {
-      try { fs.unlinkSync(tempFile) } catch (e) {}
-      if (error) {
-        reject(error)
-      } else {
-        resolve()
-      }
-    })
-  })
-}
-
-/**
- * 网络打开钱箱
- */
-function openCashDrawerViaNetwork(host: string, port: number): Promise<void> {
-  const net = require('net')
-  // ESC/POS 钱箱命令
-  const cashDrawerCommand = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32])
-  return new Promise((resolve, reject) => {
-    const client = new net.Socket()
-    const timeout = setTimeout(() => {
-      client.destroy()
-      reject(new Error('Cash drawer network timeout'))
-    }, 5000)
-    client.connect(port, host, () => {
-      clearTimeout(timeout)
-      client.write(cashDrawerCommand)
-      client.end()
-      console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port)
-      resolve()
-    })
-    client.on('error', (err: any) => {
-      clearTimeout(timeout)
-      console.error('[CASH DRAWER ERROR]', err.message)
-      reject(err)
-    })
-  })
-}
-
-/**
- * 生成小票文本 (58mm打印机, 32字符宽)
- */
 function generateReceiptText(data: any): string {
   const lines: string[] = []
   const width = 32
