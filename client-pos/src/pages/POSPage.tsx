@@ -948,11 +948,17 @@ export function POSPage() {
           setQuickAmounts(prev => ({ ...prev, ...configs.quickAmounts }))
         }
 
-        // 支付设置 (限额/默认方式) - 合并默认值
-        if (configs.paymentSettings) {
-          setPaymentSettings(prev => ({ ...prev, ...configs.paymentSettings }))
-          if (configs.paymentSettings.defaultMethod) {
-            setPaymentMethod(configs.paymentSettings.defaultMethod)
+        // 支付设置 (限额/默认方式) - Admin存到paymentMethods key下
+        if (configs.paymentMethods) {
+          setPaymentSettings(prev => ({
+            ...prev,
+            defaultMethod: configs.paymentMethods.defaultMethod || prev.defaultMethod,
+            minAmount: configs.paymentMethods.minAmount ?? prev.minAmount,
+            maxCashAmount: configs.paymentMethods.maxCashAmount ?? prev.maxCashAmount,
+            changeEnabled: configs.paymentMethods.changeEnabled ?? prev.changeEnabled,
+          }))
+          if (configs.paymentMethods.defaultMethod) {
+            setPaymentMethod(configs.paymentMethods.defaultMethod)
           }
         }
 

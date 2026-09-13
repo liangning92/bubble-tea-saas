@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi } from '../../services/api'
@@ -592,6 +592,19 @@ export function POSSettingsPage() {
     autoPrint: true,             // 自动打印
   })
 
+  // 避免首次加载触发保存
+  const receiptLoadedRef = useRef(false)
+  const receiptSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 当 _posReceipt 变化时自动保存（首次加载完成后）
+  useEffect(() => {
+    if (!receiptLoadedRef.current) return // 跳过首次加载
+    if (receiptSaveTimerRef.current) clearTimeout(receiptSaveTimerRef.current)
+    receiptSaveTimerRef.current = setTimeout(() => {
+      handleSave('posReceipt', _posReceipt)
+    }, 800) // 防抖 800ms
+  }, [_posReceipt])
+
   // 打印机类型定义
   type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
 
@@ -750,6 +763,7 @@ export function POSSettingsPage() {
       if (configs.posReceipt || configs.receiptSettings) {
         const receiptConfig = configs.posReceipt || configs.receiptSettings
         setPosReceipt(prev => ({ ...prev, ...receiptConfig }))
+        receiptLoadedRef.current = true
       }
       // Load hardware settings
       if (configs.hardwareSettings) {
