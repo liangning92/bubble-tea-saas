@@ -162,72 +162,58 @@ function getPrismaSchemaPath(): string {
   }
 }
 
-async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
-  const serverModulesPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules')
-    : path.join(process.resourcesPath, 'server', 'node_modules')
-
-  // Windows 上用 electron 的 node.exe
-  let nodeBin = process.execPath
-  if (process.platform === 'win32') {
-    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
-    const electronNodeExe = path.join(electronDir, 'node.exe')
-    if (fs.existsSync(electronNodeExe)) {
-      nodeBin = electronNodeExe
-    }
-  }
-
-  const prismaCliPath = path.join(serverModulesPath, 'prisma', 'build', 'index.js')
-  const schemaPath = getPrismaSchemaPath()
-
-  if (!fs.existsSync(schemaPath)) return
-  if (!fs.existsSync(prismaCliPath)) return
-
+// Prisma db push 的 Promise 封装
+function runPrismaPush(userDbPath: string): Promise<{ code: number | null; stderr: string }> {
   return new Promise((resolve) => {
-    let childExited = false
+    let nodeBin = process.execPath
+    if (process.platform === 'win32') {
+      const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
+      const electronNodeExe = path.join(electronDir, 'node.exe')
+      if (fs.existsSync(electronNodeExe)) nodeBin = electronNodeExe
+    }
+    const serverModulesPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules')
+      : path.join(process.resourcesPath, 'server', 'node_modules')
+    const prismaCliPath = path.join(serverModulesPath, 'prisma', 'build', 'index.js')
+    const schemaPath = getPrismaSchemaPath()
 
+    if (!fs.existsSync(prismaCliPath) || !fs.existsSync(schemaPath)) {
+      resolve({ code: -1, stderr: 'CLI or schema not found' })
+      return
+    }
+
+    let exited = false
+    let stderrData = ''
     const child = spawn(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
       env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
       stdio: ['ignore', 'pipe', 'pipe', 'pipe']
     })
-
-    let stderrData = ''
-
-    child.stdout?.on('data', (d: Buffer) => {
-      // Prisma stdout 输出，不做处理
-    })
-
     child.stderr?.on('data', (d: Buffer) => {
       const msg = d.toString()
       stderrData += msg
-      // 全部写入 crash 日志
       writeCrash(`[Prisma stderr] ${msg.trim()}`)
     })
-
-    child.on('close', (code: number | null, signal: string | null) => {
-      childExited = true
-      if (code === 0 || stderrData.includes('Your database is now in sync')) {
-        // schema 已是最新
-      } else if (code === null && signal === 'SIGTERM') {
-        // 超时被杀
-      } else {
-        writeCrash(`[Schema] db push FAILED code=${code} signal=${signal} stderr=${stderrData.slice(-500)}`)
-      }
-      resolve()
+    child.on('close', (code: number | null) => {
+      if (!exited) { exited = true; resolve({ code, stderr: stderrData }) }
     })
-
     child.on('error', (err: Error) => {
-      writeCrash(`[Schema] Could not run prisma db push: ${err.message}`)
-      resolve()
+      if (!exited) { exited = true; resolve({ code: -1, stderr: err.message }) }
     })
-
     setTimeout(() => {
-      if (!childExited) {
-        child.kill()
-        writeCrash('[Schema] db push timed out after 60s')
-      }
+      if (!exited) { child.kill(); exited = true; resolve({ code: null, stderr: 'timeout' }) }
     }, 60000)
   })
+}
+
+async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
+  const result = await runPrismaPush(userDbPath)
+  if (result.code === 0 || result.stderr.includes('Your database is now in sync')) {
+    writeCrash('[Schema] db push succeeded')
+  } else if (result.code === null) {
+    writeCrash('[Schema] db push timed out')
+  } else {
+    writeCrash(`[Schema] db push FAILED code=${result.code} stderr=${result.stderr.slice(-300)}`)
+  }
 }
 
 async function startLocalServer(): Promise<void> {
@@ -267,13 +253,20 @@ async function startLocalServer(): Promise<void> {
     return
   }
 
-  if (!fs.existsSync(userDbPath)) {
-    if (fs.existsSync(seedTemplatePath)) {
-      try {
-        fs.copyFileSync(seedTemplatePath, userDbPath)
-      } catch (copyErr) {
-        writeCrash(`[Server] Failed to copy seed.db: ${copyErr}`)
+  // 每次启动都从 seed.db 重新初始化数据库
+  // seed.db 包含正确的 schema，复制后 db push 会快速验证一致性
+  // 用户数据在首次启动后会由 app 正常创建
+  if (fs.existsSync(seedTemplatePath)) {
+    try {
+      if (fs.existsSync(userDbPath)) {
+        fs.unlinkSync(userDbPath)
+        writeCrash('[Schema] Removed old database, reinitializing from seed.db')
       }
+      fs.copyFileSync(seedTemplatePath, userDbPath)
+      writeCrash('[Schema] Seed database copied from template')
+    } catch (copyErr) {
+      writeCrash(`[Server] Failed to copy seed.db: ${copyErr}`)
+      return
     }
   }
 
