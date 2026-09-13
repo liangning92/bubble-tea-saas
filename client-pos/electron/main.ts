@@ -13,13 +13,27 @@ log.transports.file.level = 'info'
 log.transports.console.level = 'debug'
 log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB per file
 
+// 直接写文件绕过 console（asar 打包后无控制台窗口）
+const crashLogPath = path.join(app.getPath('userData'), 'logs', 'crash.log')
+function writeCrashLog(msg: string) {
+  try {
+    fs.appendFileSync(crashLogPath, `[${new Date().toISOString()}] ${msg}\n`)
+  } catch {}
+}
+
 // 全局未捕获异常处理器（防止静默崩溃）
-// EPIPE/ECONNRESET 来自 electron-log console transport，asar 打包后 Electron 没有控制台窗口，不影响功能
 process.on('uncaughtException', (error) => {
   if (error.message.includes('EPIPE') || error.message.includes('ECONNRESET')) {
     return // 忽略 pipe 断裂，不退出
   }
-  log.error('[FATAL] Uncaught exception:', error)
+  const stack = error.stack || String(error)
+  writeCrashLog(`[FATAL] Uncaught exception: ${stack}`)
+  setTimeout(() => process.exit(1), 1000)
+})
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? `[FATAL] Unhandled rejection: ${reason.stack || reason.message}` : `[FATAL] Unhandled rejection: ${String(reason)}`
+  writeCrashLog(msg)
   setTimeout(() => process.exit(1), 1000)
 })
 
