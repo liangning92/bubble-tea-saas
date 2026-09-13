@@ -5,32 +5,24 @@ import fs from 'fs'
 import { exec as execChild, fork, spawn } from 'child_process'
 import net from 'net'
 import log from 'electron-log/main'
-
-// 必须在 electron-log 初始化之前堵住 stdout/stderr
-// asar 打包后 Electron 主进程没有控制台，process.stdout/stderr 是无效流
-// electron-log 内部和所有 console.* 调用都会触发 EPIPE
+// asar 打包后 stdout/stderr 无效，electron-log 内部调用会抛 EPIPE
 process.stdout.write = () => false
 process.stderr.write = () => false
-
+// crash 日志直接写文件，不经过 electron-log
+const crashLogFile = path.join(app.getPath('userData'), 'logs', 'crash.log')
+function writeCrash(msg: string) {
+  try { fs.appendFileSync(crashLogFile, `[${new Date().toISOString()}] ${msg}\n`) } catch {}
+}
 // 初始化 electron-log（文件日志）
 log.initialize()
 log.transports.file.level = 'info'
-log.transports.console.level = false // 禁用 console transport
+log.transports.console.level = false
 log.transports.file.maxSize = 5 * 1024 * 1024
-
-// crash 日志直接写文件，不经过 electron-log（避免 EPIPE）
-const crashLogFile = path.join(app.getPath('userData'), 'logs', 'crash.log')
-function writeCrash(msg: string) {
-  try {
-    fs.appendFileSync(crashLogFile, `[${new Date().toISOString()}] ${msg}\n`)
-  } catch {}
-}
-
+// 全局未捕获异常处理器
 process.on('uncaughtException', (error) => {
   writeCrash(`[FATAL] Uncaught exception: ${error.stack || error.message}`)
   setTimeout(() => process.exit(1), 1000)
 })
-
 process.on('unhandledRejection', (reason) => {
   const msg = reason instanceof Error
     ? `[FATAL] Unhandled rejection: ${reason.stack || reason.message}`
@@ -45,14 +37,16 @@ let ElectronPrinter: any = null
 try {
   ThermalPrinter = require('node-thermal-printer')
   ElectronPrinter = require('electron-printer')
+  console.log('[PRINTER] node-thermal-printer and electron-printer loaded')
 } catch (e: any) {
-  // 打印机模块不可用，忽略
+  console.log('[PRINTER] Thermal printer libs not available:', e?.message)
 }
 
 // 检测 WebView2 是否可用（Windows only）
 function checkWebView2(): boolean {
   if (process.platform !== 'win32') return true
   try {
+    // 检查注册表键：Everett 存储（WebView2 安装后写入）
     const regKey = 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
     const { execSync } = require('child_process')
     const result = execSync(
@@ -60,9 +54,13 @@ function checkWebView2(): boolean {
       { encoding: 'utf8', timeout: 5000 }
     )
     const match = result.match(/pv\s+REG_SZ\s+(\d+\.\d+\.\d+)/)
-    if (match) return true
+    if (match) {
+      console.log('[WebView2] Runtime version:', match[1])
+      return true
+    }
     return false
   } catch {
+    // 注册表键不存在 = WebView2 未安装
     return false
   }
 }
@@ -116,16 +114,62 @@ function showErrorPageSync(title: string, message: string, details?: string): vo
   }
 }
 
-// Windows DPI awareness - 修复高分屏字体模糊
-if (process.platform === 'win32') {
-  try {
-    app.commandLine.appendSwitch('high-dpi-config', '1.0')
-    app.commandLine.appendSwitch('force-device-scale-factor', '1')
-  } catch (e) {}
+// 显示错误信息页面
+function showErrorPage(mainWindow: BrowserWindow, title: string, message: string, details?: string) {
+  const logPath = getLogPath()
+  const logDir = getLogDir()
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; color: #333; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+    .container { width: 100%; max-width: 900px; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { color: #d32f2f; margin-top: 0; font-size: 24px; }
+    .message { font-size: 18px; line-height: 1.6; margin: 20px 0; }
+    .details { background: #f9f9f9; padding: 20px; border-radius: 4px; margin-top: 20px; font-size: 14px; word-break: break-word; white-space: pre-wrap; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+    .log-path { background: #fff3e0; padding: 15px 20px; border-radius: 4px; margin-top: 15px; font-size: 14px; word-break: break-all; font-family: monospace; }
+    .btn { background: #1976d2; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; margin-right: 10px; font-size: 14px; }
+    .btn:hover { background: #1565c0; }
+    .btn-log { background: #388e3c; }
+    .btn-log:hover { background: #2e7d32; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>⚠️ ${title}</h2>
+    <p>${message}</p>
+    ${details ? `<div class="details"><strong>详细信息：</strong><br>${details}</div>` : ''}
+    <div class="log-path"><strong>📋 日志文件位置：</strong><br>${logPath}</div>
+    <button class="btn btn-log" onclick="require('electron').shell.openPath('${logDir.replace(/\\\\/g, '\\\\\\\\')}')">📂 打开日志文件夹</button>
+    <button class="btn" onclick="window.close()">关闭程序</button>
+  </div>
+</body>
+</html>`
+  mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
 }
 
+// Windows DPI awareness - 修复高分屏字体模糊
+// Process DPI awareness before app.ready()
+if (process.platform === 'win32') {
+  // 尝试设置 Per-Monitor DPI v2 (需要 Windows 10 1703+)
+  try {
+    // SetProcessDpiAwarenessContext for Per-Monitor v2
+    // Falls back gracefully on older Windows
+    app.commandLine.appendSwitch('high-dpi-config', '1.0')
+    app.commandLine.appendSwitch('force-device-scale-factor', '1')
+  } catch (e) {
+    // Ignore if not supported
+  }
+}
+
+// 启用硬件加速（禁用会导致字体模糊）
+// 如果某些特定电脑需要禁用 GPU，可以设置环境变量 ELECTRON_DISABLE_GPU=1
 if (process.env.ELECTRON_DISABLE_GPU !== '1') {
-  // 不禁用硬件加速
+  // 不禁用硬件加速，保持清晰渲染
+  // 仅在必要时通过命令行禁用：electron --disable-gpu
 }
 
 // 窗口引用
@@ -135,16 +179,32 @@ let customerWindow: BrowserWindow | null = null
 // 本地 Express 服务器进程（用于打包后的桌面版本）
 let serverProcess: ReturnType<typeof fork> | null = null
 
+/**
+ * 获取服务器入口文件的真实路径
+ *
+ * asar:true  -> server 在 app.asar.unpacked/server/dist/index.js
+ * asar:false -> server 在 server/dist/index.js（extraResources 直接在 resources/ 下）
+ *
+ * 检测方法：app.getAppPath() 末尾是 .asar 则为 asar 模式
+ */
 function getServerEntryPath(): string {
   const isAsar = app.getAppPath().endsWith('.asar')
   if (isAsar) {
+    // asar: true — server 在 app.asar.unpacked 下
     return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'dist', 'index.js')
   } else {
+    // asar: false — server 直接在 resources/server/dist 下（extraResources）
     return path.join(process.resourcesPath, 'server', 'dist', 'index.js')
   }
 }
 
+/**
+ * 获取 seed 数据库模板路径
+ */
 function getSeedTemplatePath(): string {
+  // seed.db 位于 asar 内部 app.getAppPath()/server/prisma/seed.db
+  // extraResources 已将 server/uploads 复制到 asar.unpacked，但 prisma 文件由 asarUnpack 提取
+  // 为确保兼容性，优先使用 app.getAppPath()（asar 内部），备用 asar.unpacked
   if (app.isPackaged) {
     const asarPath = path.join(app.getAppPath(), 'server', 'prisma', 'seed.db')
     const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'seed.db')
@@ -154,7 +214,11 @@ function getSeedTemplatePath(): string {
   }
 }
 
+/**
+ * 获取 Prisma schema 路径（asar/unpack 兼容）
+ */
 function getPrismaSchemaPath(): string {
+  // schema.prisma 由 asarUnpack 提取到 asar.unpacked/server/prisma/schema.prisma
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'prisma', 'schema.prisma')
   } else {
@@ -162,70 +226,142 @@ function getPrismaSchemaPath(): string {
   }
 }
 
-// Prisma db push 的 Promise 封装
-function runPrismaPush(userDbPath: string): Promise<{ code: number | null; stderr: string }> {
+/**
+ * 同步检查并修复用户数据库 schema
+ * 等待 prisma db push 完成后再继续（同步阻塞）
+ * 这确保数据库 schema 在服务器启动前就已更新
+ */
+async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
+  // 获取 server/node_modules 的基础路径（不含 .bin）
+  const serverModulesPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules')
+    : path.join(process.resourcesPath, 'server', 'node_modules')
+
+  // 定位 node 可执行文件（跨平台）
+  // 注意：Electron 打包后 process.execPath 是 Electron/BTPS.exe，不是独立的 node.exe
+  // 不能用 Electron 主程序来执行 node 脚本，必须找正确的 node 路径
+  // Windows 打包后 node.exe 位于 resources/app.asar.unpacked/server/node_modules/electron/dist/node.exe
+  let nodeBin = process.execPath
+  if (process.platform === 'win32') {
+    // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
+    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
+    const electronNodeExe = path.join(electronDir, 'node.exe')
+    if (fs.existsSync(electronNodeExe)) {
+      nodeBin = electronNodeExe
+      log.log('[Schema] Using electron bundled node:', nodeBin)
+    } else {
+      // 备用：直接用 process.execPath（Electron 本身包含 Node.js）
+      log.log('[Schema] electron node.exe not found, using process.execPath as fallback')
+    }
+  }
+
+  // prisma CLI 入口脚本（避免使用 .bin/prisma shell 脚本，它包含硬编码的开发机路径）
+  // npm 安装时路径: server/node_modules/prisma/build/index.js
+  const prismaCliPath = path.join(serverModulesPath, 'prisma', 'build', 'index.js')
+  const schemaPath = getPrismaSchemaPath()
+
+  if (!fs.existsSync(schemaPath)) {
+    log.warn('[Schema] schema.prisma not found, skipping db sync')
+    return
+  }
+
+  if (!fs.existsSync(prismaCliPath)) {
+    log.warn('[Schema] prisma CLI not found at', prismaCliPath, '- skipping db sync')
+    return
+  }
+
+  log.log('[Schema] Checking database schema...')
+  log.log('[Schema] Prisma CLI:', prismaCliPath)
+  log.log('[Schema] Database:', userDbPath)
+  log.log('[Schema] Node binary:', nodeBin)
+
   return new Promise((resolve) => {
-    let nodeBin = process.execPath
-    if (process.platform === 'win32') {
-      const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
-      const electronNodeExe = path.join(electronDir, 'node.exe')
-      if (fs.existsSync(electronNodeExe)) nodeBin = electronNodeExe
-    }
-    const serverModulesPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules')
-      : path.join(process.resourcesPath, 'server', 'node_modules')
-    const prismaCliPath = path.join(serverModulesPath, 'prisma', 'build', 'index.js')
-    const schemaPath = getPrismaSchemaPath()
+    let childExited = false
 
-    if (!fs.existsSync(prismaCliPath) || !fs.existsSync(schemaPath)) {
-      resolve({ code: -1, stderr: 'CLI or schema not found' })
-      return
-    }
-
-    let exited = false
-    let stderrData = ''
+    // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
+    // 注意：stdout 设为 'ignore' 避免 Prisma 退出后 pipe 断开导致 EPIPE 错误
     const child = spawn(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
       env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
       stdio: ['ignore', 'pipe', 'pipe', 'pipe']
     })
+
+    let stdoutData = ''
+    let stderrData = ''
+
+    child.stdout?.on('data', (d: Buffer) => {
+      const msg = d.toString()
+      stdoutData += msg
+      log.log('[Prisma stdout]', msg.trim())
+    })
+
     child.stderr?.on('data', (d: Buffer) => {
       const msg = d.toString()
       stderrData += msg
-      writeCrash(`[Prisma stderr] ${msg.trim()}`)
+      log.log('[Prisma stderr]', msg.trim())
     })
-    child.on('close', (code: number | null) => {
-      if (!exited) { exited = true; resolve({ code, stderr: stderrData }) }
+
+    child.on('close', (code: number | null, signal: string | null) => {
+      childExited = true
+      log.log('[Schema] db push finished with code:', code, 'signal:', signal)
+      if (code === 0 || stderrData.includes('Your database is now in sync')) {
+        log.log('[Schema] Database schema is up to date')
+      } else if (code === null && signal === 'SIGTERM') {
+        // 超时被杀，不算错
+        log.warn('[Schema] db push timed out (SIGTERM), continuing anyway')
+      } else {
+        log.error('[Schema] db push FAILED with code', code, '- continuing anyway')
+        log.error('[Schema] Last stderr:', stderrData.slice(-500))
+      }
+      resolve()
     })
+
     child.on('error', (err: Error) => {
-      if (!exited) { exited = true; resolve({ code: -1, stderr: err.message }) }
+      log.error('[Schema] Could not run prisma db push:', err.message, '- continuing anyway')
+      resolve()
     })
+
+    // 超时保护：60秒
     setTimeout(() => {
-      if (!exited) { child.kill(); exited = true; resolve({ code: null, stderr: 'timeout' }) }
+      if (!childExited) {
+        log.warn('[Schema] db push timed out after 60s, killing...')
+        child.kill('SIGTERM')
+      }
     }, 60000)
   })
 }
 
-async function ensureSchemaUpToDate(userDbPath: string): Promise<void> {
-  const result = await runPrismaPush(userDbPath)
-  if (result.code === 0 || result.stderr.includes('Your database is now in sync')) {
-    writeCrash('[Schema] db push succeeded')
-  } else if (result.code === null) {
-    writeCrash('[Schema] db push timed out')
-  } else {
-    writeCrash(`[Schema] db push FAILED code=${result.code} stderr=${result.stderr.slice(-300)}`)
-  }
-}
-
+/**
+ * 启动本地 Express API 服务器（fork child process）
+ *
+ * 数据库初始化策略（单门店离线安装）：
+ * 1. 用户数据库路径：{userData}/data/dev.db（用户可写）
+ * 2. 如果不存在，从打包资源复制 seed.db（包含完整表结构）
+ * 3. fork Express 服务器，DATABASE_URL 指向用户目录
+ *
+ * seed.db 打包位置（asarUnpack）：
+ *   {resourcesPath}/app.asar.unpacked/server/prisma/seed.db
+ *
+ * 多门店支持：
+ * 数据库里 Tenant → Store 表已存在，但默认创建单门店实例。
+ * Admin UI 通过切换 storeId 支持多门店管理（同一数据库内）。
+ */
 async function startLocalServer(): Promise<void> {
   if (!app.isPackaged) {
+    console.log('[Server] Dev mode - skipping local server start')
     return
   }
 
-  // 清理残留进程
+  // ─── 关键修复：启动前清理残留进程 ───────────────────────────────
+  // 场景：上次应用被强制 kill，或 SIGTERM 未能干净杀死 serverProcess
+  // 导致端口 7072 被僵尸进程占用，新实例卡在 waitForPort 超时
   try {
     const { execSync } = require('child_process')
     if (process.platform === 'win32') {
-      const result = execSync(`netstat -ano | findstr :7072 | findstr LISTENING`, { encoding: 'utf8', windowsHide: true })
+      // Windows: 查找占用 7072 端口的进程并强制结束
+      const result = execSync(
+        `netstat -ano | findstr :7072 | findstr LISTENING`,
+        { encoding: 'utf8', windowsHide: true }
+      )
       const lines = result.trim().split('\n')
       for (const line of lines) {
         const parts = line.trim().split(/\s+/)
@@ -233,29 +369,60 @@ async function startLocalServer(): Promise<void> {
         if (!localAddr.includes(':7072')) continue
         const pid = parts[parts.length - 1]
         if (!pid || pid === '0') continue
-        try { execSync(`taskkill /F /PID ${pid}`, { windowsHide: true }) } catch {}
+        console.log(`[Server] Killing residual process PID=${pid} holding port 7072`)
+        try {
+          execSync(`taskkill /F /PID ${pid}`, { windowsHide: true })
+          console.log(`[Server] Residual process ${pid} killed`)
+        } catch (killErr: any) {
+          console.warn(`[Server] Failed to kill PID ${pid}:`, killErr.message)
+        }
+      }
+    } else {
+      // macOS/Linux: 用 lsof 找到占用 7072 的进程
+      const result = execSync(
+        `lsof -ti:7072 2>/dev/null || true`,
+        { encoding: 'utf8' }
+      )
+      const pids = result.trim().split('\n').filter(Boolean)
+      for (const pid of pids) {
+        console.log(`[Server] Killing residual process PID=${pid} holding port 7072`)
+        try {
+          process.kill(parseInt(pid), 'SIGKILL')
+          console.log(`[Server] Residual process ${pid} killed`)
+        } catch (killErr: any) {
+          console.warn(`[Server] Failed to kill PID ${pid}:`, killErr.message)
+        }
       }
     }
+    // 等待系统释放端口
     await new Promise(r => setTimeout(r, 1000))
-  } catch {}
+  } catch (cleanupErr) {
+    // 端口未被占用 → 忽略错误
+    console.log('[Server] No residual process on port 7072, proceeding...')
+  }
+  // ─── 清理完毕 ────────────────────────────────────────────────
 
   const userDataDir = app.getPath('userData')
   const dbDir = path.join(userDataDir, 'data')
   const userDbPath = path.join(dbDir, 'dev.db')
+
+  // seed 模板路径（asar 模式自适应）
   const seedTemplatePath = getSeedTemplatePath()
 
+  log.log(`[Server] App version: ${app.getVersion()}, userData: ${userDataDir}`)
+
+  // 确保数据库目录存在
   try {
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true })
+      log.log('[Server] Created data directory:', dbDir)
     }
   } catch (e) {
-    writeCrash(`[Server] Failed to create data directory: ${e}`)
+    log.error('[Server] Failed to create data directory:', e)
     return
   }
 
-  // 每次启动都从 seed.db 重新初始化数据库
-  // seed.db 包含正确的 schema，复制后 db push 会快速验证一致性
-  // 用户数据在首次启动后会由 app 正常创建
+  // 每次启动都从 seed.db 重新初始化，修复旧数据库 schema 不匹配问题
   if (fs.existsSync(seedTemplatePath)) {
     try {
       if (fs.existsSync(userDbPath)) {
@@ -270,63 +437,97 @@ async function startLocalServer(): Promise<void> {
     }
   }
 
-  // 同步等待 schema 更新完成
+  // 关键：自动检测并修复数据库 schema（新增列/表缺失时自动 db push）
+  // 这确保从旧版本升级的用户不需要手动清理数据库
+  // 同步等待完成：schema 必须先更新，服务器才能安全启动
   await ensureSchemaUpToDate(userDbPath)
 
+  // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
   const unpackedRoot = path.join(process.resourcesPath, 'app.asar.unpacked')
+  // server 模块在 app.asar.unpacked/server/node_modules
+  // @prisma/client 和 .prisma 在 app.asar.unpacked/node_modules
+  // NODE_PATH 需要包含两者才能让 prisma 和服务器正确加载模块
   const serverModulesPath = path.join(unpackedRoot, 'server', 'node_modules')
   const prismaModulesPath = path.join(unpackedRoot, 'node_modules')
   const nodePath = `${serverModulesPath}${path.delimiter}${prismaModulesPath}`
+  log.log('[Server] NODE_PATH:', nodePath)
 
+  // 获取服务器入口文件路径（asarUnpack 后的真实文件系统路径）
   const serverEntry = getServerEntryPath()
+  log.log('[Server] Server path:', serverEntry)
+  log.log('[Server] Database path:', userDbPath)
+  log.log('[Server] Starting local API server...')
+
+  // asar 模式下 uploads 在 app.asar.unpacked/server/uploads
   const uploadsPath = path.join(unpackedRoot, 'server', 'uploads')
+  log.log('[Server] Uploads path:', uploadsPath)
 
   // fork Express 服务器
+  // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
+  // Windows 上 process.execPath 是 BTPS.exe（Electron 主程序），不是 node.exe
+  // electron-builder 打包后 node.exe 位于 app.asar.unpacked/node_modules/electron/dist/
   let nodeExecPath = process.execPath
   if (process.platform === 'win32') {
+    // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
     const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
     const electronNodeExe = path.join(electronDir, 'node.exe')
     if (fs.existsSync(electronNodeExe)) {
       nodeExecPath = electronNodeExe
+      log.log('[Server] Using electron bundled node:', nodeExecPath)
+    } else {
+      log.log('[Server] electron node.exe not found at', electronDir, '- using process.execPath as fallback:', nodeExecPath)
     }
   }
-
+  log.log('[Server] Node exec path:', nodeExecPath)
+  log.log('[Server] Server entry:', serverEntry)
+  log.log('[Server] Exists:', fs.existsSync(serverEntry))
   serverProcess = fork(serverEntry, [], {
     execPath: nodeExecPath,
     env: {
       ...process.env,
       NODE_ENV: 'production',
       PORT: '7072',
+      // 覆盖数据库路径为用户可写目录
+      // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
       DATABASE_URL: `file:${userDbPath}`,
+      // uploads 目录路径（asar 模式下在 asar.unpacked 下）
       UPLOADS_PATH: uploadsPath,
+      // 关键：设置 NODE_PATH 让 fork() 的子进程能找到 express/cors 等模块
+      // 需要同时包含 server/node_modules 和根目录的 node_modules（prisma 相关）
       NODE_PATH: nodePath,
+      // CORS: 允许所有来源，因为 Electron app 从 file:// 加载
       CORS_ORIGIN: '*'
     },
     stdio: ['pipe', 'pipe', 'pipe', 'ipc']
   })
 
   serverProcess.on('message', (msg) => {
-    writeCrash(`[Server] ${String(msg)}`)
+    log.log('[Server]', msg)
   })
 
   serverProcess.stdout?.on('data', (data: Buffer) => {
-    writeCrash(`[Server stdout] ${data.toString().trim()}`)
+    log.log('[Server stdout]', data.toString().trim())
   })
 
   serverProcess.stderr?.on('data', (data: Buffer) => {
-    writeCrash(`[Server stderr] ${data.toString().trim()}`)
+    log.error('[Server stderr]', data.toString().trim())
   })
 
   serverProcess.on('error', (err: Error) => {
-    writeCrash(`[Server] Failed to start: ${err.message}`)
+    log.error('[Server] Failed to start:', err.message)
   })
 
   serverProcess.on('exit', (code: number, signal: string) => {
-    writeCrash(`[Server] Process exited code=${code} signal=${signal}`)
+    console.log(`[Server] Process exited with code ${code}, signal ${signal}`)
     serverProcess = null
   })
+
+  console.log('[Server] Local API server started (PID:', serverProcess.pid, ')')
 }
 
+/**
+ * 等待端口可用（轮询检测）
+ */
 function waitForPort(port: number, timeoutMs: number = 30000): Promise<void> {
   const startTime = Date.now()
   return new Promise((resolve, reject) => {
@@ -334,6 +535,7 @@ function waitForPort(port: number, timeoutMs: number = 30000): Promise<void> {
       const client = new net.Socket()
       client.connect(port, '127.0.0.1', () => {
         client.destroy()
+        log.log(`[Server] Port ${port} is ready`)
         resolve()
       })
       client.on('error', () => {
@@ -349,27 +551,49 @@ function waitForPort(port: number, timeoutMs: number = 30000): Promise<void> {
   })
 }
 
+/**
+ * 关闭本地服务器（应用退出时）
+ */
 function stopLocalServer(): void {
   if (serverProcess) {
+    console.log('[Server] Shutting down local server...')
     serverProcess.kill('SIGTERM')
     serverProcess = null
   }
 }
 
+// 开发模式检测
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 
+/**
+ * 获取资源文件路径（兼容打包和开发模式）
+ * 优先使用 app.getAppPath()，因为 __dirname 在某些打包情况下不可靠
+ */
 function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
+    // 打包后：app.getAppPath() 返回包含 resources/app 的目录
+    // 结构: resources/app/client-pos/dist/index.html
+    // electron-builder.json 的 files 配置把 client-pos/ 目录内容打包进去
+    // 但 dist-electron 在 asarUnpack 中，所以实际在 app.asar.unpacked 下
+    // sandbox: true 时 preload 必须使用 unpacked 路径
     if (relativePath.startsWith('dist-electron')) {
+      // dist-electron 在 asarUnpack 中，使用 unpacked 路径
       return path.join(process.resourcesPath, 'app.asar.unpacked', 'client-pos', relativePath)
     }
     return path.join(app.getAppPath(), 'client-pos', relativePath)
   } else {
+    // 开发模式：使用 __dirname
+    // __dirname = 项目根目录/dist-electron/electron
     return path.join(__dirname, '..', '..', relativePath)
   }
 }
 
+/**
+ * 创建主窗口（收银界面）
+ */
 function createMainWindow() {
+  // 双屏兼容：显式找最左边的屏幕作为主屏（点单系统）
+  // 不依赖 getPrimaryDisplay()（用户可能把外接屏设为主屏）
   const allDisplays = screen.getAllDisplays()
   const leftmostDisplay = allDisplays.reduce((leftmost, current) =>
     current.bounds.x < leftmost.bounds.x ? current : leftmost
@@ -388,59 +612,227 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 高 DPI 支持
       enableBlinkFeatures: 'CSSColorSchemeUARendering'
     },
+    // Windows 高 DPI 设置
     titleBarStyle: process.platform === 'win32' ? 'default' : undefined,
     title: 'Bubble Tea POS',
     backgroundColor: '#ffffff'
   })
 
+  // 加载主界面（服务器启动后才加载，确保 API 可用）
   if (isDev) {
     mainWindow.loadURL('http://localhost:6063')
     mainWindow.webContents.openDevTools()
   } else {
     const indexPath = getResourcePath('dist/index.html')
     const preloadPath = getResourcePath('dist-electron/electron/preload.js')
+    const fs = require('fs')
 
-    mainWindow.loadFile(indexPath).catch((err) => {
-      writeCrash(`[Electron] Failed to load index: ${err.message}`)
+    console.log('[Electron] App path:', app.getAppPath())
+    console.log('[Electron] __dirname:', __dirname)
+    console.log('[Electron] Loading index from:', indexPath)
+    console.log('[Electron] Preload path:', preloadPath)
+
+    // 检查文件是否存在
+    const indexExists = fs.existsSync(indexPath)
+    const preloadExists = fs.existsSync(preloadPath)
+    console.log('[Electron] Index exists:', indexExists)
+    console.log('[Electron] Preload exists:', preloadExists)
+
+    // 诊断信息
+    const diagnosticInfo = {
+      'app.getAppPath()': app.getAppPath(),
+      '__dirname': __dirname,
+      'indexPath': indexPath,
+      'preloadPath': preloadPath,
+      'indexPath 存在': indexExists,
+      'preloadPath 存在': preloadExists,
+      'indexPath 目录': fs.existsSync(path.dirname(indexPath)) ? '存在' : '不存在',
+      'isDev': isDev,
+      'isPackaged': app.isPackaged,
+      'NODE_ENV': process.env.NODE_ENV || 'undefined'
+    }
+    const diagnosticText = Object.entries(diagnosticInfo)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('\n')
+
+    // 创建诊断窗口（独立窗口，即使主窗口白屏也能看到）
+    const diagWindow = new BrowserWindow({
+      width: 900,
+      height: 650,
+      title: '诊断信息 - Bubble Tea POS',
+      alwaysOnTop: true
+    })
+    const dir = path.dirname(indexPath)
+    let dirContents = '无法读取'
+    try {
+      if (fs.existsSync(dir)) {
+        dirContents = fs.readdirSync(dir).slice(0, 30).join('\n')
+      }
+    } catch (e) {}
+
+    // 读取最近的错误日志（electron-log）
+    const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
+    let recentLogs = '无日志文件'
+    try {
+      if (fs.existsSync(logPath)) {
+        const logContent = fs.readFileSync(logPath, 'utf-8')
+        const logLines = logContent.split('\n').filter(Boolean).slice(-30)
+        recentLogs = logLines.map((line: string) => {
+          if (line.includes('[error]') || line.includes('[FATAL]')) {
+            return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>'
+          } else if (line.includes('[warn]')) {
+            return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>'
+          }
+          return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>'
+        }).join('\n')
+      }
+    } catch (e) { recentLogs = '读取失败: ' + String(e) }
+
+    const logPathDisplay = logPath.replace(/</g, '&lt;')
+    diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>诊断信息 - Bubble Tea POS</title>
+<style>
+body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
+pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto;word-wrap:break-word;white-space:pre-wrap}
+.key{color:#9cdcfe}
+.status-ok{color:#4ec9b0}
+.status-error{color:#f44747}
+h3{margin-top:16px;color:#569cd6}
+.log-section{max-height:500px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
+</style>
+</head>
+<body>
+<h2 style="color:#569cd6">🚨 启动诊断 - 白屏时必看</h2>
+<pre>${diagnosticText.replace(/</g, '&lt;')}</pre>
+<h3>${dir.replace(/</g, '&lt;')} 目录内容</h3>
+<pre>${dirContents.replace(/</g, '&lt;')}</pre>
+<h3>📋 最近运行日志 (${logPathDisplay})</h3>
+<div class="log-section"><pre>${recentLogs}</pre></div>
+<p style="color:#808080;margin-top:16px">如果这个窗口没自动关闭，说明主窗口加载失败。请截图发给我分析。</p>
+</body>
+</html>`)}`)
+
+    // 尝试加载页面
+    mainWindow.loadFile(indexPath).then(() => {
+      console.log('[Electron] Successfully loaded index.html')
+      // 加载成功后关闭诊断窗口
+      diagWindow.close()
+    }).catch((err) => {
+      console.error('[Electron] Failed to load index:', err)
+      // 诊断窗口已经打开，显示了路径信息
     })
 
-    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-      writeCrash(`[Electron] Page failed to load: ${errorCode} ${errorDescription}`)
-      if (mainWindow) showErrorPageSync('页面加载失败', `错误码: ${errorCode}`, errorDescription)
+    // 监听页面加载成功
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('[Electron] Page finished loading')
+      // 页面加载成功，但可能是白屏（React渲染失败）
+      // 等待2秒后检查窗口是否还是空白
+      const win = mainWindow
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.executeJavaScript(`
+            document.body.innerHTML.length < 100 ||
+            document.querySelector('#root')?.innerHTML === '' ||
+            document.querySelector('#root')?.children.length === 0
+          `).then(isBlank => {
+            if (isBlank) {
+              console.error('[Electron] Page appears blank - React may have failed to render')
+            }
+          }).catch(() => {})
+        }
+      }, 2000)
     })
 
-    mainWindow.webContents.on('render-process-gone', (_event, details) => {
-      writeCrash(`[Electron] Renderer process gone: ${JSON.stringify(details)}`)
-      if (mainWindow) showErrorPageSync('渲染进程异常', '应用程序渲染进程意外退出。', JSON.stringify(details))
+    // 监听页面加载失败
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('[Electron] Page failed to load:', errorCode, errorDescription)
+      if (mainWindow) showErrorPage(mainWindow, '页面加载失败', '无法加载主界面，可能缺少必要的运行时组件。', `错误码: ${errorCode}\n描述: ${errorDescription}`)
     })
 
-    mainWindow.webContents.on('crashed', () => {
-      writeCrash('[Electron] Renderer process crashed')
-      if (mainWindow) showErrorPageSync('渲染进程崩溃', '应用程序崩溃，请尝试重新安装。')
+    // 监听渲染进程错误
+    mainWindow.webContents.on('render-process-gone', (event, details) => {
+      console.error('[Electron] Renderer process gone:', details)
+      if (mainWindow) showErrorPage(mainWindow, '渲染进程异常', '应用程序渲染进程意外退出。', `详情: ${JSON.stringify(details)}`)
+    })
+
+    // 监听控制台消息（来自渲染进程）- 捕获所有级别
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+      const levelNames = ['debug', 'info', 'warn', 'error']
+      const levelName = levelNames[level] || `level${level}`
+      console.log(`[Renderer ${levelName}] ${message} (${sourceId}:${line})`)
+
+      // React 常见错误关键字
+      const errorPatterns = [
+        'Error:', 'Cannot', 'undefined', 'null is not',
+        'is not a function', 'is not defined', 'Failed to',
+        'SyntaxError', 'TypeError', 'ReferenceError'
+      ]
+      const isLikelyError = level >= 2 ||
+        errorPatterns.some(p => message.includes(p))
+
+      if (isLikelyError && mainWindow && !mainWindow.isDestroyed()) {
+        // 显示渲染错误
+        console.error(`[Renderer Error Detected] ${message}`)
+      }
+    })
+
+    // 监听渲染进程崩溃
+    mainWindow.webContents.on('crashed', (event, killed) => {
+      console.error('[Electron] Renderer process crashed, killed:', killed)
+      if (mainWindow) showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `killed: ${killed}`)
     })
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null
-    if (customerWindow) customerWindow.close()
+    if (customerWindow) {
+      customerWindow.close()
+    }
   })
+
+  // 监听页面加载错误
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[Electron] Failed to load:', errorCode, errorDescription)
+  })
+
+  mainWindow.webContents.on('crashed', () => {
+    console.error('[Electron] Renderer process crashed')
+  })
+
+  console.log('[Electron] Main window created')
 }
 
+/**
+ * 创建副屏窗口（顾客展示）
+ * 双屏兼容：使用最右边的屏幕（排除主窗口所在屏）
+ */
 function createCustomerWindow() {
   const allDisplays = screen.getAllDisplays()
+
+  // 找最左边的屏幕（主窗口所在屏）
   const leftmostDisplay = allDisplays.reduce((leftmost, current) =>
     current.bounds.x < leftmost.bounds.x ? current : leftmost
   )
+
+  // 副屏：用最右边的屏幕（通常是外接的顾客展示屏）
   const rightmostDisplay = allDisplays.reduce((rightmost, current) =>
     current.bounds.x > rightmost.bounds.x ? current : rightmost
   )
+
+  // 如果最右边的屏幕就是主屏（只有一个屏幕），则跳过副屏创建
   const isSameDisplay = rightmostDisplay.bounds.x === leftmostDisplay.bounds.x &&
     rightmostDisplay.bounds.y === leftmostDisplay.bounds.y
-  if (isSameDisplay) return
+  if (isSameDisplay) {
+    console.log('[Electron] Only one display found, skipping customer window')
+    return
+  }
 
   const targetDisplay = rightmostDisplay
+
   const { width, height, x: screenX, y: screenY } = targetDisplay.workArea
 
   customerWindow = new BrowserWindow({
@@ -459,94 +851,145 @@ function createCustomerWindow() {
     alwaysOnTop: true
   })
 
+  // 加载副屏界面
   if (isDev) {
     customerWindow.loadURL('http://localhost:6063/customer-display')
   } else {
+    // 注意：loadFile 的 hash 参数不生效，必须用 loadURL + file:// + hash
     const indexPath = getResourcePath('dist/index.html')
     const fileUrl = 'file://' + indexPath.replace(/\\/g, '/') + '#/customer-display'
+    console.log('[Electron] Customer display loading:', fileUrl)
     customerWindow.loadURL(fileUrl).catch((err) => {
-      writeCrash(`[Electron] Customer display load failed: ${err.message}`)
+      console.error('[Electron] Customer display load failed:', err)
     })
   }
 
   customerWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-    writeCrash(`[Electron] Customer display failed to load: ${errorCode} ${errorDescription}`)
+    console.error('[Electron] Customer display failed to load:', errorCode, errorDescription)
   })
 
   customerWindow.webContents.on('crashed', () => {
-    writeCrash('[Electron] Customer display renderer crashed')
+    console.error('[Electron] Customer display renderer crashed')
   })
 
   customerWindow.on('closed', () => {
     customerWindow = null
   })
+
+  console.log('[Electron] Customer window created')
 }
 
-// IPC
+// IPC 通信 - 订单状态同步到副屏
+// ========== Printer Listing (Windows) ==========
+
 ipcMain.handle('list-printers', async () => {
-  if (process.platform !== 'win32') return { printers: [], error: 'Only supported on Windows' }
+  if (process.platform !== 'win32') {
+    return { printers: [], error: 'Only supported on Windows' }
+  }
+  
   return new Promise((resolve) => {
     const { exec } = require('child_process')
-    exec(`Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress`, (error: any, stdout: string) => {
-      if (error) { resolve({ printers: [], error: error.message }); return }
+    const psCommand = `Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress`
+    
+    exec(`powershell -Command "${psCommand}"`, (error: any, stdout: string, stderr: string) => {
+      if (error) {
+        console.error('[LIST-PRINTERS] Error:', error.message)
+        resolve({ printers: [], error: error.message })
+        return
+      }
+      
       try {
         const trimmed = stdout.trim()
-        if (!trimmed) { resolve({ printers: [], error: null }); return }
+        if (!trimmed) {
+          resolve({ printers: [], error: null })
+          return
+        }
+        
+        // Parse JSON output (might be array or single string)
         let printers: string[]
-        if (trimmed.startsWith('[')) printers = JSON.parse(trimmed)
-        else if (trimmed.startsWith('{')) printers = [JSON.parse(trimmed).Name]
-        else printers = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
+        if (trimmed.startsWith('[')) {
+          printers = JSON.parse(trimmed)
+        } else if (trimmed.startsWith('{')) {
+          printers = [JSON.parse(trimmed).Name]
+        } else {
+          // Plain text, one printer per line
+          printers = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
+        }
+        
+        console.log('[LIST-PRINTERS] Found:', printers.length, 'printers')
         resolve({ printers, error: null })
-      } catch { resolve({ printers: [], error: 'Parse error' }) }
+      } catch (parseError: any) {
+        console.error('[LIST-PRINTERS] Parse error:', parseError.message)
+        resolve({ printers: [], error: parseError.message })
+      }
     })
   })
 })
 
+// IPC 通信 - 订单状态同步到副屏
 ipcMain.on('order-update', (_event, orderData) => {
   if (customerWindow && !customerWindow.isDestroyed()) {
     customerWindow.webContents.send('order-update', orderData)
   }
 })
 
+// IPC 通信 - API URL 配置（持久化到文件系统）
 ipcMain.handle('get-api-url', () => {
+  const fs = require('fs')
+  const configPath = path.join(app.getPath('userData'), 'api-config.json')
   try {
-    const configPath = path.join(app.getPath('userData'), 'api-config.json')
     if (fs.existsSync(configPath)) {
       const data = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
       return data.apiUrl || '/api'
     }
-  } catch {}
+  } catch (e) {}
   return '/api'
 })
 
-ipcMain.handle('get-app-version', () => app.getVersion())
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
 
 ipcMain.handle('get-log-entries', () => {
   try {
     const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
+    const fs = require('fs')
     if (fs.existsSync(logPath)) {
       const content = fs.readFileSync(logPath, 'utf-8')
       const entries = content.split('\n').filter(Boolean).slice(-100).map((line: string) => {
         const match = line.match(/^\[(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\]\s*\[(\w+)\]\s*(.*)$/)
-        if (match) return { timestamp: match[1], level: match[2].toLowerCase(), message: match[3] }
+        if (match) {
+          return { timestamp: match[1], level: match[2].toLowerCase(), message: match[3] }
+        }
         return { timestamp: '', level: 'info', message: line }
       })
       return JSON.stringify(entries)
     }
-  } catch {}
+  } catch (e) {}
   return '[]'
 })
 
 ipcMain.handle('set-api-url', (_event, url: string) => {
+  const fs = require('fs')
+  // 验证 URL 格式：只允许 /api 相对路径或明确的 http/https URL
   const isValidUrl = typeof url === 'string' && (
-    url === '/api' || url.startsWith('/api?') || url.startsWith('/api/') || /^https?:\/\/[^/]+\/api\/?/.test(url)
+    url === '/api' ||
+    url.startsWith('/api?') ||
+    url.startsWith('/api/') ||
+    /^https?:\/\/[^/]+\/api\/?/.test(url)
   )
-  if (!isValidUrl) return false
+  if (!isValidUrl) {
+    console.error('[API URL] Invalid URL rejected:', url)
+    return false
+  }
+  const configPath = path.join(app.getPath('userData'), 'api-config.json')
   try {
-    const configPath = path.join(app.getPath('userData'), 'api-config.json')
     fs.writeFileSync(configPath, JSON.stringify({ apiUrl: url }, null, 2))
     return true
-  } catch { return false }
+  } catch (e) {
+    console.error('[API URL] Failed to save:', e)
+    return false
+  }
 })
 
 ipcMain.on('order-clear', () => {
@@ -561,168 +1004,320 @@ ipcMain.on('order-complete', (_event, orderNumber) => {
   }
 })
 
-// 打印小票
+/**
+ * 打印小票 - Windows原生打印 或 网络打印
+ */
 ipcMain.handle('print-receipt', async (_event, data) => {
+  console.log('[PRINT] print-receipt called with:', JSON.stringify({
+    printerName: data?.printerName,
+    printerHost: data?.printerHost,
+    printerPort: data?.printerPort,
+    hasItems: !!data?.items?.length
+  }))
   try {
+    console.log('[PRINT] Preparing to print receipt')
+
+    // USB 打印机：优先使用 Windows 原生打印
+    // 网络打印机：通过 RAW 端口打印
     if (process.platform === 'win32') {
       try {
         await printViaWindowsRaw(data)
+        console.log('[PRINT] Windows print successful')
         return { success: true }
       } catch (winError: any) {
+        console.log('[PRINT] Windows print failed:', winError.message)
+        // Windows 打印失败后尝试网络打印（如果是网络打印机）
         const printerHost = data.printerHost || process.env.PRINTER_HOST
         if (printerHost) {
           try {
             const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-            await printViaNetwork(generateReceiptText(data), printerHost, printerPort)
+            const text = generateReceiptText(data)
+            await printViaNetwork(text, printerHost, printerPort)
+            console.log('[PRINT] Network print successful')
             return { success: true }
-          } catch {}
+          } catch (netError: any) {
+            console.log('[PRINT] Network print also failed:', netError.message)
+            return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` }
+          }
         }
         return { success: false, error: winError.message }
       }
     }
+
+    // 非 Windows 平台：尝试网络打印
     const printerHost = data.printerHost || process.env.PRINTER_HOST || '192.168.1.100'
     const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
-    await printViaNetwork(generateReceiptText(data), printerHost, printerPort)
+    const text = generateReceiptText(data)
+    await printViaNetwork(text, printerHost, printerPort)
     return { success: true }
   } catch (error: any) {
-    writeCrash(`[PRINT ERROR] ${error.message}`)
+    console.error('[PRINT ERROR]', error)
     return { success: false, error: error.message }
   }
 })
 
+/**
+ * 网络打印 - 直接发送 ESC/POS 命令到打印机
+ */
 function printViaNetwork(text: string, host: string, port: number): Promise<void> {
   const net = require('net')
   return new Promise((resolve, reject) => {
     const client = new net.Socket()
-    const timeout = setTimeout(() => { client.destroy(); reject(new Error('Network print timeout')) }, 10000)
+    const timeout = setTimeout(() => {
+      client.destroy()
+      reject(new Error('Network print timeout'))
+    }, 10000) // 10秒超时
+
     client.connect(port, host, () => {
       clearTimeout(timeout)
+      // 发送 latin1 编码的原始 ESC/POS 数据
       const buffer = Buffer.from(text, 'latin1')
       client.write(buffer, 'latin1', (err: any) => {
-        if (err) { client.end(); reject(err) } else { client.end(); resolve() }
+        if (err) {
+          client.end()
+          reject(err)
+        } else {
+          client.end()
+          console.log('[PRINT] Data sent to', host + ':' + port)
+          resolve()
+        }
       })
     })
-    client.on('error', (err: any) => { clearTimeout(timeout); reject(err) })
-  })
-}
 
-async function printViaWindowsRaw(data: any): Promise<void> {
-  const os = require('os')
-  const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`)
-  fs.writeFileSync(tempFile, generateReceiptText(data), { encoding: 'utf8' })
-  const printerName = data.printerName || ''
-  let cmd: string
-  if (printerName) cmd = `print /D:"${printerName}" "${tempFile}"`
-  else cmd = `print "${tempFile}"`
-  const { exec } = require('child_process')
-  return new Promise((resolve, reject) => {
-    exec(cmd, { timeout: 30000 }, (error: any) => {
-      try { fs.unlinkSync(tempFile) } catch {}
-      if (error) reject(error)
-      else resolve()
+    client.on('error', (err: any) => {
+      clearTimeout(timeout)
+      console.error('[PRINT] Network error:', err.message)
+      reject(err)
     })
   })
 }
 
+/**
+ * Windows 原生打印 - 使用 Windows print 命令
+ */
+async function printViaWindowsRaw(data: any): Promise<void> {
+  // 直接使用 Windows print 命令
+  return new Promise((resolve, reject) => {
+    const text = generateReceiptText(data)
+    const printerName = data.printerName || ''
+    const os = require('os')
+    const path = require('path')
+    const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`)
+
+    // 写入临时文件
+    try {
+      fs.writeFileSync(tempFile, text, { encoding: 'utf8' })
+      console.log('[PRINT] Temp file:', tempFile)
+    } catch (err: any) {
+      console.log('[PRINT] Write file error:', err.message)
+      reject(err)
+      return
+    }
+
+    // 使用 print /D:printerName 直接打印到指定打印机
+    let cmd: string
+    if (printerName) {
+      cmd = `print /D:"${printerName}" "${tempFile}"`
+    } else {
+      // 使用默认打印机
+      cmd = `print "${tempFile}"`
+    }
+
+    console.log('[PRINT] Printer:', printerName || 'default')
+    console.log('[PRINT] Command:', cmd)
+
+    execChild(cmd, { timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
+      console.log('[PRINT] stdout:', stdout)
+      console.log('[PRINT] stderr:', stderr)
+      try { fs.unlinkSync(tempFile) } catch (e) {}
+      if (error) {
+        console.log('[PRINT] Error:', error.message)
+        reject(error)
+      } else {
+        console.log('[PRINT] Done')
+        resolve()
+      }
+    })
+  })
+}
+
+/**
+ * 打开钱箱 - USB打印机优先Windows原生，网络打印机用网络
+ */
 ipcMain.handle('open-cash-drawer', async (_event, data) => {
   try {
+    console.log('[CASH DRAWER] Opening drawer')
+
+    // USB 打印机：使用 Windows 原生方式
     if (process.platform === 'win32') {
       try {
         await openCashDrawerViaWindows(data.printerName)
+        console.log('[CASH DRAWER] Windows drawer successful')
         return { success: true }
       } catch (winError: any) {
+        console.log('[CASH DRAWER] Windows drawer failed:', winError.message)
+        // Windows 失败后尝试网络（如果是网络打印机）
         const printerHost = data?.printerHost || process.env.PRINTER_HOST
         if (printerHost) {
           try {
-            await openCashDrawerViaNetwork(printerHost, data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100'))
+            const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
+            await openCashDrawerViaNetwork(printerHost, printerPort)
+            console.log('[CASH DRAWER] Network drawer successful')
             return { success: true }
-          } catch {}
+          } catch (netError: any) {
+            console.log('[CASH DRAWER] Network also failed:', netError.message)
+            return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` }
+          }
         }
         return { success: false, error: winError.message }
       }
     }
+
+    // 非 Windows：尝试网络钱箱
     const printerHost = data?.printerHost || process.env.PRINTER_HOST || '192.168.1.100'
-    await openCashDrawerViaNetwork(printerHost, data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100'))
+    const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100')
+    await openCashDrawerViaNetwork(printerHost, printerPort)
     return { success: true }
   } catch (error: any) {
-    writeCrash(`[CASH DRAWER ERROR] ${error.message}`)
+    console.error('[CASH DRAWER ERROR]', error)
     return { success: false, error: error.message }
   }
+})
+
+/**
+ * Windows 原生打开钱箱 - 通过 RAW 端口发送钱箱命令
+ */
+async function openCashDrawerViaWindows(printerName?: string): Promise<void> {
+  const { exec } = require('child_process')
+  const os = require('os')
+  const path = require('path')
+  const fs = require('fs')
+
+  // ESC/POS 钱箱弹出命令: ESC p m t1 t2
+  // 标准: 0x1B 0x70 0x00 0x32 0x32 (50ms脉冲)
+  const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32])
+  const tempFile = path.join(os.tmpdir(), `drawer_${Date.now()}.bin`)
+  fs.writeFileSync(tempFile, cashDrawerCmd)
+
+  const escapedFile = tempFile.replace(/'/g, "''")
+
+  let cmd: string
+  if (printerName) {
+    // 指定了打印机名称 - 使用该打印机
+    const escapedPrinter = printerName.replace(/'/g, "''")
+    cmd = `powershell -Command "try { $p = Get-Printer -Name '${escapedPrinter}' -ErrorAction Stop; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
+  } else {
+    // 没有指定打印机 - 获取默认打印机
+    cmd = `powershell -Command "try { $p = Get-Printer | Where-Object { $_.Default } | Select-Object -First 1; if (-not $p) { $p = Get-Printer | Select-Object -First 1 }; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`
+  }
+
+  return new Promise((resolve, reject) => {
+    exec(cmd, { timeout: 10000 }, (error: any) => {
+      try { fs.unlinkSync(tempFile) } catch (e) {}
+      if (error) {
+        reject(error)
+      } else {
+        resolve()
+      }
+    })
+  })
 }
 
+/**
+ * 网络打开钱箱
+ */
 function openCashDrawerViaNetwork(host: string, port: number): Promise<void> {
   const net = require('net')
+  // ESC/POS 钱箱命令
   const cashDrawerCommand = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32])
   return new Promise((resolve, reject) => {
     const client = new net.Socket()
-    const timeout = setTimeout(() => { client.destroy(); reject(new Error('Cash drawer timeout')) }, 5000)
+    const timeout = setTimeout(() => {
+      client.destroy()
+      reject(new Error('Cash drawer network timeout'))
+    }, 5000)
     client.connect(port, host, () => {
       clearTimeout(timeout)
       client.write(cashDrawerCommand)
       client.end()
+      console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port)
       resolve()
     })
-    client.on('error', (err: any) => { clearTimeout(timeout); reject(err) })
-  })
-}
-
-async function openCashDrawerViaWindows(printerName?: string): Promise<void> {
-  const os = require('os')
-  const fs = require('fs')
-  const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32])
-  const tempFile = path.join(os.tmpdir(), `drawer_${Date.now()}.bin`)
-  fs.writeFileSync(tempFile, cashDrawerCmd)
-  const { exec } = require('child_process')
-  return new Promise((resolve, reject) => {
-    exec(`copy /b "${tempFile}" "\\\\${require('os').hostname()}\\${printerName || 'default'}"`, { timeout: 10000 }, (error: any) => {
-      try { fs.unlinkSync(tempFile) } catch {}
-      if (error) reject(error)
-      else resolve()
+    client.on('error', (err: any) => {
+      clearTimeout(timeout)
+      console.error('[CASH DRAWER ERROR]', err.message)
+      reject(err)
     })
   })
 }
 
+/**
+ * 生成小票文本 (58mm打印机, 32字符宽)
+ */
 function generateReceiptText(data: any): string {
   const lines: string[] = []
   const width = 32
-  if (data.header) { lines.push(centerText(data.header, width)); lines.push(repeatChar('=', width)) }
+
+  if (data.header) {
+    lines.push(centerText(data.header, width))
+    lines.push(repeatChar('=', width))
+  }
+
   lines.push(`No   : ${data.orderNum || ''}`)
   lines.push(`Tgl   : ${formatDateTime()}`)
   lines.push(repeatChar('-', width))
   lines.push('ITEM              QTY     HARGA')
   lines.push(repeatChar('-', width))
+
   if (data.items && data.items.length > 0) {
     data.items.forEach((item: any) => {
       const name = truncate(`${item.productName} ${item.specName}`, 16).padEnd(16)
       const qty = String(item.quantity).padStart(3)
       const price = formatRp(item.unitPrice * item.quantity).padStart(10)
       lines.push(`${name}${qty}${price}`)
+
       if (item.addons && item.addons.length > 0) {
-        item.addons.forEach((addon: any) => lines.push(`  + ${truncate(addon.name, 20)}`))
+        item.addons.forEach((addon: any) => {
+          lines.push(`  + ${truncate(addon.name, 20)}`)
+        })
       }
-      const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ')
-      if (mods) lines.push(`  [${mods}]`)
+
+      if (item.sugarLevelName || item.iceLevelName) {
+        const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ')
+        lines.push(`  [${mods}]`)
+      }
     })
   }
+
   lines.push(repeatChar('-', width))
   lines.push(`${'Subtotal:'.padEnd(20)}${formatRp(data.subtotal || 0).padStart(10)}`)
   lines.push(`${'Pajak:'.padEnd(20)}${formatRp(data.tax || 0).padStart(10)}`)
-  if (data.discount && data.discount > 0) lines.push(`${'Diskon:'.padEnd(20)}-${formatRp(data.discount).padStart(10)}`)
+  if (data.discount && data.discount > 0) {
+    lines.push(`${'Diskon:'.padEnd(20)}-${formatRp(data.discount).padStart(10)}`)
+  }
   lines.push(repeatChar('-', width))
   lines.push(`${'TOTAL:'.padEnd(20)}${formatRp(data.total || 0).padStart(10)}`)
+
   if (data.paidAmount) {
     lines.push(repeatChar('-', width))
     lines.push(`${'Bayar:'.padEnd(20)}${formatRp(data.paidAmount).padStart(10)}`)
     lines.push(`${'Kembalian:'.padEnd(20)}${formatRp(data.change || 0).padStart(10)}`)
   }
+
   if (data.memberName) {
     lines.push(repeatChar('-', width))
     lines.push(`Member: ${data.memberName}`)
-    if (data.pointsRedeemed && data.pointsRedeemed > 0) lines.push(`Points: -${data.pointsRedeemed}`)
+    if (data.pointsRedeemed && data.pointsRedeemed > 0) {
+      lines.push(`Points: -${data.pointsRedeemed}`)
+    }
   }
+
   lines.push('')
-  if (data.footer) lines.push(centerText(data.footer, width))
+  if (data.footer) {
+    lines.push(centerText(data.footer, width))
+  }
   lines.push(centerText('=== TERIMA KASIH ===', width))
+
   return lines.join('\n') + '\n\n\n\n\n'
 }
 
@@ -730,23 +1325,43 @@ function centerText(text: string, width: number): string {
   const padding = Math.max(0, Math.floor((width - text.length) / 2))
   return ' '.repeat(padding) + text
 }
-function repeatChar(char: string, count: number): string { return char.repeat(count) }
-function truncate(str: string, len: number): string { return str.length > len ? str.slice(0, len) : str }
-function formatRp(amount: number): string { return 'Rp ' + amount.toLocaleString('id-ID') }
-function formatDateTime(): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
+function repeatChar(char: string, count: number): string {
+  return char.repeat(count)
 }
 
-// 单例锁
+function truncate(str: string, len: number): string {
+  return str.length > len ? str.slice(0, len) : str
+}
+
+function formatRp(amount: number): string {
+  return 'Rp ' + amount.toLocaleString('id-ID')
+}
+
+function formatDateTime(): string {
+  const now = new Date()
+  const day = String(now.getDate()).padStart(2, '0')
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const year = now.getFullYear()
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  const seconds = String(now.getSeconds()).padStart(2, '0')
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`
+}
+
+// 单例锁：确保只有一个实例运行
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
+  console.log('[Electron] Another instance is already running. Quitting.')
   app.quit()
 }
 
+// second-instance 事件在任何时候都可能触发，在 whenReady 之前也会
+// 所以这里使用延迟引用 mainWindow（whenReady 里才创建）
 app.on('second-instance', () => {
+  // 延迟聚焦到主窗口（等待 whenReady 完成）
   setTimeout(() => {
+    const { BrowserWindow } = require('electron')
     const wins = BrowserWindow.getAllWindows()
     if (wins.length > 0) {
       const win = wins[0]
@@ -756,45 +1371,73 @@ app.on('second-instance', () => {
   }, 1000)
 })
 
+// 应用启动
 app.whenReady().then(async () => {
+  console.log('[Electron] App ready, starting up...')
+
+  // WebView2 检查（仅 Windows，Electron 28+ 已内置 WebView2 但旧系统可能缺失）
   if (process.platform === 'win32') {
     const webview2Available = checkWebView2()
+    console.log('[Electron] WebView2 available:', webview2Available)
     if (!webview2Available) {
-      dialog.showErrorBox('缺少 WebView2 运行时', '请先安装 Microsoft Edge WebView2 运行时。')
+      const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。'
+      console.error('[Electron] WebView2 MISSING:', msg)
+      dialog.showErrorBox('缺少 WebView2 运行时', msg)
       app.quit()
       return
     }
   }
 
+  // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
   globalShortcut.register('CommandOrControl+Shift+D', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.executeJavaScript(`window.location.hash = '#/diagnostics'`)
     }
   })
 
+  // 先启动本地服务器（仅打包模式）
   if (app.isPackaged) {
+    // 启动服务器并等待 schema 同步完成
+    // 注意：即使这里抛异常，也不应该导致整个 app 退出
     try {
       await startLocalServer()
     } catch (err: any) {
-      writeCrash(`[Electron] startLocalServer() threw: ${err.message} ${err.stack || ''}`)
+      log.error('[Electron] startLocalServer() threw:', err.message, err.stack)
+      // 不退出，继续尝试启动窗口和服务器
     }
 
+    // 等待服务器 port 7072 可用后再创建窗口
     try {
       await waitForPort(7072, 60000)
-      try { createMainWindow() } catch (e) { writeCrash(`[Electron] Failed to create main window: ${e}`) }
-      try { createCustomerWindow() } catch (e) {}
+      log.log('[Electron] Server is ready, creating windows...')
+      try {
+        createMainWindow()
+        console.log('[Electron] Main window created')
+      } catch (e) {
+        console.error('[Electron] Failed to create main window:', e)
+      }
+      try {
+        createCustomerWindow()
+        console.log('[Electron] Customer window created')
+      } catch (e) {
+        console.warn('[Electron] Failed to create customer window:', e)
+      }
       if (mainWindow) {
         setupUpdater(mainWindow)
         setTimeout(() => checkForUpdatesOnStart(), 10000)
       }
     } catch (err: any) {
-      writeCrash(`[Electron] Server failed to start: ${err.message}`)
+      log.error('[Electron] Server failed to start:', err.message)
+      // 即使服务器启动失败也创建主窗口，显示错误页
       createMainWindow()
       if (mainWindow) {
-        showErrorPageSync('服务器启动失败', '本地 API 服务器未能成功启动。', `错误：${err.message}`)
+        showErrorPage(mainWindow, '服务器启动失败',
+          '本地 API 服务器未能成功启动，应用程序无法正常工作。',
+          `错误：${err.message}\n\n请尝试重新安装应用程序。\n如果问题持续，请查看日志文件获取详细信息。`)
       }
     }
   } else {
+    // 开发模式：直接创建窗口（vite dev server 已运行）
     createMainWindow()
     createCustomerWindow()
     if (mainWindow) {
@@ -806,7 +1449,9 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   stopLocalServer()
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
 })
 
 app.on('activate', () => {
@@ -816,6 +1461,7 @@ app.on('activate', () => {
   }
 })
 
+// 确保退出时关闭服务器
 app.on('before-quit', () => {
   stopLocalServer()
 })
