@@ -5,7 +5,7 @@ const resources = {
   id: {
     translation: {
       auth: {
-        appName: 'Bubble Tea POS',
+        appName: 'YOUME POS',
         appSubtitle: 'Sistem Kasir',
         loginTitle: 'Masuk',
         loginSubtitle: 'Selamat datang kembali',
@@ -28,7 +28,7 @@ const resources = {
         currentApi: 'API Saat Ini',
         noAccount: 'Belum punya akun?',
         createAccount: 'Daftar',
-        copyright: '© 2026 Bubble Tea POS System',
+        copyright: '© 2026 YOUME POS System',
         login: 'Masuk',
         offlineLogin: 'Masuk Offline',
         offlineLoginFailed: 'Login offline gagal. Periksa koneksi internet.',
@@ -576,8 +576,8 @@ const resources = {
   en: {
     translation: {
       auth: {
-        appName: 'Bubble Tea POS',
-        appSubtitle: 'Bubble Tea Shop POS System',
+        appName: 'YOUME POS',
+        appSubtitle: 'YOUME POS System',
         loginTitle: 'Login',
         loginSubtitle: 'Welcome back',
         phone: 'Phone Number',
@@ -599,7 +599,7 @@ const resources = {
         currentApi: 'Current API',
         noAccount: "Don't have an account?",
         createAccount: 'Sign up',
-        copyright: '© 2026 Bubble Tea POS System',
+        copyright: '© 2026 YOUME POS System',
         login: 'Login',
         offlineLogin: 'Offline Login',
         offlineLoginFailed: 'Offline login failed. Please check your internet connection.',
@@ -1141,7 +1141,7 @@ const resources = {
   zh: {
     translation: {
       auth: {
-        appName: 'Bubble Tea POS',
+        appName: 'YOUME POS',
         appSubtitle: '奶茶店收银系统',
         loginTitle: '登录',
         loginSubtitle: '欢迎回来',
@@ -1164,7 +1164,7 @@ const resources = {
         currentApi: '当前API',
         noAccount: '还没有账号？',
         createAccount: '注册',
-        copyright: '© 2026 Bubble Tea POS System',
+        copyright: '© 2026 YOUME POS System',
         login: '登录',
         offlineLogin: '离线登录',
         offlineLoginFailed: '离线登录失败，请检查网络连接',

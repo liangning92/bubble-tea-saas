@@ -776,7 +776,7 @@ export function POSPage() {
         const storeInfoData = configs.storeInfo || {}
         if (storeInfoData.storeName || storeInfoData.address || storeInfoData.phone) {
           setStoreInfo({
-            storeName: storeInfoData.storeName || 'Bubble Tea Shop',
+            storeName: storeInfoData.storeName || 'YOUME',
             address: storeInfoData.address || '',
             phone: storeInfoData.phone || '',
             openingHours: storeInfoData.openingHours || ''
@@ -1065,7 +1065,7 @@ export function POSPage() {
           const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
           electronAPI?.sendPrintReceipt?.({
             orderNum: 'TEST-' + Date.now(),
-            header: posReceipt.header || 'Bubble Tea Shop',
+            header: posReceipt.header || 'YOUME',
             footer: posReceipt.footer || 'Test Print',
             printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt'),
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
@@ -2237,7 +2237,7 @@ export function POSPage() {
         <div className="flex items-center gap-4">
           <span className="text-4xl">🧋</span>
           <div className="flex flex-col">
-            <span className="text-white font-bold text-lg">{'Bubble Tea'}</span>
+            <span className="text-white font-bold text-lg">{'YOUME'}</span>
             <span className="text-white/70 text-base">{user?.staff?.name || t('pos.cashier')}</span>
           </div>
           {selectedChannel && (

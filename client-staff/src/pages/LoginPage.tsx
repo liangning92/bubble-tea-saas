@@ -208,7 +208,7 @@ export function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-gray-400 text-sm mt-6">
-          © 2026 Bubble Tea POS System
+          © 2026 YOUME POS System
         </p>
       </div>
     </div>

@@ -204,7 +204,7 @@ router.delete('/:storeId/:key', authenticate, authorize('admin'), async (req: Au
 // Default configs for POS
 const defaultPOSConfigs = {
   'pos.default_payment': 'cash',
-  'pos.receipt_header': 'Bubble Tea Shop',
+  'pos.receipt_header': 'YOUME',
   'pos.receipt_footer': 'Thank you!',
   'pos.offline_mode': true,
   'pos.sync_interval': 60,
