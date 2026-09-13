@@ -322,6 +322,9 @@ export function POSPage() {
     channelGoFood: true,
     channelGrab: true,
     channelShopee: true,
+    // 布局样式
+    productImage: 'thumb',
+    compactMode: false,
     // 快捷键配置
     hotkeys: {
       newOrder: 'F1',
@@ -804,12 +807,16 @@ export function POSPage() {
             channelGoFood: posLayoutData.channelGoFood ?? prev.channelGoFood,
             channelGrab: posLayoutData.channelGrab ?? prev.channelGrab,
             channelShopee: posLayoutData.channelShopee ?? prev.channelShopee,
+            // 布局样式
+            productImage: posLayoutData.productImage || prev.productImage,
+            compactMode: posLayoutData.compactMode ?? prev.compactMode,
             // 快捷键
             hotkeys: posLayoutData.hotkeys || prev.hotkeys,
           }))
         }
 
         // 工具栏设置 (包含按钮标签)
+        // showCash/showExpense 存在 posLayout，toolbarSettings 只存按钮开关和标签
         if (configs.toolbarSettings) {
           setPosLayout(prev => ({
             ...prev,
@@ -817,7 +824,6 @@ export function POSPage() {
             showHistory: configs.toolbarSettings.showHistory ?? prev.showHistory,
             showScan: configs.toolbarSettings.showScan ?? prev.showScan,
             showShift: configs.toolbarSettings.showShift ?? prev.showShift,
-            showCash: configs.toolbarSettings.showCash ?? prev.showCash,
             showExpense: configs.toolbarSettings.showExpense ?? prev.showExpense,
             // Admin 保存的 key 是 toolbarLabels，但 POS 也可能用 labels 作为 fallback
             toolbarLabels: configs.toolbarSettings.toolbarLabels || configs.toolbarSettings.labels || prev.toolbarLabels,
