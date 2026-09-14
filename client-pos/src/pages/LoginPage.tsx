@@ -146,13 +146,7 @@ export function LoginPage() {
 
           {/* Logo & Brand */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center shadow-lg shadow-primary/20">
-              <img src="/youme-logo-red.png" alt="YOUME" className="w-24 h-12 object-contain" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {t('auth.appName')}
-            </h1>
-            <p className="text-gray-500 mt-1 text-sm">{t('auth.appSubtitle')}</p>
+            <img src="/youme-logo-red.png" alt="YOUME" className="h-16 w-auto mx-auto object-contain" />
           </div>
 
           {/* Login card */}
