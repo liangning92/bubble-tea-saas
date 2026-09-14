@@ -272,7 +272,7 @@ export function CustomerDisplayPage() {
       case 'logo':
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <img src="/youme-logo-dark.png" alt="YOUME" className="w-64 h-32 object-contain" />
+            <img src="/youme-logo-red.png" alt="YOUME" className="w-64 h-32 object-contain" />
           </div>
         )
       default:

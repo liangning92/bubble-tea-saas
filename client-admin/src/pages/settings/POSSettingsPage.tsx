@@ -326,7 +326,7 @@ const DualScreenPreview: React.FC<{
       case 'logo':
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <img src="/youme-logo.png" alt="YOUME" className="h-20 w-auto object-contain" />
+            <img src="/youme-logo-red.png" alt="YOUME" className="h-20 w-auto object-contain" />
           </div>
         )
       default:

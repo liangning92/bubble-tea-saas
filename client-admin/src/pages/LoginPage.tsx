@@ -150,7 +150,7 @@ export function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="mx-auto mb-4">
-            <img src="/youme-logo-light.png" alt="YOUME" className="h-12 w-auto" style={{ display: 'block' }} />
+            <img src="/youme-logo-red.png" alt="YOUME" className="h-12 w-auto" style={{ display: 'block' }} />
           </div>
           <h1 className="text-2xl font-bold" style={{ color: '#EC6D88' }}>
             YOUME

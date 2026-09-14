@@ -115,9 +115,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm relative z-10">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center shadow-lg shadow-primary/20">
-            <span className="text-3xl">🧋</span>
-          </div>
+          <img src="/youme-logo-red.png" alt="YOUME" className="h-12 w-auto mx-auto mb-4 object-contain" />
           <h1 className="text-2xl font-bold text-gray-900">{t('auth.appName')}</h1>
           <p className="text-gray-500 mt-1">{t('auth.loginTitle')}</p>
         </div>

@@ -152,7 +152,7 @@ export function AddonListPage() {
           <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
         ) : addons.length === 0 ? (
           <div className="text-center py-8">
-            <div className="mb-3"><img src="/youme-logo.png" alt="YOUME" className="h-12 w-auto object-contain" /></div>
+            <div className="mb-3"><img src="/youme-logo-red.png" alt="YOUME" className="h-12 w-auto object-contain" /></div>
             <p className="text-gray-500">{t('common.noData')}</p>
             <button onClick={() => openModal()} className="btn-primary mt-4">
               {t('addons.addFirst')}

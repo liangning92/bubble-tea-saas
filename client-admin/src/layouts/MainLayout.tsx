@@ -56,7 +56,7 @@ export function MainLayout() {
           {sidebarOpen && (
             <div className="flex items-center gap-2">
               <img
-                src={sidebarOpen ? "/youme-logo-light.png" : "/youme-logo-dark.png"}
+                src={sidebarOpen ? "/youme-logo-red.png" : "/youme-logo-red.png"}
                 alt="YOUME"
                 className="h-10 w-auto object-contain"
               />
