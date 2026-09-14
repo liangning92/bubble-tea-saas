@@ -2232,25 +2232,25 @@ export function POSPage() {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Header + Toolbar 合并 - 品牌底色 */}
-      <header className="bg-primary px-4 py-4 flex items-center justify-between">
+      <header className="bg-primary px-3 py-2 flex items-center justify-between gap-2">
         {/* 左侧：店铺信息 */}
-        <div className="flex items-center gap-4">
-          <img src="/youme-logo-white.png" alt="YOUME" className="h-10 w-auto object-contain" />
+        <div className="flex items-center gap-3">
+          <img src="/youme-logo-white.png" alt="YOUME" className="h-8 w-auto object-contain" />
           <div className="flex flex-col">
-            <span className="text-white font-bold text-lg">{'YOUME'}</span>
-            <span className="text-white/70 text-base">{user?.staff?.name || t('pos.cashier')}</span>
+            <span className="text-white font-bold text-sm">{'YOUME'}</span>
+            <span className="text-white/70 text-xs">{user?.staff?.name || t('pos.cashier')}</span>
           </div>
           {selectedChannel && (
             <span
               onClick={() => setShowChannelModal(true)}
-              className="ml-3 px-4 py-2 text-white rounded-xl text-base font-medium cursor-pointer hover:bg-white/20 transition-colors"
+              className="px-3 py-1 text-white rounded-xl text-sm font-medium cursor-pointer hover:bg-white/20 transition-colors"
               style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
             >
               {selectedChannel.icon} {t(selectedChannel.nameKey)}
               {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
             </span>
           )}
-          <span className={`px-4 py-2 rounded-xl text-base font-medium ${
+          <span className={`px-3 py-1 rounded-xl text-sm font-medium ${
             connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
             connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
             'bg-red-500 text-white animate-pulse'
@@ -2271,7 +2271,7 @@ export function POSPage() {
                 localStorage.setItem('pos_lang', l.code)
                 setLang(l.code)
               }}
-              className={`px-4 py-2 rounded-xl text-base font-medium touch-feedback ${
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium touch-feedback ${
                 lang === l.code ? 'bg-white text-primary' : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
@@ -2294,7 +2294,7 @@ export function POSPage() {
           if (posLayout.showShift !== false) {
             toolbarButtons.push({
               id: 'shift',
-              icon: <Users size={32} />,
+              icon: <Users size={20} />,
               labelKey: posLayout.toolbarLabels?.shift || 'toolbar.shift',
               onClick: () => setShowShiftModal(true)
             })
@@ -2302,7 +2302,7 @@ export function POSPage() {
           if (posLayout.showSuspend !== false) {
             toolbarButtons.push({
               id: 'suspend',
-              icon: <Clock size={32} />,
+              icon: <Clock size={20} />,
               labelKey: posLayout.toolbarLabels?.suspend || 'toolbar.suspend',
               onClick: () => setShowSuspendModal(true),
               badge: suspendedOrders.length
@@ -2311,7 +2311,7 @@ export function POSPage() {
           if (posLayout.showScan !== false) {
             toolbarButtons.push({
               id: 'scan',
-              icon: <ScanLine size={32} />,
+              icon: <ScanLine size={20} />,
               labelKey: posLayout.toolbarLabels?.scan || 'toolbar.scan',
               onClick: () => setShowScanModal(true)
             })
@@ -2319,7 +2319,7 @@ export function POSPage() {
           if (posLayout.showHistory !== false) {
             toolbarButtons.push({
               id: 'history',
-              icon: <FileText size={32} />,
+              icon: <FileText size={20} />,
               labelKey: posLayout.toolbarLabels?.history || 'toolbar.history',
               onClick: () => setShowHistoryModal(true)
             })
@@ -2327,7 +2327,7 @@ export function POSPage() {
           if (posLayout.showCash === true) {
             toolbarButtons.push({
               id: 'cash',
-              icon: <Wallet size={32} />,
+              icon: <Wallet size={20} />,
               labelKey: posLayout.toolbarLabels?.cash || 'toolbar.cash',
               onClick: () => setShowCashModal(true)
             })
@@ -2336,14 +2336,14 @@ export function POSPage() {
           if (posLayout.showExpense !== false) {
             toolbarButtons.push({
               id: 'expense',
-              icon: <Receipt size={32} />,
+              icon: <Receipt size={20} />,
               labelKey: 'toolbar.expense',
               onClick: () => setShowExpenseModal(true)
             })
           }
           toolbarButtons.push({
             id: 'logout',
-            icon: <X size={32} />,
+            icon: <X size={20} />,
             labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
             onClick: () => setShowLogoutModal(true)
           })
@@ -2354,7 +2354,7 @@ export function POSPage() {
                 <button
                   key={btn.id}
                   onClick={btn.onClick}
-                  className="flex-1 flex flex-col items-center justify-center py-4 px-3 text-white/90 hover:bg-white/20 rounded-2xl touch-feedback min-h-[80px] relative"
+                  className="flex-1 flex flex-col items-center justify-center py-2 px-2 text-white/90 hover:bg-white/20 rounded-xl touch-feedback min-h-[64px] relative"
                 >
                   <div className="relative">
                     {btn.icon}
