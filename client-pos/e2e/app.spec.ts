@@ -51,7 +51,7 @@ async function getDevToolsTarget(port: number): Promise<{ wsUrl: string; pageUrl
 
 test.describe('POS App E2E', () => {
   test('login page renders and accepts input', async () => {
-    const exePath = process.env.ELECTRON_EXE || 'dist/win-unpacked/bubble-tea-pos.exe'
+    const exePath = process.env.ELECTRON_EXE || 'dist/win-unpacked/YOUME POS.exe'
     console.log('Launching:', exePath)
 
     const appProcess = spawn(exePath, ['--disable-gpu', '--no-sandbox', '--remote-debugging-port=9222'], {
@@ -130,7 +130,7 @@ test.describe('POS App E2E', () => {
   })
 
   test('app loads without crash', async () => {
-    const exePath = process.env.ELECTRON_EXE || 'dist/win-unpacked/bubble-tea-pos.exe'
+    const exePath = process.env.ELECTRON_EXE || 'dist/win-unpacked/YOUME POS.exe'
     const appProcess = spawn(exePath, ['--disable-gpu', '--no-sandbox', '--remote-debugging-port=9223'], {
       stdio: 'ignore',
       detached: false,

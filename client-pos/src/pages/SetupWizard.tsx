@@ -43,7 +43,7 @@ export function SetupWizard() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img src="/youme-logo.png" alt="YOUME" className="w-32 h-16 object-contain mb-2" />
-          <h1 className="text-2xl font-bold text-gray-800">BubbleTeaPOS</h1>
+          <h1 className="text-2xl font-bold text-gray-800">YOUME POS</h1>
           <p className="text-gray-500 text-sm mt-1">首次设置 · First Setup</p>
         </div>
 
@@ -173,7 +173,7 @@ export function SetupWizard() {
 
         {/* Footer */}
         <p className="text-center text-gray-400 text-xs mt-6">
-          BubbleTeaPOS v2026.7
+          YOUME POS v2026.9
         </p>
       </div>
     </div>

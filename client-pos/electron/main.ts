@@ -615,7 +615,7 @@ function createMainWindow() {
     },
     // Windows 高 DPI 设置
     titleBarStyle: process.platform === 'win32' ? 'default' : undefined,
-    title: 'Bubble Tea POS',
+    title: 'YOUME POS',
     backgroundColor: '#ffffff'
   })
 
@@ -660,7 +660,7 @@ function createMainWindow() {
     const diagWindow = new BrowserWindow({
       width: 900,
       height: 650,
-      title: '诊断信息 - Bubble Tea POS',
+      title: '诊断信息 - YOUME POS',
       alwaysOnTop: true
     })
     const dir = path.dirname(indexPath)
@@ -692,7 +692,7 @@ function createMainWindow() {
     const logPathDisplay = logPath.replace(/</g, '&lt;')
     diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>诊断信息 - Bubble Tea POS</title>
+<head><meta charset="UTF-8"><title>诊断信息 - YOUME POS</title>
 <style>
 body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
 pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto;word-wrap:break-word;white-space:pre-wrap}

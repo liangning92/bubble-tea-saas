@@ -1,9 +1,9 @@
 {
-  "name": "bubble-tea-pos",
+  "name": "youme-pos",
   "private": true,
-  "version": "2026.8.208",
-  "description": "Bubble Tea POS System",
-  "author": "Bubble Tea Team",
+  "version": "2026.9.230",
+  "description": "YOUME POS System",
+  "author": "YOUME Team",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite --port 6063",
