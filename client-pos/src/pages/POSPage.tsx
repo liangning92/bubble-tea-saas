@@ -2579,7 +2579,7 @@ export function POSPage() {
             )}
             <div className="flex justify-between font-bold text-xl pt-2 border-t">
               <span>{t('pos.total')}</span>
-              <span className="text-primary text-2xl">{formatCurrency(total)}</span>
+              <span className="text-primary text-xl">{formatCurrency(total)}</span>
             </div>
           </div>
 
@@ -2587,7 +2587,7 @@ export function POSPage() {
           <div className="p-4 border-t space-y-3 bg-white">
             {cart.length > 0 && (
               <>
-                <button onClick={() => { playSoundWithSettings('keypress', soundSettings.keypress); setShowDiscountModal(true) }} className="w-full py-3 border-2 border-dashed border-primary/30 rounded-xl text-primary font-bold text-base touch-feedback">
+                <button onClick={() => { playSoundWithSettings('keypress', soundSettings.keypress); setShowDiscountModal(true) }} className="w-full py-2 border-2 border-dashed border-primary/30 rounded-xl text-primary font-bold text-base touch-feedback">
                   + {t('pos.discount')}
                 </button>
                 <button onClick={() => {
@@ -2599,7 +2599,7 @@ export function POSPage() {
                   const orderNum = `${dateStr}${random}`
                   setPaymentModalOrderNum(orderNum)
                   setShowPaymentModal(true)
-                }} className="w-full py-5 bg-primary text-white rounded-xl font-bold text-xl active:scale-95 transition-transform touch-feedback">
+                }} className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base active:scale-95 transition-transform touch-feedback">
                   💰 {t('pos.checkout')}
                 </button>
               </>
@@ -2614,7 +2614,7 @@ export function POSPage() {
       {showAddonModal && selectedProduct && selectedSpec && (
   <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddonModal(false)}>
     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
-      <div className="bg-primary text-white px-5 py-4 flex justify-between items-center">
+      <div className="bg-primary text-white px-4 py-3 flex justify-between items-center">
         <div>
           <h2 className="text-lg font-bold">{selectedProduct.name}</h2>
           <p className="text-sm opacity-90">{selectedSpec.name} - {formatCurrency(selectedSpec.price)}</p>
@@ -2694,7 +2694,7 @@ export function POSPage() {
 {showPaymentModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPaymentModal(false)}>
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
-            <div className="bg-primary text-white px-5 py-4 flex justify-between items-center flex-shrink-0">
+            <div className="bg-primary text-white px-4 py-3 flex justify-between items-center flex-shrink-0">
               <h2 className="font-bold">{t('pos.confirmPayment')}</h2>
               <button onClick={async () => {
                 // 记录关闭弹窗日志
@@ -2724,12 +2724,12 @@ export function POSPage() {
               </div>
             </div>
             {/* 顾客人数显示（已在渠道选择时设置） */}
-            <div className="px-4 py-3 bg-blue-50 border-b flex items-center justify-between">
+            <div className="px-4 py-2 bg-blue-50 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-lg">👥</span>
+                <span className="text-base">👥</span>
                 <span className="text-sm font-medium text-gray-700">{t('settings.customerCount')}</span>
               </div>
-              <span className="text-xl font-bold">{selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount}</span>
+              <span className="text-base font-bold">{selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount}</span>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               <p className="text-sm font-medium mb-2">{t('pos.payment')}</p>
@@ -2763,14 +2763,14 @@ export function POSPage() {
                           if (prev === '0') return String(n)
                           return prev + String(n)
                         })}
-                        className="min-h-12 bg-white border-2 rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
+                        className="min-h-10 bg-white border-2 rounded-xl text-base font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
                       >
                         {n}
                       </button>
                     ))}
                     <button
                       onClick={() => setPaidAmount('')}
-                      className="min-h-12 bg-red-50 border-2 rounded-xl text-base font-bold text-red-500 hover:bg-red-100 touch-feedback"
+                      className="min-h-10 bg-red-50 border-2 rounded-xl text-sm font-bold text-red-500 hover:bg-red-100 touch-feedback"
                     >
                       C
                     </button>
@@ -2780,13 +2780,13 @@ export function POSPage() {
                         if (prev === '0') return '0'
                         return prev + '0'
                       })}
-                      className="min-h-12 bg-white border-2 rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
+                      className="min-h-10 bg-white border-2 rounded-xl text-base font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
                     >
                       0
                     </button>
                     <button
                       onClick={() => setPaidAmount(prev => prev.slice(0, -1))}
-                      className="min-h-12 bg-gray-100 border-2 rounded-xl text-base font-bold hover:bg-gray-200 touch-feedback"
+                      className="min-h-10 bg-gray-100 border-2 rounded-xl text-sm font-bold hover:bg-gray-200 touch-feedback"
                     >
                       ←
                     </button>
@@ -2798,7 +2798,7 @@ export function POSPage() {
                         <button
                           key={amount}
                           onClick={() => setPaidAmount(String(amount))}
-                          className="py-2 border rounded-lg text-xs font-bold hover:bg-primary-light touch-feedback"
+                          className="py-1.5 border rounded-lg text-xs font-bold hover:bg-primary-light touch-feedback"
                         >
                           {formatCurrency(amount)}
                         </button>
@@ -2808,7 +2808,7 @@ export function POSPage() {
                   {change > 0 && (
                     <div className="p-2 bg-green-50 rounded-xl text-right mt-2">
                       <p className="text-xs text-green-600">{t('pos.change')}</p>
-                      <p className="text-base font-bold text-green-600">{formatCurrency(change)}</p>
+                      {formatCurrency(change)}</p>{formatCurrency(change)}</p>
                     </div>
                   )}
                 </div>
@@ -2822,7 +2822,7 @@ export function POSPage() {
                   )}
                   {qrisData.status === 'waiting' && qrisData.qrImage && (
                     <div className="flex flex-col items-center">
-                      <img src={qrisData.qrImage} alt="QRIS" className="w-48 h-48 mx-auto" />
+                      <img src={qrisData.qrImage} alt="QRIS" className="w-40 h-40 mx-auto" />
                       <p className="text-sm text-gray-500 mt-2">{t('pos.scanToPay')}</p>
                       <div className="flex items-center gap-2 mt-2 text-yellow-600">
                         <Loader2 size={16} className="animate-spin" />
@@ -2839,7 +2839,7 @@ export function POSPage() {
               )}
             </div>
             {/* 确认支付按钮 - 固定在底部 */}
-            <div className="flex-shrink-0 p-4 bg-white border-t space-y-2">
+            <div className="flex-shrink-0 p-3 bg-white border-t space-y-2">
               <button
                 onClick={handleCheckout}
                 disabled={
@@ -2848,7 +2848,7 @@ export function POSPage() {
                   (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
                   (paymentMethod === 'qris' && qrisData.status === 'waiting')
                 }
-                className="w-full py-4 bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 touch-feedback"
+                className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base disabled:bg-gray-300 touch-feedback"
               >
                 {isCheckingOut ? t('common.loading') : (paymentMethod === 'qris' && qrisData.status === 'waiting' ? t('pos.waitingPayment') : t('pos.confirmPayment'))}
               </button>
@@ -2886,14 +2886,14 @@ export function POSPage() {
                     if (prev === '0') return String(n)
                     return prev + String(n)
                   })}
-                  className="h-14 bg-white border rounded-xl text-xl font-bold hover:bg-primary-light active:bg-primary-light"
+                  className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light"
                 >
                   {n}
                 </button>
               ))}
               <button
                 onClick={() => setTempDiscount('')}
-                className="h-14 bg-red-50 border rounded-xl text-lg font-bold text-red-500 hover:bg-red-100"
+                className="h-12 bg-red-50 border rounded-xl text-base font-bold text-red-500 hover:bg-red-100"
               >
                 C
               </button>
@@ -2902,13 +2902,13 @@ export function POSPage() {
                   if (prev === '0') return '0'
                   return prev + '0'
                 })}
-                className="h-14 bg-white border rounded-xl text-xl font-bold hover:bg-primary-light active:bg-primary-light"
+                className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light"
               >
                 0
               </button>
               <button
                 onClick={() => setTempDiscount(prev => prev.slice(0, -1))}
-                className="h-14 bg-gray-100 border rounded-xl text-lg font-bold hover:bg-gray-200"
+                className="h-12 bg-gray-100 border rounded-xl text-base font-bold hover:bg-gray-200"
               >
                 ←
               </button>
@@ -2953,7 +2953,7 @@ export function POSPage() {
                 <button
                   key={n}
                   onClick={() => setMemberPhone(prev => prev + String(n))}
-                  className="min-h-14 bg-white border rounded-xl text-xl font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
+                  className="min-h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
                 >
                   {n}
                 </button>
@@ -2966,7 +2966,7 @@ export function POSPage() {
               </button>
               <button
                 onClick={() => setMemberPhone(prev => prev + '0')}
-                className="min-h-14 bg-white border rounded-xl text-xl font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
+                className="min-h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
               >
                 0
               </button>
