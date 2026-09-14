@@ -2808,7 +2808,7 @@ export function POSPage() {
                   {change > 0 && (
                     <div className="p-2 bg-green-50 rounded-xl text-right mt-2">
                       <p className="text-xs text-green-600">{t('pos.change')}</p>
-                      {formatCurrency(change)}</p>{formatCurrency(change)}</p>
+                      <p className="text-base font-bold text-green-600">{formatCurrency(change)}</p>
                     </div>
                   )}
                 </div>

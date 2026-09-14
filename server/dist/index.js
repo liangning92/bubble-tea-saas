@@ -234,7 +234,7 @@ httpServer.listen(env_1.config.port, '0.0.0.0', () => {
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   🧋 Bubble Tea SaaS POS API Server                       ║
+║   🧋 YOUME POS API Server                                ║
 ║                                                           ║
 ║   Environment: ${env_1.config.nodeEnv.padEnd(40)}║
 ║   Port: ${String(env_1.config.port).padEnd(50)}║
