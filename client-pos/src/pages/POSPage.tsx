@@ -2235,7 +2235,7 @@ export function POSPage() {
       <header className="bg-primary px-4 py-4 flex items-center justify-between">
         {/* 左侧：店铺信息 */}
         <div className="flex items-center gap-4">
-          <span className="text-4xl">🧋</span>
+          <img src="/youme-logo-white.png" alt="YOUME" className="h-10 w-auto object-contain" />
           <div className="flex flex-col">
             <span className="text-white font-bold text-lg">{'YOUME'}</span>
             <span className="text-white/70 text-base">{user?.staff?.name || t('pos.cashier')}</span>
