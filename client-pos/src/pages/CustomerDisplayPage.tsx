@@ -212,8 +212,8 @@ export function CustomerDisplayPage() {
         )
       case 'welcome':
         return (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-            <span className="text-3xl font-bold">{dualScreenConfig.welcomeText || 'Welcome'}</span>
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600">
+            <img src="/youme-logo-white.png" alt="YOUME" className="w-96 h-48 object-contain" />
           </div>
         )
       case 'order':
