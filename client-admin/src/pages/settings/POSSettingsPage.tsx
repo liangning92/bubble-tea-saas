@@ -698,11 +698,25 @@ export function POSSettingsPage() {
   const [lastPrinterDetection, setLastPrinterDetection] = useState<string | null>(null)
   const [loadingPrinters, setLoadingPrinters] = useState(false)
 
-  // 获取检测到的打印机列表
+  // 获取检测到的打印机列表（同时触发 POS 客户端重新检测）
   const fetchDetectedPrinters = async () => {
     try {
       setLoadingPrinters(true)
       const apiUrl = localStorage.getItem('api_url') || ''
+      const storeId = user?.storeId || ''
+
+      // 设置触发标志，通知 POS 客户端重新检测打印机
+      // POS 轮询时看到这个标志会执行检测并上报到 /api/hardware/printers
+      await axios.post(`${apiUrl}/api/config`, {
+        storeId,
+        key: 'hardwareSettings',
+        value: JSON.stringify({ triggerPrinterDetect: Date.now() }),
+        category: 'pos'
+      })
+
+      // 等待一下让 POS 上报，然后读取最新结果
+      await new Promise(r => setTimeout(r, 3000))
+
       const response = await axios.get(`${apiUrl}/api/hardware/printers`)
       if (response.data?.printers) {
         setDetectedPrinters(response.data.printers)

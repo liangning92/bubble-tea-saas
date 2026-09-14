@@ -469,6 +469,7 @@ export function POSPage() {
     },
     testPrint: null as number | null,
     testCashDrawer: null as number | null,
+    triggerPrinterDetect: null as number | null,
   })
 
   // 声音设置
@@ -1078,9 +1079,27 @@ export function POSPage() {
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
           const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-          electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt') })
+          electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt'), cashDrawerPulse: hs.cashDrawerPulse || 100 })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
+        }
+
+        // 检测刷新打印机标志（Admin 点刷新按钮时设置）
+        if (hs.triggerPrinterDetect && hs.triggerPrinterDetect !== hardwareSettings.triggerPrinterDetect) {
+          console.log('[POS] Admin triggered printer detect')
+          // 重新检测打印机并上报
+          if (electronAPI?.listPrinters) {
+            try {
+              const result = await electronAPI.listPrinters()
+              console.log('[POS] Detected printers:', result.printers)
+              await posApi.syncPrinters(result.printers || [], user.storeId)
+              console.log('[POS] Printers synced to server')
+            } catch (err) {
+              console.warn('[POS] Failed to detect printers:', err)
+            }
+          }
+          // 清除触发标志
+          posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, triggerPrinterDetect: null }, 'pos')
         }
       } catch (err) {
         // 静默失败，不影响主流程
@@ -1090,7 +1109,7 @@ export function POSPage() {
     // 每5秒轮询硬件配置
     const interval = setInterval(pollHardwareConfig, 5000)
     return () => clearInterval(interval)
-  }, [user?.storeId, hardwareSettings.testPrint, hardwareSettings.testCashDrawer])
+  }, [user?.storeId, hardwareSettings.testPrint, hardwareSettings.testCashDrawer, hardwareSettings.triggerPrinterDetect])
 
   // 加载渠道列表 (从API加载，支持Admin配置)
   useEffect(() => {
@@ -1339,7 +1358,7 @@ export function POSPage() {
       if (Date.now() - lastActivity > TIMEOUT) {
         setIsLocked(true)
       }
-    }, 30000) // 每30秒检查一次
+    }, 10000) // 每10秒检查一次
 
     return () => {
       events.forEach(e => window.removeEventListener(e, updateActivity))
@@ -1755,6 +1774,10 @@ export function POSPage() {
     setDineInCount(1) // 重置堂食人数
     setCustomerCount(1) // 重置顾客人数
     setOrderSuccess('') // 清除订单成功提示
+    setTableNumber('') // 重置桌号
+    setPlatformOrderId('') // 重置平台单号
+    setSocialRef('') // 重置社交引用
+    setPurchaseOrderNo('') // 重置采购单号
   }
 
   // 挂单 - 同时在服务端创建订单记录
@@ -2063,7 +2086,7 @@ export function POSPage() {
       // 现金支付：自动开钱箱
       if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
         const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt') })
+        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt'), cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100 })
         if (!drawerResult?.success) {
           showToast(t('pos.cashDrawerFailed') || '钱箱打开失败', 'error')
         }
@@ -2481,8 +2504,8 @@ export function POSPage() {
 
         {/* 购物车 - 大屏设计 */}
         <div className="w-80 bg-white border-l flex flex-col">
-          <div className="p-3 border-b flex items-center justify-between bg-gray-50">
-            <h2 className="font-bold text-base flex items-center gap-2">
+          <div className="p-2 border-b flex items-center justify-between bg-gray-50">
+            <h2 className="font-bold text-sm flex items-center gap-2">
               <ShoppingCart size={20} />
               {t('pos.cart')}
               <span className="bg-primary text-white text-xs px-2 py-0.5 rounded-full">{cart.length}</span>
@@ -2515,23 +2538,23 @@ export function POSPage() {
           </div>
 
           {/* 商品列表 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {cart.length === 0 ? (
-              <div className="text-center text-gray-400 py-12 text-lg">{t('pos.emptyCart')}</div>
+              <div className="text-center text-gray-400 py-8 text-sm">{t('pos.emptyCart')}</div>
             ) : (
               cart.map((item, idx) => (
-                <div key={item.id} className="bg-gray-50 rounded-xl p-4">
+                <div key={item.id} className="bg-gray-50 rounded-xl p-3">
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex-1">
-                      <p className="font-bold text-base">{item.productName}</p>
+                      <p className="font-bold text-sm">{item.productName}</p>
                       <p className="text-xs text-gray-400">{item.specName}</p>
                     </div>
-                    <button onClick={() => removeItem(idx)} className="min-w-12 min-h-12 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 touch-feedback">
-                      <Trash2 size={18} />
+                    <button onClick={() => removeItem(idx)} className="min-w-8 min-h-8 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 touch-feedback">
+                      <Trash2 size={14} />
                     </button>
                   </div>
                   {/* 甜度冰度标签 */}
-                  <div className="flex gap-1 mb-2">
+                  <div className="flex gap-1 mb-1">
                     {item.sugarLevelName && (
                       <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded">{item.sugarLevelName}</span>
                     )}
@@ -2541,7 +2564,7 @@ export function POSPage() {
                   </div>
                   {/* 加料列表 */}
                   {item.addons.length > 0 && (
-                    <div className="space-y-1 mb-2">
+                    <div className="space-y-1 mb-1">
                       {item.addons.map((a, ai) => (
                         <div key={ai} className="flex justify-between text-xs text-primary">
                           <span>{t('pos.add')} {a.name} × {a.qty}</span>
@@ -2550,13 +2573,13 @@ export function POSPage() {
                       ))}
                     </div>
                   )}
-                  <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center justify-between mt-1">
                     <div className="flex items-center gap-2">
-                                           <button onClick={() => changeQty(idx, -1)} className="min-w-10 min-h-10 rounded-full bg-gray-200 font-bold flex items-center justify-center active:scale-95 touch-feedback text-lg">-</button>
-                      <span className="w-8 text-center text-lg font-bold">{item.quantity}</span>
-                      <button onClick={() => changeQty(idx, 1)} className="min-w-10 min-h-10 rounded-full bg-primary text-white font-bold flex items-center justify-center active:scale-95 touch-feedback text-lg">+</button>
+                      <button onClick={() => changeQty(idx, -1)} className="min-w-8 min-h-8 rounded-full bg-gray-200 font-bold flex items-center justify-center active:scale-95 touch-feedback text-base">-</button>
+                      <span className="w-6 text-center text-sm font-bold">{item.quantity}</span>
+                      <button onClick={() => changeQty(idx, 1)} className="min-w-8 min-h-8 rounded-full bg-primary text-white font-bold flex items-center justify-center active:scale-95 touch-feedback text-base">+</button>
                     </div>
-                    <span className="text-primary font-bold text-lg">{formatCurrency((item.unitPrice + item.addons.reduce((s, a) => s + a.price * a.qty, 0)) * item.quantity)}</span>
+                    <span className="text-primary font-bold text-sm">{formatCurrency((item.unitPrice + item.addons.reduce((s, a) => s + a.price * a.qty, 0)) * item.quantity)}</span>
                   </div>
                 </div>
               ))
@@ -2564,7 +2587,7 @@ export function POSPage() {
           </div>
 
           {/* 金额 */}
-          <div className="p-4 border-t space-y-2 text-base bg-gray-50">
+          <div className="p-3 border-t space-y-1 text-sm bg-gray-50">
             {(posLayout.showTax !== false) && (
               <div className="flex justify-between text-gray-500">
                 <span>{t('pos.tax')}</span>
@@ -2577,14 +2600,14 @@ export function POSPage() {
                 <span>-{formatCurrency(discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-xl pt-2 border-t">
+            <div className="flex justify-between font-bold text-base pt-2 border-t">
               <span>{t('pos.total')}</span>
-              <span className="text-primary text-xl">{formatCurrency(total)}</span>
+              <span className="text-primary">{formatCurrency(total)}</span>
             </div>
           </div>
 
           {/* 操作按钮 */}
-          <div className="p-4 border-t space-y-3 bg-white">
+          <div className="p-3 border-t space-y-2 bg-white">
             {cart.length > 0 && (
               <>
                 <button onClick={() => { playSoundWithSettings('keypress', soundSettings.keypress); setShowDiscountModal(true) }} className="w-full py-2 border-2 border-dashed border-primary/30 rounded-xl text-primary font-bold text-base touch-feedback">
@@ -3678,7 +3701,7 @@ export function POSPage() {
               <p className="text-center text-gray-600">{t('pos.logoutConfirm')}</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowLogoutModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback">{t('common.cancel')}</button>
-                <button onClick={() => { setShowLogoutModal(false); logout() }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
+                <button onClick={() => { setShowLogoutModal(false); setIsLocked(false); logout() }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
                            </div>
             </div>
           </div>

@@ -1007,17 +1007,24 @@ ipcMain.on('order-complete', (_event, orderNumber) => {
  */
 ipcMain.handle('print-receipt', async (_event, data) => {
   try {
-    const printerName = data.printerName || ''
-    writeCrash(`[PRINT] print-receipt printer=${printerName}`)
+    const printerName = (data.printerName || '').trim()
+    const { printerHost, printerPort, blocks } = data
+
+    writeCrash(`[PRINT] ====== print-receipt called ======`)
+    writeCrash(`[PRINT] printerName='${printerName}'`)
+    writeCrash(`[PRINT] printerHost='${printerHost}' port=${printerPort}`)
+    writeCrash(`[PRINT] hasBlocks=${!!(blocks && blocks.length > 0)}`)
+    writeCrash(`[PRINT] orderNum=${data.orderNum} total=${data.total}`)
 
     if (!printerName) {
+      writeCrash('[PRINT] ERROR: printerName is empty — check hardware settings in Admin')
       return { success: false, error: 'No printer name provided' }
     }
 
     // 如果有模板块，使用 PosPrinter 格式化打印（走 Windows 打印 API）
-    if (data.blocks && data.blocks.length > 0) {
+    if (blocks && blocks.length > 0) {
       try {
-        await PosPrinter.print(data.blocks, {
+        await PosPrinter.print(blocks, {
           printerName: printerName,
           silent: false,
           preview: false,
@@ -1036,6 +1043,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     const initCmd = Buffer.from([0x1B, 0x40])  // ESC @
     const cutCmd = Buffer.from([0x1D, 0x56, 0x00])  // GS V 0 (full cut)
     const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd])
+    writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`)
 
     try {
       await PosPrinter.sendRawCommand(printerName, rawBytes)
@@ -1141,20 +1149,30 @@ async function printViaWindowsRaw(data: any): Promise<void> {
  */
 /**
  * 打开钱箱 - 使用 electron-pos-printer 的 sendRawCommand (Windows 打印 API)
+ * data.printerName: Windows 打印机名称
+ * data.cashDrawerPulse: 脉冲时长(毫秒)，默认 100ms
  */
 ipcMain.handle('open-cash-drawer', async (_event, data) => {
   try {
-    const printerName = data.printerName || ''
-    writeCrash(`[CASH DRAWER] Opening drawer printer=${printerName}`)
+    const printerName = (data.printerName || '').trim()
+    const pulseMs = Math.max(20, Math.min(500, data.cashDrawerPulse || 100))
+
+    writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`)
+    writeCrash(`[CASH DRAWER] printerName='${printerName}'`)
+    writeCrash(`[CASH DRAWER] cashDrawerPulse=${pulseMs}ms`)
 
     if (!printerName) {
+      writeCrash('[CASH DRAWER] ERROR: printerName is empty')
       return { success: false, error: 'No printer name provided' }
     }
 
     // ESC/POS 钱箱命令: ESC p m t1 t2
-    // pin=2, onTime=50ms, offTime=50ms => 0x1B 0x70 0x00 0x19 0x32
-    // onTime = 50/2 = 25 = 0x19, offTime clamped to 255
-    const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0x32])
+    // m=0 (pin 2), t1=onTime/2, t2=offTime/2
+    // onTime = pulseMs, offTime clamped to 255*2=510ms max
+    const onTime = Math.round(pulseMs / 2)
+    const offTime = Math.round(pulseMs / 2)
+    const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, onTime, offTime])
+    writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`)
 
     try {
       await PosPrinter.sendRawCommand(printerName, drawerCmd)

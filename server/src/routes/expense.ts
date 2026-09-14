@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx'
 const router = Router()
 
 // GET /api/expenses
-router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
     const { type, category, startDate, endDate } = req.query
@@ -43,9 +43,9 @@ router.get('/summary', authenticate, authorize('admin', 'manager'), async (req: 
 })
 
 // POST /api/expenses
-router.post('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
-    const expense = await ExpenseService.createExpense(req.body)
+    const expense = await ExpenseService.createExpense({ ...req.body, storeId: req.user!.storeId })
     await FinanceAuditService.createAuditLog({
       storeId: req.user!.storeId,
       userId: req.user!.id,
