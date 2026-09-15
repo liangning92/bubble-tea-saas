@@ -6,7 +6,8 @@
     {
       "provider": "github",
       "owner": "liangning92",
-      "repo": "bubble-tea-saas"
+      "repo": "bubble-tea-saas",
+      "releaseType": "release"
     }
   ],
   "directories": {
