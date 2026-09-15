@@ -887,39 +887,133 @@ ipcMain.handle('list-printers', async () => {
   
   return new Promise((resolve) => {
     const { exec } = require('child_process')
-    const psCommand = `Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress`
-    
-    exec(`powershell -Command "${psCommand}"`, (error: any, stdout: string, stderr: string) => {
-      if (error) {
-        console.error('[LIST-PRINTERS] Error:', error.message)
-        resolve({ printers: [], error: error.message })
-        return
+    const allPrinters = new Set<string>()
+    let hasError = false
+    let methodsChecked = 0
+
+    const checkDone = () => {
+      methodsChecked++
+      if (methodsChecked >= 3) {
+        const result = Array.from(allPrinters)
+        console.log('[LIST-PRINTERS] Total found:', result.length, '->', result)
+        resolve({ printers: result, error: hasError ? 'Some methods failed' : null })
       }
-      
-      try {
-        const trimmed = stdout.trim()
-        if (!trimmed) {
-          resolve({ printers: [], error: null })
-          return
+    }
+
+    // Method 1: Get-Printer (standard Windows printers)
+    const cmd1 = 'powershell -Command "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"'
+    exec(cmd1, (error: any, stdout: string, stderr: string) => {
+      if (!error && stdout.trim()) {
+        try {
+          const trimmed = stdout.trim()
+          let parsed: string[]
+          if (trimmed.startsWith('[')) {
+            parsed = JSON.parse(trimmed)
+          } else if (trimmed.startsWith('{')) {
+            parsed = [JSON.parse(trimmed).Name]
+          } else {
+            parsed = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          }
+          parsed.forEach((p: string) => allPrinters.add(p))
+          console.log('[LIST-PRINTERS] Get-Printer found:', parsed.length)
+        } catch (e: any) {
+          console.error('[LIST-PRINTERS] Get-Printer parse error:', e.message)
+          hasError = true
         }
-        
-        // Parse JSON output (might be array or single string)
-        let printers: string[]
-        if (trimmed.startsWith('[')) {
-          printers = JSON.parse(trimmed)
-        } else if (trimmed.startsWith('{')) {
-          printers = [JSON.parse(trimmed).Name]
-        } else {
-          // Plain text, one printer per line
-          printers = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
-        }
-        
-        console.log('[LIST-PRINTERS] Found:', printers.length, 'printers')
-        resolve({ printers, error: null })
-      } catch (parseError: any) {
-        console.error('[LIST-PRINTERS] Parse error:', parseError.message)
-        resolve({ printers: [], error: parseError.message })
+      } else if (error) {
+        console.error('[LIST-PRINTERS] Get-Printer error:', error.message)
+        hasError = true
       }
+      checkDone()
+    })
+
+    // Method 2: WMI Win32_Printer (finds printers that Get-Printer misses)
+    const cmd2 = 'powershell -Command "Get-WmiObject Win32_Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"'
+    exec(cmd2, (error: any, stdout: string, stderr: string) => {
+      if (!error && stdout.trim()) {
+        try {
+          const trimmed = stdout.trim()
+          let parsed: string[]
+          if (trimmed.startsWith('[')) {
+            parsed = JSON.parse(trimmed)
+          } else if (trimmed.startsWith('{')) {
+            parsed = [JSON.parse(trimmed).Name]
+          } else {
+            parsed = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          }
+          parsed.forEach((p: string) => allPrinters.add(p))
+          console.log('[LIST-PRINTERS] WMI found:', parsed.length)
+        } catch (e: any) {
+          console.error('[LIST-PRINTERS] WMI parse error:', e.message)
+          hasError = true
+        }
+      } else if (error) {
+        console.error('[LIST-PRINTERS] WMI error:', error.message)
+        hasError = true
+      }
+      checkDone()
+    })
+
+    // Method 3: USB enumerate (find thermal printers connected as USB devices)
+    const cmd3 = 'powershell -Command "Get-PnpDevice -Class Printer -Status OK | Select-Object -ExpandProperty FriendlyName | ConvertTo-Json -Compress"'
+    exec(cmd3, (error: any, stdout: string, stderr: string) => {
+      if (!error && stdout.trim()) {
+        try {
+          const trimmed = stdout.trim()
+          let parsed: string[]
+          if (trimmed.startsWith('[')) {
+            parsed = JSON.parse(trimmed)
+          } else if (trimmed.startsWith('{')) {
+            parsed = [JSON.parse(trimmed).FriendlyName]
+          } else {
+            parsed = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          }
+          parsed.forEach((p: string) => allPrinters.add(p))
+          console.log('[LIST-PRINTERS] USB PnP found:', parsed.length)
+        } catch (e: any) {
+          console.error('[LIST-PRINTERS] USB PnP parse error:', e.message)
+          hasError = true
+        }
+      } else if (error) {
+        console.error('[LIST-PRINTERS] USB PnP error:', error.message)
+        hasError = true
+      }
+      checkDone()
+    })
+
+    // Method 4: Enumerate COM ports (USB virtual serial ports used by most thermal receipt printers)
+    const cmd4 = 'powershell -Command "Get-WmiObject Win32_SerialPort | Select-Object Name,DeviceID,Description | ConvertTo-Json -Compress"'
+    exec(cmd4, (error: any, stdout: string, stderr: string) => {
+      if (!error && stdout.trim()) {
+        try {
+          const trimmed = stdout.trim()
+          let ports: any[]
+          if (trimmed.startsWith('[')) {
+            ports = JSON.parse(trimmed)
+          } else if (trimmed.startsWith('{')) {
+            ports = [JSON.parse(trimmed)]
+          } else {
+            checkDone()
+            return
+          }
+          ports.forEach((port: any) => {
+            // Add both DeviceID (COMx) and Description as printer name
+            if (port.DeviceID) {
+              allPrinters.add(port.DeviceID)
+            }
+            if (port.Name && port.Name !== port.DeviceID) {
+              allPrinters.add(port.Name)
+            }
+          })
+          console.log('[LIST-PRINTERS] COM ports found:', ports.length)
+        } catch (e: any) {
+          console.error('[LIST-PRINTERS] COM port parse error:', e.message)
+          hasError = true
+        }
+      } else {
+        console.error('[LIST-PRINTERS] COM port enum error:', error?.message)
+      }
+      checkDone()
     })
   })
 })
@@ -1037,7 +1131,8 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       }
     }
 
-    // 否则使用纯文本 + sendRawCommand 发送 ESC/POS 原始命令
+    // 如果打印机是 COM 口（虚拟串口，如 USB 热敏打印机），直接写串口不走 Windows 打印 API
+    const isComPort = /^COM\d+/i.test(printerName)
     const text = generateReceiptText(data)
     const encoder = new TextEncoder()
     const initCmd = Buffer.from([0x1B, 0x40])  // ESC @
@@ -1045,6 +1140,19 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd])
     writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`)
 
+    if (isComPort) {
+      // COM 口打印机：直接写串口
+      try {
+        await printViaComPort(printerName, rawBytes)
+        writeCrash('[PRINT] printViaComPort success')
+        return { success: true }
+      } catch (comErr: any) {
+        writeCrash(`[PRINT] printViaComPort failed: ${comErr.message}`)
+        return { success: false, error: comErr.message }
+      }
+    }
+
+    // 否则使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
     try {
       await PosPrinter.sendRawCommand(printerName, rawBytes)
       writeCrash('[PRINT] sendRawCommand success')
@@ -1058,6 +1166,45 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     return { success: false, error: error.message }
   }
 })
+
+/**
+ * 串口打印 - 直接发送 ESC/POS 命令到 COM 口（热敏打印机最常见的连接方式）
+ * 不走 Windows 打印 API，直接写串口
+ */
+function printViaComPort(comPort: string, rawBytes: Buffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process')
+    // PowerShell script: open COM port, write bytes, close
+    const hexString = Array.from(rawBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+    const ps = `
+      Add-Type -AssemblyName System
+      $port = New-Object System.IO.Ports.SerialPort '${comPort}',9600,None,8,One
+      $port.Open()
+      Start-Sleep -Milliseconds 200
+      $bytes = [byte[]]@(${Array.from(rawBytes).join(',')})
+      $port.Write($bytes, 0, $bytes.Length)
+      Start-Sleep -Milliseconds 100
+      $port.Close()
+      Write-Output 'OK'
+    `
+    const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { shell: false })
+    let stderr = ''
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+    proc.on('close', (code: number) => {
+      if (code === 0) {
+        writeCrash(`[COM] ${comPort} write success`)
+        resolve()
+      } else {
+        writeCrash(`[COM] ${comPort} failed: ${stderr.trim()}`)
+        reject(new Error(`COM port write failed: ${stderr.trim()}`))
+      }
+    })
+    proc.on('error', (err: Error) => {
+      writeCrash(`[COM] ${comPort} spawn error: ${err.message}`)
+      reject(err)
+    })
+  })
+}
 
 /**
  * 网络打印 - 直接发送 ESC/POS 命令到打印机
@@ -1174,6 +1321,20 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
     const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, onTime, offTime])
     writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`)
 
+    // COM 口打印机：直接写串口
+    const isComPort = /^COM\d+/i.test(printerName)
+    if (isComPort) {
+      try {
+        await printViaComPort(printerName, drawerCmd)
+        writeCrash('[CASH DRAWER] printViaComPort success')
+        return { success: true }
+      } catch (comErr: any) {
+        writeCrash(`[CASH DRAWER] printViaComPort failed: ${comErr.message}`)
+        return { success: false, error: comErr.message }
+      }
+    }
+
+    // Windows 打印机名称：走 Windows 打印队列
     try {
       await PosPrinter.sendRawCommand(printerName, drawerCmd)
       writeCrash('[CASH DRAWER] sendRawCommand success')
