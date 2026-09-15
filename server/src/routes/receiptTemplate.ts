@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
-import { authenticate, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
+import { seedDefaultReceiptTemplate } from '../services/HygieneService'
 
 const router = Router()
 
@@ -284,6 +285,22 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Delete receipt template error:', error)
     res.status(500).json({ code: 500, message: 'Failed to delete template' })
+  }
+})
+
+// POST /api/receipt-templates/seed - 初始化默认模板
+router.post('/seed', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const created = await seedDefaultReceiptTemplate(storeId)
+    res.json({
+      code: 200,
+      data: { created, message: created.length > 0 ? 'Default template created' : 'Template already exists' },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Seed receipt template error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to seed default template' })
   }
 })
 

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { seedDefaultReceiptTemplate } from '../services/HygieneService'
 
 const router = Router()
 
@@ -24,6 +25,11 @@ router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res)
         address: address || '',
         phone: phone || ''
       }
+    })
+
+    // Initialize default receipt template for new store
+    await seedDefaultReceiptTemplate(store.id).catch((err: any) => {
+      console.error('Failed to seed default receipt template:', err)
     })
 
     res.status(201).json({

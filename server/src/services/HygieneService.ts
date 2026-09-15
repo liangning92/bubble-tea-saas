@@ -1874,3 +1874,179 @@ export async function seedDefaultTemplates(storeId: string) {
 
   return created
 }
+
+// ============================================
+// 默认小票模板
+// ============================================
+const DEFAULT_RECEIPT_BLOCKS = [
+  {
+    id: 'logo-1',
+    type: 'logo',
+    enabled: true,
+    order: 1,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: {}
+  },
+  {
+    id: 'divider-1',
+    type: 'divider',
+    enabled: true,
+    order: 2,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: { char: '-', repeat: 32 }
+  },
+  {
+    id: 'header-1',
+    type: 'header',
+    enabled: true,
+    order: 3,
+    style: { bold: true, fontSize: 'large', align: 'center' },
+    config: {}
+  },
+  {
+    id: 'storeInfo-1',
+    type: 'storeInfo',
+    enabled: true,
+    order: 4,
+    style: { bold: false, fontSize: 'small', align: 'center' },
+    config: {}
+  },
+  {
+    id: 'divider-2',
+    type: 'divider',
+    enabled: true,
+    order: 5,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: { char: '-', repeat: 32 }
+  },
+  {
+    id: 'orderInfo-1',
+    type: 'orderInfo',
+    enabled: true,
+    order: 6,
+    style: { bold: false, fontSize: 'normal', align: 'left' },
+    config: { fields: ['orderNum', 'date', 'staff'] }
+  },
+  {
+    id: 'divider-3',
+    type: 'divider',
+    enabled: true,
+    order: 7,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: { char: '-', repeat: 32 }
+  },
+  {
+    id: 'items-1',
+    type: 'items',
+    enabled: true,
+    order: 8,
+    style: { bold: false, fontSize: 'normal', align: 'left' },
+    config: {
+      showProductName: true,
+      showSpecName: true,
+      showSugarLevel: true,
+      showIceLevel: true,
+      showAddons: true,
+      showQuantity: true,
+      showUnitPrice: true
+    }
+  },
+  {
+    id: 'divider-4',
+    type: 'divider',
+    enabled: true,
+    order: 9,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: { char: '-', repeat: 32 }
+  },
+  {
+    id: 'subtotal-1',
+    type: 'subtotal',
+    enabled: true,
+    order: 10,
+    style: { bold: false, fontSize: 'normal', align: 'right' },
+    config: {}
+  },
+  {
+    id: 'tax-1',
+    type: 'tax',
+    enabled: true,
+    order: 11,
+    style: { bold: false, fontSize: 'normal', align: 'right' },
+    config: {}
+  },
+  {
+    id: 'total-1',
+    type: 'total',
+    enabled: true,
+    order: 12,
+    style: { bold: true, fontSize: 'large', align: 'right' },
+    config: {}
+  },
+  {
+    id: 'divider-5',
+    type: 'divider',
+    enabled: true,
+    order: 13,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: { char: '-', repeat: 32 }
+  },
+  {
+    id: 'paymentInfo-1',
+    type: 'paymentInfo',
+    enabled: true,
+    order: 14,
+    style: { bold: false, fontSize: 'normal', align: 'left' },
+    config: { showPaidAmount: true, showChange: true }
+  },
+  {
+    id: 'divider-6',
+    type: 'divider',
+    enabled: true,
+    order: 15,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: { char: '-', repeat: 32 }
+  },
+  {
+    id: 'footer-1',
+    type: 'footer',
+    enabled: true,
+    order: 16,
+    style: { bold: false, fontSize: 'small', align: 'center' },
+    config: {}
+  },
+  {
+    id: 'qrCode-1',
+    type: 'qrCode',
+    enabled: false,
+    order: 17,
+    style: { bold: false, fontSize: 'normal', align: 'center' },
+    config: {}
+  }
+]
+
+export async function seedDefaultReceiptTemplate(storeId: string) {
+  // Check if already exists
+  const existing = await prisma.receiptTemplate.findFirst({
+    where: { storeId }
+  })
+  if (existing) {
+    return []
+  }
+
+  const templateContent = JSON.stringify({
+    version: 1,
+    blocks: DEFAULT_RECEIPT_BLOCKS
+  })
+
+  const template = await prisma.receiptTemplate.create({
+    data: {
+      storeId,
+      name: '默认模板',
+      content: templateContent,
+      isDefault: true
+    }
+  })
+
+  return [template]
+}
