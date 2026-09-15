@@ -7,7 +7,8 @@
       "provider": "github",
       "owner": "liangning92",
       "repo": "bubble-tea-saas",
-      "releaseType": "release"
+      "releaseType": "release",
+      "vPrefixedTagName": false
     }
   ],
   "directories": {
