@@ -95,15 +95,7 @@ jobs:
       - name: Compile Electron
         run: cd client-pos && npm run build:electron:main
 
-      - name: Build Electron
-        run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.VERSION }}
-          name: Bubble Tea POS v${{ steps.version.outputs.VERSION }}
-          draft: false
-          files: |
-            release/*.exe
-            release/latest.yml
+      - name: Build and Publish to GitHub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish always

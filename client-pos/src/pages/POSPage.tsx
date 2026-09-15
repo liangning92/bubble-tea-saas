@@ -1364,7 +1364,7 @@ export function POSPage() {
       events.forEach(e => window.removeEventListener(e, updateActivity))
       clearInterval(checkInterval)
     }
-  }, [displaySettings.autoLockMinutes])
+  }, [displaySettings.autoLockMinutes, isLocked])
 
   // 解锁处理 - 如果设置了PIN则必须输入正确才能解锁
   const handleUnlock = async () => {
