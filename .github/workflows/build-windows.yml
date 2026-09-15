@@ -15,9 +15,14 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: '22'
+
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - name: Checkout code
@@ -31,7 +36,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Set version
@@ -66,7 +71,7 @@ jobs:
           Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
           npm install --force --prefer-offline=false
 
-      - name: Install server dependencies (populate server/node_modules/.bin/prisma)
+      - name: Install server dependencies
         run: |
           Remove-Item -Force server/package-lock.json -ErrorAction SilentlyContinue
           Remove-Item -Force server/node_modules -Recurse -ErrorAction SilentlyContinue
@@ -90,8 +95,6 @@ jobs:
           Set-Location "$repoRoot\server"
           npx prisma db seed
 
-
-
       - name: Build server
         run: npm run build:server
 
@@ -104,7 +107,40 @@ jobs:
       - name: Compile Electron
         run: cd client-pos && npm run build:electron:main
 
-      - name: Build and Publish to GitHub
+      # 官方方案：只打包，不上传
+      - name: Build (no publish)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BTPS-build-dist
+          path: release/
+
+  publish:
+    needs: build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: BTPS-build-dist
+          path: release/
+
+      - name: Publish to GitHub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish always
