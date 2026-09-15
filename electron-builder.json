@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.bubbletea.pos",
   "productName": "BTPS",
+  "electronVersion": "33.4.11",
   "publish": [
     {
       "provider": "github",
