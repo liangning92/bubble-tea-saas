@@ -2,12 +2,13 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.bubbletea.pos",
   "productName": "BTPS",
-  "publish": {
-    "provider": "github",
-    "owner": "liangning92",
-    "repo": "bubble-tea-saas",
-    "skipDuplicateRelease": true
-  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "liangning92",
+      "repo": "bubble-tea-saas"
+    }
+  ],
   "directories": {
     "output": "release",
     "buildResources": "build"
