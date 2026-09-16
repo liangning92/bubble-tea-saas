@@ -475,6 +475,41 @@ async function startLocalServer(): Promise<void> {
       log.log('[Server] electron node.exe not found at', electronDir, '- using process.execPath as fallback:', nodeExecPath)
     }
   }
+  // ── FORK DEBUG（按 ChatGPT 建议添加）──────────────────────────────
+  // 关键诊断信息：在 fork 之前打印，帮助定位子进程静默崩溃的根因
+  writeCrash(`[FORK DEBUG] serverEntry = ${serverEntry}`)
+  writeCrash(`[FORK DEBUG] serverEntry exists = ${fs.existsSync(serverEntry)}`)
+  writeCrash(`[FORK DEBUG] nodeExecPath = ${nodeExecPath}`)
+  writeCrash(`[FORK DEBUG] nodeExecPath exists = ${fs.existsSync(nodeExecPath)}`)
+  writeCrash(`[FORK DEBUG] NODE_PATH = ${nodePath}`)
+  writeCrash(`[FORK DEBUG] cwd = ${process.cwd()}`)
+  writeCrash(`[FORK DEBUG] resourcesPath = ${process.resourcesPath}`)
+  writeCrash(`[FORK DEBUG] appPath = ${app.getAppPath()}`)
+  // 检查 electronDir 和 node.exe
+  if (process.platform === 'win32') {
+    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
+    writeCrash(`[FORK DEBUG] electronDir = ${electronDir}`)
+    writeCrash(`[FORK DEBUG] electronDir exists = ${fs.existsSync(electronDir)}`)
+    const nodeExeInElectron = path.join(electronDir, 'node.exe')
+    writeCrash(`[FORK DEBUG] node.exe in electron dir exists = ${fs.existsSync(nodeExeInElectron)}`)
+  }
+  // 检查 server/dist/index.js 是否存在
+  const serverDistIndex = path.join(unpackedRoot, 'server', 'dist', 'index.js')
+  writeCrash(`[FORK DEBUG] serverDistIndex = ${serverDistIndex}`)
+  writeCrash(`[FORK DEBUG] serverDistIndex exists = ${fs.existsSync(serverDistIndex)}`)
+  // 检查 prisma client
+  const prismaClientIndex = path.join(prismaModulesPath, '@prisma', 'client', 'index.js')
+  writeCrash(`[FORK DEBUG] prismaClientIndex = ${prismaClientIndex}`)
+  writeCrash(`[FORK DEBUG] prismaClientIndex exists = ${fs.existsSync(prismaClientIndex)}`)
+  const prismaClient = path.join(unpackedRoot, 'node_modules', '@prisma', 'client')
+  writeCrash(`[FORK DEBUG] prismaClient dir exists = ${fs.existsSync(prismaClient)}`)
+  // 检查 seed.db
+  writeCrash(`[FORK DEBUG] seedTemplatePath = ${seedTemplatePath}`)
+  writeCrash(`[FORK DEBUG] seedTemplatePath exists = ${fs.existsSync(seedTemplatePath)}`)
+  writeCrash(`[FORK DEBUG] userDbPath = ${userDbPath}`)
+  writeCrash(`[FORK DEBUG] userDbPath exists = ${fs.existsSync(userDbPath)}`)
+  // ── FORK DEBUG 结束 ───────────────────────────────────────────────
+
   log.log('[Server] Node exec path:', nodeExecPath)
   log.log('[Server] Server entry:', serverEntry)
   log.log('[Server] Exists:', fs.existsSync(serverEntry))
@@ -510,13 +545,26 @@ async function startLocalServer(): Promise<void> {
     log.error('[Server stderr]', data.toString().trim())
   })
 
+  // ChatGPT 建议：加 spawn 事件，确认子进程真的启动了
+  serverProcess.on('spawn', () => {
+    writeCrash('[Server] child spawn event - PID: ' + serverProcess.pid)
+    console.log('[Server] child spawn event - PID:', serverProcess.pid)
+  })
+
   serverProcess.on('error', (err: Error) => {
+    writeCrash('[Server] CHILD ERROR: ' + err.message)
     log.error('[Server] Failed to start:', err.message)
   })
 
-  serverProcess.on('exit', (code: number, signal: string) => {
-    console.log(`[Server] Process exited with code ${code}, signal ${signal}`)
+  serverProcess.on('exit', (code: number | null, signal: string | null) => {
+    writeCrash(`[Server] CHILD EXIT code=${code} signal=${signal} pid=${serverProcess?.pid}`)
+    console.log(`[Server] Process exited with code ${code}, signal ${signal}, pid ${serverProcess?.pid}`)
     serverProcess = null
+  })
+
+  serverProcess.on('close', (code: number | null, signal: string | null) => {
+    writeCrash(`[Server] CHILD CLOSE code=${code} signal=${signal}`)
+    console.log(`[Server] Process closed with code ${code}, signal ${signal}`)
   })
 
   console.log('[Server] Local API server started (PID:', serverProcess.pid, ')')
