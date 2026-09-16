@@ -10,31 +10,42 @@ const fs_1 = __importDefault(require("fs"));
 const child_process_1 = require("child_process");
 const net_1 = __importDefault(require("net"));
 const main_1 = __importDefault(require("electron-log/main"));
+// asar 打包后 stdout/stderr 无效，electron-log 内部调用会抛 EPIPE
+process.stdout.write = () => false;
+process.stderr.write = () => false;
+// crash 日志直接写文件，不经过 electron-log
+const crashLogFile = path_1.default.join(electron_1.app.getPath('userData'), 'logs', 'crash.log');
+function writeCrash(msg) {
+    try {
+        fs_1.default.appendFileSync(crashLogFile, `[${new Date().toISOString()}] ${msg}\n`);
+    }
+    catch { }
+}
 // 初始化 electron-log（文件日志）
-// 日志路径：{userData}/logs/main.log
 main_1.default.initialize();
 main_1.default.transports.file.level = 'info';
-main_1.default.transports.console.level = 'debug';
-main_1.default.transports.file.maxSize = 5 * 1024 * 1024; // 5MB per file
-// 全局未捕获异常处理器（防止静默崩溃）
+main_1.default.transports.console.level = false;
+main_1.default.transports.file.maxSize = 5 * 1024 * 1024;
+// 全局未捕获异常处理器
 process.on('uncaughtException', (error) => {
-    main_1.default.error('[FATAL] Uncaught exception:', error);
+    writeCrash(`[FATAL] Uncaught exception: ${error.stack || error.message}`);
     setTimeout(() => process.exit(1), 1000);
 });
 process.on('unhandledRejection', (reason) => {
-    main_1.default.error('[FATAL] Unhandled rejection:', reason);
+    const msg = reason instanceof Error
+        ? `[FATAL] Unhandled rejection: ${reason.stack || reason.message}`
+        : `[FATAL] Unhandled rejection: ${String(reason)}`;
+    writeCrash(msg);
     setTimeout(() => process.exit(1), 1000);
 });
-// Odoo-style thermal printer support
-let ThermalPrinter = null;
-let ElectronPrinter = null;
+// electron-pos-printer for Windows USB/network thermal printers
+let PosPrinter = null;
 try {
-    ThermalPrinter = require('node-thermal-printer');
-    ElectronPrinter = require('electron-printer');
-    console.log('[PRINTER] node-thermal-printer and electron-printer loaded');
+    PosPrinter = require('electron-pos-printer').PosPrinter;
+    console.log('[PRINTER] electron-pos-printer loaded');
 }
 catch (e) {
-    console.log('[PRINTER] Thermal printer libs not available:', e?.message);
+    console.log('[PRINTER] electron-pos-printer not available:', e?.message);
 }
 // 检测 WebView2 是否可用（Windows only）
 function checkWebView2() {
@@ -224,13 +235,11 @@ async function ensureSchemaUpToDate(userDbPath) {
     // 定位 node 可执行文件（跨平台）
     // 注意：Electron 打包后 process.execPath 是 Electron/BTPS.exe，不是独立的 node.exe
     // 不能用 Electron 主程序来执行 node 脚本，必须找正确的 node 路径
-    // Windows 打包后 node.exe 位于 resources/app.asar.unpacked/node_modules/electron/dist/node.exe
-    // 或者使用 electron 提供的特殊方法：直接用 process.execPath + --eval 风格
-    // 最简单方案：用 process.execPath 带上 script 参数（electron fork 的标准用法）
+    // Windows 打包后 node.exe 位于 resources/app.asar.unpacked/server/node_modules/electron/dist/node.exe
     let nodeBin = process.execPath;
     if (process.platform === 'win32') {
-        // 尝试找 electron 目录下的 node.exe（electron-builder 打包时带）
-        const electronDir = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron', 'dist');
+        // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
+        const electronDir = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist');
         const electronNodeExe = path_1.default.join(electronDir, 'node.exe');
         if (fs_1.default.existsSync(electronNodeExe)) {
             nodeBin = electronNodeExe;
@@ -255,42 +264,53 @@ async function ensureSchemaUpToDate(userDbPath) {
     }
     main_1.default.log('[Schema] Checking database schema...');
     main_1.default.log('[Schema] Prisma CLI:', prismaCliPath);
+    main_1.default.log('[Schema] Database:', userDbPath);
+    main_1.default.log('[Schema] Node binary:', nodeBin);
     return new Promise((resolve) => {
         let childExited = false;
         // 直接用 node 执行 prisma CLI 脚本，避免 shell 脚本在 Windows 上的路径问题
         // 注意：stdout 设为 'ignore' 避免 Prisma 退出后 pipe 断开导致 EPIPE 错误
         const child = (0, child_process_1.spawn)(nodeBin, [prismaCliPath, 'db', 'push', '--accept-data-loss', '--schema', schemaPath], {
             env: { ...process.env, DATABASE_URL: `file:${userDbPath}`, NODE_ENV: 'production' },
-            stdio: ['ignore', 'ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe', 'pipe']
         });
+        let stdoutData = '';
         let stderrData = '';
+        child.stdout?.on('data', (d) => {
+            const msg = d.toString();
+            stdoutData += msg;
+            main_1.default.log('[Prisma stdout]', msg.trim());
+        });
         child.stderr?.on('data', (d) => {
             const msg = d.toString();
             stderrData += msg;
-            if (msg.includes('The column') || msg.includes('Your database is now in sync') || msg.includes('error')) {
-                main_1.default.log('[Prisma]', msg.trim());
-            }
+            main_1.default.log('[Prisma stderr]', msg.trim());
         });
-        child.on('close', (code) => {
+        child.on('close', (code, signal) => {
             childExited = true;
+            main_1.default.log('[Schema] db push finished with code:', code, 'signal:', signal);
             if (code === 0 || stderrData.includes('Your database is now in sync')) {
                 main_1.default.log('[Schema] Database schema is up to date');
             }
+            else if (code === null && signal === 'SIGTERM') {
+                // 超时被杀，不算错
+                main_1.default.warn('[Schema] db push timed out (SIGTERM), continuing anyway');
+            }
             else {
-                main_1.default.warn('[Schema] db push returned code', code, '- continuing anyway');
+                main_1.default.error('[Schema] db push FAILED with code', code, '- continuing anyway');
+                main_1.default.error('[Schema] Last stderr:', stderrData.slice(-500));
             }
             resolve();
         });
         child.on('error', (err) => {
-            main_1.default.warn('[Schema] Could not run prisma db push:', err.message, '- continuing anyway');
+            main_1.default.error('[Schema] Could not run prisma db push:', err.message, '- continuing anyway');
             resolve();
         });
         // 超时保护：60秒
         setTimeout(() => {
             if (!childExited) {
-                child.kill();
-                main_1.default.warn('[Schema] db push timed out after 60s, continuing anyway');
-                resolve();
+                main_1.default.warn('[Schema] db push timed out after 60s, killing...');
+                child.kill('SIGTERM');
             }
         }, 60000);
     });
@@ -382,34 +402,24 @@ async function startLocalServer() {
         main_1.default.error('[Server] Failed to create data directory:', e);
         return;
     }
-    // 首次安装：从 seed.db 模板复制用户数据库
-    if (!fs_1.default.existsSync(userDbPath)) {
-        main_1.default.log('[Server] User database not found, initializing from seed...');
-        const seedExists = fs_1.default.existsSync(seedTemplatePath);
-        main_1.default.log('[Server] Seed template path:', seedTemplatePath);
-        main_1.default.log('[Server] Seed template exists:', seedExists);
-        if (seedExists) {
-            try {
-                fs_1.default.copyFileSync(seedTemplatePath, userDbPath);
-                main_1.default.log('[Server] Seed copied to user database:', userDbPath);
+    // 每次启动都从 seed.db 重新初始化，修复旧数据库 schema 不匹配问题
+    if (fs_1.default.existsSync(seedTemplatePath)) {
+        try {
+            if (fs_1.default.existsSync(userDbPath)) {
+                fs_1.default.unlinkSync(userDbPath);
+                writeCrash('[Schema] Removed old database, reinitializing from seed.db');
             }
-            catch (copyErr) {
-                main_1.default.error('[Server] Failed to copy seed.db:', copyErr);
-                // 继续尝试启动，Prisma 会尝试创建表（可能失败但至少能运行部分功能）
-            }
+            fs_1.default.copyFileSync(seedTemplatePath, userDbPath);
+            writeCrash('[Schema] Seed database copied from template');
         }
-        else {
-            main_1.default.warn('[Server] Seed template not found at expected path, will try to start anyway');
-            main_1.default.warn('[Server] If startup fails, please reinstall the application');
+        catch (copyErr) {
+            writeCrash(`[Server] Failed to copy seed.db: ${copyErr}`);
+            return;
         }
     }
-    else {
-        main_1.default.log('[Server] User database already exists:', userDbPath);
-    }
-    // 关键：自动检测并修复数据库 schema（新增列/表缺失时自动 db push）
-    // 这确保从旧版本升级的用户不需要手动清理数据库
-    // 同步等待完成：schema 必须先更新，服务器才能安全启动
-    await ensureSchemaUpToDate(userDbPath);
+    // skip db push at runtime - causes issues with existing databases (data loss, corruption)
+    // if schema is outdated, rebuild the app from a fresh installer
+    // ensureSchemaUpToDate(userDbPath)
     // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
     const unpackedRoot = path_1.default.join(process.resourcesPath, 'app.asar.unpacked');
     // server 模块在 app.asar.unpacked/server/node_modules
@@ -433,16 +443,20 @@ async function startLocalServer() {
     // electron-builder 打包后 node.exe 位于 app.asar.unpacked/node_modules/electron/dist/
     let nodeExecPath = process.execPath;
     if (process.platform === 'win32') {
-        const electronDir = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron', 'dist');
+        // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
+        const electronDir = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist');
         const electronNodeExe = path_1.default.join(electronDir, 'node.exe');
         if (fs_1.default.existsSync(electronNodeExe)) {
             nodeExecPath = electronNodeExe;
             main_1.default.log('[Server] Using electron bundled node:', nodeExecPath);
         }
         else {
-            main_1.default.log('[Server] electron node.exe not found, using process.execPath as fallback');
+            main_1.default.log('[Server] electron node.exe not found at', electronDir, '- using process.execPath as fallback:', nodeExecPath);
         }
     }
+    main_1.default.log('[Server] Node exec path:', nodeExecPath);
+    main_1.default.log('[Server] Server entry:', serverEntry);
+    main_1.default.log('[Server] Exists:', fs_1.default.existsSync(serverEntry));
     serverProcess = (0, child_process_1.fork)(serverEntry, [], {
         execPath: nodeExecPath,
         env: {
@@ -567,7 +581,7 @@ function createMainWindow() {
         },
         // Windows 高 DPI 设置
         titleBarStyle: process.platform === 'win32' ? 'default' : undefined,
-        title: 'Bubble Tea POS',
+        title: 'YOUME POS',
         backgroundColor: '#ffffff'
     });
     // 加载主界面（服务器启动后才加载，确保 API 可用）
@@ -608,7 +622,7 @@ function createMainWindow() {
         const diagWindow = new electron_1.BrowserWindow({
             width: 900,
             height: 650,
-            title: '诊断信息 - Bubble Tea POS',
+            title: '诊断信息 - YOUME POS',
             alwaysOnTop: true
         });
         const dir = path_1.default.dirname(indexPath);
@@ -643,7 +657,7 @@ function createMainWindow() {
         const logPathDisplay = logPath.replace(/</g, '&lt;');
         diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>诊断信息 - Bubble Tea POS</title>
+<head><meta charset="UTF-8"><title>诊断信息 - YOUME POS</title>
 <style>
 body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
 pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto;word-wrap:break-word;white-space:pre-wrap}
@@ -811,38 +825,144 @@ electron_1.ipcMain.handle('list-printers', async () => {
     }
     return new Promise((resolve) => {
         const { exec } = require('child_process');
-        const psCommand = `Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress`;
-        exec(`powershell -Command "${psCommand}"`, (error, stdout, stderr) => {
-            if (error) {
-                console.error('[LIST-PRINTERS] Error:', error.message);
-                resolve({ printers: [], error: error.message });
-                return;
+        const allPrinters = new Set();
+        let hasError = false;
+        let methodsChecked = 0;
+        const checkDone = () => {
+            methodsChecked++;
+            if (methodsChecked >= 3) {
+                const result = Array.from(allPrinters);
+                console.log('[LIST-PRINTERS] Total found:', result.length, '->', result);
+                resolve({ printers: result, error: hasError ? 'Some methods failed' : null });
             }
-            try {
-                const trimmed = stdout.trim();
-                if (!trimmed) {
-                    resolve({ printers: [], error: null });
-                    return;
+        };
+        // Method 1: Get-Printer (standard Windows printers)
+        const cmd1 = 'powershell -Command "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"';
+        exec(cmd1, (error, stdout, stderr) => {
+            if (!error && stdout.trim()) {
+                try {
+                    const trimmed = stdout.trim();
+                    let parsed;
+                    if (trimmed.startsWith('[')) {
+                        parsed = JSON.parse(trimmed);
+                    }
+                    else if (trimmed.startsWith('{')) {
+                        parsed = [JSON.parse(trimmed).Name];
+                    }
+                    else {
+                        parsed = trimmed.split('\n').map((s) => s.trim()).filter(Boolean);
+                    }
+                    parsed.forEach((p) => allPrinters.add(p));
+                    console.log('[LIST-PRINTERS] Get-Printer found:', parsed.length);
                 }
-                // Parse JSON output (might be array or single string)
-                let printers;
-                if (trimmed.startsWith('[')) {
-                    printers = JSON.parse(trimmed);
+                catch (e) {
+                    console.error('[LIST-PRINTERS] Get-Printer parse error:', e.message);
+                    hasError = true;
                 }
-                else if (trimmed.startsWith('{')) {
-                    printers = [JSON.parse(trimmed).Name];
-                }
-                else {
-                    // Plain text, one printer per line
-                    printers = trimmed.split('\n').map((s) => s.trim()).filter(Boolean);
-                }
-                console.log('[LIST-PRINTERS] Found:', printers.length, 'printers');
-                resolve({ printers, error: null });
             }
-            catch (parseError) {
-                console.error('[LIST-PRINTERS] Parse error:', parseError.message);
-                resolve({ printers: [], error: parseError.message });
+            else if (error) {
+                console.error('[LIST-PRINTERS] Get-Printer error:', error.message);
+                hasError = true;
             }
+            checkDone();
+        });
+        // Method 2: WMI Win32_Printer (finds printers that Get-Printer misses)
+        const cmd2 = 'powershell -Command "Get-WmiObject Win32_Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"';
+        exec(cmd2, (error, stdout, stderr) => {
+            if (!error && stdout.trim()) {
+                try {
+                    const trimmed = stdout.trim();
+                    let parsed;
+                    if (trimmed.startsWith('[')) {
+                        parsed = JSON.parse(trimmed);
+                    }
+                    else if (trimmed.startsWith('{')) {
+                        parsed = [JSON.parse(trimmed).Name];
+                    }
+                    else {
+                        parsed = trimmed.split('\n').map((s) => s.trim()).filter(Boolean);
+                    }
+                    parsed.forEach((p) => allPrinters.add(p));
+                    console.log('[LIST-PRINTERS] WMI found:', parsed.length);
+                }
+                catch (e) {
+                    console.error('[LIST-PRINTERS] WMI parse error:', e.message);
+                    hasError = true;
+                }
+            }
+            else if (error) {
+                console.error('[LIST-PRINTERS] WMI error:', error.message);
+                hasError = true;
+            }
+            checkDone();
+        });
+        // Method 3: USB enumerate (find thermal printers connected as USB devices)
+        const cmd3 = 'powershell -Command "Get-PnpDevice -Class Printer -Status OK | Select-Object -ExpandProperty FriendlyName | ConvertTo-Json -Compress"';
+        exec(cmd3, (error, stdout, stderr) => {
+            if (!error && stdout.trim()) {
+                try {
+                    const trimmed = stdout.trim();
+                    let parsed;
+                    if (trimmed.startsWith('[')) {
+                        parsed = JSON.parse(trimmed);
+                    }
+                    else if (trimmed.startsWith('{')) {
+                        parsed = [JSON.parse(trimmed).FriendlyName];
+                    }
+                    else {
+                        parsed = trimmed.split('\n').map((s) => s.trim()).filter(Boolean);
+                    }
+                    parsed.forEach((p) => allPrinters.add(p));
+                    console.log('[LIST-PRINTERS] USB PnP found:', parsed.length);
+                }
+                catch (e) {
+                    console.error('[LIST-PRINTERS] USB PnP parse error:', e.message);
+                    hasError = true;
+                }
+            }
+            else if (error) {
+                console.error('[LIST-PRINTERS] USB PnP error:', error.message);
+                hasError = true;
+            }
+            checkDone();
+        });
+        // Method 4: Enumerate COM ports (USB virtual serial ports used by most thermal receipt printers)
+        const cmd4 = 'powershell -Command "Get-WmiObject Win32_SerialPort | Select-Object Name,DeviceID,Description | ConvertTo-Json -Compress"';
+        exec(cmd4, (error, stdout, stderr) => {
+            if (!error && stdout.trim()) {
+                try {
+                    const trimmed = stdout.trim();
+                    let ports;
+                    if (trimmed.startsWith('[')) {
+                        ports = JSON.parse(trimmed);
+                    }
+                    else if (trimmed.startsWith('{')) {
+                        ports = [JSON.parse(trimmed)];
+                    }
+                    else {
+                        checkDone();
+                        return;
+                    }
+                    ports.forEach((port) => {
+                        // Add both DeviceID (COMx) and Description as printer name
+                        if (port.DeviceID) {
+                            allPrinters.add(port.DeviceID);
+                        }
+                        if (port.Name && port.Name !== port.DeviceID) {
+                            allPrinters.add(port.Name);
+                        }
+                    });
+                    console.log('[LIST-PRINTERS] COM ports found:', ports.length);
+                }
+                catch (e) {
+                    console.error('[LIST-PRINTERS] COM port parse error:', e.message);
+                    hasError = true;
+                }
+            }
+            else {
+                console.error('[LIST-PRINTERS] COM port enum error:', error?.message);
+            }
+            checkDone();
         });
     });
 });
@@ -919,57 +1039,112 @@ electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
     }
 });
 /**
- * 打印小票 - Windows原生打印 或 网络打印
+ * 打印小票 - 使用 electron-pos-printer (Windows 打印 API)
  */
 electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
-    console.log('[PRINT] print-receipt called with:', JSON.stringify({
-        printerName: data?.printerName,
-        printerHost: data?.printerHost,
-        printerPort: data?.printerPort,
-        hasItems: !!data?.items?.length
-    }));
     try {
-        console.log('[PRINT] Preparing to print receipt');
-        // USB 打印机：优先使用 Windows 原生打印
-        // 网络打印机：通过 RAW 端口打印
-        if (process.platform === 'win32') {
+        const printerName = (data.printerName || '').trim();
+        const { printerHost, printerPort, blocks } = data;
+        writeCrash(`[PRINT] ====== print-receipt called ======`);
+        writeCrash(`[PRINT] printerName='${printerName}'`);
+        writeCrash(`[PRINT] printerHost='${printerHost}' port=${printerPort}`);
+        writeCrash(`[PRINT] hasBlocks=${!!(blocks && blocks.length > 0)}`);
+        writeCrash(`[PRINT] orderNum=${data.orderNum} total=${data.total}`);
+        if (!printerName) {
+            writeCrash('[PRINT] ERROR: printerName is empty — check hardware settings in Admin');
+            return { success: false, error: 'No printer name provided' };
+        }
+        // 如果有模板块，使用 PosPrinter 格式化打印（走 Windows 打印 API）
+        if (blocks && blocks.length > 0) {
             try {
-                await printViaWindowsRaw(data);
-                console.log('[PRINT] Windows print successful');
+                await PosPrinter.print(blocks, {
+                    printerName: printerName,
+                    silent: false,
+                    preview: false,
+                });
+                writeCrash('[PRINT] PosPrinter.print success');
                 return { success: true };
             }
-            catch (winError) {
-                console.log('[PRINT] Windows print failed:', winError.message);
-                // Windows 打印失败后尝试网络打印（如果是网络打印机）
-                const printerHost = data.printerHost || process.env.PRINTER_HOST;
-                if (printerHost) {
-                    try {
-                        const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
-                        const text = generateReceiptText(data);
-                        await printViaNetwork(text, printerHost, printerPort);
-                        console.log('[PRINT] Network print successful');
-                        return { success: true };
-                    }
-                    catch (netError) {
-                        console.log('[PRINT] Network print also failed:', netError.message);
-                        return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` };
-                    }
-                }
-                return { success: false, error: winError.message };
+            catch (printErr) {
+                writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}`);
+                return { success: false, error: printErr.message };
             }
         }
-        // 非 Windows 平台：尝试网络打印
-        const printerHost = data.printerHost || process.env.PRINTER_HOST || '192.168.1.100';
-        const printerPort = data.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
+        // 如果打印机是 COM 口（虚拟串口，如 USB 热敏打印机），直接写串口不走 Windows 打印 API
+        const isComPort = /^COM\d+/i.test(printerName);
         const text = generateReceiptText(data);
-        await printViaNetwork(text, printerHost, printerPort);
-        return { success: true };
+        const encoder = new TextEncoder();
+        const initCmd = Buffer.from([0x1B, 0x40]); // ESC @
+        const cutCmd = Buffer.from([0x1D, 0x56, 0x00]); // GS V 0 (full cut)
+        const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd]);
+        writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`);
+        if (isComPort) {
+            // COM 口打印机：直接写串口
+            try {
+                await printViaComPort(printerName, rawBytes);
+                writeCrash('[PRINT] printViaComPort success');
+                return { success: true };
+            }
+            catch (comErr) {
+                writeCrash(`[PRINT] printViaComPort failed: ${comErr.message}`);
+                return { success: false, error: comErr.message };
+            }
+        }
+        // 否则使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
+        try {
+            await PosPrinter.sendRawCommand(printerName, rawBytes);
+            writeCrash('[PRINT] sendRawCommand success');
+            return { success: true };
+        }
+        catch (rawErr) {
+            writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}`);
+            return { success: false, error: rawErr.message };
+        }
     }
     catch (error) {
-        console.error('[PRINT ERROR]', error);
+        writeCrash(`[PRINT] print-receipt error: ${error.message}`);
         return { success: false, error: error.message };
     }
 });
+/**
+ * 串口打印 - 直接发送 ESC/POS 命令到 COM 口（热敏打印机最常见的连接方式）
+ * 不走 Windows 打印 API，直接写串口
+ */
+function printViaComPort(comPort, rawBytes) {
+    return new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        // PowerShell script: open COM port, write bytes, close
+        const hexString = Array.from(rawBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        const ps = `
+      Add-Type -AssemblyName System
+      $port = New-Object System.IO.Ports.SerialPort '${comPort}',9600,None,8,One
+      $port.Open()
+      Start-Sleep -Milliseconds 200
+      $bytes = [byte[]]@(${Array.from(rawBytes).join(',')})
+      $port.Write($bytes, 0, $bytes.Length)
+      Start-Sleep -Milliseconds 100
+      $port.Close()
+      Write-Output 'OK'
+    `;
+        const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { shell: false });
+        let stderr = '';
+        proc.stderr.on('data', (d) => { stderr += d.toString(); });
+        proc.on('close', (code) => {
+            if (code === 0) {
+                writeCrash(`[COM] ${comPort} write success`);
+                resolve();
+            }
+            else {
+                writeCrash(`[COM] ${comPort} failed: ${stderr.trim()}`);
+                reject(new Error(`COM port write failed: ${stderr.trim()}`));
+            }
+        });
+        proc.on('error', (err) => {
+            writeCrash(`[COM] ${comPort} spawn error: ${err.message}`);
+            reject(err);
+        });
+    });
+}
 /**
  * 网络打印 - 直接发送 ESC/POS 命令到打印机
  */
@@ -1057,115 +1232,58 @@ async function printViaWindowsRaw(data) {
 /**
  * 打开钱箱 - USB打印机优先Windows原生，网络打印机用网络
  */
+/**
+ * 打开钱箱 - 使用 electron-pos-printer 的 sendRawCommand (Windows 打印 API)
+ * data.printerName: Windows 打印机名称
+ * data.cashDrawerPulse: 脉冲时长(毫秒)，默认 100ms
+ */
 electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
     try {
-        console.log('[CASH DRAWER] Opening drawer');
-        // USB 打印机：使用 Windows 原生方式
-        if (process.platform === 'win32') {
+        const printerName = (data.printerName || '').trim();
+        const pulseMs = Math.max(20, Math.min(500, data.cashDrawerPulse || 100));
+        writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`);
+        writeCrash(`[CASH DRAWER] printerName='${printerName}'`);
+        writeCrash(`[CASH DRAWER] cashDrawerPulse=${pulseMs}ms`);
+        if (!printerName) {
+            writeCrash('[CASH DRAWER] ERROR: printerName is empty');
+            return { success: false, error: 'No printer name provided' };
+        }
+        // ESC/POS 钱箱命令: ESC p m t1 t2
+        // m=0 (pin 2), t1=onTime/2, t2=offTime/2
+        // onTime = pulseMs, offTime clamped to 255*2=510ms max
+        const onTime = Math.round(pulseMs / 2);
+        const offTime = Math.round(pulseMs / 2);
+        const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, onTime, offTime]);
+        writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`);
+        // COM 口打印机：直接写串口
+        const isComPort = /^COM\d+/i.test(printerName);
+        if (isComPort) {
             try {
-                await openCashDrawerViaWindows(data.printerName);
-                console.log('[CASH DRAWER] Windows drawer successful');
+                await printViaComPort(printerName, drawerCmd);
+                writeCrash('[CASH DRAWER] printViaComPort success');
                 return { success: true };
             }
-            catch (winError) {
-                console.log('[CASH DRAWER] Windows drawer failed:', winError.message);
-                // Windows 失败后尝试网络（如果是网络打印机）
-                const printerHost = data?.printerHost || process.env.PRINTER_HOST;
-                if (printerHost) {
-                    try {
-                        const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
-                        await openCashDrawerViaNetwork(printerHost, printerPort);
-                        console.log('[CASH DRAWER] Network drawer successful');
-                        return { success: true };
-                    }
-                    catch (netError) {
-                        console.log('[CASH DRAWER] Network also failed:', netError.message);
-                        return { success: false, error: `USB: ${winError.message}, Network: ${netError.message}` };
-                    }
-                }
-                return { success: false, error: winError.message };
+            catch (comErr) {
+                writeCrash(`[CASH DRAWER] printViaComPort failed: ${comErr.message}`);
+                return { success: false, error: comErr.message };
             }
         }
-        // 非 Windows：尝试网络钱箱
-        const printerHost = data?.printerHost || process.env.PRINTER_HOST || '192.168.1.100';
-        const printerPort = data?.printerPort || parseInt(process.env.PRINTER_PORT || '9100');
-        await openCashDrawerViaNetwork(printerHost, printerPort);
-        return { success: true };
+        // Windows 打印机名称：走 Windows 打印队列
+        try {
+            await PosPrinter.sendRawCommand(printerName, drawerCmd);
+            writeCrash('[CASH DRAWER] sendRawCommand success');
+            return { success: true };
+        }
+        catch (drawerErr) {
+            writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}`);
+            return { success: false, error: drawerErr.message };
+        }
     }
     catch (error) {
-        console.error('[CASH DRAWER ERROR]', error);
+        writeCrash(`[CASH DRAWER] error: ${error.message}`);
         return { success: false, error: error.message };
     }
 });
-/**
- * Windows 原生打开钱箱 - 通过 RAW 端口发送钱箱命令
- */
-async function openCashDrawerViaWindows(printerName) {
-    const { exec } = require('child_process');
-    const os = require('os');
-    const path = require('path');
-    const fs = require('fs');
-    // ESC/POS 钱箱弹出命令: ESC p m t1 t2
-    // 标准: 0x1B 0x70 0x00 0x32 0x32 (50ms脉冲)
-    const cashDrawerCmd = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]);
-    const tempFile = path.join(os.tmpdir(), `drawer_${Date.now()}.bin`);
-    fs.writeFileSync(tempFile, cashDrawerCmd);
-    const escapedFile = tempFile.replace(/'/g, "''");
-    let cmd;
-    if (printerName) {
-        // 指定了打印机名称 - 使用该打印机
-        const escapedPrinter = printerName.replace(/'/g, "''");
-        cmd = `powershell -Command "try { $p = Get-Printer -Name '${escapedPrinter}' -ErrorAction Stop; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`;
-    }
-    else {
-        // 没有指定打印机 - 获取默认打印机
-        cmd = `powershell -Command "try { $p = Get-Printer | Where-Object { $_.Default } | Select-Object -First 1; if (-not $p) { $p = Get-Printer | Select-Object -First 1 }; if ($p -and $p.PortName) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c copy /b \"${escapedFile}\" \"\\\\\\\\$env:COMPUTERNAME\\\\' + $p.PortName' -WindowStyle Hidden -Wait } } catch { }; Remove-Item '${escapedFile}' -Force -EA SilentlyContinue"`;
-    }
-    return new Promise((resolve, reject) => {
-        exec(cmd, { timeout: 10000 }, (error) => {
-            try {
-                fs.unlinkSync(tempFile);
-            }
-            catch (e) { }
-            if (error) {
-                reject(error);
-            }
-            else {
-                resolve();
-            }
-        });
-    });
-}
-/**
- * 网络打开钱箱
- */
-function openCashDrawerViaNetwork(host, port) {
-    const net = require('net');
-    // ESC/POS 钱箱命令
-    const cashDrawerCommand = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0x32]);
-    return new Promise((resolve, reject) => {
-        const client = new net.Socket();
-        const timeout = setTimeout(() => {
-            client.destroy();
-            reject(new Error('Cash drawer network timeout'));
-        }, 5000);
-        client.connect(port, host, () => {
-            clearTimeout(timeout);
-            client.write(cashDrawerCommand);
-            client.end();
-            console.log('[CASH DRAWER] Network drawer command sent to', host + ':' + port);
-            resolve();
-        });
-        client.on('error', (err) => {
-            clearTimeout(timeout);
-            console.error('[CASH DRAWER ERROR]', err.message);
-            reject(err);
-        });
-    });
-}
-/**
- * 生成小票文本 (58mm打印机, 32字符宽)
- */
 function generateReceiptText(data) {
     const lines = [];
     const width = 32;
@@ -1290,10 +1408,17 @@ electron_1.app.whenReady().then(async () => {
     // 先启动本地服务器（仅打包模式）
     if (electron_1.app.isPackaged) {
         // 启动服务器并等待 schema 同步完成
-        await startLocalServer();
+        // 注意：即使这里抛异常，也不应该导致整个 app 退出
+        try {
+            await startLocalServer();
+        }
+        catch (err) {
+            main_1.default.error('[Electron] startLocalServer() threw:', err.message, err.stack);
+            // 不退出，继续尝试启动窗口和服务器
+        }
         // 等待服务器 port 7072 可用后再创建窗口
         try {
-            await waitForPort(7072, 30000);
+            await waitForPort(7072, 60000);
             main_1.default.log('[Electron] Server is ready, creating windows...');
             try {
                 createMainWindow();

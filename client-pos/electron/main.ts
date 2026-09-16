@@ -435,10 +435,9 @@ async function startLocalServer(): Promise<void> {
     }
   }
 
-  // 关键：自动检测并修复数据库 schema（新增列/表缺失时自动 db push）
-  // 这确保从旧版本升级的用户不需要手动清理数据库
-  // 同步等待完成：schema 必须先更新，服务器才能安全启动
-  await ensureSchemaUpToDate(userDbPath)
+  // skip db push at runtime - causes issues with existing databases (data loss, corruption)
+  // if schema is outdated, rebuild the app from a fresh installer
+  // ensureSchemaUpToDate(userDbPath)
 
   // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
   const unpackedRoot = path.join(process.resourcesPath, 'app.asar.unpacked')
