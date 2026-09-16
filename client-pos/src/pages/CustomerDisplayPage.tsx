@@ -104,6 +104,12 @@ export function CustomerDisplayPage() {
   const mediaFiles = dualScreenConfig.mediaFiles || []
   const promotions = dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS
 
+  // Use refs to avoid stale closure in interval callbacks
+  const mediaFilesRef = useRef(mediaFiles)
+  const promotionsRef = useRef(promotions)
+  mediaFilesRef.current = mediaFiles
+  promotionsRef.current = promotions
+
   // Get current layout based on display state
   const currentLayout = displayState === 'idle'
     ? dualScreenConfig.idleLayout || DEFAULT_IDLE_LAYOUT
@@ -115,20 +121,22 @@ export function CustomerDisplayPage() {
   useEffect(() => {
     if (displayState !== 'idle') return
 
+    const mf = mediaFilesRef.current
+    const pr = promotionsRef.current
     // If has media files, rotate through them
-    if (mediaFiles.length > 0) {
+    if (mf.length > 0) {
       const interval = setInterval(() => {
-        setCurrentMediaIndex(p => (p + 1) % mediaFiles.length)
+        setCurrentMediaIndex(p => (p + 1) % mf.length)
       }, 10000) // 10 seconds per media
       return () => clearInterval(interval)
     }
 
     // Otherwise rotate promotions
     const interval = setInterval(() => {
-      setCurrentPromotion(p => (p + 1) % promotions.length)
+      setCurrentPromotion(p => (p + 1) % pr.length)
     }, 5000)
     return () => clearInterval(interval)
-  }, [displayState, mediaFiles.length, promotions.length])
+  }, [displayState])
 
   // Auto-play video when it's the current media
   useEffect(() => {

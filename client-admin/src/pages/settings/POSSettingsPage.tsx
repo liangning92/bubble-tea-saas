@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi } from '../../services/api'
@@ -32,7 +32,8 @@ const DualScreenMediaUpload: React.FC<{
   mediaFiles: MediaFile[]
   onUpload: (files: MediaFile[]) => void
   onRemove: (index: number) => void
-}> = ({ mediaFiles, onUpload, onRemove }) => {
+  onMediaFilesChange?: (getNewFiles: (current: MediaFile[]) => MediaFile[]) => void
+}> = ({ mediaFiles, onUpload, onRemove, onMediaFilesChange }) => {
   const { t } = useTranslation()
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -56,7 +57,12 @@ const DualScreenMediaUpload: React.FC<{
     try {
       const response = await uploadApi.uploadDualScreen(files)
       const newFiles = response.data.data.files || []
-      onUpload([...mediaFiles, ...newFiles])
+      if (onMediaFilesChange) {
+        // Use functional update to avoid stale closure
+        onMediaFilesChange((current) => [...current, ...newFiles])
+      } else {
+        onUpload([...mediaFiles, ...newFiles])
+      }
     } catch (error) {
       console.error('Upload failed:', error)
       alert(t('common.error'))
@@ -237,32 +243,40 @@ const _DualScreenLayoutEditor: React.FC<{
 // DualScreen Preview Component
 const DualScreenPreview: React.FC<{
   dualScreen: any
-}> = ({ dualScreen }) => {
+}> = React.memo(({ dualScreen }) => {
   const { t } = useTranslation()
   const [previewState, setPreviewState] = useState<'idle' | 'ordering' | 'complete'>('idle')
   const [currentIndex, setCurrentIndex] = useState(0)
   const promotions = dualScreen.promotions || ['🧋', '🍓', '💳', '🎁']
   const mediaFiles = dualScreen.mediaFiles || []
 
-  const idleLayout = dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] }
-  const orderingLayout = dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] }
+  // Use refs to avoid stale closure in interval callbacks
+  const mediaFilesRef = useRef(mediaFiles)
+  const promotionsRef = useRef(promotions)
+  mediaFilesRef.current = mediaFiles
+  promotionsRef.current = promotions
+
+  const idleLayout = useMemo(() => dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] }, [dualScreen.idleLayout])
+  const orderingLayout = useMemo(() => dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] }, [dualScreen.orderingLayout])
   const currentLayout = previewState === 'idle' ? idleLayout : orderingLayout
 
   // Auto-rotate for preview
   useEffect(() => {
     if (previewState !== 'idle') return
-    if (mediaFiles.length > 0) {
+    const mf = mediaFilesRef.current
+    const pr = promotionsRef.current
+    if (mf.length > 0) {
       const interval = setInterval(() => {
-        setCurrentIndex(p => (p + 1) % mediaFiles.length)
+        setCurrentIndex(p => (p + 1) % mf.length)
       }, 3000)
       return () => clearInterval(interval)
     } else {
       const interval = setInterval(() => {
-        setCurrentIndex(p => (p + 1) % promotions.length)
+        setCurrentIndex(p => (p + 1) % pr.length)
       }, 2000)
       return () => clearInterval(interval)
     }
-  }, [previewState, mediaFiles.length, promotions.length])
+  }, [previewState])
 
   const currentMedia = mediaFiles[currentIndex]
   const currentPromotion = promotions[currentIndex]
@@ -375,7 +389,7 @@ const DualScreenPreview: React.FC<{
       </div>
     </div>
   )
-}
+})
 
 export function POSSettingsPage() {
   const { t, i18n } = useTranslation()
@@ -2110,12 +2124,24 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
                       setHardwareSettings(newHardwareSettings)
                       handleSave('hardwareSettings', newHardwareSettings)
                     }}
+                    onMediaFilesChange={(getNewFiles) => {
+                      setHardwareSettings((prev: any) => {
+                        const current = prev.dualScreen?.mediaFiles || []
+                        const updated = getNewFiles(current)
+                        const newHardwareSettings = { ...prev, dualScreen: { ...prev.dualScreen!, mediaFiles: updated } }
+                        handleSave('hardwareSettings', newHardwareSettings)
+                        return newHardwareSettings
+                      })
+                    }}
                     onRemove={(index) => {
-                      const newFiles = [...(hardwareSettings.dualScreen?.mediaFiles || [])]
-                      newFiles.splice(index, 1)
-                      const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, mediaFiles: newFiles } }
-                      setHardwareSettings(newHardwareSettings)
-                      handleSave('hardwareSettings', newHardwareSettings)
+                      setHardwareSettings((prev: any) => {
+                        const current = prev.dualScreen?.mediaFiles || []
+                        const newFiles = [...current]
+                        newFiles.splice(index, 1)
+                        const newHardwareSettings = { ...prev, dualScreen: { ...prev.dualScreen!, mediaFiles: newFiles } }
+                        handleSave('hardwareSettings', newHardwareSettings)
+                        return newHardwareSettings
+                      })
                     }}
                   />
                 </div>

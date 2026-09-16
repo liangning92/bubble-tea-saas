@@ -146,6 +146,24 @@ interface DualScreenConfig {
   showLogo: boolean
   adImageUrl: string
   promotions: string[]
+  mediaFiles?: Array<{
+    url: string
+    filename: string
+    mimetype: string
+    isVideo: boolean
+  }>
+  idleLayout?: {
+    columns: Array<{
+      width: number
+      content: 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
+    }>
+  }
+  orderingLayout?: {
+    columns: Array<{
+      width: number
+      content: 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
+    }>
+  }
 }
 
 export function POSPage() {
@@ -885,6 +903,9 @@ export function POSPage() {
             showLogo: hw.dualScreen.showLogo ?? false,
             adImageUrl: hw.dualScreen.adImageUrl || '',
             promotions: hw.dualScreen.promotions || ['🧋', '🍓', '💳', '🎁'],
+            mediaFiles: hw.dualScreen.mediaFiles || [],
+            idleLayout: hw.dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] },
+            orderingLayout: hw.dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] },
           } : hardwareSettings.dualScreen
 
           setHardwareSettings(prev => ({
