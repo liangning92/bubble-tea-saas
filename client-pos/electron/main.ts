@@ -462,17 +462,30 @@ async function startLocalServer(): Promise<void> {
   // fork Express 服务器
   // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
   // Windows 上 process.execPath 是 BTPS.exe（Electron 主程序），不是 node.exe
-  // electron-builder 打包后 node.exe 位于 app.asar.unpacked/node_modules/electron/dist/
+  // 修复：electron 在根 node_modules（打包进 asar），不在 server/node_modules
+  // 因此 asar.unpacked 下可能没有 electron/dist/node.exe
+  // 尝试多个可能路径，都找不到则用系统 node（最后手段）
   let nodeExecPath = process.execPath
   if (process.platform === 'win32') {
-    // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
-    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
-    const electronNodeExe = path.join(electronDir, 'node.exe')
-    if (fs.existsSync(electronNodeExe)) {
-      nodeExecPath = electronNodeExe
-      log.log('[Server] Using electron bundled node:', nodeExecPath)
-    } else {
-      log.log('[Server] electron node.exe not found at', electronDir, '- using process.execPath as fallback:', nodeExecPath)
+    // 可能的 node.exe 位置（按优先级）
+    const possiblePaths = [
+      // 1. app.asar.unpacked/node_modules/electron/dist/（electron 在根 node_modules）
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron', 'dist', 'node.exe'),
+      // 2. app.asar.unpacked/server/node_modules/electron/dist/（旧路径，可能不存在）
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist', 'node.exe'),
+      // 3. 系统级 node（作为最后的 fallback）
+      'C:\\Program Files\\nodejs\\node.exe',
+      'C:\\Program Files (x86)\\nodejs\\node.exe',
+    ]
+    for (const possibleNode of possiblePaths) {
+      if (fs.existsSync(possibleNode)) {
+        nodeExecPath = possibleNode
+        log.log('[Server] Using found node:', nodeExecPath)
+        break
+      }
+    }
+    if (!possiblePaths.some(p => p === nodeExecPath) || !fs.existsSync(nodeExecPath)) {
+      log.log('[Server] No working node.exe found - using process.execPath as fallback:', nodeExecPath)
     }
   }
   // ── FORK DEBUG（按 ChatGPT 建议添加）──────────────────────────────
