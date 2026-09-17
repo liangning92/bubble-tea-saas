@@ -1509,7 +1509,7 @@ function generateKitchenText(data: any): string {
           lines.push(`  + ${addon.name}`)
         })
       }
-      if (item.notes || item.note || itemremark) {
+      if (item.notes || item.note || item.remark) {
         lines.push(`  备注: ${item.notes || item.note || item.remark}`)
       }
     })
