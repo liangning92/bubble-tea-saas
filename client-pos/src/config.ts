@@ -48,7 +48,12 @@ export function getApiUrl(): string {
 }
 
 export function setApiUrl(url: string): void {
-  localStorage.setItem(API_URL_KEY, url.trim())
+  // Normalize: ensure cloud URLs always have /api suffix before storing
+  let normalized = url.trim()
+  if ((normalized.startsWith('https://') || normalized.startsWith('http://')) && !normalized.endsWith('/api')) {
+    normalized = normalized.replace(/\/$/, '') + '/api'
+  }
+  localStorage.setItem(API_URL_KEY, normalized)
 }
 
 export function clearApiUrl(): void {
