@@ -560,8 +560,8 @@ async function startLocalServer(): Promise<void> {
 
   // ChatGPT 建议：加 spawn 事件，确认子进程真的启动了
   serverProcess.on('spawn', () => {
-    writeCrash('[Server] child spawn event - PID: ' + serverProcess.pid)
-    console.log('[Server] child spawn event - PID:', serverProcess.pid)
+    writeCrash('[Server] child spawn event - PID: ' + serverProcess?.pid)
+    console.log('[Server] child spawn event - PID:', serverProcess?.pid)
   })
 
   serverProcess.on('error', (err: Error) => {
