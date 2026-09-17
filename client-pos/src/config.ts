@@ -35,7 +35,13 @@ function autoDetectApiUrl(): string {
 export function getApiUrl(): string {
   // First check localStorage
   const stored = localStorage.getItem(API_URL_KEY)
-  if (stored) return stored
+  if (stored) {
+    // Ensure cloud URLs always have /api suffix (fix: checkServerConfigApiUrl strips /api before storing)
+    if ((stored.startsWith('https://') || stored.startsWith('http://')) && !stored.endsWith('/api')) {
+      return stored.replace(/\/$/, '') + '/api'
+    }
+    return stored
+  }
 
   // Auto-detect based on current host
   return autoDetectApiUrl()
