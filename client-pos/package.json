@@ -1,7 +1,7 @@
 {
   "name": "youme-pos",
   "private": true,
-  "version": "2026.9.249",
+  "version": "2026.9.250",
   "description": "YOUME POS System",
   "author": "YOUME Team",
   "main": "dist-electron/electron/main.js",
