@@ -49,6 +49,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('list-printers')
   },
 
+  // 发送厨房小票
+  sendKitchenOrder: (data: any) => {
+    return ipcRenderer.invoke('send-kitchen-order', data)
+  },
+
   // ========== 自动更新相关 ==========
 
   // 检查更新

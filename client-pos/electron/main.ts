@@ -33,11 +33,14 @@ process.on('unhandledRejection', (reason) => {
 
 // electron-pos-printer for Windows USB/network thermal printers
 let PosPrinter: any = null
+let printerLoadFailed = false
 try {
   PosPrinter = require('electron-pos-printer').PosPrinter
   console.log('[PRINTER] electron-pos-printer loaded')
 } catch (e: any) {
+  printerLoadFailed = true
   console.log('[PRINTER] electron-pos-printer not available:', e?.message)
+  log.error('[PRINTER] electron-pos-printer load failed:', e?.message)
 }
 
 // 检测 WebView2 是否可用（Windows only）
@@ -420,15 +423,15 @@ async function startLocalServer(): Promise<void> {
     return
   }
 
-  // 每次启动都从 seed.db 重新初始化，修复旧数据库 schema 不匹配问题
+  // 仅在用户数据库完全不存在时，才从 seed.db 复制初始化（保护用户数据）
   if (fs.existsSync(seedTemplatePath)) {
     try {
-      if (fs.existsSync(userDbPath)) {
-        fs.unlinkSync(userDbPath)
-        writeCrash('[Schema] Removed old database, reinitializing from seed.db')
+      if (!fs.existsSync(userDbPath)) {
+        // 用户数据库不存在时才从 seed.db 复制（首次安装时）
+        fs.copyFileSync(seedTemplatePath, userDbPath)
+        writeCrash('[Schema] User database created from seed template')
       }
-      fs.copyFileSync(seedTemplatePath, userDbPath)
-      writeCrash('[Schema] Seed database copied from template')
+      // 注意：已存在的用户数据库不再被覆盖，以保护用户数据
     } catch (copyErr) {
       writeCrash(`[Server] Failed to copy seed.db: ${copyErr}`)
       return
@@ -1409,6 +1412,122 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
   }
 })
 
+/**
+ * 发送厨房小票 - 支持网络打印机和本地打印机
+ */
+ipcMain.handle('send-kitchen-order', async (_event, data) => {
+  try {
+    const { orderNum, printerName, printerHost, printerPort, items } = data
+
+    writeCrash(`[KITCHEN] ====== send-kitchen-order called ======`)
+    writeCrash(`[KITCHEN] orderNum='${orderNum}' printerName='${printerName}'`)
+    writeCrash(`[KITCHEN] printerHost='${printerHost}' port=${printerPort}`)
+
+    if (!orderNum) {
+      writeCrash('[KITCHEN] ERROR: orderNum is empty')
+      return { success: false, error: 'No order number provided' }
+    }
+
+    // 生成厨房小票文本
+    const kitchenText = generateKitchenText({ orderNum, items })
+    writeCrash(`[KITCHEN] text length=${kitchenText.length}`)
+
+    // 网络打印机（优先）
+    if (printerHost && printerPort) {
+      try {
+        await printViaNetwork(kitchenText, printerHost, printerPort)
+        writeCrash('[KITCHEN] Network print success')
+        return { success: true }
+      } catch (netErr: any) {
+        writeCrash(`[KITCHEN] Network print failed: ${netErr.message}`)
+        return { success: false, error: netErr.message }
+      }
+    }
+
+    // 本地打印机（COM 口或 Windows 打印机名）
+    if (printerName) {
+      const isComPort = /^COM\d+/i.test(printerName)
+      const encoder = new TextEncoder()
+      const initCmd = Buffer.from([0x1B, 0x40])  // ESC @
+      const cutCmd = Buffer.from([0x1D, 0x56, 0x00])  // GS V 0 (full cut)
+      const rawBytes = Buffer.concat([initCmd, encoder.encode(kitchenText), cutCmd])
+
+      if (isComPort) {
+        try {
+          await printViaComPort(printerName, rawBytes)
+          writeCrash('[KITCHEN] COM port print success')
+          return { success: true }
+        } catch (comErr: any) {
+          writeCrash(`[KITCHEN] COM port print failed: ${comErr.message}`)
+          return { success: false, error: comErr.message }
+        }
+      } else {
+        // Windows 打印机名：使用 sendRawCommand
+        try {
+          await PosPrinter.sendRawCommand(printerName, rawBytes)
+          writeCrash('[KITCHEN] sendRawCommand success')
+          return { success: true }
+        } catch (rawErr: any) {
+          writeCrash(`[KITCHEN] sendRawCommand failed: ${rawErr.message}`)
+          return { success: false, error: rawErr.message }
+        }
+      }
+    }
+
+    writeCrash('[KITCHEN] ERROR: no printer configured')
+    return { success: false, error: 'No printer configured' }
+  } catch (error: any) {
+    writeCrash(`[KITCHEN] error: ${error.message}`)
+    return { success: false, error: error.message }
+  }
+})
+
+/**
+ * 生成厨房小票文本
+ */
+function generateKitchenText(data: any): string {
+  const lines: string[] = []
+  const width = 32
+
+  lines.push(centerText('======== 厨房订单 ========', width))
+  lines.push(`桌号/订单号: ${data.orderNum || ''}`)
+  lines.push(`时间: ${formatTime()}`)
+  lines.push(repeatChar('-', width))
+
+  if (data.items && data.items.length > 0) {
+    data.items.forEach((item: any) => {
+      lines.push(`${item.quantity || 1} x ${item.productName || item.name || 'item'}`)
+      if (item.specName) {
+        lines.push(`  规格: ${item.specName}`)
+      }
+      if (item.sugarLevelName || item.iceLevelName) {
+        const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ')
+        lines.push(`  甜度/冰度: ${mods}`)
+      }
+      if (item.addons && item.addons.length > 0) {
+        item.addons.forEach((addon: any) => {
+          lines.push(`  + ${addon.name}`)
+        })
+      }
+      if (item.notes || item.note || itemremark) {
+        lines.push(`  备注: ${item.notes || item.note || item.remark}`)
+      }
+    })
+  }
+
+  lines.push(repeatChar('-', width))
+  lines.push('')
+
+  return lines.join('\n') + '\n\n\n\n'
+}
+
+function formatTime(): string {
+  const now = new Date()
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
 function generateReceiptText(data: any): string {
   const lines: string[] = []
   const width = 32
@@ -1530,12 +1649,24 @@ app.on('second-instance', () => {
 app.whenReady().then(async () => {
   console.log('[Electron] App ready, starting up...')
 
+  // 警告：打印模块加载失败
+  if (printerLoadFailed) {
+    const warningMsg = '打印模块（electron-pos-printer）未能成功加载。\n\n影响功能：\n- 小票打印可能无法工作\n- 钱箱可能无法打开\n\n建议：请重新安装应用程序。'
+    console.error('[Electron] Printer module warning:', warningMsg)
+    dialog.showMessageBox({
+      type: 'warning',
+      title: '打印模块加载失败',
+      message: warningMsg,
+      buttons: ['确定']
+    })
+  }
+
   // WebView2 检查（仅 Windows，Electron 28+ 已内置 WebView2 但旧系统可能缺失）
   if (process.platform === 'win32') {
     const webview2Available = checkWebView2()
     console.log('[Electron] WebView2 available:', webview2Available)
     if (!webview2Available) {
-      const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。'
+      const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。'
       console.error('[Electron] WebView2 MISSING:', msg)
       dialog.showErrorBox('缺少 WebView2 运行时', msg)
       app.quit()
