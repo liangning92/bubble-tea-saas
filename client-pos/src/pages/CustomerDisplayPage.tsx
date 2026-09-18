@@ -207,7 +207,7 @@ export function CustomerDisplayPage() {
         return (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4">
             <div className="text-5xl mb-4">{promotion}</div>
-            <div className="text-xl text-center">{dualScreenConfig.welcomeText || 'Welcome'}</div>
+            <div className="text-xl text-center">{dualScreenConfig.welcomeText || t('customer_welcome', 'Welcome')}</div>
             <div className="flex gap-2 mt-4">
               {promotions.map((_, i) => (
                 <div

@@ -1880,7 +1880,7 @@ export function POSPage() {
     setDetectedPrinters([])
     try {
       if (!electronAPI?.listPrinters) {
-        setPrinterDetectError(t('pos.printerNotAvailable') || '打印机功能不可用（仅支持 Windows）')
+        setPrinterDetectError(t('pos.printerNotAvailable', 'Printer not available (Windows only)'))
         return
       }
       const result = await electronAPI.listPrinters()
@@ -1889,7 +1889,7 @@ export function POSPage() {
         setDetectedPrinters(result.printers)
         setSelectedPrinterForSetup(result.printers[0])
       } else {
-        setPrinterDetectError(t('pos.noPrinterFound') || '未检测到打印机，请确保打印机已连接并开机')
+        setPrinterDetectError(t('pos_no_printers', 'No printers detected'))
       }
     } catch (err: any) {
       console.error('[POS] Detect printers failed:', err)
@@ -1913,7 +1913,7 @@ export function POSPage() {
       setHardwareSettings(newHardwareSettings)
       await posApi.setConfig(user.storeId, 'hardwareSettings', newHardwareSettings, 'pos')
       setShowPrinterDetectModal(false)
-      showToast(t('pos.printerSetupSuccess') || '打印机已设为 ' + selectedPrinterForSetup, 'success')
+      showToast(t('pos.printerSetupSuccess', 'Printer set as') + ' ' + selectedPrinterForSetup, 'success')
     } catch (err: any) {
       showToast(t('common.error') + ': ' + (err?.message || ''), 'error')
     }
@@ -3779,7 +3779,7 @@ export function POSPage() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPrinterDetectModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
-              <h3 className="font-bold">{t('pos.detectPrinter') || '检测打印机'}</h3>
+              <h3 className="font-bold">{t('pos_detect_printer', 'Detect Printer')}</h3>
               <button onClick={() => setShowPrinterDetectModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
                 <X size={20} />
               </button>
@@ -3789,14 +3789,14 @@ export function POSPage() {
               {printerDetectLoading && (
                 <div className="flex flex-col items-center py-8">
                   <Loader2 size={40} className="animate-spin text-primary mb-3" />
-                  <p className="text-gray-500">{t('pos.detectingPrinters') || '正在检测打印机...'}</p>
+                  <p className="text-gray-500">{t('pos_detecting_printer', 'Detecting printer...')}</p>
                 </div>
               )}
 
               {/* 检测结果 */}
               {!printerDetectLoading && detectedPrinters.length > 0 && (
                 <>
-                  <p className="text-sm text-gray-500">{t('pos.foundPrintersList') || '检测到以下打印机'}</p>
+                  <p className="text-sm text-gray-500">{t('pos_printers_found', 'Printers found')}</p>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {detectedPrinters.map((p, idx) => (
                       <div
@@ -3821,7 +3821,7 @@ export function POSPage() {
                     disabled={!selectedPrinterForSetup}
                     className="w-full py-3 bg-primary text-white rounded-xl font-bold disabled:opacity-50 touch-feedback"
                   >
-                    {t('pos.setAsReceiptPrinter') || '设为小票打印机'}
+                    {t('pos.setAsReceiptPrinter', 'Set as Receipt Printer')}
                   </button>
                 </>
               )}
@@ -3835,7 +3835,7 @@ export function POSPage() {
                     onClick={handleDetectPrinters}
                     className="mt-4 px-6 py-2 border-2 border-primary text-primary rounded-xl font-medium hover:bg-primary/5"
                   >
-                    {t('pos.retryDetect') || '重新检测'}
+                    {t('pos.retryDetect', 'Retry')}
                   </button>
                 </div>
               )}
@@ -3844,12 +3844,12 @@ export function POSPage() {
               {!printerDetectLoading && !printerDetectError && detectedPrinters.length === 0 && (
                 <div className="flex flex-col items-center py-6">
                   <Printer size={40} className="text-gray-300 mb-3" />
-                  <p className="text-gray-500 text-center">{t('pos.noPrinterFound') || '未检测到打印机'}</p>
+                  <p className="text-gray-500 text-center">{t('pos_no_printers', 'No printers detected')}</p>
                   <button
                     onClick={handleDetectPrinters}
                     className="mt-4 px-6 py-2 border-2 border-primary text-primary rounded-xl font-medium hover:bg-primary/5"
                   >
-                    {t('pos.retryDetect') || '重新检测'}
+                    {t('pos.retryDetect', 'Retry')}
                   </button>
                 </div>
               )}

@@ -112,7 +112,7 @@ export function DiagnosticsPage() {
     <div className="min-h-screen bg-gray-100 p-4">
       <div className="max-w-2xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">🔧 诊断中心</h1>
+          <h1 className="text-xl font-bold">🔧 {t('diag_title', '🔧 Diagnostic Center')}</h1>
           <button onClick={loadDiagnostics} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">
             刷新
           </button>
@@ -126,7 +126,7 @@ export function DiagnosticsPage() {
               onClick={() => setActiveTab(tab)}
               className={`flex-1 py-3 text-sm font-medium ${activeTab === tab ? 'bg-primary text-white' : 'text-gray-500 hover:bg-gray-50'}`}
             >
-              {tab === 'overview' ? '总览' : tab === 'logs' ? '日志' : '网络'}
+              {tab === 'overview' ? t('diag_tab_overview') : tab === 'logs' ? t('diag_tab_logs') : t('diag_tab_network') }
             </button>
           ))}
         </div>
@@ -134,11 +134,11 @@ export function DiagnosticsPage() {
         {activeTab === 'overview' && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <StatusBadge label="云端API" value={status.api} />
-              <StatusBadge label="本地网络" value={status.network} />
-              <StatusBadge label="本地数据库" value={status.db} />
+              <StatusBadge label={t("diag_cloud_api", "Cloud API")} value={status.api} />
+              <StatusBadge label={t("diag_local_network", "Local Network")} value={status.network} />
+              <StatusBadge label={t("diag_local_db", "Local Database")} value={status.db} />
               <div className="flex items-center gap-3 p-3 bg-white rounded-xl border">
-                <span className="text-gray-500 text-sm">API延迟</span>
+                <span className="text-gray-500 text-sm">{t("diag_api_latency", "API Latency")}</span>
                 <span className={`font-bold ${status.apiLatency && status.apiLatency < 1000 ? 'text-green-600' : 'text-red-600'}`}>
                   {status.apiLatency ? `${status.apiLatency}ms` : '-'}
                 </span>
@@ -146,10 +146,10 @@ export function DiagnosticsPage() {
             </div>
 
             <div className="bg-white rounded-xl border p-3 space-y-2">
-              <h2 className="font-bold text-sm text-gray-700">系统信息</h2>
+              <h2 className="font-bold text-sm text-gray-700">{t("diag_sys_info", "System Info")}</h2>
               <div className="text-sm space-y-1">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">版本</span>
+                  <span className="text-gray-500">{t("diag_version", "Version")}</span>
                   <span className="font-mono">{status.version}</span>
                 </div>
                 <div className="flex justify-between">
@@ -157,7 +157,7 @@ export function DiagnosticsPage() {
                   <span className="font-mono text-xs">{getApiUrl()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">错误数</span>
+                  <span className="text-gray-500">{t("diag_error_count", "Error Count")}</span>
                   <span className={`font-bold ${status.errors.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {status.errors.length}
                   </span>
@@ -167,7 +167,7 @@ export function DiagnosticsPage() {
 
             {status.errors.length > 0 && (
               <div className="bg-red-50 rounded-xl border border-red-200 p-3">
-                <h2 className="font-bold text-sm text-red-700 mb-2">⚠️ 最新错误</h2>
+                <h2 className="font-bold text-sm text-red-700 mb-2">{t("diag_latest_error", "⚠️ Latest Error")}</h2>
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {status.errors.slice(-5).reverse().map((err, i) => (
                     <div key={i} className="text-xs text-red-600 font-mono bg-red-100 rounded p-2 break-all">
@@ -183,11 +183,11 @@ export function DiagnosticsPage() {
         {activeTab === 'logs' && (
           <div className="bg-white rounded-xl border overflow-hidden">
             <div className="p-3 border-b bg-gray-50">
-              <span className="text-sm font-medium">最近日志（来自 electron-log）</span>
+              <span className="text-sm font-medium">{t("diag_recent_logs", "Recent Logs")} (来自 electron-log)</span>
             </div>
             <div className="max-h-96 overflow-y-auto">
               {status.logs.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-sm">暂无日志</div>
+                <div className="p-8 text-center text-gray-400 text-sm">{t("diag_no_logs", "No logs")}</div>
               ) : (
                 <div className="divide-y">
                   {status.logs.slice(-50).reverse().map((log, i) => (
@@ -206,7 +206,7 @@ export function DiagnosticsPage() {
         {activeTab === 'network' && (
           <div className="space-y-3">
             <div className="bg-white rounded-xl border p-4">
-              <h2 className="font-bold text-sm mb-3">🌐 API 连接测试</h2>
+              <h2 className="font-bold text-sm mb-3">{t("diag_api_test", "🌐 API Connection Test")}</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">API地址</span>
@@ -215,7 +215,7 @@ export function DiagnosticsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">状态</span>
                   <span className={`font-bold ${status.api === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
-                    {status.api === 'ok' ? '✅ 可连接' : '❌ 不可连接'}
+                    {status.api === 'ok' ? t('diag_reachable', '✅ Reachable') : t('diag_unreachable', '❌ Unreachable') }
                   </span>
                 </div>
                 {status.apiLatency && (
@@ -230,12 +230,12 @@ export function DiagnosticsPage() {
             </div>
 
             <div className="bg-white rounded-xl border p-4">
-              <h2 className="font-bold text-sm mb-3">💾 IndexedDB 状态</h2>
+              <h2 className="font-bold text-sm mb-3">{t("diag_indexeddb_status", "💾 IndexedDB Status")}</h2>
               <div className="text-sm space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-500">数据库</span>
                   <span className={`font-bold ${status.db === 'ok' ? 'text-green-600' : 'text-gray-600'}`}>
-                    {status.db === 'ok' ? '✅ 正常' : status.db === 'error' ? '❌ 异常' : '❓ 未知'}
+                    {status.db === 'ok' ? t('diag_db_ok', '✅ OK') : status.db === 'error' ? t('diag_db_error', '❌ Error') : t('diag_db_unknown', '❓ Unknown') }
                   </span>
                 </div>
               </div>
