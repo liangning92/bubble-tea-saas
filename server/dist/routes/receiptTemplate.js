@@ -9,6 +9,7 @@ const zod_1 = require("zod");
 const database_1 = __importDefault(require("../config/database"));
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
+const HygieneService_1 = require("../services/HygieneService");
 const router = (0, express_1.Router)();
 exports.receiptTemplateRouter = router;
 // Schema for receipt block
@@ -262,6 +263,22 @@ router.delete('/:id', auth_1.authenticate, async (req, res) => {
     catch (error) {
         console.error('Delete receipt template error:', error);
         res.status(500).json({ code: 500, message: 'Failed to delete template' });
+    }
+});
+// POST /api/receipt-templates/seed - 初始化默认模板
+router.post('/seed', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const storeId = req.user.storeId;
+        const created = await (0, HygieneService_1.seedDefaultReceiptTemplate)(storeId);
+        res.json({
+            code: 200,
+            data: { created, message: created.length > 0 ? 'Default template created' : 'Template already exists' },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Seed receipt template error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to seed default template' });
     }
 });
 //# sourceMappingURL=receiptTemplate.js.map

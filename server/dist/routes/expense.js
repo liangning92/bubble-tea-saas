@@ -42,7 +42,7 @@ const XLSX = __importStar(require("xlsx"));
 const router = (0, express_1.Router)();
 exports.expenseRouter = router;
 // GET /api/expenses
-router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager', 'cashier'), async (req, res) => {
     try {
         const storeId = req.user.storeId;
         const { type, category, startDate, endDate } = req.query;
@@ -75,9 +75,9 @@ router.get('/summary', auth_1.authenticate, (0, auth_1.authorize)('admin', 'mana
     }
 });
 // POST /api/expenses
-router.post('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+router.post('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager', 'cashier'), async (req, res) => {
     try {
-        const expense = await ExpenseService.createExpense(req.body);
+        const expense = await ExpenseService.createExpense({ ...req.body, storeId: req.user.storeId });
         await FinanceAuditService.createAuditLog({
             storeId: req.user.storeId,
             userId: req.user.id,

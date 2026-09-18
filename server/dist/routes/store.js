@@ -7,6 +7,7 @@ exports.storeRouter = void 0;
 const express_1 = require("express");
 const database_1 = __importDefault(require("../config/database"));
 const auth_1 = require("../middlewares/auth");
+const HygieneService_1 = require("../services/HygieneService");
 const router = (0, express_1.Router)();
 exports.storeRouter = router;
 // POST /api/stores - Create a new store with tenant (Admin only)
@@ -27,6 +28,10 @@ router.post('/', auth_1.authenticate, (0, auth_1.authorize)('admin'), async (req
                 address: address || '',
                 phone: phone || ''
             }
+        });
+        // Initialize default receipt template for new store
+        await (0, HygieneService_1.seedDefaultReceiptTemplate)(store.id).catch((err) => {
+            console.error('Failed to seed default receipt template:', err);
         });
         res.status(201).json({
             code: 201,
