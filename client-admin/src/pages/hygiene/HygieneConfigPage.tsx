@@ -736,7 +736,7 @@ function WeekdayEditor({ data, onChange }: { data: WeekdayItem[]; onChange: (dat
 
           {/* Short */}
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Short</label>
+            <label className="block text-xs text-gray-500 mb-1">{t('hygiene.short')}</label>
             <input
               type="text"
               value={item.short}

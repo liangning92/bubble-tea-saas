@@ -134,7 +134,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
               <div className="w-48 h-48 mx-auto bg-white p-2 rounded-xl border-2 border-gray-200">
                 <img
                   src={qrDataUrl}
-                  alt="Attendance QR Code"
+                  alt={t('auth.attendanceQrAlt')}
                   className="w-full h-full"
                 />
               </div>

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Loader2, Wifi, WifiOff, AlertCircle, CheckCircle } from 'lucide-react'
 import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
 
 export function SetupWizard() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -52,7 +54,7 @@ export function SetupWizard() {
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-start gap-3">
             <AlertCircle className="text-red-500 mt-0.5 flex-shrink-0" size={20} />
             <div>
-              <p className="text-red-700 text-sm font-medium">连接失败</p>
+              <p className="text-red-700 text-sm font-medium">{t('auth.connectionFailed')}</p>
               <p className="text-red-600 text-xs mt-1">{error}</p>
             </div>
           </div>
@@ -63,32 +65,32 @@ export function SetupWizard() {
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex items-center gap-2 mb-4">
               <Wifi className="text-pink-500" size={20} />
-              <h2 className="font-semibold text-gray-800">连接云端账户</h2>
+              <h2 className="font-semibold text-gray-800">{t('auth.connectCloudTitle')}</h2>
             </div>
             <p className="text-gray-500 text-sm mb-4">
-              输入您的门店管理员账户（手机号 + 密码）<br />
+              {t('auth.connectCloudHint')}<br />
               <span className="text-xs">从云端同步产品、分类和配置</span>
             </p>
 
             <form onSubmit={handleConnect} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">手机号</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('auth.phone')}</label>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="0812xxxxxxxx"
+                  placeholder={t('auth.phoneExample')}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('common.password')}</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={t('auth.passwordPlaceholder') || '••••••••'}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
                   required
                 />
@@ -101,17 +103,17 @@ export function SetupWizard() {
                 {loading ? (
                   <>
                     <Loader2 className="animate-spin" size={20} />
-                    连接中...
+                    {t('auth.connecting')}...
                   </>
                 ) : (
-                  '连接云端同步 ➜'
+                  t('auth.connectAndSync') + ' ➜'
                 )}
               </button>
             </form>
 
             <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
               <WifiOff size={14} />
-              <span>离线模式：安装后需联网设置一次，之后可完全离线使用</span>
+              <span>{t('auth.offlineModeNote')}</span>
             </div>
 
           </div>
@@ -123,10 +125,10 @@ export function SetupWizard() {
             <div className="flex justify-center mb-4">
               <Loader2 className="animate-spin text-pink-500" size={48} />
             </div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">同步数据中...</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('auth.syncingData')}</h2>
             <p className="text-gray-500 text-sm">
-              正在从云端拉取产品、分类、配置等数据<br />
-              请保持网络连接
+              {t('auth.pullingFromCloud')}<br />
+              {t('auth.keepNetwork')}
             </p>
           </div>
         )}
@@ -137,27 +139,27 @@ export function SetupWizard() {
             <div className="flex justify-center mb-4">
               <CheckCircle className="text-green-500" size={48} />
             </div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">同步完成！</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('auth.syncComplete')}</h2>
             <p className="text-gray-600 text-sm mb-1">
-              门店：<strong>{syncResult.storeName}</strong>
+              {t('auth.store')}: <strong>{syncResult.storeName}</strong>
             </p>
             <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-              <p className="text-xs text-gray-500 mb-2">已同步数据：</p>
+              <p className="text-xs text-gray-500 mb-2">{t('auth.syncedData')}:</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">分类</span>
+                  <span className="text-gray-500">{t('pos.categories')}</span>
                   <span className="font-medium text-gray-800">{syncResult.categories}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">产品</span>
+                  <span className="text-gray-500">{t('pos.products')}</span>
                   <span className="font-medium text-gray-800">{syncResult.products}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">规格</span>
+                  <span className="text-gray-500">{t('pos.specs')}</span>
                   <span className="font-medium text-gray-800">{syncResult.specs}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">加料</span>
+                  <span className="text-gray-500">{t('pos.addons')}</span>
                   <span className="font-medium text-gray-800">{syncResult.addons}</span>
                 </div>
               </div>
@@ -166,7 +168,7 @@ export function SetupWizard() {
               onClick={handleDone}
               className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition-colors"
             >
-              开始使用 ➜
+              {t('auth.startUsing')} ➜
             </button>
           </div>
         )}

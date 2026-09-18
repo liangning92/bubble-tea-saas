@@ -226,7 +226,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="input"
-              placeholder="e.g. Basic Barista Training"
+              placeholder={t('staff.trainingNamePlaceholder')}
               required
             />
           </div>
@@ -239,7 +239,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
                 value={form.provider}
                 onChange={(e) => setForm({ ...form, provider: e.target.value })}
                 className="input"
-                placeholder="e.g. Head Office"
+                placeholder={t('staff.locationPlaceholder')}
                 required
               />
             </div>
@@ -299,7 +299,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               value={form.certificate}
               onChange={(e) => setForm({ ...form, certificate: e.target.value })}
               className="input"
-              placeholder="Certificate number (optional)"
+              placeholder={t('staff.certificateNumberPlaceholder')}
             />
           </div>
 
@@ -310,7 +310,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="input"
               rows={3}
-              placeholder="Additional notes..."
+              placeholder={t('staff.notesPlaceholder')}
             />
           </div>
 

@@ -230,25 +230,25 @@ export function AttendanceRulesPage() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.lateDeduction')}</span>
                 <span className="font-medium">
-                  {rule.lateDeductionType === 'none' ? 'No deduction' :
+                  {rule.lateDeductionType === 'none' ? t('staff.attendanceRules.lateDeductionNone') :
                    rule.lateDeductionType === 'fixed' ? formatCurrency(rule.lateDeductionFixed || 0) + ' /time' :
-                   'Daily rate'}
+                   t('staff.attendanceRules.lateDeductionDaily')}
                 </span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.absenceDeduction')}</span>
                 <span className="font-medium">
-                  {rule.absenceDeductionType === 'none' ? 'No deduction' :
+                  {rule.absenceDeductionType === 'none' ? t('staff.attendanceRules.lateDeductionNone') :
                    rule.absenceDeductionType === 'fixed' ? formatCurrency(rule.absenceDeductionFixed || 0) :
-                   'Daily rate'}
+                   t('staff.attendanceRules.lateDeductionDaily')}
                 </span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.sickLeaveDeduction')}</span>
                 <span className="font-medium">
-                  {rule.sickLeaveDeductionType === 'none' ? 'No deduction' :
+                  {rule.sickLeaveDeductionType === 'none' ? t('staff.attendanceRules.lateDeductionNone') :
                    rule.sickLeaveDeductionType === 'fixed' ? formatCurrency(rule.sickLeaveDeductionFixed || 0) :
-                   'Daily rate'}
+                   t('staff.attendanceRules.lateDeductionDaily')}
                 </span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
@@ -287,7 +287,7 @@ export function AttendanceRulesPage() {
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="input"
-                  placeholder="e.g. Standard Hours"
+                  placeholder={t('staff.attendanceRuleNamePlaceholder')}
                 />
               </div>
 
@@ -329,9 +329,9 @@ export function AttendanceRulesPage() {
                   onChange={e => setFormData({ ...formData, lateDeductionType: e.target.value })}
                   className="input mb-2"
                 >
-                  <option value="none">No deduction</option>
-                  <option value="fixed">Fixed Amount</option>
-                  <option value="daily_rate">Daily Rate</option>
+                  <option value="none">{t('staff.attendanceRules.lateDeductionNone')}</option>
+                  <option value="fixed">{t('staff.attendanceRules.lateDeductionFixed')}</option>
+                  <option value="daily_rate">{t('staff.attendanceRules.lateDeductionDaily')}</option>
                 </select>
                 {formData.lateDeductionType === 'fixed' && (
                   <input
@@ -339,7 +339,7 @@ export function AttendanceRulesPage() {
                     value={formData.lateDeductionFixed}
                     onChange={e => setFormData({ ...formData, lateDeductionFixed: e.target.value })}
                     className="input"
-                    placeholder="Deduction per late (Rp)"
+                    placeholder={t('staff.deductionPerLatePlaceholder')}
                   />
                 )}
               </div>
@@ -351,9 +351,9 @@ export function AttendanceRulesPage() {
                   onChange={e => setFormData({ ...formData, absenceDeductionType: e.target.value })}
                   className="input mb-2"
                 >
-                  <option value="none">No deduction</option>
-                  <option value="fixed">Fixed Amount</option>
-                  <option value="daily_rate">Daily Rate</option>
+                  <option value="none">{t('staff.attendanceRules.lateDeductionNone')}</option>
+                  <option value="fixed">{t('staff.attendanceRules.lateDeductionFixed')}</option>
+                  <option value="daily_rate">{t('staff.attendanceRules.lateDeductionDaily')}</option>
                 </select>
                 {formData.absenceDeductionType === 'fixed' && (
                   <input
@@ -361,7 +361,7 @@ export function AttendanceRulesPage() {
                     value={formData.absenceDeductionFixed}
                     onChange={e => setFormData({ ...formData, absenceDeductionFixed: e.target.value })}
                     className="input"
-                    placeholder="Deduction per absence (Rp)"
+                    placeholder={t('staff.deductionPerAbsencePlaceholder')}
                   />
                 )}
               </div>
@@ -373,9 +373,9 @@ export function AttendanceRulesPage() {
                   onChange={e => setFormData({ ...formData, sickLeaveDeductionType: e.target.value })}
                   className="input mb-2"
                 >
-                  <option value="none">No deduction</option>
-                  <option value="fixed">Fixed Amount</option>
-                  <option value="daily_rate">Daily Rate</option>
+                  <option value="none">{t('staff.attendanceRules.lateDeductionNone')}</option>
+                  <option value="fixed">{t('staff.attendanceRules.lateDeductionFixed')}</option>
+                  <option value="daily_rate">{t('staff.attendanceRules.lateDeductionDaily')}</option>
                 </select>
                 {formData.sickLeaveDeductionType === 'fixed' && (
                   <input
@@ -383,7 +383,7 @@ export function AttendanceRulesPage() {
                     value={formData.sickLeaveDeductionFixed}
                     onChange={e => setFormData({ ...formData, sickLeaveDeductionFixed: e.target.value })}
                     className="input"
-                    placeholder="Deduction per sick day (Rp)"
+                    placeholder={t('staff.deductionPerSickPlaceholder')}
                   />
                 )}
               </div>

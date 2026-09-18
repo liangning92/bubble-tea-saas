@@ -830,14 +830,14 @@ function AccountTypeModal({
               />
               <input
                 type="text"
-                placeholder="中文名称"
+                placeholder={t('finance.categoryLabelZhPlaceholder')}
                 value={newType.labelZh}
                 onChange={e => setNewType({ ...newType, labelZh: e.target.value })}
                 className="px-3 py-2 border rounded-lg text-sm"
               />
               <input
                 type="text"
-                placeholder="English Label"
+                placeholder={t('finance.categoryLabelEnPlaceholder')}
                 value={newType.labelEn}
                 onChange={e => setNewType({ ...newType, labelEn: e.target.value })}
                 className="px-3 py-2 border rounded-lg text-sm"

@@ -52,3 +52,109 @@ Changed Files:
 Regression Test:
 Commit:
 ```
+
+---
+
+## BUG-001
+Title: PM2 服务反复 EADDRINUSE 无法正确守护进程
+Severity: P0
+Status: OPEN
+Reproductions:
+  - 启动 `pm2 start ecosystem.config.js`
+  - tea-server 启动后立即报 `EADDRINUSE: address already in use 0.0.0.0:7072`
+  - PM2 日志显示持续尝试重启（多次 `restartProcessId`）
+Expected: tea-server 应正常监听 7072 端口
+Actual: PM2 日志: "HTTP server error: listen EADDRINUSE: address already in use 0.0.0.0:7072"
+Root Cause: ecosystem.config.js 使用 `script: 'npm', args: 'run dev'` 启动方式，PM2 守护的是 npm wrapper 而非实际 node 进程，导致 PM2 无法正确监控子进程死亡/端口状态
+Changed Files:
+Regression Test:
+Commit:
+
+## BUG-002
+Title: Admin/POS/Staff App 三个 PM2 服务全部未启动
+Severity: P0
+Status: OPEN
+Reproductions:
+  - `pm2 list` 显示所有服务状态 online，但实际 `lsof -i :6063/5173/5175` 无监听
+  - `curl http://localhost:6063` → 000 connection refused
+  - `curl https://staff.aicube.online` → 502
+Expected: Admin(5173) / POS(6063) / Staff App(5175) 均应正常监听
+Actual: 仅 tea-server (7072) 实际在跑，Admin/POS/StaffApp 三者均无进程监听
+Root Cause: PM2 ecosystem.config.js 的 `script: path/to/vite args: '--port XXX'` 方式启动 Vite，Vite 启动后监听端口被 PM2 误判为已退出，导致服务实际未运行
+Changed Files:
+Regression Test:
+Commit:
+
+## BUG-003
+Title: 数据库 seed 需手动运行，账户丢失
+Severity: P1
+Status: OPEN
+Reproductions:
+  - Prisma schema push 或数据库文件被覆盖后
+  - 登录 `081234567890/admin123` 返回 401
+  - 需手动 `cd server && npx prisma db seed` 恢复账户
+Expected: 数据库损坏后应可自恢复，或有初始化机制
+Actual: 无自动初始化，User 表为空，所有登录失败
+Root Cause: 数据库为 SQLite 文件，PM2 进程崩溃/重启后数据可能丢失（dev.db 被 seed.db 覆盖）
+Changed Files:
+Regression Test:
+Commit:
+
+## BUG-004
+Title: 登录限流过于严格（10次/15分钟即封禁）
+Severity: P1
+Status: OPEN
+Reproductions:
+  - 开发测试阶段频繁登录约10次后
+  - 任何账户（081234567890/081234567891等）均返回 401 并提示 "Too many login attempts, please try again after 15 minutes"
+  - 15分钟内所有账户无法登录
+Expected: 合理的登录限流策略（生产环境应允许更多尝试）
+Actual: `server/src/routes/auth.ts` - `max: 10` attempts per 15min，测试环境过于严格
+Root Cause: authLimiter 限流配置 max=10 未区分环境，生产/开发采用相同限制
+Changed Files:
+Regression Test:
+Commit:
+
+## BUG-005
+Title: Staff App 端口 5175 未配置/未启动
+Severity: P1
+Status: OPEN
+Reproductions:
+  - cloudflare: `staff.aicube.online → http://localhost:5175`
+  - `curl https://staff.aicube.online` → 502 Bad Gateway
+  - `lsof -i :5175` → 无监听
+Expected: Staff App 应在 5175 端口正常提供访问
+Actual: Staff App 服务未在 ecosystem.config.js 中配置，或配置了但未成功启动
+Root Cause: ecosystem.config.js 中无 tea-staff PM2 应用定义；cloudflare 指向了不存在的本地端口
+Changed Files:
+Regression Test:
+Commit:
+
+## BUG-006
+Title: Cloud API 测试账户不存在（本地/云端账户隔离）
+Severity: P1
+Status: OPEN
+Reproductions:
+  - `POST https://api.aicube.online/api/auth/login` with `081234567890/admin123` → 401 Invalid credentials
+  - Cloud 数据库和本地 SQLite 数据库账户完全独立
+  - cloud 仅有 storeId 但无对应 User 记录
+Expected: 同一套账户体系（门店在云端有对应账户）
+Actual: Cloud DB (PostgreSQL) 和本地 SQLite 完全独立，云端无 store 对应账户，sync/connect 流程在云端会失败
+Root Cause: Cloud 部署使用了不同的用户数据库（PostgreSQL），而本地测试账户只存在于 SQLite
+Changed Files:
+Regression Test:
+Commit:
+
+## BUG-007
+Title: sync/full 不同步订单（订单数据孤岛）
+Severity: P1
+Status: OPEN
+Reproductions:
+  - POS 创建订单后，Admin 远程访问 `api.aicube.online/api/orders` 看不到订单
+  - sync/full 仅同步商品/分类/加料/渠道，订单无上传通道
+Expected: POS 订单应同步到 Cloud DB，Admin 远程可见
+Actual: 订单仅存在于 POS 本地 SQLite，Cloud Admin 无法访问
+Root Cause: sync 机制是单向的（cloud → local），本地 SQLite 无向 cloud push 订单的逻辑
+Changed Files:
+Regression Test:
+Commit:

@@ -262,7 +262,7 @@ export function BudgetPage() {
               onChange={(e) => setSelectedMonth(e.target.value ? parseInt(e.target.value) : undefined)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
-              <option value="">Semua Bulan</option>
+              <option value="">{t('finance.allMonths')}</option>
               {months.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
@@ -361,8 +361,8 @@ export function BudgetPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-600">
-                          {budget.period === 'monthly' ? 'Bulanan' :
-                           budget.period === 'quarterly' ? 'Triwulanan' : 'Tahunan'}
+                          {budget.period === 'monthly' ? t('finance.monthly') :
+                           budget.period === 'quarterly' ? t('finance.quarterly') : t('finance.yearly')}
                         </span>
                         <div className="text-xs text-gray-500">
                           {budget.year} {budget.month ? `- ${budget.month}` : ''}
@@ -445,9 +445,9 @@ export function BudgetPage() {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   required
                 >
-                  <option value="monthly">Bulanan</option>
-                  <option value="quarterly">Triwulanan</option>
-                  <option value="yearly">Tahunan</option>
+                  <option value="monthly">{t('finance.monthly')}</option>
+                  <option value="quarterly">{t('finance.quarterly')}</option>
+                  <option value="yearly">{t('finance.yearly')}</option>
                 </select>
               </div>
 
@@ -593,12 +593,12 @@ function BudgetCategoryModal({
           <div className="border-t pt-4">
             <h4 className="text-sm font-medium text-gray-700 mb-2">{t('finance.addNewType')}</h4>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <input placeholder="Key (e.g. rent)" value={newCat.key} onChange={e => setNewCat({...newCat, key: e.target.value})} className="px-3 py-2 border rounded text-sm" />
-              <input placeholder="Label (e.g. Sewa)" value={newCat.label} onChange={e => setNewCat({...newCat, label: e.target.value})} className="px-3 py-2 border rounded text-sm" />
+              <input placeholder={t('finance.categoryKeyPlaceholder')} value={newCat.key} onChange={e => setNewCat({...newCat, key: e.target.value})} className="px-3 py-2 border rounded text-sm" />
+              <input placeholder={t('finance.categoryLabelIdPlaceholder')} value={newCat.label} onChange={e => setNewCat({...newCat, label: e.target.value})} className="px-3 py-2 border rounded text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <input placeholder="中文" value={newCat.labelZh} onChange={e => setNewCat({...newCat, labelZh: e.target.value})} className="px-3 py-2 border rounded text-sm" />
-              <input placeholder="English" value={newCat.labelEn} onChange={e => setNewCat({...newCat, labelEn: e.target.value})} className="px-3 py-2 border rounded text-sm" />
+              <input placeholder={t('finance.categoryLabelZhPlaceholder')} value={newCat.labelZh} onChange={e => setNewCat({...newCat, labelZh: e.target.value})} className="px-3 py-2 border rounded text-sm" />
+              <input placeholder={t('finance.categoryLabelEnPlaceholder')} value={newCat.labelEn} onChange={e => setNewCat({...newCat, labelEn: e.target.value})} className="px-3 py-2 border rounded text-sm" />
             </div>
             <select value={`${newCat.color}|${newCat.bgColor}`} onChange={e => { const [color, bgColor] = e.target.value.split('|'); setNewCat({...newCat, color, bgColor}) }} className="w-full px-3 py-2 border rounded text-sm mb-2">
               {COLORS.map((c, i) => <option key={i} value={`${c.color}|${c.bgColor}`}>{c.color.replace('text-', '')}</option>)}

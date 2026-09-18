@@ -142,7 +142,7 @@ export function ProcessingFormPage() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="input w-full"
-                placeholder="如：煮珍珠"
+                placeholder={t('bom.processNamePlaceholder')}
                 required
               />
             </div>
@@ -190,7 +190,7 @@ export function ProcessingFormPage() {
                     value={input.quantity}
                     onChange={(e) => updateInput(idx, 'quantity', parseFloat(e.target.value) || 0)}
                     className="input w-24"
-                    placeholder="用量"
+                    placeholder={t('bom.inputQuantityPlaceholder')}
                   />
                   {form.inputs.length > 1 && (
                     <button type="button" onClick={() => removeInput(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded">
@@ -220,14 +220,14 @@ export function ProcessingFormPage() {
                     value={output.name}
                     onChange={(e) => updateOutput(idx, 'name', e.target.value)}
                     className="input flex-1"
-                    placeholder="产出物名称，如：冰淇淋液体"
+                    placeholder={t('bom.outputNamePlaceholder')}
                   />
                   <input
                     type="number"
                     value={output.quantity}
                     onChange={(e) => updateOutput(idx, 'quantity', parseFloat(e.target.value) || 0)}
                     className="input w-24"
-                    placeholder="产量"
+                    placeholder={t('bom.outputQuantityPlaceholder')}
                   />
                   {form.outputs.length > 1 && (
                     <button type="button" onClick={() => removeOutput(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded">

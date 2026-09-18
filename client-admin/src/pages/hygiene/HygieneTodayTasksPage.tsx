@@ -366,7 +366,7 @@ export function HygieneTodayTasksPage() {
               {selectedTask.photoUrl && (
                 <div>
                   <div className="text-sm font-medium text-gray-700 mb-2">{t('hygiene.photoRequired')}</div>
-                  <img src={selectedTask.photoUrl} alt="Task evidence" className="w-full rounded-lg" />
+                  <img src={selectedTask.photoUrl} alt={t('hygiene.taskEvidenceAlt')} className="w-full rounded-lg" />
                 </div>
               )}
 

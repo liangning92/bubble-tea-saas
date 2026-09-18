@@ -120,6 +120,7 @@ httpServer.on('error', (err: NodeJS.ErrnoException) => {
 })
 
 // Security & Logging Middlewares
+app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({
   origin: config.corsOrigin.split(','),

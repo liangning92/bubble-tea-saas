@@ -282,7 +282,7 @@ export function ChannelListPage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input"
-                  placeholder="如：GoFood"
+                  placeholder={t('channels.channelNamePlaceholder')}
                   required
                 />
               </div>
@@ -295,7 +295,7 @@ export function ChannelListPage() {
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   className="input"
-                  placeholder="如：GOFOOD"
+                  placeholder={t('channels.channelCodePlaceholder')}
                   required
                 />
               </div>

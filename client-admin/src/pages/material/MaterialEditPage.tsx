@@ -207,7 +207,7 @@ export function MaterialEditPage() {
               value={form.shelfLife}
               onChange={(e) => setForm({ ...form, shelfLife: parseInt(e.target.value) || 0 })}
               className="input w-full"
-              placeholder="0表示不限"
+              placeholder={t('material.unlimitedPlaceholder')}
             />
           </div>
 

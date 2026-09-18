@@ -233,7 +233,7 @@ export function CampaignEditPage() {
                     checked={form.actions.channelType === 'whatsapp'}
                     onChange={() => setForm({ ...form, actions: { ...form.actions, channelType: 'whatsapp' } })}
                   />
-                  <span>WhatsApp</span>
+                  <span>{t('marketing.channelWhatsApp')}</span>
                 </label>
               </div>
             </div>

@@ -76,7 +76,7 @@ export function MaterialFormPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="input w-full"
-              placeholder="如：红茶茶叶"
+              placeholder={t('material.materialNamePlaceholder')}
               required
             />
           </div>
@@ -208,7 +208,7 @@ export function MaterialFormPage() {
               value={form.shelfLife}
               onChange={(e) => setForm({ ...form, shelfLife: parseInt(e.target.value) || 0 })}
               className="input w-full"
-              placeholder="0表示不限"
+              placeholder={t('material.unlimitedPlaceholder')}
             />
           </div>
 

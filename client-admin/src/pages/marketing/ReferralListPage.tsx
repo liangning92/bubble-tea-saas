@@ -214,11 +214,11 @@ export function ReferralListPage() {
                       <td className="py-3 text-sm">
                         <div className="flex items-center gap-1">
                           <Star size={12} className="text-yellow-500" />
-                          <span>Inviter: {formatRewardDisplay(r.inviterReward)}</span>
+                          <span>{t('marketing.inviterReward')}: {formatRewardDisplay(r.inviterReward)}</span>
                         </div>
                         <div className="text-gray-500 flex items-center gap-1">
                           <Gift size={12} />
-                          <span>Rewardee: {formatRewardDisplay(r.rewardeeReward)}</span>
+                          <span>{t('marketing.rewardeeReward')}: {formatRewardDisplay(r.rewardeeReward)}</span>
                         </div>
                       </td>
                       <td className="py-3 text-sm">
@@ -305,7 +305,7 @@ export function ReferralListPage() {
                       onChange={e => setForm({ ...form, inviterRewardCouponId: e.target.value })}
                       className="input"
                     >
-                      <option value="">Select Coupon</option>
+                      <option value="">{t('marketing.selectCoupon')}</option>
                       {coupons.map((c: any) => <option key={c.id} value={c.id}>{c.code}</option>)}
                     </select>
                   )}
@@ -338,7 +338,7 @@ export function ReferralListPage() {
                       onChange={e => setForm({ ...form, rewardeeRewardCouponId: e.target.value })}
                       className="input"
                     >
-                      <option value="">Select Coupon</option>
+                      <option value="">{t('marketing.selectCoupon')}</option>
                       {coupons.map((c: any) => <option key={c.id} value={c.id}>{c.code}</option>)}
                     </select>
                   )}
@@ -352,7 +352,7 @@ export function ReferralListPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.maxUsage')}</label>
-                  <input type="number" value={form.maxUsageCount} onChange={e => setForm({ ...form, maxUsageCount: Number(e.target.value) })} className="input" min={0} placeholder="0 = unlimited" />
+                  <input type="number" value={form.maxUsageCount} onChange={e => setForm({ ...form, maxUsageCount: Number(e.target.value) })} className="input" min={0} placeholder={t('marketing.unlimitedPlaceholder')} />
                 </div>
               </div>
 

@@ -230,7 +230,7 @@ export function DepositRulesPage() {
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="input"
-                  placeholder="e.g. Standard Deposit"
+                  placeholder={t('staff.depositRuleNamePlaceholder')}
                 />
               </div>
 

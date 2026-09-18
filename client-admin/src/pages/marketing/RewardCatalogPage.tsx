@@ -251,7 +251,7 @@ export function RewardCatalogPage() {
                   value={form.stock ?? ''}
                   onChange={e => setForm(f => ({ ...f, stock: e.target.value ? Number(e.target.value) : null }))}
                   className="input"
-                  placeholder="∞"
+                  placeholder={t('marketing.unlimitedQuantityPlaceholder')}
                   min={0}
                 />
               </div>

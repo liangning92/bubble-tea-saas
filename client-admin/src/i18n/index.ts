@@ -314,6 +314,16 @@ const resources = {
         linkedRecipe: 'Resep Proses Tertaut',
         selectRecipe: 'Pilih Resep',
         materialNamePlaceholder: 'cth. Daun Teh Hitam'
+      day: 'hari',
+      expiresIn: 'Kadaluarsa Dalam',
+      expiryAlerts: 'Peringatan Kadaluarsa',
+      noRecipes: 'Belum ada resep olah',
+      outputUnit: 'Satuan Output',
+      processHistory: 'Riwayat Proses',
+      recipe: 'Resep',
+      recipeName: 'Nama Resep',
+      suggestQty: 'Saran Stok Ulang',
+      enterMultiplier: 'Masukkan pengali',
       },
       addons: {
         addAddon: 'Tambah Addon',
@@ -474,6 +484,10 @@ const resources = {
         rejectReasonRequired: 'Harap masukkan alasan penolakan',
         approved: 'Disetujui',
         rejected: 'Ditolak',
+      approveRefund: 'Setujui Refund',
+      rejectRefund: 'Tolak Refund',
+      noRefunds: 'Tidak ada permintaan refund',
+      requestedBy: 'Diminta Oleh',
       },
       inventory: {
         itemName: 'Nama Barang',
@@ -794,6 +808,17 @@ const resources = {
           orders: 'order',
           ofTotal: 'dari total'
         },
+      addFirstShift: 'Tambah shift pertama',
+      attendanceRules: 'Aturan Kehadiran',
+      depositRule: 'Aturan Deposit',
+      editShift: 'Edit Shift',
+      noShifts: 'Belum ada shift dikonfigurasi',
+      passwordRequired: 'Kata sandi wajib diisi',
+      shiftConfig: 'Konfigurasi Shift',
+      shiftKey: 'Kunci Shift',
+      shiftName: 'Nama Shift (EN)',
+      shiftNameId: 'Nama Shift (ID)',
+      shiftNameZh: 'Nama Shift (ZH)',
       },
       training: {
         categoryManagement: 'Kelola Kategori',
@@ -866,6 +891,8 @@ const resources = {
         rejectFailed: 'Gagal menolak',
         markPaidFailed: 'Gagal menandai lunas',
         fillRejectReason: 'Silakan isi alasan penolakan'
+      markedPaid: 'Ditandai Lunas',
+      noRequests: 'Tidak ada permintaan reimburs',
       },
       reimbTypes: {
         title: 'Jenis Ganti Rugi',
@@ -1271,6 +1298,12 @@ const resources = {
         usage: 'Pakai',
         usedByMembers: 'Dipakai oleh Member',
         viewStats: 'Lihat Statistik'
+      couponCodePlaceholder: 'Masukkan kode kupon',
+      referralCodePlaceholder: 'Masukkan kode referral',
+      usageLimitPlaceholder: 'Batas penggunaan',
+      stackingRuleTypes_stackable: 'Bertumpuk',
+      stackingRuleTypes_exclusive: 'Eksklusif',
+      stackingRuleTypes_replace: 'Ganti',
       },
       members: {
         addMember: 'Tambah Member',
@@ -1298,7 +1331,8 @@ const resources = {
           redeem: 'Ditarik',
           adjust: 'Disesuaikan',
           expire: 'Kedaluwarsa',
-          coupon: 'Kupon'
+          coupon: 'Kupon',
+        noName:  'Tanpa Nama',
         }
       },
       leave: {
@@ -1823,6 +1857,11 @@ const resources = {
         checkmark: '✓',
         milliseconds: 'ms',
         currencySymbol: 'Rp'
+      blockDelete: 'Hapus Blok',
+      blockDisabled: 'Dinonaktifkan',
+      blockDuplicate: 'Duplikat',
+      dualScreenWelcome: 'Sambutan Layar Ganda',
+      hardware: 'Perangkat Keras',
       },
       posMonitor: {
         pageTitle: 'Monitoring POS',
@@ -1907,6 +1946,11 @@ const resources = {
         createPO: 'Buat PO Baru',
         itemCount: 'item(s)',
         supplier: 'Supplier',
+      approved: 'Disetujui',
+      pending: 'Menunggu',
+      cancelled: 'Dibatalkan',
+      contactPersonPlaceholder: 'Nama kontak',
+      supplierNamePlaceholder: 'Nama pemasok',
       },
       queue: {
         queueNumber: 'No. Antrian',
@@ -3154,6 +3198,16 @@ const resources = {
         linkedRecipe: 'Linked Process Recipe',
         selectRecipe: 'Select Recipe',
         materialNamePlaceholder: 'e.g. Black Tea Leaves'
+      day: 'day',
+      expiresIn: 'Expires In',
+      expiryAlerts: 'Expiry Alerts',
+      noRecipes: 'No processing recipes',
+      outputUnit: 'Output Unit',
+      processHistory: 'Process History',
+      recipe: 'Recipe',
+      recipeName: 'Recipe Name',
+      suggestQty: 'Suggested Restock',
+      enterMultiplier: 'Enter multiplier',
       },
       addons: {
         title: 'Add-ons',
@@ -3574,6 +3628,12 @@ const resources = {
         usage: 'Usage',
         usedByMembers: 'Used by Members',
         viewStats: 'View Stats'
+      couponCodePlaceholder: 'Enter coupon code',
+      referralCodePlaceholder: 'Enter referral code',
+      usageLimitPlaceholder: 'Usage limit',
+      stackingRuleTypes_stackable: 'Stackable',
+      stackingRuleTypes_exclusive: 'Exclusive',
+      stackingRuleTypes_replace: 'Replace',
       },
       channels: {
         title: 'Channels',
@@ -3809,6 +3869,10 @@ const resources = {
         rejectReasonRequired: 'Please enter reject reason',
         approved: 'Approved',
         rejected: 'Rejected'
+      approveRefund: 'Approve Refund',
+      rejectRefund: 'Reject Refund',
+      noRefunds: 'No refund requests',
+      requestedBy: 'Requested By',
       },
       features: {
         title: 'Feature Settings',
@@ -4431,6 +4495,10 @@ const resources = {
         checkmark: '✓',
         milliseconds: 'ms',
         currencySymbol: 'Rp'
+      blockDelete: 'Delete Block',
+      blockDisabled: 'Disabled',
+      blockDuplicate: 'Duplicate',
+      dualScreenWelcome: 'Dual Screen Welcome',
       },
       posMonitor: {
         pageTitle: 'POS Monitoring',
@@ -4524,6 +4592,8 @@ const resources = {
         rejectFailed: 'Failed to reject reimbursement',
         markPaidFailed: 'Failed to mark as paid',
         fillRejectReason: 'Please fill in the rejection reason'
+      markedPaid: 'Marked as Paid',
+      noRequests: 'No reimbursement requests',
       },
       reimbTypes: {
         title: 'Expense Types',
@@ -4611,8 +4681,10 @@ const resources = {
           redeem: 'Redeemed',
           adjust: 'Adjusted',
           expire: 'Expired',
-          coupon: 'Coupon'
-        }
+          coupon: 'Coupon',
+          noName:  'No Name',
+        },
+      noName: 'No Name',
       },
       leave: {
         title: 'Leave Management',
@@ -4941,6 +5013,17 @@ const resources = {
           orders: 'orders',
           ofTotal: 'of total'
         },
+      addFirstShift: 'Add first shift',
+      attendanceRules: 'Attendance Rules',
+      depositRule: 'Deposit Rule',
+      editShift: 'Edit Shift',
+      noShifts: 'No shifts configured',
+      passwordRequired: 'Password is required',
+      shiftConfig: 'Shift Configuration',
+      shiftKey: 'Shift Key',
+      shiftName: 'Shift Name (EN)',
+      shiftNameId: 'Shift Name (ID)',
+      shiftNameZh: 'Shift Name (ZH)',
       },
       inventory: {
         title: 'Inventory',
@@ -5197,6 +5280,8 @@ const resources = {
         supplier: 'Supplier',
         select: 'Select',
         noData: 'No purchase orders'
+      contactPersonPlaceholder: 'Contact person',
+      supplierNamePlaceholder: 'Supplier name',
       },
       queue: {
         title: 'Queue',
@@ -5921,6 +6006,16 @@ const resources = {
         linkedRecipe: '关联加工配方',
         selectRecipe: '请选择加工配方',
         materialNamePlaceholder: '如：红茶茶叶'
+      day: '天',
+      expiresIn: '剩余过期',
+      expiryAlerts: '过期提醒',
+      noRecipes: '暂无加工配方',
+      outputUnit: '产出单位',
+      processHistory: '加工记录',
+      recipe: '配方',
+      recipeName: '配方名称',
+      suggestQty: '建议补货量',
+      enterMultiplier: '输入倍数',
       },
       addons: {
         title: '加料',
@@ -6161,6 +6256,10 @@ const resources = {
         rejectReasonRequired: '请输入拒绝原因',
         approved: '已批准',
         rejected: '已拒绝'
+      approveRefund: '批准退款',
+      rejectRefund: '拒绝退款',
+      noRefunds: '暂无退款请求',
+      requestedBy: '申请人',
       },
       leaveTypes: {
         title: '请假类型',
@@ -6224,6 +6323,8 @@ const resources = {
         rejectFailed: '拒绝失败',
         markPaidFailed: '标记已支付失败',
         fillRejectReason: '请填写拒绝原因'
+      markedPaid: '已标记为已付',
+      noRequests: '暂无报销申请',
       },
       marketing: {
         campaignActions: '活动奖励设置',
@@ -6613,6 +6714,16 @@ const resources = {
         usage: '使用',
         usedByMembers: '已被会员使用',
         viewStats: '查看统计'
+      couponCodePlaceholder: '输入优惠券码',
+      referralCodePlaceholder: '输入推荐码',
+      usageLimitPlaceholder: '使用限制',
+      discount_percent: '百分比折扣',
+      discount_fixed: '固定金额',
+      free_product: '免费产品',
+      free_delivery: '免费配送',
+      stackingRuleTypes_stackable: '可叠加',
+      stackingRuleTypes_exclusive: '排他',
+      stackingRuleTypes_replace: '替换',
       },
       reimbTypes: {
         title: '报销类型',
@@ -6993,6 +7104,17 @@ const resources = {
           orders: '订单',
           ofTotal: '占比'
         },
+      addFirstShift: '添加第一个班次',
+      attendanceRules: '考勤规则',
+      depositRule: '押金规则',
+      editShift: '编辑班次',
+      noShifts: '暂无班次配置',
+      passwordRequired: '密码为必填项',
+      shiftConfig: '班次配置',
+      shiftKey: '班次键',
+      shiftName: '班次名称（英文）',
+      shiftNameId: '班次名称（印尼）',
+      shiftNameZh: '班次名称（中文）',
       },
       members: {
         title: '会员',
@@ -7023,8 +7145,10 @@ const resources = {
           redeem: '兑换',
           adjust: '调整',
           expire: '过期',
-          coupon: '优惠券'
-        }
+          coupon: '优惠券',
+          noName:  '无名',
+        },
+      noName: '无名',
       },
       inventory: {
         title: '库存',
@@ -7240,6 +7364,8 @@ const resources = {
         supplier: '供应商',
         select: '选择',
         noData: '暂无采购单'
+      contactPersonPlaceholder: '联系人姓名',
+      supplierNamePlaceholder: '供应商名称',
       },
       queue: {
         title: '排队',
@@ -8190,6 +8316,10 @@ const resources = {
         checkmark: '✓',
         milliseconds: '毫秒',
         currencySymbol: 'Rp'
+      blockDelete: '删除区块',
+      blockDisabled: '已禁用',
+      blockDuplicate: '复制',
+      dualScreenWelcome: '双屏欢迎语',
       },
       posMonitor: {
         pageTitle: 'POS 操作监控',

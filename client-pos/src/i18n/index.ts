@@ -295,7 +295,8 @@ const resources = {
       testPage: {
         environmentOk: 'Jika Anda dapat melihat ini, lingkungan berfungsi dengan benar',
         testButton: 'Tombol Tes',
-        buttonNormal: 'Tombol berfungsi'
+        buttonNormal: 'Tombol berfungsi',
+        detectPrinter: 'Deteksi Printer'
       },
       toolbar: {
         shift: 'Shift',
@@ -877,7 +878,8 @@ const resources = {
         logout: 'Exit',
         hardware: 'Hardware',
         scanPlaceholder: 'Use barcode scanner to add products',
-        cashComingSoon: 'Cash management coming soon'
+        cashComingSoon: 'Cash management coming soon',
+        detectPrinter: 'Detect Printer'
       },
       settings: {
         orderCount: 'Order Count',
@@ -1433,7 +1435,8 @@ const resources = {
         logout: '退出',
         hardware: '硬件',
         scanPlaceholder: '使用条码扫描器添加产品',
-        cashComingSoon: '现金管理即将推出'
+        cashComingSoon: '现金管理即将推出',
+        detectPrinter: '检测打印机'
       },
       settings: {
         orderCount: '订单数量',

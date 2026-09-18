@@ -113,7 +113,7 @@ export function ABCAnalysisPage() {
             <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
               <TrendingUp size={16} className="text-green-600" />
             </div>
-            <span className="font-medium text-green-700">Class A</span>
+            <span className="font-medium text-green-700">{t('productAnalysis.classA')}</span>
           </div>
           <p className="text-2xl font-bold text-green-700">
             {products.filter(p => p.class === 'A').length} {t('products.title')}
@@ -128,7 +128,7 @@ export function ABCAnalysisPage() {
             <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
               <Minus size={16} className="text-yellow-600" />
             </div>
-            <span className="font-medium text-yellow-700">Class B</span>
+            <span className="font-medium text-yellow-700">{t('productAnalysis.classB')}</span>
           </div>
           <p className="text-2xl font-bold text-yellow-700">
             {products.filter(p => p.class === 'B').length} {t('products.title')}
@@ -143,7 +143,7 @@ export function ABCAnalysisPage() {
             <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
               <TrendingDown size={16} className="text-red-600" />
             </div>
-            <span className="font-medium text-red-700">Class C</span>
+            <span className="font-medium text-red-700">{t('productAnalysis.classC')}</span>
           </div>
           <p className="text-2xl font-bold text-red-700">
             {products.filter(p => p.class === 'C').length} {t('products.title')}

@@ -200,12 +200,21 @@ export function POSPage() {
             <span className="text-primary">{formatCurrency(cartTotal)}</span>
           </div>
           <div className="grid grid-cols-5 gap-2">
-            {PAYMENT_METHODS.map(method => (
-              <button key={method} onClick={() => setPaymentMethod(method)}
-                className={`py-2 px-2 rounded-lg text-xs text-center ${paymentMethod === method ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                {method === 'cash' && 'Cash'}{method === 'gopay' && 'GoPay'}{method === 'ovo' && 'OVO'}{method === 'dana' && 'DANA'}{method === 'card' && 'Card'}
-              </button>
-            ))}
+            {PAYMENT_METHODS.map(method => {
+              const labels: Record<string, string> = {
+                cash: t('pos.paymentCash'),
+                gopay: t('pos.paymentGoPay'),
+                ovo: t('pos.paymentOvo'),
+                dana: t('pos.paymentDana'),
+                card: t('pos.paymentCard'),
+              }
+              return (
+                <button key={method} onClick={() => setPaymentMethod(method)}
+                  className={`py-2 px-2 rounded-lg text-xs text-center ${paymentMethod === method ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                  {labels[method] || method}
+                </button>
+              )
+            })}
           </div>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('pos.notes')} className="input text-sm" rows={2} />
           <button onClick={handleCheckout} disabled={cart.length === 0 || isProcessing} className="btn-primary w-full py-3 flex items-center justify-center gap-2">

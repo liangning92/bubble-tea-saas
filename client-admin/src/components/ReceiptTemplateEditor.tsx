@@ -122,6 +122,24 @@ export interface ReceiptTemplate {
 
 // ============ DEFAULT BLOCKS ============
 
+// Maps block types to their i18n keys under posSettings.*
+const BLOCK_LABEL_KEYS: Record<BlockType, string> = {
+  logo: 'blockLogo',
+  header: 'blockHeader',
+  storeInfo: 'blockStoreInfo',
+  orderInfo: 'blockOrderInfo',
+  items: 'blockItems',
+  subtotal: 'blockSubtotal',
+  tax: 'blockTax',
+  total: 'blockTotal',
+  paymentInfo: 'blockPaymentInfo',
+  qrCode: 'blockQrCode',
+  barcode: 'blockBarcode',
+  footer: 'blockFooter',
+  divider: 'blockDivider',
+  customText: 'blockCustomText',
+}
+
 const BLOCK_DEFINITIONS: Record<
   BlockType,
   { label: string; icon: string; defaultConfig: BlockConfig }
@@ -201,25 +219,9 @@ const BLOCK_DEFINITIONS: Record<
 // Get block definition with translated label
 function getBlockDef(t: (key: string) => string, type: BlockType) {
   const def = BLOCK_DEFINITIONS[type]
-  const labelKeyMap: Record<BlockType, string> = {
-    logo: 'blockLogo',
-    header: 'blockHeader',
-    storeInfo: 'blockStoreInfo',
-    orderInfo: 'blockOrderInfo',
-    items: 'blockItems',
-    subtotal: 'blockSubtotal',
-    tax: 'blockTax',
-    total: 'blockTotal',
-    paymentInfo: 'blockPaymentInfo',
-    qrCode: 'blockQrCode',
-    barcode: 'blockBarcode',
-    footer: 'blockFooter',
-    divider: 'blockDivider',
-    customText: 'blockCustomText',
-  }
   return {
     ...def,
-    label: t(`posSettings.${labelKeyMap[type]}`),
+    label: t(`posSettings.${BLOCK_LABEL_KEYS[type]}`),
   }
 }
 
@@ -361,7 +363,7 @@ const LivePreview: React.FC<{
           case 'tax':
             return (
               <div key={block.id} className={`flex justify-between ${sizeClass} text-gray-500 border-b pb-2 mb-2`}>
-                <span>{block.config.label || `Tax (${block.config.rate || 11}%)`}</span>
+                <span>{block.config.label || t('posSettings.blockTax') + ' (' + (block.config.rate || 11) + '%)'}</span>
                 <span>3,850</span>
               </div>
             )
@@ -865,7 +867,7 @@ const BlockPropertiesPanel: React.FC<{
         {/* Custom Text */}
         {block.type === 'customText' && (
           <div>
-            <label className="text-sm text-gray-600">Custom Text</label>
+            <label className="text-sm text-gray-600">{t('posSettings.blockCustomText')}</label>
             <textarea
               value={block.config.customText || ''}
               onChange={(e) => updateConfig('customText', e.target.value)}
@@ -1219,7 +1221,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
               {activeBlock && (
                 <div className="flex items-center gap-2 p-3 bg-white border-2 border-primary rounded-lg shadow-lg opacity-90">
                   <span className="text-lg">{BLOCK_DEFINITIONS[activeBlock.type].icon}</span>
-                  <span className="font-medium text-sm">{BLOCK_DEFINITIONS[activeBlock.type].label}</span>
+                  <span className="font-medium text-sm">{t(`posSettings.${BLOCK_LABEL_KEYS[activeBlock.type]}`)}</span>
                 </div>
               )}
             </DragOverlay>
@@ -1244,7 +1246,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
                 <LivePreview blocks={blocks} paperSize={paperSize} />
               </div>
               <div className="mt-3">
-                <label className="text-xs text-gray-600">Paper Size</label>
+                <label className="text-xs text-gray-600">{t('posSettings.paperSize')}</label>
                 <div className="flex gap-2 mt-1">
                   {(['58mm', '80mm'] as const).map((size) => (
                     <button

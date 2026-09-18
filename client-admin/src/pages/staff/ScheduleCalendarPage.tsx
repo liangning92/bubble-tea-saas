@@ -39,6 +39,15 @@ const DEFAULT_SHIFTS: Shift[] = [
   { id: 'default-4', key: 'off', name: 'Off', nameZh: '休息', nameId: 'Libur', startTime: '', endTime: '', color: '#6B7280', sortOrder: 3, isActive: true }
 ]
 
+const DEFAULT_SHIFT_KEYS = new Set(['morning', 'afternoon', 'evening', 'off'])
+
+const DEFAULT_SHIFT_I18N_KEYS: Record<string, string> = {
+  morning: 'staff.morning',
+  afternoon: 'staff.afternoon',
+  evening: 'staff.evening',
+  off: 'staff.off',
+}
+
 export function ScheduleCalendarPage() {
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
@@ -57,10 +66,19 @@ export function ScheduleCalendarPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [editingCell, setEditingCell] = useState<{ staffId: string; date: string } | null>(null)
 
-  // Get translated shift labels
+  // Get translated shift labels — uses i18n for default shifts, stored fields for custom shifts
   const getShiftLabel = (key: string) => {
     const shift = shifts.find(s => s.key === key)
     if (shift) {
+      // Default shifts: use i18n so English also gets proper translations
+      if (DEFAULT_SHIFT_KEYS.has(key)) {
+        const i18nKey = DEFAULT_SHIFT_I18N_KEYS[key]
+        if (i18nKey) {
+          const translated = t(i18nKey)
+          if (translated !== i18nKey) return translated
+        }
+      }
+      // Fall back to stored fields
       if (i18n.language === 'zh' && shift.nameZh) return shift.nameZh
       if (i18n.language === 'id' && shift.nameId) return shift.nameId
       return shift.name

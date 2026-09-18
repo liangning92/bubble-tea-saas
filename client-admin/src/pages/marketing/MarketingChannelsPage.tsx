@@ -443,7 +443,7 @@ export function MarketingChannelsPage() {
                     <div className="text-lg font-bold text-green-600">
                       {formatCurrency(ch.stats?.totalRevenue || 0).replace('Rp', '')}
                     </div>
-                    <div className="text-xs text-gray-500">Revenue</div>
+                    <div className="text-xs text-gray-500">{t('marketing.revenue')}</div>
                   </div>
                 </div>
               </div>
@@ -485,7 +485,7 @@ export function MarketingChannelsPage() {
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   className="input font-mono"
-                  placeholder="GFOOD"
+                  placeholder={t('channels.channelCodePlaceholder')}
                   required
                 />
               </div>
