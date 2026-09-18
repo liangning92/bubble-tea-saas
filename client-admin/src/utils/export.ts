@@ -1,6 +1,65 @@
 // Export utilities for CSV/Excel
 
 /**
+ * i18n key names for export headers.
+ * Use getExportHeaders(t) in React components to get translated versions.
+ */
+export const EXPORT_HEADER_KEYS = {
+  id: 'exportHeaders.id',
+  name: 'exportHeaders.name',
+  phone: 'exportHeaders.phone',
+  email: 'exportHeaders.email',
+  address: 'exportHeaders.address',
+  createdAt: 'exportHeaders.createdAt',
+  updatedAt: 'exportHeaders.updatedAt',
+  status: 'exportHeaders.status',
+  amount: 'exportHeaders.amount',
+  total: 'exportHeaders.total',
+  price: 'exportHeaders.price',
+  quantity: 'exportHeaders.quantity',
+  stock: 'exportHeaders.stock',
+  category: 'exportHeaders.category',
+  description: 'exportHeaders.description',
+  note: 'exportHeaders.note',
+  reason: 'exportHeaders.reason',
+  date: 'exportHeaders.date',
+  startDate: 'exportHeaders.startDate',
+  endDate: 'exportHeaders.endDate',
+  orderNumber: 'exportHeaders.orderNumber',
+  customerName: 'exportHeaders.customerName',
+  staffName: 'exportHeaders.staffName',
+  supplierName: 'exportHeaders.supplierName',
+  productName: 'exportHeaders.productName',
+  paymentMethod: 'exportHeaders.paymentMethod',
+  subtotal: 'exportHeaders.subtotal',
+  tax: 'exportHeaders.tax',
+  discount: 'exportHeaders.discount',
+  finalAmount: 'exportHeaders.finalAmount',
+  paidAmount: 'exportHeaders.paidAmount',
+  change: 'exportHeaders.change',
+  employeeNumber: 'exportHeaders.employeeNumber',
+  position: 'exportHeaders.position',
+  hireDate: 'exportHeaders.hireDate',
+  salary: 'exportHeaders.salary',
+  leaveType: 'exportHeaders.leaveType',
+  leaveBalance: 'exportHeaders.leaveBalance',
+  usedLeave: 'exportHeaders.usedLeave',
+  remainingLeave: 'exportHeaders.remainingLeave'
+} as const
+
+/**
+ * Get export headers translated via the given t() function.
+ * Call this inside a React component that has useTranslation().
+ */
+export function getExportHeaders(t: (key: string) => string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [k, v] of Object.entries(EXPORT_HEADER_KEYS)) {
+    result[k] = t(v)
+  }
+  return result
+}
+
+/**
  * Convert array of objects to CSV string
  */
 export function convertToCSV<T extends Record<string, any>>(
@@ -86,50 +145,4 @@ export function formatDateTimeForExport(date: string | Date): string {
     hour: '2-digit',
     minute: '2-digit'
   })
-}
-
-/**
- * Common header translations for exports
- */
-export const EXPORT_HEADERS = {
-  id: 'ID',
-  name: 'Nama',
-  phone: 'Telepon',
-  email: 'Email',
-  address: 'Alamat',
-  createdAt: 'Tanggal Dibuat',
-  updatedAt: 'Tanggal Diupdate',
-  status: 'Status',
-  amount: 'Jumlah',
-  total: 'Total',
-  price: 'Harga',
-  quantity: 'Jumlah',
-  stock: 'Stok',
-  category: 'Kategori',
-  description: 'Deskripsi',
-  note: 'Catatan',
-  reason: 'Alasan',
-  date: 'Tanggal',
-  startDate: 'Tanggal Mulai',
-  endDate: 'Tanggal Selesai',
-  orderNumber: 'No. Order',
-  customerName: 'Nama Pelanggan',
-  staffName: 'Nama Staff',
-  supplierName: 'Nama Supplier',
-  productName: 'Nama Produk',
-  paymentMethod: 'Metode Pembayaran',
-  subtotal: 'Subtotal',
-  tax: 'Pajak',
-  discount: 'Diskon',
-  finalAmount: 'Total Akhir',
-  paidAmount: 'Jumlah Bayar',
-  change: 'Kembalian',
-  employeeNumber: 'No. Karyawan',
-  position: 'Posisi',
-  hireDate: 'Tanggal Masuk',
-  salary: 'Gaji',
-  leaveType: 'Jenis Cuti',
-  leaveBalance: 'Saldo Cuti',
-  usedLeave: 'Cuti Terpakai',
-  remainingLeave: 'Sisa Cuti'
 }

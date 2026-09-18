@@ -290,7 +290,8 @@ const resources = {
         saveExpense: 'Simpan Biaya',
         expenseRequired: 'Silakan isi kategori dan jumlah',
         expenseCreated: 'Biaya berhasil dicatat',
-        expenseFailed: 'Gagal mencatat biaya'
+        expenseFailed: 'Gagal mencatat biaya',
+        detectPrinter: "Deteksi Printer",
       },
       testPage: {
         environmentOk: 'Jika Anda dapat melihat ini, lingkungan berfungsi dengan benar',
@@ -859,7 +860,8 @@ const resources = {
         saveExpense: 'Record Expense',
         expenseRequired: 'Please fill in category and amount',
         expenseCreated: 'Expense recorded successfully',
-        expenseFailed: 'Failed to record expense'
+        expenseFailed: 'Failed to record expense',
+        detectPrinter: "Detect Printer",
       },
       testPage: {
         environmentOk: 'If you can see this, the environment is working correctly',
@@ -1416,7 +1418,8 @@ const resources = {
         saveExpense: '记录费用',
         expenseRequired: '请填写费用类别和金额',
         expenseCreated: '费用已记录',
-        expenseFailed: '记录费用失败'
+        expenseFailed: '记录费用失败',
+        detectPrinter: "检测打印机",
       },
       testPage: {
         environmentOk: '如果看到这个，说明基本环境正常',

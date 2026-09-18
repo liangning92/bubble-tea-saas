@@ -11,6 +11,8 @@ const prisma = new client_1.PrismaClient({
 });
 // CLOUD API base URL
 const CLOUD_API = 'https://api.aicube.online';
+// Config key for cloud auth token
+const CLOUD_TOKEN_KEY = 'sync.cloud_token';
 // POST /api/sync/connect
 // Body: { phone: string, password: string }
 // Returns: { storeId, storeName, tenantId, token, phone, passwordHash }
@@ -44,6 +46,24 @@ router.post('/connect', async (req, res) => {
         });
         const storeInfo = storeRes.ok ? (await storeRes.json()) : null;
         const store = storeInfo?.data || {};
+        // Step 3: Save cloud token to local Config so we can push orders to cloud later
+        try {
+            await prisma.config.upsert({
+                where: { storeId_key: { storeId, key: CLOUD_TOKEN_KEY } },
+                create: {
+                    storeId,
+                    key: CLOUD_TOKEN_KEY,
+                    value: token,
+                    category: 'sync',
+                },
+                update: {
+                    value: token,
+                },
+            });
+        }
+        catch (e) {
+            console.warn('[sync/connect] Failed to save cloud token to Config:', e);
+        }
         return res.json({
             code: 200,
             data: {
@@ -252,6 +272,89 @@ router.get('/status', async (req, res) => {
     }
     catch (err) {
         res.status(500).json({ code: 500, message: err.message });
+    }
+});
+// POST /api/sync/order
+// Receives an order from local POS and upserts into cloud DB.
+// Called by local server after creating an order locally.
+// Uses order ID as unique key so duplicate syncs are idempotent.
+router.post('/order', async (req, res) => {
+    try {
+        const { order } = req.body;
+        if (!order?.id || !order?.storeId) {
+            return res.status(400).json({ code: 400, message: 'order.id and order.storeId required' });
+        }
+        // Upsert order - idempotent, safe to retry
+        await prisma.$transaction(async (tx) => {
+            // Delete existing items for this order (clean slate for items)
+            await tx.orderItem.deleteMany({ where: { orderId: order.id } }).catch(() => { });
+            // Upsert the order
+            await tx.order.upsert({
+                where: { id: order.id },
+                create: {
+                    id: order.id,
+                    storeId: order.storeId,
+                    channelId: order.channelId || null,
+                    staffId: order.staffId,
+                    memberId: order.memberId || null,
+                    orderNumber: order.orderNumber,
+                    totalAmount: order.totalAmount,
+                    discountAmount: order.discountAmount || 0,
+                    finalAmount: order.finalAmount,
+                    customerCount: order.customerCount || 1,
+                    status: order.status || 'completed',
+                    paymentMethod: order.paymentMethod,
+                    taxCategory: order.taxCategory || 'taxable',
+                    platformOrderId: order.platformOrderId || null,
+                    tableNumber: order.tableNumber || null,
+                    callerPhone: order.callerPhone || null,
+                    driverPickupTime: order.driverPickupTime ? new Date(order.driverPickupTime) : null,
+                    purchaseOrderNo: order.purchaseOrderNo || null,
+                    socialRef: order.socialRef || null,
+                    note: order.note || null,
+                    createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
+                    items: {
+                        create: (order.items || []).map((item) => ({
+                            id: item.id,
+                            productId: item.productId,
+                            productName: item.productName,
+                            specId: item.specId,
+                            specName: item.specName,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            addons: typeof item.addons === 'string' ? item.addons : JSON.stringify(item.addons || '[]'),
+                            bomCost: item.bomCost || 0,
+                        }))
+                    },
+                },
+                update: {
+                    totalAmount: order.totalAmount,
+                    discountAmount: order.discountAmount || 0,
+                    finalAmount: order.finalAmount,
+                    status: order.status,
+                    paymentMethod: order.paymentMethod,
+                    items: {
+                        deleteMany: {},
+                        create: (order.items || []).map((item) => ({
+                            id: item.id,
+                            productId: item.productId,
+                            productName: item.productName,
+                            specId: item.specId,
+                            specName: item.specName,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            addons: typeof item.addons === 'string' ? item.addons : JSON.stringify(item.addons || '[]'),
+                            bomCost: item.bomCost || 0,
+                        }))
+                    },
+                },
+            });
+        });
+        return res.json({ code: 200, message: 'Order synced to cloud' });
+    }
+    catch (err) {
+        console.error('[sync/order] Error:', err);
+        return res.status(500).json({ code: 500, message: err.message || 'Order sync failed' });
     }
 });
 exports.default = router;

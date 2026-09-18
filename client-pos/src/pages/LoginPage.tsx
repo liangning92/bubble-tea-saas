@@ -6,9 +6,9 @@ import { posApi } from '../services/api'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe } from 'lucide-react'
 
 const LANGUAGES = [
-  { code: 'zh', labelKey: 'lang.zhName', flag: '🇨🇳' },
-  { code: 'en', labelKey: 'lang.enName', flag: '🇺🇸' },
-  { code: 'id', labelKey: 'lang.idName', flag: '🇮🇩' }
+  { code: 'zh', labelKey: '中文', flag: '🇨🇳' },
+  { code: 'en', labelKey: 'English', flag: '🇺🇸' },
+  { code: 'id', labelKey: 'Bahasa Indonesia', flag: '🇮🇩' }
 ]
 
 export function LoginPage() {

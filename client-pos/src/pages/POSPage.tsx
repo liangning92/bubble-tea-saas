@@ -44,9 +44,9 @@ function getPrinterName(printerSettings: { printerName?: string; printers?: Arra
 
 // 语言选项
 const LANGS = [
-  { code: 'zh', nextCode: 'en', labelKey: 'lang.zh' },
-  { code: 'en', nextCode: 'id', labelKey: 'lang.en' },
-  { code: 'id', nextCode: 'zh', labelKey: 'lang.id' }
+  { code: 'zh', nextCode: 'en', labelKey: '中文' },
+  { code: 'en', nextCode: 'id', labelKey: 'English' },
+  { code: 'id', nextCode: 'zh', labelKey: 'Bahasa Indonesia' }
 ]
 
 // 渠道 - 使用i18n key
