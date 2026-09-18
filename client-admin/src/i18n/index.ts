@@ -313,7 +313,7 @@ const resources = {
         quantity: 'Jumlah',
         linkedRecipe: 'Resep Proses Tertaut',
         selectRecipe: 'Pilih Resep',
-        materialNamePlaceholder: 'cth. Daun Teh Hitam'
+        materialNamePlaceholder: 'cth. Daun Teh Hitam',
       day: 'hari',
       expiresIn: 'Kadaluarsa Dalam',
       expiryAlerts: 'Peringatan Kadaluarsa',
@@ -890,7 +890,7 @@ const resources = {
         approveFailed: 'Gagal menyetujui',
         rejectFailed: 'Gagal menolak',
         markPaidFailed: 'Gagal menandai lunas',
-        fillRejectReason: 'Silakan isi alasan penolakan'
+        fillRejectReason: 'Silakan isi alasan penolakan',
       markedPaid: 'Ditandai Lunas',
       noRequests: 'Tidak ada permintaan reimburs',
       },
@@ -1297,7 +1297,7 @@ const resources = {
         unreadNotifications: 'Notifikasi Belum Dibaca',
         usage: 'Pakai',
         usedByMembers: 'Dipakai oleh Member',
-        viewStats: 'Lihat Statistik'
+        viewStats: 'Lihat Statistik',
       couponCodePlaceholder: 'Masukkan kode kupon',
       referralCodePlaceholder: 'Masukkan kode referral',
       usageLimitPlaceholder: 'Batas penggunaan',
@@ -1856,7 +1856,7 @@ const resources = {
         percent: '%',
         checkmark: '✓',
         milliseconds: 'ms',
-        currencySymbol: 'Rp'
+        currencySymbol: 'Rp',
       blockDelete: 'Hapus Blok',
       blockDisabled: 'Dinonaktifkan',
       blockDuplicate: 'Duplikat',
@@ -3197,7 +3197,7 @@ const resources = {
         quantity: 'Quantity',
         linkedRecipe: 'Linked Process Recipe',
         selectRecipe: 'Select Recipe',
-        materialNamePlaceholder: 'e.g. Black Tea Leaves'
+        materialNamePlaceholder: 'e.g. Black Tea Leaves',
       day: 'day',
       expiresIn: 'Expires In',
       expiryAlerts: 'Expiry Alerts',
@@ -3627,7 +3627,7 @@ const resources = {
         unreadNotifications: 'Unread Notifications',
         usage: 'Usage',
         usedByMembers: 'Used by Members',
-        viewStats: 'View Stats'
+        viewStats: 'View Stats',
       couponCodePlaceholder: 'Enter coupon code',
       referralCodePlaceholder: 'Enter referral code',
       usageLimitPlaceholder: 'Usage limit',
@@ -3868,7 +3868,7 @@ const resources = {
         refundRejected: 'Refund rejected',
         rejectReasonRequired: 'Please enter reject reason',
         approved: 'Approved',
-        rejected: 'Rejected'
+        rejected: 'Rejected',
       approveRefund: 'Approve Refund',
       rejectRefund: 'Reject Refund',
       noRefunds: 'No refund requests',
@@ -4494,7 +4494,7 @@ const resources = {
         percent: '%',
         checkmark: '✓',
         milliseconds: 'ms',
-        currencySymbol: 'Rp'
+        currencySymbol: 'Rp',
       blockDelete: 'Delete Block',
       blockDisabled: 'Disabled',
       blockDuplicate: 'Duplicate',
@@ -4591,7 +4591,7 @@ const resources = {
         approveFailed: 'Failed to approve reimbursement',
         rejectFailed: 'Failed to reject reimbursement',
         markPaidFailed: 'Failed to mark as paid',
-        fillRejectReason: 'Please fill in the rejection reason'
+        fillRejectReason: 'Please fill in the rejection reason',
       markedPaid: 'Marked as Paid',
       noRequests: 'No reimbursement requests',
       },
@@ -5279,7 +5279,7 @@ const resources = {
         itemCount: 'item(s)',
         supplier: 'Supplier',
         select: 'Select',
-        noData: 'No purchase orders'
+        noData: 'No purchase orders',
       contactPersonPlaceholder: 'Contact person',
       supplierNamePlaceholder: 'Supplier name',
       },
@@ -6005,7 +6005,7 @@ const resources = {
         quantity: '数量',
         linkedRecipe: '关联加工配方',
         selectRecipe: '请选择加工配方',
-        materialNamePlaceholder: '如：红茶茶叶'
+        materialNamePlaceholder: '如：红茶茶叶',
       day: '天',
       expiresIn: '剩余过期',
       expiryAlerts: '过期提醒',
@@ -6255,7 +6255,7 @@ const resources = {
         refundRejected: '退款已拒绝',
         rejectReasonRequired: '请输入拒绝原因',
         approved: '已批准',
-        rejected: '已拒绝'
+        rejected: '已拒绝',
       approveRefund: '批准退款',
       rejectRefund: '拒绝退款',
       noRefunds: '暂无退款请求',
@@ -6322,7 +6322,7 @@ const resources = {
         approveFailed: '批准失败',
         rejectFailed: '拒绝失败',
         markPaidFailed: '标记已支付失败',
-        fillRejectReason: '请填写拒绝原因'
+        fillRejectReason: '请填写拒绝原因',
       markedPaid: '已标记为已付',
       noRequests: '暂无报销申请',
       },
@@ -6713,7 +6713,7 @@ const resources = {
         unreadNotifications: '未读通知',
         usage: '使用',
         usedByMembers: '已被会员使用',
-        viewStats: '查看统计'
+        viewStats: '查看统计',
       couponCodePlaceholder: '输入优惠券码',
       referralCodePlaceholder: '输入推荐码',
       usageLimitPlaceholder: '使用限制',
@@ -7363,7 +7363,7 @@ const resources = {
         itemCount: '个明细',
         supplier: '供应商',
         select: '选择',
-        noData: '暂无采购单'
+        noData: '暂无采购单',
       contactPersonPlaceholder: '联系人姓名',
       supplierNamePlaceholder: '供应商名称',
       },
@@ -8315,7 +8315,7 @@ const resources = {
         percent: '%',
         checkmark: '✓',
         milliseconds: '毫秒',
-        currencySymbol: 'Rp'
+        currencySymbol: 'Rp',
       blockDelete: '删除区块',
       blockDisabled: '已禁用',
       blockDuplicate: '复制',
