@@ -371,7 +371,13 @@ const resources = {
         cashDrawerFailed: 'Gagal membuka laci tunai',
         printFailed: 'Gagal mencetak struk',
         printFunctionNotAvailable: 'Fungsi cetak tidak tersedia',
-        cashDrawerFunctionNotAvailable: 'Fungsi laci tunai tidak tersedia'
+        cashDrawerFunctionNotAvailable: 'Fungsi laci tunai tidak tersedia',
+        foundPrintersList: 'Printer yang terdeteksi',
+        setAsReceiptPrinter: 'Jadikan Printer Struk',
+        printerSetupSuccess: 'Printer struk diatur',
+        printerNotAvailable: 'Fungsi printer tidak tersedia (Windows only)',
+        noPrinterFound: 'Tidak ada printer terdeteksi, pastikan printer terhubung dan aktif',
+        retryDetect: 'Deteksi Ulang'
       },
       orders: {
         title: 'Riwayat Pesanan',
@@ -1134,7 +1140,13 @@ const resources = {
         cashDrawerFailed: 'Failed to open cash drawer',
         printFailed: 'Failed to print receipt',
         printFunctionNotAvailable: 'Print function not available',
-        cashDrawerFunctionNotAvailable: 'Fungsi laci tunai tidak tersedia'
+        cashDrawerFunctionNotAvailable: 'Cash drawer function not available',
+        foundPrintersList: 'Detected printers',
+        setAsReceiptPrinter: 'Set as Receipt Printer',
+        printerSetupSuccess: 'Set as receipt printer',
+        printerNotAvailable: 'Printer not available (Windows only)',
+        noPrinterFound: 'No printers found, make sure printer is connected and powered on',
+        retryDetect: 'Retry'
       }
     }
   },
@@ -1585,7 +1597,13 @@ const resources = {
         cashDrawerTestSuccess: '钱箱已打开',
         cashDrawerTestFailed: '钱箱测试失败',
         printFunctionNotAvailable: '打印功能不可用',
-        cashDrawerFunctionNotAvailable: '钱箱功能不可用'
+        cashDrawerFunctionNotAvailable: '钱箱功能不可用',
+        foundPrintersList: '检测到以下打印机',
+        setAsReceiptPrinter: '设为小票打印机',
+        printerSetupSuccess: '已设为小票打印机',
+        printerNotAvailable: '打印机功能不可用（仅支持 Windows）',
+        noPrinterFound: '未检测到打印机，请确保打印机已连接并开机',
+        retryDetect: '重新检测'
       },
       member: {
         register: '会员注册',

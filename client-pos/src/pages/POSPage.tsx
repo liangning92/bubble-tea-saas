@@ -213,6 +213,13 @@ export function POSPage() {
   const [lockPin, setLockPin] = useState('')
   const [lockError, setLockError] = useState(false)
 
+  // 打印机检测弹窗状态
+  const [showPrinterDetectModal, setShowPrinterDetectModal] = useState(false)
+  const [detectedPrinters, setDetectedPrinters] = useState<string[]>([])
+  const [printerDetectLoading, setPrinterDetectLoading] = useState(false)
+  const [printerDetectError, setPrinterDetectError] = useState<string | null>(null)
+  const [selectedPrinterForSetup, setSelectedPrinterForSetup] = useState<string | null>(null)
+
   // 费用记录状态
   const [todayExpenses, setTodayExpenses] = useState<any[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
@@ -1866,6 +1873,52 @@ export function POSPage() {
     }
   }
 
+  // 检测本机打印机
+  const handleDetectPrinters = async () => {
+    setPrinterDetectLoading(true)
+    setPrinterDetectError(null)
+    setDetectedPrinters([])
+    try {
+      if (!electronAPI?.listPrinters) {
+        setPrinterDetectError(t('pos.printerNotAvailable') || '打印机功能不可用（仅支持 Windows）')
+        return
+      }
+      const result = await electronAPI.listPrinters()
+      console.log('[POS] Detected printers:', result)
+      if (result.printers && result.printers.length > 0) {
+        setDetectedPrinters(result.printers)
+        setSelectedPrinterForSetup(result.printers[0])
+      } else {
+        setPrinterDetectError(t('pos.noPrinterFound') || '未检测到打印机，请确保打印机已连接并开机')
+      }
+    } catch (err: any) {
+      console.error('[POS] Detect printers failed:', err)
+      setPrinterDetectError((err?.message) || t('common.error'))
+    } finally {
+      setPrinterDetectLoading(false)
+    }
+  }
+
+  // 将选中的打印机设为小票打印机并保存
+  const handleSetupReceiptPrinter = async () => {
+    if (!selectedPrinterForSetup || !user?.storeId) return
+    try {
+      const updatedPrinters = (hardwareSettings.printers || []).map((p: any) => {
+        if (p.type === 'receipt' && p.enabled) {
+          return { ...p, printerName: selectedPrinterForSetup }
+        }
+        return p
+      })
+      const newHardwareSettings = { ...hardwareSettings, printers: updatedPrinters }
+      setHardwareSettings(newHardwareSettings)
+      await posApi.setConfig(user.storeId, 'hardwareSettings', newHardwareSettings, 'pos')
+      setShowPrinterDetectModal(false)
+      showToast(t('pos.printerSetupSuccess') || '打印机已设为 ' + selectedPrinterForSetup, 'success')
+    } catch (err: any) {
+      showToast(t('common.error') + ': ' + (err?.message || ''), 'error')
+    }
+  }
+
   const resumeOrder = async (order: typeof suspendedOrders[0]) => {
     // 如果当前购物车有内容，需要确认覆盖
     if (cart.length > 0) {
@@ -2385,6 +2438,19 @@ export function POSPage() {
               onClick: () => setShowExpenseModal(true)
             })
           }
+          toolbarButtons.push({
+            id: 'detectPrinter',
+            icon: <Printer size={20} />,
+            labelKey: 'pos.detectPrinter',
+            onClick: () => {
+              setSelectedPrinterForSetup(null)
+              setDetectedPrinters([])
+              setPrinterDetectError(null)
+              setShowPrinterDetectModal(true)
+              // 自动开始检测
+              handleDetectPrinters()
+            }
+          })
           toolbarButtons.push({
             id: 'logout',
             icon: <X size={20} />,
@@ -3703,6 +3769,97 @@ export function POSPage() {
                   {t('pos.saveExpense')}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 打印机检测弹窗 */}
+      {showPrinterDetectModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPrinterDetectModal(false)}>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[60]" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
+              <h3 className="font-bold">{t('pos.detectPrinter') || '检测打印机'}</h3>
+              <button onClick={() => setShowPrinterDetectModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* 检测中状态 */}
+              {printerDetectLoading && (
+                <div className="flex flex-col items-center py-8">
+                  <Loader2 size={40} className="animate-spin text-primary mb-3" />
+                  <p className="text-gray-500">{t('pos.detectingPrinters') || '正在检测打印机...'}</p>
+                </div>
+              )}
+
+              {/* 检测结果 */}
+              {!printerDetectLoading && detectedPrinters.length > 0 && (
+                <>
+                  <p className="text-sm text-gray-500">{t('pos.foundPrintersList') || '检测到以下打印机'}</p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {detectedPrinters.map((p, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedPrinterForSetup(p)}
+                        className={`p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                          selectedPrinterForSetup === p
+                            ? 'border-primary bg-primary/5'
+                            : 'border-gray-200 hover:border-primary/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Printer size={18} className={selectedPrinterForSetup === p ? 'text-primary' : 'text-gray-400'} />
+                          <span className="font-medium text-sm">{p}</span>
+                          {selectedPrinterForSetup === p && <CheckCircle size={16} className="text-primary ml-auto" />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleSetupReceiptPrinter}
+                    disabled={!selectedPrinterForSetup}
+                    className="w-full py-3 bg-primary text-white rounded-xl font-bold disabled:opacity-50 touch-feedback"
+                  >
+                    {t('pos.setAsReceiptPrinter') || '设为小票打印机'}
+                  </button>
+                </>
+              )}
+
+              {/* 检测失败 */}
+              {!printerDetectLoading && printerDetectError && (
+                <div className="flex flex-col items-center py-6">
+                  <XCircle size={40} className="text-red-400 mb-3" />
+                  <p className="text-red-500 text-center text-sm">{printerDetectError}</p>
+                  <button
+                    onClick={handleDetectPrinters}
+                    className="mt-4 px-6 py-2 border-2 border-primary text-primary rounded-xl font-medium hover:bg-primary/5"
+                  >
+                    {t('pos.retryDetect') || '重新检测'}
+                  </button>
+                </div>
+              )}
+
+              {/* 无打印机 */}
+              {!printerDetectLoading && !printerDetectError && detectedPrinters.length === 0 && (
+                <div className="flex flex-col items-center py-6">
+                  <Printer size={40} className="text-gray-300 mb-3" />
+                  <p className="text-gray-500 text-center">{t('pos.noPrinterFound') || '未检测到打印机'}</p>
+                  <button
+                    onClick={handleDetectPrinters}
+                    className="mt-4 px-6 py-2 border-2 border-primary text-primary rounded-xl font-medium hover:bg-primary/5"
+                  >
+                    {t('pos.retryDetect') || '重新检测'}
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowPrinterDetectModal(false)}
+                className="w-full py-2 text-gray-500 text-sm"
+              >
+                {t('common.close') || '关闭'}
+              </button>
             </div>
           </div>
         </div>
