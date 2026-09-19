@@ -7,7 +7,7 @@ CRCCheck off
   WriteRegDWORD HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\FileSystem" "LongPathsEnabled" 1
 
   # 创建桌面快捷方式：打开日志文件夹
-  CreateShortcut "$DESKTOP\BTPS 日志.lnk" "explorer.exe" "$APPDATA\BubbleTeaPOS\logs"
+  CreateShortcut "$DESKTOP\BTPS 日志.lnk" "explorer.exe" "$APPDATA\BTPS\logs"
 !macroend
 
 !macro customUnInstall
