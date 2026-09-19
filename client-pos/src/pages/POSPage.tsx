@@ -2441,7 +2441,7 @@ export function POSPage() {
           toolbarButtons.push({
             id: 'detectPrinter',
             icon: <Printer size={20} />,
-            labelKey: 'pos.detectPrinter',
+            labelKey: 'toolbar.setting',
             onClick: () => {
               setSelectedPrinterForSetup(null)
               setDetectedPrinters([])

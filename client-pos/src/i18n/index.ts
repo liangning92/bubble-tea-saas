@@ -311,7 +311,8 @@ const resources = {
         logout: 'Keluar',
         hardware: 'Perangkat Keras',
         scanPlaceholder: 'Gunakan pemindai barcode untuk menambah produk',
-        cashComingSoon: 'Manajemen kas akan segera hadir'
+        cashComingSoon: 'Manajemen kas akan segera hadir',
+        setting: 'Pengaturan'
       },
       settings: {
         orderCount: 'Jumlah Pesanan',
@@ -881,7 +882,7 @@ const resources = {
         hardware: 'Hardware',
         scanPlaceholder: 'Use barcode scanner to add products',
         cashComingSoon: 'Cash management coming soon',
-        detectPrinter: 'Detect Printer'
+        setting: 'Settings'
       },
       settings: {
         orderCount: 'Order Count',
@@ -1419,7 +1420,7 @@ const resources = {
         expenseRequired: '请填写费用类别和金额',
         expenseCreated: '费用已记录',
         expenseFailed: '记录费用失败',
-        detectPrinter: "检测打印机",
+        setting: "设置",
       },
       testPage: {
         environmentOk: '如果看到这个，说明基本环境正常',
@@ -1439,7 +1440,7 @@ const resources = {
         hardware: '硬件',
         scanPlaceholder: '使用条码扫描器添加产品',
         cashComingSoon: '现金管理即将推出',
-        detectPrinter: '检测打印机'
+        setting: '设置'
       },
       settings: {
         orderCount: '订单数量',
@@ -1576,7 +1577,7 @@ const resources = {
         selectPrinter: '选择打印机',
         refresh: '刷新',
         foundPrinters: '发现 %d 台打印机',
-        clickRefresh: '点击刷新检测打印机',
+        clickRefresh: '点击刷新设置',
         noPrintersDetected: '未检测到打印机？',
         printerTips: '请确保打印机已开机并连接',
         checkUsbCable: '检查USB线连接',
@@ -1594,7 +1595,7 @@ const resources = {
         saveSettings: '保存设置',
         settingsSaved: '设置已保存',
         settingsSaveFailed: '保存设置失败',
-        detectingPrinters: '正在检测打印机...',
+        detectingSettings: '正在设置...',
         detectionFailed: '检测失败',
         noPrintersFound: '未发现打印机',
         makeSurePrinterOn: '请确保打印机已开机',
