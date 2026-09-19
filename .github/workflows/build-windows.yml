@@ -86,16 +86,6 @@ jobs:
           npx prisma generate
           Set-Location ..
 
-      - name: Sync Prisma schema to database
-        env:
-          DATABASE_URL: "file:./seed.db"
-        run: |
-          $repoRoot = $PWD.Path
-          Set-Location "$repoRoot\server\prisma"
-          npx prisma db push --accept-data-loss
-          Set-Location "$repoRoot\server"
-          npx prisma db seed
-
       - name: Build server
         run: npm run build:server
 
