@@ -4,6 +4,23 @@
 
 格式：
 ```markdown
+## BUG-011
+Title: 首次设置弹窗在服务器 DATABASE_URL 配置错误时出现，无法进入登录页
+Severity: P1
+Status: FIXED
+Reproductions:
+  - 服务器 DATABASE_URL 配置无效（格式错误或缺失）
+  - 用户打开 POS 客户端
+  - checkSyncStatus() 失败 → needsSetup=true → 弹出 SetupWizard
+  - SetupWizard 也调用 syncConnect，同样失败
+Expected: 即使服务器有问题，用户也能进入 LoginPage；auto-sync 在登录后处理
+Actual: SetupWizard 阻断，用户无法进入主界面
+Root Cause: App.tsx 在 checkSyncStatus() 失败时强制跳转 SetupWizard，绕过了 LoginPage 的 auto-sync 逻辑
+Changed Files:
+  - client-pos/src/App.tsx: 删除 SetupWizard，永远直接显示 LoginPage
+Regression Test: 服务器配置错误时，POS 仍能打开 LoginPage，auto-sync 在登录后失败时给出友好提示
+Commit: 243c016
+
 ## BUG-010
 Title: 打印模块(electron-pos-printer)加载失败
 Severity: P1
