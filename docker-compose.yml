@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16-alpine
@@ -25,6 +23,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
@@ -40,12 +43,39 @@ services:
       JWT_EXPIRES_IN: "7d"
       NODE_ENV: production
       PORT: 3000
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://admin.aicube.online https://pos.aicube.online https://staff.aicube.online}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ./client-admin
+      dockerfile: Dockerfile
+    container_name: bubble-tea-admin
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+  pos:
+    build:
+      context: ./client-pos
+      dockerfile: Dockerfile
+    container_name: bubble-tea-pos
+    ports:
+      - "6063:80"
+    restart: unless-stopped
+
+  staff:
+    build:
+      context: ./client-staff
+      dockerfile: Dockerfile
+    container_name: bubble-tea-staff
+    ports:
+      - "5175:80"
     restart: unless-stopped
 
 volumes:
