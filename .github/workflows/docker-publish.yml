@@ -10,13 +10,12 @@ on:
       - 'client-pos/**'
       - 'client-staff/**'
       - 'shared/**'
-      - 'docker/**'
       - 'Dockerfile'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository_owner }}/bubble-tea
+  OWNER: ${{ github.repository_owner }}
 
 jobs:
   build-and-push:
@@ -35,85 +34,40 @@ jobs:
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (labels, tags) for API
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Derive image tags
+        id: tags
+        run: |
+          SHA_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "sha_tag=${SHA_TAG}" >> $GITHUB_OUTPUT
+          echo "branch_tag=${{ github.ref_name }}-${SHA_TAG}" >> $GITHUB_OUTPUT
 
       - name: Build and push API image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./server
-          push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract metadata for Admin
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-admin
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+        run: |
+          API_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-api
+          docker build ./server -t ${API_IMG}:latest -t ${API_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${API_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker push -a ${API_IMG}
 
       - name: Build and push Admin image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./client-admin
-          push: true
-          tags: ${{ steps.meta-admin.outputs.tags }}
-          labels: ${{ steps.meta-admin.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract metadata for POS
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-pos
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+        run: |
+          ADMIN_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-admin
+          docker build ./client-admin -t ${ADMIN_IMG}:latest -t ${ADMIN_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${ADMIN_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker push -a ${ADMIN_IMG}
 
       - name: Build and push POS image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./client-pos
-          push: true
-          tags: ${{ steps.meta-pos.outputs.tags }}
-          labels: ${{ steps.meta-pos.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract metadata for Staff
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-staff
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+        run: |
+          POS_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-pos
+          docker build ./client-pos -t ${POS_IMG}:latest -t ${POS_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${POS_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker push -a ${POS_IMG}
 
       - name: Build and push Staff image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./client-staff
-          push: true
-          tags: ${{ steps.meta-staff.outputs.tags }}
-          labels: ${{ steps.meta-staff.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          STAFF_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-staff
+          docker build ./client-staff -t ${STAFF_IMG}:latest -t ${STAFF_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${STAFF_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker push -a ${STAFF_IMG}
 
       - name: Summary
         run: |
@@ -121,22 +75,21 @@ jobs:
           echo ""
           echo "| Service | Image |"
           echo "|---------|-------|"
-          echo "| API | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api:latest\` |"
-          echo "| Admin | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-admin:latest\` |"
-          echo "| POS | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-pos:latest\` |"
-          echo "| Staff | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-staff:latest\` |"
+          echo "| API | \`ghcr.io/${{ env.OWNER }}/bubble-tea-api:latest\` |"
+          echo "| Admin | \`ghcr.io/${{ env.OWNER }}/bubble-tea-admin:latest\` |"
+          echo "| POS | \`ghcr.io/${{ env.OWNER }}/bubble-tea-pos:latest\` |"
+          echo "| Staff | \`ghcr.io/${{ env.OWNER }}/bubble-tea-staff:latest\` |"
           echo ""
           echo "**服务器手动更新命令：**"
-          echo ""
           echo '```bash'
           echo "# 登录 GHCR（只需一次）"
-          echo "echo \$GITHUB_TOKEN | docker login ghcr.io -u \$GITHUB_ACTOR --password-stdin"
+          echo 'echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin'
           echo ""
           echo "# 拉取最新镜像"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api:latest"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-admin:latest"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-pos:latest"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-staff:latest"
+          echo "docker pull ghcr.io/${{ env.OWNER }}/bubble-tea-api:latest"
+          echo "docker pull ghcr.io/${{ env.OWNER }}/bubble-tea-admin:latest"
+          echo "docker pull ghcr.io/${{ env.OWNER }}/bubble-tea-pos:latest"
+          echo "docker pull ghcr.io/${{ env.OWNER }}/bubble-tea-staff:latest"
           echo ""
           echo "# 重启容器"
           echo "docker-compose -f docker-compose.yml up -d"
