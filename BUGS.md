@@ -4,19 +4,24 @@
 
 格式：
 ```markdown
-## BUG-XXX
-Title:
-Severity: P0/P1/P2/P3
-Status: OPEN / IN_PROGRESS / FIXED / DEFERRED
+## BUG-008
+Title: 打印机选择后无法保存
+Severity: P1
+Status: FIXED
 Reproductions:
-  - 步骤 1
-  - 步骤 2
-Expected:
-Actual:
-Root Cause: (修复后填写)
-Changed Files: (修复后填写)
-Regression Test: (修复后填写)
-Commit: (修复后填写)
+  - 进入 POS 设置 -> 打印机设置
+  - 选择一个打印机
+  - 确认保存
+  - 重新进入打印机设置，检查选中的打印机
+Expected: 选中的打印机应该被保存，再次进入时仍然选中
+Actual: 打印机选择后无法保存，重启后恢复默认
+Root Cause: POST /api/config 需要 admin/manager 权限，staff/cashier 角色调用返回 403 但被静默忽略
+Changed Files:
+  - server/src/routes/config.ts: 新增 PUT /api/config/hardware-settings（允许 staff 保存硬件设置）
+  - client-pos/src/services/api.ts: 新增 setHardwareSettings 方法
+  - client-pos/src/pages/POSPage.tsx: handleSetupReceiptPrinter 改用 setHardwareSettings
+Regression Test: 用 staff 账号登录 POS -> 检测打印机 -> 选择 -> 保存 -> 重新进入确认仍选中
+Commit: pending
 ```
 
 ---

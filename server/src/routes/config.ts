@@ -121,6 +121,26 @@ router.get('/:storeId/:key', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// PUT /api/config/hardware-settings - Allow staff/cashier to update hardware settings (printers, cash drawer, etc.)
+router.put('/hardware-settings', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { storeId, hardwareSettings } = req.body
+    if (!storeId || !hardwareSettings) {
+      return res.status(400).json({ code: 400, message: 'Missing storeId or hardwareSettings' })
+    }
+    const valueStr = JSON.stringify(hardwareSettings)
+    const config = await prisma.config.upsert({
+      where: { storeId_key: { storeId, key: 'hardwareSettings' } },
+      create: { storeId, key: 'hardwareSettings', value: valueStr, category: 'pos' },
+      update: { value: valueStr, category: 'pos' }
+    })
+    res.json({ code: 200, message: 'Hardware settings saved', timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('Save hardware settings error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to save hardware settings' })
+  }
+})
+
 // POST /api/config
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(configSchema), async (req: AuthRequest, res) => {
   try {

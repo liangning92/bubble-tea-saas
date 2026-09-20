@@ -103,6 +103,8 @@ export const posApi = {
     api.get(`/config/${storeId}/${key}`),
   setConfig: (storeId: string, key: string, value: any, category: string = 'pos') =>
     api.post('/config', { storeId, key, value, category }),
+  setHardwareSettings: (storeId: string, hardwareSettings: any) =>
+    api.put('/config/hardware-settings', { storeId, hardwareSettings }),
 
   // Receipt Template
   getReceiptTemplate: (templateId: string) =>

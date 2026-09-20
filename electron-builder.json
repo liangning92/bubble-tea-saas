@@ -26,7 +26,6 @@
     "shared/**/*",
     "!**/*.map",
     "!**/node_modules/.cache/**/*",
-    "!**/node_modules/**/printer/**/*",
     "!**/node_modules/**/node-thermal-printer/**/*"
   ],
   "extraResources": [
@@ -68,6 +67,13 @@
     {
       "from": "node_modules/@prisma/client",
       "to": "app.asar.unpacked/node_modules/@prisma/client",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "node_modules/electron-pos-printer",
+      "to": "app.asar.unpacked/node_modules/electron-pos-printer",
       "filter": [
         "**/*"
       ]

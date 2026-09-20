@@ -1911,7 +1911,7 @@ export function POSPage() {
       })
       const newHardwareSettings = { ...hardwareSettings, printers: updatedPrinters }
       setHardwareSettings(newHardwareSettings)
-      await posApi.setConfig(user.storeId, 'hardwareSettings', newHardwareSettings, 'pos')
+      await posApi.setHardwareSettings(user.storeId, newHardwareSettings)
       setShowPrinterDetectModal(false)
       showToast(t('pos.printerSetupSuccess', 'Printer set as') + ' ' + selectedPrinterForSetup, 'success')
     } catch (err: any) {

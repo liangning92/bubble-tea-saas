@@ -22,6 +22,8 @@ jobs:
   build:
     runs-on: windows-latest
     environment: windows-build
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
 
