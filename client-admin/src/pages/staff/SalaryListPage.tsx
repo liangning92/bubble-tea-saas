@@ -155,7 +155,7 @@ export function SalaryListPage() {
 
   const handleAutoCalculate = async () => {
     if (!formData.staffId || !formData.month) {
-      alert(t('salary.selectStaffMonth'))
+      alert(t('staff.salary.selectStaffMonth'))
       return
     }
 
@@ -177,7 +177,7 @@ export function SalaryListPage() {
       }
     } catch (error) {
       console.error('Failed to calculate salary:', error)
-      alert(t('salary.calcFailed'))
+      alert(t('staff.salary.calcFailed'))
     } finally {
       setCalculating(false)
     }
@@ -229,7 +229,7 @@ export function SalaryListPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(t('salary.confirmDelete'))) return
+    if (!window.confirm(t('staff.salary.confirmDelete'))) return
     try {
       await salaryApi.delete(id)
       loadSalaries()
@@ -262,7 +262,7 @@ export function SalaryListPage() {
             className="flex items-center gap-2 bg-white text-primary px-4 py-2 rounded-lg font-medium hover:bg-gray-100"
           >
             <Plus size={20} />
-            {t('salary.addSalary')}
+            {t('staff.salary.addSalary')}
           </button>
         </div>
       </header>
@@ -276,7 +276,7 @@ export function SalaryListPage() {
             onChange={(e) => setFilterStaff(e.target.value)}
             className="flex-1 p-2 border border-gray-200 rounded-lg text-sm"
           >
-            <option value="">{t('salary.selectStaff')}</option>
+            <option value="">{t('staff.salary.selectStaff')}</option>
             {staffOptions.map((staff) => (
               <option key={staff.id} value={staff.id}>{staff.name}</option>
             ))}
@@ -292,9 +292,9 @@ export function SalaryListPage() {
             onChange={(e) => setFilterStatus(e.target.value)}
             className="flex-1 p-2 border border-gray-200 rounded-lg text-sm"
           >
-            <option value="">{t('common.all')} {t('salary.status')}</option>
-            <option value="pending">{t('salary.pending')}</option>
-            <option value="paid">{t('salary.paid')}</option>
+            <option value="">{t('common.all')} {t('staff.salary.status')}</option>
+            <option value="pending">{t('staff.salary.pending')}</option>
+            <option value="paid">{t('staff.salary.paid')}</option>
           </select>
         </div>
       </div>
@@ -302,15 +302,15 @@ export function SalaryListPage() {
       {/* Summary Cards */}
       <div className="p-4 grid grid-cols-3 gap-3">
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-          <p className="text-yellow-800 text-sm font-medium">{t('salary.totalPending')}</p>
+          <p className="text-yellow-800 text-sm font-medium">{t('staff.salary.totalPending')}</p>
           <p className="text-xl font-bold text-yellow-900">{formatCurrency(totalPending)}</p>
         </div>
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <p className="text-green-800 text-sm font-medium">{t('salary.totalPaid')}</p>
+          <p className="text-green-800 text-sm font-medium">{t('staff.salary.totalPaid')}</p>
           <p className="text-xl font-bold text-green-900">{formatCurrency(totalPaid)}</p>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <p className="text-blue-800 text-sm font-medium">{t('salary.thisMonth')}</p>
+          <p className="text-blue-800 text-sm font-medium">{t('staff.salary.thisMonth')}</p>
           <p className="text-xl font-bold text-blue-900">{formatCurrency(thisMonthTotal)}</p>
         </div>
       </div>
@@ -324,12 +324,12 @@ export function SalaryListPage() {
         ) : salaries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-500">
             <DollarSign size={48} className="mb-4 opacity-50" />
-            <p>{t('salary.noSalaries')}</p>
+            <p>{t('staff.salary.noSalaries')}</p>
             <button
               onClick={() => handleOpenModal()}
               className="mt-4 text-primary font-medium"
             >
-              {t('salary.addFirst')}
+              {t('staff.salary.addFirst')}
             </button>
           </div>
         ) : (
@@ -338,14 +338,14 @@ export function SalaryListPage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="font-bold text-gray-900">
-                    {salary.staff?.name || t('salary.staff')}
+                    {salary.staff?.name || t('staff.salary.staff')}
                   </p>
                   <p className="text-sm text-gray-500">
                     {salary.staff?.employeeNumber || '-'}
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[salary.status]}`}>
-                  {salary.status === 'pending' ? t('salary.pending') : t('salary.paid')}
+                  {salary.status === 'pending' ? t('staff.salary.pending') : t('staff.salary.paid')}
                 </span>
               </div>
 
@@ -358,30 +358,30 @@ export function SalaryListPage() {
               {/* Salary breakdown */}
               <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">{t('salary.baseSalary')}:</span>
+                  <span className="text-gray-500">{t('staff.salary.baseSalary')}:</span>
                   <span className="font-medium">{formatCurrency(salary.baseSalary)}</span>
                 </div>
                 {salary.overtime > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">{t('salary.overtime')}:</span>
+                    <span className="text-gray-500">{t('staff.salary.overtime')}:</span>
                     <span className="font-medium">{formatCurrency(salary.overtime)}</span>
                   </div>
                 )}
                 {salary.commission > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">{t('salary.commission')}:</span>
+                    <span className="text-gray-500">{t('staff.salary.commission')}:</span>
                     <span className="font-medium">{formatCurrency(salary.commission)}</span>
                   </div>
                 )}
                 {salary.bonus > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">{t('salary.bonus')}:</span>
+                    <span className="text-gray-500">{t('staff.salary.bonus')}:</span>
                     <span className="font-medium">{formatCurrency(salary.bonus)}</span>
                   </div>
                 )}
                 {salary.deduction > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">{t('salary.deduction')}:</span>
+                    <span className="text-gray-500">{t('staff.salary.deduction')}:</span>
                     <span className="font-medium text-red-600">-{formatCurrency(salary.deduction)}</span>
                   </div>
                 )}
@@ -398,7 +398,7 @@ export function SalaryListPage() {
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
-                    {t('salary.markAsPaid')}
+                    {t('staff.salary.markAsPaid')}
                   </button>
                 )}
                 <button
@@ -419,7 +419,7 @@ export function SalaryListPage() {
           <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">
-                {editingSalary ? t('salary.editSalary') : t('salary.addSalary')}
+                {editingSalary ? t('staff.salary.editSalary') : t('staff.salary.addSalary')}
               </h2>
               <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={20} />
@@ -430,7 +430,7 @@ export function SalaryListPage() {
               {/* Staff Select */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.staff')} *
+                  {t('staff.salary.staff')} *
                 </label>
                 <select
                   value={formData.staffId}
@@ -438,7 +438,7 @@ export function SalaryListPage() {
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   disabled={!!editingSalary}
                 >
-                  <option value="">{t('salary.selectStaff')}</option>
+                  <option value="">{t('staff.salary.selectStaff')}</option>
                   {staffOptions.map((staff) => (
                     <option key={staff.id} value={staff.id}>{staff.name}</option>
                   ))}
@@ -448,7 +448,7 @@ export function SalaryListPage() {
               {/* Month */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.month')} *
+                  {t('staff.salary.month')} *
                 </label>
                 <input
                   type="month"
@@ -462,7 +462,7 @@ export function SalaryListPage() {
               {/* Base Salary */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.baseSalary')} (Rp) *
+                  {t('staff.salary.baseSalary')} (Rp) *
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -480,7 +480,7 @@ export function SalaryListPage() {
                     className="px-4 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1 text-sm font-medium"
                   >
                     {calculating ? <Loader2 size={16} className="animate-spin" /> : null}
-                    {t('salary.autoCalc')}
+                    {t('staff.salary.autoCalc')}
                   </button>
                 </div>
               </div>
@@ -488,7 +488,7 @@ export function SalaryListPage() {
               {/* Overtime */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.overtime')} (Rp)
+                  {t('staff.salary.overtime')} (Rp)
                 </label>
                 <input
                   type="number"
@@ -503,7 +503,7 @@ export function SalaryListPage() {
               {/* Commission */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.commission')} (Rp)
+                  {t('staff.salary.commission')} (Rp)
                 </label>
                 <input
                   type="number"
@@ -518,7 +518,7 @@ export function SalaryListPage() {
               {/* Bonus */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.bonus')} (Rp)
+                  {t('staff.salary.bonus')} (Rp)
                 </label>
                 <input
                   type="number"
@@ -533,7 +533,7 @@ export function SalaryListPage() {
               {/* Deduction */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('salary.deduction')} (Rp)
+                  {t('staff.salary.deduction')} (Rp)
                 </label>
                 <input
                   type="number"
@@ -548,7 +548,7 @@ export function SalaryListPage() {
               {/* Final Amount Preview */}
               <div className="p-4 bg-gray-50 rounded-xl">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium">{t('salary.finalAmount')}:</span>
+                  <span className="font-medium">{t('staff.salary.finalAmount')}:</span>
                   <span className="text-xl font-bold text-primary">
                     {formatCurrency(calculateFinalAmount())}
                   </span>
