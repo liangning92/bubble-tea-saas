@@ -47,6 +47,11 @@ function App() {
           <DiagnosticsPage />
         </ProtectedRoute>
       } />
+      <Route path="/pos" element={
+        <ProtectedRoute>
+          <POSPage />
+        </ProtectedRoute>
+      } />
       <Route
         path="/*"
         element={
@@ -55,7 +60,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Navigate to="/cash" replace />} />
     </Routes>
   )
 }

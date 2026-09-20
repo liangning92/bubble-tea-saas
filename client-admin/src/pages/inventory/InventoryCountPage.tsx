@@ -428,21 +428,21 @@ export function InventoryCountPage() {
 
         <div className="space-y-4">
           <div className="form-group">
-            <label className="form-label">{t('inventory.period') || '盘点周期'}</label>
+            <label className="form-label">{t('inventory.period')}</label>
             <select
               value={newCountForm.period}
               onChange={(e) => setNewCountForm({ ...newCountForm, period: e.target.value as any })}
               className="input w-full"
             >
-              <option value="monthly">{t('inventory.monthly') || '月度盘点'}</option>
-              <option value="quarterly">{t('inventory.quarterly') || '季度盘点'}</option>
-              <option value="annual">{t('inventory.annual') || '年度盘点'}</option>
+              <option value="monthly">{t('inventory.monthly')}</option>
+              <option value="quarterly">{t('inventory.quarterly')}</option>
+              <option value="annual">{t('inventory.annual')}</option>
             </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="form-group">
-              <label className="form-label">{t('inventory.startDate') || '开始日期'}</label>
+              <label className="form-label">{t('inventory.startDate')}</label>
               <input
                 type="date"
                 value={newCountForm.startDate}
@@ -451,7 +451,7 @@ export function InventoryCountPage() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">{t('inventory.endDate') || '结束日期'}</label>
+              <label className="form-label">{t('inventory.endDate')}</label>
               <input
                 type="date"
                 value={newCountForm.endDate}
@@ -462,20 +462,20 @@ export function InventoryCountPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">{t('inventory.notes') || '备注'}</label>
+            <label className="form-label">{t('inventory.notes')}</label>
             <textarea
               value={newCountForm.notes}
               onChange={(e) => setNewCountForm({ ...newCountForm, notes: e.target.value })}
               className="input w-full"
               rows={3}
-              placeholder={t('inventory.notesPlaceholder') || '可选备注...'}
+              placeholder={t('inventory.notesPlaceholder')}
             />
           </div>
         </div>
 
         <div className="flex gap-3 mt-6">
           <button onClick={() => setShowCreateModal(false)} className="btn btn-outline flex-1">
-            {t('common.cancel') || '取消'}
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleCreateCount}
@@ -483,7 +483,7 @@ export function InventoryCountPage() {
             className="btn btn-primary flex-1"
           >
             {createMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            {t('inventory.create') || '创建'}
+            {t('inventory.create')}
           </button>
         </div>
       </div>

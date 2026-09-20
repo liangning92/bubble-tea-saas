@@ -115,11 +115,6 @@ export function RewardCatalogPage() {
     return d ? new Date(d).toLocaleDateString('id-ID') : '-'
   }
 
-  const tl = (key: string, fallback: string) => {
-    const translated = t(key)
-    return translated === key ? fallback : translated
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -143,14 +138,14 @@ export function RewardCatalogPage() {
           <table className="w-full min-w-[800px]">
             <thead>
               <tr className="text-left text-sm text-gray-500 border-b">
-                <th className="pb-3">{tl('marketing.rewardName', '奖励名称')}</th>
-                <th className="pb-3">{tl('marketing.type', '类型')}</th>
-                <th className="pb-3">{tl('marketing.pointsCost', '所需积分')}</th>
-                <th className="pb-3">{tl('marketing.value', '价值')}</th>
-                <th className="pb-3">{tl('marketing.stock', '库存')}</th>
-                <th className="pb-3">{tl('marketing.validity', '有效期')}</th>
-                <th className="pb-3">{tl('common.status', '状态')}</th>
-                <th className="pb-3">{tl('common.actions', '操作')}</th>
+                <th className="pb-3">{t('marketing.rewardName')}</th>
+                <th className="pb-3">{t('marketing.type')}</th>
+                <th className="pb-3">{t('marketing.pointsCost')}</th>
+                <th className="pb-3">{t('marketing.couponValue')}</th>
+                <th className="pb-3">{t('marketing.stock')}</th>
+                <th className="pb-3">{t('marketing.validity')}</th>
+                <th className="pb-3">{t('common.status')}</th>
+                <th className="pb-3">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -173,7 +168,7 @@ export function RewardCatalogPage() {
                   </td>
                   <td className="py-3">
                     <span className={"badge " + (r.isActive ? 'badge-success' : 'badge-gray')}>
-                      {r.isActive ? tl('common.active', '激活') : tl('common.inactive', '停用')}
+                      {r.isActive ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   <td className="py-3">
@@ -194,13 +189,13 @@ export function RewardCatalogPage() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
-                {editingReward ? tl('marketing.editReward', '编辑奖励') : tl('marketing.addReward', '添加奖励')}
+                {editingReward ? t('marketing.editReward') : t('marketing.addReward')}
               </h3>
               <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100"><X size={20} /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">{tl('marketing.rewardName', '奖励名称')} *</label>
+                <label className="block text-sm font-medium mb-1">{t('marketing.rewardName')} *</label>
                 <input
                   type="text"
                   value={form.name}
@@ -210,7 +205,7 @@ export function RewardCatalogPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">{tl('marketing.type', '类型')}</label>
+                <label className="block text-sm font-medium mb-1">{t('marketing.type')}</label>
                 <select
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
@@ -223,7 +218,7 @@ export function RewardCatalogPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">{tl('marketing.pointsCost', '所需积分')} *</label>
+                  <label className="block text-sm font-medium mb-1">{t('marketing.pointsCost')} *</label>
                   <input
                     type="number"
                     value={form.pointsCost}
@@ -234,7 +229,7 @@ export function RewardCatalogPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">{tl('marketing.value', '价值 (Rp)')}</label>
+                  <label className="block text-sm font-medium mb-1">{t('marketing.rewardValue')}</label>
                   <input
                     type="number"
                     value={form.value}
@@ -245,7 +240,7 @@ export function RewardCatalogPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">{tl('marketing.stock', '库存')}</label>
+                <label className="block text-sm font-medium mb-1">{t('marketing.stock')}</label>
                 <input
                   type="number"
                   value={form.stock ?? ''}
@@ -257,7 +252,7 @@ export function RewardCatalogPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">{tl('marketing.validFrom', '开始日期')}</label>
+                  <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')}</label>
                   <input
                     type="date"
                     value={form.validFrom}
@@ -266,7 +261,7 @@ export function RewardCatalogPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">{tl('marketing.validUntil', '结束日期')}</label>
+                  <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')}</label>
                   <input
                     type="date"
                     value={form.validUntil}
@@ -282,9 +277,9 @@ export function RewardCatalogPage() {
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
                 >
                   {(createMutation.isPending || updateMutation.isPending) && <Loader2 size={16} className="animate-spin" />}
-                  {tl('common.save', '保存')}
+                  {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">{tl('common.cancel', '取消')}</button>
+                <button type="button" onClick={closeModal} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </form>
           </div>
@@ -294,8 +289,8 @@ export function RewardCatalogPage() {
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">{tl('common.delete', '删除')}</h3>
-            <p className="text-gray-600 mb-6">{tl('marketing.deleteRewardConfirm', '确定删除此奖励？')}</p>
+            <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
+            <p className="text-gray-600 mb-6">{t('marketing.deleteRewardConfirm')}</p>
             <div className="flex gap-3">
               <button
                 onClick={() => deleteMutation.mutate(deleteId)}
@@ -303,10 +298,10 @@ export function RewardCatalogPage() {
                 className="btn-danger flex-1 flex items-center justify-center gap-2"
               >
                 {deleteMutation.isPending && <Loader2 size={16} className="animate-spin" />}
-                {tl('common.delete', '删除')}
+                {t('common.delete')}
               </button>
               <button onClick={() => setDeleteId(null)} className="btn-secondary flex-1">
-                {tl('common.cancel', '取消')}
+                {t('common.cancel')}
               </button>
             </div>
           </div>

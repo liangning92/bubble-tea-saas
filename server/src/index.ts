@@ -123,8 +123,10 @@ httpServer.on('error', (err: NodeJS.ErrnoException) => {
 app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({
-  origin: config.corsOrigin.split(','),
-  credentials: true
+  origin: config.corsOrigin.split(/[,\s]+/).map(s => s.trim()).filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept']
 }))
 app.use(morgan('dev'))
 app.use(express.json({ limit: '10mb' }))

@@ -91,6 +91,14 @@ jobs:
       - name: Build POS
         run: npm run build:pos
 
+      - name: Install POS dependencies
+        run: |
+          Remove-Item -Force client-pos/package-lock.json -ErrorAction SilentlyContinue
+          Remove-Item -Force client-pos/node_modules -Recurse -ErrorAction SilentlyContinue
+          cd client-pos
+          npm install
+          Set-Location ..
+
       - name: Compile Electron
         run: cd client-pos && npm run build:electron:main
 

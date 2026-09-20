@@ -13,9 +13,9 @@ interface InventoryCategory {
 }
 
 const DEFAULT_CATEGORIES = [
-  { id: 'raw_material', name: '原料', code: 'raw_material', description: '原材料' },
-  { id: 'packaging', name: '包材', code: 'packaging', description: '包装材料' },
-  { id: 'finished_goods', name: '成品', code: 'finished_goods', description: '成品' },
+  { id: 'raw_material', nameKey: 'inventory.categoryNames.rawMaterial', name: '原料', code: 'raw_material', description: '原材料' },
+  { id: 'packaging', nameKey: 'inventory.categoryNames.packaging', name: '包材', code: 'packaging', description: '包装材料' },
+  { id: 'finished_goods', nameKey: 'inventory.categoryNames.finishedGoods', name: '成品', code: 'finished_goods', description: '成品' },
 ]
 
 export function InventoryCategoryPage() {

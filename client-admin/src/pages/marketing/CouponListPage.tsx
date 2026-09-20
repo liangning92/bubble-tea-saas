@@ -193,7 +193,7 @@ export function CouponListPage() {
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 font-medium">{t('marketing.couponCode')}</th>
                   <th className="pb-3 font-medium">{t('marketing.couponType')}</th>
-                  <th className="pb-3 font-medium">{t('marketing.value')}</th>
+                  <th className="pb-3 font-medium">{t('marketing.couponValue')}</th>
                   <th className="pb-3 font-medium">{t('marketing.minOrder')}</th>
                   <th className="pb-3 font-medium">{t('marketing.validity')}</th>
                   <th className="pb-3 font-medium">{t('marketing.usageCount')}</th>
@@ -301,7 +301,7 @@ export function CouponListPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">{t('marketing.value')} *</label>
+                <label className="block text-sm font-medium mb-1">{t('marketing.couponValue')} *</label>
                 <input
                   type="number"
                   value={form.value}
@@ -407,7 +407,7 @@ export function CouponListPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">{t('marketing.value')} *</label>
+                <label className="block text-sm font-medium mb-1">{t('marketing.couponValue')} *</label>
                 <input
                   type="number"
                   value={form.value}

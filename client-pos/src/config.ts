@@ -28,8 +28,8 @@ function autoDetectApiUrl(): string {
     return LOCAL_API_URL  // http://localhost:7072/api
   }
 
-  // Remote access via cloudflare tunnel → use cloud API
-  return CLOUD_API_URL  // https://api.aicube.online/api
+  // Remote access via cloudflare tunnel → use relative path (nginx in container proxies to API)
+  return '/api'
 }
 
 export function getApiUrl(): string {

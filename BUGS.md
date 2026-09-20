@@ -21,16 +21,34 @@ Changed Files:
 Regression Test: 服务器配置错误时，POS 仍能打开 LoginPage，auto-sync 在登录后失败时给出友好提示
 Commit: 243c016
 
+## BUG-012
+Title: electron-pos-printer 未安装导致打印和钱箱功能完全不可用
+Severity: P1
+Status: OPEN
+Reproductions:
+  - 用户启动 POS 安装版
+  - 弹出错误提示："打印模块（electron-pos-printer）未能成功加载"
+  - 票据打印和钱箱功能完全不可用
+Expected: electron-pos-printer 正常打包，打印和钱箱功能可用
+Actual: 打印模块加载失败，弹错误弹窗阻断使用
+Root Cause: > **真正根因**：`client-pos/package.json` 中声明了 `electron-pos-printer` 依赖，但 GitHub Actions 构建流程（build-windows.yml）从未在 `client-pos/` 目录运行 `npm install`，导致 `client-pos/node_modules/electron-pos-printer/` 不存在。
+  > `electron-builder.json` 的 `files` 和 `asarUnpack` 均指向 `node_modules/electron-pos-printer`（根目录），根目录也从未安装过此包。
+  > `electron-rebuild` 步骤存在但无模块可 rebuild。
+Changed Files:
+  - .github/workflows/build-windows.yml: 添加 `cd client-pos && npm install` 步骤
+  - electron-builder.json: 确认 `files` 和 `asarUnpack` 路径正确指向 client-pos/node_modules
+Regression Test: 用安装版 POS 启动，无打印模块错误弹窗，能正常打印小票和开钱箱
+
 ## BUG-010
 Title: 打印模块(electron-pos-printer)加载失败
 Severity: P1
-Status: IN_PROGRESS
+Status: SUPERSEDED BY BUG-012
 Reproductions:
   - 用户启动 POS 客户端
   - 弹出错误提示："打印模块(electron-pos-printer)未能成功加载"
 Expected: electron-pos-printer 模块正常加载，票据打印和钱箱功能可用
 Actual: 模块加载失败，打印和钱箱功能不可用
-Root Cause: @electron/rebuild 未装，native module 未针对 Electron 版本重建
+Root Cause: 【已废弃，正确根因见 BUG-012】
 Changed Files:
   - package.json: 加 @electron/rebuild
   - .github/workflows/build-windows.yml: 加 rebuild 步骤 + DEBUG

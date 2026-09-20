@@ -83,7 +83,7 @@ export function CouponDetailPage() {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">{t('marketing.value')}</span>
+              <span className="text-gray-500">{t('marketing.couponValue')}</span>
               <span className="font-semibold">{formatValue(coupon)}</span>
             </div>
             <div className="flex justify-between">

@@ -42,6 +42,7 @@ const PLATFORM_CONFIG: Record<string, { name: string; color: string; bgColor: st
   direct: { name: 'Dine-in', color: 'text-blue-600', bgColor: 'bg-blue-500' }
 }
 
+// Mock product data for demo purposes (Chinese names are demo data)
 const MOCK_PRODUCTS = ['珍奶', '椰果', '芒果冰沙', '绿茶', '芋头', '茉莉花茶']
 const MOCK_NAMES = ['Customer A', 'Customer B', 'Customer C', 'Customer D', 'Customer E']
 const MOCK_STREETS = [

@@ -318,7 +318,7 @@ export function ShiftConfigPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('staff.color') || '颜色'}
+                  {t('staff.color')}
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {PRESET_COLORS.map(color => (

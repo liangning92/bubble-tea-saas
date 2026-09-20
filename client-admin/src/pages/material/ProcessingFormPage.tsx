@@ -155,9 +155,9 @@ export function ProcessingFormPage() {
                 onChange={(e) => setForm({ ...form, outputUnit: e.target.value })}
                 className="input w-full"
               >
-                <option value="ml">ml</option>
-                <option value="g">g</option>
-                <option value="个">个</option>
+                <option value="ml">{t('material.unitMl')}</option>
+                <option value="g">{t('material.unitG')}</option>
+                <option value="个">{t('material.unitPiece')}</option>
               </select>
             </div>
           </div>

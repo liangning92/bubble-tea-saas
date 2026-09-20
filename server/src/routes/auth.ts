@@ -118,6 +118,11 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
 router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) => {
   try {
     const { phone, password } = req.body
+    console.log('[DEBUG LOGIN]', new Date().toISOString(), {
+      body: req.body,
+      ip: req.ip,
+      ua: req.headers['user-agent']?.substring(0, 50)
+    })
 
     // Find user
     const user = await prisma.user.findUnique({

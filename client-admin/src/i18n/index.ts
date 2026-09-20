@@ -5419,7 +5419,25 @@ const resources = {
         deliveryFee: 'Delivery Fee',
         estimate: 'Estimate',
         startPrepare: 'Start Prepare',
-        markReady: 'Mark Ready'
+        markReady: 'Mark Ready',
+        // Mock product names for demo
+        product: {
+          bubbleTea: '珍奶',
+          coconutMilk: '椰果',
+          mangoSmoothie: '芒果冰沙',
+          greenTea: '绿茶',
+          taroMilk: '芋头',
+          jasmineTea: '茉莉花茶',
+        },
+        size: {
+          large: '大杯',
+          medium: '中杯',
+        },
+        ice: {
+          less: '少冰',
+          noIce: '去冰',
+          normal: '正常',
+        }
       },
       reports: {
         title: 'Revenue Report',
@@ -5931,7 +5949,9 @@ const resources = {
         refunded: '已退款',
         errorPageTitle: '页面出错了',
         goBack: '返回',
-        reloadPage: '刷新页面'
+        reloadPage: '刷新页面',
+        chinese: '中文',
+        status: '状态'
       },
       nav: {
         dashboard: '仪表盘',
@@ -6202,16 +6222,26 @@ const resources = {
         linkedRecipe: '关联加工配方',
         selectRecipe: '请选择加工配方',
         materialNamePlaceholder: '如：红茶茶叶',
-      day: '天',
-      expiresIn: '剩余过期',
-      expiryAlerts: '过期提醒',
-      noRecipes: '暂无加工配方',
-      outputUnit: '产出单位',
-      processHistory: '加工记录',
-      recipe: '配方',
-      recipeName: '配方名称',
-      suggestQty: '建议补货量',
-      enterMultiplier: '输入倍数',
+        // Material types
+        typeRawMaterial: '原料(毛料)',
+        typeSemiFinished: '加工原料(半成品)',
+        typeFinishedGoods: '成品',
+        // Material categories
+        categoryTea: '茶叶',
+        categoryMilk: '奶类',
+        categorySugar: '糖类',
+        categoryTopping: '小料',
+        categorySyrup: '调味糖浆',
+        categoryConsumable: '耗材',
+        categoryOther: '其他',
+        // FIFO and expiry
+        urgent: '紧急',
+        fifoExplanation: '先进先出 (FIFO) 说明',
+        fifoDescription: '先进先出原则：优先使用最早到期的批次。系统会根据批次到期日期自动排序，确保快过期的原料被优先使用。建议每日检查批次列表，及时处理即将过期的原料。',
+        unlimited: '不限',
+        alert: '提醒',
+        lowStockWarning: '库存低于安全库存 ({stock} {unit})',
+        concentrateRatioHint: '如：茶叶浓缩10倍则填10',
       },
       addons: {
         title: '加料',
@@ -6275,7 +6305,14 @@ const resources = {
         commissions: '佣金记录',
         pricing: '定价',
         addFirst: '添加第一个渠道',
-        configureApi: '配置 API 密钥'
+        configureApi: '配置 API 密钥',
+        dineIn: '堂食',
+        pos: 'POS收银',
+        gofood: 'GoFood',
+        grabFood: 'GrabFood',
+        shopeeFood: 'ShopeeFood',
+        tokopedia: 'Tokopedia',
+        tikTokShop: 'TikTok Shop'
       },
       pos: {
         title: '收银',
@@ -6547,6 +6584,10 @@ const resources = {
         templateHint: '选择发送的通知模板（需与活动类型匹配）',
         copyCode: '复制',
         copied: '已复制',
+        // Reward Catalog
+        type: '类型',
+        value: '价值',
+        stock: '库存',
         // Marketing tabs
         campaigns: '活动',
         coupons: '优惠券',
@@ -6799,7 +6840,7 @@ const resources = {
         editCoupon: '编辑优惠券',
         couponCode: '优惠码',
         couponType: '类型',
-        value: '面值',
+        couponValue: '面值',
         minOrder: '最低消费',
         usageCount: '已使用',
         usageLimit: '限制',
@@ -6905,7 +6946,7 @@ const resources = {
           manual: '手动',
           scheduled: '定时'
         },
-        type: '类型',
+        notificationType: '通知类型',
         unreadNotifications: '未读通知',
         usage: '使用',
         usedByMembers: '已被会员使用',
@@ -7051,7 +7092,7 @@ const resources = {
         scheduleDescription: '管理员工排班',
         thisWeek: '本周',
         selectShift: '选择班次',
-        training: '培训',
+        trainingLabel: '培训',
         trainingTitle: '员工培训',
         points: '积分',
         pointsTitle: '员工积分',
@@ -7311,7 +7352,6 @@ const resources = {
       shiftName: '班次名称（英文）',
       shiftNameId: '班次名称（印尼）',
       shiftNameZh: '班次名称（中文）',
-      },
       members: {
         title: '会员',
         addMember: '添加会员',
@@ -7336,6 +7376,9 @@ const resources = {
         id: 'ID',
         totalVisits: '总访问次数',
         memberSince: '注册时间',
+        totalMembers: '会员',
+        orders: '订单',
+        searchPlaceholder: '搜索姓名或电话...',
         pointTypes: {
           earn: '获得',
           redeem: '兑换',
@@ -7415,7 +7458,20 @@ const resources = {
         inProgress: '进行中',
         completed: '已完成',
         newCount: '新建盘点',
-        totalCounts: '盘点记录'
+        totalCounts: '盘点记录',
+        period: '盘点周期',
+        monthly: '月度盘点',
+        quarterly: '季度盘点',
+        annual: '年度盘点',
+        startDate: '开始日期',
+        endDate: '结束日期',
+        create: '创建',
+        // Inventory category names
+        categoryNames: {
+          rawMaterial: '原料',
+          packaging: '包材',
+          finishedGoods: '成品',
+        }
       },
       training: {
         categoryManagement: '类别管理',
@@ -7437,6 +7493,7 @@ const resources = {
         deductionPerLatePlaceholder: '每次迟到扣款 (Rp)',
         deductionPerAbsencePlaceholder: '每次旷工扣款 (Rp)',
         deductionPerSickPlaceholder: '每天病假扣款 (Rp)',
+        newCategory: '新类别',
       },
       kds: {
         title: '厨房显示屏',
@@ -7610,7 +7667,7 @@ const resources = {
         title: '工资管理',
         addSalary: '添加工资',
         editSalary: '编辑工资',
-        staff: '员工',
+        salaryStaff: '员工',
         month: '月份',
         baseSalary: '基本工资',
         overtime: '加班费',
@@ -8807,7 +8864,20 @@ const resources = {
         createAreaFailed: '创建区域失败',
         updateAreaFailed: '更新区域失败',
         deleteAreaFailed: '删除区域失败',
-        saveAreaFailed: '保存区域失败'
+        saveAreaFailed: '保存区域失败',
+        // Hygiene area names
+        areaNames: {
+          counter: '柜台',
+          kitchen: '后厨',
+          ingredients: '原料区',
+          floor: '地面',
+          restroom: '卫生间',
+          waste: '垃圾区',
+          equipment: '设备区',
+          ventilation: '通风/空调',
+          storage: '仓储区',
+          dining: '用餐区',
+        }
       },
       calendar: {
         sun: '周日',
@@ -8879,6 +8949,7 @@ const resources = {
       }
     }
   }
+}
 }
 
 // 从 localStorage 读取保存的语言设置，默认 'id'

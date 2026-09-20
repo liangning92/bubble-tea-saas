@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { materialApi } from '../../services/api'
 import { Loader2, Package, Clock } from 'lucide-react'
 
 export function BatchListPage() {
+  const { t } = useTranslation()
   const [daysFilter, setDaysFilter] = useState(7)
 
   // 获取7天内过期的批次
@@ -98,9 +100,9 @@ export function BatchListPage() {
                   </td>
                   <td className="py-3">
                     <span className={`px-2 py-1 rounded text-xs border ${getUrgencyClass(batch.daysUntilExpiry)}`}>
-                      {batch.daysUntilExpiry <= 1 ? '紧急' :
-                       batch.daysUntilExpiry <= 3 ? '紧急' :
-                       batch.daysUntilExpiry <= 7 ? '预警' : '正常'}
+                      {batch.daysUntilExpiry <= 1 ? t('material.urgent') :
+                       batch.daysUntilExpiry <= 3 ? t('material.urgent') :
+                       batch.daysUntilExpiry <= 7 ? t('material.warning') : t('material.normal')}
                     </span>
                   </td>
                 </tr>
@@ -114,11 +116,10 @@ export function BatchListPage() {
       <div className="card bg-blue-50 border-blue-200">
         <h3 className="font-semibold text-blue-700 mb-2 flex items-center gap-2">
           <Clock size={18} />
-          先进先出 (FIFO) 说明
+          {t('material.fifoExplanation') || '先进先出 (FIFO) 说明'}
         </h3>
         <p className="text-sm text-blue-600">
-          先进先出原则：优先使用最早到期的批次。系统会根据批次到期日期自动排序，确保快过期的原料被优先使用。
-          建议每日检查批次列表，及时处理即将过期的原料。
+          {t('material.fifoDescription') || '先进先出原则：优先使用最早到期的批次。系统会根据批次到期日期自动排序，确保快过期的原料被优先使用。建议每日检查批次列表，及时处理即将过期的原料。'}
         </p>
       </div>
     </div>

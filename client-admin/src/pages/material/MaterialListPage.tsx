@@ -6,10 +6,10 @@ import { materialApi } from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
 import { Plus, Edit2, AlertTriangle, Package, Loader2 } from 'lucide-react'
 
-const TYPE_LABELS: Record<string, string> = {
-  raw_material: '原料(毛料)',
-  semi_finished: '加工原料(半成品)',
-  finished_goods: '成品'
+const TYPE_KEYS: Record<string, string> = {
+  raw_material: 'material.typeRawMaterial',
+  semi_finished: 'material.typeSemiFinished',
+  finished_goods: 'material.typeFinishedGoods'
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -72,7 +72,7 @@ export function MaterialListPage() {
         >
           {t('material.all') || 'All'}
         </button>
-        {Object.entries(TYPE_LABELS).map(([value, label]) => (
+        {Object.entries(TYPE_KEYS).map(([value, labelKey]) => (
           <button
             key={value}
             onClick={() => setTypeFilter(value)}
@@ -80,7 +80,7 @@ export function MaterialListPage() {
               typeFilter === value ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
@@ -141,7 +141,7 @@ export function MaterialListPage() {
                   <td className="py-3 text-gray-600">{mat.category}</td>
                   <td className="py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${TYPE_COLORS[mat.type] || 'bg-gray-100 text-gray-700'}`}>
-                      {TYPE_LABELS[mat.type] || mat.type}
+                      {t(TYPE_KEYS[mat.type] || 'material.type')}
                     </span>
                   </td>
                   <td className="py-3 text-right">

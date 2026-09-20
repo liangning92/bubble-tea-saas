@@ -7,13 +7,13 @@ import { Link2, Plus, Edit2, Trash2, Loader2 } from 'lucide-react'
 
 // 预置渠道类型
 const PRESET_CHANNELS = [
-  { name: '堂食', code: 'DINE_IN', commission: 0, icon: '🍵' },
-  { name: 'POS收银', code: 'POS', commission: 0, icon: '💳' },
-  { name: 'GoFood', code: 'GOFOOD', commission: 0.2, icon: '🟢' },
-  { name: 'GrabFood', code: 'GRAB', commission: 0.2, icon: '🟡' },
-  { name: 'ShopeeFood', code: 'SHOPEE', commission: 0.18, icon: '🟠' },
-  { name: 'Tokopedia', code: 'TOKOPEDIA', commission: 0.15, icon: '🛒' },
-  { name: 'TikTok Shop', code: 'TIKTOK', commission: 0.12, icon: '🎵' },
+  { nameKey: 'channels.dineIn', name: '堂食', code: 'DINE_IN', commission: 0, icon: '🍵' },
+  { nameKey: 'channels.pos', name: 'POS收银', code: 'POS', commission: 0, icon: '💳' },
+  { nameKey: 'channels.gofood', name: 'GoFood', code: 'GOFOOD', commission: 0.2, icon: '🟢' },
+  { nameKey: 'channels.grabFood', name: 'GrabFood', code: 'GRAB', commission: 0.2, icon: '🟡' },
+  { nameKey: 'channels.shopeeFood', name: 'ShopeeFood', code: 'SHOPEE', commission: 0.18, icon: '🟠' },
+  { nameKey: 'channels.tokopedia', name: 'Tokopedia', code: 'TOKOPEDIA', commission: 0.15, icon: '🛒' },
+  { nameKey: 'channels.tikTokShop', name: 'TikTok Shop', code: 'TIKTOK', commission: 0.12, icon: '🎵' },
 ]
 
 interface Channel {
@@ -172,7 +172,7 @@ export function ChannelListPage() {
                 className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-sm flex items-center gap-1 transition-colors"
               >
                 <span>{preset.icon}</span>
-                <span>{preset.name}</span>
+                <span>{t(preset.nameKey)}</span>
                 <span className="text-xs text-gray-400">({preset.commission * 100}%)</span>
               </button>
             ))}
@@ -214,7 +214,7 @@ export function ChannelListPage() {
                         <span className="font-medium text-gray-900">{channel.name}</span>
                         {['GOFOOD', 'GRAB', 'SHOPEE'].includes(channel.code) && channel.status === 'active' && (
                           <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">
-                            {t('channels.configureApi') || '需配置API'}
+                            {t('channels.configureApi')}
                           </span>
                         )}
                       </div>

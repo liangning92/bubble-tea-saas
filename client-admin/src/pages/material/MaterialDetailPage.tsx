@@ -5,10 +5,10 @@ import { materialApi } from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
 import { Loader2, Package, AlertTriangle, Edit2 } from 'lucide-react'
 
-const TYPE_LABELS: Record<string, string> = {
-  raw_material: '原料(毛料)',
-  semi_finished: '加工原料(半成品)',
-  finished_goods: '成品'
+const TYPE_KEYS: Record<string, string> = {
+  raw_material: 'material.typeRawMaterial',
+  semi_finished: 'material.typeSemiFinished',
+  finished_goods: 'material.typeFinishedGoods'
 }
 
 export function MaterialDetailPage() {
@@ -58,7 +58,7 @@ export function MaterialDetailPage() {
             <div className="flex gap-4 mt-2 text-sm text-gray-500">
               <span>{mat.category}</span>
               <span>•</span>
-              <span>{TYPE_LABELS[mat.type] || mat.type}</span>
+              <span>{t(TYPE_KEYS[mat.type] || 'material.type')}</span>
               <span>•</span>
               <span>{mat.unit}</span>
             </div>
@@ -85,9 +85,9 @@ export function MaterialDetailPage() {
             </div>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="text-sm text-gray-500">保质期</div>
+            <div className="text-sm text-gray-500">{t('material.shelfLife')}</div>
             <div className="text-2xl font-bold">
-              {mat.shelfLife > 0 ? `${mat.shelfLife}天` : '不限'}
+              {mat.shelfLife > 0 ? `${mat.shelfLife}${t('material.day')}` : (t('material.unlimited') || '不限')}
             </div>
           </div>
         </div>
@@ -98,13 +98,13 @@ export function MaterialDetailPage() {
         <div className="card border-orange-200 bg-orange-50">
           <h3 className="font-semibold text-orange-700 mb-3 flex items-center gap-2">
             <AlertTriangle size={20} />
-            提醒
+            {t('material.alert') || '提醒'}
           </h3>
           <div className="space-y-2">
             {mat.currentStock <= mat.safetyStock && (
               <div className="flex items-center gap-2 text-orange-700">
                 <AlertTriangle size={16} />
-                库存低于安全库存 ({mat.safetyStock} {mat.unit})
+                {t('material.lowStockWarning', { stock: mat.safetyStock, unit: mat.unit })}
               </div>
             )}
           </div>
@@ -175,8 +175,8 @@ export function MaterialDetailPage() {
             <span>{mat.maxStock} {mat.unit}</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
-            <span className="text-gray-500">保质期</span>
-            <span>{mat.shelfLife > 0 ? `${mat.shelfLife}天` : '不限'}</span>
+            <span className="text-gray-500">{t('material.shelfLife')}</span>
+            <span>{mat.shelfLife > 0 ? `${mat.shelfLife}${t('material.day')}` : (t('material.unlimited') || '不限')}</span>
           </div>
         </div>
       </div>

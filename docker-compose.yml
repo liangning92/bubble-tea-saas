@@ -43,7 +43,7 @@ services:
       JWT_EXPIRES_IN: "7d"
       NODE_ENV: production
       PORT: 3000
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://admin.aicube.online https://pos.aicube.online https://staff.aicube.online}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://admin.aicube.online,https://pos.aicube.online,https://staff.aicube.online,https://api.aicube.online}
     depends_on:
       db:
         condition: service_healthy

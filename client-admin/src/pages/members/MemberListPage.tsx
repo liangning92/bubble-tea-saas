@@ -48,7 +48,7 @@ export function MemberListPage() {
       <div className="flex items-center justify-between mb-6">
         <div />
         <div className="text-sm text-gray-500">
-          {members.length} {t('members.totalMembers') || '会员'}
+          {members.length} {t('members.totalMembers')}
         </div>
       </div>
 
@@ -58,7 +58,7 @@ export function MemberListPage() {
           <Search size={20} className="text-gray-400" />
           <input
             type="text"
-            placeholder={t('members.searchPlaceholder') || '搜索姓名或电话...'}
+            placeholder={t('members.searchPlaceholder')}
             value={searchName}
             onChange={(e) => setSearchName(e.target.value)}
             className="input flex-1"
@@ -115,7 +115,7 @@ export function MemberListPage() {
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {member.totalOrders || 0} {t('members.orders') || '订单'}
+                    {member.totalOrders || 0} {t('members.orders')}
                   </div>
                 </div>
 

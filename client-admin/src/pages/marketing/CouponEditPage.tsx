@@ -102,7 +102,7 @@ export function CouponEditPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">{t('marketing.value')} *</label>
+            <label className="block text-sm font-medium mb-1">{t('marketing.couponValue')} *</label>
             <input type="number" value={form.value} onChange={e => setForm({ ...form, value: Number(e.target.value) })} className="input" min={0} />
           </div>
           <div>

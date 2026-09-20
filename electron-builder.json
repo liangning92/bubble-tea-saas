@@ -18,7 +18,7 @@
   },
   "files": [
     "server/uploads/**/*",
-    "node_modules/electron-pos-printer/**/*",
+    "client-pos/node_modules/electron-pos-printer/**/*",
     "server/node_modules/**/*",
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
@@ -72,7 +72,7 @@
       ]
     },
     {
-      "from": "node_modules/electron-pos-printer",
+      "from": "client-pos/node_modules/electron-pos-printer",
       "to": "app.asar.unpacked/node_modules/electron-pos-printer",
       "filter": [
         "**/*"
@@ -87,10 +87,9 @@
     "**/*.node",
     "node_modules/.prisma/client/**/*",
     "node_modules/@prisma/client/**/*",
-    "node_modules/electron-pos-printer/**/*",
+    "client-pos/node_modules/electron-pos-printer/**/*",
     "server/node_modules/**/*",
-    "client-pos/dist-electron/**/*",
-    "node_modules/electron-pos-printer/**/*"
+    "client-pos/dist-electron/**/*"
   ],
   "npmRebuild": true,
   "win": {

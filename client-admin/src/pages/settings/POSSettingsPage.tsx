@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi } from '../../services/api'
@@ -810,7 +810,8 @@ export function POSSettingsPage() {
       return configApi.set(currentStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config', queryStoreId] })
+      // 使用函数式 queryKey，运行时获取最新的 storeId，避免闭包捕获 stale 值
+      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId || ''] })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
     },
@@ -820,10 +821,10 @@ export function POSSettingsPage() {
     }
   })
 
-  const handleSave = (key: string, value: any) => {
+  const handleSave = useCallback((key: string, value: any) => {
     console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
     saveConfigMutation.mutate({ key, value })
-  }
+  }, [])
 
   // ========== SUB TABS ==========
   const subTabs: { key: POSSubTab; labelKey: string; icon: React.ReactNode }[] = [
