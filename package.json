@@ -63,6 +63,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electron/rebuild": "^28.3.0",
     "@playwright/test": "^1.61.1",
     "electron": "^33.4.0",
     "electron-builder": "^26.0.12",

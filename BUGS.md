@@ -4,6 +4,21 @@
 
 格式：
 ```markdown
+## BUG-010
+Title: 打印模块(electron-pos-printer)加载失败
+Severity: P1
+Status: IN_PROGRESS
+Reproductions:
+  - 用户启动 POS 客户端
+  - 弹出错误提示："打印模块(electron-pos-printer)未能成功加载"
+Expected: electron-pos-printer 模块正常加载，票据打印和钱箱功能可用
+Actual: 模块加载失败，打印和钱箱功能不可用
+Root Cause: 待查（可能是 native module 架构不匹配或打包配置问题）
+Changed Files:
+  - 待定
+Regression Test: 启动 POS 后无错误弹窗，打印功能正常
+Commit: pending
+
 ## BUG-008
 Title: 打印机选择后无法保存
 Severity: P1

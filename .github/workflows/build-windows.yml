@@ -65,6 +65,9 @@ jobs:
           Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
           npm install --force --prefer-offline=false
 
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild
+
       - name: Install server dependencies
         run: |
           Remove-Item -Force server/package-lock.json -ErrorAction SilentlyContinue
@@ -95,7 +98,17 @@ jobs:
       - name: Build (no publish)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: electron-builder
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
+
+      - name: List ASAR contents (debug)
+        run: |
+          $asar = Get-ChildItem -Path release -Filter "*.asar" -Recurse | Select-Object -First 1
+          if ($asar) {
+            npx asar list $asar.FullName | Select-String "electron-pos-printer"
+          } else {
+            Write-Host "No ASAR found"
+          }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
