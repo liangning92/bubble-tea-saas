@@ -30,9 +30,7 @@ services:
       retries: 5
 
   api:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    image: ghcr.io/liangning92/bubble-tea-api:latest
     container_name: bubble-tea-api
     ports:
       - "3000:3000"
@@ -52,27 +50,21 @@ services:
     restart: unless-stopped
 
   admin:
-    build:
-      context: ./client-admin
-      dockerfile: Dockerfile
+    image: ghcr.io/liangning92/bubble-tea-admin:latest
     container_name: bubble-tea-admin
     ports:
       - "5173:80"
     restart: unless-stopped
 
   pos:
-    build:
-      context: ./client-pos
-      dockerfile: Dockerfile
+    image: ghcr.io/liangning92/bubble-tea-pos:latest
     container_name: bubble-tea-pos
     ports:
       - "6063:80"
     restart: unless-stopped
 
   staff:
-    build:
-      context: ./client-staff
-      dockerfile: Dockerfile
+    image: ghcr.io/liangning92/bubble-tea-staff:latest
     container_name: bubble-tea-staff
     ports:
       - "5175:80"
