@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { posApi } from '../services/api'
+import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe } from 'lucide-react'
 
 const LANGUAGES = [
@@ -52,6 +53,19 @@ export function LoginPage() {
       } else {
         localStorage.removeItem('remembered_phone')
         localStorage.removeItem('remember_me')
+      }
+
+      // Auto-sync from cloud if local DB is empty (first login)
+      try {
+        const syncStatus = await checkSyncStatus()
+        if (!syncStatus.isSetUp) {
+          // Local DB is empty, auto-sync from cloud
+          const connResult = await syncConnect(phone, password)
+          await syncFull(connResult.storeId, connResult.token, connResult.phone, connResult.passwordHash)
+        }
+      } catch (syncErr) {
+        console.warn('[Login] Auto-sync failed:', syncErr)
+        // Continue anyway - user can still use the app
       }
 
       navigate('/')
