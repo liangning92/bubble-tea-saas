@@ -13,11 +13,12 @@ Reproductions:
   - 弹出错误提示："打印模块(electron-pos-printer)未能成功加载"
 Expected: electron-pos-printer 模块正常加载，票据打印和钱箱功能可用
 Actual: 模块加载失败，打印和钱箱功能不可用
-Root Cause: 待查（可能是 native module 架构不匹配或打包配置问题）
+Root Cause: @electron/rebuild 未装，native module 未针对 Electron 版本重建
 Changed Files:
-  - 待定
+  - package.json: 加 @electron/rebuild
+  - .github/workflows/build-windows.yml: 加 rebuild 步骤 + DEBUG
 Regression Test: 启动 POS 后无错误弹窗，打印功能正常
-Commit: pending
+Commit: b207622
 
 ## BUG-008
 Title: 打印机选择后无法保存
