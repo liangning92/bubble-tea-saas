@@ -163,3 +163,18 @@ Root Cause: sync 机制是单向的（cloud → local），本地 SQLite 无向 
 Changed Files:
 Regression Test:
 Commit:
+
+## BUG-009
+Title: 已安装 POS 不会自动从云端增量同步数据
+Severity: P2
+Status: OPEN
+Reproductions:
+  - 后台管理新增产品
+  - 已安装的 POS 重新打开
+  - POS 看不到新产品
+Expected: 已安装 POS 应定期从云端同步最新产品/分类/会员数据
+Actual: 已安装 POS 只在首次安装（本地 DB 为空）时同步一次，之后永不更新
+Root Cause: SyncManager.startSync() 只调用 syncPendingOrders()（只上传订单），无拉取数据的逻辑。syncFull() 仅在 LoginPage 本地 DB 为空时触发
+Changed Files:
+Regression Test:
+Commit:

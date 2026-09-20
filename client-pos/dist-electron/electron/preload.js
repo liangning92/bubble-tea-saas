@@ -41,6 +41,10 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     listPrinters: () => {
         return electron_1.ipcRenderer.invoke('list-printers');
     },
+    // 发送厨房小票
+    sendKitchenOrder: (data) => {
+        return electron_1.ipcRenderer.invoke('send-kitchen-order', data);
+    },
     // ========== 自动更新相关 ==========
     // 检查更新
     checkForUpdates: () => {

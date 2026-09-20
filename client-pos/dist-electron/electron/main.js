@@ -40,12 +40,15 @@ process.on('unhandledRejection', (reason) => {
 });
 // electron-pos-printer for Windows USB/network thermal printers
 let PosPrinter = null;
+let printerLoadFailed = false;
 try {
     PosPrinter = require('electron-pos-printer').PosPrinter;
     console.log('[PRINTER] electron-pos-printer loaded');
 }
 catch (e) {
+    printerLoadFailed = true;
     console.log('[PRINTER] electron-pos-printer not available:', e?.message);
+    main_1.default.error('[PRINTER] electron-pos-printer load failed:', e?.message);
 }
 // 检测 WebView2 是否可用（Windows only）
 function checkWebView2() {
@@ -402,15 +405,15 @@ async function startLocalServer() {
         main_1.default.error('[Server] Failed to create data directory:', e);
         return;
     }
-    // 每次启动都从 seed.db 重新初始化，修复旧数据库 schema 不匹配问题
+    // 仅在用户数据库完全不存在时，才从 seed.db 复制初始化（保护用户数据）
     if (fs_1.default.existsSync(seedTemplatePath)) {
         try {
-            if (fs_1.default.existsSync(userDbPath)) {
-                fs_1.default.unlinkSync(userDbPath);
-                writeCrash('[Schema] Removed old database, reinitializing from seed.db');
+            if (!fs_1.default.existsSync(userDbPath)) {
+                // 用户数据库不存在时才从 seed.db 复制（首次安装时）
+                fs_1.default.copyFileSync(seedTemplatePath, userDbPath);
+                writeCrash('[Schema] User database created from seed template');
             }
-            fs_1.default.copyFileSync(seedTemplatePath, userDbPath);
-            writeCrash('[Schema] Seed database copied from template');
+            // 注意：已存在的用户数据库不再被覆盖，以保护用户数据
         }
         catch (copyErr) {
             writeCrash(`[Server] Failed to copy seed.db: ${copyErr}`);
@@ -440,20 +443,66 @@ async function startLocalServer() {
     // fork Express 服务器
     // 注意：必须显式指定 node 可执行文件路径，不能依赖 fork() 默认行为
     // Windows 上 process.execPath 是 BTPS.exe（Electron 主程序），不是 node.exe
-    // electron-builder 打包后 node.exe 位于 app.asar.unpacked/node_modules/electron/dist/
+    // 修复：electron 在根 node_modules（打包进 asar），不在 server/node_modules
+    // 因此 asar.unpacked 下可能没有 electron/dist/node.exe
+    // 尝试多个可能路径，都找不到则用系统 node（最后手段）
     let nodeExecPath = process.execPath;
     if (process.platform === 'win32') {
-        // electron 的 node.exe 在 server/node_modules/electron/dist/node.exe
-        const electronDir = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist');
-        const electronNodeExe = path_1.default.join(electronDir, 'node.exe');
-        if (fs_1.default.existsSync(electronNodeExe)) {
-            nodeExecPath = electronNodeExe;
-            main_1.default.log('[Server] Using electron bundled node:', nodeExecPath);
+        // 可能的 node.exe 位置（按优先级）
+        const possiblePaths = [
+            // 1. app.asar.unpacked/node_modules/electron/dist/（electron 在根 node_modules）
+            path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron', 'dist', 'node.exe'),
+            // 2. app.asar.unpacked/server/node_modules/electron/dist/（旧路径，可能不存在）
+            path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist', 'node.exe'),
+            // 3. 系统级 node（作为最后的 fallback）
+            'C:\\Program Files\\nodejs\\node.exe',
+            'C:\\Program Files (x86)\\nodejs\\node.exe',
+        ];
+        for (const possibleNode of possiblePaths) {
+            if (fs_1.default.existsSync(possibleNode)) {
+                nodeExecPath = possibleNode;
+                main_1.default.log('[Server] Using found node:', nodeExecPath);
+                break;
+            }
         }
-        else {
-            main_1.default.log('[Server] electron node.exe not found at', electronDir, '- using process.execPath as fallback:', nodeExecPath);
+        if (!possiblePaths.some(p => p === nodeExecPath) || !fs_1.default.existsSync(nodeExecPath)) {
+            main_1.default.log('[Server] No working node.exe found - using process.execPath as fallback:', nodeExecPath);
         }
     }
+    // ── FORK DEBUG（按 ChatGPT 建议添加）──────────────────────────────
+    // 关键诊断信息：在 fork 之前打印，帮助定位子进程静默崩溃的根因
+    writeCrash(`[FORK DEBUG] serverEntry = ${serverEntry}`);
+    writeCrash(`[FORK DEBUG] serverEntry exists = ${fs_1.default.existsSync(serverEntry)}`);
+    writeCrash(`[FORK DEBUG] nodeExecPath = ${nodeExecPath}`);
+    writeCrash(`[FORK DEBUG] nodeExecPath exists = ${fs_1.default.existsSync(nodeExecPath)}`);
+    writeCrash(`[FORK DEBUG] NODE_PATH = ${nodePath}`);
+    writeCrash(`[FORK DEBUG] cwd = ${process.cwd()}`);
+    writeCrash(`[FORK DEBUG] resourcesPath = ${process.resourcesPath}`);
+    writeCrash(`[FORK DEBUG] appPath = ${electron_1.app.getAppPath()}`);
+    // 检查 electronDir 和 node.exe
+    if (process.platform === 'win32') {
+        const electronDir = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist');
+        writeCrash(`[FORK DEBUG] electronDir = ${electronDir}`);
+        writeCrash(`[FORK DEBUG] electronDir exists = ${fs_1.default.existsSync(electronDir)}`);
+        const nodeExeInElectron = path_1.default.join(electronDir, 'node.exe');
+        writeCrash(`[FORK DEBUG] node.exe in electron dir exists = ${fs_1.default.existsSync(nodeExeInElectron)}`);
+    }
+    // 检查 server/dist/index.js 是否存在
+    const serverDistIndex = path_1.default.join(unpackedRoot, 'server', 'dist', 'index.js');
+    writeCrash(`[FORK DEBUG] serverDistIndex = ${serverDistIndex}`);
+    writeCrash(`[FORK DEBUG] serverDistIndex exists = ${fs_1.default.existsSync(serverDistIndex)}`);
+    // 检查 prisma client
+    const prismaClientIndex = path_1.default.join(prismaModulesPath, '@prisma', 'client', 'index.js');
+    writeCrash(`[FORK DEBUG] prismaClientIndex = ${prismaClientIndex}`);
+    writeCrash(`[FORK DEBUG] prismaClientIndex exists = ${fs_1.default.existsSync(prismaClientIndex)}`);
+    const prismaClient = path_1.default.join(unpackedRoot, 'node_modules', '@prisma', 'client');
+    writeCrash(`[FORK DEBUG] prismaClient dir exists = ${fs_1.default.existsSync(prismaClient)}`);
+    // 检查 seed.db
+    writeCrash(`[FORK DEBUG] seedTemplatePath = ${seedTemplatePath}`);
+    writeCrash(`[FORK DEBUG] seedTemplatePath exists = ${fs_1.default.existsSync(seedTemplatePath)}`);
+    writeCrash(`[FORK DEBUG] userDbPath = ${userDbPath}`);
+    writeCrash(`[FORK DEBUG] userDbPath exists = ${fs_1.default.existsSync(userDbPath)}`);
+    // ── FORK DEBUG 结束 ───────────────────────────────────────────────
     main_1.default.log('[Server] Node exec path:', nodeExecPath);
     main_1.default.log('[Server] Server entry:', serverEntry);
     main_1.default.log('[Server] Exists:', fs_1.default.existsSync(serverEntry));
@@ -485,12 +534,23 @@ async function startLocalServer() {
     serverProcess.stderr?.on('data', (data) => {
         main_1.default.error('[Server stderr]', data.toString().trim());
     });
+    // ChatGPT 建议：加 spawn 事件，确认子进程真的启动了
+    serverProcess.on('spawn', () => {
+        writeCrash('[Server] child spawn event - PID: ' + serverProcess?.pid);
+        console.log('[Server] child spawn event - PID:', serverProcess?.pid);
+    });
     serverProcess.on('error', (err) => {
+        writeCrash('[Server] CHILD ERROR: ' + err.message);
         main_1.default.error('[Server] Failed to start:', err.message);
     });
     serverProcess.on('exit', (code, signal) => {
-        console.log(`[Server] Process exited with code ${code}, signal ${signal}`);
+        writeCrash(`[Server] CHILD EXIT code=${code} signal=${signal} pid=${serverProcess?.pid}`);
+        console.log(`[Server] Process exited with code ${code}, signal ${signal}, pid ${serverProcess?.pid}`);
         serverProcess = null;
+    });
+    serverProcess.on('close', (code, signal) => {
+        writeCrash(`[Server] CHILD CLOSE code=${code} signal=${signal}`);
+        console.log(`[Server] Process closed with code ${code}, signal ${signal}`);
     });
     console.log('[Server] Local API server started (PID:', serverProcess.pid, ')');
 }
@@ -1284,6 +1344,113 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
         return { success: false, error: error.message };
     }
 });
+/**
+ * 发送厨房小票 - 支持网络打印机和本地打印机
+ */
+electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
+    try {
+        const { orderNum, printerName, printerHost, printerPort, items } = data;
+        writeCrash(`[KITCHEN] ====== send-kitchen-order called ======`);
+        writeCrash(`[KITCHEN] orderNum='${orderNum}' printerName='${printerName}'`);
+        writeCrash(`[KITCHEN] printerHost='${printerHost}' port=${printerPort}`);
+        if (!orderNum) {
+            writeCrash('[KITCHEN] ERROR: orderNum is empty');
+            return { success: false, error: 'No order number provided' };
+        }
+        // 生成厨房小票文本
+        const kitchenText = generateKitchenText({ orderNum, items });
+        writeCrash(`[KITCHEN] text length=${kitchenText.length}`);
+        // 网络打印机（优先）
+        if (printerHost && printerPort) {
+            try {
+                await printViaNetwork(kitchenText, printerHost, printerPort);
+                writeCrash('[KITCHEN] Network print success');
+                return { success: true };
+            }
+            catch (netErr) {
+                writeCrash(`[KITCHEN] Network print failed: ${netErr.message}`);
+                return { success: false, error: netErr.message };
+            }
+        }
+        // 本地打印机（COM 口或 Windows 打印机名）
+        if (printerName) {
+            const isComPort = /^COM\d+/i.test(printerName);
+            const encoder = new TextEncoder();
+            const initCmd = Buffer.from([0x1B, 0x40]); // ESC @
+            const cutCmd = Buffer.from([0x1D, 0x56, 0x00]); // GS V 0 (full cut)
+            const rawBytes = Buffer.concat([initCmd, encoder.encode(kitchenText), cutCmd]);
+            if (isComPort) {
+                try {
+                    await printViaComPort(printerName, rawBytes);
+                    writeCrash('[KITCHEN] COM port print success');
+                    return { success: true };
+                }
+                catch (comErr) {
+                    writeCrash(`[KITCHEN] COM port print failed: ${comErr.message}`);
+                    return { success: false, error: comErr.message };
+                }
+            }
+            else {
+                // Windows 打印机名：使用 sendRawCommand
+                try {
+                    await PosPrinter.sendRawCommand(printerName, rawBytes);
+                    writeCrash('[KITCHEN] sendRawCommand success');
+                    return { success: true };
+                }
+                catch (rawErr) {
+                    writeCrash(`[KITCHEN] sendRawCommand failed: ${rawErr.message}`);
+                    return { success: false, error: rawErr.message };
+                }
+            }
+        }
+        writeCrash('[KITCHEN] ERROR: no printer configured');
+        return { success: false, error: 'No printer configured' };
+    }
+    catch (error) {
+        writeCrash(`[KITCHEN] error: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+});
+/**
+ * 生成厨房小票文本
+ */
+function generateKitchenText(data) {
+    const lines = [];
+    const width = 32;
+    lines.push(centerText('======== 厨房订单 ========', width));
+    lines.push(`桌号/订单号: ${data.orderNum || ''}`);
+    lines.push(`时间: ${formatTime()}`);
+    lines.push(repeatChar('-', width));
+    if (data.items && data.items.length > 0) {
+        data.items.forEach((item) => {
+            lines.push(`${item.quantity || 1} x ${item.productName || item.name || 'item'}`);
+            if (item.specName) {
+                lines.push(`  规格: ${item.specName}`);
+            }
+            if (item.sugarLevelName || item.iceLevelName) {
+                const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                lines.push(`  甜度/冰度: ${mods}`);
+            }
+            if (item.addons && item.addons.length > 0) {
+                item.addons.forEach((addon) => {
+                    lines.push(`  + ${addon.name}`);
+                });
+            }
+            if (item.notes || item.note || item.remark) {
+                lines.push(`  备注: ${item.notes || item.note || item.remark}`);
+            }
+        });
+    }
+    lines.push(repeatChar('-', width));
+    lines.push('');
+    return lines.join('\n') + '\n\n\n\n';
+}
+function formatTime() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
 function generateReceiptText(data) {
     const lines = [];
     const width = 32;
@@ -1387,12 +1554,23 @@ electron_1.app.on('second-instance', () => {
 // 应用启动
 electron_1.app.whenReady().then(async () => {
     console.log('[Electron] App ready, starting up...');
+    // 警告：打印模块加载失败
+    if (printerLoadFailed) {
+        const warningMsg = '打印模块（electron-pos-printer）未能成功加载。\n\n影响功能：\n- 小票打印可能无法工作\n- 钱箱可能无法打开\n\n建议：请重新安装应用程序。';
+        console.error('[Electron] Printer module warning:', warningMsg);
+        electron_1.dialog.showMessageBox({
+            type: 'warning',
+            title: '打印模块加载失败',
+            message: warningMsg,
+            buttons: ['确定']
+        });
+    }
     // WebView2 检查（仅 Windows，Electron 28+ 已内置 WebView2 但旧系统可能缺失）
     if (process.platform === 'win32') {
         const webview2Available = checkWebView2();
         console.log('[Electron] WebView2 available:', webview2Available);
         if (!webview2Available) {
-            const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。';
+            const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。';
             console.error('[Electron] WebView2 MISSING:', msg);
             electron_1.dialog.showErrorBox('缺少 WebView2 运行时', msg);
             electron_1.app.quit();
