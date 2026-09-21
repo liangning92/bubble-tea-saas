@@ -5987,7 +5987,34 @@ const resources = {
         goBack: '返回',
         reloadPage: '刷新页面',
         chinese: '中文',
-        status: '状态'
+        status: '状态',
+        addressPlaceholder: 'Enter address',
+        builtIn: 'Built-in',
+        cancelled: 'Cancelled',
+        close: 'Close',
+        completed: 'Completed',
+        confirmDelete: 'Confirm Delete',
+        custom: 'Custom',
+        disabled: 'Disabled',
+        download: 'Download',
+        duplicate: 'Duplicate',
+        emailPlaceholder: 'Enter email',
+        enabled: 'Enabled',
+        expired: 'Expired',
+        hours: 'hours',
+        none: 'None',
+        note: 'Note',
+        paused: 'Paused',
+        period: 'Period',
+        phonePlaceholder: 'Enter phone number',
+        preview: 'Preview',
+        reset: 'Reset',
+        saveFailed: 'Save failed',
+        saveSuccess: 'Saved successfully',
+        saved: 'Saved',
+        seed: 'Seed Default',
+        uploading: 'Uploading...',
+        week: 'Week'
       },
       nav: {
         dashboard: '仪表盘',
@@ -6122,7 +6149,13 @@ const resources = {
         consumptionAnomaly: '消耗异常预警',
         warning: '警告',
         itemsUnpaid: '件商品未结账',
-        unpaidItems: '{count} 件商品未结账'
+        unpaidItems: '{count} 件商品未结账',
+        activeSessions: 'Active Sessions',
+        actual: 'Actual',
+        posAlerts: 'POS Alerts',
+        posOperations: 'POS Operations',
+        theoretical: 'Theoretical',
+        viewDetails: 'View Details'
       },
       welcome: {
         appName: 'YOUME POS',
@@ -9018,7 +9051,7 @@ const resources = {
 }
 }
 
-// 从 localStorage 读取保存的语言设置，默认 'id'
+// 从 localStorage 读取保存的语言设置，默认 'zh'
 const getInitialLanguage = () => {
   try {
     const stored = localStorage.getItem('bubble-tea-language')
@@ -9028,7 +9061,7 @@ const getInitialLanguage = () => {
   } catch (e) {
     // localStorage 不可用时忽略
   }
-  return 'id'
+  return 'zh'
 }
 
 i18n.use(initReactI18next).init({
