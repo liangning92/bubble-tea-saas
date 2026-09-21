@@ -16,7 +16,7 @@ import {
   Wallet,
   Link2
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // 一级导航只有10个模块
 const navItems = [
@@ -37,6 +37,20 @@ export function MainLayout() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [lang, setLang] = useState(i18n.language)
+
+  // 监听 i18n 语言变化，强制 React 重新渲染
+  useEffect(() => {
+    const handler = () => setLang(i18n.language)
+    i18n.on('languageChanged', handler)
+    return () => { i18n.off('languageChanged', handler) }
+  }, [])
+
+  const handleLanguageChange = (newLang: string) => {
+    i18n.changeLanguage(newLang)
+    localStorage.setItem('bubble-tea-language', newLang)
+    setLang(newLang)
+  }
 
   const handleLogout = () => {
     logout()
@@ -99,28 +113,20 @@ export function MainLayout() {
           {sidebarOpen ? (
             <div className="relative">
               <select
-                value={i18n.language}
-                onChange={(e) => {
-                  const lang = e.target.value
-                  i18n.changeLanguage(lang)
-                  localStorage.setItem('bubble-tea-language', lang)
-                }}
+                value={lang}
+                onChange={(e) => handleLanguageChange(e.target.value)}
                 className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white appearance-none cursor-pointer"
               >
-                <option value="id">🇮🇩 {'Bahasa Indonesia'}</option>
-                <option value="en">🇬🇧 {'English'}</option>
-                <option value="zh">🇨🇳 {t('common.chinese')}</option>
+                <option value="id">🇮🇩 Bahasa Indonesia</option>
+                <option value="en">🇬🇧 English</option>
+                <option value="zh">🇨🇳 中文</option>
               </select>
               <Globe size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           ) : (
             <select
-              value={i18n.language}
-              onChange={(e) => {
-                const lang = e.target.value
-                i18n.changeLanguage(lang)
-                localStorage.setItem('bubble-tea-language', lang)
-              }}
+              value={lang}
+              onChange={(e) => handleLanguageChange(e.target.value)}
               className="w-10 h-10 border border-gray-200 rounded-lg text-sm bg-white flex items-center justify-center cursor-pointer"
             >
               <option value="id">🇮🇩</option>
