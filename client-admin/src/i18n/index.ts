@@ -6594,6 +6594,52 @@ const resources = {
       noRefunds: '暂无退款请求',
       requestedBy: '申请人',
       },
+      features: {
+        title: '功能设置',
+        subtitle: '启用或禁用员工管理功能',
+        reset: '重置为默认',
+        saved: '已保存！',
+        note: '提示：部分功能需要刷新页面才能生效。禁用时数据将被保留。',
+        schedule: '排班',
+        attendance: '考勤',
+        salary: '薪资与绩效',
+        points: '积分与奖励',
+        customShifts: '自定义班次',
+        customShiftsDesc: '允许创建默认早/中/晚班次之外的自定义班次定义',
+        shiftSwapConfirmation: '换班确认',
+        shiftSwapConfirmationDesc: '需要目标员工在审批前确认换班请求',
+        gpsCheckIn: 'GPS 签到',
+        gpsCheckInDesc: '签到/签退时记录员工位置。需要位置权限。',
+        attendanceRuleActive: '考勤规则已激活',
+        attendanceRuleActiveDesc: '将配置的工时、宽限期和扣款规则应用到考勤',
+        autoLeaveBalance: '自动假期余额',
+        autoLeaveBalanceDesc: '根据请假类型设置自动计算和扣减假期余额',
+        leaveScheduleLinkage: '请假-排班联动',
+        leaveScheduleLinkageDesc: '在排班日历上显示已批准的请假并阻止冲突的班次',
+        salesPerformance: '销售业绩跟踪',
+        salesPerformanceDesc: '按员工跟踪销售量并计算绩效奖金',
+        attendanceBonus: '全勤奖金',
+        attendanceBonusDesc: '对当月全勤员工发放奖金',
+        salaryPdfExport: '薪资 PDF 导出',
+        salaryPdfExportDesc: '允许将个人工资条导出为 PDF 文档',
+        pointRedemptionStock: '积分兑换库存',
+        pointRedemptionStockDesc: '员工兑换商品时跟踪和扣减库存',
+        leaveBalance: '假期余额',
+        leaveBalanceDesc: '管理员工年假和病假余额',
+        annualLeave: '年假',
+        sickLeave: '病假',
+        used: '已用',
+        available: '可用',
+        searchStaff: '搜索员工...',
+        salesStats: '销售统计',
+        salesStatsDesc: '查看员工销售业绩和排名',
+        totalRevenue: '总营收',
+        topPerformer: '业绩冠军',
+        avgPerOrder: '每单平均',
+        leaderboard: '排行榜',
+        orders: '订单',
+        ofTotal: '占比'
+      },
       leaveTypes: {
         title: '请假类型',
         description: '配置员工请假类型',
@@ -9051,7 +9097,7 @@ const resources = {
 }
 }
 
-// 从 localStorage 读取保存的语言设置，默认 'zh'
+// 从 localStorage 读取保存的语言设置，默认 'id'
 const getInitialLanguage = () => {
   try {
     const stored = localStorage.getItem('bubble-tea-language')
@@ -9061,7 +9107,7 @@ const getInitialLanguage = () => {
   } catch (e) {
     // localStorage 不可用时忽略
   }
-  return 'zh'
+  return 'id'
 }
 
 i18n.use(initReactI18next).init({
