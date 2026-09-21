@@ -54,19 +54,19 @@ jobs:
       - name: Build and push Admin image
         run: |
           ADMIN_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-admin
-          docker build ./client-admin -t ${ADMIN_IMG}:latest -t ${ADMIN_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${ADMIN_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker build --no-cache ./client-admin -t ${ADMIN_IMG}:latest -t ${ADMIN_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${ADMIN_IMG}:${{ steps.tags.outputs.branch_tag }}
           docker push -a ${ADMIN_IMG}
 
       - name: Build and push POS image
         run: |
           POS_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-pos
-          docker build ./client-pos -t ${POS_IMG}:latest -t ${POS_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${POS_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker build --no-cache ./client-pos -t ${POS_IMG}:latest -t ${POS_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${POS_IMG}:${{ steps.tags.outputs.branch_tag }}
           docker push -a ${POS_IMG}
 
       - name: Build and push Staff image
         run: |
           STAFF_IMG=ghcr.io/${{ env.OWNER }}/bubble-tea-staff
-          docker build ./client-staff -t ${STAFF_IMG}:latest -t ${STAFF_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${STAFF_IMG}:${{ steps.tags.outputs.branch_tag }}
+          docker build --no-cache ./client-staff -t ${STAFF_IMG}:latest -t ${STAFF_IMG}:${{ steps.tags.outputs.sha_tag }} -t ${STAFF_IMG}:${{ steps.tags.outputs.branch_tag }}
           docker push -a ${STAFF_IMG}
 
       - name: Summary
