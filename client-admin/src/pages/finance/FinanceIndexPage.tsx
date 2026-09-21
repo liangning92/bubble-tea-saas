@@ -15,8 +15,16 @@ interface FinanceSettings {
 }
 
 export function FinanceIndexPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const location = useLocation()
+  useEffect(() => {
+    console.log('[I18N FINANCE]', {
+      language: i18n.language,
+      resolvedLanguage: i18n.resolvedLanguage,
+      result: t('finance.revenue'),
+      resource: i18n.getResourceBundle('zh', 'translation')?.finance,
+    })
+  }, [])
   const { user } = useAuthStore()
   const [settings, setSettings] = useState<FinanceSettings | null>(null)
 
