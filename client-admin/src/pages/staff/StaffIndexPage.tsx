@@ -9,7 +9,7 @@ export function StaffIndexPage() {
     { key: 'staff', label: t('staff.staffFile'), path: '/staff' },
     { key: 'attendance', label: t('staff.attendance'), path: '/staff/attendance' },
     { key: 'schedule', label: t('staff.schedule'), path: '/staff/schedule' },
-    { key: 'training', label: t('staff.training'), path: '/staff/training' },
+    { key: 'training', label: t('staff.trainingLabel'), path: '/staff/training' },
     { key: 'salary', label: t('staff.salary'), path: '/staff/salary' },
     { key: 'points', label: t('staff.points'), path: '/staff/points' },
   ]
