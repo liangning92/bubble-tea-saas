@@ -817,7 +817,7 @@ export function POSSettingsPage() {
     },
     onError: (error: any) => {
       console.error('Save config error:', error)
-      alert('保存失败: ' + (error?.message || '未知错误'))
+      alert(t('pos.saveFailed') + ': ' + (error?.message || '未知错误'))
     }
   })
 

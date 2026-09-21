@@ -314,7 +314,7 @@ const resources = {
         linkedRecipe: 'Resep Proses Tertaut',
         selectRecipe: 'Pilih Resep',
         materialNamePlaceholder: 'cth. Daun Teh Hitam',
-      day: 'hari',
+        day: 'hari',
       expiresIn: 'Kadaluarsa Dalam',
       expiryAlerts: 'Peringatan Kadaluarsa',
       noRecipes: 'Belum ada resep olah',
@@ -3210,7 +3210,8 @@ const resources = {
         posOperations: 'POS Operations',
         theoretical: 'Theoretical',
         viewDetails: 'View Details',
-        itemsUnpaid: 'items unpaid'
+        itemsUnpaid: 'items unpaid',
+        unpaidItems: '{count} items unpaid'
       },
       products: {
         title: 'Products',
@@ -3228,6 +3229,7 @@ const resources = {
         description: 'Description',
         image: 'Image',
         imageHint: 'Drag & drop or click to upload',
+        imageUploadFailed: 'Image upload failed',
         bomItems: 'Raw Materials',
         channelPrices: 'Channel Prices',
         selectCategory: 'Select Category',
@@ -3318,7 +3320,31 @@ const resources = {
         linkedRecipe: 'Linked Process Recipe',
         selectRecipe: 'Select Recipe',
         materialNamePlaceholder: 'e.g. Black Tea Leaves',
-      day: 'day',
+        // Batch list
+        batchManagement: 'Batch Management',
+        show: 'Show',
+        withinDays: '{n} days',
+        expiry: 'Expiry',
+        urgentExpiry: 'Urgent',
+        warningExpiry: 'Warning',
+        normal: 'Normal',
+        batchListTitle: 'Expiring Batches (FIFO)',
+        noExpiringBatches: 'No expiring batches',
+        materialName: 'Material',
+        batchNumber: 'Batch No.',
+        expiryDate: 'Expiry Date',
+        remainingDays: 'Days Left',
+        batchStatus: 'Status',
+        batchDetailTitle: 'Material Batches',
+        stockInDate: 'Stock In Date',
+        otherSettings: 'Other Settings',
+        concentrateRatioLabel: 'Concentrate Ratio',
+        semiFinishedHint: 'Semi-finished materials must be produced from raw materials through processing recipes. Select the corresponding processing recipe for this semi-finished product.',
+        // Processing
+        addInput: 'Add Input',
+        selectMaterial: 'Select Material',
+        addOutput: 'Add Output',
+        day: 'day',
       expiresIn: 'Expires In',
       expiryAlerts: 'Expiry Alerts',
       noRecipes: 'No processing recipes',
@@ -3790,7 +3816,16 @@ const resources = {
         commissions: 'Commissions',
         pricing: 'Pricing',
         addFirst: 'Add first channel',
-        configureApi: 'Configure API'
+        configureApi: 'Configure API',
+        iconLabel: 'Icon (emoji)',
+        commissionHint: 'Delivery platform commission rate, e.g. GoFood is usually 20%',
+        deleteConfirm: 'Are you sure you want to delete this channel? After deletion, orders from this channel cannot be received.',
+        dineIn: 'Dine-in',
+        gofood: 'GoFood',
+        grabFood: 'GrabFood',
+        shopeeFood: 'ShopeeFood',
+        tokopedia: 'Tokopedia',
+        tikTokShop: 'TikTok Shop'
       },
       import: {
         title: 'Data Import',
@@ -3894,7 +3929,8 @@ const resources = {
         memberPhone: 'Member Phone',
         emptyCart: 'Cart is empty',
         notes: 'Notes',
-        items: 'item'
+        items: 'item',
+        saveFailed: 'Save failed'
       },
       orders: {
         title: 'Orders',
@@ -6085,7 +6121,8 @@ const resources = {
         management: '管理',
         consumptionAnomaly: '消耗异常预警',
         warning: '警告',
-        itemsUnpaid: '件商品未结账'
+        itemsUnpaid: '件商品未结账',
+        unpaidItems: '{count} 件商品未结账'
       },
       welcome: {
         appName: 'YOUME POS',
@@ -6132,6 +6169,7 @@ const resources = {
         description: '描述',
         image: '图片',
         imageHint: '拖拽或点击上传图片',
+        imageUploadFailed: '图片上传失败',
         bomItems: '原料',
         channelPrices: '渠道价格',
         selectCategory: '选择分类',
@@ -6242,6 +6280,31 @@ const resources = {
         alert: '提醒',
         lowStockWarning: '库存低于安全库存 ({stock} {unit})',
         concentrateRatioHint: '如：茶叶浓缩10倍则填10',
+        // Batch list
+        batchManagement: '批次管理',
+        show: '显示',
+        withinDays: '{n}天内',
+        expiry: '到期',
+        urgentExpiry: '紧急',
+        warningExpiry: '预警',
+        normal: '正常',
+        batchListTitle: '到期批次列表 (先进先出)',
+        noExpiringBatches: '暂无即将过期的批次',
+        materialName: '原料',
+        batchNumber: '批次号',
+        expiryDate: '到期日期',
+        remainingDays: '剩余天数',
+        batchStatus: '状态',
+        batchDetailTitle: '原料批次',
+        stockInDate: '入库日期',
+        otherSettings: '其他设置',
+        concentrateRatioLabel: '浓缩比例',
+        semiFinishedHint: '半成品需要先通过加工配方从原料制作。选择此半成品对应的加工配方。',
+        // Processing
+        addInput: '添加投入',
+        selectMaterial: '选择原料',
+        addOutput: '添加产出',
+        day: '天',
       },
       addons: {
         title: '加料',
@@ -6306,6 +6369,9 @@ const resources = {
         pricing: '定价',
         addFirst: '添加第一个渠道',
         configureApi: '配置 API 密钥',
+        iconLabel: '图标 (emoji)',
+        commissionHint: '外卖平台佣金比例，如GoFood通常为20%',
+        deleteConfirm: '确定要删除此渠道吗？删除后，该渠道的订单将无法接收。',
         dineIn: '堂食',
         pos: 'POS收银',
         gofood: 'GoFood',
@@ -6322,7 +6388,8 @@ const resources = {
         memberPhone: '会员手机号',
         emptyCart: '购物车为空',
         notes: '备注',
-        items: '个'
+        items: '个',
+        saveFailed: '保存失败'
       },
       productAnalysis: {
         title: '产品分析',

@@ -46,7 +46,7 @@ export function ProcessingListPage() {
   }
 
   const handleDelete = (id: string, name: string) => {
-    if (confirm(t('material.deleteRecipeConfirm', { name }) || `确定删除配方"${name}"吗？`)) {
+    if (confirm(t('material.deleteRecipeConfirm', { name }))) {
       deleteMutation.mutate(id)
     }
   }

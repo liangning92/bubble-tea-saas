@@ -169,7 +169,7 @@ export function ProcessingFormPage() {
                 {t('material.inputs') || 'Input Materials'}
               </label>
               <button type="button" onClick={addInput} className="text-sm text-primary flex items-center gap-1">
-                <Plus size={16} /> 添加投入
+                <Plus size={16} /> {t('material.addInput')}
               </button>
             </div>
             <div className="space-y-2">
@@ -180,7 +180,7 @@ export function ProcessingFormPage() {
                     onChange={(e) => updateInput(idx, 'inventoryId', e.target.value)}
                     className="input flex-1"
                   >
-                    <option value="">选择原料</option>
+                    <option value="">{t('material.selectMaterial')}</option>
                     {materials.map((m: any) => (
                       <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
                     ))}
@@ -209,7 +209,7 @@ export function ProcessingFormPage() {
                 {t('material.outputs') || 'Output'}
               </label>
               <button type="button" onClick={addOutput} className="text-sm text-primary flex items-center gap-1">
-                <Plus size={16} /> 添加产出
+                <Plus size={16} /> {t('material.addOutput')}
               </button>
             </div>
             <div className="space-y-2">

@@ -189,7 +189,7 @@ export function ProductFormPage() {
       setUploadedImages(prev => [...prev, ...newImages])
     } catch (error: any) {
       console.error('Upload failed:', error)
-      const msg = error?.response?.data?.message || error?.message || '图片上传失败'
+      const msg = error?.response?.data?.message || error?.message || t('products.imageUploadFailed')
       alert(msg)
     } finally {
       setIsUploading(false)

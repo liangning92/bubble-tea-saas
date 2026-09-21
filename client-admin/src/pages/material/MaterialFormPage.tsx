@@ -125,7 +125,7 @@ export function MaterialFormPage() {
                 ))}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                半成品需要先通过加工配方从原料制作。选择此半成品对应的加工配方。
+                {t('material.semiFinishedHint')}
               </p>
             </div>
           )}
@@ -167,7 +167,7 @@ export function MaterialFormPage() {
                 className="input w-full"
                 step="0.1"
               />
-              <p className="text-xs text-gray-500 mt-1">如：茶叶浓缩10倍则填10</p>
+              <p className="text-xs text-gray-500 mt-1">{t('material.concentrateRatioHint')}</p>
             </div>
           </div>
 

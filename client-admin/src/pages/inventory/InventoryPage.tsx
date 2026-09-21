@@ -497,15 +497,15 @@ export function InventoryPage() {
                     onChange={(e) => setAddForm({...addForm, type: e.target.value})}
                     className="input w-full"
                   >
-                    <option value="raw_material">原料(直接使用)</option>
-                    <option value="semi_finished">半成品(需加工)</option>
-                    <option value="finished_goods">成品</option>
+                    <option value="raw_material">{t('material.typeRawMaterial')}</option>
+                    <option value="semi_finished">{t('material.typeSemiFinished')}</option>
+                    <option value="finished_goods">{t('material.typeFinishedGoods')}</option>
                   </select>
                 </div>
               </div>
               {addForm.type === 'semi_finished' && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">关联加工配方</label>
+                  <label className="block text-sm font-medium mb-1">{t('material.linkedRecipe')}</label>
                   <select
                     value={addForm.processRecipeId}
                     onChange={(e) => setAddForm({...addForm, processRecipeId: e.target.value})}

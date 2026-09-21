@@ -87,7 +87,7 @@ export function MaterialDetailPage() {
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="text-sm text-gray-500">{t('material.shelfLife')}</div>
             <div className="text-2xl font-bold">
-              {mat.shelfLife > 0 ? `${mat.shelfLife}${t('material.day')}` : (t('material.unlimited') || '不限')}
+              {mat.shelfLife > 0 ? `${mat.shelfLife}${t('day')}` : t('material.unlimited')}
             </div>
           </div>
         </div>
@@ -98,7 +98,7 @@ export function MaterialDetailPage() {
         <div className="card border-orange-200 bg-orange-50">
           <h3 className="font-semibold text-orange-700 mb-3 flex items-center gap-2">
             <AlertTriangle size={20} />
-            {t('material.alert') || '提醒'}
+            {t('material.alert')}
           </h3>
           <div className="space-y-2">
             {mat.currentStock <= mat.safetyStock && (
@@ -114,15 +114,15 @@ export function MaterialDetailPage() {
       {/* Batch List */}
       {mat.batches && mat.batches.length > 0 && (
         <div className="card">
-          <h3 className="font-semibold mb-4">批次列表 (先进先出)</h3>
+          <h3 className="font-semibold mb-4">{t('material.batchDetailTitle')}</h3>
           <table className="w-full">
             <thead>
               <tr className="text-left text-sm text-gray-500 border-b">
-                <th className="pb-2">批次号</th>
-                <th className="pb-2">数量</th>
-                <th className="pb-2">入库日期</th>
-                <th className="pb-2">到期日期</th>
-                <th className="pb-2">状态</th>
+                <th className="pb-2">{t('material.batchNumber')}</th>
+                <th className="pb-2">{t('material.quantity')}</th>
+                <th className="pb-2">{t('material.stockInDate')}</th>
+                <th className="pb-2">{t('material.expiryDate')}</th>
+                <th className="pb-2">{t('material.batchStatus')}</th>
               </tr>
             </thead>
             <tbody>
@@ -160,18 +160,18 @@ export function MaterialDetailPage() {
 
       {/* Settings */}
       <div className="card">
-        <h3 className="font-semibold mb-4">其他设置</h3>
+        <h3 className="font-semibold mb-4">{t('material.otherSettings')}</h3>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex justify-between p-2 bg-gray-50 rounded">
-            <span className="text-gray-500">浓缩比例</span>
+            <span className="text-gray-500">{t('material.concentrateRatioLabel')}</span>
             <span>{mat.concentrateRatio}x</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
-            <span className="text-gray-500">最低库存</span>
+            <span className="text-gray-500">{t('material.minStock')}</span>
             <span>{mat.minStock} {mat.unit}</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
-            <span className="text-gray-500">最高库存</span>
+            <span className="text-gray-500">{t('material.maxStock')}</span>
             <span>{mat.maxStock} {mat.unit}</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">

@@ -88,7 +88,7 @@ export function MaterialEditPage() {
       </button>
 
       <div className="card">
-        <h2 className="text-lg font-semibold mb-6">编辑原料</h2>
+        <h2 className="text-lg font-semibold mb-6">{t('material.editMaterial')}</h2>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -166,7 +166,7 @@ export function MaterialEditPage() {
                 className="input w-full"
                 step="0.1"
               />
-              <p className="text-xs text-gray-500 mt-1">{t('material.concentrateRatioHint') || '如：茶叶浓缩10倍则填10'}</p>
+              <p className="text-xs text-gray-500 mt-1">{t('material.concentrateRatioHint')}</p>
             </div>
           </div>
 

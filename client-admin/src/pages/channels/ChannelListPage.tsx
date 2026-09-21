@@ -7,8 +7,8 @@ import { Link2, Plus, Edit2, Trash2, Loader2 } from 'lucide-react'
 
 // 预置渠道类型
 const PRESET_CHANNELS = [
-  { nameKey: 'channels.dineIn', name: '堂食', code: 'DINE_IN', commission: 0, icon: '🍵' },
-  { nameKey: 'channels.pos', name: 'POS收银', code: 'POS', commission: 0, icon: '💳' },
+  { nameKey: 'channels.dineIn', name: 'channels.dineIn', code: 'DINE_IN', commission: 0, icon: '🍵' },
+  { nameKey: 'channels.pos', name: 'channels.pos', code: 'POS', commission: 0, icon: '💳' },
   { nameKey: 'channels.gofood', name: 'GoFood', code: 'GOFOOD', commission: 0.2, icon: '🟢' },
   { nameKey: 'channels.grabFood', name: 'GrabFood', code: 'GRAB', commission: 0.2, icon: '🟡' },
   { nameKey: 'channels.shopeeFood', name: 'ShopeeFood', code: 'SHOPEE', commission: 0.18, icon: '🟠' },
@@ -135,7 +135,7 @@ export function ChannelListPage() {
 
   const quickAddChannel = (preset: typeof PRESET_CHANNELS[0]) => {
     setFormData({
-      name: preset.name,
+      name: t(preset.nameKey),
       code: preset.code,
       commission: preset.commission,
       status: 'active',
@@ -301,7 +301,7 @@ export function ChannelListPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  图标 (emoji)
+                  {t('channels.iconLabel')}
                 </label>
                 <input
                   type="text"
@@ -323,7 +323,7 @@ export function ChannelListPage() {
                   min="0"
                   max="100"
                 />
-                <p className="text-xs text-gray-500 mt-1">外卖平台佣金比例，如GoFood通常为20%</p>
+                <p className="text-xs text-gray-500 mt-1">{t('channels.commissionHint')}</p>
               </div>
               <div className="flex gap-3 pt-4">
                 <button
@@ -352,7 +352,7 @@ export function ChannelListPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">{t('common.confirm')}</h2>
             <p className="text-gray-600 mb-4">
-              确定要删除此渠道吗？删除后，该渠道的订单将无法接收。
+              {t('channels.deleteConfirm')}
             </p>
             <div className="flex gap-3">
               <button

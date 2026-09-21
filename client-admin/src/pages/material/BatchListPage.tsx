@@ -31,20 +31,20 @@ export function BatchListPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">批次管理</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t('material.batchManagement')}</h1>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">显示</span>
+          <span className="text-sm text-gray-500">{t('material.show')}</span>
           <select
             value={daysFilter}
             onChange={(e) => setDaysFilter(parseInt(e.target.value))}
             className="input w-24"
           >
-            <option value={3}>3天内</option>
-            <option value={7}>7天内</option>
-            <option value={14}>14天内</option>
-            <option value={30}>30天内</option>
+            <option value={3}>{t('material.withinDays', { n: 3 })}</option>
+            <option value={7}>{t('material.withinDays', { n: 7 })}</option>
+            <option value={14}>{t('material.withinDays', { n: 14 })}</option>
+            <option value={30}>{t('material.withinDays', { n: 30 })}</option>
           </select>
-          <span className="text-sm text-gray-500">到期</span>
+          <span className="text-sm text-gray-500">{t('material.expiry')}</span>
         </div>
       </div>
 
@@ -52,38 +52,38 @@ export function BatchListPage() {
       <div className="grid grid-cols-3 gap-4">
         <div className="card text-center">
           <div className="text-3xl font-bold text-red-500">{batches.filter((b: any) => b.daysUntilExpiry <= 3).length}</div>
-          <div className="text-sm text-gray-500">紧急过期</div>
+          <div className="text-sm text-gray-500">{t('material.urgentExpiry')}</div>
         </div>
         <div className="card text-center">
           <div className="text-3xl font-bold text-orange-500">{batches.filter((b: any) => b.daysUntilExpiry > 3 && b.daysUntilExpiry <= 7).length}</div>
-          <div className="text-sm text-gray-500">一般预警</div>
+          <div className="text-sm text-gray-500">{t('material.warningExpiry')}</div>
         </div>
         <div className="card text-center">
           <div className="text-3xl font-bold text-green-500">{batches.filter((b: any) => b.daysUntilExpiry > 7).length}</div>
-          <div className="text-sm text-gray-500">正常</div>
+          <div className="text-sm text-gray-500">{t('material.normal')}</div>
         </div>
       </div>
 
       {/* Batch List */}
       <div className="card">
-        <h3 className="font-semibold mb-4">到期批次列表 (先进先出)</h3>
+        <h3 className="font-semibold mb-4">{t('material.batchListTitle')}</h3>
         {isLoading ? (
           <div className="text-center py-8"><Loader2 className="animate-spin mx-auto" size={32} /></div>
         ) : batches.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Package size={48} className="mx-auto mb-4 text-gray-300" />
-            <p>暂无即将过期的批次</p>
+            <p>{t('material.noExpiringBatches')}</p>
           </div>
         ) : (
           <table className="w-full">
             <thead>
               <tr className="text-left text-sm text-gray-500 border-b">
-                <th className="pb-3">原料</th>
-                <th className="pb-3">批次号</th>
-                <th className="pb-3 text-right">数量</th>
-                <th className="pb-3 text-right">到期日期</th>
-                <th className="pb-3 text-right">剩余天数</th>
-                <th className="pb-3">状态</th>
+                <th className="pb-3">{t('material.materialName')}</th>
+                <th className="pb-3">{t('material.batchNumber')}</th>
+                <th className="pb-3 text-right">{t('material.quantity')}</th>
+                <th className="pb-3 text-right">{t('material.expiryDate')}</th>
+                <th className="pb-3 text-right">{t('material.remainingDays')}</th>
+                <th className="pb-3">{t('material.batchStatus')}</th>
               </tr>
             </thead>
             <tbody>
@@ -96,13 +96,13 @@ export function BatchListPage() {
                     {formatDate(batch.expiryDate)}
                   </td>
                   <td className="py-3 text-right font-medium">
-                    {batch.daysUntilExpiry}天
+                    {t('material.withinDays', { n: batch.daysUntilExpiry })}
                   </td>
                   <td className="py-3">
                     <span className={`px-2 py-1 rounded text-xs border ${getUrgencyClass(batch.daysUntilExpiry)}`}>
-                      {batch.daysUntilExpiry <= 1 ? t('material.urgent') :
-                       batch.daysUntilExpiry <= 3 ? t('material.urgent') :
-                       batch.daysUntilExpiry <= 7 ? t('material.warning') : t('material.normal')}
+                      {batch.daysUntilExpiry <= 1 ? t('material.urgentExpiry') :
+                       batch.daysUntilExpiry <= 3 ? t('material.urgentExpiry') :
+                       batch.daysUntilExpiry <= 7 ? t('material.warningExpiry') : t('material.normal')}
                     </span>
                   </td>
                 </tr>
@@ -116,10 +116,10 @@ export function BatchListPage() {
       <div className="card bg-blue-50 border-blue-200">
         <h3 className="font-semibold text-blue-700 mb-2 flex items-center gap-2">
           <Clock size={18} />
-          {t('material.fifoExplanation') || '先进先出 (FIFO) 说明'}
+          {t('material.fifoExplanation')}
         </h3>
         <p className="text-sm text-blue-600">
-          {t('material.fifoDescription') || '先进先出原则：优先使用最早到期的批次。系统会根据批次到期日期自动排序，确保快过期的原料被优先使用。建议每日检查批次列表，及时处理即将过期的原料。'}
+          {t('material.fifoDescription')}
         </p>
       </div>
     </div>
