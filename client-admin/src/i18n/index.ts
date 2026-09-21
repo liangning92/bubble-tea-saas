@@ -6150,12 +6150,12 @@ const resources = {
         warning: '警告',
         itemsUnpaid: '件商品未结账',
         unpaidItems: '{count} 件商品未结账',
-        activeSessions: 'Active Sessions',
-        actual: 'Actual',
-        posAlerts: 'POS Alerts',
-        posOperations: 'POS Operations',
-        theoretical: 'Theoretical',
-        viewDetails: 'View Details'
+        activeSessions: '活跃会话',
+        actual: '实际',
+        posAlerts: 'POS 预警',
+        posOperations: 'POS 操作',
+        theoretical: '理论',
+        viewDetails: '查看详情'
       },
       welcome: {
         appName: 'YOUME POS',
