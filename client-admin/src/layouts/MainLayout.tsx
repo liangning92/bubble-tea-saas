@@ -50,6 +50,8 @@ export function MainLayout() {
     i18n.changeLanguage(newLang).then(() => {
       localStorage.setItem('bubble-tea-language', newLang)
       setLang(newLang)
+      // 强制重新加载以确保所有组件使用新语言
+      window.location.reload()
     })
   }
 
