@@ -47,9 +47,10 @@ export function MainLayout() {
   }, [])
 
   const handleLanguageChange = (newLang: string) => {
-    i18n.changeLanguage(newLang)
-    localStorage.setItem('bubble-tea-language', newLang)
-    setLang(newLang)
+    i18n.changeLanguage(newLang).then(() => {
+      localStorage.setItem('bubble-tea-language', newLang)
+      setLang(newLang)
+    })
   }
 
   const handleLogout = () => {
