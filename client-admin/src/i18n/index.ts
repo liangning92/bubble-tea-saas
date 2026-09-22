@@ -2514,10 +2514,6 @@ const resources = {
         note: 'Catatan',
         invalidSaleValue: 'Nilai penjualan harus angka positif',
         disposeNotePlaceholder: 'Catatan penghapusan (opsional)',
-        today: 'Hari Ini',
-        thisWeek: 'Minggu Ini',
-        thisMonth: 'Bulan Ini',
-        custom: 'Kustom',
         // Bank
         bankAccounts: 'Rekening Bank',
         bankDesc: 'Rekening bank dan catatan transfer',
@@ -2864,10 +2860,6 @@ const resources = {
         note: 'Note',
         invalidSaleValue: 'Sale value must be a positive number',
         disposeNotePlaceholder: 'Disposal note (optional)',
-        today: 'Today',
-        thisWeek: 'This Week',
-        thisMonth: 'This Month',
-        custom: 'Custom',
         // Finance Settings
         financeSettings: 'Finance Settings',
         settingsDesc: 'Customize finance module based on your business needs',
@@ -8281,10 +8273,6 @@ const resources = {
         note: '备注',
         invalidSaleValue: '销售价值必须是正数',
         disposeNotePlaceholder: '处置备注（可选）',
-        today: '今日',
-        thisWeek: '本周',
-        thisMonth: '本月',
-        custom: '自定义',
       },
       settings: {
         title: '设置',
