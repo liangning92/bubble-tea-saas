@@ -14,34 +14,45 @@ interface FinanceSettings {
   cashOnlyMode: boolean
 }
 
+// Fallback Chinese translations when i18n bundle is broken for finance section
+const zhFinanceFallback: Record<string, string> = {
+  revenue: '营收',
+  chartOfAccounts: '会计科目表',
+  budget: '预算',
+  orders: '订单',
+  expense: '支出管理',
+  fixedAssets: '固定资产',
+  financialReports: '财务报表',
+  tax: '税务',
+}
+
 export function FinanceIndexPage() {
   const { t, i18n } = useTranslation()
   const location = useLocation()
-  useEffect(() => {
-    const debug = {
-      'i18n.language': i18n.language,
-      'i18n.resolvedLanguage': i18n.resolvedLanguage,
-      'i18n.languages': i18n.languages,
-      'i18n.options.ns': i18n.options.ns,
-      'i18n.options.defaultNS': i18n.options.defaultNS,
-      "t('finance.revenue')": t('finance.revenue'),
-      "t('finance.chartOfAccounts')": t('finance.chartOfAccounts'),
-      "t('nav.finance')": t('nav.finance'),
-      "t('dashboard.title')": t('dashboard.title'),
-      'zh_bundle_keys_count': Object.keys(i18n.getResourceBundle('zh', 'translation') || {}).length,
-      'has_finance_in_zh': !!i18n.getResourceBundle('zh', 'translation')?.finance,
-      'en_bundle_revenue': i18n.getResourceBundle('en', 'translation')?.finance?.revenue,
-      'zh_bundle_revenue': i18n.getResourceBundle('zh', 'translation')?.finance?.revenue,
-      'zh_nav_finance': i18n.getResourceBundle('zh', 'translation')?.nav?.finance,
+
+  // Helper: get finance translation, with zh fallback
+  const ft = (key: string) => {
+    if (i18n.language === 'zh') {
+      const fb = zhFinanceFallback[key]
+      if (fb) return fb
     }
-    console.log('[I18N FINANCE]', debug)
-    ;(window as any).__I18N_DEBUG__ = debug
-    // Also try direct bundle access
+    return t(`finance.${key}`)
+  }
+
+  useEffect(() => {
     const zhTrans = i18n.getResourceBundle('zh', 'translation')
     const enTrans = i18n.getResourceBundle('en', 'translation')
-    console.log('[I18N FINANCE] zh translation has finance?', !!zhTrans?.finance, 'nav?', !!zhTrans?.nav)
-    console.log('[I18N FINANCE] en translation has finance?', !!enTrans?.finance, 'nav?', !!enTrans?.nav)
-    console.log('[I18N FINANCE] All zh top-level keys:', Object.keys(zhTrans || {}).join(', '))
+    console.log('[I18N FINANCE]', {
+      lang: i18n.language,
+      zhKeysCount: Object.keys(zhTrans || {}).length,
+      zhHasFinance: !!zhTrans?.finance,
+      zhFinanceRev: zhTrans?.finance?.revenue,
+      zhNavFinance: zhTrans?.nav?.finance,
+      enHasFinance: !!enTrans?.finance,
+    })
+    // Also log the zh bundle raw to see its structure
+    const zhKeys = Object.keys(zhTrans || {}).slice(0, 50)
+    console.log('[I18N FINANCE] zh top keys:', zhKeys.join(', '))
   }, [])
   const { user } = useAuthStore()
   const [settings, setSettings] = useState<FinanceSettings | null>(null)
@@ -97,14 +108,14 @@ export function FinanceIndexPage() {
 
   // Build tabs based on settings
   const tabs = [
-    { key: 'revenue', label: t('finance.revenue'), path: 'revenue', show: true },
-    { key: 'accounts', label: t('finance.chartOfAccounts'), path: 'accounts', show: settings?.enableAccounts ?? true },
-    { key: 'budgets', label: t('finance.budget'), path: 'budgets', show: settings?.enableBudget ?? true },
-    { key: 'orders', label: t('finance.orders'), path: 'orders', show: true },
-    { key: 'expenses', label: t('finance.expense'), path: 'expenses', show: true },
-    { key: 'fixed-assets', label: t('finance.fixedAssets'), path: 'fixed-assets', show: settings?.enableFixedAssets ?? true },
-    { key: 'reports', label: t('finance.financialReports'), path: 'reports', show: true },
-    { key: 'tax', label: t('finance.tax'), path: 'tax', show: true },
+    { key: 'revenue', label: ft('revenue'), path: 'revenue', show: true },
+    { key: 'accounts', label: ft('chartOfAccounts'), path: 'accounts', show: settings?.enableAccounts ?? true },
+    { key: 'budgets', label: ft('budget'), path: 'budgets', show: settings?.enableBudget ?? true },
+    { key: 'orders', label: ft('orders'), path: 'orders', show: true },
+    { key: 'expenses', label: ft('expense'), path: 'expenses', show: true },
+    { key: 'fixed-assets', label: ft('fixedAssets'), path: 'fixed-assets', show: settings?.enableFixedAssets ?? true },
+    { key: 'reports', label: ft('financialReports'), path: 'reports', show: true },
+    { key: 'tax', label: ft('tax'), path: 'tax', show: true },
     { key: 'settings', label: t('common.settings'), path: 'settings', show: true, icon: Settings },
   ].filter(tab => tab.show)
 
