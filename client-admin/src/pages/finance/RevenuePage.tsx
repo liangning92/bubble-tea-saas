@@ -60,36 +60,8 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 type Period = 'today' | 'week' | 'month' | 'custom'
 
-const zhFinanceFallback: Record<string, string> = {
-  // period buttons
-  today: '今日',
-  thisWeek: '本周',
-  thisMonth: '本月',
-  custom: '自定义',
-  // summary cards
-  todayRevenue: '今日营收',
-  weekRevenue: '本周营收',
-  monthRevenue: '本月营收',
-  netRevenue: '净收入',
-  // table
-  orders: '订单',
-  avgOrderValue: '平均订单',
-  change: '变化',
-  channel: '渠道',
-  total: '合计',
-  loading: '加载中...',
-  noData: '暂无数据',
-}
-
 export function RevenuePage() {
-  const { t, i18n } = useTranslation()
-  const ft = (key: string) => {
-    if (i18n.language === 'zh') {
-      const fb = zhFinanceFallback[key]
-      if (fb) return fb
-    }
-    return t(`finance.${key}`)
-  }
+  const { t } = useTranslation()
   const { user } = useAuthStore()
   const [channels, setChannels] = useState<ChannelData[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -303,7 +275,7 @@ export function RevenuePage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {ft('today')}
+            {t('finance.today')}
           </button>
           <button
             onClick={() => handlePeriodChange('week')}
@@ -313,7 +285,7 @@ export function RevenuePage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {ft('thisWeek')}
+            {t('finance.thisWeek')}
           </button>
           <button
             onClick={() => handlePeriodChange('month')}
@@ -323,7 +295,7 @@ export function RevenuePage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {ft('thisMonth')}
+            {t('finance.thisMonth')}
           </button>
           <div className="h-6 w-px bg-gray-300 mx-1" />
           <button
@@ -335,7 +307,7 @@ export function RevenuePage() {
             }`}
           >
             <Calendar size={14} />
-            {ft('custom')}
+            {t('common.custom')}
           </button>
           {period === 'custom' && (
             <div className="flex items-center gap-2 ml-2">
@@ -361,24 +333,24 @@ export function RevenuePage() {
       <div className="p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow-sm p-4">
-            <p className="text-sm text-gray-500">{ft('todayRevenue')}</p>
+            <p className="text-sm text-gray-500">{t('finance.todayRevenue')}</p>
             <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(totalToday)}</p>
             {summary && renderChange(summary.todayChange)}
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4">
-            <p className="text-sm text-gray-500">{ft('weekRevenue')}</p>
+            <p className="text-sm text-gray-500">{t('finance.weekRevenue')}</p>
             <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(totalWeek)}</p>
             {summary && renderChange(summary.weekChange)}
           </div>
           <div className="bg-white rounded-xl shadow-sm p-4">
-            <p className="text-sm text-gray-500">{ft('monthRevenue')}</p>
+            <p className="text-sm text-gray-500">{t('finance.monthRevenue')}</p>
             <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(totalMonth)}</p>
             {summary && renderChange(summary.monthChange)}
           </div>
           <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-sm p-4 text-white">
-            <p className="text-sm text-green-100">{ft('netRevenue')}</p>
+            <p className="text-sm text-green-100">{t('finance.netRevenue')}</p>
             <p className="text-xl font-bold mt-1">{formatCurrency(totalMonth)}</p>
-            <p className="text-xs text-green-100 mt-1">{totalOrders} {ft('orders')}</p>
+            <p className="text-xs text-green-100 mt-1">{totalOrders} {t('common.orders')}</p>
           </div>
         </div>
       </div>
@@ -388,11 +360,11 @@ export function RevenuePage() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="p-8 text-center text-gray-500">
-              {ft('loading')}
+              {t('common.loading')}
             </div>
           ) : channels.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
-              {ft('noData')}
+              {t('common.noData')}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -400,25 +372,25 @@ export function RevenuePage() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('channel')}
+                      {t('finance.channel')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('todayRevenue')}
+                      {t('finance.todayRevenue')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('weekRevenue')}
+                      {t('finance.weekRevenue')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('monthRevenue')}
+                      {t('finance.monthRevenue')}
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('orders')}
+                      {t('common.orders')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('avgOrderValue')}
+                      {t('finance.avgOrderValue')}
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {ft('change')}
+                      {t('finance.change')}
                     </th>
                   </tr>
                 </thead>
@@ -442,7 +414,7 @@ export function RevenuePage() {
                             {formatCurrency(channel.todayRevenue)}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {channel.todayOrders} {ft('orders')}
+                            {channel.todayOrders} {t('common.orders')}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -450,7 +422,7 @@ export function RevenuePage() {
                             {formatCurrency(channel.weekRevenue)}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {channel.weekOrders} {ft('orders')}
+                            {channel.weekOrders} {t('common.orders')}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -458,7 +430,7 @@ export function RevenuePage() {
                             {formatCurrency(channel.monthRevenue)}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {channel.monthOrders} {ft('orders')}
+                            {channel.monthOrders} {t('common.orders')}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -481,7 +453,7 @@ export function RevenuePage() {
                 <tfoot className="bg-gray-50 border-t border-gray-200">
                   <tr>
                     <td className="px-4 py-3">
-                      <span className="font-bold text-gray-900">{ft('total')}</span>
+                      <span className="font-bold text-gray-900">{t('common.total')}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="font-bold text-gray-900">{formatCurrency(totalToday)}</div>

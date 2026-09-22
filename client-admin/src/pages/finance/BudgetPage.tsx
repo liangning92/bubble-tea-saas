@@ -36,12 +36,12 @@ interface BudgetCategory {
 }
 
 const DEFAULT_CATEGORIES: BudgetCategory[] = [
-  { key: 'rent', label: 'Sewa', labelZh: '租金', labelEn: 'Rent', color: 'text-purple-600', bgColor: 'bg-purple-100' },
-  { key: 'utilities', label: 'Utilitas', labelZh: '水电费', labelEn: 'Utilities', color: 'text-blue-600', bgColor: 'bg-blue-100' },
-  { key: 'staff', label: 'Gaji Staff', labelZh: '员工工资', labelEn: 'Staff Salary', color: 'text-green-600', bgColor: 'bg-green-100' },
-  { key: 'marketing', label: 'Pemasaran', labelZh: '营销', labelEn: 'Marketing', color: 'text-orange-600', bgColor: 'bg-orange-100' },
-  { key: 'supplies', label: 'Perlengkapan', labelZh: '用品', labelEn: 'Supplies', color: 'text-pink-600', bgColor: 'bg-pink-100' },
-  { key: 'other', label: 'Lainnya', labelZh: '其他', labelEn: 'Other', color: 'text-gray-600', bgColor: 'bg-gray-100' }
+  { key: 'rent', label: 'Sewa', labelZh: 'finance.rent', labelEn: 'Rent', color: 'text-purple-600', bgColor: 'bg-purple-100' },
+  { key: 'utilities', label: 'Utilitas', labelZh: 'finance.utilities', labelEn: 'Utilities', color: 'text-blue-600', bgColor: 'bg-blue-100' },
+  { key: 'staff', label: 'Gaji Staff', labelZh: 'finance.staff', labelEn: 'Staff Salary', color: 'text-green-600', bgColor: 'bg-green-100' },
+  { key: 'marketing', label: 'Pemasaran', labelZh: 'finance.marketing', labelEn: 'Marketing', color: 'text-orange-600', bgColor: 'bg-orange-100' },
+  { key: 'supplies', label: 'Perlengkapan', labelZh: 'finance.supplies', labelEn: 'Supplies', color: 'text-pink-600', bgColor: 'bg-pink-100' },
+  { key: 'other', label: 'Lainnya', labelZh: 'finance.other', labelEn: 'Other', color: 'text-gray-600', bgColor: 'bg-gray-100' }
 ]
 
 export function BudgetPage() {
@@ -72,8 +72,14 @@ export function BudgetPage() {
 
   // Get localized label
   const getCategoryLabel = (cat: BudgetCategory) => {
-    if (i18n.language === 'zh') return cat.labelZh || cat.label
-    if (i18n.language === 'en') return cat.labelEn || cat.label
+    if (i18n.language === 'zh') {
+      if (cat.labelZh.includes('.')) return t(cat.labelZh)
+      return cat.labelZh || cat.label
+    }
+    if (i18n.language === 'en') {
+      if (cat.labelEn.includes('.')) return t(cat.labelEn)
+      return cat.labelEn || cat.label
+    }
     return cat.label
   }
 

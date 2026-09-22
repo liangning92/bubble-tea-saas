@@ -1,34 +1,17 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-const zhInventoryFallback: Record<string, string> = {
-  'inventory.list': '列表',
-  'inventory.logs': '记录',
-  'inventory.process': '流程',
-  'inventory.alerts': '预警',
-  'inventory.restock': '补货',
-  'inventory.suppliers': '供应商',
-}
-
 export function InventoryIndexPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const location = useLocation()
 
-  const ft = (key: string) => {
-    if (i18n.language === 'zh') {
-      const fb = zhInventoryFallback[key]
-      if (fb) return fb
-    }
-    return t(key)
-  }
-
   const tabs = [
-    { key: 'list', label: ft('inventory.list'), path: '/inventory' },
-    { key: 'logs', label: ft('inventory.logs'), path: '/inventory/logs' },
-    { key: 'process', label: ft('inventory.process'), path: '/inventory/process' },
-    { key: 'alerts', label: ft('inventory.alerts'), path: '/inventory/alerts' },
-    { key: 'restock', label: ft('inventory.restock'), path: '/inventory/restock' },
-    { key: 'suppliers', label: ft('inventory.suppliers'), path: '/inventory/suppliers' },
+    { key: 'list', label: t('inventory.list'), path: '/inventory' },
+    { key: 'logs', label: t('inventory.logs'), path: '/inventory/logs' },
+    { key: 'process', label: t('inventory.process'), path: '/inventory/process' },
+    { key: 'alerts', label: t('inventory.alerts'), path: '/inventory/alerts' },
+    { key: 'restock', label: t('inventory.restock'), path: '/inventory/restock' },
+    { key: 'suppliers', label: t('inventory.suppliers'), path: '/inventory/suppliers' },
   ]
 
   const isActive = (path: string) => location.pathname === path

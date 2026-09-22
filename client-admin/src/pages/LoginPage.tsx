@@ -8,12 +8,6 @@ import { updateApiUrl } from '../services/api'
 import { connectionManager } from '../services/ConnectionManager'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Settings, Globe } from 'lucide-react'
 
-const LANGUAGES = [
-  { code: 'zh', label: '中文', flag: '🇨🇳' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'id', label: 'Indonesia', flag: '🇮🇩' }
-]
-
 export function LoginPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -101,6 +95,11 @@ export function LoginPage() {
     setShowLangMenu(false)
   }
 
+  const LANGUAGES = [
+    { code: 'zh', label: t('common.chinese'), flag: '🇨🇳' },
+    { code: 'en', label: t('common.english', 'English'), flag: '🇺🇸' },
+    { code: 'id', label: t('common.indonesian', 'Indonesia'), flag: '🇮🇩' }
+  ]
   const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
 
   return (

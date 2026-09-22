@@ -13,13 +13,13 @@ const TYPE_OPTIONS = [
 ]
 
 const CATEGORY_OPTIONS = [
-  { value: '茶叶', labelKey: 'material.categoryTea' },
-  { value: '奶类', labelKey: 'material.categoryMilk' },
-  { value: '糖类', labelKey: 'material.categorySugar' },
-  { value: '小料', labelKey: 'material.categoryTopping' },
-  { value: '调味糖浆', labelKey: 'material.categorySyrup' },
-  { value: '耗材', labelKey: 'material.categoryConsumable' },
-  { value: '其他', labelKey: 'material.categoryOther' }
+  { value: 'tea', labelKey: 'material.categoryTea' },
+  { value: 'milk', labelKey: 'material.categoryMilk' },
+  { value: 'sugar', labelKey: 'material.categorySugar' },
+  { value: 'topping', labelKey: 'material.categoryTopping' },
+  { value: 'syrup', labelKey: 'material.categorySyrup' },
+  { value: 'consumable', labelKey: 'material.categoryConsumable' },
+  { value: 'other', labelKey: 'material.categoryOther' }
 ]
 
 export function MaterialFormPage() {
@@ -29,7 +29,7 @@ export function MaterialFormPage() {
 
   const [form, setForm] = useState({
     name: '',
-    category: '茶叶',
+    category: 'tea',
     type: 'raw_material',
     unit: 'kg',
     avgCost: 0,

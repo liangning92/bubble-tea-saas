@@ -176,7 +176,7 @@ export function MaterialDetailPage() {
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
             <span className="text-gray-500">{t('material.shelfLife')}</span>
-            <span>{mat.shelfLife > 0 ? `${mat.shelfLife}${t('material.day')}` : (t('material.unlimited') || '不限')}</span>
+            <span>{mat.shelfLife > 0 ? `${mat.shelfLife}${t('material.day')}` : (t('material.unlimited') || 'Unlimited')}</span>
           </div>
         </div>
       </div>

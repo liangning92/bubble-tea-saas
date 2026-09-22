@@ -33,10 +33,10 @@ interface Shift {
 }
 
 const DEFAULT_SHIFTS: Shift[] = [
-  { id: 'default-1', key: 'morning', name: 'Morning', nameZh: '早班', nameId: 'Pagi', startTime: '08:00', endTime: '16:00', color: '#F59E0B', sortOrder: 0, isActive: true },
-  { id: 'default-2', key: 'afternoon', name: 'Afternoon', nameZh: '中班', nameId: 'Siang', startTime: '14:00', endTime: '22:00', color: '#F97316', sortOrder: 1, isActive: true },
-  { id: 'default-3', key: 'evening', name: 'Evening', nameZh: '晚班', nameId: 'Malam', startTime: '18:00', endTime: '02:00', color: '#3B82F6', sortOrder: 2, isActive: true },
-  { id: 'default-4', key: 'off', name: 'Off', nameZh: '休息', nameId: 'Libur', startTime: '', endTime: '', color: '#6B7280', sortOrder: 3, isActive: true }
+  { id: 'default-1', key: 'morning', name: 'Morning', nameZh: 'Morning', nameId: 'Pagi', startTime: '08:00', endTime: '16:00', color: '#F59E0B', sortOrder: 0, isActive: true },
+  { id: 'default-2', key: 'afternoon', name: 'Afternoon', nameZh: 'Afternoon', nameId: 'Siang', startTime: '14:00', endTime: '22:00', color: '#F97316', sortOrder: 1, isActive: true },
+  { id: 'default-3', key: 'evening', name: 'Evening', nameZh: 'Evening', nameId: 'Malam', startTime: '18:00', endTime: '02:00', color: '#3B82F6', sortOrder: 2, isActive: true },
+  { id: 'default-4', key: 'off', name: 'Off', nameZh: 'Off', nameId: 'Libur', startTime: '', endTime: '', color: '#6B7280', sortOrder: 3, isActive: true }
 ]
 
 const DEFAULT_SHIFT_KEYS = new Set(['morning', 'afternoon', 'evening', 'off'])

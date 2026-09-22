@@ -6,16 +6,16 @@ import { Loader2, Plus, Trash2, X } from 'lucide-react'
 
 // Default area options for new areas (user can still use these or enter custom)
 export const DEFAULT_AREA_OPTIONS = [
-  { code: 'counter', nameKey: 'hygiene.areaNames.counter', name: '柜台 / Counter', icon: '🧾', color: '#FF6B6B' },
-  { code: 'kitchen', nameKey: 'hygiene.areaNames.kitchen', name: '后厨 / Kitchen', icon: '🍳', color: '#4ECDC4' },
-  { code: 'ingredients', nameKey: 'hygiene.areaNames.ingredients', name: '原料区 / Ingredients', icon: '🧋', color: '#45B7D1' },
-  { code: 'floor', nameKey: 'hygiene.areaNames.floor', name: '地面 / Floor', icon: '🧹', color: '#96CEB4' },
-  { code: 'restroom', nameKey: 'hygiene.areaNames.restroom', name: '卫生间 / Restroom', icon: '🚻', color: '#DDA0DD' },
-  { code: 'waste', nameKey: 'hygiene.areaNames.waste', name: '垃圾区 / Waste', icon: '🗑️', color: '#FFEAA7' },
-  { code: 'equipment', nameKey: 'hygiene.areaNames.equipment', name: '设备区 / Equipment', icon: '⚙️', color: '#74B9FF' },
-  { code: 'ventilation', nameKey: 'hygiene.areaNames.ventilation', name: '通风/空调 / Ventilation', icon: '💨', color: '#A29BFE' },
-  { code: 'storage', nameKey: 'hygiene.areaNames.storage', name: '仓储区 / Storage', icon: '📦', color: '#F38181' },
-  { code: 'dining', nameKey: 'hygiene.areaNames.dining', name: '用餐区 / Dining', icon: '🪑', color: '#AA96DA' },
+  { code: 'counter', nameKey: 'hygiene.areaNames.counter', name: 'Counter', icon: '🧾', color: '#FF6B6B' },
+  { code: 'kitchen', nameKey: 'hygiene.areaNames.kitchen', name: 'Kitchen', icon: '🍳', color: '#4ECDC4' },
+  { code: 'ingredients', nameKey: 'hygiene.areaNames.ingredients', name: 'Ingredients', icon: '🧋', color: '#45B7D1' },
+  { code: 'floor', nameKey: 'hygiene.areaNames.floor', name: 'Floor', icon: '🧹', color: '#96CEB4' },
+  { code: 'restroom', nameKey: 'hygiene.areaNames.restroom', name: 'Restroom', icon: '🚻', color: '#DDA0DD' },
+  { code: 'waste', nameKey: 'hygiene.areaNames.waste', name: 'Waste', icon: '🗑️', color: '#FFEAA7' },
+  { code: 'equipment', nameKey: 'hygiene.areaNames.equipment', name: 'Equipment', icon: '⚙️', color: '#74B9FF' },
+  { code: 'ventilation', nameKey: 'hygiene.areaNames.ventilation', name: 'Ventilation', icon: '💨', color: '#A29BFE' },
+  { code: 'storage', nameKey: 'hygiene.areaNames.storage', name: 'Storage', icon: '📦', color: '#F38181' },
+  { code: 'dining', nameKey: 'hygiene.areaNames.dining', name: 'Dining', icon: '🪑', color: '#AA96DA' },
 ]
 
 interface Area {

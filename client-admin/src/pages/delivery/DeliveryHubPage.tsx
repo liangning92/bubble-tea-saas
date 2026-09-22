@@ -42,8 +42,7 @@ const PLATFORM_CONFIG: Record<string, { name: string; color: string; bgColor: st
   direct: { name: 'Dine-in', color: 'text-blue-600', bgColor: 'bg-blue-500' }
 }
 
-// Mock product data for demo purposes (Chinese names are demo data)
-const MOCK_PRODUCTS = ['珍奶', '椰果', '芒果冰沙', '绿茶', '芋头', '茉莉花茶']
+const MOCK_PRODUCTS = ['Pearl Milk Tea', 'Coconut Jelly', 'Mango Smoothie', 'Green Tea', 'Taro', 'Jasmine Tea']
 const MOCK_NAMES = ['Customer A', 'Customer B', 'Customer C', 'Customer D', 'Customer E']
 const MOCK_STREETS = [
   'Jl. Utama No.' + Math.floor(Math.random() * 999 + 1),
@@ -78,8 +77,8 @@ export function DeliveryHubPage() {
           customerPhone: '081234567890',
           deliveryAddress: 'Jl. Utama No.' + Math.floor(Math.random() * 999 + 1),
           items: [
-            { productName: '珍珠奶茶', specName: '大杯', quantity: 2, notes: '少冰' },
-            { productName: '椰果奶茶', specName: '中杯', quantity: 1 }
+            { productName: 'Pearl Milk Tea', specName: 'Large', quantity: 2, notes: 'Less Ice' },
+            { productName: 'Coconut Milk Tea', specName: 'Medium', quantity: 1 }
           ],
           subtotal: 65000,
           deliveryFee: 15000,
@@ -97,7 +96,7 @@ export function DeliveryHubPage() {
           customerPhone: '081234567891',
           deliveryAddress: 'Jl. Besar No.' + Math.floor(Math.random() * 999 + 1),
           items: [
-            { productName: '芒果冰沙', specName: '大杯', quantity: 1 }
+            { productName: 'Mango Smoothie', specName: 'Large', quantity: 1 }
           ],
           subtotal: 28000,
           deliveryFee: 12000,
@@ -114,8 +113,8 @@ export function DeliveryHubPage() {
           customerName: 'Budi Santoso',
           customerPhone: '081234567892',
           items: [
-            { productName: '绿奶茶', specName: '中杯', quantity: 3 },
-            { productName: '珍珠奶茶', specName: '大杯', quantity: 2 }
+            { productName: 'Green Tea', specName: 'Medium', quantity: 3 },
+            { productName: 'Pearl Milk Tea', specName: 'Large', quantity: 2 }
           ],
           subtotal: 125000,
           deliveryFee: 18000,
@@ -145,9 +144,9 @@ export function DeliveryHubPage() {
       items: [
         {
           productName: MOCK_PRODUCTS[Math.floor(Math.random() * MOCK_PRODUCTS.length)],
-          specName: Math.random() > 0.5 ? '大杯' : '中杯',
+          specName: Math.random() > 0.5 ? 'Large' : 'Medium',
           quantity: Math.floor(Math.random() * 3) + 1,
-          notes: Math.random() > 0.7 ? '少冰/去冰' : undefined
+          notes: Math.random() > 0.7 ? 'Less Ice/No Ice' : undefined
         }
       ],
       subtotal: Math.floor(Math.random() * 100000) + 20000,

@@ -6,54 +6,54 @@ import { Loader2, Plus, Trash2, RotateCw } from 'lucide-react'
 
 // Default config templates for reference
 const DEFAULT_CATEGORIES = [
-  { value: 'food_safety', label: 'Food Safety', labelZh: '食品安全', icon: '⚠️', color: '#FF0000' },
-  { value: 'daily', label: 'Daily Cleaning', labelZh: '日常清洁', icon: '🧹', color: '#FFA500' },
-  { value: 'equipment', label: 'Equipment', labelZh: '设备维护', icon: '🔧', color: '#00BFFF' },
-  { value: 'periodic', label: 'Periodic', labelZh: '周期维护', icon: '📅', color: '#9370DB' },
-  { value: 'opening', label: 'Opening', labelZh: '开业准备', icon: '🌅', color: '#32CD32' },
-  { value: 'closing', label: 'Closing', labelZh: '闭店检查', icon: '🌙', color: '#8B0000' },
+  { value: 'food_safety', label: 'Food Safety', labelZh: 'Food Safety', icon: '⚠️', color: '#FF0000' },
+  { value: 'daily', label: 'Daily Cleaning', labelZh: 'Daily Cleaning', icon: '🧹', color: '#FFA500' },
+  { value: 'equipment', label: 'Equipment', labelZh: 'Equipment', icon: '🔧', color: '#00BFFF' },
+  { value: 'periodic', label: 'Periodic', labelZh: 'Periodic', icon: '📅', color: '#9370DB' },
+  { value: 'opening', label: 'Opening', labelZh: 'Opening', icon: '🌅', color: '#32CD32' },
+  { value: 'closing', label: 'Closing', labelZh: 'Closing', icon: '🌙', color: '#8B0000' },
 ]
 
 const DEFAULT_PRIORITIES = [
-  { value: 1, label: 'Critical', labelZh: '紧急', color: '#FF0000' },
-  { value: 2, label: 'High', labelZh: '重要', color: '#FFA500' },
-  { value: 3, label: 'Normal', labelZh: '一般', color: '#00BFFF' },
-  { value: 4, label: 'Low', labelZh: '低', color: '#808080' },
+  { value: 1, label: 'Critical', labelZh: 'Critical', color: '#FF0000' },
+  { value: 2, label: 'High', labelZh: 'High', color: '#FFA500' },
+  { value: 3, label: 'Normal', labelZh: 'Normal', color: '#00BFFF' },
+  { value: 4, label: 'Low', labelZh: 'Low', color: '#808080' },
 ]
 
 const DEFAULT_SHIFTS = [
-  { value: 'morning', label: 'Morning', labelZh: '早班', time: '09:00-17:00' },
-  { value: 'afternoon', label: 'Afternoon', labelZh: '午班', time: '14:00-22:00' },
-  { value: 'evening', label: 'Evening', labelZh: '晚班', time: '22:00-06:00' },
+  { value: 'morning', label: 'Morning', labelZh: 'Morning', time: '09:00-17:00' },
+  { value: 'afternoon', label: 'Afternoon', labelZh: 'Afternoon', time: '14:00-22:00' },
+  { value: 'evening', label: 'Evening', labelZh: 'Evening', time: '22:00-06:00' },
 ]
 
 const DEFAULT_EVIDENCE_TYPES = [
-  { value: 'photo', label: 'Photo', labelZh: '拍照', icon: '📷' },
-  { value: 'signature', label: 'Signature', labelZh: '签名', icon: '✍️' },
-  { value: 'both', label: 'Photo + Signature', labelZh: '拍照+签名', icon: '📝' },
+  { value: 'photo', label: 'Photo', labelZh: 'Photo', icon: '📷' },
+  { value: 'signature', label: 'Signature', labelZh: 'Signature', icon: '✍️' },
+  { value: 'both', label: 'Photo + Signature', labelZh: 'Photo + Signature', icon: '📝' },
 ]
 
 const DEFAULT_WEEKDAYS = [
-  { value: 1, label: 'Monday', labelZh: '周一', short: 'Mon' },
-  { value: 2, label: 'Tuesday', labelZh: '周二', short: 'Tue' },
-  { value: 3, label: 'Wednesday', labelZh: '周三', short: 'Wed' },
-  { value: 4, label: 'Thursday', labelZh: '周四', short: 'Thu' },
-  { value: 5, label: 'Friday', labelZh: '周五', short: 'Fri' },
-  { value: 6, label: 'Saturday', labelZh: '周六', short: 'Sat' },
-  { value: 0, label: 'Sunday', labelZh: '周日', short: 'Sun' },
+  { value: 1, label: 'Monday', labelZh: 'Monday', short: 'Mon' },
+  { value: 2, label: 'Tuesday', labelZh: 'Tuesday', short: 'Tue' },
+  { value: 3, label: 'Wednesday', labelZh: 'Wednesday', short: 'Wed' },
+  { value: 4, label: 'Thursday', labelZh: 'Thursday', short: 'Thu' },
+  { value: 5, label: 'Friday', labelZh: 'Friday', short: 'Fri' },
+  { value: 6, label: 'Saturday', labelZh: 'Saturday', short: 'Sat' },
+  { value: 0, label: 'Sunday', labelZh: 'Sunday', short: 'Sun' },
 ]
 
 const DEFAULT_FREQUENCIES = [
-  { value: 'daily', label: 'Daily', labelZh: '每日', icon: '📅' },
-  { value: 'weekly', label: 'Weekly', labelZh: '每周', icon: '📆' },
-  { value: 'monthly', label: 'Monthly', labelZh: '每月', icon: '🗓️' },
-  { value: 'specific_days', label: 'Specific Days', labelZh: '特定日期', icon: '📌' },
+  { value: 'daily', label: 'Daily', labelZh: 'Daily', icon: '📅' },
+  { value: 'weekly', label: 'Weekly', labelZh: 'Weekly', icon: '📆' },
+  { value: 'monthly', label: 'Monthly', labelZh: 'Monthly', icon: '🗓️' },
+  { value: 'specific_days', label: 'Specific Days', labelZh: 'Specific Days', icon: '📌' },
 ]
 
 const DEFAULT_ASSIGNED_TYPES = [
-  { value: 'shift', label: 'By Shift', labelZh: '按班次', icon: '👥' },
-  { value: 'staff', label: 'By Staff', labelZh: '指定员工', icon: '👤' },
-  { value: 'area', label: 'By Area', labelZh: '按区域', icon: '📍' },
+  { value: 'shift', label: 'By Shift', labelZh: 'By Shift', icon: '👥' },
+  { value: 'staff', label: 'By Staff', labelZh: 'By Staff', icon: '👤' },
+  { value: 'area', label: 'By Area', labelZh: 'By Area', icon: '📍' },
 ]
 
 type ConfigTab = 'categories' | 'priorities' | 'shifts' | 'evidence_types' | 'weekdays' | 'frequencies' | 'assigned_types'

@@ -1,34 +1,17 @@
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
-const zhStaffFallback: Record<string, string> = {
-  'staff.staffFile': '员工档案',
-  'staff.attendance': '考勤',
-  'staff.schedule': '排班',
-  'staff.trainingLabel': '培训',
-  'staff.salary': '工资',
-  'staff.points': '积分',
-}
-
 export function StaffIndexPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const location = useLocation()
 
-  const ft = (key: string) => {
-    if (i18n.language === 'zh') {
-      const fb = zhStaffFallback[key]
-      if (fb) return fb
-    }
-    return t(key)
-  }
-
   const tabs = [
-    { key: 'staff', label: ft('staff.staffFile'), path: '/staff' },
-    { key: 'attendance', label: ft('staff.attendance'), path: '/staff/attendance' },
-    { key: 'schedule', label: ft('staff.schedule'), path: '/staff/schedule' },
-    { key: 'training', label: ft('staff.trainingLabel'), path: '/staff/training' },
-    { key: 'salary', label: ft('staff.salary'), path: '/staff/salary' },
-    { key: 'points', label: ft('staff.points'), path: '/staff/points' },
+    { key: 'staff', label: t('staff.staffFile'), path: '/staff' },
+    { key: 'attendance', label: t('staff.attendance'), path: '/staff/attendance' },
+    { key: 'schedule', label: t('staff.schedule'), path: '/staff/schedule' },
+    { key: 'training', label: t('staff.trainingLabel'), path: '/staff/training' },
+    { key: 'salary', label: t('staff.salary'), path: '/staff/salary' },
+    { key: 'points', label: t('staff.points'), path: '/staff/points' },
   ]
 
   const isActive = (path: string) => location.pathname === path

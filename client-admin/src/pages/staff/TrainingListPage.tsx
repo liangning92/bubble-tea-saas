@@ -153,7 +153,7 @@ export function TrainingListPage() {
 
   const handleAddCategory = () => {
     const newKey = 'custom_' + Date.now()
-    setCategoryForm(prev => [...prev, { key: newKey, label: 'New Category', labelZh: '新类别', labelId: 'Kategori Baru' }])
+    setCategoryForm(prev => [...prev, { key: newKey, label: 'New Category', labelZh: 'New Category', labelId: 'Kategori Baru' }])
   }
 
   const handleRemoveCategory = (index: number) => {
