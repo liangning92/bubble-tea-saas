@@ -8,12 +8,37 @@ import { POSSettingsPage } from './settings/POSSettingsPage'
 
 type TabKey = 'store' | 'pos'
 
+const zhSettingsFallback: Record<string, string> = {
+  'settings.title': '设置',
+  'settings.store': '店铺',
+  'settings.pos': 'POS',
+  'settings.storeInfo': '店铺信息',
+  'settings.storeName': '店铺名称',
+  'settings.storeNamePlaceholder': '例如：YOUME 奶茶店',
+  'settings.storeCode': '店铺编号',
+  'settings.storeCodePlaceholder': '例如：BT001',
+  'settings.address': '地址',
+  'settings.addressPlaceholder': '例如：北京市朝阳区某某路123号',
+  'settings.phone': '电话',
+  'settings.phonePlaceholder': '08xxxxxxxxxx',
+  'settings.email': '邮箱',
+  'settings.emailPlaceholder': 'email@example.com',
+}
+
 export function SettingsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<TabKey>('store')
   const [showSuccess, setShowSuccess] = useState(false)
+
+  const ft = (key: string) => {
+    if (i18n.language === 'zh') {
+      const fb = zhSettingsFallback[key]
+      if (fb) return fb
+    }
+    return t(key)
+  }
 
   // 店铺信息状态
   const [storeInfo, setStoreInfo] = useState({
@@ -69,7 +94,7 @@ export function SettingsPage() {
       )}
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
+        <h1 className="text-2xl font-bold">{ft('settings.title')}</h1>
       </div>
 
       {/* Tab Navigation */}
@@ -83,7 +108,7 @@ export function SettingsPage() {
           }`}
         >
           <Store size={18} />
-          {t('settings.store')}
+          {ft('settings.store')}
         </button>
         <button
           onClick={() => setActiveTab('pos')}
@@ -94,7 +119,7 @@ export function SettingsPage() {
           }`}
         >
           <Smartphone size={18} />
-          {t('settings.pos')}
+          {ft('settings.pos')}
         </button>
       </div>
 
@@ -106,8 +131,8 @@ export function SettingsPage() {
               <Store className="text-primary" size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">{t('settings.storeInfo')}</h3>
-              <p className="text-sm text-gray-500">{t('settings.storeInfoHint')}</p>
+              <h3 className="text-lg font-semibold">{ft('settings.storeInfo')}</h3>
+              <p className="text-sm text-gray-500">{ft('settings.storeInfoHint')}</p>
             </div>
           </div>
 
@@ -115,7 +140,7 @@ export function SettingsPage() {
             {/* 店铺名称 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('settings.storeName')}
+                {ft('settings.storeName')}
               </label>
               <div className="relative">
                 <input
@@ -124,7 +149,7 @@ export function SettingsPage() {
                   onChange={(e) => setStoreInfo({ ...storeInfo, storeName: e.target.value })}
                   onBlur={() => handleSave('storeInfo', storeInfo)}
                   className="input pl-10"
-                  placeholder={t('settings.storeNamePlaceholder')}
+                  placeholder={ft('settings.storeNamePlaceholder')}
                 />
                 <Store className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               </div>
@@ -133,7 +158,7 @@ export function SettingsPage() {
             {/* 店铺编号 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('settings.storeCode')}
+                {ft('settings.storeCode')}
               </label>
               <input
                 type="text"
@@ -141,14 +166,14 @@ export function SettingsPage() {
                 onChange={(e) => setStoreInfo({ ...storeInfo, storeCode: e.target.value })}
                 onBlur={() => handleSave('storeInfo', storeInfo)}
                 className="input"
-                placeholder={t('settings.storeCodePlaceholder')}
+                placeholder={ft('settings.storeCodePlaceholder')}
               />
             </div>
 
             {/* 地址 */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('settings.address')}
+                {ft('settings.address')}
               </label>
               <div className="relative">
                 <input
@@ -157,7 +182,7 @@ export function SettingsPage() {
                   onChange={(e) => setStoreInfo({ ...storeInfo, address: e.target.value })}
                   onBlur={() => handleSave('storeInfo', storeInfo)}
                   className="input pl-10"
-                  placeholder={t('settings.addressPlaceholder')}
+                  placeholder={ft('settings.addressPlaceholder')}
                 />
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               </div>
@@ -166,7 +191,7 @@ export function SettingsPage() {
             {/* 电话 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('settings.phone')}
+                {ft('settings.phone')}
               </label>
               <div className="relative">
                 <input
@@ -175,7 +200,7 @@ export function SettingsPage() {
                   onChange={(e) => setStoreInfo({ ...storeInfo, phone: e.target.value })}
                   onBlur={() => handleSave('storeInfo', storeInfo)}
                   className="input pl-10"
-                  placeholder={t('settings.phonePlaceholder')}
+                  placeholder={ft('settings.phonePlaceholder')}
                 />
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               </div>
@@ -184,7 +209,7 @@ export function SettingsPage() {
             {/* 邮箱 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('settings.email')}
+                {ft('settings.email')}
               </label>
               <input
                 type="email"
@@ -192,7 +217,7 @@ export function SettingsPage() {
                 onChange={(e) => setStoreInfo({ ...storeInfo, email: e.target.value })}
                 onBlur={() => handleSave('storeInfo', storeInfo)}
                 className="input"
-                placeholder={t('settings.emailPlaceholder')}
+                placeholder={ft('settings.emailPlaceholder')}
               />
             </div>
           </div>

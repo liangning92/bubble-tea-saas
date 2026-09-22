@@ -10,9 +10,26 @@ const tabs = [
   { key: 'config', path: '/config', label: 'hygiene.config' },
 ]
 
+const zhHygieneFallback: Record<string, string> = {
+  'hygiene.templates': '模板',
+  'hygiene.areas': '区域',
+  'hygiene.calendar': '日历',
+  'hygiene.todayTasks': '今日任务',
+  'hygiene.stats': '统计',
+  'hygiene.config': '配置',
+}
+
 export function HygieneIndexPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const location = useLocation()
+
+  const ft = (key: string) => {
+    if (i18n.language === 'zh') {
+      const fb = zhHygieneFallback[key]
+      if (fb) return fb
+    }
+    return t(key)
+  }
 
   const isActive = (path: string) => {
     if (path === '') return location.pathname === '/hygiene'
@@ -37,7 +54,7 @@ export function HygieneIndexPage() {
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              {t(tab.label)}
+              {ft(tab.label)}
             </Link>
           ))}
         </div>
