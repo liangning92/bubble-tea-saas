@@ -18,12 +18,30 @@ export function FinanceIndexPage() {
   const { t, i18n } = useTranslation()
   const location = useLocation()
   useEffect(() => {
-    console.log('[I18N FINANCE]', {
-      language: i18n.language,
-      resolvedLanguage: i18n.resolvedLanguage,
-      result: t('finance.revenue'),
-      resource: i18n.getResourceBundle('zh', 'translation')?.finance,
-    })
+    const debug = {
+      'i18n.language': i18n.language,
+      'i18n.resolvedLanguage': i18n.resolvedLanguage,
+      'i18n.languages': i18n.languages,
+      'i18n.options.ns': i18n.options.ns,
+      'i18n.options.defaultNS': i18n.options.defaultNS,
+      "t('finance.revenue')": t('finance.revenue'),
+      "t('finance.chartOfAccounts')": t('finance.chartOfAccounts'),
+      "t('nav.finance')": t('nav.finance'),
+      "t('dashboard.title')": t('dashboard.title'),
+      'zh_bundle_keys_count': Object.keys(i18n.getResourceBundle('zh', 'translation') || {}).length,
+      'has_finance_in_zh': !!i18n.getResourceBundle('zh', 'translation')?.finance,
+      'en_bundle_revenue': i18n.getResourceBundle('en', 'translation')?.finance?.revenue,
+      'zh_bundle_revenue': i18n.getResourceBundle('zh', 'translation')?.finance?.revenue,
+      'zh_nav_finance': i18n.getResourceBundle('zh', 'translation')?.nav?.finance,
+    }
+    console.log('[I18N FINANCE]', debug)
+    ;(window as any).__I18N_DEBUG__ = debug
+    // Also try direct bundle access
+    const zhTrans = i18n.getResourceBundle('zh', 'translation')
+    const enTrans = i18n.getResourceBundle('en', 'translation')
+    console.log('[I18N FINANCE] zh translation has finance?', !!zhTrans?.finance, 'nav?', !!zhTrans?.nav)
+    console.log('[I18N FINANCE] en translation has finance?', !!enTrans?.finance, 'nav?', !!enTrans?.nav)
+    console.log('[I18N FINANCE] All zh top-level keys:', Object.keys(zhTrans || {}).join(', '))
   }, [])
   const { user } = useAuthStore()
   const [settings, setSettings] = useState<FinanceSettings | null>(null)
