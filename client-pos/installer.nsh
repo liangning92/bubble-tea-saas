@@ -6,12 +6,16 @@ CRCCheck off
   # 使用 HKCU（当前用户注册表），无需管理员权限
   WriteRegDWORD HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\FileSystem" "LongPathsEnabled" 1
 
-  # 创建桌面快捷方式：打开日志文件夹
+  # 创建桌面快捷方式
+  CreateShortcut "$DESKTOP\BTPS.lnk" "$INSTDIR\BTPS.exe"
+  CreateShortcut "$DESKTOP\BubbleTeaPOS.lnk" "$INSTDIR\BTPS.exe"
   CreateShortcut "$DESKTOP\BTPS 日志.lnk" "explorer.exe" "$APPDATA\BTPS\logs"
 !macroend
 
 !macro customUnInstall
   # 卸载时不关闭 LongPaths（其他应用可能也用）
-  # 删除桌面日志快捷方式
+  # 删除桌面快捷方式
+  Delete "$DESKTOP\BTPS.lnk"
+  Delete "$DESKTOP\BubbleTeaPOS.lnk"
   Delete "$DESKTOP\BTPS 日志.lnk"
 !macroend

@@ -6,6 +6,7 @@
 
 | 日期 | Issue ID | 问题名称 | 状态 | 修复方式 |
 |------|----------|----------|------|----------|
+| 2026-09-23 | [i18n-001](i18n-001.md) | 后台管理系统中文语言界面显示英文 | ✅ 已修复 | 修正命名空间映射并补全缺失翻译 Key |
 | 2026-07-30 | [white-screen-002](white-screen-002.md) | 白屏问题完整分析 - 多种原因 | 🔄 调查中 | 学习完成，待验证 |
 | 2026-07-30 | [github-action-002](github-action-002.md) | Release 上传 win-unpacked 超时/404 | ✅ 已修复 | 移除 win-unpacked，只上传 exe + latest.yml |
 | 2026-07-29 | [github-action-001](github-action-001.md) | GitHub Actions 构建失败 - overwrite参数无效 | ✅ 已修复 | 移除 action-gh-release@v1 的 overwrite 参数 |

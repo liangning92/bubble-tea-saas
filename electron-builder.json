@@ -23,6 +23,8 @@
     "client-pos/dist/**/*",
     "client-pos/dist-electron/**/*",
     "client-admin/dist/**/*",
+    "server/prisma/seed.db",
+    "server/prisma/**/*",
     "shared/**/*",
     "!**/*.map",
     "!**/node_modules/.cache/**/*",

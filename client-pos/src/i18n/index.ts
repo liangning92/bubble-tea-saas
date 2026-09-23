@@ -1192,6 +1192,7 @@ const resources = {
       },
       pos: {
         title: '收银',
+        detectPrinter: '检测打印机',
         cart: '购物车',
         total: '合计',
         subtotal: '小计',
@@ -1598,6 +1599,9 @@ const resources = {
         detectingSettings: '正在设置...',
         detectionFailed: '检测失败',
         noPrintersFound: '未发现打印机',
+        detectingPrinters: '正在检测打印机...',
+        cashDrawerFailed: '钱箱打开失败',
+        printFailed: '打印小票失败',
         makeSurePrinterOn: '请确保打印机已开机',
         printTestSuccess: '测试打印已发送，请检查打印机',
         printTestFailed: '打印失败',
@@ -1710,6 +1714,7 @@ const resources = {
         due: '截止'
       },
       common: {
+        ok: '确定',
         cancel: '取消',
         confirm: '确认',
         success: '成功',

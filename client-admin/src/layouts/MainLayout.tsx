@@ -122,7 +122,7 @@ export function MainLayout() {
               >
                 <option value="id">🇮🇩 Bahasa Indonesia</option>
                 <option value="en">🇬🇧 English</option>
-                <option value="zh">🇨🇳 中文</option>
+                <option value="zh">🇨🇳 {t('common.chinese')}</option>
               </select>
               <Globe size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>

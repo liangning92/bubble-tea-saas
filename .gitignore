@@ -40,3 +40,5 @@ release/
 npm-debug.log*
 .DS_Store
 client-pos/dist-electron/
+*.exe
+*.zip
