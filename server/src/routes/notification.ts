@@ -1,13 +1,14 @@
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import prisma from '../config/database'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
 // GET /api/notifications
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const { type, status, limit = 50 } = req.query
     const where: any = { storeId }
     if (type) where.type = type
@@ -29,7 +30,8 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 router.post('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { type, title, message, memberId, storeId } = req.body
-    const finalStoreId = storeId || req.user!.storeId
+    const userRole = req.user?.role || ''
+    const finalStoreId = (['admin', 'super_admin'].includes(userRole) && storeId) ? storeId : (req.user?.storeId || '')
 
     const notification = await prisma.notification.create({
       data: {
@@ -65,7 +67,7 @@ router.put('/:id/read', authenticate, async (req: AuthRequest, res) => {
 // PUT /api/notifications/mark-all-read - Mark all notifications as read
 router.put('/mark-all-read', authenticate, async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     await prisma.notification.updateMany({
       where: { storeId, status: 'unread' },
       data: { status: 'read', readAt: new Date() }

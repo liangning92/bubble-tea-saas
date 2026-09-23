@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as CampaignCategoryService from '../services/CampaignCategoryService'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -24,7 +25,7 @@ const updateCategorySchema = z.object({
 // GET /api/marketing/campaign-categories
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const categories = await CampaignCategoryService.getCampaignCategories(storeId)
     res.json({ code: 200, data: { list: categories }, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -98,7 +99,8 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
 // POST /api/marketing/campaign-categories/seed - Seed default categories
 router.post('/seed', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.body.storeId || req.user!.storeId
+    const userRole = req.user?.role || ''
+    const storeId = (['admin', 'super_admin'].includes(userRole) && req.body.storeId) ? req.body.storeId : (req.user?.storeId || '')
     const created = await CampaignCategoryService.seedDefaultCategories(storeId)
     res.json({ code: 200, message: 'Default categories seeded', data: { created }, timestamp: new Date().toISOString() })
   } catch (error: any) {

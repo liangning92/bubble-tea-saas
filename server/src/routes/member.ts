@@ -3,6 +3,7 @@ import { z } from 'zod'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -76,7 +77,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 router.get('/barcode/:barcode', authenticate, async (req: AuthRequest, res) => {
   try {
     const { barcode } = req.params
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
 
     // Look up member by phone (assuming phone is used as member card number)
     // Or by memberCard field if it exists

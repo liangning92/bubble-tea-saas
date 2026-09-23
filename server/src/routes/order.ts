@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { getStoreId } from '../utils/storeHelper'
 import { validateBody } from '../utils/validation'
 import * as OrderService from '../services/OrderService'
 
@@ -70,7 +71,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 router.get('/refund-requests', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { status } = req.query
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
 
     const where: any = {}
     if (status && status !== 'all') where.status = status
@@ -135,6 +136,27 @@ router.post('/', authenticate, validateBody(createOrderSchema), async (req: Auth
     // Pass through the actual error message (e.g., "库存不足: 生珍珠 (可用: 500, 需要: 750)")
     const message = error?.message || 'Failed to create order'
     res.status(500).json({ code: 500, message })
+  }
+})
+
+// POST /api/orders/bulk-sync - POS端离线订单批量同步
+router.post('/bulk-sync', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { orders } = req.body
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).json({ code: 400, message: 'Invalid or empty orders array' })
+    }
+
+    const results = await OrderService.bulkCreateOrders(orders)
+    res.json({
+      code: 200,
+      message: 'Bulk sync completed',
+      data: { results },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error: any) {
+    console.error('Bulk sync error:', error)
+    res.status(500).json({ code: 500, message: error?.message || 'Failed to process bulk sync' })
   }
 })
 
@@ -330,7 +352,7 @@ router.post('/refund-requests/:id/reject', authenticate, authorize('admin', 'man
 // GET /api/orders/kds/list - KDS orders for kitchen display
 router.get('/kds/list', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const orders = await OrderService.getKDSOrders(storeId, {
       status: req.query.status as string,
       limit: parseInt(req.query.limit as string) || 50

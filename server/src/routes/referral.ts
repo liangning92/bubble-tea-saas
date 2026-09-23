@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as ReferralService from '../services/ReferralService'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -23,7 +24,7 @@ const createReferralSchema = z.object({
 // GET /api/marketing/referrals
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const campaigns = await ReferralService.getReferralCampaigns(storeId)
     res.json({ code: 200, data: { list: campaigns }, timestamp: new Date().toISOString() })
   } catch (error) {

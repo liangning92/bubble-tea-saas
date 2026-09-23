@@ -937,3 +937,33 @@ export async function getKDSOrders(storeId: string, options?: {
     take: options?.limit || 50
   })
 }
+
+/**
+ * Bulk create orders for POS offline sync.
+ * Processes multiple orders, returning individual success/failure results for each order.
+ */
+export async function bulkCreateOrders(ordersData: CreateOrderData[]): Promise<Array<{ index: number; localId?: string; success: boolean; data?: any; error?: string }>> {
+  const results: Array<{ index: number; localId?: string; success: boolean; data?: any; error?: string }> = []
+
+  for (let i = 0; i < ordersData.length; i++) {
+    const orderData = ordersData[i]
+    try {
+      const order = await createOrder(orderData)
+      results.push({
+        index: i,
+        localId: orderData.orderNumber,
+        success: true,
+        data: order
+      })
+    } catch (err: any) {
+      results.push({
+        index: i,
+        localId: orderData.orderNumber,
+        success: false,
+        error: err?.message || 'Failed to create order'
+      })
+    }
+  }
+
+  return results
+}

@@ -150,6 +150,87 @@ export class SyncManager {
         .equals('pending')
         .toArray()
 
+      if (pendingOrders.length === 0) {
+        this.isSyncing = false
+        return
+      }
+
+      const apiUrl = connectionManager.getCurrentUrl()
+      const token = this.getToken()
+
+      if (pendingOrders.length > 1) {
+        try {
+          const bulkPayload = pendingOrders.map(order => ({
+            storeId: order.storeId,
+            staffId: order.staffId,
+            channelId: order.channelId || 'POS',
+            memberId: order.memberId,
+            items: order.items,
+            subtotal: order.subtotal,
+            ppn: order.ppn,
+            totalAmount: order.totalAmount,
+            finalAmount: order.finalAmount,
+            discountAmount: order.discountAmount,
+            paymentMethod: order.paymentMethod,
+            taxEnabled: order.taxEnabled,
+            pointsRedeemed: order.pointsRedeemed,
+            orderNumber: order.orderNumber,
+            customerCount: order.customerCount || 1
+          }))
+
+          const response = await fetch(`${apiUrl}/orders/bulk-sync`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ orders: bulkPayload })
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            const results = data.data?.results || []
+
+            let syncedCount = 0
+            let failedCount = 0
+
+            for (let i = 0; i < pendingOrders.length; i++) {
+              const order = pendingOrders[i]
+              const resItem = results[i]
+
+              if (resItem && resItem.success) {
+                await db.orders.update(order.id!, {
+                  status: 'synced',
+                  serverId: resItem.data?.id,
+                  syncedAt: new Date()
+                })
+                syncedCount++
+                this.emit({
+                  type: 'sync:success',
+                  orderId: order.localId,
+                  serverId: resItem.data?.id
+                })
+              } else {
+                await db.orders.update(order.id!, {
+                  status: 'failed',
+                  error: resItem?.error || 'Bulk sync item error'
+                })
+                failedCount++
+              }
+            }
+
+            this.emit({
+              type: 'sync:complete',
+              syncedCount,
+              failedCount
+            })
+            return
+          }
+        } catch (bulkErr) {
+          console.warn('[SyncManager] Bulk sync failed, falling back to single order sync:', bulkErr)
+        }
+      }
+
       let syncedCount = 0
       let failedCount = 0
 
@@ -158,12 +239,11 @@ export class SyncManager {
           // Update status to syncing
           await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1 })
 
-          const apiUrl = connectionManager.getCurrentUrl()
           const response = await fetch(`${apiUrl}/orders`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.getToken()}`
+              'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
               storeId: order.storeId,

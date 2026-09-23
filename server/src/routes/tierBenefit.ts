@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as TierBenefitService from '../services/TierBenefitService'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -20,7 +21,7 @@ const createTierBenefitSchema = z.object({
 // GET /api/marketing/tier-benefits
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const benefits = await TierBenefitService.getTierBenefits(storeId)
     res.json({ code: 200, data: { list: benefits }, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -77,7 +78,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
 // GET /api/marketing/tier-benefits/level/:level
 router.get('/level/:level', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const benefit = await TierBenefitService.getTierBenefitByLevel(storeId, req.params.level)
     res.json({ code: 200, data: benefit, timestamp: new Date().toISOString() })
   } catch (error) {

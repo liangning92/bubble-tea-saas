@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as SupplierService from '../services/SupplierService'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -23,7 +24,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     const { storeId, search, isActive } = req.query
 
     const suppliers = await SupplierService.getSuppliers({
-      storeId: storeId as string || req.user!.storeId,
+      storeId: getStoreId(req),
       search: search as string,
       isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined
     })
@@ -42,7 +43,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 // GET /api/suppliers/dropdown
 router.get('/dropdown', authenticate, async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const suppliers = await SupplierService.getSuppliersForDropdown(storeId)
 
     res.json({

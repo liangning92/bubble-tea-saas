@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { getStoreId } from '../utils/storeHelper'
 import { validateBody } from '../utils/validation'
 import * as PurchaseOrderService from '../services/PurchaseOrderService'
 
@@ -46,7 +47,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 // GET /api/purchase-orders/pending
 router.get('/pending', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const orders = await PurchaseOrderService.getPendingPurchaseOrders(storeId)
 
     res.json({

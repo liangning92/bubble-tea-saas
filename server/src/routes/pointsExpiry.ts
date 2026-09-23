@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as PointsExpiryService from '../services/PointsExpiryService'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -17,7 +18,7 @@ const createRuleSchema = z.object({
 // GET /api/marketing/points-expiry-rules
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const rule = await PointsExpiryService.getPointsExpiryRule(storeId)
     res.json({ code: 200, data: rule, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -51,7 +52,8 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
 // POST /api/marketing/points-expiry-rules/process
 router.post('/process', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.body.storeId || req.user!.storeId
+    const userRole = req.user?.role || ''
+    const storeId = (['admin', 'super_admin'].includes(userRole) && req.body.storeId) ? req.body.storeId : (req.user?.storeId || '')
     const result = await PointsExpiryService.processPointsExpiry(storeId)
     res.json({ code: 200, message: 'Points expiry processed', data: result, timestamp: new Date().toISOString() })
   } catch (error) {

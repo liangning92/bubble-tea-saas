@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as ProductService from '../services/ProductService'
+import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
 
@@ -68,7 +69,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 // GET /api/products/pos - Products for POS (simplified format)
 router.get('/pos', authenticate, async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const products = await ProductService.getProductsForPOS(storeId)
 
     res.json({
@@ -85,7 +86,7 @@ router.get('/pos', authenticate, async (req: AuthRequest, res) => {
 // GET /api/products/pos/version - Check if products have changed (lightweight check)
 router.get('/pos/version', authenticate, async (req: AuthRequest, res) => {
   try {
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const latestProduct = await ProductService.getLatestProductUpdate(storeId)
 
     res.json({
@@ -106,7 +107,7 @@ router.get('/pos/version', authenticate, async (req: AuthRequest, res) => {
 router.get('/barcode/:barcode', authenticate, async (req: AuthRequest, res) => {
   try {
     const { barcode } = req.params
-    const storeId = req.query.storeId as string || req.user!.storeId
+    const storeId = getStoreId(req)
     const product = await ProductService.getProductByBarcode(barcode, storeId)
 
     if (!product) {
