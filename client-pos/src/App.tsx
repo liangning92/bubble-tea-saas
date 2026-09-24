@@ -17,6 +17,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RootRoute() {
+  const { isAuthenticated } = useAuthStore()
+  return <Navigate to={isAuthenticated ? "/pos" : "/login"} replace />
+}
+
 function App() {
   return (
     <>
@@ -63,7 +68,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/pos" replace />} />
+      <Route path="/" element={<RootRoute />} />
     </Routes>
     </>
   )

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getApiUrl, setApiUrl } from '../config'
+import { getApiUrl, setApiUrl, normalizeApiUrl } from '../config'
 import { connectionManager, type ConnectionEvent } from './ConnectionManager'
 
 const api = axios.create({
@@ -9,15 +9,17 @@ const api = axios.create({
 
 // Update baseURL dynamically (for API URL configuration)
 export function updateApiUrl(url: string) {
-  api.defaults.baseURL = url
+  const normalized = normalizeApiUrl(url)
+  api.defaults.baseURL = normalized
 }
 
 // Listen for connection manager events to update API URL
 connectionManager.addListener((event: ConnectionEvent) => {
   if (event.type === 'connected' || event.type === 'url-changed') {
     if (event.url) {
-      api.defaults.baseURL = event.url
-      setApiUrl(event.url)
+      const normalized = normalizeApiUrl(event.url)
+      api.defaults.baseURL = normalized
+      setApiUrl(normalized)
     }
   }
 })

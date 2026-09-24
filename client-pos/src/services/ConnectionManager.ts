@@ -9,7 +9,7 @@
  * - Persists last working URL
  */
 
-import { getApiUrl, setApiUrl } from '../config'
+import { getApiUrl, setApiUrl, normalizeApiUrl } from '../config'
 
 const CONNECTIVITY_CHECK_KEY = 'pos-connectivity-check'
 const WORKING_URL_KEY = 'pos-working-url'
@@ -17,7 +17,7 @@ const FALLBACK_URLS_KEY = 'pos-fallback-urls'
 
 // Default fallback URLs
 const DEFAULT_FALLBACKS: string[] = [
-  'https://api.aicube.online',
+  'https://api.aicube.online/api',
 ]
 
 // Connection states
@@ -113,7 +113,7 @@ class ConnectionManagerClass {
   private setState(newState: ConnectionState, url?: string) {
     this.state = newState
     if (url) {
-      this.currentUrl = url
+      this.currentUrl = normalizeApiUrl(url)
     }
     this.emit({ type: newState, url: this.currentUrl })
   }
@@ -121,7 +121,7 @@ class ConnectionManagerClass {
   // Get current API URL
   getCurrentUrl(): string {
     // Fallback to getApiUrl() if currentUrl is empty (initial state)
-    return this.currentUrl || getApiUrl()
+    return normalizeApiUrl(this.currentUrl || getApiUrl())
   }
 
   // Get connection state

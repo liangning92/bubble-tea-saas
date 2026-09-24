@@ -32,27 +32,31 @@ function autoDetectApiUrl(): string {
   return '/api'
 }
 
+export function normalizeApiUrl(url: string): string {
+  let trimmed = (url || '').trim()
+  if (!trimmed) return '/api'
+  // Strip trailing slashes
+  trimmed = trimmed.replace(/\/+$/, '')
+  // If URL does not end with /api, append /api
+  if (!trimmed.endsWith('/api')) {
+    trimmed += '/api'
+  }
+  return trimmed
+}
+
 export function getApiUrl(): string {
   // First check localStorage
   const stored = localStorage.getItem(API_URL_KEY)
   if (stored) {
-    // Ensure cloud URLs always have /api suffix (fix: checkServerConfigApiUrl strips /api before storing)
-    if ((stored.startsWith('https://') || stored.startsWith('http://')) && !stored.endsWith('/api')) {
-      return stored.replace(/\/$/, '') + '/api'
-    }
-    return stored
+    return normalizeApiUrl(stored)
   }
 
   // Auto-detect based on current host
-  return autoDetectApiUrl()
+  return normalizeApiUrl(autoDetectApiUrl())
 }
 
 export function setApiUrl(url: string): void {
-  // Normalize: ensure cloud URLs always have /api suffix before storing
-  let normalized = url.trim()
-  if ((normalized.startsWith('https://') || normalized.startsWith('http://')) && !normalized.endsWith('/api')) {
-    normalized = normalized.replace(/\/$/, '') + '/api'
-  }
+  const normalized = normalizeApiUrl(url)
   localStorage.setItem(API_URL_KEY, normalized)
 }
 
