@@ -15,21 +15,16 @@ function autoDetectApiUrl(): string {
   const host = window.location.hostname
   const protocol = window.location.protocol
 
-  // Local development: use Vite proxy
+  // Local web development: use Vite proxy
   if (host === 'localhost' || host === '127.0.0.1') {
     return '/api'
   }
 
-  // Packaged Electron app (file:// protocol): use local Express server
-  // The Windows installer bundles a local Express server (forked at startup).
-  // All API calls go to the local server (127.0.0.1:7072).
-  // Initial sync (/sync/connect, /sync/full) proxies through local server to cloud.
-  if (!host || host === 'file' || protocol === 'file:') {
-    return LOCAL_API_URL  // http://localhost:7072/api
-  }
-
-  // Remote access via cloudflare tunnel → use relative path (nginx in container proxies to API)
-  return '/api'
+  // Packaged Electron app (file:// protocol) or remote access:
+  // All store accounts and product catalogs are managed on the Cloud PostgreSQL database (api.aicube.online).
+  // Returning CLOUD_API_URL ensures initial login and product queries fetch real store data from the Cloud DB.
+  // The client automatically caches fetched products into local IndexedDB for offline operation.
+  return CLOUD_API_URL
 }
 
 export function normalizeApiUrl(url: string): string {
