@@ -60,7 +60,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/cash" replace />} />
+      <Route path="/" element={<Navigate to="/pos" replace />} />
     </Routes>
   )
 }
