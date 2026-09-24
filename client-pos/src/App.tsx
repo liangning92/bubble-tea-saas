@@ -8,6 +8,7 @@ import { CustomerDisplayPage } from './pages/CustomerDisplayPage'
 import { RegisterMemberPage } from './pages/RegisterMemberPage'
 import { ScanPage } from './pages/ScanPage'
 import { HygieneTasksPage } from './pages/HygieneTasksPage'
+import { UpdateNotification } from './components/UpdateNotification'
 import { useAuthStore } from './stores/auth'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -18,7 +19,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <Routes>
+    <>
+      <UpdateNotification />
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/register-member" element={<RegisterMemberPage />} />
@@ -62,6 +65,7 @@ function App() {
       />
       <Route path="/" element={<Navigate to="/pos" replace />} />
     </Routes>
+    </>
   )
 }
 
