@@ -39,6 +39,7 @@ const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const ReferralService = __importStar(require("../services/ReferralService"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.referralRouter = router;
 const createReferralSchema = zod_1.z.object({
@@ -57,7 +58,7 @@ const createReferralSchema = zod_1.z.object({
 // GET /api/marketing/referrals
 router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const campaigns = await ReferralService.getReferralCampaigns(storeId);
         res.json({ code: 200, data: { list: campaigns }, timestamp: new Date().toISOString() });
     }

@@ -117,6 +117,26 @@ router.get('/:storeId/:key', auth_1.authenticate, async (req, res) => {
         res.status(500).json({ code: 500, message: 'Failed to get config' });
     }
 });
+// PUT /api/config/hardware-settings - Allow staff/cashier to update hardware settings (printers, cash drawer, etc.)
+router.put('/hardware-settings', auth_1.authenticate, async (req, res) => {
+    try {
+        const { storeId, hardwareSettings } = req.body;
+        if (!storeId || !hardwareSettings) {
+            return res.status(400).json({ code: 400, message: 'Missing storeId or hardwareSettings' });
+        }
+        const valueStr = JSON.stringify(hardwareSettings);
+        const config = await database_1.default.config.upsert({
+            where: { storeId_key: { storeId, key: 'hardwareSettings' } },
+            create: { storeId, key: 'hardwareSettings', value: valueStr, category: 'pos' },
+            update: { value: valueStr, category: 'pos' }
+        });
+        res.json({ code: 200, message: 'Hardware settings saved', timestamp: new Date().toISOString() });
+    }
+    catch (error) {
+        console.error('Save hardware settings error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to save hardware settings' });
+    }
+});
 // POST /api/config
 router.post('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), (0, validation_1.validateBody)(configSchema), async (req, res) => {
     try {

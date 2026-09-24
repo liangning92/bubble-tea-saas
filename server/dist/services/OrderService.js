@@ -15,6 +15,7 @@ exports.refundOrder = refundOrder;
 exports.createRefundRequest = createRefundRequest;
 exports.returnInventory = returnInventory;
 exports.getKDSOrders = getKDSOrders;
+exports.bulkCreateOrders = bulkCreateOrders;
 const database_1 = __importDefault(require("../config/database"));
 const env_1 = require("../config/env");
 const ReferralService_1 = require("./ReferralService");
@@ -756,5 +757,33 @@ async function getKDSOrders(storeId, options) {
         orderBy: { createdAt: 'asc' },
         take: options?.limit || 50
     });
+}
+/**
+ * Bulk create orders for POS offline sync.
+ * Processes multiple orders, returning individual success/failure results for each order.
+ */
+async function bulkCreateOrders(ordersData) {
+    const results = [];
+    for (let i = 0; i < ordersData.length; i++) {
+        const orderData = ordersData[i];
+        try {
+            const order = await createOrder(orderData);
+            results.push({
+                index: i,
+                localId: orderData.orderNumber,
+                success: true,
+                data: order
+            });
+        }
+        catch (err) {
+            results.push({
+                index: i,
+                localId: orderData.orderNumber,
+                success: false,
+                error: err?.message || 'Failed to create order'
+            });
+        }
+    }
+    return results;
 }
 //# sourceMappingURL=OrderService.js.map

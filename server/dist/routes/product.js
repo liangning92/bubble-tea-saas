@@ -39,6 +39,7 @@ const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const ProductService = __importStar(require("../services/ProductService"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.productRouter = router;
 // Validation schemas
@@ -98,7 +99,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 // GET /api/products/pos - Products for POS (simplified format)
 router.get('/pos', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const products = await ProductService.getProductsForPOS(storeId);
         res.json({
             code: 200,
@@ -114,7 +115,7 @@ router.get('/pos', auth_1.authenticate, async (req, res) => {
 // GET /api/products/pos/version - Check if products have changed (lightweight check)
 router.get('/pos/version', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const latestProduct = await ProductService.getLatestProductUpdate(storeId);
         res.json({
             code: 200,
@@ -134,7 +135,7 @@ router.get('/pos/version', auth_1.authenticate, async (req, res) => {
 router.get('/barcode/:barcode', auth_1.authenticate, async (req, res) => {
     try {
         const { barcode } = req.params;
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const product = await ProductService.getProductByBarcode(barcode, storeId);
         if (!product) {
             return res.status(404).json({ code: 404, message: 'Product not found' });

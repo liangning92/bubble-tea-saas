@@ -9,6 +9,7 @@ const zod_1 = require("zod");
 const database_1 = __importDefault(require("../config/database"));
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.memberRouter = router;
 // Validation schemas
@@ -77,7 +78,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 router.get('/barcode/:barcode', auth_1.authenticate, async (req, res) => {
     try {
         const { barcode } = req.params;
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         // Look up member by phone (assuming phone is used as member card number)
         // Or by memberCard field if it exists
         const member = await database_1.default.member.findFirst({

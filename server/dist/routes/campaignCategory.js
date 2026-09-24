@@ -39,6 +39,7 @@ const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const CampaignCategoryService = __importStar(require("../services/CampaignCategoryService"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.campaignCategoryRouter = router;
 const createCategorySchema = zod_1.z.object({
@@ -57,7 +58,7 @@ const updateCategorySchema = zod_1.z.object({
 // GET /api/marketing/campaign-categories
 router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const categories = await CampaignCategoryService.getCampaignCategories(storeId);
         res.json({ code: 200, data: { list: categories }, timestamp: new Date().toISOString() });
     }
@@ -131,7 +132,8 @@ router.delete('/:id', auth_1.authenticate, (0, auth_1.authorize)('admin'), async
 // POST /api/marketing/campaign-categories/seed - Seed default categories
 router.post('/seed', auth_1.authenticate, (0, auth_1.authorize)('admin'), async (req, res) => {
     try {
-        const storeId = req.body.storeId || req.user.storeId;
+        const userRole = req.user?.role || '';
+        const storeId = (['admin', 'super_admin'].includes(userRole) && req.body.storeId) ? req.body.storeId : (req.user?.storeId || '');
         const created = await CampaignCategoryService.seedDefaultCategories(storeId);
         res.json({ code: 200, message: 'Default categories seeded', data: { created }, timestamp: new Date().toISOString() });
     }

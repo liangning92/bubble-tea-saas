@@ -110,6 +110,11 @@ router.post('/register', authLimiter, (0, validation_1.validateBody)(registerSch
 router.post('/login', authLimiter, (0, validation_1.validateBody)(loginSchema), async (req, res) => {
     try {
         const { phone, password } = req.body;
+        console.log('[DEBUG LOGIN]', new Date().toISOString(), {
+            body: req.body,
+            ip: req.ip,
+            ua: req.headers['user-agent']?.substring(0, 50)
+        });
         // Find user
         const user = await database_1.default.user.findUnique({
             where: { phone },

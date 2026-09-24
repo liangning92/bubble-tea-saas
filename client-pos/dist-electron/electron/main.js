@@ -43,12 +43,27 @@ let PosPrinter = null;
 let printerLoadFailed = false;
 try {
     PosPrinter = require('electron-pos-printer').PosPrinter;
-    console.log('[PRINTER] electron-pos-printer loaded');
+    console.log('[PRINTER] electron-pos-printer loaded via standard require');
 }
 catch (e) {
-    printerLoadFailed = true;
-    console.log('[PRINTER] electron-pos-printer not available:', e?.message);
-    main_1.default.error('[PRINTER] electron-pos-printer load failed:', e?.message);
+    console.warn('[PRINTER] Standard require failed, trying unpacked path:', e?.message);
+    try {
+        const unpackedPath = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron-pos-printer');
+        PosPrinter = require(unpackedPath).PosPrinter;
+        console.log('[PRINTER] electron-pos-printer loaded via unpacked path:', unpackedPath);
+    }
+    catch (e2) {
+        try {
+            const unpackedClientPosPath = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'client-pos', 'node_modules', 'electron-pos-printer');
+            PosPrinter = require(unpackedClientPosPath).PosPrinter;
+            console.log('[PRINTER] electron-pos-printer loaded via unpacked client-pos path:', unpackedClientPosPath);
+        }
+        catch (e3) {
+            printerLoadFailed = true;
+            console.log('[PRINTER] electron-pos-printer load failed:', e?.message, e2?.message, e3?.message);
+            main_1.default.error('[PRINTER] electron-pos-printer load failed:', e?.message, e2?.message, e3?.message);
+        }
+    }
 }
 // 检测 WebView2 是否可用（Windows only）
 function checkWebView2() {

@@ -37,6 +37,7 @@ exports.inventoryRouter = void 0;
 const express_1 = require("express");
 const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
+const storeHelper_1 = require("../utils/storeHelper");
 const validation_1 = require("../utils/validation");
 const InventoryService = __importStar(require("../services/InventoryService"));
 const InventoryAlertConfigService_1 = require("../services/InventoryAlertConfigService");
@@ -104,7 +105,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 // GET /api/inventory/logs - Get all inventory logs (combined stock-in, stock-out, and adjustments)
 router.get('/logs', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const inventoryId = req.query.inventoryId;
         const type = req.query.type;
         let logs = [];
@@ -205,7 +206,7 @@ router.put('/:id/adjust', auth_1.authenticate, (0, auth_1.authorize)('admin', 'm
 // GET /api/inventory/alerts/low-stock
 router.get('/alerts/low-stock', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const alerts = await InventoryService.getLowStockAlerts(storeId);
         res.json({
             code: 200,
@@ -221,7 +222,7 @@ router.get('/alerts/low-stock', auth_1.authenticate, (0, auth_1.authorize)('admi
 // GET /api/inventory/stats
 router.get('/stats/summary', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const stats = await InventoryService.getInventoryStats(storeId);
         res.json({
             code: 200,
@@ -237,7 +238,7 @@ router.get('/stats/summary', auth_1.authenticate, (0, auth_1.authorize)('admin',
 // GET /api/inventory/logs/stock-in
 router.get('/logs/stock-in', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const inventoryId = req.query.inventoryId;
         const logs = await InventoryService.getStockInLogs(storeId, inventoryId);
         res.json({
@@ -254,7 +255,7 @@ router.get('/logs/stock-in', auth_1.authenticate, async (req, res) => {
 // GET /api/inventory/logs/stock-out
 router.get('/logs/stock-out', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const inventoryId = req.query.inventoryId;
         const logs = await InventoryService.getStockOutLogs(storeId, inventoryId);
         res.json({

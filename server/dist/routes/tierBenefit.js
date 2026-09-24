@@ -39,6 +39,7 @@ const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const TierBenefitService = __importStar(require("../services/TierBenefitService"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.tierBenefitRouter = router;
 const createTierBenefitSchema = zod_1.z.object({
@@ -54,7 +55,7 @@ const createTierBenefitSchema = zod_1.z.object({
 // GET /api/marketing/tier-benefits
 router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const benefits = await TierBenefitService.getTierBenefits(storeId);
         res.json({ code: 200, data: { list: benefits }, timestamp: new Date().toISOString() });
     }
@@ -112,7 +113,7 @@ router.delete('/:id', auth_1.authenticate, (0, auth_1.authorize)('admin'), async
 // GET /api/marketing/tier-benefits/level/:level
 router.get('/level/:level', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const benefit = await TierBenefitService.getTierBenefitByLevel(storeId, req.params.level);
         res.json({ code: 200, data: benefit, timestamp: new Date().toISOString() });
     }

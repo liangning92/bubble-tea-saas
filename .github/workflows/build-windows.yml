@@ -99,6 +99,19 @@ jobs:
           npm install
           Set-Location ..
 
+      - name: Ensure electron-pos-printer in node_modules
+        run: |
+          if (Test-Path "node_modules/electron-pos-printer") {
+            if (!(Test-Path "client-pos/node_modules")) { New-Item -ItemType Directory -Force -Path "client-pos/node_modules" }
+            Copy-Item -Path "node_modules/electron-pos-printer" -Destination "client-pos/node_modules/electron-pos-printer" -Recurse -Force
+            Write-Host "Copied electron-pos-printer from root node_modules to client-pos/node_modules"
+          }
+          if (Test-Path "client-pos/node_modules/electron-pos-printer") {
+            if (!(Test-Path "node_modules")) { New-Item -ItemType Directory -Force -Path "node_modules" }
+            Copy-Item -Path "client-pos/node_modules/electron-pos-printer" -Destination "node_modules/electron-pos-printer" -Recurse -Force
+            Write-Host "Copied electron-pos-printer from client-pos/node_modules to root node_modules"
+          }
+
       - name: Compile Electron
         run: cd client-pos && npm run build:electron:main
 

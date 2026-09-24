@@ -118,10 +118,13 @@ httpServer.on('error', (err) => {
     process.exit(1);
 });
 // Security & Logging Middlewares
+app.set('trust proxy', 1);
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
-    origin: env_1.config.corsOrigin.split(','),
-    credentials: true
+    origin: env_1.config.corsOrigin.split(/[,\s]+/).map(s => s.trim()).filter(Boolean),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept']
 }));
 app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json({ limit: '10mb' }));

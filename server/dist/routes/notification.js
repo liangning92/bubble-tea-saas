@@ -7,12 +7,13 @@ exports.notificationRouter = void 0;
 const express_1 = require("express");
 const auth_1 = require("../middlewares/auth");
 const database_1 = __importDefault(require("../config/database"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.notificationRouter = router;
 // GET /api/notifications
 router.get('/', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const { type, status, limit = 50 } = req.query;
         const where = { storeId };
         if (type)
@@ -36,7 +37,8 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 router.post('/', auth_1.authenticate, async (req, res) => {
     try {
         const { type, title, message, memberId, storeId } = req.body;
-        const finalStoreId = storeId || req.user.storeId;
+        const userRole = req.user?.role || '';
+        const finalStoreId = (['admin', 'super_admin'].includes(userRole) && storeId) ? storeId : (req.user?.storeId || '');
         const notification = await database_1.default.notification.create({
             data: {
                 type: type || 'promotion',
@@ -71,7 +73,7 @@ router.put('/:id/read', auth_1.authenticate, async (req, res) => {
 // PUT /api/notifications/mark-all-read - Mark all notifications as read
 router.put('/mark-all-read', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         await database_1.default.notification.updateMany({
             where: { storeId, status: 'unread' },
             data: { status: 'read', readAt: new Date() }

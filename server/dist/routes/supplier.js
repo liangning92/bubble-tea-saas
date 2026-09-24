@@ -39,6 +39,7 @@ const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const SupplierService = __importStar(require("../services/SupplierService"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.supplierRouter = router;
 // Validation schemas
@@ -56,7 +57,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
     try {
         const { storeId, search, isActive } = req.query;
         const suppliers = await SupplierService.getSuppliers({
-            storeId: storeId || req.user.storeId,
+            storeId: (0, storeHelper_1.getStoreId)(req),
             search: search,
             isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined
         });
@@ -74,7 +75,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 // GET /api/suppliers/dropdown
 router.get('/dropdown', auth_1.authenticate, async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const suppliers = await SupplierService.getSuppliersForDropdown(storeId);
         res.json({
             code: 200,

@@ -37,6 +37,7 @@ exports.orderRouter = void 0;
 const express_1 = require("express");
 const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
+const storeHelper_1 = require("../utils/storeHelper");
 const validation_1 = require("../utils/validation");
 const OrderService = __importStar(require("../services/OrderService"));
 const router = (0, express_1.Router)();
@@ -102,7 +103,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 router.get('/refund-requests', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
         const { status } = req.query;
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const where = {};
         if (status && status !== 'all')
             where.status = status;
@@ -162,6 +163,26 @@ router.post('/', auth_1.authenticate, (0, validation_1.validateBody)(createOrder
         // Pass through the actual error message (e.g., "库存不足: 生珍珠 (可用: 500, 需要: 750)")
         const message = error?.message || 'Failed to create order';
         res.status(500).json({ code: 500, message });
+    }
+});
+// POST /api/orders/bulk-sync - POS端离线订单批量同步
+router.post('/bulk-sync', auth_1.authenticate, async (req, res) => {
+    try {
+        const { orders } = req.body;
+        if (!Array.isArray(orders) || orders.length === 0) {
+            return res.status(400).json({ code: 400, message: 'Invalid or empty orders array' });
+        }
+        const results = await OrderService.bulkCreateOrders(orders);
+        res.json({
+            code: 200,
+            message: 'Bulk sync completed',
+            data: { results },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Bulk sync error:', error);
+        res.status(500).json({ code: 500, message: error?.message || 'Failed to process bulk sync' });
     }
 });
 // POST /api/orders/refund-request - POS端退款申请
@@ -335,7 +356,7 @@ router.post('/refund-requests/:id/reject', auth_1.authenticate, (0, auth_1.autho
 // GET /api/orders/kds/list - KDS orders for kitchen display
 router.get('/kds/list', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager', 'staff'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const orders = await OrderService.getKDSOrders(storeId, {
             status: req.query.status,
             limit: parseInt(req.query.limit) || 50

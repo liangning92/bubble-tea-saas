@@ -37,6 +37,7 @@ exports.purchaseOrderRouter = void 0;
 const express_1 = require("express");
 const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
+const storeHelper_1 = require("../utils/storeHelper");
 const validation_1 = require("../utils/validation");
 const PurchaseOrderService = __importStar(require("../services/PurchaseOrderService"));
 const router = (0, express_1.Router)();
@@ -78,7 +79,7 @@ router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), 
 // GET /api/purchase-orders/pending
 router.get('/pending', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const orders = await PurchaseOrderService.getPendingPurchaseOrders(storeId);
         res.json({
             code: 200,

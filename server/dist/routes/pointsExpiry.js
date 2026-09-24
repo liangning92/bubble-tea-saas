@@ -39,6 +39,7 @@ const zod_1 = require("zod");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const PointsExpiryService = __importStar(require("../services/PointsExpiryService"));
+const storeHelper_1 = require("../utils/storeHelper");
 const router = (0, express_1.Router)();
 exports.pointsExpiryRouter = router;
 const createRuleSchema = zod_1.z.object({
@@ -51,7 +52,7 @@ const createRuleSchema = zod_1.z.object({
 // GET /api/marketing/points-expiry-rules
 router.get('/', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
-        const storeId = req.query.storeId || req.user.storeId;
+        const storeId = (0, storeHelper_1.getStoreId)(req);
         const rule = await PointsExpiryService.getPointsExpiryRule(storeId);
         res.json({ code: 200, data: rule, timestamp: new Date().toISOString() });
     }
@@ -85,7 +86,8 @@ router.put('/:id', auth_1.authenticate, (0, auth_1.authorize)('admin'), async (r
 // POST /api/marketing/points-expiry-rules/process
 router.post('/process', auth_1.authenticate, (0, auth_1.authorize)('admin'), async (req, res) => {
     try {
-        const storeId = req.body.storeId || req.user.storeId;
+        const userRole = req.user?.role || '';
+        const storeId = (['admin', 'super_admin'].includes(userRole) && req.body.storeId) ? req.body.storeId : (req.user?.storeId || '');
         const result = await PointsExpiryService.processPointsExpiry(storeId);
         res.json({ code: 200, message: 'Points expiry processed', data: result, timestamp: new Date().toISOString() });
     }
