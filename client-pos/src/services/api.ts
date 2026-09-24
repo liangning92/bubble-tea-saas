@@ -67,6 +67,19 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Auto-logout on 401 Unauthorized (except for login requests)
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
+      import('../stores/auth').then(({ useAuthStore }) => {
+        useAuthStore.getState().logout()
+      })
+    }
+    return Promise.reject(error)
+  }
+)
+
 export default api
 
 export const posApi = {

@@ -728,45 +728,45 @@ function createMainWindow() {
       'isPackaged': app.isPackaged,
       'NODE_ENV': process.env.NODE_ENV || 'undefined'
     }
-    const diagnosticText = Object.entries(diagnosticInfo)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('\n')
+    // 函数：显示诊断窗口（仅在加载失败时弹出）
+    const showDiagnosticWindow = () => {
+      const diagWindow = new BrowserWindow({
+        width: 900,
+        height: 650,
+        title: '诊断信息 - YOUME POS',
+        alwaysOnTop: true
+      })
+      const dir = path.dirname(indexPath)
+      let dirContents = '无法读取'
+      try {
+        if (fs.existsSync(dir)) {
+          dirContents = fs.readdirSync(dir).slice(0, 30).join('\n')
+        }
+      } catch (e) {}
 
-    // 创建诊断窗口（独立窗口，即使主窗口白屏也能看到）
-    const diagWindow = new BrowserWindow({
-      width: 900,
-      height: 650,
-      title: '诊断信息 - YOUME POS',
-      alwaysOnTop: true
-    })
-    const dir = path.dirname(indexPath)
-    let dirContents = '无法读取'
-    try {
-      if (fs.existsSync(dir)) {
-        dirContents = fs.readdirSync(dir).slice(0, 30).join('\n')
-      }
-    } catch (e) {}
+      const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
+      let recentLogs = '无日志文件'
+      try {
+        if (fs.existsSync(logPath)) {
+          const logContent = fs.readFileSync(logPath, 'utf-8')
+          const logLines = logContent.split('\n').filter(Boolean).slice(-30)
+          recentLogs = logLines.map((line: string) => {
+            if (line.includes('[error]') || line.includes('[FATAL]')) {
+              return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>'
+            } else if (line.includes('[warn]')) {
+              return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>'
+            }
+            return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>'
+          }).join('\n')
+        }
+      } catch (e) { recentLogs = '读取失败: ' + String(e) }
 
-    // 读取最近的错误日志（electron-log）
-    const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
-    let recentLogs = '无日志文件'
-    try {
-      if (fs.existsSync(logPath)) {
-        const logContent = fs.readFileSync(logPath, 'utf-8')
-        const logLines = logContent.split('\n').filter(Boolean).slice(-30)
-        recentLogs = logLines.map((line: string) => {
-          if (line.includes('[error]') || line.includes('[FATAL]')) {
-            return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>'
-          } else if (line.includes('[warn]')) {
-            return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>'
-          }
-          return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>'
-        }).join('\n')
-      }
-    } catch (e) { recentLogs = '读取失败: ' + String(e) }
+      const logPathDisplay = logPath.replace(/</g, '&lt;')
+      const diagnosticText = Object.entries(diagnosticInfo)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n')
 
-    const logPathDisplay = logPath.replace(/</g, '&lt;')
-    diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
+      diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><title>诊断信息 - YOUME POS</title>
 <style>
@@ -786,19 +786,21 @@ h3{margin-top:16px;color:#569cd6}
 <pre>${dirContents.replace(/</g, '&lt;')}</pre>
 <h3>📋 最近运行日志 (${logPathDisplay})</h3>
 <div class="log-section"><pre>${recentLogs}</pre></div>
-<p style="color:#808080;margin-top:16px">如果这个窗口没自动关闭，说明主窗口加载失败。请截图发给我分析。</p>
+<p style="color:#808080;margin-top:16px">如果主窗口加载失败，请截图发给技术支持分析。</p>
 </body>
 </html>`)}`)
+    }
 
-    // 尝试加载页面
-    mainWindow.loadFile(indexPath).then(() => {
-      console.log('[Electron] Successfully loaded index.html')
-      // 加载成功后关闭诊断窗口
-      diagWindow.close()
-    }).catch((err) => {
-      console.error('[Electron] Failed to load index:', err)
-      // 诊断窗口已经打开，显示了路径信息
-    })
+    if (!indexExists) {
+      showDiagnosticWindow()
+    } else {
+      mainWindow.loadFile(indexPath).then(() => {
+        console.log('[Electron] Successfully loaded index.html')
+      }).catch((err) => {
+        console.error('[Electron] Failed to load index:', err)
+        showDiagnosticWindow()
+      })
+    }
 
     // 监听页面加载成功
     mainWindow.webContents.on('did-finish-load', () => {
