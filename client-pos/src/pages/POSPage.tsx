@@ -2204,10 +2204,12 @@ export function POSPage() {
         }
       }
 
-      // 打印小票
-      const printResult = await printReceipt(orderNum, orderData)
-      if (!printResult) {
-        showToast(t('pos.printFailed') || '小票打印失败', 'error')
+      // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
+      if (posReceipt.autoPrint !== false) {
+        const printResult = await printReceipt(orderNum, orderData)
+        if (!printResult) {
+          showToast(t('pos.printFailed') || '小票打印失败', 'error')
+        }
       }
       // 打印厨房单
       printKitchenOrder(orderNum, cart)
