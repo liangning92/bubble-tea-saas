@@ -28,10 +28,14 @@ const electronAPI = (window as any).electronAPI
 // Helper to get available printer name from settings
 function getPrinterName(printerSettings: { printerName?: string; printers?: Array<{ type: string; enabled: boolean; printerName?: string }> }, type: 'receipt' | 'kitchen' = 'receipt'): string {
   // 1. First try: use configured printer for this type
-  if (printerSettings?.printers) {
+  if (printerSettings?.printers && printerSettings.printers.length > 0) {
     const configured = printerSettings.printers.find(p => p.type === type && p.enabled && p.printerName)
     if (configured?.printerName) {
       return configured.printerName
+    }
+    const fallbackConfigured = printerSettings.printers.find(p => p.type === type && p.printerName)
+    if (fallbackConfigured?.printerName) {
+      return fallbackConfigured.printerName
     }
   }
   // 2. Fallback: use legacy printerName field
@@ -219,6 +223,7 @@ export function POSPage() {
   const [printerDetectLoading, setPrinterDetectLoading] = useState(false)
   const [printerDetectError, setPrinterDetectError] = useState<string | null>(null)
   const [selectedPrinterForSetup, setSelectedPrinterForSetup] = useState<string | null>(null)
+  const [appVersion, setAppVersion] = useState<string>('')
 
   // 费用记录状态
   const [todayExpenses, setTodayExpenses] = useState<any[]>([])
@@ -1064,9 +1069,18 @@ export function POSPage() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [loadConfig])
 
-  // 初始加载配置
+  // 初始加载配置与获取软件版本
   useEffect(() => {
     loadConfig()
+    const fetchAppVersion = async () => {
+      try {
+        const ver = await electronAPI?.getAppVersion?.()
+        if (ver) setAppVersion(ver)
+      } catch (err) {
+        console.error('[POS] Failed to get app version:', err)
+      }
+    }
+    fetchAppVersion()
   }, [loadConfig])
 
   // 定期轮询配置（Admin修改后自动同步，30秒间隔）
@@ -1903,13 +1917,32 @@ export function POSPage() {
   const handleSetupReceiptPrinter = async () => {
     if (!selectedPrinterForSetup || !user?.storeId) return
     try {
-      const updatedPrinters = (hardwareSettings.printers || []).map((p: any) => {
-        if (p.type === 'receipt') {
-          return { ...p, enabled: true, printerName: selectedPrinterForSetup }
+      const existingPrinters = hardwareSettings.printers || []
+      const existingIndex = existingPrinters.findIndex((p: any) => p.type === 'receipt')
+      let updatedPrinters = [...existingPrinters]
+      if (existingIndex >= 0) {
+        updatedPrinters[existingIndex] = {
+          ...updatedPrinters[existingIndex],
+          enabled: true,
+          printerName: selectedPrinterForSetup
         }
-        return p
-      })
-      const newHardwareSettings = { ...hardwareSettings, printers: updatedPrinters }
+      } else {
+        updatedPrinters.push({
+          id: 'receipt-1',
+          type: 'receipt',
+          name: 'Receipt Printer',
+          enabled: true,
+          connectionType: 'usb',
+          printerName: selectedPrinterForSetup,
+          printerIp: '',
+          printerPort: 9100
+        })
+      }
+      const newHardwareSettings = {
+        ...hardwareSettings,
+        printerName: selectedPrinterForSetup,
+        printers: updatedPrinters
+      }
       setHardwareSettings(newHardwareSettings)
       await posApi.setHardwareSettings(user.storeId, newHardwareSettings)
       setShowPrinterDetectModal(false)
@@ -2158,11 +2191,16 @@ export function POSPage() {
       setMemberCoupons(prev => prev.filter(c => c.id !== selectedCoupon?.id))
 
       // 现金支付：自动开钱箱
-      if (paymentMethod === 'cash' && hardwareSettings.autoOpenCashDrawer) {
+      if (paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)) {
         const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-        const drawerResult = await electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt'), cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100 })
-        if (!drawerResult?.success) {
-          showToast(t('pos.cashDrawerFailed') || '钱箱打开失败', 'error')
+        const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
+        const drawerResult = await electronAPI?.openCashDrawer?.({
+          printerName: targetPrinterName,
+          cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
+        })
+        if (drawerResult && !drawerResult.success) {
+          console.warn('[POS] Cash drawer auto-open failed:', drawerResult.error)
+          showToast((t('pos.cashDrawerFailed') || '钱箱打开失败') + (drawerResult.error ? `: ${drawerResult.error}` : ''), 'error')
         }
       }
 
@@ -2334,7 +2372,10 @@ export function POSPage() {
         <div className="flex items-center gap-3">
           <img src="/youme-logo-white.png" alt="YOUME" className="h-8 w-auto object-contain" />
           <div className="flex flex-col">
-            <span className="text-white font-bold text-sm">{'YOUME'}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-white font-bold text-sm">{'YOUME'}</span>
+              {appVersion && <span className="text-white/80 text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono">v{appVersion}</span>}
+            </div>
             <span className="text-white/70 text-xs">{user?.staff?.name || t('pos.cashier')}</span>
           </div>
           {selectedChannel && (

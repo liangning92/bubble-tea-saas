@@ -690,47 +690,47 @@ function createMainWindow() {
             'isPackaged': electron_1.app.isPackaged,
             'NODE_ENV': process.env.NODE_ENV || 'undefined'
         };
-        const diagnosticText = Object.entries(diagnosticInfo)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join('\n');
-        // 创建诊断窗口（独立窗口，即使主窗口白屏也能看到）
-        const diagWindow = new electron_1.BrowserWindow({
-            width: 900,
-            height: 650,
-            title: '诊断信息 - YOUME POS',
-            alwaysOnTop: true
-        });
-        const dir = path_1.default.dirname(indexPath);
-        let dirContents = '无法读取';
-        try {
-            if (fs.existsSync(dir)) {
-                dirContents = fs.readdirSync(dir).slice(0, 30).join('\n');
+        // 函数：显示诊断窗口（仅在加载失败时弹出）
+        const showDiagnosticWindow = () => {
+            const diagWindow = new electron_1.BrowserWindow({
+                width: 900,
+                height: 650,
+                title: '诊断信息 - YOUME POS',
+                alwaysOnTop: true
+            });
+            const dir = path_1.default.dirname(indexPath);
+            let dirContents = '无法读取';
+            try {
+                if (fs.existsSync(dir)) {
+                    dirContents = fs.readdirSync(dir).slice(0, 30).join('\n');
+                }
             }
-        }
-        catch (e) { }
-        // 读取最近的错误日志（electron-log）
-        const logPath = path_1.default.join(electron_1.app.getPath('userData'), 'logs', 'main.log');
-        let recentLogs = '无日志文件';
-        try {
-            if (fs.existsSync(logPath)) {
-                const logContent = fs.readFileSync(logPath, 'utf-8');
-                const logLines = logContent.split('\n').filter(Boolean).slice(-30);
-                recentLogs = logLines.map((line) => {
-                    if (line.includes('[error]') || line.includes('[FATAL]')) {
-                        return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>';
-                    }
-                    else if (line.includes('[warn]')) {
-                        return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>';
-                    }
-                    return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>';
-                }).join('\n');
+            catch (e) { }
+            const logPath = path_1.default.join(electron_1.app.getPath('userData'), 'logs', 'main.log');
+            let recentLogs = '无日志文件';
+            try {
+                if (fs.existsSync(logPath)) {
+                    const logContent = fs.readFileSync(logPath, 'utf-8');
+                    const logLines = logContent.split('\n').filter(Boolean).slice(-30);
+                    recentLogs = logLines.map((line) => {
+                        if (line.includes('[error]') || line.includes('[FATAL]')) {
+                            return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>';
+                        }
+                        else if (line.includes('[warn]')) {
+                            return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>';
+                        }
+                        return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>';
+                    }).join('\n');
+                }
             }
-        }
-        catch (e) {
-            recentLogs = '读取失败: ' + String(e);
-        }
-        const logPathDisplay = logPath.replace(/</g, '&lt;');
-        diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
+            catch (e) {
+                recentLogs = '读取失败: ' + String(e);
+            }
+            const logPathDisplay = logPath.replace(/</g, '&lt;');
+            const diagnosticText = Object.entries(diagnosticInfo)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join('\n');
+            diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><title>诊断信息 - YOUME POS</title>
 <style>
@@ -750,18 +750,21 @@ h3{margin-top:16px;color:#569cd6}
 <pre>${dirContents.replace(/</g, '&lt;')}</pre>
 <h3>📋 最近运行日志 (${logPathDisplay})</h3>
 <div class="log-section"><pre>${recentLogs}</pre></div>
-<p style="color:#808080;margin-top:16px">如果这个窗口没自动关闭，说明主窗口加载失败。请截图发给我分析。</p>
+<p style="color:#808080;margin-top:16px">如果主窗口加载失败，请截图发给技术支持分析。</p>
 </body>
 </html>`)}`);
-        // 尝试加载页面
-        mainWindow.loadFile(indexPath).then(() => {
-            console.log('[Electron] Successfully loaded index.html');
-            // 加载成功后关闭诊断窗口
-            diagWindow.close();
-        }).catch((err) => {
-            console.error('[Electron] Failed to load index:', err);
-            // 诊断窗口已经打开，显示了路径信息
-        });
+        };
+        if (!indexExists) {
+            showDiagnosticWindow();
+        }
+        else {
+            mainWindow.loadFile(indexPath).then(() => {
+                console.log('[Electron] Successfully loaded index.html');
+            }).catch((err) => {
+                console.error('[Electron] Failed to load index:', err);
+                showDiagnosticWindow();
+            });
+        }
         // 监听页面加载成功
         mainWindow.webContents.on('did-finish-load', () => {
             console.log('[Electron] Page finished loading');
@@ -896,7 +899,17 @@ function createCustomerWindow() {
 // ========== Printer Listing (Windows) ==========
 electron_1.ipcMain.handle('list-printers', async () => {
     if (process.platform !== 'win32') {
-        return { printers: [], error: 'Only supported on Windows' };
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+                const sysPrinters = await mainWindow.webContents.getPrintersAsync();
+                const names = (sysPrinters || []).map(p => p.name).filter(Boolean);
+                return { printers: names, error: null };
+            }
+            catch (err) {
+                return { printers: [], error: err?.message || 'Failed to get printers on macOS/Linux' };
+            }
+        }
+        return { printers: [], error: 'Window not available to query printers' };
     }
     return new Promise((resolve) => {
         const { exec } = require('child_process');
@@ -1114,11 +1127,45 @@ electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
     }
 });
 /**
+ * 自动识别打印机名称：优先使用传入参数，未指定时自动查找 Windows 默认打印机或热敏小票打印机
+ */
+async function resolvePrinterName(providedName) {
+    const trimmed = (providedName || '').trim();
+    if (trimmed)
+        return trimmed;
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            const printers = await mainWindow.webContents.getPrintersAsync();
+            if (printers && printers.length > 0) {
+                // 1. 查找系统默认打印机
+                const defaultPrinter = printers.find(p => p.isDefault);
+                if (defaultPrinter?.name) {
+                    writeCrash(`[PRINTER RESOLVE] Auto-selected default printer: '${defaultPrinter.name}'`);
+                    return defaultPrinter.name;
+                }
+                // 2. 查找热敏/小票/POS关键词打印机
+                const thermalPrinter = printers.find(p => /pos|receipt|thermal|xp-|epson|tsp|58|80|printer/i.test(p.name));
+                if (thermalPrinter?.name) {
+                    writeCrash(`[PRINTER RESOLVE] Auto-selected thermal printer: '${thermalPrinter.name}'`);
+                    return thermalPrinter.name;
+                }
+                // 3. 回退至第 1 台可用打印机
+                writeCrash(`[PRINTER RESOLVE] Auto-selected first printer: '${printers[0].name}'`);
+                return printers[0].name;
+            }
+        }
+    }
+    catch (err) {
+        writeCrash(`[PRINTER RESOLVE] getPrintersAsync failed: ${err.message}`);
+    }
+    return '';
+}
+/**
  * 打印小票 - 使用 electron-pos-printer (Windows 打印 API)
  */
 electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
     try {
-        const printerName = (data.printerName || '').trim();
+        let printerName = await resolvePrinterName(data.printerName);
         const { printerHost, printerPort, blocks } = data;
         writeCrash(`[PRINT] ====== print-receipt called ======`);
         writeCrash(`[PRINT] printerName='${printerName}'`);
@@ -1126,11 +1173,11 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
         writeCrash(`[PRINT] hasBlocks=${!!(blocks && blocks.length > 0)}`);
         writeCrash(`[PRINT] orderNum=${data.orderNum} total=${data.total}`);
         if (!printerName) {
-            writeCrash('[PRINT] ERROR: printerName is empty — check hardware settings in Admin');
-            return { success: false, error: 'No printer name provided' };
+            writeCrash('[PRINT] ERROR: No printer available on Windows system');
+            return { success: false, error: 'No printer available on system' };
         }
         // 如果有模板块，使用 PosPrinter 格式化打印（走 Windows 打印 API）
-        if (blocks && blocks.length > 0) {
+        if (blocks && blocks.length > 0 && PosPrinter) {
             try {
                 await PosPrinter.print(blocks, {
                     printerName: printerName,
@@ -1141,8 +1188,7 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 return { success: true };
             }
             catch (printErr) {
-                writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}`);
-                return { success: false, error: printErr.message };
+                writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}, falling back to raw print...`);
             }
         }
         // 如果打印机是 COM 口（虚拟串口，如 USB 热敏打印机），直接写串口不走 Windows 打印 API
@@ -1154,7 +1200,6 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
         const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd]);
         writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`);
         if (isComPort) {
-            // COM 口打印机：直接写串口
             try {
                 await printViaComPort(printerName, rawBytes);
                 writeCrash('[PRINT] printViaComPort success');
@@ -1165,15 +1210,26 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 return { success: false, error: comErr.message };
             }
         }
-        // 否则使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
+        // 使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
+        if (PosPrinter) {
+            try {
+                await PosPrinter.sendRawCommand(printerName, rawBytes);
+                writeCrash('[PRINT] sendRawCommand success');
+                return { success: true };
+            }
+            catch (rawErr) {
+                writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}, falling back to printViaWindowsRaw...`);
+            }
+        }
+        // 回退尝试：使用 Windows 原生 print /D:printerName 命令
         try {
-            await PosPrinter.sendRawCommand(printerName, rawBytes);
-            writeCrash('[PRINT] sendRawCommand success');
+            await printViaWindowsRaw({ ...data, printerName });
+            writeCrash('[PRINT] printViaWindowsRaw fallback success');
             return { success: true };
         }
-        catch (rawErr) {
-            writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}`);
-            return { success: false, error: rawErr.message };
+        catch (winRawErr) {
+            writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winRawErr.message}`);
+            return { success: false, error: winRawErr.message };
         }
     }
     catch (error) {
@@ -1255,17 +1311,15 @@ function printViaNetwork(text, host, port) {
     });
 }
 /**
- * Windows 原生打印 - 使用 Windows print 命令
+ * 原生打印回退 - 支持 Windows PowerShell Out-Printer 及 macOS/Linux CUPS lp
  */
 async function printViaWindowsRaw(data) {
-    // 直接使用 Windows print 命令
     return new Promise((resolve, reject) => {
-        const text = generateReceiptText(data);
-        const printerName = data.printerName || '';
+        const text = data.text || generateReceiptText(data);
+        const printerName = (data.printerName || '').trim();
         const os = require('os');
         const path = require('path');
         const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`);
-        // 写入临时文件
         try {
             fs_1.default.writeFileSync(tempFile, text, { encoding: 'utf8' });
             console.log('[PRINT] Temp file:', tempFile);
@@ -1275,60 +1329,83 @@ async function printViaWindowsRaw(data) {
             reject(err);
             return;
         }
-        // 使用 print /D:printerName 直接打印到指定打印机
-        let cmd;
-        if (printerName) {
-            cmd = `print /D:"${printerName}" "${tempFile}"`;
-        }
-        else {
-            // 使用默认打印机
-            cmd = `print "${tempFile}"`;
-        }
-        console.log('[PRINT] Printer:', printerName || 'default');
-        console.log('[PRINT] Command:', cmd);
-        (0, child_process_1.exec)(cmd, { timeout: 30000 }, (error, stdout, stderr) => {
-            console.log('[PRINT] stdout:', stdout);
-            console.log('[PRINT] stderr:', stderr);
+        const cleanup = () => {
             try {
                 fs_1.default.unlinkSync(tempFile);
             }
             catch (e) { }
-            if (error) {
-                console.log('[PRINT] Error:', error.message);
-                reject(error);
-            }
-            else {
-                console.log('[PRINT] Done');
+        };
+        // macOS / Linux: 使用 CUPS lp 命令
+        if (process.platform === 'darwin' || process.platform === 'linux') {
+            const cmd = printerName ? `lp -d "${printerName}" "${tempFile}"` : `lp "${tempFile}"`;
+            (0, child_process_1.exec)(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+                cleanup();
+                if (error) {
+                    console.error('[PRINT] macOS/Linux lp error:', error.message);
+                    reject(error);
+                }
+                else {
+                    console.log('[PRINT] macOS/Linux lp success');
+                    resolve();
+                }
+            });
+            return;
+        }
+        // Windows: 优先使用 PowerShell Out-Printer 发送到打印后台，失败则回退 print /D:
+        const safePrinterName = printerName.replace(/'/g, "''");
+        const safeTempFile = tempFile.replace(/'/g, "''");
+        const psCmd = printerName
+            ? `Get-Content -LiteralPath '${safeTempFile}' | Out-Printer -Name '${safePrinterName}'`
+            : `Get-Content -LiteralPath '${safeTempFile}' | Out-Printer`;
+        console.log('[PRINT] Trying PowerShell Out-Printer:', psCmd);
+        (0, child_process_1.exec)(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, { timeout: 15000 }, (psErr, stdout, stderr) => {
+            if (!psErr) {
+                console.log('[PRINT] PowerShell Out-Printer success');
+                cleanup();
                 resolve();
+                return;
             }
+            console.warn('[PRINT] PowerShell Out-Printer failed, trying print /D fallback:', psErr.message);
+            const cmd = printerName ? `print /D:"${printerName}" "${tempFile}"` : `print "${tempFile}"`;
+            (0, child_process_1.exec)(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+                cleanup();
+                if (error) {
+                    console.error('[PRINT] Legacy print /D error:', error.message);
+                    reject(error);
+                }
+                else {
+                    console.log('[PRINT] Legacy print /D success');
+                    resolve();
+                }
+            });
         });
     });
 }
 /**
- * 打开钱箱 - USB打印机优先Windows原生，网络打印机用网络
- */
-/**
- * 打开钱箱 - 使用 electron-pos-printer 的 sendRawCommand (Windows 打印 API)
- * data.printerName: Windows 打印机名称
- * data.cashDrawerPulse: 脉冲时长(毫秒)，默认 100ms
+ * 打开钱箱 - 自动识别打印机 + 三合一脉冲命令 (Pin 2 + Pin 5 + BEL)
  */
 electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
     try {
-        const printerName = (data.printerName || '').trim();
+        let printerName = await resolvePrinterName(data.printerName);
         const pulseMs = Math.max(20, Math.min(500, data.cashDrawerPulse || 100));
         writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`);
         writeCrash(`[CASH DRAWER] printerName='${printerName}'`);
         writeCrash(`[CASH DRAWER] cashDrawerPulse=${pulseMs}ms`);
         if (!printerName) {
-            writeCrash('[CASH DRAWER] ERROR: printerName is empty');
-            return { success: false, error: 'No printer name provided' };
+            writeCrash('[CASH DRAWER] ERROR: No printer available on Windows system');
+            return { success: false, error: 'No printer available on system' };
         }
-        // ESC/POS 钱箱命令: ESC p m t1 t2
-        // m=0 (pin 2), t1=onTime/2, t2=offTime/2
-        // onTime = pulseMs, offTime clamped to 255*2=510ms max
+        // 三合一 ESC/POS 钱箱开锁脉冲命令：
+        // 1. Pin 2 脉冲: ESC p 0 t1 t2
+        // 2. Pin 5 脉冲: ESC p 1 t1 t2
+        // 3. ASCII BEL 响铃触发: 0x07
         const onTime = Math.round(pulseMs / 2);
         const offTime = Math.round(pulseMs / 2);
-        const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, onTime, offTime]);
+        const drawerCmd = Buffer.from([
+            0x1B, 0x70, 0x00, onTime, offTime, // Pin 2
+            0x1B, 0x70, 0x01, onTime, offTime, // Pin 5
+            0x07 // BEL
+        ]);
         writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`);
         // COM 口打印机：直接写串口
         const isComPort = /^COM\d+/i.test(printerName);
@@ -1343,15 +1420,25 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
                 return { success: false, error: comErr.message };
             }
         }
-        // Windows 打印机名称：走 Windows 打印队列
+        // Windows 打印机名称：优先 PosPrinter.sendRawCommand，失败回退 printViaWindowsRaw
+        if (PosPrinter) {
+            try {
+                await PosPrinter.sendRawCommand(printerName, drawerCmd);
+                writeCrash('[CASH DRAWER] sendRawCommand success');
+                return { success: true };
+            }
+            catch (drawerErr) {
+                writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}, trying printViaWindowsRaw fallback...`);
+            }
+        }
         try {
-            await PosPrinter.sendRawCommand(printerName, drawerCmd);
-            writeCrash('[CASH DRAWER] sendRawCommand success');
+            await printViaWindowsRaw({ ...data, printerName, text: drawerCmd.toString('latin1') });
+            writeCrash('[CASH DRAWER] printViaWindowsRaw fallback success');
             return { success: true };
         }
-        catch (drawerErr) {
-            writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}`);
-            return { success: false, error: drawerErr.message };
+        catch (winErr) {
+            writeCrash(`[CASH DRAWER] printViaWindowsRaw fallback failed: ${winErr.message}`);
+            return { success: false, error: winErr.message };
         }
     }
     catch (error) {

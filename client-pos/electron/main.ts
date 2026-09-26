@@ -960,7 +960,16 @@ function createCustomerWindow() {
 
 ipcMain.handle('list-printers', async () => {
   if (process.platform !== 'win32') {
-    return { printers: [], error: 'Only supported on Windows' }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        const sysPrinters = await mainWindow.webContents.getPrintersAsync()
+        const names = (sysPrinters || []).map(p => p.name).filter(Boolean)
+        return { printers: names, error: null }
+      } catch (err: any) {
+        return { printers: [], error: err?.message || 'Failed to get printers on macOS/Linux' }
+      }
+    }
+    return { printers: [], error: 'Window not available to query printers' }
   }
   
   return new Promise((resolve) => {
@@ -1367,18 +1376,16 @@ function printViaNetwork(text: string, host: string, port: number): Promise<void
 }
 
 /**
- * Windows 原生打印 - 使用 Windows print 命令
+ * 原生打印回退 - 支持 Windows PowerShell Out-Printer 及 macOS/Linux CUPS lp
  */
 async function printViaWindowsRaw(data: any): Promise<void> {
-  // 直接使用 Windows print 命令
   return new Promise((resolve, reject) => {
-    const text = generateReceiptText(data)
-    const printerName = data.printerName || ''
+    const text = data.text || generateReceiptText(data)
+    const printerName = (data.printerName || '').trim()
     const os = require('os')
     const path = require('path')
     const tempFile = path.join(os.tmpdir(), `receipt_${Date.now()}.txt`)
 
-    // 写入临时文件
     try {
       fs.writeFileSync(tempFile, text, { encoding: 'utf8' })
       console.log('[PRINT] Temp file:', tempFile)
@@ -1388,29 +1395,54 @@ async function printViaWindowsRaw(data: any): Promise<void> {
       return
     }
 
-    // 使用 print /D:printerName 直接打印到指定打印机
-    let cmd: string
-    if (printerName) {
-      cmd = `print /D:"${printerName}" "${tempFile}"`
-    } else {
-      // 使用默认打印机
-      cmd = `print "${tempFile}"`
+    const cleanup = () => {
+      try { fs.unlinkSync(tempFile) } catch (e) {}
     }
 
-    console.log('[PRINT] Printer:', printerName || 'default')
-    console.log('[PRINT] Command:', cmd)
+    // macOS / Linux: 使用 CUPS lp 命令
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+      const cmd = printerName ? `lp -d "${printerName}" "${tempFile}"` : `lp "${tempFile}"`
+      execChild(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+        cleanup()
+        if (error) {
+          console.error('[PRINT] macOS/Linux lp error:', error.message)
+          reject(error)
+        } else {
+          console.log('[PRINT] macOS/Linux lp success')
+          resolve()
+        }
+      })
+      return
+    }
 
-    execChild(cmd, { timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
-      console.log('[PRINT] stdout:', stdout)
-      console.log('[PRINT] stderr:', stderr)
-      try { fs.unlinkSync(tempFile) } catch (e) {}
-      if (error) {
-        console.log('[PRINT] Error:', error.message)
-        reject(error)
-      } else {
-        console.log('[PRINT] Done')
+    // Windows: 优先使用 PowerShell Out-Printer 发送到打印后台，失败则回退 print /D:
+    const safePrinterName = printerName.replace(/'/g, "''")
+    const safeTempFile = tempFile.replace(/'/g, "''")
+    const psCmd = printerName
+      ? `Get-Content -LiteralPath '${safeTempFile}' | Out-Printer -Name '${safePrinterName}'`
+      : `Get-Content -LiteralPath '${safeTempFile}' | Out-Printer`
+    
+    console.log('[PRINT] Trying PowerShell Out-Printer:', psCmd)
+    execChild(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, { timeout: 15000 }, (psErr, stdout, stderr) => {
+      if (!psErr) {
+        console.log('[PRINT] PowerShell Out-Printer success')
+        cleanup()
         resolve()
+        return
       }
+
+      console.warn('[PRINT] PowerShell Out-Printer failed, trying print /D fallback:', psErr.message)
+      const cmd = printerName ? `print /D:"${printerName}" "${tempFile}"` : `print "${tempFile}"`
+      execChild(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+        cleanup()
+        if (error) {
+          console.error('[PRINT] Legacy print /D error:', error.message)
+          reject(error)
+        } else {
+          console.log('[PRINT] Legacy print /D success')
+          resolve()
+        }
+      })
     })
   })
 }
