@@ -1175,11 +1175,48 @@ ipcMain.on('order-complete', (_event, orderNumber) => {
 })
 
 /**
+ * 自动识别打印机名称：优先使用传入参数，未指定时自动查找 Windows 默认打印机或热敏小票打印机
+ */
+async function resolvePrinterName(providedName?: string): Promise<string> {
+  const trimmed = (providedName || '').trim()
+  if (trimmed) return trimmed
+
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const printers = await mainWindow.webContents.getPrintersAsync()
+      if (printers && printers.length > 0) {
+        // 1. 查找系统默认打印机
+        const defaultPrinter = printers.find(p => p.isDefault)
+        if (defaultPrinter?.name) {
+          writeCrash(`[PRINTER RESOLVE] Auto-selected default printer: '${defaultPrinter.name}'`)
+          return defaultPrinter.name
+        }
+        // 2. 查找热敏/小票/POS关键词打印机
+        const thermalPrinter = printers.find(p =>
+          /pos|receipt|thermal|xp-|epson|tsp|58|80|printer/i.test(p.name)
+        )
+        if (thermalPrinter?.name) {
+          writeCrash(`[PRINTER RESOLVE] Auto-selected thermal printer: '${thermalPrinter.name}'`)
+          return thermalPrinter.name
+        }
+        // 3. 回退至第 1 台可用打印机
+        writeCrash(`[PRINTER RESOLVE] Auto-selected first printer: '${printers[0].name}'`)
+        return printers[0].name
+      }
+    }
+  } catch (err: any) {
+    writeCrash(`[PRINTER RESOLVE] getPrintersAsync failed: ${err.message}`)
+  }
+
+  return ''
+}
+
+/**
  * 打印小票 - 使用 electron-pos-printer (Windows 打印 API)
  */
 ipcMain.handle('print-receipt', async (_event, data) => {
   try {
-    const printerName = (data.printerName || '').trim()
+    let printerName = await resolvePrinterName(data.printerName)
     const { printerHost, printerPort, blocks } = data
 
     writeCrash(`[PRINT] ====== print-receipt called ======`)
@@ -1189,12 +1226,12 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     writeCrash(`[PRINT] orderNum=${data.orderNum} total=${data.total}`)
 
     if (!printerName) {
-      writeCrash('[PRINT] ERROR: printerName is empty — check hardware settings in Admin')
-      return { success: false, error: 'No printer name provided' }
+      writeCrash('[PRINT] ERROR: No printer available on Windows system')
+      return { success: false, error: 'No printer available on system' }
     }
 
     // 如果有模板块，使用 PosPrinter 格式化打印（走 Windows 打印 API）
-    if (blocks && blocks.length > 0) {
+    if (blocks && blocks.length > 0 && PosPrinter) {
       try {
         await PosPrinter.print(blocks, {
           printerName: printerName,
@@ -1204,8 +1241,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
         writeCrash('[PRINT] PosPrinter.print success')
         return { success: true }
       } catch (printErr: any) {
-        writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}`)
-        return { success: false, error: printErr.message }
+        writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}, falling back to raw print...`)
       }
     }
 
@@ -1219,7 +1255,6 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`)
 
     if (isComPort) {
-      // COM 口打印机：直接写串口
       try {
         await printViaComPort(printerName, rawBytes)
         writeCrash('[PRINT] printViaComPort success')
@@ -1230,14 +1265,25 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       }
     }
 
-    // 否则使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
+    // 使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
+    if (PosPrinter) {
+      try {
+        await PosPrinter.sendRawCommand(printerName, rawBytes)
+        writeCrash('[PRINT] sendRawCommand success')
+        return { success: true }
+      } catch (rawErr: any) {
+        writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}, falling back to printViaWindowsRaw...`)
+      }
+    }
+
+    // 回退尝试：使用 Windows 原生 print /D:printerName 命令
     try {
-      await PosPrinter.sendRawCommand(printerName, rawBytes)
-      writeCrash('[PRINT] sendRawCommand success')
+      await printViaWindowsRaw({ ...data, printerName })
+      writeCrash('[PRINT] printViaWindowsRaw fallback success')
       return { success: true }
-    } catch (rawErr: any) {
-      writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}`)
-      return { success: false, error: rawErr.message }
+    } catch (winRawErr: any) {
+      writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winRawErr.message}`)
+      return { success: false, error: winRawErr.message }
     }
   } catch (error: any) {
     writeCrash(`[PRINT] print-receipt error: ${error.message}`)
@@ -1370,16 +1416,11 @@ async function printViaWindowsRaw(data: any): Promise<void> {
 }
 
 /**
- * 打开钱箱 - USB打印机优先Windows原生，网络打印机用网络
- */
-/**
- * 打开钱箱 - 使用 electron-pos-printer 的 sendRawCommand (Windows 打印 API)
- * data.printerName: Windows 打印机名称
- * data.cashDrawerPulse: 脉冲时长(毫秒)，默认 100ms
+ * 打开钱箱 - 自动识别打印机 + 三合一脉冲命令 (Pin 2 + Pin 5 + BEL)
  */
 ipcMain.handle('open-cash-drawer', async (_event, data) => {
   try {
-    const printerName = (data.printerName || '').trim()
+    let printerName = await resolvePrinterName(data.printerName)
     const pulseMs = Math.max(20, Math.min(500, data.cashDrawerPulse || 100))
 
     writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`)
@@ -1387,16 +1428,21 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
     writeCrash(`[CASH DRAWER] cashDrawerPulse=${pulseMs}ms`)
 
     if (!printerName) {
-      writeCrash('[CASH DRAWER] ERROR: printerName is empty')
-      return { success: false, error: 'No printer name provided' }
+      writeCrash('[CASH DRAWER] ERROR: No printer available on Windows system')
+      return { success: false, error: 'No printer available on system' }
     }
 
-    // ESC/POS 钱箱命令: ESC p m t1 t2
-    // m=0 (pin 2), t1=onTime/2, t2=offTime/2
-    // onTime = pulseMs, offTime clamped to 255*2=510ms max
+    // 三合一 ESC/POS 钱箱开锁脉冲命令：
+    // 1. Pin 2 脉冲: ESC p 0 t1 t2
+    // 2. Pin 5 脉冲: ESC p 1 t1 t2
+    // 3. ASCII BEL 响铃触发: 0x07
     const onTime = Math.round(pulseMs / 2)
     const offTime = Math.round(pulseMs / 2)
-    const drawerCmd = Buffer.from([0x1B, 0x70, 0x00, onTime, offTime])
+    const drawerCmd = Buffer.from([
+      0x1B, 0x70, 0x00, onTime, offTime, // Pin 2
+      0x1B, 0x70, 0x01, onTime, offTime, // Pin 5
+      0x07                               // BEL
+    ])
     writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`)
 
     // COM 口打印机：直接写串口
@@ -1412,14 +1458,24 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
       }
     }
 
-    // Windows 打印机名称：走 Windows 打印队列
+    // Windows 打印机名称：优先 PosPrinter.sendRawCommand，失败回退 printViaWindowsRaw
+    if (PosPrinter) {
+      try {
+        await PosPrinter.sendRawCommand(printerName, drawerCmd)
+        writeCrash('[CASH DRAWER] sendRawCommand success')
+        return { success: true }
+      } catch (drawerErr: any) {
+        writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}, trying printViaWindowsRaw fallback...`)
+      }
+    }
+
     try {
-      await PosPrinter.sendRawCommand(printerName, drawerCmd)
-      writeCrash('[CASH DRAWER] sendRawCommand success')
+      await printViaWindowsRaw({ ...data, printerName, text: drawerCmd.toString('latin1') })
+      writeCrash('[CASH DRAWER] printViaWindowsRaw fallback success')
       return { success: true }
-    } catch (drawerErr: any) {
-      writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}`)
-      return { success: false, error: drawerErr.message }
+    } catch (winErr: any) {
+      writeCrash(`[CASH DRAWER] printViaWindowsRaw fallback failed: ${winErr.message}`)
+      return { success: false, error: winErr.message }
     }
   } catch (error: any) {
     writeCrash(`[CASH DRAWER] error: ${error.message}`)

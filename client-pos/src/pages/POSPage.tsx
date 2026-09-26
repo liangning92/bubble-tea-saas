@@ -2221,19 +2221,15 @@ export function POSPage() {
       console.log('[POS PAGE] electronAPI.sendPrintReceipt not available')
       return false
     }
-    // Find enabled receipt printer
+    // Find enabled receipt printer or fallback to default
     const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
     console.log('[POS PAGE] receiptPrinter:', receiptPrinter)
-    if (!receiptPrinter) {
-      console.log('[POS PAGE] No receipt printer found')
-      return false
-    }
-    const isNetworkPrinter = receiptPrinter.connectionType === 'network'
+    const isNetworkPrinter = receiptPrinter?.connectionType === 'network'
     const printerName = isNetworkPrinter
       ? undefined
-      : receiptPrinter.printerName || undefined
-    const printerHost = isNetworkPrinter ? receiptPrinter.printerIp : undefined
-    const printerPort = isNetworkPrinter ? (receiptPrinter.printerPort || 9100) : undefined
+      : receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt') || ''
+    const printerHost = isNetworkPrinter ? receiptPrinter?.printerIp : undefined
+    const printerPort = isNetworkPrinter ? (receiptPrinter?.printerPort || 9100) : undefined
     try {
       const result = await electronAPI?.sendPrintReceipt({
         orderNum,
