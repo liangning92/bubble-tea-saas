@@ -1904,8 +1904,8 @@ export function POSPage() {
     if (!selectedPrinterForSetup || !user?.storeId) return
     try {
       const updatedPrinters = (hardwareSettings.printers || []).map((p: any) => {
-        if (p.type === 'receipt' && p.enabled) {
-          return { ...p, printerName: selectedPrinterForSetup }
+        if (p.type === 'receipt') {
+          return { ...p, enabled: true, printerName: selectedPrinterForSetup }
         }
         return p
       })
@@ -1913,9 +1913,9 @@ export function POSPage() {
       setHardwareSettings(newHardwareSettings)
       await posApi.setHardwareSettings(user.storeId, newHardwareSettings)
       setShowPrinterDetectModal(false)
-      showToast(t('pos.printerSetupSuccess', 'Printer set as') + ' ' + selectedPrinterForSetup, 'success')
+      showToast((t('pos.printerSetupSuccess') || 'Printer set as') + ' ' + selectedPrinterForSetup, 'success')
     } catch (err: any) {
-      showToast(t('common.error') + ': ' + (err?.message || ''), 'error')
+      showToast((t('common.error') || 'Error') + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2177,7 +2177,6 @@ export function POSPage() {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart()
       setShowPaymentModal(false)
-      setIsCheckingOut(false)
       showToast(`${t('pos.orderSuccess')} #${orderNum}`, 'success')
     } catch (error: any) {
       playSoundWithSettings('error', soundSettings.error)
@@ -2195,19 +2194,24 @@ export function POSPage() {
         displayMsg = rawMsg || t('pos.paymentError')
       }
       showToast(displayMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
-      await db.orders.add({
-        localId, storeId: orderData.storeId, staffId: orderData.staffId,
-        items: orderData.items, subtotal, ppn: tax, totalAmount: subtotal,
-        finalAmount: total, discountAmount, paymentMethod,
-        taxEnabled: orderData.taxEnabled, pointsRedeemed: orderData.pointsRedeemed,
-        orderNumber: orderData.orderNumber, customerCount: orderData.customerCount || 1,
-        status: 'pending', syncAttempts: 0, createdAt: new Date()
-      })
+      try {
+        await db.orders.add({
+          localId, storeId: orderData.storeId, staffId: orderData.staffId,
+          items: orderData.items, subtotal, ppn: tax, totalAmount: subtotal,
+          finalAmount: total, discountAmount, paymentMethod,
+          taxEnabled: orderData.taxEnabled, pointsRedeemed: orderData.pointsRedeemed,
+          orderNumber: orderData.orderNumber, customerCount: orderData.customerCount || 1,
+          status: 'pending', syncAttempts: 0, createdAt: new Date()
+        })
+      } catch (dbErr) {
+        console.error('[POS] Failed to add offline order to DB:', dbErr)
+      }
       // Don't show success banner - order is pending sync
       // 清空购物车让用户可以开始新的订单
       clearCart()
-      setIsCheckingOut(false)
       setShowPaymentModal(false)
+    } finally {
+      setIsCheckingOut(false)
     }
   }
 
@@ -2950,7 +2954,7 @@ export function POSPage() {
                 onClick={handleCheckout}
                 disabled={
                   isCheckingOut ||
-                  (paymentMethod === 'cash' && (!paidAmount || parseInt(paidAmount) < total)) ||
+                  (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
                   (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
                   (paymentMethod === 'qris' && qrisData.status === 'waiting')
                 }
