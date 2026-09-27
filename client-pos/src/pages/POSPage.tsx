@@ -42,7 +42,14 @@ function getPrinterName(printerSettings: { printerName?: string; printers?: Arra
   if (printerSettings?.printerName) {
     return printerSettings.printerName
   }
-  // 3. Last resort: empty string (system default)
+  // 3. Fallback: check localStorage for saved printer
+  if (typeof window !== 'undefined' && type === 'receipt') {
+    const localName = localStorage.getItem('receipt_printer_name')
+    if (localName) {
+      return localName
+    }
+  }
+  // 4. Last resort: empty string (system default)
   return ''
 }
 
@@ -443,63 +450,76 @@ export function POSPage() {
     lockScreenPin: '', // 锁屏密码
   })
 
-  // 硬件设置
-  const [hardwareSettings, setHardwareSettings] = useState({
-    printers: [
-      {
-        id: 'receipt-1',
-        type: 'receipt' as const,
-        name: 'Receipt Printer',
-        enabled: true,
-        connectionType: 'usb' as 'usb' | 'network',
-        printerName: '',  // 从硬件设置读取
-        printerIp: '192.168.1.100',
-        printerPort: 9100,
-      },
-      {
-        id: 'kitchen-1',
-        type: 'kitchen' as const,
-        name: 'Kitchen Printer',
+  // 硬件设置 - 支持 localStorage 本地优先与持久化缓存
+  const [hardwareSettings, setHardwareSettings] = useState(() => {
+    const defaultSettings = {
+      printers: [
+        {
+          id: 'receipt-1',
+          type: 'receipt' as const,
+          name: 'Receipt Printer',
+          enabled: true,
+          connectionType: 'usb' as 'usb' | 'network',
+          printerName: (typeof window !== 'undefined' && localStorage.getItem('receipt_printer_name')) || '',
+          printerIp: '192.168.1.100',
+          printerPort: 9100,
+        },
+        {
+          id: 'kitchen-1',
+          type: 'kitchen' as const,
+          name: 'Kitchen Printer',
+          enabled: false,
+          connectionType: 'usb' as 'usb' | 'network',
+          printerName: '',
+          printerIp: '192.168.1.100',
+          printerPort: 9100,
+        },
+        {
+          id: 'label-1',
+          type: 'label' as const,
+          name: 'Label Printer',
+          enabled: false,
+          connectionType: 'usb' as 'usb' | 'network',
+          printerName: '',
+          printerIp: '192.168.1.100',
+          printerPort: 9100,
+        },
+      ],
+      printerConnectionType: 'usb',
+      printerType: 'escpos',
+      printerName: (typeof window !== 'undefined' && localStorage.getItem('receipt_printer_name')) || '',
+      printerIp: '192.168.1.100',
+      printerPort: 9100,
+      cashDrawerPulse: 100,
+      autoOpenCashDrawer: true,
+      scannerEnabled: true,
+      scannerType: 'usb',
+      displayBrightness: 80,
+      dualScreen: {
         enabled: false,
-        connectionType: 'usb' as 'usb' | 'network',
-        printerName: '',  // 从硬件设置读取
-        printerIp: '192.168.1.100',
-        printerPort: 9100,
+        layoutStyle: 'full' as 'simple' | 'full',
+        welcomeText: 'YOUME',
+        showLogo: false,
+        adImageUrl: '',
+        promotions: ['✨', '🍓', '💳', '🎁'],
       },
-      {
-        id: 'label-1',
-        type: 'label' as const,
-        name: 'Label Printer',
-        enabled: false,
-        connectionType: 'usb' as 'usb' | 'network',
-        printerName: '',  // 从硬件设置读取
-        printerIp: '192.168.1.100',
-        printerPort: 9100,
-      },
-    ],
-    // Legacy fields for backward compatibility
-    printerConnectionType: 'usb',
-    printerType: 'escpos',
-    printerName: '',  // 从硬件设置读取
-    printerIp: '192.168.1.100',
-    printerPort: 9100,
-    // Other hardware settings
-    cashDrawerPulse: 100,
-    autoOpenCashDrawer: true,
-    scannerEnabled: true,
-    scannerType: 'usb',
-    displayBrightness: 80,
-    dualScreen: {
-      enabled: false,
-      layoutStyle: 'full' as 'simple' | 'full',
-      welcomeText: 'YOUME',
-      showLogo: false,
-      adImageUrl: '',
-      promotions: ['✨', '🍓', '💳', '🎁'],
-    },
-    testPrint: null as number | null,
-    testCashDrawer: null as number | null,
-    triggerPrinterDetect: null as number | null,
+      testPrint: null as number | null,
+      testCashDrawer: null as number | null,
+      triggerPrinterDetect: null as number | null,
+    }
+
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('hardware_settings')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          return { ...defaultSettings, ...parsed }
+        }
+      }
+    } catch (e) {
+      console.error('[POS] Failed to parse hardware_settings from localStorage:', e)
+    }
+    return defaultSettings
   })
 
   // 声音设置
@@ -920,23 +940,50 @@ export function POSPage() {
             orderingLayout: hw.dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] },
           } : hardwareSettings.dualScreen
 
-          setHardwareSettings(prev => ({
-            ...prev,
-            printers: hw.printers && Array.isArray(hw.printers) ? hw.printers : prev.printers,
-            printerConnectionType: hw.printerConnectionType || prev.printerConnectionType,
-            printerType: hw.printerType || prev.printerType,
-            printerName: hw.printerName || prev.printerName,
-            printerIp: hw.printerIp || prev.printerIp,
-            printerPort: hw.printerPort || prev.printerPort,
-            cashDrawerPulse: hw.cashDrawerPulse || prev.cashDrawerPulse,
-            autoOpenCashDrawer: hw.autoOpenCashDrawer ?? prev.autoOpenCashDrawer,
-            scannerEnabled: hw.scannerEnabled ?? prev.scannerEnabled,
-            scannerType: hw.scannerType || prev.scannerType,
-            displayBrightness: hw.displayBrightness || prev.displayBrightness,
-            dualScreen: newDualScreen,
-            testPrint: null,
-            testCashDrawer: null,
-          }))
+          setHardwareSettings((prev: any) => {
+            const localPrinterName = (typeof window !== 'undefined' && localStorage.getItem('receipt_printer_name')) || ''
+            let mergedPrinters = hw.printers && Array.isArray(hw.printers) ? [...hw.printers] : [...prev.printers]
+            const activePrinterName = hw.printerName || localPrinterName || prev.printerName || ''
+
+            if (localPrinterName || activePrinterName) {
+              const targetName = localPrinterName || activePrinterName
+              const idx = mergedPrinters.findIndex((p: any) => p.type === 'receipt')
+              if (idx >= 0) {
+                if (!mergedPrinters[idx].printerName) {
+                  mergedPrinters[idx] = { ...mergedPrinters[idx], enabled: true, printerName: targetName }
+                }
+              } else {
+                mergedPrinters.push({
+                  id: 'receipt-1',
+                  type: 'receipt',
+                  name: 'Receipt Printer',
+                  enabled: true,
+                  connectionType: 'usb',
+                  printerName: targetName,
+                  printerIp: '',
+                  printerPort: 9100
+                })
+              }
+            }
+
+            return {
+              ...prev,
+              printers: mergedPrinters,
+              printerConnectionType: hw.printerConnectionType || prev.printerConnectionType,
+              printerType: hw.printerType || prev.printerType,
+              printerName: activePrinterName,
+              printerIp: hw.printerIp || prev.printerIp,
+              printerPort: hw.printerPort || prev.printerPort,
+              cashDrawerPulse: hw.cashDrawerPulse || prev.cashDrawerPulse,
+              autoOpenCashDrawer: hw.autoOpenCashDrawer ?? prev.autoOpenCashDrawer,
+              scannerEnabled: hw.scannerEnabled ?? prev.scannerEnabled,
+              scannerType: hw.scannerType || prev.scannerType,
+              displayBrightness: hw.displayBrightness || prev.displayBrightness,
+              dualScreen: newDualScreen,
+              testPrint: null,
+              testCashDrawer: null,
+            }
+          })
 
 
           // 同步 dualScreen 配置到 localStorage，供副屏使用
@@ -1915,7 +1962,14 @@ export function POSPage() {
 
   // 将选中的打印机设为小票打印机并保存
   const handleSetupReceiptPrinter = async () => {
-    if (!selectedPrinterForSetup || !user?.storeId) return
+    const printerToSave = (selectedPrinterForSetup || '').trim()
+    if (!printerToSave) {
+      showToast(t('pos.pleaseSelectPrinter') || '请选择或输入打印机名称', 'warning')
+      return
+    }
+
+    const storeId = user?.storeId || localStorage.getItem('storeId') || ''
+
     try {
       const existingPrinters = hardwareSettings.printers || []
       const existingIndex = existingPrinters.findIndex((p: any) => p.type === 'receipt')
@@ -1924,7 +1978,7 @@ export function POSPage() {
         updatedPrinters[existingIndex] = {
           ...updatedPrinters[existingIndex],
           enabled: true,
-          printerName: selectedPrinterForSetup
+          printerName: printerToSave
         }
       } else {
         updatedPrinters.push({
@@ -1933,22 +1987,42 @@ export function POSPage() {
           name: 'Receipt Printer',
           enabled: true,
           connectionType: 'usb',
-          printerName: selectedPrinterForSetup,
+          printerName: printerToSave,
           printerIp: '',
           printerPort: 9100
         })
       }
       const newHardwareSettings = {
         ...hardwareSettings,
-        printerName: selectedPrinterForSetup,
+        printerName: printerToSave,
         printers: updatedPrinters
       }
+
+      // 1. 本地状态更新
       setHardwareSettings(newHardwareSettings)
-      await posApi.setHardwareSettings(user.storeId, newHardwareSettings)
+
+      // 2. 本地持久化 (localStorage)，离线与再次加载时 100% 生效
+      try {
+        localStorage.setItem('hardware_settings', JSON.stringify(newHardwareSettings))
+        localStorage.setItem('receipt_printer_name', printerToSave)
+      } catch (e) {
+        console.error('[POS] Failed to save hardware settings to localStorage:', e)
+      }
+
+      // 3. 服务端配置同步 (如果有 storeId)
+      if (storeId) {
+        try {
+          await posApi.setHardwareSettings(storeId, newHardwareSettings)
+        } catch (apiErr: any) {
+          console.warn('[POS] Server setHardwareSettings failed, local copy active:', apiErr)
+        }
+      }
+
       setShowPrinterDetectModal(false)
-      showToast((t('pos.printerSetupSuccess') || 'Printer set as') + ' ' + selectedPrinterForSetup, 'success')
+      showToast((t('pos.printerSetupSuccess') || '打印机已成功设置为') + ' ' + printerToSave, 'success')
     } catch (err: any) {
-      showToast((t('common.error') || 'Error') + ': ' + (err?.message || ''), 'error')
+      console.error('[POS] handleSetupReceiptPrinter error:', err)
+      showToast((t('common.error') || '保存失败') + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -3859,40 +3933,54 @@ export function POSPage() {
                       </div>
                     ))}
                   </div>
+                </>
+              )}
+              {/* 手动输入 / 选定打印机输入框 */}
+              {!printerDetectLoading && (
+                <div className="space-y-2 pt-2 border-t">
+                  <label className="text-xs font-semibold text-gray-700 block">
+                    {t('pos.printerNameLabel', '当前/选定的打印机名称 (Printer Name):')}
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedPrinterForSetup || ''}
+                    onChange={(e) => setSelectedPrinterForSetup(e.target.value)}
+                    placeholder={t('pos.enterPrinterNamePlaceholder', '例如: EPSON TM-T82 或 POS-80 或 COM3')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono focus:border-primary focus:outline-none"
+                  />
                   <button
                     onClick={handleSetupReceiptPrinter}
                     disabled={!selectedPrinterForSetup}
-                    className="w-full py-3 bg-primary text-white rounded-xl font-bold disabled:opacity-50 touch-feedback"
+                    className="w-full py-3 bg-primary text-white rounded-xl font-bold disabled:opacity-50 touch-feedback mt-2"
                   >
                     {t('pos.setAsReceiptPrinter', 'Set as Receipt Printer')}
                   </button>
-                </>
+                </div>
               )}
 
               {/* 检测失败 */}
               {!printerDetectLoading && printerDetectError && (
-                <div className="flex flex-col items-center py-6">
-                  <XCircle size={40} className="text-red-400 mb-3" />
-                  <p className="text-red-500 text-center text-sm">{printerDetectError}</p>
+                <div className="flex flex-col items-center py-4">
+                  <XCircle size={32} className="text-red-400 mb-2" />
+                  <p className="text-red-500 text-center text-xs">{printerDetectError}</p>
                   <button
                     onClick={handleDetectPrinters}
-                    className="mt-4 px-6 py-2 border-2 border-primary text-primary rounded-xl font-medium hover:bg-primary/5"
+                    className="mt-3 px-4 py-1.5 border border-primary text-primary text-xs rounded-xl font-medium hover:bg-primary/5"
                   >
                     {t('pos.retryDetect', 'Retry')}
                   </button>
                 </div>
               )}
 
-              {/* 无打印机 */}
+              {/* 无自动识别打印机提示 */}
               {!printerDetectLoading && !printerDetectError && detectedPrinters.length === 0 && (
-                <div className="flex flex-col items-center py-6">
-                  <Printer size={40} className="text-gray-300 mb-3" />
-                  <p className="text-gray-500 text-center">{t('pos_no_printers', 'No printers detected')}</p>
+                <div className="flex flex-col items-center py-3">
+                  <p className="text-gray-400 text-center text-xs">{t('pos_no_printers', 'No printers detected. You can type the printer name above manually.')}</p>
                   <button
                     onClick={handleDetectPrinters}
-                    className="mt-4 px-6 py-2 border-2 border-primary text-primary rounded-xl font-medium hover:bg-primary/5"
+                    className="mt-2 px-4 py-1 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50"
                   >
-                    {t('pos.retryDetect', 'Retry')}
+                    {t('pos.retryDetect', 'Retry Detect')}
                   </button>
                 </div>
               )}
