@@ -1656,8 +1656,8 @@ export function POSPage() {
       if (e.key === 'F4') { e.preventDefault(); setSelectedChannel(posChannels[3] || posChannels[0] || null) }
       // F5-F8: 常用金额
       if (e.key === 'F5' && cartRef.current.length > 0) { e.preventDefault(); setPaymentModalOrderNum(Date.now().toString().slice(-6)); setShowPaymentModal(true) }
-      // F6: 扫码
-      if (e.key === 'F6') { e.preventDefault(); navigate('/scan') }
+      // F6: 弹出钱箱 (快捷键)
+      if (e.key === 'F6') { e.preventDefault(); handleOpenCashDrawer() }
       // ESC: 关闭弹窗
       if (e.key === 'Escape') {
         if (showAddonModal) setShowAddonModal(false)
@@ -2026,6 +2026,71 @@ export function POSPage() {
     }
   }
 
+  // 手动/快捷键打开钱箱
+  const handleOpenCashDrawer = async () => {
+    const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
+    const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
+    try {
+      const res = await electronAPI?.openCashDrawer?.({
+        printerName: targetPrinterName,
+        cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
+      })
+      if (res?.success) {
+        showToast(t('pos.cashDrawerOpened', '钱箱已弹开'), 'success')
+      } else {
+        showToast((t('pos.cashDrawerFailed', '钱箱打开失败') || '钱箱打开失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+      }
+    } catch (err: any) {
+      showToast('钱箱打开失败: ' + (err?.message || ''), 'error')
+    }
+  }
+
+  // 测试打印小票
+  const handleTestPrint = async () => {
+    const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'receipt')
+    try {
+      const res = await electronAPI?.sendPrintReceipt?.({
+        orderNum: 'TEST-' + Date.now().toString().slice(-4),
+        header: posReceipt.header || 'YOUME POS',
+        footer: posReceipt.footer || 'TEST PRINT / 测试打印',
+        printerName: targetName,
+        items: [{ productName: '测试商品 (Test Item)', specName: '标准杯', quantity: 1, unitPrice: 15000, addons: [] }],
+        subtotal: 15000,
+        tax: 0,
+        discount: 0,
+        total: 15000,
+        paymentMethod: 'Cash',
+        paidAmount: 15000,
+        change: 0,
+      })
+      if (res?.success) {
+        showToast((t('pos.testPrintSuccess', '测试打印已发送') || '测试打印已发送') + (targetName ? ` (${targetName})` : ''), 'success')
+      } else {
+        showToast((t('pos.printFailed', '打印失败') || '打印失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+      }
+    } catch (err: any) {
+      showToast('打印失败: ' + (err?.message || ''), 'error')
+    }
+  }
+
+  // 测试弹开钱箱
+  const handleTestCashDrawer = async () => {
+    const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'receipt')
+    try {
+      const res = await electronAPI?.openCashDrawer?.({
+        printerName: targetName,
+        cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
+      })
+      if (res?.success) {
+        showToast((t('pos.cashDrawerOpened', '钱箱测试已触发') || '钱箱测试已触发') + (targetName ? ` (${targetName})` : ''), 'success')
+      } else {
+        showToast((t('pos.cashDrawerFailed', '钱箱弹开失败') || '钱箱弹开失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+      }
+    } catch (err: any) {
+      showToast('钱箱弹开失败: ' + (err?.message || ''), 'error')
+    }
+  }
+
   const resumeOrder = async (order: typeof suspendedOrders[0]) => {
     // 如果当前购物车有内容，需要确认覆盖
     if (cart.length > 0) {
@@ -2265,22 +2330,29 @@ export function POSPage() {
       setMemberCoupons(prev => prev.filter(c => c.id !== selectedCoupon?.id))
 
       // 现金支付：自动开钱箱
-      if (paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)) {
+      const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
+      if (shouldOpenDrawer) {
         const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
         const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
-        const drawerResult = await electronAPI?.openCashDrawer?.({
-          printerName: targetPrinterName,
-          cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
-        })
-        if (drawerResult && !drawerResult.success) {
-          console.warn('[POS] Cash drawer auto-open failed:', drawerResult.error)
-          showToast((t('pos.cashDrawerFailed') || '钱箱打开失败') + (drawerResult.error ? `: ${drawerResult.error}` : ''), 'error')
+        try {
+          const drawerResult = await electronAPI?.openCashDrawer?.({
+            printerName: targetPrinterName,
+            cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
+          })
+          if (drawerResult && !drawerResult.success) {
+            console.warn('[POS] Cash drawer auto-open failed:', drawerResult.error)
+          }
+        } catch (e) {
+          console.warn('[POS] Cash drawer invocation error:', e)
         }
       }
 
       // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
       if (posReceipt.autoPrint !== false) {
-        const printResult = await printReceipt(orderNum, orderData)
+        const printResult = await printReceipt(orderNum, {
+          ...orderData,
+          openCashDrawer: shouldOpenDrawer
+        })
         if (!printResult) {
           showToast(t('pos.printFailed') || '小票打印失败', 'error')
         }
@@ -2356,6 +2428,7 @@ export function POSPage() {
         printerName,
         printerHost,
         printerPort,
+        openCashDrawer: orderData?.openCashDrawer ?? false,
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,
@@ -3955,6 +4028,23 @@ export function POSPage() {
                   >
                     {t('pos.setAsReceiptPrinter', 'Set as Receipt Printer')}
                   </button>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleTestPrint}
+                      className="flex-1 py-2 px-3 border border-primary text-primary rounded-xl text-xs font-semibold hover:bg-primary/5 flex items-center justify-center gap-1.5 touch-feedback"
+                    >
+                      <Printer size={15} /> {t('pos.testPrint', '测试打印小票')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleTestCashDrawer}
+                      className="flex-1 py-2 px-3 border border-amber-600 text-amber-700 bg-amber-50/50 rounded-xl text-xs font-semibold hover:bg-amber-100 flex items-center justify-center gap-1.5 touch-feedback"
+                    >
+                      <Wallet size={15} /> {t('pos.testCashDrawer', '测试弹开钱箱')}
+                    </button>
+                  </div>
                 </div>
               )}
 

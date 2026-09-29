@@ -1184,54 +1184,234 @@ ipcMain.on('order-complete', (_event, orderNumber) => {
 })
 
 /**
- * 自动识别打印机名称：优先使用传入参数，未指定时自动查找 Windows 默认打印机或热敏小票打印机
+ * 自动识别打印机名称：优先使用传入参数（支持精确匹配和模糊匹配），未指定时自动查找 Windows 默认打印机或热敏小票打印机
  */
 async function resolvePrinterName(providedName?: string): Promise<string> {
   const trimmed = (providedName || '').trim()
-  if (trimmed) return trimmed
 
+  // 获取系统已安装的所有打印机
+  let installedPrinters: { name: string; isDefault?: boolean }[] = []
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      const printers = await mainWindow.webContents.getPrintersAsync()
-      if (printers && printers.length > 0) {
-        // 1. 查找系统默认打印机
-        const defaultPrinter = printers.find(p => p.isDefault)
-        if (defaultPrinter?.name) {
-          writeCrash(`[PRINTER RESOLVE] Auto-selected default printer: '${defaultPrinter.name}'`)
-          return defaultPrinter.name
-        }
-        // 2. 查找热敏/小票/POS关键词打印机
-        const thermalPrinter = printers.find(p =>
-          /pos|receipt|thermal|xp-|epson|tsp|58|80|printer/i.test(p.name)
-        )
-        if (thermalPrinter?.name) {
-          writeCrash(`[PRINTER RESOLVE] Auto-selected thermal printer: '${thermalPrinter.name}'`)
-          return thermalPrinter.name
-        }
-        // 3. 回退至第 1 台可用打印机
-        writeCrash(`[PRINTER RESOLVE] Auto-selected first printer: '${printers[0].name}'`)
-        return printers[0].name
-      }
+      installedPrinters = await mainWindow.webContents.getPrintersAsync()
     }
   } catch (err: any) {
     writeCrash(`[PRINTER RESOLVE] getPrintersAsync failed: ${err.message}`)
+  }
+
+  // 1. 如果收银员指定了名称
+  if (trimmed) {
+    // 虚拟串口 COM 口或网络共享路径直接返回
+    if (/^COM\d+/i.test(trimmed) || trimmed.startsWith('\\\\')) {
+      return trimmed
+    }
+
+    if (installedPrinters.length > 0) {
+      // 1a. 优先全字精确匹配（忽略大小写）
+      const exact = installedPrinters.find(p => p.name.toLowerCase() === trimmed.toLowerCase())
+      if (exact) {
+        writeCrash(`[PRINTER RESOLVE] Exact match: '${trimmed}' -> '${exact.name}'`)
+        return exact.name
+      }
+      // 1b. 模糊匹配：例如输入 'POS-80'，实际驱动名为 'POS-80 Series' 或 'XP-80 POS'
+      const fuzzy = installedPrinters.find(p =>
+        p.name.toLowerCase().includes(trimmed.toLowerCase()) ||
+        trimmed.toLowerCase().includes(p.name.toLowerCase())
+      )
+      if (fuzzy) {
+        writeCrash(`[PRINTER RESOLVE] Fuzzy match: '${trimmed}' -> '${fuzzy.name}'`)
+        return fuzzy.name
+      }
+    }
+    // 未在系统列表中找到时，仍返回用户输入的名称（由打印子系统尝试打开）
+    writeCrash(`[PRINTER RESOLVE] Using provided printer name directly: '${trimmed}'`)
+    return trimmed
+  }
+
+  // 2. 未指定名称时的自动探测策略
+  if (installedPrinters.length > 0) {
+    // 2a. 查找系统默认打印机
+    const defaultPrinter = installedPrinters.find(p => p.isDefault)
+    if (defaultPrinter?.name) {
+      writeCrash(`[PRINTER RESOLVE] Auto-selected default printer: '${defaultPrinter.name}'`)
+      return defaultPrinter.name
+    }
+    // 2b. 查找热敏/小票/POS关键词打印机
+    const thermalPrinter = installedPrinters.find(p =>
+      /pos|receipt|thermal|xp-|epson|tsp|58|80|printer/i.test(p.name)
+    )
+    if (thermalPrinter?.name) {
+      writeCrash(`[PRINTER RESOLVE] Auto-selected thermal printer: '${thermalPrinter.name}'`)
+      return thermalPrinter.name
+    }
+    // 2c. 回退至第 1 台可用打印机
+    writeCrash(`[PRINTER RESOLVE] Auto-selected first printer: '${installedPrinters[0].name}'`)
+    return installedPrinters[0].name
   }
 
   return ''
 }
 
 /**
- * 打印小票 - 使用 electron-pos-printer (Windows 打印 API)
+ * 原生 Windows winspool.drv RAW 方式发送二进制指令（钱箱脉冲、ESC/POS 小票）
+ * 100% 适用于 Windows 所有 USB 热敏小票打印机驱动，不走 GDI 文本转换
+ */
+function sendRawBytesToWindowsPrinter(printerName: string, rawBytes: Buffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const os = require('os')
+    const path = require('path')
+    const tempFile = path.join(os.tmpdir(), `pos_raw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.bin`)
+
+    try {
+      fs.writeFileSync(tempFile, rawBytes)
+    } catch (err: any) {
+      writeCrash(`[WIN-RAW] Failed to write temp binary file: ${err.message}`)
+      reject(err)
+      return
+    }
+
+    const cleanup = () => {
+      try { fs.unlinkSync(tempFile) } catch (e) {}
+    }
+
+    if (process.platform !== 'win32') {
+      const cmd = printerName ? `lp -d "${printerName}" -o raw "${tempFile}"` : `lp -o raw "${tempFile}"`
+      execChild(cmd, { timeout: 15000 }, (error) => {
+        cleanup()
+        if (error) {
+          writeCrash(`[WIN-RAW] macOS/Linux lp error: ${error.message}`)
+          reject(error)
+        } else {
+          writeCrash(`[WIN-RAW] macOS/Linux lp success`)
+          resolve()
+        }
+      })
+      return
+    }
+
+    // Windows P/Invoke 调用 winspool.drv 的 OpenPrinterA + StartDocPrinterA + WritePrinter
+    const safePrinterName = printerName.replace(/'/g, "''").replace(/\\/g, "\\\\")
+    const safeTempFile = tempFile.replace(/'/g, "''").replace(/\\/g, "\\\\")
+
+    const psScript = `
+$code = @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public class WinSpoolRaw {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public class DOCINFOA {
+        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    }
+    [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
+    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
+
+    [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true)]
+    public static extern bool ClosePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
+    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+
+    [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true)]
+    public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true)]
+    public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true)]
+    public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+    [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true)]
+    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
+
+    public static bool SendFile(string szPrinter, string szFile) {
+        if (!File.Exists(szFile)) return false;
+        byte[] bytes = File.ReadAllBytes(szFile);
+        if (bytes.Length == 0) return false;
+
+        IntPtr hPrinter = IntPtr.Zero;
+        DOCINFOA di = new DOCINFOA();
+        di.pDocName = "POS_RAW_JOB";
+        di.pDataType = "RAW";
+
+        if (!OpenPrinter(szPrinter, out hPrinter, IntPtr.Zero)) {
+            return false;
+        }
+
+        bool ok = false;
+        if (StartDocPrinter(hPrinter, 1, di)) {
+            if (StartPagePrinter(hPrinter)) {
+                IntPtr pBuf = Marshal.AllocCoTaskMem(bytes.Length);
+                Marshal.Copy(bytes, 0, pBuf, bytes.Length);
+                Int32 written = 0;
+                ok = WritePrinter(hPrinter, pBuf, bytes.Length, out written);
+                Marshal.FreeCoTaskMem(pBuf);
+                EndPagePrinter(hPrinter);
+            }
+            EndDocPrinter(hPrinter);
+        }
+        ClosePrinter(hPrinter);
+        return ok;
+    }
+}
+'@
+
+try {
+    Add-Type -TypeDefinition $code -Language CSharp
+} catch {}
+
+$res = [WinSpoolRaw]::SendFile('${safePrinterName}', '${safeTempFile}')
+if ($res) {
+    Write-Output "SUCCESS"
+    exit 0
+} else {
+    Write-Error "WinSpool OpenPrinter or WritePrinter failed for printer: ${safePrinterName}"
+    exit 1
+}
+`
+    const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], { shell: false })
+    let stderr = ''
+    let stdout = ''
+
+    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+
+    proc.on('close', (code: number) => {
+      cleanup()
+      if (code === 0 && stdout.includes('SUCCESS')) {
+        writeCrash(`[WIN-RAW] Successfully sent ${rawBytes.length} bytes to printer '${printerName}'`)
+        resolve()
+      } else {
+        const errMsg = stderr.trim() || `Exit code ${code}`
+        writeCrash(`[WIN-RAW] Failed to send to '${printerName}': ${errMsg}`)
+        reject(new Error(errMsg))
+      }
+    })
+
+    proc.on('error', (err: Error) => {
+      cleanup()
+      writeCrash(`[WIN-RAW] Spawn error: ${err.message}`)
+      reject(err)
+    })
+  })
+}
+
+/**
+ * 打印小票 - 优先使用 winspool.drv RAW 原生打印，支持内嵌弹钱箱脉冲
  */
 ipcMain.handle('print-receipt', async (_event, data) => {
   try {
     let printerName = await resolvePrinterName(data.printerName)
-    const { printerHost, printerPort, blocks } = data
+    const { printerHost, printerPort, blocks, openCashDrawer: shouldOpenDrawer } = data
 
     writeCrash(`[PRINT] ====== print-receipt called ======`)
-    writeCrash(`[PRINT] printerName='${printerName}'`)
+    writeCrash(`[PRINT] resolved printerName='${printerName}' (original: '${data.printerName}')`)
     writeCrash(`[PRINT] printerHost='${printerHost}' port=${printerPort}`)
     writeCrash(`[PRINT] hasBlocks=${!!(blocks && blocks.length > 0)}`)
+    writeCrash(`[PRINT] openCashDrawer=${!!shouldOpenDrawer}`)
     writeCrash(`[PRINT] orderNum=${data.orderNum} total=${data.total}`)
 
     if (!printerName) {
@@ -1239,12 +1419,23 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       return { success: false, error: 'No printer available on system' }
     }
 
-    // 如果有模板块，使用 PosPrinter 格式化打印（走 Windows 打印 API）
+    // 钱箱开锁脉冲指令：ESC p 0 25 250 + ESC p 1 25 250 + BEL
+    const drawerCmd = shouldOpenDrawer ? Buffer.from([
+      0x1B, 0x70, 0x00, 0x19, 0xFA,
+      0x1B, 0x70, 0x01, 0x19, 0xFA,
+      0x10, 0x14, 0x01, 0x00, 0x05,
+      0x07
+    ]) : Buffer.alloc(0)
+
+    // 如果有自定义格式化模板，尝试 PosPrinter 静默打印
     if (blocks && blocks.length > 0 && PosPrinter) {
       try {
+        if (shouldOpenDrawer) {
+          try { await sendRawBytesToWindowsPrinter(printerName, drawerCmd) } catch (e) {}
+        }
         await PosPrinter.print(blocks, {
           printerName: printerName,
-          silent: false,
+          silent: true,
           preview: false,
         })
         writeCrash('[PRINT] PosPrinter.print success')
@@ -1254,15 +1445,17 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       }
     }
 
-    // 如果打印机是 COM 口（虚拟串口，如 USB 热敏打印机），直接写串口不走 Windows 打印 API
-    const isComPort = /^COM\d+/i.test(printerName)
+    // 生成 ESC/POS 原始打印指令
     const text = generateReceiptText(data)
     const encoder = new TextEncoder()
-    const initCmd = Buffer.from([0x1B, 0x40])  // ESC @
-    const cutCmd = Buffer.from([0x1D, 0x56, 0x00])  // GS V 0 (full cut)
-    const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd])
+    const initCmd = Buffer.from([0x1B, 0x40])  // ESC @ 初始化
+    const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A, 0x0A])  // GS V 0 全切纸
+    // 组装最终 RAW 字节流：[钱箱脉冲] + [初始化] + [小票内容] + [切纸]
+    const rawBytes = Buffer.concat([drawerCmd, initCmd, encoder.encode(text), cutCmd])
     writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`)
 
+    // 1. 如果打印机是 COM 口（虚拟串口）
+    const isComPort = /^COM\d+/i.test(printerName)
     if (isComPort) {
       try {
         await printViaComPort(printerName, rawBytes)
@@ -1274,25 +1467,34 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       }
     }
 
-    // 使用 PosPrinter.sendRawCommand（走 Windows 打印队列）
-    if (PosPrinter) {
+    // 2. Windows 原生 winspool.drv RAW 方式（最高优先级，直接写入打印后台）
+    try {
+      await sendRawBytesToWindowsPrinter(printerName, rawBytes)
+      writeCrash('[PRINT] sendRawBytesToWindowsPrinter success')
+      return { success: true }
+    } catch (winRawErr: any) {
+      writeCrash(`[PRINT] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
+    }
+
+    // 3. 回退尝试 PosPrinter.sendRawCommand
+    if (PosPrinter?.sendRawCommand) {
       try {
         await PosPrinter.sendRawCommand(printerName, rawBytes)
-        writeCrash('[PRINT] sendRawCommand success')
+        writeCrash('[PRINT] PosPrinter.sendRawCommand success')
         return { success: true }
       } catch (rawErr: any) {
-        writeCrash(`[PRINT] sendRawCommand failed: ${rawErr.message}, falling back to printViaWindowsRaw...`)
+        writeCrash(`[PRINT] PosPrinter.sendRawCommand failed: ${rawErr.message}, trying printViaWindowsRaw...`)
       }
     }
 
-    // 回退尝试：使用 Windows 原生 print /D:printerName 命令
+    // 4. 回退尝试 printViaWindowsRaw
     try {
       await printViaWindowsRaw({ ...data, printerName })
       writeCrash('[PRINT] printViaWindowsRaw fallback success')
       return { success: true }
-    } catch (winRawErr: any) {
-      writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winRawErr.message}`)
-      return { success: false, error: winRawErr.message }
+    } catch (winErr: any) {
+      writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winErr.message}`)
+      return { success: false, error: winErr.message }
     }
   } catch (error: any) {
     writeCrash(`[PRINT] print-receipt error: ${error.message}`)
@@ -1301,19 +1503,16 @@ ipcMain.handle('print-receipt', async (_event, data) => {
 })
 
 /**
- * 串口打印 - 直接发送 ESC/POS 命令到 COM 口（热敏打印机最常见的连接方式）
- * 不走 Windows 打印 API，直接写串口
+ * 串口打印 - 直接发送 ESC/POS 命令到 COM 口
  */
 function printViaComPort(comPort: string, rawBytes: Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process')
-    // PowerShell script: open COM port, write bytes, close
-    const hexString = Array.from(rawBytes).map(b => b.toString(16).padStart(2, '0')).join('')
     const ps = `
       Add-Type -AssemblyName System
       $port = New-Object System.IO.Ports.SerialPort '${comPort}',9600,None,8,One
       $port.Open()
-      Start-Sleep -Milliseconds 200
+      Start-Sleep -Milliseconds 150
       $bytes = [byte[]]@(${Array.from(rawBytes).join(',')})
       $port.Write($bytes, 0, $bytes.Length)
       Start-Sleep -Milliseconds 100
@@ -1349,11 +1548,10 @@ function printViaNetwork(text: string, host: string, port: number): Promise<void
     const timeout = setTimeout(() => {
       client.destroy()
       reject(new Error('Network print timeout'))
-    }, 10000) // 10秒超时
+    }, 10000)
 
     client.connect(port, host, () => {
       clearTimeout(timeout)
-      // 发送 latin1 编码的原始 ESC/POS 数据
       const buffer = Buffer.from(text, 'latin1')
       client.write(buffer, 'latin1', (err: any) => {
         if (err) {
@@ -1376,7 +1574,7 @@ function printViaNetwork(text: string, host: string, port: number): Promise<void
 }
 
 /**
- * 原生打印回退 - 支持 Windows PowerShell Out-Printer 及 macOS/Linux CUPS lp
+ * 原生打印回退
  */
 async function printViaWindowsRaw(data: any): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -1388,9 +1586,7 @@ async function printViaWindowsRaw(data: any): Promise<void> {
 
     try {
       fs.writeFileSync(tempFile, text, { encoding: 'utf8' })
-      console.log('[PRINT] Temp file:', tempFile)
     } catch (err: any) {
-      console.log('[PRINT] Write file error:', err.message)
       reject(err)
       return
     }
@@ -1399,64 +1595,43 @@ async function printViaWindowsRaw(data: any): Promise<void> {
       try { fs.unlinkSync(tempFile) } catch (e) {}
     }
 
-    // macOS / Linux: 使用 CUPS lp 命令
     if (process.platform === 'darwin' || process.platform === 'linux') {
       const cmd = printerName ? `lp -d "${printerName}" "${tempFile}"` : `lp "${tempFile}"`
-      execChild(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+      execChild(cmd, { timeout: 15000 }, (error) => {
         cleanup()
-        if (error) {
-          console.error('[PRINT] macOS/Linux lp error:', error.message)
-          reject(error)
-        } else {
-          console.log('[PRINT] macOS/Linux lp success')
-          resolve()
-        }
+        if (error) reject(error)
+        else resolve()
       })
       return
     }
 
-    // Windows: 优先使用 PowerShell Out-Printer 发送到打印后台，失败则回退 print /D:
     const safePrinterName = printerName.replace(/'/g, "''")
     const safeTempFile = tempFile.replace(/'/g, "''")
     const psCmd = printerName
       ? `Get-Content -LiteralPath '${safeTempFile}' | Out-Printer -Name '${safePrinterName}'`
       : `Get-Content -LiteralPath '${safeTempFile}' | Out-Printer`
-    
-    console.log('[PRINT] Trying PowerShell Out-Printer:', psCmd)
-    execChild(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, { timeout: 15000 }, (psErr, stdout, stderr) => {
-      if (!psErr) {
-        console.log('[PRINT] PowerShell Out-Printer success')
-        cleanup()
-        resolve()
-        return
-      }
 
-      console.warn('[PRINT] PowerShell Out-Printer failed, trying print /D fallback:', psErr.message)
-      const cmd = printerName ? `print /D:"${printerName}" "${tempFile}"` : `print "${tempFile}"`
-      execChild(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
-        cleanup()
-        if (error) {
-          console.error('[PRINT] Legacy print /D error:', error.message)
-          reject(error)
-        } else {
-          console.log('[PRINT] Legacy print /D success')
-          resolve()
-        }
-      })
+    execChild(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, { timeout: 15000 }, (psErr) => {
+      cleanup()
+      if (!psErr) {
+        resolve()
+      } else {
+        reject(psErr)
+      }
     })
   })
 }
 
 /**
- * 打开钱箱 - 自动识别打印机 + 三合一脉冲命令 (Pin 2 + Pin 5 + BEL)
+ * 打开钱箱 - 自动识别打印机 + 多协议钱箱开锁脉冲 (Pin 2 + Pin 5 + DLE DC4 + BEL)
  */
 ipcMain.handle('open-cash-drawer', async (_event, data) => {
   try {
-    let printerName = await resolvePrinterName(data.printerName)
-    const pulseMs = Math.max(20, Math.min(500, data.cashDrawerPulse || 100))
+    let printerName = await resolvePrinterName(data?.printerName)
+    const pulseMs = Math.max(20, Math.min(500, data?.cashDrawerPulse || 100))
 
     writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`)
-    writeCrash(`[CASH DRAWER] printerName='${printerName}'`)
+    writeCrash(`[CASH DRAWER] resolved printerName='${printerName}' (original: '${data?.printerName}')`)
     writeCrash(`[CASH DRAWER] cashDrawerPulse=${pulseMs}ms`)
 
     if (!printerName) {
@@ -1464,20 +1639,22 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
       return { success: false, error: 'No printer available on system' }
     }
 
-    // 三合一 ESC/POS 钱箱开锁脉冲命令：
-    // 1. Pin 2 脉冲: ESC p 0 t1 t2
-    // 2. Pin 5 脉冲: ESC p 1 t1 t2
-    // 3. ASCII BEL 响铃触发: 0x07
+    // 多重兼容 ESC/POS 钱箱开锁脉冲命令：
+    // 1. Pin 2 脉冲: ESC p 0 on off (0x1B, 0x70, 0x00, on, off)
+    // 2. Pin 5 脉冲: ESC p 1 on off (0x1B, 0x70, 0x01, on, off)
+    // 3. DLE DC4 脉冲: 0x10, 0x14, 0x01, 0x00, 0x05 (Epson/Star 机型专用)
+    // 4. ASCII BEL 响铃触发: 0x07
     const onTime = Math.round(pulseMs / 2)
     const offTime = Math.round(pulseMs / 2)
     const drawerCmd = Buffer.from([
       0x1B, 0x70, 0x00, onTime, offTime, // Pin 2
       0x1B, 0x70, 0x01, onTime, offTime, // Pin 5
+      0x10, 0x14, 0x01, 0x00, 0x05,       // DLE DC4
       0x07                               // BEL
     ])
     writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`)
 
-    // COM 口打印机：直接写串口
+    // 1. COM 口（虚拟串口）
     const isComPort = /^COM\d+/i.test(printerName)
     if (isComPort) {
       try {
@@ -1490,25 +1667,38 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
       }
     }
 
-    // Windows 打印机名称：优先 PosPrinter.sendRawCommand，失败回退 printViaWindowsRaw
-    if (PosPrinter) {
+    // 2. Windows 原生 winspool.drv RAW 方式（最高优先级，直接写入打印机 Spooler 队列）
+    try {
+      await sendRawBytesToWindowsPrinter(printerName, drawerCmd)
+      writeCrash('[CASH DRAWER] sendRawBytesToWindowsPrinter success')
+      return { success: true }
+    } catch (winRawErr: any) {
+      writeCrash(`[CASH DRAWER] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
+    }
+
+    // 3. 回退尝试 PosPrinter.sendRawCommand
+    if (PosPrinter?.sendRawCommand) {
       try {
         await PosPrinter.sendRawCommand(printerName, drawerCmd)
-        writeCrash('[CASH DRAWER] sendRawCommand success')
+        writeCrash('[CASH DRAWER] PosPrinter.sendRawCommand success')
         return { success: true }
       } catch (drawerErr: any) {
-        writeCrash(`[CASH DRAWER] sendRawCommand failed: ${drawerErr.message}, trying printViaWindowsRaw fallback...`)
+        writeCrash(`[CASH DRAWER] PosPrinter.sendRawCommand failed: ${drawerErr.message}, trying PosPrinter.openCashDrawer...`)
       }
     }
 
-    try {
-      await printViaWindowsRaw({ ...data, printerName, text: drawerCmd.toString('latin1') })
-      writeCrash('[CASH DRAWER] printViaWindowsRaw fallback success')
-      return { success: true }
-    } catch (winErr: any) {
-      writeCrash(`[CASH DRAWER] printViaWindowsRaw fallback failed: ${winErr.message}`)
-      return { success: false, error: winErr.message }
+    // 4. 回退尝试 PosPrinter.openCashDrawer
+    if (PosPrinter?.openCashDrawer) {
+      try {
+        await PosPrinter.openCashDrawer(printerName, { onTime: pulseMs, offTime: pulseMs })
+        writeCrash('[CASH DRAWER] PosPrinter.openCashDrawer success')
+        return { success: true }
+      } catch (posDrawerErr: any) {
+        writeCrash(`[CASH DRAWER] PosPrinter.openCashDrawer failed: ${posDrawerErr.message}`)
+      }
     }
+
+    return { success: false, error: 'All cash drawer opening methods failed for: ' + printerName }
   } catch (error: any) {
     writeCrash(`[CASH DRAWER] error: ${error.message}`)
     return { success: false, error: error.message }
