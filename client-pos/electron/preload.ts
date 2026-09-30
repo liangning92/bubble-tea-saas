@@ -54,6 +54,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('send-kitchen-order', data)
   },
 
+  // 发送付款二维码到副屏
+  sendPaymentQr: (qrData: any) => {
+    ipcRenderer.send('payment-qr', qrData)
+  },
+
+  // 监听付款二维码 (副屏端)
+  onPaymentQr: (callback: (qrData: any) => void) => {
+    ipcRenderer.on('payment-qr', (_event, data) => callback(data))
+  },
+
+  // 打印交接班对账小票 (Z-Report)
+  sendPrintShiftReport: (data: any) => {
+    return ipcRenderer.invoke('print-shift-report', data)
+  },
+
+  // 打印茶饮杯贴/不干胶标签 (TSPL)
+  sendCupStickers: (data: any) => {
+    return ipcRenderer.invoke('print-cup-stickers', data)
+  },
+
   // ========== 自动更新相关 ==========
 
   // 检查更新

@@ -160,7 +160,19 @@ export function LoginPage() {
 
           {/* Logo & Brand */}
           <div className="text-center mb-8">
-            <img src="/youme-logo-red.png" alt="YOUME" className="h-16 w-auto mx-auto object-contain" />
+            {(() => {
+              const storeLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
+              return (
+                <img
+                  src={storeLogo || '/youme-logo-red.png'}
+                  alt="YOUME"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/youme-logo-red.png'
+                  }}
+                  className="h-16 max-w-[200px] mx-auto object-contain"
+                />
+              )
+            })()}
           </div>
 
           {/* Login card */}

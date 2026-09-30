@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone } from 'lucide-react'
+import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone, Image as ImageIcon } from 'lucide-react'
 import { configApi } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { POSSettingsPage } from './settings/POSSettingsPage'
@@ -22,6 +22,7 @@ export function SettingsPage() {
     address: '',
     phone: '',
     email: '',
+    storeLogo: '',
   })
 
   // 加载店铺信息
@@ -49,6 +50,15 @@ export function SettingsPage() {
 
   const handleSave = (key: string, value: any) => {
     saveMutation.mutate({ key, value })
+    // 当修改 storeInfo 时，同步将 storeLogo 写入 posReceipt 以保持 POS 端配置同步
+    if (key === 'storeInfo' && value && value.storeLogo !== undefined) {
+      configApi.get().then((res: any) => {
+        const currentReceipt = res?.data?.posReceipt || {}
+        if (currentReceipt.storeLogo !== value.storeLogo) {
+          configApi.set(user?.storeId || '', 'posReceipt', { ...currentReceipt, storeLogo: value.storeLogo }, 'pos').catch(() => {})
+        }
+      }).catch(() => {})
+    }
   }
 
   if (isLoading) {
@@ -194,6 +204,40 @@ export function SettingsPage() {
                 className="input"
                 placeholder={t('settings.emailPlaceholder')}
               />
+            </div>
+
+            {/* 店铺 Logo (URL 或 相对路径) */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
+                <span>{t('settings.storeLogo', '店铺 Logo (URL 或路径)')}</span>
+                {storeInfo.storeLogo && (
+                  <span className="text-xs text-green-600 font-medium">✓ 已配置</span>
+                )}
+              </label>
+              <div className="flex gap-4 items-center">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={storeInfo.storeLogo}
+                    onChange={(e) => setStoreInfo({ ...storeInfo, storeLogo: e.target.value })}
+                    onBlur={() => handleSave('storeInfo', storeInfo)}
+                    className="input pl-10"
+                    placeholder="例如: https://... 或 /youme-logo-white.png"
+                  />
+                  <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                </div>
+                {storeInfo.storeLogo && (
+                  <div className="w-12 h-12 rounded-lg border bg-gray-50 flex items-center justify-center overflow-hidden p-1 shrink-0">
+                    <img
+                      src={storeInfo.storeLogo}
+                      alt="Logo Preview"
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => { (e.target as any).style.display = 'none' }}
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{t('settings.storeLogoHint', '用于 POS 顶栏、登录界面、客显副屏及打印小票的品牌 Logo 展示')}</p>
             </div>
           </div>
 

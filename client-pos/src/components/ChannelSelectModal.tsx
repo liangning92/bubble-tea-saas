@@ -57,10 +57,18 @@ export function ChannelSelectModal({
       'GRAB': 'grab',
       'SHOPEE': 'shopee',
     }
-    const adminKey = codeToKeyMap[ch.code]
-    if (adminKey && channelSettings[adminKey]) {
-      return channelSettings[adminKey].enabled !== false
+    const codeToLayoutMap: Record<string, keyof PosLayout> = {
+      'DINE_IN': 'channelDineIn',
+      'GOFOOD': 'channelGoFood',
+      'GRAB': 'channelGrab',
+      'SHOPEE': 'channelShopee',
     }
+    const adminKey = codeToKeyMap[ch.code]
+    if (adminKey && channelSettings?.[adminKey]) {
+      if (channelSettings[adminKey].enabled === false) return false
+    }
+    const layoutKey = codeToLayoutMap[ch.code]
+    if (layoutKey && posLayout?.[layoutKey] === false) return false
     return true
   })
 
@@ -130,20 +138,31 @@ export function ChannelSelectModal({
         {/* Channel Grid */}
         <div className="p-4">
           <div className="grid grid-cols-4 gap-3">
-            {availableChannels.map(ch => (
-              <button
-                key={ch.id}
-                onClick={() => onSelectChannel(ch)}
-                className={`min-h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${
-                  selectedChannel?.id === ch.id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <span className="text-3xl">{ch.icon}</span>
-                <span className="text-xs font-medium text-gray-700">{t(ch.nameKey)}</span>
-              </button>
-            ))}
+            {availableChannels.map(ch => {
+              const codeToKeyMap: Record<string, string> = {
+                'DINE_IN': 'dineIn',
+                'GOFOOD': 'gofood',
+                'GRAB': 'grab',
+                'SHOPEE': 'shopee',
+              }
+              const adminKey = codeToKeyMap[ch.code]
+              const customName = (ch as any).name || (adminKey && (channelSettings as any)?.[adminKey]?.name)
+              const customIcon = (ch as any).icon || (adminKey && (channelSettings as any)?.[adminKey]?.icon) || ch.icon
+              return (
+                <button
+                  key={ch.id}
+                  onClick={() => onSelectChannel(ch)}
+                  className={`min-h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${
+                    selectedChannel?.id === ch.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-3xl">{customIcon}</span>
+                  <span className="text-xs font-medium text-gray-700">{customName || t(ch.nameKey)}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
 

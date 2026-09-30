@@ -20,15 +20,19 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     const { storeId, category } = req.query
 
     const where: any = {}
-    if (storeId) where.storeId = storeId as string
+    if (storeId) {
+      where.storeId = { in: [storeId as string, ''] }
+    } else {
+      where.storeId = ''
+    }
     if (category) where.category = category as string
 
     const configs = await prisma.config.findMany({
       where,
-      orderBy: { key: 'asc' }
+      orderBy: { storeId: 'asc' } // '' (global) comes first, storeId specific comes after to override
     })
 
-    // Transform to key-value object
+    // Transform to key-value object (storeId specific will overwrite global '')
     const result: Record<string, any> = {}
     configs.forEach(c => {
       try {
@@ -95,9 +99,15 @@ router.get('/:storeId/:key', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId, key } = req.params
 
-    const config = await prisma.config.findUnique({
+    let config = await prisma.config.findUnique({
       where: { storeId_key: { storeId, key } }
     })
+
+    if (!config && storeId !== '') {
+      config = await prisma.config.findUnique({
+        where: { storeId_key: { storeId: '', key } }
+      })
+    }
 
     if (!config) {
       return res.status(404).json({ code: 404, message: 'Config not found' })

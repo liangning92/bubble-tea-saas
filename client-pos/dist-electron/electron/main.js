@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
+// 彻底禁用并隐藏 Windows / Linux 默认顶部菜单栏（File, Edit, View, Window, Help）
+electron_1.Menu.setApplicationMenu(null);
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = require("child_process");
 const net_1 = __importDefault(require("net"));
@@ -640,11 +642,12 @@ function createMainWindow() {
     const leftmostDisplay = allDisplays.reduce((leftmost, current) => current.bounds.x < leftmost.bounds.x ? current : leftmost);
     const { width, height, x: screenX, y: screenY } = leftmostDisplay.workArea;
     mainWindow = new electron_1.BrowserWindow({
-        width: Math.floor(width * 0.6),
+        width,
         height,
         x: screenX,
         y: screenY,
-        fullscreen: false,
+        fullscreen: true,
+        autoHideMenuBar: true,
         resizable: true,
         webPreferences: {
             preload: getResourcePath('dist-electron/electron/preload.js'),
@@ -654,10 +657,25 @@ function createMainWindow() {
             // 高 DPI 支持
             enableBlinkFeatures: 'CSSColorSchemeUARendering'
         },
-        // Windows 高 DPI 设置
-        titleBarStyle: process.platform === 'win32' ? 'default' : undefined,
         title: 'YOUME POS',
         backgroundColor: '#ffffff'
+    });
+    // 彻底移除 Windows 默认菜单栏（File, Edit, View, Window, Help）
+    mainWindow.setMenu(null);
+    mainWindow.setMenuBarVisibility(false);
+    mainWindow.setAutoHideMenuBar(true);
+    // 确保全屏铺满无黑边
+    mainWindow.maximize();
+    mainWindow.setFullScreen(true);
+    // 允许 F11 键切换全屏（方便运维调试）
+    mainWindow.webContents.on('before-input-event', (_event, input) => {
+        if (input.key === 'F11' && input.type === 'keyDown' && mainWindow && !mainWindow.isDestroyed()) {
+            const isFull = mainWindow.isFullScreen();
+            mainWindow.setFullScreen(!isFull);
+            if (isFull) {
+                mainWindow.maximize();
+            }
+        }
     });
     // 加载主界面（服务器启动后才加载，确保 API 可用）
     if (isDev) {
@@ -862,6 +880,7 @@ function createCustomerWindow() {
         x: screenX,
         y: screenY,
         fullscreen: true,
+        autoHideMenuBar: true,
         webPreferences: {
             preload: getResourcePath('dist-electron/electron/preload.js'),
             contextIsolation: true,
@@ -871,6 +890,10 @@ function createCustomerWindow() {
         title: 'Customer Display',
         alwaysOnTop: true
     });
+    // 彻底移除副屏的 Windows 菜单栏
+    customerWindow.setMenu(null);
+    customerWindow.setMenuBarVisibility(false);
+    customerWindow.setAutoHideMenuBar(true);
     // 加载副屏界面
     if (isDev) {
         customerWindow.loadURL('http://localhost:6063/customer-display');
@@ -1126,6 +1149,11 @@ electron_1.ipcMain.on('order-complete', (_event, orderNumber) => {
         customerWindow.webContents.send('order-complete', orderNumber);
     }
 });
+electron_1.ipcMain.on('payment-qr', (_event, qrData) => {
+    if (customerWindow && !customerWindow.isDestroyed()) {
+        customerWindow.webContents.send('payment-qr', qrData);
+    }
+});
 /**
  * 自动识别打印机名称：优先使用传入参数（支持精确匹配和模糊匹配），未指定时自动查找 Windows 默认打印机或热敏小票打印机
  */
@@ -1375,14 +1403,24 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}, falling back to raw print...`);
             }
         }
-        // 生成 ESC/POS 原始打印指令
-        const text = generateReceiptText(data);
+        // 生成 ESC/POS 原始打印指令 (支持多联打印 printCopies)
+        const printCopies = Math.max(1, Math.min(5, data.printCopies || 1));
+        const rawChunks = [];
         const encoder = new TextEncoder();
         const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ 初始化
         const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A, 0x0A]); // GS V 0 全切纸
-        // 组装最终 RAW 字节流：[钱箱脉冲] + [初始化] + [小票内容] + [切纸]
-        const rawBytes = Buffer.concat([drawerCmd, initCmd, encoder.encode(text), cutCmd]);
-        writeCrash(`[PRINT] rawBytes length=${rawBytes.length} text length=${text.length}`);
+        for (let c = 0; c < printCopies; c++) {
+            const copyData = printCopies > 1 ? {
+                ...data,
+                copyLabel: c === 0 ? '(Customer Copy)' : '(Merchant Copy)'
+            } : data;
+            const text = generateReceiptText(copyData);
+            // 只有第一联出纸前触发弹钱箱
+            const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0);
+            rawChunks.push(Buffer.concat([firstDrawerCmd, initCmd, encoder.encode(text), cutCmd]));
+        }
+        const rawBytes = Buffer.concat(rawChunks);
+        writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length}`);
         // 1. 如果打印机是 COM 口（虚拟串口）
         const isComPort = /^COM\d+/i.test(printerName);
         if (isComPort) {
@@ -1698,6 +1736,316 @@ electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
     }
 });
 /**
+ * 打印交接班对账小票 (Z-Report)
+ */
+electron_1.ipcMain.handle('print-shift-report', async (_event, data) => {
+    try {
+        writeCrash(`[SHIFT-REPORT] ====== print-shift-report called ======`);
+        const resolvedName = await resolvePrinterName(data.printerName);
+        const text = generateShiftReportText(data);
+        if (data.printerHost && data.printerPort) {
+            try {
+                await printViaNetwork(text, data.printerHost, data.printerPort);
+                writeCrash('[SHIFT-REPORT] Network print success');
+                return { success: true };
+            }
+            catch (netErr) {
+                writeCrash(`[SHIFT-REPORT] Network print failed: ${netErr.message}`);
+                return { success: false, error: netErr.message };
+            }
+        }
+        if (resolvedName) {
+            const isComPort = /^COM\d+/i.test(resolvedName);
+            const encoder = new TextEncoder();
+            const initCmd = Buffer.from([0x1B, 0x40]); // ESC @
+            const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A, 0x0A]); // GS V 0 full cut
+            const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd]);
+            if (isComPort) {
+                try {
+                    await printViaComPort(resolvedName, rawBytes);
+                    writeCrash('[SHIFT-REPORT] COM port print success');
+                    return { success: true };
+                }
+                catch (comErr) {
+                    writeCrash(`[SHIFT-REPORT] COM port print failed: ${comErr.message}`);
+                    return { success: false, error: comErr.message };
+                }
+            }
+            else {
+                try {
+                    await sendRawBytesToWindowsPrinter(resolvedName, rawBytes);
+                    writeCrash('[SHIFT-REPORT] sendRawBytesToWindowsPrinter success');
+                    return { success: true };
+                }
+                catch (winRawErr) {
+                    writeCrash(`[SHIFT-REPORT] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
+                }
+                try {
+                    await PosPrinter.sendRawCommand(resolvedName, rawBytes);
+                    writeCrash('[SHIFT-REPORT] sendRawCommand success');
+                    return { success: true };
+                }
+                catch (rawErr) {
+                    writeCrash(`[SHIFT-REPORT] sendRawCommand failed: ${rawErr.message}`);
+                    return { success: false, error: rawErr.message };
+                }
+            }
+        }
+        writeCrash('[SHIFT-REPORT] ERROR: no receipt printer found');
+        return { success: false, error: 'No receipt printer found for shift report' };
+    }
+    catch (err) {
+        writeCrash(`[SHIFT-REPORT] error: ${err.message}`);
+        return { success: false, error: err.message };
+    }
+});
+/**
+ * 打印茶饮单杯杯贴/不干胶标签 (TSPL / ESC-POS)
+ */
+electron_1.ipcMain.handle('print-cup-stickers', async (_event, data) => {
+    try {
+        const { printerName, printerHost, printerPort, stickers, isTspl = true } = data;
+        if (!stickers || stickers.length === 0)
+            return { success: true };
+        writeCrash(`[STICKER] ====== print-cup-stickers called, count=${stickers.length} ======`);
+        const resolvedName = await resolvePrinterName(printerName);
+        const encoder = new TextEncoder();
+        const chunks = [];
+        for (const item of stickers) {
+            if (isTspl) {
+                const tsplStr = generateCupStickerTspl(item);
+                chunks.push(Buffer.from(encoder.encode(tsplStr)));
+            }
+            else {
+                const escStr = generateCupStickerEscPos(item);
+                const initCmd = Buffer.from([0x1B, 0x40]);
+                const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A]);
+                chunks.push(Buffer.concat([initCmd, Buffer.from(encoder.encode(escStr)), cutCmd]));
+            }
+        }
+        const rawBytes = Buffer.concat(chunks);
+        if (printerHost && printerPort) {
+            try {
+                await printViaNetwork(rawBytes.toString('binary'), printerHost, printerPort);
+                writeCrash('[STICKER] Network print success');
+                return { success: true };
+            }
+            catch (netErr) {
+                writeCrash(`[STICKER] Network print failed: ${netErr.message}`);
+                return { success: false, error: netErr.message };
+            }
+        }
+        if (resolvedName) {
+            const isComPort = /^COM\d+/i.test(resolvedName);
+            if (isComPort) {
+                try {
+                    await printViaComPort(resolvedName, rawBytes);
+                    writeCrash('[STICKER] COM port print success');
+                    return { success: true };
+                }
+                catch (comErr) {
+                    writeCrash(`[STICKER] COM port print failed: ${comErr.message}`);
+                    return { success: false, error: comErr.message };
+                }
+            }
+            else {
+                // 1. 优先使用 Windows WinSpool RAW 原生方式（直接写入打印后台，兼容所有主流 USB 标签机）
+                try {
+                    await sendRawBytesToWindowsPrinter(resolvedName, rawBytes);
+                    writeCrash('[STICKER] sendRawBytesToWindowsPrinter success');
+                    return { success: true };
+                }
+                catch (winRawErr) {
+                    writeCrash(`[STICKER] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
+                }
+                // 2. 回退尝试 PosPrinter.sendRawCommand
+                try {
+                    await PosPrinter.sendRawCommand(resolvedName, rawBytes);
+                    writeCrash('[STICKER] sendRawCommand success');
+                    return { success: true };
+                }
+                catch (rawErr) {
+                    writeCrash(`[STICKER] sendRawCommand failed: ${rawErr.message}`);
+                    return { success: false, error: rawErr.message };
+                }
+            }
+        }
+        writeCrash('[STICKER] ERROR: no label printer configured');
+        return { success: false, error: 'No label printer configured' };
+    }
+    catch (err) {
+        writeCrash(`[STICKER] error: ${err.message}`);
+        return { success: false, error: err.message };
+    }
+});
+/**
+ * 生成交接班对账单文本
+ */
+function generateShiftReportText(data) {
+    const lines = [];
+    const is80mm = data.paperSize === '80mm';
+    const width = is80mm ? 48 : 32;
+    const lang = (data.language || 'id').toLowerCase();
+    const L = lang === 'zh' ? {
+        title: '=== 交接班对账单 (Z-REPORT) ===',
+        store: '门店',
+        cashier: '收银员',
+        shift: '班次',
+        openedAt: '开班时间',
+        closedAt: '交班时间',
+        printTime: '打印时间',
+        secSales: '--- 营业额汇总 ---',
+        openFloat: '开班备用金',
+        cashSales: '现金实收',
+        qrisSales: 'QRIS/扫码销售',
+        gofoodSales: 'GoFood 销售',
+        grabSales: 'Grab 销售',
+        shopeeSales: 'Shopee 销售',
+        expenses: '营业支出(备用金支取)',
+        secReconcile: '--- 现金盘点对账 ---',
+        expectedCash: '钱箱应有现金',
+        actualCash: '实际盘点现金',
+        difference: '现金差额(长/短款)',
+        secStats: '--- 单据统计 ---',
+        totalOrders: '总订单数',
+        totalCups: '总制作杯数',
+        signCashier: '收银员签字: ________________',
+        signManager: '店长/主管签字: ______________'
+    } : {
+        title: '=== LAPORAN SHIFT (Z-REPORT) ===',
+        store: 'Toko',
+        cashier: 'Kasir',
+        shift: 'Shift',
+        openedAt: 'Waktu Buka',
+        closedAt: 'Waktu Tutup',
+        printTime: 'Dicetak',
+        secSales: '--- RINGKASAN PENJUALAN ---',
+        openFloat: 'Kas Awal / Float',
+        cashSales: 'Penjualan Tunai',
+        qrisSales: 'Penjualan QRIS',
+        gofoodSales: 'Penjualan GoFood',
+        grabSales: 'Penjualan Grab',
+        shopeeSales: 'Penjualan Shopee',
+        expenses: 'Pengeluaran Kas',
+        secReconcile: '--- REKONSILIASI KAS ---',
+        expectedCash: 'Kas Seharusnya',
+        actualCash: 'Kas Dihitung',
+        difference: 'Selisih (Lebih/Kurang)',
+        secStats: '--- STATISTIK TRANSAKSI ---',
+        totalOrders: 'Total Transaksi',
+        totalCups: 'Total Cup / Minuman',
+        signCashier: 'Ttd Kasir: __________________',
+        signManager: 'Ttd Supervisor: _____________'
+    };
+    const storeName = data.storeName || 'YOUME';
+    lines.push(centerText(L.title, width));
+    lines.push(centerText(storeName, width));
+    lines.push(repeatChar('=', width));
+    const colWidth = is80mm ? 22 : 14;
+    lines.push(`${L.cashier.padEnd(colWidth)}: ${data.cashierName || 'Kasir'}`);
+    lines.push(`${L.shift.padEnd(colWidth)}: ${data.shiftType || 'Regular'}`);
+    if (data.openedAt)
+        lines.push(`${L.openedAt.padEnd(colWidth)}: ${data.openedAt}`);
+    lines.push(`${L.closedAt.padEnd(colWidth)}: ${data.closedAt || formatDateTime()}`);
+    lines.push(`${L.printTime.padEnd(colWidth)}: ${formatDateTime()}`);
+    lines.push(repeatChar('-', width));
+    lines.push(centerText(L.secSales, width));
+    const addRow = (label, amount) => {
+        const valStr = formatRp(amount || 0);
+        const spaces = Math.max(1, width - label.length - valStr.length);
+        lines.push(`${label}${' '.repeat(spaces)}${valStr}`);
+    };
+    addRow(L.openFloat, data.openFloat || 0);
+    addRow(L.cashSales, data.cashSales || 0);
+    if (data.qrisSales)
+        addRow(L.qrisSales, data.qrisSales);
+    if (data.gofoodSales)
+        addRow(L.gofoodSales, data.gofoodSales);
+    if (data.grabSales)
+        addRow(L.grabSales, data.grabSales);
+    if (data.shopeeSales)
+        addRow(L.shopeeSales, data.shopeeSales);
+    if (data.expenses)
+        addRow(L.expenses, data.expenses);
+    lines.push(repeatChar('-', width));
+    lines.push(centerText(L.secReconcile, width));
+    const expected = data.expectedCash || 0;
+    const actual = data.actualCash || 0;
+    const diff = actual - expected;
+    addRow(L.expectedCash, expected);
+    addRow(L.actualCash, actual);
+    const diffStr = (diff >= 0 ? '+' : '') + formatRp(diff);
+    const diffLabel = L.difference;
+    const diffSpaces = Math.max(1, width - diffLabel.length - diffStr.length);
+    lines.push(`${diffLabel}${' '.repeat(diffSpaces)}${diffStr}`);
+    lines.push(repeatChar('-', width));
+    lines.push(centerText(L.secStats, width));
+    lines.push(`${L.totalOrders.padEnd(colWidth)}: ${data.totalOrders ?? 0}`);
+    if (data.totalCups !== undefined) {
+        lines.push(`${L.totalCups.padEnd(colWidth)}: ${data.totalCups}`);
+    }
+    lines.push(repeatChar('-', width));
+    lines.push('');
+    lines.push(L.signCashier);
+    lines.push('');
+    lines.push(L.signManager);
+    lines.push('');
+    lines.push(repeatChar('=', width));
+    return lines.join('\n') + '\n\n\n\n';
+}
+/**
+ * 生成 TSPL 茶饮杯贴指令 (40mm x 30mm / 50mm x 30mm)
+ */
+function generateCupStickerTspl(item) {
+    const store = item.storeName || 'YOUME';
+    const orderNum = item.orderNum || '';
+    const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : '';
+    const name = (item.productName || item.name || '').slice(0, 24);
+    const spec = item.specName || '';
+    const sugar = item.sugarLevelName ? `Sugar: ${item.sugarLevelName}` : '';
+    const ice = item.iceLevelName ? `Ice: ${item.iceLevelName}` : '';
+    const mods = [sugar, ice].filter(Boolean).join(' | ');
+    const addons = (item.addons || []).map((a) => `+${a.name || a}`).join(', ').slice(0, 30);
+    const time = item.time || formatDateTime().slice(11, 19);
+    const channel = item.channelName ? `(${item.channelName})` : '';
+    const tspl = [
+        'SIZE 40 mm, 30 mm',
+        'GAP 2 mm, 0 mm',
+        'DIRECTION 1',
+        'CLS',
+        `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${orderNum} ${cupNo}"`,
+        `TEXT 15,48,"TSS24.BF2",0,1,1,"${name}"`,
+        spec ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${spec}  ${mods}"` : (mods ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${mods}"` : ''),
+        addons ? `TEXT 15,112,"TSS24.BF2",0,1,1,"${addons}"` : '',
+        `TEXT 15,150,"2",0,1,1,"${time} ${channel}"`,
+        'PRINT 1,1',
+        ''
+    ].filter(Boolean).join('\r\n');
+    return tspl;
+}
+/**
+ * 生成 ESC/POS 单杯杯贴降级文本
+ */
+function generateCupStickerEscPos(item) {
+    const lines = [];
+    const width = 32;
+    const store = item.storeName || 'YOUME';
+    const orderNum = item.orderNum || '';
+    const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : '';
+    lines.push(centerText(`${store} #${orderNum} ${cupNo}`, width));
+    lines.push(repeatChar('-', width));
+    lines.push(`${item.productName || item.name || ''} (${item.specName || 'Reg'})`);
+    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(' / ');
+    if (mods)
+        lines.push(`* ${mods}`);
+    if (item.addons && item.addons.length > 0) {
+        lines.push(`+ ${item.addons.map((a) => a.name || a).join(', ')}`);
+    }
+    lines.push(repeatChar('-', width));
+    lines.push(`${formatTime()} ${item.channelName || ''}`);
+    return lines.join('\n') + '\n\n\n';
+}
+/**
  * 生成厨房小票文本
  */
 function generateKitchenText(data) {
@@ -1739,58 +2087,159 @@ function formatTime() {
 }
 function generateReceiptText(data) {
     const lines = [];
-    const width = 32;
-    if (data.header) {
-        lines.push(centerText(data.header, width));
-        lines.push(repeatChar('=', width));
+    const is80mm = data.paperSize === '80mm';
+    const width = is80mm ? 48 : 32;
+    const lang = (data.language || 'id').toLowerCase();
+    const i18nMap = {
+        zh: {
+            orderNo: '单号',
+            date: '日期',
+            channel: '渠道',
+            table: '桌号',
+            cashier: '收银员',
+            customer: '顾客',
+            item: '商品名称',
+            qty: '数量',
+            price: '金额',
+            subtotal: '小计:',
+            tax: '税费:',
+            discount: '优惠:',
+            total: '总计:',
+            pay: '实付:',
+            change: '找零:',
+            member: '会员:',
+            points: '积分抵扣:',
+            thanks: '=== 谢谢惠顾 欢迎光临 ==='
+        },
+        en: {
+            orderNo: 'Order No',
+            date: 'Date',
+            channel: 'Channel',
+            table: 'Table',
+            cashier: 'Cashier',
+            customer: 'Customer',
+            item: 'ITEM',
+            qty: 'QTY',
+            price: 'PRICE',
+            subtotal: 'Subtotal:',
+            tax: 'Tax:',
+            discount: 'Discount:',
+            total: 'TOTAL:',
+            pay: 'Paid:',
+            change: 'Change:',
+            member: 'Member:',
+            points: 'Points:',
+            thanks: '=== THANK YOU ==='
+        },
+        id: {
+            orderNo: 'No Order',
+            date: 'Tgl',
+            channel: 'Kanal',
+            table: 'Meja',
+            cashier: 'Kasir',
+            customer: 'Pelanggan',
+            item: 'ITEM',
+            qty: 'QTY',
+            price: 'HARGA',
+            subtotal: 'Subtotal:',
+            tax: 'Pajak:',
+            discount: 'Diskon:',
+            total: 'TOTAL:',
+            pay: 'Bayar:',
+            change: 'Kembalian:',
+            member: 'Member:',
+            points: 'Poin:',
+            thanks: '=== TERIMA KASIH ==='
+        }
+    };
+    const L = i18nMap[lang] || i18nMap.id;
+    // 1. Header (Store Name / Custom Header)
+    const storeTitle = data.storeName || data.header || 'YOUME';
+    lines.push(centerText(storeTitle, width));
+    if (data.storeAddress) {
+        lines.push(centerText(data.storeAddress, width));
     }
-    lines.push(`No   : ${data.orderNum || ''}`);
-    lines.push(`Tgl   : ${formatDateTime()}`);
+    if (data.storePhone) {
+        lines.push(centerText(`Tel: ${data.storePhone}`, width));
+    }
+    if (data.copyLabel) {
+        lines.push(centerText(data.copyLabel, width));
+    }
+    lines.push(repeatChar('=', width));
+    // 2. Order Metadata
+    lines.push(`${L.orderNo.padEnd(is80mm ? 10 : 7)}: ${data.orderNum || ''}`);
+    lines.push(`${L.date.padEnd(is80mm ? 10 : 7)}: ${formatDateTime()}`);
+    if (data.channelName) {
+        const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : '';
+        lines.push(`${L.channel.padEnd(is80mm ? 10 : 7)}: ${data.channelName}${tableText}`);
+    }
+    if (data.showStaffName !== false && data.cashierName) {
+        lines.push(`${L.cashier.padEnd(is80mm ? 10 : 7)}: ${data.cashierName}`);
+    }
+    if (data.showCustomerName && data.customerName) {
+        lines.push(`${L.customer.padEnd(is80mm ? 10 : 7)}: ${data.customerName}`);
+    }
     lines.push(repeatChar('-', width));
-    lines.push('ITEM              QTY     HARGA');
+    // 3. Item Table Header
+    // 58mm: name 16 + qty 4 + price 12 = 32
+    // 80mm: name 28 + qty 6 + price 14 = 48
+    const nameWidth = is80mm ? 28 : 16;
+    const qtyWidth = is80mm ? 6 : 4;
+    const priceWidth = is80mm ? 14 : 12;
+    lines.push(`${L.item.padEnd(nameWidth)}${L.qty.padStart(qtyWidth)}${L.price.padStart(priceWidth)}`);
     lines.push(repeatChar('-', width));
+    // 4. Items List
     if (data.items && data.items.length > 0) {
         data.items.forEach((item) => {
-            const name = truncate(`${item.productName} ${item.specName}`, 16).padEnd(16);
-            const qty = String(item.quantity).padStart(3);
-            const price = formatRp(item.unitPrice * item.quantity).padStart(10);
+            const spec = item.specName ? ` ${item.specName}` : '';
+            const name = truncate(`${item.productName}${spec}`, nameWidth).padEnd(nameWidth);
+            const qty = String(item.quantity).padStart(qtyWidth);
+            const price = formatRp(item.unitPrice * item.quantity).padStart(priceWidth);
             lines.push(`${name}${qty}${price}`);
-            if (item.addons && item.addons.length > 0) {
-                item.addons.forEach((addon) => {
-                    lines.push(`  + ${truncate(addon.name, 20)}`);
-                });
-            }
-            if (item.sugarLevelName || item.iceLevelName) {
-                const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
-                lines.push(`  [${mods}]`);
+            if (data.showKitchenNote !== false) {
+                if (item.addons && item.addons.length > 0) {
+                    item.addons.forEach((addon) => {
+                        lines.push(`  + ${truncate(addon.name, width - 4)}`);
+                    });
+                }
+                if (item.sugarLevelName || item.iceLevelName) {
+                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                    lines.push(`  [${mods}]`);
+                }
             }
         });
     }
     lines.push(repeatChar('-', width));
-    lines.push(`${'Subtotal:'.padEnd(20)}${formatRp(data.subtotal || 0).padStart(10)}`);
-    lines.push(`${'Pajak:'.padEnd(20)}${formatRp(data.tax || 0).padStart(10)}`);
+    // 5. Totals
+    const labelWidth = is80mm ? 30 : 18;
+    const valWidth = is80mm ? 18 : 14;
+    lines.push(`${L.subtotal.padEnd(labelWidth)}${formatRp(data.subtotal || 0).padStart(valWidth)}`);
+    lines.push(`${L.tax.padEnd(labelWidth)}${formatRp(data.tax || 0).padStart(valWidth)}`);
     if (data.discount && data.discount > 0) {
-        lines.push(`${'Diskon:'.padEnd(20)}-${formatRp(data.discount).padStart(10)}`);
+        lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`);
     }
     lines.push(repeatChar('-', width));
-    lines.push(`${'TOTAL:'.padEnd(20)}${formatRp(data.total || 0).padStart(10)}`);
+    lines.push(`${L.total.padEnd(labelWidth)}${formatRp(data.total || 0).padStart(valWidth)}`);
+    // 6. Payment & Change
     if (data.paidAmount) {
         lines.push(repeatChar('-', width));
-        lines.push(`${'Bayar:'.padEnd(20)}${formatRp(data.paidAmount).padStart(10)}`);
-        lines.push(`${'Kembalian:'.padEnd(20)}${formatRp(data.change || 0).padStart(10)}`);
+        lines.push(`${L.pay.padEnd(labelWidth)}${formatRp(data.paidAmount).padStart(valWidth)}`);
+        lines.push(`${L.change.padEnd(labelWidth)}${formatRp(data.change || 0).padStart(valWidth)}`);
     }
+    // 7. Member
     if (data.memberName) {
         lines.push(repeatChar('-', width));
-        lines.push(`Member: ${data.memberName}`);
+        lines.push(`${L.member} ${data.memberName}`);
         if (data.pointsRedeemed && data.pointsRedeemed > 0) {
-            lines.push(`Points: -${data.pointsRedeemed}`);
+            lines.push(`${L.points} -${data.pointsRedeemed}`);
         }
     }
+    // 8. Footer
     lines.push('');
-    if (data.footer) {
+    if (data.footer && data.footer !== data.storeName) {
         lines.push(centerText(data.footer, width));
     }
-    lines.push(centerText('=== TERIMA KASIH ===', width));
+    lines.push(centerText(L.thanks, width));
     return lines.join('\n') + '\n\n\n\n\n';
 }
 function centerText(text, width) {

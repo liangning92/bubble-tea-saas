@@ -84,21 +84,26 @@ export function CustomerDisplayPage() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Load dualScreen config from localStorage
+  // Load dualScreen config from localStorage and listen to real-time updates
   useEffect(() => {
-    const savedConfig = localStorage.getItem('dualScreenConfig')
-    if (savedConfig) {
-      try {
-        const config = JSON.parse(savedConfig)
-        setDualScreenConfig({
-          ...config,
-          idleLayout: config.idleLayout || DEFAULT_IDLE_LAYOUT,
-          orderingLayout: config.orderingLayout || DEFAULT_ORDERING_LAYOUT,
-        })
-      } catch (e) {
-        console.error('Failed to parse dualScreenConfig:', e)
+    const loadConfig = () => {
+      const savedConfig = localStorage.getItem('dualScreenConfig')
+      if (savedConfig) {
+        try {
+          const config = JSON.parse(savedConfig)
+          setDualScreenConfig({
+            ...config,
+            idleLayout: config.idleLayout || DEFAULT_IDLE_LAYOUT,
+            orderingLayout: config.orderingLayout || DEFAULT_ORDERING_LAYOUT,
+          })
+        } catch (e) {
+          console.error('Failed to parse dualScreenConfig:', e)
+        }
       }
     }
+    loadConfig()
+    window.addEventListener('storage', loadConfig)
+    return () => window.removeEventListener('storage', loadConfig)
   }, [])
 
   const mediaFiles = dualScreenConfig.mediaFiles || []
@@ -148,6 +153,8 @@ export function CustomerDisplayPage() {
     }
   }, [currentMediaIndex, displayState, mediaFiles])
 
+  const [paymentQr, setPaymentQr] = useState<{ qrImage: string; amount: number; orderNumber?: string } | null>(null)
+
   // Listen for order updates from main screen via Electron IPC
   useEffect(() => {
     const api = (window as any).electronAPI
@@ -156,22 +163,37 @@ export function CustomerDisplayPage() {
     api.onOrderUpdate((data: OrderData) => {
       setOrderData(data)
       setDisplayState('ordering')
+      setPaymentQr(null)
       setOrderComplete({ show: false, orderNumber: '' })
     })
 
     api.onOrderClear(() => {
       setOrderData(null)
+      setPaymentQr(null)
       setDisplayState('idle')
     })
 
     api.onOrderComplete((orderNumber: string) => {
       setDisplayState('complete')
+      setPaymentQr(null)
       setOrderComplete({ show: true, orderNumber })
       setTimeout(() => {
         setDisplayState('idle')
         setOrderComplete({ show: false, orderNumber: '' })
       }, 5000)
     })
+
+    if (api.onPaymentQr) {
+      api.onPaymentQr((qrData: any) => {
+        if (qrData && qrData.qrImage) {
+          setPaymentQr(qrData)
+          setDisplayState('paying')
+        } else {
+          setPaymentQr(null)
+          setDisplayState(prev => (prev === 'paying' ? 'ordering' : prev))
+        }
+      })
+    }
   }, [])
 
   const promotion = promotions[currentPromotion]
@@ -218,16 +240,28 @@ export function CustomerDisplayPage() {
             </div>
           </div>
         )
-      case 'welcome':
+      case 'welcome': {
+        const storeLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
         return (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600">
-            <img src="/youme-logo-white.png" alt="YOUME" className="w-96 h-48 object-contain" />
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 p-8 text-white">
+            <img
+              src={storeLogo || '/youme-logo-white.png'}
+              alt="YOUME"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/youme-logo-white.png'
+              }}
+              className="max-w-[80%] max-h-48 object-contain mb-6 drop-shadow-lg"
+            />
+            {dualScreenConfig.welcomeText && (
+              <h2 className="text-3xl font-bold text-center tracking-wide">{dualScreenConfig.welcomeText}</h2>
+            )}
           </div>
         )
+      }
       case 'order':
         return (
           <div className="w-full h-full flex flex-col bg-gray-50">
-            <div className="bg-primary text-white py-3 px-4 text-center font-bold">Your Order</div>
+            <div className="bg-primary text-white py-3 px-4 text-center font-bold">{t('pos.cart', 'Your Order')}</div>
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
               {orderData?.items.map((item) => (
                 <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
@@ -251,41 +285,76 @@ export function CustomerDisplayPage() {
             <div className="bg-white border-t p-4">
               <div className="space-y-1 mb-3">
                 <div className="flex justify-between text-gray-500 text-sm">
-                  <span>Subtotal</span>
+                  <span>{t('pos.subtotal', 'Subtotal')}</span>
                   <span>{formatCurrency(orderData?.subtotal || 0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-500 text-sm">
-                  <span>Tax</span>
+                  <span>{t('pos.tax', 'Tax')}</span>
                   <span>{formatCurrency(orderData?.ppn || 0)}</span>
                 </div>
                 {(orderData?.discount || 0) > 0 && (
                   <div className="flex justify-between text-green-500 text-sm">
-                    <span>Discount</span>
+                    <span>{t('pos.discount', 'Discount')}</span>
                     <span>-{formatCurrency(orderData?.discount || 0)}</span>
                   </div>
                 )}
               </div>
               <div className="flex justify-between font-bold text-xl pt-2 border-t">
-                <span>Total</span>
+                <span>{t('pos.total', 'Total')}</span>
                 <span className="text-primary">{formatCurrency(orderData?.total || 0)}</span>
               </div>
               {displayState === 'ordering' && (
                 <div className="mt-3 bg-yellow-100 text-yellow-800 py-2 rounded-lg text-center text-sm font-medium">
-                  Please pay at counter
+                  {t('customerDisplay.payAtCounter', 'Please pay at counter')}
                 </div>
               )}
             </div>
           </div>
         )
-      case 'logo':
+      case 'logo': {
+        const displayLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
         return (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <img src="/youme-logo-red.png" alt="YOUME" className="w-64 h-32 object-contain" />
+          <div className="w-full h-full flex items-center justify-center bg-gray-100 p-8">
+            <img
+              src={displayLogo || '/youme-logo-red.png'}
+              alt="YOUME"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/youme-logo-red.png'
+              }}
+              className="max-w-[80%] max-h-48 object-contain"
+            />
           </div>
         )
+      }
       default:
         return null
     }
+  }
+
+  // Paying state - show prominent payment QR code to customer
+  if (displayState === 'paying' && paymentQr) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center p-8 text-white">
+        <div className="bg-white text-gray-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in duration-300">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-2xl">📱</span>
+            <span className="font-bold text-lg text-primary">{t('pos.scanToPay', 'Scan QR to Pay')}</span>
+          </div>
+          {paymentQr.orderNumber && (
+            <p className="text-xs text-gray-400 font-mono mb-2">#{paymentQr.orderNumber}</p>
+          )}
+          <div className="p-3 bg-white border-2 border-indigo-100 rounded-2xl shadow-sm mb-4 flex items-center justify-center">
+            <img src={paymentQr.qrImage} alt="Payment QR" className="w-56 h-56 object-contain" />
+          </div>
+          <p className="text-gray-500 text-xs mb-1 uppercase tracking-wider">{t('pos.total', 'Total Amount')}</p>
+          <p className="text-3xl font-extrabold text-primary mb-4">{formatCurrency(paymentQr.amount)}</p>
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span>QRIS / GoPay / OVO / Dana / BCA</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Order complete state - show thank you message (always full screen)

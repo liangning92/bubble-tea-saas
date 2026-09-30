@@ -6,6 +6,7 @@ const router = Router()
 // This gets updated when POS client detects printers
 let detectedPrinters: string[] = []
 let lastDetectionTime: Date | null = null
+const storePrintersMap: Record<string, { printers: string[]; lastDetection: Date }> = {}
 
 /**
  * GET /api/hardware/printers
@@ -13,13 +14,18 @@ let lastDetectionTime: Date | null = null
  */
 router.get('/printers', async (req: Request, res: Response) => {
   try {
+    const storeId = (req.query.storeId as string) || ''
+    const storeData = storeId ? storePrintersMap[storeId] : null
+    const printers = storeData ? storeData.printers : detectedPrinters
+    const lastDetection = storeData ? storeData.lastDetection : lastDetectionTime
+
     res.json({
       success: true,
-      printers: detectedPrinters,
-      lastDetection: lastDetectionTime,
-      message: detectedPrinters.length > 0 
-        ? `${detectedPrinters.length} printer(s) detected`
-        : 'No printers detected. Click "Detect Printers" on POS terminal.'
+      printers,
+      lastDetection,
+      message: printers.length > 0 
+        ? `${printers.length} printer(s) detected`
+        : 'No printers detected. Printers will be detected automatically when POS terminal connects.'
     })
   } catch (error) {
     console.error('[Hardware] Error getting printers:', error)
@@ -42,7 +48,13 @@ router.post('/printers', async (req: Request, res: Response) => {
     
     detectedPrinters = printers
     lastDetectionTime = new Date()
-    
+
+    if (storeId) {
+      storePrintersMap[storeId] = {
+        printers,
+        lastDetection: lastDetectionTime
+      }
+    }
     
     res.json({
       success: true,

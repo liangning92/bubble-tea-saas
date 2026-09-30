@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { receiptTemplateApi as ReceiptTemplateApi } from '../services/api'
+import { receiptTemplateApi as ReceiptTemplateApi, uploadApi } from '../services/api'
 import {
   GripVertical,
   Trash2,
@@ -28,6 +28,7 @@ import {
   Settings2,
   Eye,
   Palette,
+  Upload,
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -57,6 +58,7 @@ export interface BlockStyle {
 export interface BlockConfig {
   // logo
   width?: number
+  url?: string
   // header
   text?: string
   // storeInfo
@@ -308,9 +310,21 @@ const LivePreview: React.FC<{
             return (
               <div key={block.id} className={`${alignClass} mb-2`}>
                 <div className="border rounded p-1 inline-block">
-                  <div className="w-20 h-12 bg-gray-100 flex items-center justify-center text-gray-400 text-[10px]">
-                    LOGO
-                  </div>
+                  {block.config.url ? (
+                    <img
+                      src={block.config.url}
+                      alt="Logo"
+                      style={{ width: block.config.width ? `${block.config.width}px` : '100px' }}
+                      className="max-h-20 object-contain inline-block"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none'
+                      }}
+                    />
+                  ) : (
+                    <div className="w-20 h-12 bg-gray-100 flex items-center justify-center text-gray-400 text-[10px]">
+                      LOGO
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -635,14 +649,51 @@ const BlockPropertiesPanel: React.FC<{
 
         {/* Logo */}
         {block.type === 'logo' && (
-          <div>
-            <label className="text-sm text-gray-600">{t('posSettings.blockWidthPx')}</label>
-            <input
-              type="number"
-              value={block.config.width || 120}
-              onChange={(e) => updateConfig('width', parseInt(e.target.value))}
-              className="input mt-1 w-full"
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockWidthPx', '宽度 (px)')}</label>
+              <input
+                type="number"
+                value={block.config.width || 120}
+                onChange={(e) => updateConfig('width', parseInt(e.target.value))}
+                className="input mt-1 w-full"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.storeLogo', 'Logo 图片')}</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={block.config.url || ''}
+                  onChange={(e) => updateConfig('url', e.target.value)}
+                  placeholder="图片 URL 或点击上传"
+                  className="input flex-1 text-xs"
+                />
+                <label className="btn-secondary text-xs cursor-pointer flex items-center gap-1 py-2 px-3 flex-shrink-0">
+                  <Upload size={13} />
+                  <span>上传</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const files = e.target.files
+                      if (!files || files.length === 0) return
+                      try {
+                        const res = await uploadApi.uploadReceipt([files[0]])
+                        const urls = res.data?.data?.urls || []
+                        if (urls.length > 0) {
+                          updateConfig('url', urls[0])
+                        }
+                      } catch (err) {
+                        console.error('Failed to upload logo:', err)
+                        alert('上传失败，请重试')
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         )}
 

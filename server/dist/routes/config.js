@@ -23,15 +23,19 @@ router.get('/', auth_1.authenticate, async (req, res) => {
     try {
         const { storeId, category } = req.query;
         const where = {};
-        if (storeId)
-            where.storeId = storeId;
+        if (storeId) {
+            where.storeId = { in: [storeId, ''] };
+        }
+        else {
+            where.storeId = '';
+        }
         if (category)
             where.category = category;
         const configs = await database_1.default.config.findMany({
             where,
-            orderBy: { key: 'asc' }
+            orderBy: { storeId: 'asc' } // '' (global) comes first, storeId specific comes after to override
         });
-        // Transform to key-value object
+        // Transform to key-value object (storeId specific will overwrite global '')
         const result = {};
         configs.forEach(c => {
             try {
@@ -93,9 +97,14 @@ router.put('/staff/features', auth_1.authenticate, (0, auth_1.authorize)('admin'
 router.get('/:storeId/:key', auth_1.authenticate, async (req, res) => {
     try {
         const { storeId, key } = req.params;
-        const config = await database_1.default.config.findUnique({
+        let config = await database_1.default.config.findUnique({
             where: { storeId_key: { storeId, key } }
         });
+        if (!config && storeId !== '') {
+            config = await database_1.default.config.findUnique({
+                where: { storeId_key: { storeId: '', key } }
+            });
+        }
         if (!config) {
             return res.status(404).json({ code: 404, message: 'Config not found' });
         }

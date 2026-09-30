@@ -26,7 +26,7 @@ import {
 const electronAPI = (window as any).electronAPI
 
 // Helper to get available printer name from settings
-function getPrinterName(printerSettings: { printerName?: string; printers?: Array<{ type: string; enabled: boolean; printerName?: string }> }, type: 'receipt' | 'kitchen' = 'receipt'): string {
+function getPrinterName(printerSettings: { printerName?: string; printers?: Array<{ type: string; enabled: boolean; printerName?: string }> }, type: 'receipt' | 'kitchen' | 'label' = 'receipt'): string {
   // 1. First try: use configured printer for this type
   if (printerSettings?.printers && printerSettings.printers.length > 0) {
     const configured = printerSettings.printers.find(p => p.type === type && p.enabled && p.printerName)
@@ -38,15 +38,22 @@ function getPrinterName(printerSettings: { printerName?: string; printers?: Arra
       return fallbackConfigured.printerName
     }
   }
-  // 2. Fallback: use legacy printerName field
-  if (printerSettings?.printerName) {
+  // 2. Fallback: use legacy printerName field (receipt only)
+  if (type === 'receipt' && printerSettings?.printerName) {
     return printerSettings.printerName
   }
   // 3. Fallback: check localStorage for saved printer
-  if (typeof window !== 'undefined' && type === 'receipt') {
-    const localName = localStorage.getItem('receipt_printer_name')
-    if (localName) {
-      return localName
+  if (typeof window !== 'undefined') {
+    if (type === 'receipt') {
+      const localName = localStorage.getItem('receipt_printer_name')
+      if (localName) {
+        return localName
+      }
+    } else if (type === 'label') {
+      const localName = localStorage.getItem('label_printer_name')
+      if (localName) {
+        return localName
+      }
     }
   }
   // 4. Last resort: empty string (system default)
@@ -189,8 +196,8 @@ export function POSPage() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'offline'>('connected')
   // 渠道状态 - 动态加载
-  const [posChannels, setPosChannels] = useState<Array<{id: string; nameKey: string; icon: string; code: string; color?: string}>>([])
-  const [selectedChannel, setSelectedChannel] = useState<{id: string; nameKey: string; icon: string; code: string; color?: string} | null>(null)
+  const [posChannels, setPosChannels] = useState<Array<{id: string; nameKey: string; icon: string; code: string; color?: string; name?: string}>>([])
+  const [selectedChannel, setSelectedChannel] = useState<{id: string; nameKey: string; icon: string; code: string; color?: string; name?: string} | null>(null)
   // 渠道设置（用于控制各渠道开关）
   const [channelSettings, setChannelSettings] = useState<Record<string, { enabled: boolean }>>({})
   const [dineInCount, setDineInCount] = useState(1) // 堂食人数
@@ -355,6 +362,9 @@ export function POSPage() {
     showShift: true,
     showCash: false,
     showExpense: true,
+    showTasks: true,
+    showHardware: false,
+    showLogout: true,
     channelDineIn: true,
     channelGoFood: true,
     channelGrab: true,
@@ -362,6 +372,8 @@ export function POSPage() {
     // 布局样式
     productImage: 'thumb',
     compactMode: false,
+    productSortBy: 'name',
+    productSortOrder: 'asc',
     // 快捷键配置
     hotkeys: {
       newOrder: 'F1',
@@ -381,10 +393,12 @@ export function POSPage() {
       scan: 'toolbar.scan',
       shift: 'toolbar.shift',
       cash: 'toolbar.cash',
+      expense: 'toolbar.expense',
       tasks: 'toolbar.tasks',
+      setting: 'toolbar.setting',
       hardware: 'toolbar.hardware',
       logout: 'toolbar.logout'
-    }
+    } as Record<string, string>
   })
 
   // 店铺信息
@@ -392,7 +406,8 @@ export function POSPage() {
     storeName: 'YOUME',
     address: '',
     phone: '',
-    openingHours: ''
+    openingHours: '',
+    storeLogo: (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || '',
   })
 
   // 小票设置
@@ -401,6 +416,7 @@ export function POSPage() {
     footer: 'Thank you!',
     taxRate: 11,
     showLogo: true,
+    storeLogo: (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || '',
     paperSize: '80mm',
     printCopies: 1,
     showQR: false,
@@ -413,6 +429,81 @@ export function POSPage() {
     showCustomerName: false,
     autoPrint: true,
   })
+
+  // 根据 channelSettings 与 posLayout 动态过滤并补齐自定义名称的可用渠道
+  const availableChannels = useMemo(() => {
+    const codeToKeyMap: Record<string, string> = {
+      'DINE_IN': 'dineIn',
+      'GOFOOD': 'gofood',
+      'GRAB': 'grab',
+      'SHOPEE': 'shopee',
+    }
+    const codeToLayoutMap: Record<string, keyof typeof posLayout> = {
+      'DINE_IN': 'channelDineIn',
+      'GOFOOD': 'channelGoFood',
+      'GRAB': 'channelGrab',
+      'SHOPEE': 'channelShopee',
+    }
+    const baseList = (posChannels && posChannels.length > 0) ? posChannels : CHANNELS
+    return baseList.filter(ch => {
+      const adminKey = codeToKeyMap[ch.code]
+      if (adminKey && channelSettings[adminKey]) {
+        if (channelSettings[adminKey].enabled === false) return false
+      }
+      const layoutKey = codeToLayoutMap[ch.code]
+      if (layoutKey && posLayout[layoutKey] === false) return false
+      return true
+    }).map(ch => {
+      const adminKey = codeToKeyMap[ch.code]
+      const cfg = adminKey ? (channelSettings as any)[adminKey] : null
+      return {
+        ...ch,
+        name: cfg?.name || (ch as any).name || ((ch as any).nameKey ? t(`pos.channel.${(ch as any).nameKey}`, ch.code) : ch.code),
+        color: cfg?.color || (ch as any).color,
+        icon: cfg?.icon || ch.icon
+      }
+    })
+  }, [posChannels, channelSettings, posLayout, t])
+
+  // 保证当前选中的渠道必须在可用渠道内
+  useEffect(() => {
+    if (availableChannels.length > 0) {
+      if (!selectedChannel) {
+        setSelectedChannel(availableChannels[0])
+      } else {
+        const stillValid = availableChannels.find(c => c.id === selectedChannel.id || c.code === selectedChannel.code)
+        if (!stillValid) {
+          setSelectedChannel(availableChannels[0])
+        }
+      }
+    }
+  }, [availableChannels, selectedChannel])
+
+  // 每日递增排队取餐号生成器 (如 A001, A002, G001...)
+  const getNextPickupNumber = (channelCode?: string) => {
+    const now = new Date()
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+    const storeKey = `pos_pickup_seq_${dateStr}`
+    let currentSeq = 1
+    try {
+      const saved = localStorage.getItem(storeKey)
+      if (saved) {
+        currentSeq = (parseInt(saved, 10) || 0) + 1
+      }
+      localStorage.setItem(storeKey, String(currentSeq))
+    } catch (e) {
+      currentSeq = Math.floor(1 + Math.random() * 999)
+    }
+
+    let prefix = 'A'
+    if (channelCode === 'GOFOOD') prefix = 'G'
+    else if (channelCode === 'GRAB') prefix = 'B'
+    else if (channelCode === 'SHOPEE') prefix = 'S'
+    else if (channelCode === 'TAKEAWAY') prefix = 'T'
+    else if (channelCode === 'DINE_IN') prefix = 'A'
+
+    return `${prefix}${String(currentSeq).padStart(3, '0')}`
+  }
 
   // 小票模板（从ReceiptTemplate表加载，支持拖拽编辑器自定义）
   const [receiptTemplate, setReceiptTemplate] = useState<any>(null)
@@ -781,6 +872,16 @@ export function POSPage() {
               if (serverTimestamp) {
                 await productCache.saveProductsVersion(serverTimestamp)
               }
+              // 同步更新当前 React 商品状态，收银员即时看到后台修改
+              setProducts(localProducts.map(p => ({
+                id: p.id,
+                name: p.name,
+                description: p.description,
+                image: p.image,
+                category: { id: p.categoryId, name: p.categoryName },
+                specs: p.specs || [],
+                addons: (p.addons || []).map(a => ({ addonId: a.id, addon: a }))
+              })))
             }
           }
         }
@@ -825,13 +926,20 @@ export function POSPage() {
 
         // 店铺信息 - Admin保存为storeInfo对象
         const storeInfoData = configs.storeInfo || {}
-        if (storeInfoData.storeName || storeInfoData.address || storeInfoData.phone) {
+        const receiptConfig = configs.posReceipt || configs.receiptSettings || {}
+        const resolvedStoreLogo = storeInfoData.storeLogo || storeInfoData.logo || receiptConfig.storeLogo || ''
+
+        if (storeInfoData.storeName || storeInfoData.address || storeInfoData.phone || resolvedStoreLogo) {
           setStoreInfo({
             storeName: storeInfoData.storeName || 'YOUME',
             address: storeInfoData.address || '',
             phone: storeInfoData.phone || '',
-            openingHours: storeInfoData.openingHours || ''
+            openingHours: storeInfoData.openingHours || '',
+            storeLogo: resolvedStoreLogo,
           })
+          if (resolvedStoreLogo) {
+            localStorage.setItem('pos_store_logo', resolvedStoreLogo)
+          }
         }
 
         // POS布局设置 - Admin保存为posLayout对象，包含快捷键、渠道开关等
@@ -866,8 +974,7 @@ export function POSPage() {
           }))
         }
 
-        // 工具栏设置 (包含按钮标签)
-        // showCash/showExpense 存在 posLayout，toolbarSettings 只存按钮开关和标签
+        // 工具栏设置 (包含按钮标签与完整开关)
         if (configs.toolbarSettings) {
           setPosLayout(prev => ({
             ...prev,
@@ -875,27 +982,31 @@ export function POSPage() {
             showHistory: configs.toolbarSettings.showHistory ?? prev.showHistory,
             showScan: configs.toolbarSettings.showScan ?? prev.showScan,
             showShift: configs.toolbarSettings.showShift ?? prev.showShift,
+            showCash: configs.toolbarSettings.showCash ?? prev.showCash,
             showExpense: configs.toolbarSettings.showExpense ?? prev.showExpense,
+            showTasks: configs.toolbarSettings.showTasks ?? (prev as any).showTasks,
+            showHardware: configs.toolbarSettings.showHardware ?? (prev as any).showHardware,
+            showLogout: configs.toolbarSettings.showLogout ?? (prev as any).showLogout,
             // Admin 保存的 key 是 toolbarLabels，但 POS 也可能用 labels 作为 fallback
             toolbarLabels: configs.toolbarSettings.toolbarLabels || configs.toolbarSettings.labels || prev.toolbarLabels,
           }))
         }
 
         // 小票设置 - Admin保存完整posReceipt对象，合并默认值
-        const receiptConfig = configs.posReceipt || configs.receiptSettings
-        if (receiptConfig) {
+        if (receiptConfig && Object.keys(receiptConfig).length > 0) {
           setPosReceipt(prev => ({
             header: receiptConfig.header || receiptConfig.headerCustomText || prev.header,
             footer: receiptConfig.footer || receiptConfig.footerMessage || prev.footer,
             taxRate: receiptConfig.taxRate ?? prev.taxRate,
             showLogo: receiptConfig.showLogo ?? prev.showLogo,
+            storeLogo: resolvedStoreLogo || receiptConfig.storeLogo || prev.storeLogo,
             paperSize: receiptConfig.paperSize || prev.paperSize,
             printCopies: receiptConfig.printCopies ?? prev.printCopies,
             showQR: receiptConfig.showQR ?? prev.showQR,
             showBarcode: receiptConfig.showBarcode ?? prev.showBarcode,
             showKitchenNote: receiptConfig.showKitchenNote ?? prev.showKitchenNote,
-            storePhone: receiptConfig.storePhone || prev.storePhone,
-            storeAddress: receiptConfig.storeAddress || prev.storeAddress,
+            storePhone: receiptConfig.storePhone || storeInfoData.phone || prev.storePhone,
+            storeAddress: receiptConfig.storeAddress || storeInfoData.address || prev.storeAddress,
             itemDetailFormat: receiptConfig.itemDetailFormat || prev.itemDetailFormat,
             showStaffName: receiptConfig.showStaffName ?? prev.showStaffName,
             showCustomerName: receiptConfig.showCustomerName ?? prev.showCustomerName,
@@ -941,29 +1052,37 @@ export function POSPage() {
           } : hardwareSettings.dualScreen
 
           setHardwareSettings((prev: any) => {
-            const localPrinterName = (typeof window !== 'undefined' && localStorage.getItem('receipt_printer_name')) || ''
             let mergedPrinters = hw.printers && Array.isArray(hw.printers) ? [...hw.printers] : [...prev.printers]
-            const activePrinterName = hw.printerName || localPrinterName || prev.printerName || ''
+            // 服务端配置为绝对第一优先级 (Single Source of Truth)
+            const serverReceiptPrinter = mergedPrinters.find((p: any) => p.type === 'receipt' && p.printerName)?.printerName
+            const activePrinterName = serverReceiptPrinter || hw.printerName || prev.printerName || (typeof window !== 'undefined' ? localStorage.getItem('receipt_printer_name') : '') || ''
 
-            if (localPrinterName || activePrinterName) {
-              const targetName = localPrinterName || activePrinterName
+            if (activePrinterName) {
               const idx = mergedPrinters.findIndex((p: any) => p.type === 'receipt')
               if (idx >= 0) {
-                if (!mergedPrinters[idx].printerName) {
-                  mergedPrinters[idx] = { ...mergedPrinters[idx], enabled: true, printerName: targetName }
-                }
+                mergedPrinters[idx] = { ...mergedPrinters[idx], enabled: true, printerName: activePrinterName }
               } else {
                 mergedPrinters.push({
                   id: 'receipt-1',
                   type: 'receipt',
                   name: 'Receipt Printer',
                   enabled: true,
-                  connectionType: 'usb',
-                  printerName: targetName,
-                  printerIp: '',
-                  printerPort: 9100
+                  connectionType: hw.printerConnectionType || 'usb',
+                  printerName: activePrinterName,
+                  printerIp: hw.printerIp || '',
+                  printerPort: hw.printerPort || 9100
                 })
               }
+            }
+
+            // 更新离线缓存供无网断网时使用
+            try {
+              localStorage.setItem('hardware_settings', JSON.stringify({ ...hw, printers: mergedPrinters, printerName: activePrinterName }))
+              if (activePrinterName) {
+                localStorage.setItem('receipt_printer_name', activePrinterName)
+              }
+            } catch (e) {
+              console.warn('[POS] Failed to update offline hardware settings cache:', e)
             }
 
             return {
@@ -988,6 +1107,7 @@ export function POSPage() {
 
           // 同步 dualScreen 配置到 localStorage，供副屏使用
           localStorage.setItem('dualScreenConfig', JSON.stringify(newDualScreen))
+          window.dispatchEvent(new Event('storage'))
         }
 
         // 支付方式配置 - 使用Admin配置，覆盖默认值
@@ -1055,32 +1175,41 @@ export function POSPage() {
           }))
         }
 
-        // 渠道颜色配置和开关设置
+        // 渠道颜色配置、自定义名称与开关设置
         if (configs.channelSettings) {
-          // 存储渠道设置（包含enabled开关）供ChannelSelectModal使用
           setChannelSettings(configs.channelSettings)
 
-          setPosChannels(prev => prev.map(ch => {
-            // Admin 保存的 key 格式: dineIn, gofood, grab, shopee
-            // POS 使用的 code 格式: DINE_IN, GOFOOD, GRAB, SHOPEE
-            // 建立直接映射表
-            const codeToKeyMap: Record<string, string> = {
-              'DINE_IN': 'dineIn',
-              'GOFOOD': 'gofood',
-              'GRAB': 'grab',
-              'SHOPEE': 'shopee',
-            }
-            const adminKey = codeToKeyMap[ch.code]
-            const channelConfig = adminKey ? configs.channelSettings[adminKey] : null
-            if (channelConfig) {
-              return {
-                ...ch,
-                color: channelConfig.color || ch.color,
-                icon: channelConfig.icon || ch.icon,
-              }
-            }
-            return ch
+          // 保持 posLayout 的渠道开关与 channelSettings 同步
+          setPosLayout(prev => ({
+            ...prev,
+            channelDineIn: configs.channelSettings.dineIn?.enabled ?? prev.channelDineIn,
+            channelGoFood: configs.channelSettings.gofood?.enabled ?? prev.channelGoFood,
+            channelGrab: configs.channelSettings.grab?.enabled ?? prev.channelGrab,
+            channelShopee: configs.channelSettings.shopee?.enabled ?? prev.channelShopee,
           }))
+
+          setPosChannels(prev => {
+            const list = (prev && prev.length > 0) ? prev : CHANNELS
+            return list.map(ch => {
+              const codeToKeyMap: Record<string, string> = {
+                'DINE_IN': 'dineIn',
+                'GOFOOD': 'gofood',
+                'GRAB': 'grab',
+                'SHOPEE': 'shopee',
+              }
+              const adminKey = codeToKeyMap[ch.code]
+              const channelConfig = adminKey ? configs.channelSettings[adminKey] : null
+              if (channelConfig) {
+                return {
+                  ...ch,
+                  name: channelConfig.name || (ch as any).name || '',
+                  color: channelConfig.color || (ch as any).color,
+                  icon: channelConfig.icon || ch.icon,
+                }
+              }
+              return ch
+            })
+          })
         }
 
         // 显示设置 (autoLogout, language, etc)
@@ -1089,6 +1218,12 @@ export function POSPage() {
             ...prev,
             ...configs.displaySettings
           }))
+          // 如果后台配置了系统语言，同步切换
+          if (configs.displaySettings.language && configs.displaySettings.language !== lang) {
+            i18n.changeLanguage(configs.displaySettings.language)
+            setLang(configs.displaySettings.language)
+            localStorage.setItem('pos_lang', configs.displaySettings.language)
+          }
           // 离线解锁：保存 lockScreenPin 到本地
           if (configs.displaySettings.lockScreenPin) {
             saveLockScreenPin(configs.displaySettings.lockScreenPin)
@@ -1105,15 +1240,22 @@ export function POSPage() {
       })
   }, [user?.storeId])
 
-  // 页面可见性变化时重新加载配置（Admin修改设置后自动同步）
+  // 页面可见性或获得焦点时重新加载配置（Admin修改设置后自动秒级同步）
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         loadConfig()
       }
     }
+    const handleFocus = () => {
+      loadConfig()
+    }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [loadConfig])
 
   // 初始加载配置与获取软件版本
@@ -1130,13 +1272,32 @@ export function POSPage() {
     fetchAppVersion()
   }, [loadConfig])
 
-  // 定期轮询配置（Admin修改后自动同步，30秒间隔）
+  // 启动与登录后静默检测收银机连接的物理打印机并自动上报给服务端供Admin选配
+  useEffect(() => {
+    const silentDetectAndReport = async () => {
+      try {
+        if (!electronAPI?.getPrinters) return
+        const printers = await electronAPI.getPrinters()
+        if (printers && Array.isArray(printers) && printers.length > 0) {
+          const names = printers.map((p: any) => typeof p === 'string' ? p : p.name).filter(Boolean)
+          console.log('[POS] Auto-detected local printers on startup:', names)
+          const storeId = user?.storeId || localStorage.getItem('storeId') || ''
+          await posApi.reportPrinters(names, storeId)
+        }
+      } catch (err) {
+        console.warn('[POS] Failed to auto-report printers on startup:', err)
+      }
+    }
+    silentDetectAndReport()
+  }, [user?.storeId])
+
+  // 定期轮询配置（Admin修改后自动同步，10秒间隔）
   useEffect(() => {
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadConfig()
       }
-    }, 30000) // 30秒轮询
+    }, 10000) // 10秒轮询
     return () => clearInterval(pollInterval)
   }, [loadConfig])
 
@@ -1222,7 +1383,8 @@ export function POSPage() {
                 id: ch.id,  // 使用数据库中的实际UUID
                 nameKey: `pos.${nameKey}` as string,
                 icon: ch.icon || '📦',
-                code: ch.code  // 保留code备用
+                code: ch.code,  // 保留code备用
+                name: ch.name || ''
               }
             })
           setPosChannels(loadedChannels)
@@ -1649,13 +1811,13 @@ export function POSPage() {
   // 快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // F1-F4: 渠道快捷切换
-      if (e.key === 'F1') { e.preventDefault(); setSelectedChannel(posChannels[0] || null) }
-      if (e.key === 'F2') { e.preventDefault(); setSelectedChannel(posChannels[1] || posChannels[0] || null) }
-      if (e.key === 'F3') { e.preventDefault(); setSelectedChannel(posChannels[2] || posChannels[0] || null) }
-      if (e.key === 'F4') { e.preventDefault(); setSelectedChannel(posChannels[3] || posChannels[0] || null) }
+      // F1-F4: 渠道快捷切换（严格限定在可用渠道内）
+      if (e.key === 'F1') { e.preventDefault(); if (availableChannels[0]) setSelectedChannel(availableChannels[0]) }
+      if (e.key === 'F2') { e.preventDefault(); if (availableChannels[1]) setSelectedChannel(availableChannels[1]) }
+      if (e.key === 'F3') { e.preventDefault(); if (availableChannels[2]) setSelectedChannel(availableChannels[2]) }
+      if (e.key === 'F4') { e.preventDefault(); if (availableChannels[3]) setSelectedChannel(availableChannels[3]) }
       // F5-F8: 常用金额
-      if (e.key === 'F5' && cartRef.current.length > 0) { e.preventDefault(); setPaymentModalOrderNum(Date.now().toString().slice(-6)); setShowPaymentModal(true) }
+      if (e.key === 'F5' && cartRef.current.length > 0) { e.preventDefault(); const pNum = getNextPickupNumber(selectedChannel?.code); setPaymentModalOrderNum(pNum); setShowPaymentModal(true) }
       // F6: 弹出钱箱 (快捷键)
       if (e.key === 'F6') { e.preventDefault(); handleOpenCashDrawer() }
       // ESC: 关闭弹窗
@@ -1694,11 +1856,42 @@ export function POSPage() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [products, filter, showAddonModal, showPaymentModal, showMemberModal, showDiscountModal, showSuspendModal, showShiftModal, showHistoryModal, showScanModal, showCashModal, showLogoutModal])
+  }, [availableChannels, products, filter, showAddonModal, showPaymentModal, showMemberModal, showDiscountModal, showSuspendModal, showShiftModal, showHistoryModal, showScanModal, showCashModal, showLogoutModal])
 
   const productStore = useProductStore()
   const categories = productStore.categories()
-  const filtered = productStore.filtered()
+  const rawFiltered = productStore.filtered()
+  const filtered = useMemo(() => {
+    const list = [...rawFiltered]
+    const sortBy = (posLayout as any).productSortBy || 'name'
+    const sortOrder = (posLayout as any).productSortOrder || 'asc'
+    const orderMul = sortOrder === 'desc' ? -1 : 1
+
+    list.sort((a, b) => {
+      if (sortBy === 'name') {
+        return a.name.localeCompare(b.name) * orderMul
+      }
+      if (sortBy === 'price_asc') {
+        const priceA = a.specs?.[0]?.price ?? 0
+        const priceB = b.specs?.[0]?.price ?? 0
+        return (priceA - priceB) * orderMul
+      }
+      if (sortBy === 'price_desc') {
+        const priceA = a.specs?.[0]?.price ?? 0
+        const priceB = b.specs?.[0]?.price ?? 0
+        return (priceB - priceA) * orderMul
+      }
+      if (sortBy === 'category') {
+        const catA = a.category?.name || ''
+        const catB = b.category?.name || ''
+        const catCmp = catA.localeCompare(catB)
+        if (catCmp !== 0) return catCmp * orderMul
+        return a.name.localeCompare(b.name) * orderMul
+      }
+      return 0
+    })
+    return list
+  }, [rawFiltered, (posLayout as any).productSortBy, (posLayout as any).productSortOrder])
 
   // 动态grid class
   const gridColsClass = {
@@ -1723,13 +1916,56 @@ export function POSPage() {
       return sum + (item.unitPrice + addonsTotal) * item.quantity
     }, 0)
   const tax = taxSettings.enabled !== false && posLayout.showTax !== false ? Math.round(taxableSubtotal * taxRate) : 0
-  // 积分抵扣：每100积分抵扣1印尼盾
-  const pointsDiscount = (pointsToRedeem || 0) / 100
-  const total = Math.max(0, subtotal + tax - discountAmount - pointsDiscount)
+  // 积分抵扣：每100积分抵扣1印尼盾，强制取整避免产生小数零头
+  const pointsDiscount = Math.floor((pointsToRedeem || 0) / 100)
+  const total = Math.max(0, Math.round(subtotal + tax - discountAmount - pointsDiscount))
   const change = paidAmount ? Math.max(0, (parseInt(paidAmount) || 0) - total) : 0
 
   // Sync totalRef after total is calculated
   useEffect(() => { totalRef.current = total }, [total])
+
+  // 实时推流购物车状态到客显副屏
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const api = (window as any).electronAPI
+    if (!api) return
+
+    if (cart.length === 0) {
+      api.sendOrderClear?.()
+    } else {
+      api.sendOrderUpdate?.({
+        items: cart.map(item => ({
+          id: item.id,
+          productName: item.productName,
+          specName: item.specName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          addons: (item.addons || []).map(a => ({ name: a.name, price: a.price }))
+        })),
+        subtotal,
+        ppn: tax,
+        discount: discountAmount,
+        total
+      })
+    }
+  }, [cart, subtotal, tax, discountAmount, total])
+
+  // 当选择 QRIS 且生成二维码后，推流收款二维码到副屏
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const api = (window as any).electronAPI
+    if (!api?.sendPaymentQr) return
+
+    if (showPaymentModal && paymentMethod === 'qris' && qrisData.status === 'waiting' && qrisData.qrImage) {
+      api.sendPaymentQr({
+        qrImage: qrisData.qrImage,
+        amount: total,
+        orderNumber: paymentModalOrderNum
+      })
+    } else if (!showPaymentModal || paymentMethod !== 'qris' || qrisData.status !== 'waiting') {
+      api.sendPaymentQr(null)
+    }
+  }, [showPaymentModal, paymentMethod, qrisData.status, qrisData.qrImage, total, paymentModalOrderNum])
 
   // Auto-apply coupon discount when selected coupon changes
   useEffect(() => {
@@ -1935,26 +2171,37 @@ export function POSPage() {
   }
 
   // 检测本机打印机
-  const handleDetectPrinters = async () => {
+  const handleDetectPrinters = async (): Promise<string[]> => {
     setPrinterDetectLoading(true)
     setPrinterDetectError(null)
     setDetectedPrinters([])
     try {
-      if (!electronAPI?.listPrinters) {
-        setPrinterDetectError(t('pos.printerNotAvailable', 'Printer not available (Windows only)'))
-        return
+      let printerList: string[] = []
+      if (electronAPI?.listPrinters) {
+        const result = await electronAPI.listPrinters()
+        if (result?.printers && Array.isArray(result.printers)) {
+          printerList = result.printers
+        }
+      } else if (electronAPI?.getPrinters) {
+        const raw = await electronAPI.getPrinters()
+        if (Array.isArray(raw)) {
+          printerList = raw.map((p: any) => typeof p === 'string' ? p : p.name).filter(Boolean)
+        }
       }
-      const result = await electronAPI.listPrinters()
-      console.log('[POS] Detected printers:', result)
-      if (result.printers && result.printers.length > 0) {
-        setDetectedPrinters(result.printers)
-        setSelectedPrinterForSetup(result.printers[0])
+
+      console.log('[POS] Detected printers:', printerList)
+      if (printerList.length > 0) {
+        setDetectedPrinters(printerList)
+        setSelectedPrinterForSetup(printerList[0])
+        return printerList
       } else {
-        setPrinterDetectError(t('pos_no_printers', 'No printers detected'))
+        setPrinterDetectError(t('pos_no_printers', '未检测到可用打印机'))
+        return []
       }
     } catch (err: any) {
       console.error('[POS] Detect printers failed:', err)
       setPrinterDetectError((err?.message) || t('common.error'))
+      return []
     } finally {
       setPrinterDetectLoading(false)
     }
@@ -2026,6 +2273,68 @@ export function POSPage() {
     }
   }
 
+  // 将选中的打印机设为标签打印机并保存
+  const handleSetupLabelPrinter = async () => {
+    const printerToSave = (selectedPrinterForSetup || '').trim()
+    if (!printerToSave) {
+      showToast(t('pos.pleaseSelectPrinter') || '请选择或输入打印机名称', 'warning')
+      return
+    }
+
+    const storeId = user?.storeId || localStorage.getItem('storeId') || ''
+
+    try {
+      const existingPrinters = hardwareSettings.printers || []
+      const existingIndex = existingPrinters.findIndex((p: any) => p.type === 'label')
+      let updatedPrinters = [...existingPrinters]
+      if (existingIndex >= 0) {
+        updatedPrinters[existingIndex] = {
+          ...updatedPrinters[existingIndex],
+          enabled: true,
+          printerName: printerToSave,
+          connectionType: 'usb'
+        }
+      } else {
+        updatedPrinters.push({
+          id: 'label-1',
+          type: 'label',
+          name: 'Label Printer',
+          enabled: true,
+          connectionType: 'usb',
+          printerName: printerToSave,
+          printerIp: '',
+          printerPort: 9100
+        })
+      }
+      const newHardwareSettings = {
+        ...hardwareSettings,
+        printers: updatedPrinters
+      }
+
+      setHardwareSettings(newHardwareSettings)
+
+      try {
+        localStorage.setItem('hardware_settings', JSON.stringify(newHardwareSettings))
+        localStorage.setItem('label_printer_name', printerToSave)
+      } catch (e) {
+        console.error('[POS] Failed to save label printer to localStorage:', e)
+      }
+
+      if (storeId) {
+        try {
+          await posApi.setHardwareSettings(storeId, newHardwareSettings)
+        } catch (apiErr: any) {
+          console.warn('[POS] Server setHardwareSettings failed, local copy active:', apiErr)
+        }
+      }
+
+      showToast((t('pos.labelPrinterSetupSuccess', '已成功设为标签打印机') || '已成功设为标签打印机') + ' ' + printerToSave, 'success')
+    } catch (err: any) {
+      console.error('[POS] handleSetupLabelPrinter error:', err)
+      showToast((t('common.error') || '保存失败') + ': ' + (err?.message || ''), 'error')
+    }
+  }
+
   // 手动/快捷键打开钱箱
   const handleOpenCashDrawer = async () => {
     const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
@@ -2070,6 +2379,36 @@ export function POSPage() {
       }
     } catch (err: any) {
       showToast('打印失败: ' + (err?.message || ''), 'error')
+    }
+  }
+
+  // 测试打印标签杯贴
+  const handleTestLabelPrint = async () => {
+    const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'label')
+    try {
+      const res = await electronAPI?.sendCupStickers?.({
+        printerName: targetName,
+        stickers: [{
+          orderNum: 'A001',
+          cupIndex: 1,
+          totalCups: 1,
+          productName: '招牌珍珠奶茶 (Brown Sugar Milk Tea)',
+          specName: '大杯 Large',
+          sugarLevelName: '50% 少糖',
+          iceLevelName: 'Less Ice 微冰',
+          addons: [{ name: '波霸 Boba' }, { name: '椰果 Jelly' }],
+          storeName: storeInfo.storeName || 'YOUME',
+          channelName: '堂食 (Dine-in)'
+        }],
+        isTspl: true
+      })
+      if (res?.success) {
+        showToast((t('pos.testLabelSuccess', '杯贴测试打印已发送') || '杯贴测试打印已发送') + (targetName ? ` (${targetName})` : ''), 'success')
+      } else {
+        showToast((t('pos.printFailed', '打印失败') || '打印失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+      }
+    } catch (err: any) {
+      showToast('杯贴打印失败: ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2291,9 +2630,14 @@ export function POSPage() {
       orderData.note = orderNote
     }
 
+    const initialOrderNum = orderData.orderNumber || getNextPickupNumber(selectedChannel?.code) || localId.replace('LOCAL-', '')
+    orderData.orderNumber = initialOrderNum
+    const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
+    let orderNum = initialOrderNum
+
     try {
       const res = await posApi.createOrder(orderData)
-      const orderNum = res.data?.data?.orderNumber || localId.replace('LOCAL-', '')
+      orderNum = res.data?.data?.orderNumber || initialOrderNum
       // 使用服务端计算的权威金额（包含税费、折扣、积分）
       const serverGrandTotal = res.data?.data?.grandTotal || total
       setOrderSuccess(orderNum)
@@ -2359,6 +2703,10 @@ export function POSPage() {
       }
       // 打印厨房单
       printKitchenOrder(orderNum, cart)
+      // 打印茶饮单杯杯贴 (TSPL)
+      printCupStickers(orderNum, cart)
+      // 通知副屏结账完成
+      electronAPI?.sendOrderComplete?.(orderNum)
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart()
@@ -2392,6 +2740,13 @@ export function POSPage() {
       } catch (dbErr) {
         console.error('[POS] Failed to add offline order to DB:', dbErr)
       }
+      // 离线模式同样下发打印和副屏通知
+      if (posReceipt.autoPrint !== false) {
+        printReceipt(orderNum, { ...orderData, openCashDrawer: shouldOpenDrawer })
+      }
+      printKitchenOrder(orderNum, cart)
+      printCupStickers(orderNum, cart)
+      electronAPI?.sendOrderComplete?.(orderNum)
       // Don't show success banner - order is pending sync
       // 清空购物车让用户可以开始新的订单
       clearCart()
@@ -2425,6 +2780,21 @@ export function POSPage() {
         orderNum,
         header: posReceipt.header,
         footer: posReceipt.footer,
+        paperSize: posReceipt.paperSize || '80mm',
+        printCopies: posReceipt.printCopies || 1,
+        storeName: storeInfo.storeName || posReceipt.header || 'YOUME',
+        storePhone: posReceipt.storePhone || storeInfo.phone || '',
+        storeAddress: posReceipt.storeAddress || storeInfo.address || '',
+        storeLogo: posReceipt.storeLogo || storeInfo.storeLogo || '',
+        language: lang || 'id',
+        channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : ''),
+        tableNumber: selectedChannel?.code === 'DINE_IN' ? tableNumber : undefined,
+        cashierName: user?.staff?.name || (user as any)?.name || user?.phone || '',
+        customerName: member?.name || '',
+        showStaffName: posReceipt.showStaffName ?? true,
+        showCustomerName: posReceipt.showCustomerName ?? true,
+        showKitchenNote: posReceipt.showKitchenNote ?? true,
+        showLogo: posReceipt.showLogo ?? true,
         printerName,
         printerHost,
         printerPort,
@@ -2453,9 +2823,9 @@ export function POSPage() {
           data: {
             header: posReceipt.header,
             footer: posReceipt.footer,
-            storeName: 'YOUME',
-            storePhone: posReceipt.storePhone,
-            storeAddress: posReceipt.storeAddress,
+            storeName: storeInfo.storeName || 'YOUME',
+            storePhone: posReceipt.storePhone || storeInfo.phone || '',
+            storeAddress: posReceipt.storeAddress || storeInfo.address || '',
             items: cart.map(item => ({
               productName: item.productName,
               specName: item.specName,
@@ -2470,7 +2840,7 @@ export function POSPage() {
             total,
             discount: discountAmount,
             paymentMethod: t(paymentMethods.find(m => m.id === paymentMethod)?.labelKey || 'pos.paymentCash') || paymentMethod,
-            cashierName: user?.staff?.name || '',
+            cashierName: user?.staff?.name || (user as any)?.name || user?.phone || '',
             customerName: member?.name || '',
             orderDate: undefined,
             paidAmount: paidAmount ? parseInt(paidAmount) : 0,
@@ -2506,6 +2876,57 @@ export function POSPage() {
     }
   }
 
+  // 打印茶饮单杯杯贴/不干胶标签 (TSPL)
+  const printCupStickers = (orderNum: string, items: any[]) => {
+    const labelPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'label' && p.enabled)
+    const isNetworkLabelPrinter = labelPrinter?.connectionType === 'network'
+    const printerName = isNetworkLabelPrinter
+      ? undefined
+      : labelPrinter?.printerName || getPrinterName(hardwareSettings, 'label') || undefined
+    const printerHost = isNetworkLabelPrinter ? labelPrinter?.printerIp : undefined
+    const printerPort = isNetworkLabelPrinter ? (labelPrinter?.printerPort || 9100) : undefined
+
+    if ((!printerName && !printerHost) || !electronAPI?.sendCupStickers) {
+      return
+    }
+
+    const stickerList: any[] = []
+    let totalCups = 0
+    items.forEach((item: any) => { totalCups += (item.quantity || 1) })
+
+    let cupIndex = 1
+    items.forEach((item: any) => {
+      const qty = item.quantity || 1
+      for (let q = 0; q < qty; q++) {
+        stickerList.push({
+          orderNum,
+          cupIndex,
+          totalCups,
+          productName: item.productName || item.name || '',
+          specName: item.specName || '',
+          sugarLevelName: item.sugarLevelName || '',
+          iceLevelName: item.iceLevelName || '',
+          addons: item.addons || [],
+          storeName: storeInfo.storeName || 'YOUME',
+          channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : '')
+        })
+        cupIndex++
+      }
+    })
+
+    try {
+      electronAPI?.sendCupStickers?.({
+        printerName,
+        printerHost,
+        printerPort,
+        stickers: stickerList,
+        isTspl: true
+      })
+    } catch (err) {
+      console.warn('Cup stickers print error:', err)
+    }
+  }
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -2519,10 +2940,17 @@ export function POSPage() {
       <header className="bg-primary px-3 py-2 flex items-center justify-between gap-2">
         {/* 左侧：店铺信息 */}
         <div className="flex items-center gap-3">
-          <img src="/youme-logo-white.png" alt="YOUME" className="h-8 w-auto object-contain" />
+          <img
+            src={storeInfo.storeLogo || '/youme-logo-white.png'}
+            alt={storeInfo.storeName || 'YOUME'}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/youme-logo-white.png'
+            }}
+            className="h-8 max-w-[120px] object-contain rounded"
+          />
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <span className="text-white font-bold text-sm">{'YOUME'}</span>
+              <span className="text-white font-bold text-sm">{storeInfo.storeName || 'YOUME'}</span>
               {appVersion && <span className="text-white/80 text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono">v{appVersion}</span>}
             </div>
             <span className="text-white/70 text-xs">{user?.staff?.name || t('pos.cashier')}</span>
@@ -2533,7 +2961,7 @@ export function POSPage() {
               className="px-3 py-1 text-white rounded-xl text-sm font-medium cursor-pointer hover:bg-white/20 transition-colors"
               style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
             >
-              {selectedChannel.icon} {t(selectedChannel.nameKey)}
+              {selectedChannel.icon} {(selectedChannel as any)?.name || t(selectedChannel.nameKey)}
               {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
             </span>
           )}
@@ -2624,29 +3052,38 @@ export function POSPage() {
             toolbarButtons.push({
               id: 'expense',
               icon: <Receipt size={20} />,
-              labelKey: 'toolbar.expense',
+              labelKey: posLayout.toolbarLabels?.expense || 'toolbar.expense',
               onClick: () => setShowExpenseModal(true)
             })
           }
-          toolbarButtons.push({
-            id: 'detectPrinter',
-            icon: <Printer size={20} />,
-            labelKey: 'toolbar.setting',
-            onClick: () => {
-              setSelectedPrinterForSetup(null)
-              setDetectedPrinters([])
-              setPrinterDetectError(null)
-              setShowPrinterDetectModal(true)
-              // 自动开始检测
-              handleDetectPrinters()
-            }
-          })
-          toolbarButtons.push({
-            id: 'logout',
-            icon: <X size={20} />,
-            labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
-            onClick: () => setShowLogoutModal(true)
-          })
+          // 巡店卫生与员工任务
+          if (posLayout.showTasks === true) {
+            toolbarButtons.push({
+              id: 'tasks',
+              icon: <ClipboardList size={20} />,
+              labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
+              onClick: () => navigate('/hygiene')
+            })
+          }
+          // 硬件设备状态自检（仅在后台明确开启 showHardware 时开放，默认收银员无此项）
+          if (posLayout.showHardware === true) {
+            toolbarButtons.push({
+              id: 'hardware',
+              icon: <Printer size={20} />,
+              labelKey: posLayout.toolbarLabels?.hardware || 'toolbar.hardware',
+              onClick: () => {
+                setShowPrinterDetectModal(true)
+              }
+            })
+          }
+          if (posLayout.showLogout !== false) {
+            toolbarButtons.push({
+              id: 'logout',
+              icon: <X size={20} />,
+              labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
+              onClick: () => setShowLogoutModal(true)
+            })
+          }
 
           return (
             <div className="flex items-stretch gap-3">
@@ -2664,7 +3101,9 @@ export function POSPage() {
                       </span>
                     )}
                   </div>
-                  <span className="text-sm mt-2 font-medium">{t(btn.labelKey)}</span>
+                  <span className="text-sm mt-2 font-medium">
+                    {btn.labelKey.startsWith('toolbar.') ? t(btn.labelKey) : btn.labelKey}
+                  </span>
                 </button>
               ))}
             </div>
@@ -2675,7 +3114,7 @@ export function POSPage() {
       {/* 渠道选择弹窗 - 解锁后必须先选择 */}
       {showChannelModal && (
         <ChannelSelectModal
-          channels={posChannels}
+          channels={availableChannels.length > 0 ? availableChannels : posChannels}
           posLayout={posLayout}
           channelSettings={channelSettings}
           selectedChannel={selectedChannel}
@@ -2715,6 +3154,46 @@ export function POSPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：分类栏 + 产品区 */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* 渠道快捷切换条 (根据后台渠道设置实时生效) */}
+          {availableChannels.length > 1 && (
+            <div className="bg-white border-b px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto flex-shrink-0 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mr-1">
+                  {t('pos.channel', '渠道')}:
+                </span>
+                {availableChannels.map(ch => {
+                  const isSelected = selectedChannel?.code === ch.code || selectedChannel?.id === ch.id
+                  const displayName = (ch as any).name || ((ch as any).nameKey ? t(`pos.channel.${(ch as any).nameKey}`, ch.code) : ch.code)
+                  return (
+                    <button
+                      key={ch.id || ch.code}
+                      onClick={() => {
+                        setSelectedChannel(ch)
+                        if (ch.code === 'DINE_IN' && !dineInCount) {
+                          setDineInCount(1)
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all touch-feedback ${
+                        isSelected
+                          ? 'bg-primary text-white shadow-sm ring-2 ring-primary/20'
+                          : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200/80'
+                      }`}
+                      style={isSelected && (ch as any).color ? { backgroundColor: (ch as any).color } : {}}
+                    >
+                      <span className="text-sm">{(ch as any).icon || '🛍️'}</span>
+                      <span>{displayName}</span>
+                      {ch.code === 'DINE_IN' && isSelected && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-black/20 rounded text-[10px]">
+                          {dineInCount || 1}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* 分类区域 - 白色背景 */}
           {selectedChannel && (
             <div className="bg-white px-4 py-2 border-b flex-shrink-0">
@@ -2757,15 +3236,23 @@ export function POSPage() {
                   className={`${cardHeightClass} bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary active:scale-95 transition-all overflow-hidden flex flex-col items-center justify-center ${!product.specs?.length ? 'opacity-50' : ''}`}
                   style={{ minHeight: '110px' }}
                 >
-                  {product.image ? (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-50 p-1">
-                      <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain" />
+                  {product.image && (posLayout.productImage as any) !== false && posLayout.productImage !== 'hidden' ? (
+                    <div className="w-full h-full flex flex-col items-center justify-between p-1.5">
+                      <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden">
+                        <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain rounded" />
+                      </div>
+                      <div className="flex flex-col items-center justify-center w-full mt-1">
+                        <span className="font-semibold text-sm text-gray-900 text-center leading-tight truncate w-full">{product.name}</span>
+                        {posLayout.showPrice && (
+                          <span className="text-primary font-bold text-sm mt-0.5">{formatCurrency(product.specs[0]?.price || 0)}</span>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center w-full px-2">
-                      <span className="font-bold text-lg text-gray-900 text-center leading-tight truncate w-full">{product.name}</span>
+                      <span className="font-bold text-base text-gray-900 text-center leading-tight line-clamp-2 w-full">{product.name}</span>
                       {posLayout.showPrice && (
-                        <span className="text-primary font-bold text-xl mt-1">{formatCurrency(product.specs[0]?.price || 0)}</span>
+                        <span className="text-primary font-bold text-lg mt-1">{formatCurrency(product.specs[0]?.price || 0)}</span>
                       )}
                     </div>
                   )}
@@ -2892,12 +3379,8 @@ export function POSPage() {
                 </button>
                 <button onClick={() => {
                   playSoundWithSettings('keypress', soundSettings.keypress)
-                  // 生成不规则订单号（防顾客推断销量）
-                  const date = new Date()
-                  const dateStr = date.toISOString().slice(0,10).replace(/-/g,'')
-                  const random = Math.floor(1000 + Math.random() * 9000) // 4位随机数
-                  const orderNum = `${dateStr}${random}`
-                  setPaymentModalOrderNum(orderNum)
+                  const pNum = getNextPickupNumber(selectedChannel?.code)
+                  setPaymentModalOrderNum(pNum)
                   setShowPaymentModal(true)
                 }} className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base active:scale-95 transition-transform touch-feedback">
                   💰 {t('pos.checkout')}
@@ -2992,172 +3475,274 @@ export function POSPage() {
 )}
 
 {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPaymentModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
-            <div className="bg-primary text-white px-4 py-3 flex justify-between items-center flex-shrink-0">
-              <h2 className="font-bold">{t('pos.confirmPayment')}</h2>
-              <button onClick={async () => {
-                // 记录关闭弹窗日志
-                try {
-                  await posApi.createCashEvent({
-                    type: 'payment_modal_closed',
-                    amount: 0,
-                    paymentMethod: paymentMethod,
-                    orderId: paymentModalOrderNum || `CLOSED-${Date.now()}`,
-                    note: `关闭支付弹窗 #${paymentModalOrderNum || 'unknown'}`
-                  })
-                } catch (e) {
-                  console.error('Failed to log modal close:', e)
-                }
-                setShowPaymentModal(false)
-                setQrisData({ status: 'idle' })
-              }} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20"><X size={20} /></button>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setShowPaymentModal(false)}>
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col z-[60] overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header (紧凑单行) */}
+            <div className="bg-primary text-white px-4 py-2.5 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <h2 className="font-bold text-base flex items-center gap-1.5">
+                  <span>💰</span>
+                  <span>{t('pos.confirmPayment', '结账与收款')}</span>
+                </h2>
+                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-mono">
+                  #{paymentModalOrderNum}
+                </span>
+                <span className="text-xs bg-black/20 px-2 py-0.5 rounded-full">
+                  {selectedChannel?.icon} {(selectedChannel as any)?.name || t(selectedChannel?.nameKey || '')}
+                  {selectedChannel?.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount', '人')})`}
+                </span>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    await posApi.createCashEvent({
+                      type: 'payment_modal_closed',
+                      amount: 0,
+                      paymentMethod: paymentMethod,
+                      orderId: paymentModalOrderNum || `CLOSED-${Date.now()}`,
+                      note: `关闭支付弹窗 #${paymentModalOrderNum || 'unknown'}`
+                    })
+                  } catch (e) {
+                    console.error('Failed to log modal close:', e)
+                  }
+                  setShowPaymentModal(false)
+                  setQrisData({ status: 'idle' })
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
+              >
+                <X size={18} />
+              </button>
             </div>
-            <div className="p-4 border-b flex items-center justify-between bg-green-50 flex-shrink-0">
-              <div>
-                <p className="text-xs text-gray-500">{t('pos.orderNo')}</p>
-                <p className="text-lg font-bold text-green-600">#{paymentModalOrderNum}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500">{t('pos.receivable')}</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(total)}</p>
-              </div>
-            </div>
-            {/* 顾客人数显示（已在渠道选择时设置） */}
-            <div className="px-4 py-2 bg-blue-50 border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">👥</span>
-                <span className="text-sm font-medium text-gray-700">{t('settings.customerCount')}</span>
-              </div>
-              <span className="text-base font-bold">{selectedChannel?.code === 'DINE_IN' ? dineInCount : customerCount}</span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3">
-              <p className="text-sm font-medium mb-2">{t('pos.payment')}</p>
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {paymentMethods.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setPaymentMethod(m.id)}
-                    className={`p-2 rounded-xl border-2 flex flex-col items-center gap-1 min-h-[56px] ${
-                      paymentMethod === m.id ? 'border-primary bg-primary-light' : 'border-gray-200'
-                    }`}
-                  >
-                    <span className="text-xl">{m.icon}</span>
-                    <span className="text-xs font-medium truncate w-full text-center">{t(m.labelKey)}</span>
-                  </button>
-                ))}
-              </div>
-              {paymentMethod === 'cash' && (
-                <div className="mb-3">
-                  {/* 金额显示 */}
-                  <div className="bg-gray-100 rounded-xl p-2 mb-2 text-right">
-                    <span className="text-xl font-bold text-gray-700">{formatCurrency(parseInt(paidAmount) || 0)}</span>
-                  </div>
-                  {/* 数字键盘 */}
-                  <div className="grid grid-cols-3 gap-2 mb-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setPaidAmount(prev => {
-                          if (prev.length >= 6) return prev // 最多6位
-                          if (prev === '0') return String(n)
-                          return prev + String(n)
-                        })}
-                        className="min-h-10 bg-white border-2 rounded-xl text-base font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
-                      >
-                        {n}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setPaidAmount('')}
-                      className="min-h-10 bg-red-50 border-2 rounded-xl text-sm font-bold text-red-500 hover:bg-red-100 touch-feedback"
-                    >
-                      C
-                    </button>
-                    <button
-                      onClick={() => setPaidAmount(prev => {
-                        if (prev.length >= 6) return prev
-                        if (prev === '0') return '0'
-                        return prev + '0'
-                      })}
-                      className="min-h-10 bg-white border-2 rounded-xl text-base font-bold hover:bg-primary-light active:bg-primary-light touch-feedback"
-                    >
-                      0
-                    </button>
-                    <button
-                      onClick={() => setPaidAmount(prev => prev.slice(0, -1))}
-                      className="min-h-10 bg-gray-100 border-2 rounded-xl text-sm font-bold hover:bg-gray-200 touch-feedback"
-                    >
-                      ←
-                    </button>
-                  </div>
-                  {/* 快捷金额按钮 */}
-                  {quickAmounts.enabled && (
-                    <div className="grid grid-cols-4 gap-1">
-                      {quickAmounts.amounts.map(amount => (
-                        <button
-                          key={amount}
-                          onClick={() => setPaidAmount(String(amount))}
-                          className="py-1.5 border rounded-lg text-xs font-bold hover:bg-primary-light touch-feedback"
-                        >
-                          {formatCurrency(amount)}
-                        </button>
-                      ))}
+
+            {/* 主内容区域：宽屏双列自适应布局，高度绝不超屏 */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 min-h-0">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4 items-start">
+                
+                {/* 左列 (应收金额 + 支付方式 + QRIS动态码展示) */}
+                <div className="md:col-span-5 space-y-3">
+                  {/* 应收金额大卡片 */}
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] text-emerald-800 font-medium uppercase tracking-wider">{t('pos.receivable', '应收总计')}</p>
+                      <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 leading-tight">
+                        {formatCurrency(total)}
+                      </p>
                     </div>
-                  )}
-                  {change > 0 && (
-                    <div className="p-2 bg-green-50 rounded-xl text-right mt-2">
-                      <p className="text-xs text-green-600">{t('pos.change')}</p>
-                      <p className="text-base font-bold text-green-600">{formatCurrency(change)}</p>
+                    <div className="text-right">
+                      <span className="text-xs px-2 py-1 bg-emerald-200/60 text-emerald-900 rounded-md font-semibold">
+                        {paymentMethods.find(m => m.id === paymentMethod)?.labelKey ? t(paymentMethods.find(m => m.id === paymentMethod)!.labelKey) : paymentMethod.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 支付方式网格 */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      {t('pos.paymentMethod', '选择收款渠道')}
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {paymentMethods.map(m => {
+                        const isSelected = paymentMethod === m.id
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => setPaymentMethod(m.id)}
+                            className={`p-2 rounded-xl border-2 flex items-center gap-2 transition-all touch-feedback text-left ${
+                              isSelected
+                                ? 'border-primary bg-primary/10 text-primary font-bold shadow-sm ring-1 ring-primary'
+                                : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <span className="text-xl flex-shrink-0">{m.icon}</span>
+                            <span className="text-xs truncate">{t(m.labelKey)}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* QRIS 扫码展示区 (若选中QRIS时在左列直接呈现) */}
+                  {paymentMethod === 'qris' && (
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex flex-col items-center justify-center">
+                      {qrisData.status === 'idle' && (
+                        <div className="text-center py-4">
+                          <QrCode size={36} className="mx-auto text-gray-400 mb-1" />
+                          <p className="text-xs text-gray-500">{t('pos.qrisInstruction', '请出示二维码由顾客手机扫码')}</p>
+                        </div>
+                      )}
+                      {qrisData.status === 'waiting' && qrisData.qrImage && (
+                        <div className="flex flex-col items-center">
+                          <img src={qrisData.qrImage} alt="QRIS" className="w-32 h-32 object-contain rounded-lg border bg-white p-1" />
+                          <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-amber-600">
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>{t('pos.waitingPayment', '等待顾客扫码支付...')}</span>
+                          </div>
+                          <span className="text-[10px] text-gray-400 mt-0.5">客显副屏已同步全屏展示</span>
+                        </div>
+                      )}
+                      {qrisData.status === 'paid' && (
+                        <div className="text-center py-4 text-emerald-600">
+                          <CheckCircle size={36} className="mx-auto mb-1 text-emerald-600" />
+                          <p className="font-bold text-sm">{t('pos.paymentReceived', '扫码收款已成功')}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-              {paymentMethod === 'qris' && (
-                <div className="mb-3">
-                  {qrisData.status === 'idle' && (
-                    <div className="text-center text-sm text-gray-500 py-4">
-                      {t('pos.qrisInstruction')}
+
+                {/* 右列 (现金输入键盘 / 非现金引导) */}
+                <div className="md:col-span-7 space-y-2.5">
+                  {paymentMethod === 'cash' ? (
+                    <div>
+                      {/* 实收与找零金额并列显示 */}
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div className="bg-gray-100 rounded-xl p-2 border border-gray-200">
+                          <div className="text-[11px] text-gray-500 font-medium">{t('pos.paidAmount', '实收现金')}</div>
+                          <div className="text-lg sm:text-xl font-bold text-gray-800 truncate font-mono">
+                            {formatCurrency(parseInt(paidAmount) || 0)}
+                          </div>
+                        </div>
+                        <div className={`rounded-xl p-2 border ${change > 0 ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="text-[11px] text-gray-500 font-medium">{t('pos.change', '应找零钱')}</div>
+                          <div className={`text-lg sm:text-xl font-bold truncate font-mono ${change > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                            {change > 0 ? formatCurrency(change) : 'Rp 0'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 紧凑数字小键盘 (高度经过精密缩减) */}
+                      <div className="grid grid-cols-3 gap-1.5 mb-2">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                          <button
+                            key={n}
+                            onClick={() => setPaidAmount(prev => {
+                              if (prev.length >= 8) return prev
+                              if (prev === '0') return String(n)
+                              return prev + String(n)
+                            })}
+                            className="h-10 bg-white border border-gray-300 rounded-xl text-base font-bold text-gray-800 hover:bg-gray-100 active:scale-95 transition-all touch-feedback shadow-sm"
+                          >
+                            {n}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setPaidAmount('')}
+                          className="h-10 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100 active:scale-95 transition-all touch-feedback"
+                        >
+                          C {t('common.clear', '清空')}
+                        </button>
+                        <button
+                          onClick={() => setPaidAmount(prev => {
+                            if (prev.length >= 8) return prev
+                            if (prev === '0') return '0'
+                            return prev + '0'
+                          })}
+                          className="h-10 bg-white border border-gray-300 rounded-xl text-base font-bold text-gray-800 hover:bg-gray-100 active:scale-95 transition-all touch-feedback shadow-sm"
+                        >
+                          0
+                        </button>
+                        <button
+                          onClick={() => setPaidAmount(prev => prev.slice(0, -1))}
+                          className="h-10 bg-gray-100 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-200 active:scale-95 transition-all touch-feedback"
+                        >
+                          ← {t('common.backspace', '退格')}
+                        </button>
+                      </div>
+
+                      {/* 快捷现金面额按钮 + 正好 */}
+                      <div className="grid grid-cols-4 gap-1.5">
+                        <button
+                          onClick={() => setPaidAmount(String(total))}
+                          className="py-1.5 px-1 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg text-xs font-bold hover:bg-amber-100 transition-colors touch-feedback"
+                        >
+                          ⚡ {t('pos.exactAmount', '正好')}
+                        </button>
+                        {(quickAmounts.enabled && quickAmounts.amounts.length > 0 ? quickAmounts.amounts.slice(0, 3) : [50000, 100000, 200000]).map(amount => (
+                          <button
+                            key={amount}
+                            onClick={() => setPaidAmount(String(amount))}
+                            className="py-1.5 px-1 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors touch-feedback truncate"
+                          >
+                            {formatCurrency(amount)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
-                  {qrisData.status === 'waiting' && qrisData.qrImage && (
-                    <div className="flex flex-col items-center">
-                      <img src={qrisData.qrImage} alt="QRIS" className="w-40 h-40 mx-auto" />
-                      <p className="text-sm text-gray-500 mt-2">{t('pos.scanToPay')}</p>
-                      <div className="flex items-center gap-2 mt-2 text-yellow-600">
-                        <Loader2 size={16} className="animate-spin" />
-                        <span className="text-sm">{t('pos.waitingPayment')}</span>
+                  ) : (
+                    <div className="h-full min-h-[200px] bg-gray-50 rounded-xl border border-gray-200 p-4 flex flex-col items-center justify-center text-center">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl mb-2">
+                        {paymentMethods.find(m => m.id === paymentMethod)?.icon || '💳'}
+                      </div>
+                      <h4 className="font-bold text-gray-800 text-sm">
+                        {paymentMethods.find(m => m.id === paymentMethod)?.labelKey ? t(paymentMethods.find(m => m.id === paymentMethod)!.labelKey) : paymentMethod.toUpperCase()}
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-1 max-w-xs">
+                        {paymentMethod === 'qris'
+                          ? t('pos.qrisHelp', '请提示顾客扫码，支付成功后系统将自动出单')
+                          : t('pos.externalPayHelp', '请引导顾客在外接刷卡机 (EDC) 或扫码机上完成刷卡/交易，完成后点击下方确认结账')}
+                      </p>
+                      <div className="mt-3 px-3 py-1 bg-white rounded-lg border text-xs font-mono font-bold text-gray-700">
+                        {t('pos.amountDue', '支付金额')}: {formatCurrency(total)}
                       </div>
                     </div>
                   )}
-                  {qrisData.status === 'paid' && (
-                    <div className="text-center py-4">
-                      <p className="text-green-600 font-bold">{t('pos.paymentReceived')}</p>
-                    </div>
-                  )}
                 </div>
-              )}
+
+              </div>
             </div>
-            {/* 确认支付按钮 - 固定在底部 */}
-            <div className="flex-shrink-0 p-3 bg-white border-t space-y-2">
-              <button
-                onClick={handleCheckout}
-                disabled={
-                  isCheckingOut ||
-                  (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
-                  (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
-                  (paymentMethod === 'qris' && qrisData.status === 'waiting')
-                }
-                className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base disabled:bg-gray-300 touch-feedback"
-              >
-                {isCheckingOut ? t('common.loading') : (paymentMethod === 'qris' && qrisData.status === 'waiting' ? t('pos.waitingPayment') : t('pos.confirmPayment'))}
-              </button>
-              {paymentSettings.minAmount > 0 && total < paymentSettings.minAmount && (
-                <p className="text-xs text-red-500 mt-1 text-center">
-                  {t('pos.minAmountRequired')} {formatCurrency(paymentSettings.minAmount)}
-                </p>
-              )}
+
+            {/* 确认支付操作栏 - 紧凑固定底栏 */}
+            <div className="flex-shrink-0 px-4 py-2.5 bg-gray-50 border-t flex items-center justify-between gap-3">
+              <div className="text-xs text-gray-500 truncate hidden sm:block">
+                {paymentMethod === 'cash' ? (
+                  Boolean(paidAmount) && parseInt(paidAmount) >= total ? (
+                    <span className="text-emerald-600 font-medium">✅ 实收已足额，点击确认完成结账并打印小票/杯贴</span>
+                  ) : (
+                    <span>💡 输入顾客支付的现金金额，系统将自动核算找零</span>
+                  )
+                ) : (
+                  <span>📱 电子支付或刷卡成功后，点击右侧按钮出单</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-xl text-xs font-semibold hover:bg-gray-50 touch-feedback"
+                >
+                  {t('common.cancel', '取消')}
+                </button>
+                <button
+                  onClick={handleCheckout}
+                  disabled={
+                    isCheckingOut ||
+                    (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
+                    (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
+                    (paymentMethod === 'qris' && qrisData.status === 'waiting')
+                  }
+                  className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"
+                >
+                  {isCheckingOut ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>{t('common.loading', '正在结账...')}</span>
+                    </>
+                  ) : paymentMethod === 'qris' && qrisData.status === 'waiting' ? (
+                    t('pos.waitingPayment', '等待支付')
+                  ) : (
+                    <>
+                      <span>💰</span>
+                      <span>{t('pos.confirmPayment', '确认结账')}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+            {paymentSettings.minAmount > 0 && total < paymentSettings.minAmount && (
+              <div className="bg-red-50 text-red-500 text-[11px] py-1 px-4 text-center border-t border-red-100">
+                {t('pos.minAmountRequired')} {formatCurrency(paymentSettings.minAmount)}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3619,6 +4204,40 @@ export function POSPage() {
                             actualCash,
                             closeNote: ''
                           })
+                          // 自动打印交接班对账小票 (Z-Report)
+                          try {
+                            const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
+                            const isNetwork = receiptPrinter?.connectionType === 'network'
+                            const printerName = isNetwork ? undefined : (receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt'))
+                            const printerHost = isNetwork ? receiptPrinter?.printerIp : undefined
+                            const printerPort = isNetwork ? (receiptPrinter?.printerPort || 9100) : undefined
+
+                            await electronAPI?.sendPrintShiftReport?.({
+                              printerName,
+                              printerHost,
+                              printerPort,
+                              paperSize: posReceipt.paperSize || '80mm',
+                              language: lang || 'id',
+                              storeName: storeInfo.storeName || 'YOUME',
+                              cashierName: user?.staff?.name || (user as any)?.name || user?.phone || 'Kasir',
+                              shiftType: selectedShiftType || shiftData?.shift?.shift || 'Regular',
+                              openedAt: shiftData?.shift?.openedAt ? new Date(shiftData.shift.openedAt).toLocaleString() : '',
+                              closedAt: new Date().toLocaleString(),
+                              openFloat: shiftData?.openFloat || 0,
+                              cashSales: shiftData?.cashSales || 0,
+                              qrisSales: shiftData?.qrisSales || 0,
+                              gofoodSales: shiftData?.gofoodSales || 0,
+                              grabSales: shiftData?.grabSales || 0,
+                              shopeeSales: shiftData?.shopeeSales || 0,
+                              expenses: shiftData?.expenses || 0,
+                              expectedCash: shiftData?.expectedCash || 0,
+                              actualCash,
+                              totalOrders: (shiftData?.dineInCount || 0) + (shiftData?.gofoodCount || 0) + (shiftData?.grabCount || 0) + (shiftData?.shopeeCount || 0),
+                              totalCups: shiftData?.customerCount || 0,
+                            })
+                          } catch (reportErr) {
+                            console.warn('[Shift] Failed to print shift report:', reportErr)
+                          }
                           clearCart()
                           setSuspendedOrders([])
                           localStorage.removeItem('suspended_orders')
@@ -3964,123 +4583,150 @@ export function POSPage() {
         </div>
       )}
 
-      {/* 打印机检测弹窗 */}
+      {/* 硬件设备状态与自检弹窗 (纯只读与测试，由后台统一管控) */}
       {showPrinterDetectModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPrinterDetectModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
-              <h3 className="font-bold">{t('pos_detect_printer', 'Detect Printer')}</h3>
+              <div>
+                <h3 className="font-bold text-base flex items-center gap-2">
+                  <Printer size={18} />
+                  {t('pos.hardwareStatus', '外设状态与自检')}
+                </h3>
+                <p className="text-xs text-white/80 mt-0.5">{t('pos.hardwareAdminManaged', '所有外设由后台管理统一配置并自动同步')}</p>
+              </div>
               <button onClick={() => setShowPrinterDetectModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
                 <X size={20} />
               </button>
             </div>
-            <div className="p-4 space-y-4">
-              {/* 检测中状态 */}
-              {printerDetectLoading && (
-                <div className="flex flex-col items-center py-8">
-                  <Loader2 size={40} className="animate-spin text-primary mb-3" />
-                  <p className="text-gray-500">{t('pos_detecting_printer', 'Detecting printer...')}</p>
-                </div>
-              )}
 
-              {/* 检测结果 */}
-              {!printerDetectLoading && detectedPrinters.length > 0 && (
-                <>
-                  <p className="text-sm text-gray-500">{t('pos_printers_found', 'Printers found')}</p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {detectedPrinters.map((p, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setSelectedPrinterForSetup(p)}
-                        className={`p-3 rounded-xl border-2 cursor-pointer transition-colors ${
-                          selectedPrinterForSetup === p
-                            ? 'border-primary bg-primary/5'
-                            : 'border-gray-200 hover:border-primary/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Printer size={18} className={selectedPrinterForSetup === p ? 'text-primary' : 'text-gray-400'} />
-                          <span className="font-medium text-sm">{p}</span>
-                          {selectedPrinterForSetup === p && <CheckCircle size={16} className="text-primary ml-auto" />}
+            <div className="p-4 space-y-3">
+              {/* 设备绑定状态列表 */}
+              <div className="space-y-2">
+                {/* 小票打印机 */}
+                {(() => {
+                  const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt')
+                  const pName = receiptPrinter?.printerName || hardwareSettings.printerName || '系统默认打印机'
+                  const isNetwork = receiptPrinter?.connectionType === 'network'
+                  return (
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-base">
+                          🧾
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-gray-800">{t('posSettings.receiptPrinter', '小票打印机')}</div>
+                          <div className="text-xs text-gray-500 font-mono truncate max-w-[200px]">
+                            {isNetwork ? `${receiptPrinter?.printerIp}:${receiptPrinter?.printerPort || 9100}` : pName}
+                          </div>
                         </div>
                       </div>
-                    ))}
+                      <span className="text-[11px] px-2 py-0.5 bg-green-100 text-green-700 font-semibold rounded-md">
+                        {t('common.ready', '已就绪')}
+                      </span>
+                    </div>
+                  )
+                })()}
+
+                {/* 标签杯贴机 */}
+                {(() => {
+                  const labelPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'label')
+                  const isEnabled = labelPrinter?.enabled ?? false
+                  const pName = labelPrinter?.printerName || (isEnabled ? '标签机已启用' : '未启用 (后台配置)')
+                  return (
+                    <div className={`p-3 rounded-xl border flex items-center justify-between ${isEnabled ? 'bg-indigo-50/50 border-indigo-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-base">
+                          🏷️
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-gray-800">{t('posSettings.labelPrinter', '标签杯贴机')}</div>
+                          <div className="text-xs text-gray-500 font-mono truncate max-w-[200px]">{pName}</div>
+                        </div>
+                      </div>
+                      <span className={`text-[11px] px-2 py-0.5 font-semibold rounded-md ${isEnabled ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-500'}`}>
+                        {isEnabled ? t('common.ready', '已就绪') : t('common.disabled', '未启用')}
+                      </span>
+                    </div>
+                  )
+                })()}
+
+                {/* 钱箱与客显状态 */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                    <span className="text-gray-600">💰 {t('posSettings.cashDrawer', '收银钱箱')}:</span>
+                    <span className="font-semibold text-gray-800">
+                      {hardwareSettings.autoOpenCashDrawer !== false ? t('common.auto', '自动弹开') : t('common.manual', '手动')}
+                    </span>
                   </div>
-                </>
-              )}
-              {/* 手动输入 / 选定打印机输入框 */}
-              {!printerDetectLoading && (
-                <div className="space-y-2 pt-2 border-t">
-                  <label className="text-xs font-semibold text-gray-700 block">
-                    {t('pos.printerNameLabel', '当前/选定的打印机名称 (Printer Name):')}
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedPrinterForSetup || ''}
-                    onChange={(e) => setSelectedPrinterForSetup(e.target.value)}
-                    placeholder={t('pos.enterPrinterNamePlaceholder', '例如: EPSON TM-T82 或 POS-80 或 COM3')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono focus:border-primary focus:outline-none"
-                  />
-                  <button
-                    onClick={handleSetupReceiptPrinter}
-                    disabled={!selectedPrinterForSetup}
-                    className="w-full py-3 bg-primary text-white rounded-xl font-bold disabled:opacity-50 touch-feedback mt-2"
-                  >
-                    {t('pos.setAsReceiptPrinter', 'Set as Receipt Printer')}
-                  </button>
-
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleTestPrint}
-                      className="flex-1 py-2 px-3 border border-primary text-primary rounded-xl text-xs font-semibold hover:bg-primary/5 flex items-center justify-center gap-1.5 touch-feedback"
-                    >
-                      <Printer size={15} /> {t('pos.testPrint', '测试打印小票')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleTestCashDrawer}
-                      className="flex-1 py-2 px-3 border border-amber-600 text-amber-700 bg-amber-50/50 rounded-xl text-xs font-semibold hover:bg-amber-100 flex items-center justify-center gap-1.5 touch-feedback"
-                    >
-                      <Wallet size={15} /> {t('pos.testCashDrawer', '测试弹开钱箱')}
-                    </button>
+                  <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                    <span className="text-gray-600">🖥️ {t('posSettings.dualScreen', '客显副屏')}:</span>
+                    <span className={`font-semibold ${hardwareSettings.dualScreen?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+                      {hardwareSettings.dualScreen?.enabled ? t('common.enabled', '已开启') : t('common.disabled', '未开启')}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* 检测失败 */}
-              {!printerDetectLoading && printerDetectError && (
-                <div className="flex flex-col items-center py-4">
-                  <XCircle size={32} className="text-red-400 mb-2" />
-                  <p className="text-red-500 text-center text-xs">{printerDetectError}</p>
+              {/* 一键自检与测试区 */}
+              <div className="pt-2 border-t">
+                <div className="text-xs font-bold text-gray-700 mb-2">
+                  ⚡ {t('pos.quickSelfTest', '一键外设自检测试')}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={handleDetectPrinters}
-                    className="mt-3 px-4 py-1.5 border border-primary text-primary text-xs rounded-xl font-medium hover:bg-primary/5"
+                    type="button"
+                    onClick={handleTestPrint}
+                    className="py-2.5 px-2 border border-primary text-primary rounded-xl text-xs font-semibold hover:bg-primary/5 flex flex-col items-center justify-center gap-1 touch-feedback"
                   >
-                    {t('pos.retryDetect', 'Retry')}
+                    <Printer size={16} />
+                    <span>{t('pos.testPrint', '测试小票')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestLabelPrint}
+                    className="py-2.5 px-2 border border-indigo-600 text-indigo-600 rounded-xl text-xs font-semibold hover:bg-indigo-50 flex flex-col items-center justify-center gap-1 touch-feedback"
+                  >
+                    <Tag size={16} />
+                    <span>{t('pos.testLabel', '测试杯贴')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestCashDrawer}
+                    className="py-2.5 px-2 border border-amber-600 text-amber-700 bg-amber-50/50 rounded-xl text-xs font-semibold hover:bg-amber-100 flex flex-col items-center justify-center gap-1 touch-feedback"
+                  >
+                    <Wallet size={16} />
+                    <span>{t('pos.testCashDrawer', '测试钱箱')}</span>
                   </button>
                 </div>
-              )}
+              </div>
 
-              {/* 无自动识别打印机提示 */}
-              {!printerDetectLoading && !printerDetectError && detectedPrinters.length === 0 && (
-                <div className="flex flex-col items-center py-3">
-                  <p className="text-gray-400 text-center text-xs">{t('pos_no_printers', 'No printers detected. You can type the printer name above manually.')}</p>
-                  <button
-                    onClick={handleDetectPrinters}
-                    className="mt-2 px-4 py-1 border border-gray-300 text-gray-600 text-xs rounded-lg hover:bg-gray-50"
-                  >
-                    {t('pos.retryDetect', 'Retry Detect')}
-                  </button>
-                </div>
-              )}
-
-              <button
-                onClick={() => setShowPrinterDetectModal(false)}
-                className="w-full py-2 text-gray-500 text-sm"
-              >
-                {t('common.close') || '关闭'}
-              </button>
+              {/* 重新扫描并上报本地 USB 打印机 */}
+              <div className="pt-2 flex items-center justify-between text-xs text-gray-400 border-t">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    handleDetectPrinters().then(printers => {
+                      if (printers && printers.length > 0) {
+                        const storeId = user?.storeId || localStorage.getItem('storeId') || ''
+                        posApi.reportPrinters(printers, storeId).then(() => {
+                          showToast(t('pos.printersReported', '已成功同步本地打印机至后台'), 'success')
+                        }).catch(() => {})
+                      }
+                    })
+                  }}
+                  className="text-gray-500 hover:text-primary flex items-center gap-1 py-1"
+                >
+                  <RotateCcw size={12} />
+                  <span>{t('pos.syncPrintersToAdmin', '同步本地打印机至后台')}</span>
+                </button>
+                <button
+                  onClick={() => setShowPrinterDetectModal(false)}
+                  className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium"
+                >
+                  {t('common.close', '关闭')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
