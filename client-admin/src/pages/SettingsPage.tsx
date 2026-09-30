@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone, Image as ImageIcon } from 'lucide-react'
-import { configApi } from '../services/api'
+import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone, Image as ImageIcon, Upload, X } from 'lucide-react'
+import { configApi, uploadApi } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { POSSettingsPage } from './settings/POSSettingsPage'
 
@@ -24,6 +24,40 @@ export function SettingsPage() {
     email: '',
     storeLogo: '',
   })
+
+  // 店铺 Logo 上传
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const file = files[0]
+    if (!file.type.startsWith('image/')) {
+      alert(t('common.invalidImageType', '请上传有效的图片文件 (PNG, JPG, SVG 等)'))
+      return
+    }
+
+    setUploadingLogo(true)
+    try {
+      const response = await uploadApi.uploadReceipt([file])
+      const urls = response.data?.data?.urls || []
+      if (urls.length > 0) {
+        const newLogo = urls[0]
+        const updated = { ...storeInfo, storeLogo: newLogo }
+        setStoreInfo(updated)
+        handleSave('storeInfo', updated)
+      }
+    } catch (error) {
+      console.error('Failed to upload store logo:', error)
+      alert(t('common.uploadFailed', '上传失败，请重试'))
+    } finally {
+      setUploadingLogo(false)
+      if (logoInputRef.current) {
+        logoInputRef.current.value = ''
+      }
+    }
+  }
 
   // 加载店铺信息
   const { data: configData, isLoading } = useQuery({
@@ -206,28 +240,55 @@ export function SettingsPage() {
               />
             </div>
 
-            {/* 店铺 Logo (URL 或 相对路径) */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
-                <span>{t('settings.storeLogo', '店铺 Logo (URL 或路径)')}</span>
-                {storeInfo.storeLogo && (
-                  <span className="text-xs text-green-600 font-medium">✓ 已配置</span>
-                )}
-              </label>
-              <div className="flex gap-4 items-center">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={storeInfo.storeLogo}
-                    onChange={(e) => setStoreInfo({ ...storeInfo, storeLogo: e.target.value })}
-                    onBlur={() => handleSave('storeInfo', storeInfo)}
-                    className="input pl-10"
-                    placeholder="例如: https://... 或 /youme-logo-white.png"
-                  />
-                  <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            {/* 店铺 Logo 上传与配置 */}
+            <div className="md:col-span-2 p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <span>{t('settings.storeLogo', '店铺品牌 Logo')}</span>
+                    {storeInfo.storeLogo && (
+                      <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle size={12} /> 已配置
+                      </span>
+                    )}
+                  </label>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {t('settings.storeLogoHint', '用于 POS 顶栏、登录界面、客显副屏及打印小票的品牌 Logo 展示，建议白底或透明底高清 PNG')}
+                  </p>
                 </div>
-                {storeInfo.storeLogo && (
-                  <div className="w-12 h-12 rounded-lg border bg-gray-50 flex items-center justify-center overflow-hidden p-1 shrink-0">
+                <div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingLogo}
+                    onClick={() => logoInputRef.current?.click()}
+                    className="px-3.5 py-1.5 bg-white border border-gray-300 hover:border-primary text-gray-700 hover:text-primary rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {uploadingLogo ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin text-primary" />
+                        <span>{t('common.uploading', '正在上传...')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        <span>{storeInfo.storeLogo ? t('common.changeImage', '更换 Logo 图片') : t('common.uploadImage', '上传 Logo 图片')}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* 预览与移除 */}
+              {storeInfo.storeLogo && (
+                <div className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
+                  <div className="w-16 h-12 rounded border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden p-1 shrink-0">
                     <img
                       src={storeInfo.storeLogo}
                       alt="Logo Preview"
@@ -235,9 +296,37 @@ export function SettingsPage() {
                       onError={(e) => { (e.target as any).style.display = 'none' }}
                     />
                   </div>
-                )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono text-gray-600 truncate">{storeInfo.storeLogo}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">已与收银端及客显实时同步</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...storeInfo, storeLogo: '' }
+                      setStoreInfo(updated)
+                      handleSave('storeInfo', updated)
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                    title="移除 Logo"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              {/* 辅助 URL 输入框 */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={storeInfo.storeLogo}
+                  onChange={(e) => setStoreInfo({ ...storeInfo, storeLogo: e.target.value })}
+                  onBlur={() => handleSave('storeInfo', storeInfo)}
+                  className="input pl-10 text-xs w-full"
+                  placeholder="或直接输入图片 URL（例如: https://... 或 /youme-logo-white.png）"
+                />
+                <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               </div>
-              <p className="text-xs text-gray-500 mt-1">{t('settings.storeLogoHint', '用于 POS 顶栏、登录界面、客显副屏及打印小票的品牌 Logo 展示')}</p>
             </div>
           </div>
 

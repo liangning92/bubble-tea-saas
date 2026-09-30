@@ -202,6 +202,18 @@ export const staffApi = {
     return response.data
   },
 
+  uploadAttachment: async (file: File) => {
+    const formData = new FormData()
+    formData.append('files', file)
+    const response = await axios.post(`${API_BASE}/upload/attachment`, formData, {
+      headers: {
+        ...getAuthHeader(),
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
+  },
+
   // Hygiene Tasks
   getMyTasks: async (date?: string) => {
     const response = await axios.get(`${API_BASE}/hygiene/tasks/my`, {

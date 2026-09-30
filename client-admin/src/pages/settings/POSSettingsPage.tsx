@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi } from '../../services/api'
 import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
-import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
+import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X, QrCode } from 'lucide-react'
 import axios from 'axios'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
@@ -655,6 +655,42 @@ export function POSSettingsPage() {
       setUploadingReceiptLogo(false)
       if (receiptLogoInputRef.current) {
         receiptLogoInputRef.current.value = ''
+      }
+    }
+  }
+
+  // 小票二维码上传状态与方法
+  const [uploadingReceiptQr, setUploadingReceiptQr] = useState(false)
+  const receiptQrInputRef = useRef<HTMLInputElement>(null)
+
+  const handleReceiptQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const file = files[0]
+
+    if (!file.type.startsWith('image/')) {
+      alert(t('common.invalidImageType', '请上传有效的图片文件 (PNG, JPG, SVG 等)'))
+      return
+    }
+
+    setUploadingReceiptQr(true)
+    try {
+      const response = await uploadApi.uploadReceipt([file])
+      const urls = response.data?.data?.urls || []
+      if (urls.length > 0) {
+        setPosReceipt(prev => ({
+          ...prev,
+          qrCodeUrl: urls[0],
+          showQR: true
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to upload receipt QR code:', error)
+      alert(t('common.uploadFailed', '上传失败，请重试'))
+    } finally {
+      setUploadingReceiptQr(false)
+      if (receiptQrInputRef.current) {
+        receiptQrInputRef.current.value = ''
       }
     }
   }
@@ -2117,6 +2153,92 @@ export function POSSettingsPage() {
                       />
                     </div>
                   </div>
+
+                  {/* 小票二维码设置与上传 */}
+                  <div className="md:col-span-2 p-3.5 bg-white border border-gray-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                          <QrCode size={14} className="text-primary" />
+                          <span>{t('posSettings.showQR', '小票底部二维码')}</span>
+                        </label>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          {t('posSettings.showQRHint', '在小票尾部打印二维码（如商家静态 QRIS 收款码、会员注册链接、WhatsApp 客服或社交媒体）')}
+                        </p>
+                      </div>
+                      <div>
+                        <input
+                          ref={receiptQrInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleReceiptQrUpload}
+                        />
+                        <button
+                          type="button"
+                          disabled={uploadingReceiptQr}
+                          onClick={() => receiptQrInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-gray-50 border border-gray-300 hover:border-primary text-gray-700 hover:text-primary rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
+                        >
+                          {uploadingReceiptQr ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin text-primary" />
+                              <span>{t('common.uploading', '正在上传...')}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={13} />
+                              <span>{_posReceipt.qrCodeUrl ? t('common.changeImage', '更换二维码图片') : t('common.uploadImage', '上传二维码图片')}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 二维码预览与清除 */}
+                    {_posReceipt.qrCodeUrl ? (
+                      <div className="flex items-center gap-3 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                        <div className="w-16 h-16 bg-white rounded border border-gray-300 flex items-center justify-center p-1 overflow-hidden flex-shrink-0">
+                          <img
+                            src={_posReceipt.qrCodeUrl}
+                            alt="Receipt QR Preview"
+                            className="max-w-full max-h-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none'
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-mono text-gray-600 truncate">
+                            {_posReceipt.qrCodeUrl}
+                          </div>
+                          <div className="text-[11px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                            <CheckCircle size={12} />
+                            <span>小票二维码已就绪</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPosReceipt(prev => ({ ...prev, qrCodeUrl: '', showQR: false }))}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                          title="移除二维码"
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* URL/内容辅助输入框 */}
+                    <div>
+                      <input
+                        type="text"
+                        value={_posReceipt.qrCodeUrl || ''}
+                        onChange={(e) => setPosReceipt(prev => ({ ...prev, qrCodeUrl: e.target.value, showQR: !!e.target.value }))}
+                        className="input text-xs w-full py-1.5"
+                        placeholder="或直接输入二维码图片 URL / 跳转网址（例如: https://... 或 /uploads/receipts/qr.png）"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2133,6 +2255,18 @@ export function POSSettingsPage() {
                     <Toggle
                       enabled={_posReceipt.showLogo !== false}
                       onChange={() => setPosReceipt(prev => ({ ...prev, showLogo: !prev.showLogo }))}
+                    />
+                  </div>
+
+                  {/* 是否打印二维码开关 */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showQR', '打印小票时显示二维码')}</div>
+                      <div className="text-xs text-gray-500">{t('posSettings.showQRHint', '在小票尾部居中打印商家二维码')}</div>
+                    </div>
+                    <Toggle
+                      enabled={_posReceipt.showQR === true}
+                      onChange={() => setPosReceipt(prev => ({ ...prev, showQR: !prev.showQR }))}
                     />
                   </div>
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">

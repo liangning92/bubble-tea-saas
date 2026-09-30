@@ -408,12 +408,22 @@ const LivePreview: React.FC<{
           case 'qrCode':
             return (
               <div key={block.id} className={`${alignClass} border-b pb-2 mb-2`}>
-                <div
-                  className="bg-gray-200 mx-auto flex items-center justify-center"
-                  style={{ width: block.config.size || 80, height: block.config.size || 80 }}
-                >
-                  <span className="text-[8px] text-gray-500">QR</span>
-                </div>
+                {block.config.url ? (
+                  <img
+                    src={block.config.url}
+                    alt="QR"
+                    style={{ width: block.config.size || 80, height: block.config.size || 80 }}
+                    className="mx-auto object-contain inline-block"
+                    onError={(e) => { (e.target as any).style.display = 'none' }}
+                  />
+                ) : (
+                  <div
+                    className="bg-gray-100 mx-auto flex items-center justify-center border border-dashed border-gray-300"
+                    style={{ width: block.config.size || 80, height: block.config.size || 80 }}
+                  >
+                    <span className="text-[9px] text-gray-500 font-bold">QR CODE</span>
+                  </div>
+                )}
               </div>
             )
           case 'barcode':
@@ -831,14 +841,51 @@ const BlockPropertiesPanel: React.FC<{
 
         {/* QR Code */}
         {block.type === 'qrCode' && (
-          <div>
-            <label className="text-sm text-gray-600">{t('posSettings.blockSizePx')}</label>
-            <input
-              type="number"
-              value={block.config.size || 80}
-              onChange={(e) => updateConfig('size', parseInt(e.target.value))}
-              className="input mt-1 w-full"
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockSizePx', '尺寸 (px)')}</label>
+              <input
+                type="number"
+                value={block.config.size || 80}
+                onChange={(e) => updateConfig('size', parseInt(e.target.value))}
+                className="input mt-1 w-full"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.showQR', '二维码图片/内容')}</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={block.config.url || ''}
+                  onChange={(e) => updateConfig('url', e.target.value)}
+                  placeholder="二维码图片 URL 或跳转链接"
+                  className="input flex-1 text-xs"
+                />
+                <label className="btn-secondary text-xs cursor-pointer flex items-center gap-1 py-2 px-3 flex-shrink-0">
+                  <Upload size={13} />
+                  <span>上传</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const files = e.target.files
+                      if (!files || files.length === 0) return
+                      try {
+                        const res = await uploadApi.uploadReceipt([files[0]])
+                        const urls = res.data?.data?.urls || []
+                        if (urls.length > 0) {
+                          updateConfig('url', urls[0])
+                        }
+                      } catch (err) {
+                        console.error('Failed to upload QR code:', err)
+                        alert('上传失败，请重试')
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         )}
 

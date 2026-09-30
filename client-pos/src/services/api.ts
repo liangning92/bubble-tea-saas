@@ -197,6 +197,15 @@ export const posApi = {
     api.get('/expenses', { params }),
   createExpense: (data: { type: string; category: string; amount: number; description: string; date: string }) =>
     api.post('/expenses', data),
+
+  // File Upload
+  uploadAttachment: (file: File) => {
+    const formData = new FormData()
+    formData.append('files', file)
+    return api.post('/upload/attachment', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
 }
 
 // Shift API - uses admin's /api/shifts endpoint

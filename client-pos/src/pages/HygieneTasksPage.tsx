@@ -5,7 +5,7 @@ import { posApi } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import {
   ArrowLeft, CheckCircle, SkipForward, Camera, X, Loader2,
-  Clock, MapPin, AlertCircle, CheckSquare, Star, AlertTriangle
+  Clock, MapPin, AlertCircle, CheckSquare, Star, AlertTriangle, Trash2
 } from 'lucide-react'
 
 interface Task {
@@ -61,6 +61,7 @@ export function HygieneTasksPage() {
   const [skipReason, setSkipReason] = useState('')
   const [selfRating, setSelfRating] = useState<number>(0)
   const [actionLoading, setActionLoading] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<'today' | 'overdue'>('today')
 
@@ -150,6 +151,12 @@ export function HygieneTasksPage() {
         return
       }
 
+      if (selectedTask.photoRequired && !photoUrl) {
+        setError(t('tasks.photoRequiredError', '该任务要求必须拍摄/上传清洁完成照片凭证'))
+        setActionLoading(false)
+        return
+      }
+
       await posApi.completeTask(selectedTask.id, {
         photoUrl: photoUrl || undefined,
         note: note || undefined,
@@ -182,6 +189,26 @@ export function HygieneTasksPage() {
 
   const toggleChecklist = (id: string) => {
     setChecklistResults(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    setError('')
+    try {
+      const res = await posApi.uploadAttachment(file)
+      const url = res?.data?.data?.urls?.[0] || res?.data?.data?.url
+      if (url) {
+        setPhotoUrl(url)
+      } else {
+        setError('Failed to get uploaded photo URL')
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to upload photo')
+    } finally {
+      setUploadingPhoto(false)
+    }
   }
 
   // Check if task is overdue
@@ -472,6 +499,66 @@ export function HygieneTasksPage() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">{t('tasks.selfRatingTip')}</p>
+              </div>
+
+              {/* Photo Evidence */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Camera size={16} className={selectedTask.photoRequired ? 'text-red-500' : 'text-gray-500'} />
+                    {t('tasks.photoEvidence', '照片凭证')}
+                    {selectedTask.photoRequired && (
+                      <span className="text-xs text-red-500 font-normal">({t('common.required', '必填')})</span>
+                    )}
+                  </span>
+                  {photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl('')}
+                      className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                    >
+                      <Trash2 size={12} />
+                      {t('common.remove', '移除')}
+                    </button>
+                  )}
+                </label>
+
+                {photoUrl ? (
+                  <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-video max-h-48 flex items-center justify-center">
+                    <img
+                      src={photoUrl.startsWith('http') ? photoUrl : `${window.location.origin}${photoUrl}`}
+                      alt="Task evidence"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <label className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    selectedTask.photoRequired ? 'border-amber-300 bg-amber-50/50 hover:bg-amber-50' : 'border-gray-300 hover:bg-gray-50'
+                  }`}>
+                    {uploadingPhoto ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Loader2 className="animate-spin" size={20} />
+                        <span>{t('common.uploading', '正在上传...')}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Camera size={28} className="text-gray-400 mb-1" />
+                        <span className="text-sm font-medium text-gray-700">
+                          {t('tasks.takeOrUploadPhoto', '点击拍照或上传凭证照片')}
+                        </span>
+                        <span className="text-xs text-gray-400 mt-0.5">PNG / JPG</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      disabled={uploadingPhoto}
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
 
               {/* Note */}

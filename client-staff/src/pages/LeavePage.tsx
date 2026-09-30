@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { Calendar, Plus, Clock, XCircle } from 'lucide-react'
+import { Calendar, Plus, Clock, XCircle, Paperclip, Trash2, Upload, Loader2 } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,6 +38,7 @@ interface Leave {
   reason?: string
   status: string
   halfDay: boolean
+  attachmentUrl?: string
 }
 
 interface LeaveBalance {
@@ -183,6 +184,19 @@ export function LeavePage() {
                     {leave.reason && (
                       <p className="text-gray-500 mt-2">{t('leave.reason')}: {leave.reason}</p>
                     )}
+                    {leave.attachmentUrl && (
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1.5 text-xs text-primary font-medium">
+                        <Paperclip size={14} />
+                        <a
+                          href={leave.attachmentUrl.startsWith('http') ? leave.attachmentUrl : `${window.location.origin}${leave.attachmentUrl}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:underline"
+                        >
+                          {t('leave.viewAttachment', '查看附件凭证')}
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   {leave.status === 'pending' && (
@@ -288,6 +302,8 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   const [totalDays, setTotalDays] = useState(1)
   const [reason, setReason] = useState('')
   const [halfDay, setHalfDay] = useState(false)
+  const [attachmentUrl, setAttachmentUrl] = useState('')
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadingTypes, setLoadingTypes] = useState(true)
 
@@ -309,6 +325,23 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
     fetchLeaveTypes()
   }, [])
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAttachment(true)
+    try {
+      const res = await staffApi.uploadAttachment(file)
+      const url = res?.data?.urls?.[0] || res?.data?.url
+      if (url) {
+        setAttachmentUrl(url)
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.message || t('common.uploadFailed', '上传失败'))
+    } finally {
+      setUploadingAttachment(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!startDate || !endDate) {
       alert(t('leave.selectDateRange'))
@@ -323,7 +356,8 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
         endDate,
         totalDays,
         reason,
-        halfDay
+        halfDay,
+        attachmentUrl: attachmentUrl || undefined
       })
       onSuccess()
     } catch (error: any) {
@@ -418,6 +452,62 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
               className="w-full p-3 border border-gray-200 rounded-xl"
               placeholder={t('leave.explainReason')}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Paperclip size={15} className="text-gray-500" />
+                {t('leave.attachment', '证明/附件 (可选)')}
+              </span>
+              {attachmentUrl && (
+                <button
+                  type="button"
+                  onClick={() => setAttachmentUrl('')}
+                  className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                >
+                  <Trash2 size={12} />
+                  {t('common.remove', '移除')}
+                </button>
+              )}
+            </label>
+            {attachmentUrl ? (
+              <div className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-700">
+                <Paperclip size={14} className="text-primary flex-shrink-0" />
+                <span className="truncate flex-1 font-mono">{attachmentUrl.split('/').pop()}</span>
+                <a
+                  href={attachmentUrl.startsWith('http') ? attachmentUrl : `${window.location.origin}${attachmentUrl}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline px-1.5 py-0.5"
+                >
+                  {t('common.view', '查看')}
+                </a>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                {uploadingAttachment ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Loader2 className="animate-spin" size={16} />
+                    <span>{t('common.uploading', '正在上传...')}</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={16} className="text-gray-400" />
+                    <span className="text-xs text-gray-600 font-medium">
+                      {t('leave.uploadAttachmentHint', '上传病假条/证明文件 (JPG, PNG, PDF)')}
+                    </span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  disabled={uploadingAttachment}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
 
           <button
