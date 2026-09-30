@@ -613,6 +613,35 @@ export function POSSettingsPage() {
 
 
 
+  // ========== SAVE MUTATION ==========
+  const saveConfigMutation = useMutation({
+    mutationFn: (data: { key: string; value: any }) => {
+      const currentStoreId = user?.storeId || ''
+      return configApi.set(currentStoreId, data.key, data.value, 'pos')
+    },
+    onSuccess: () => {
+      // 使用函数式 queryKey，运行时获取最新的 storeId，避免闭包捕获 stale 值
+      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId || ''] })
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 2000)
+    },
+    onError: (error: any) => {
+      console.error('Save config error:', error)
+      alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.unknownError')))
+    }
+  })
+
+  const handleSave = useCallback((key: string, value: any) => {
+    console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
+    saveConfigMutation.mutate({ key, value })
+    if (key === 'posReceipt' && value && value.storeLogo !== undefined) {
+      const currentStoreInfo = (posConfig as any)?.storeInfo || {}
+      if (currentStoreInfo.storeLogo !== value.storeLogo) {
+        configApi.set(user?.storeId || '', 'storeInfo', { ...currentStoreInfo, storeLogo: value.storeLogo }, 'pos').catch(() => {})
+      }
+    }
+  }, [user?.storeId, posConfig])
+
   // 小票 Logo 上传状态与方法
   const [uploadingReceiptLogo, setUploadingReceiptLogo] = useState(false)
   const receiptLogoInputRef = useRef<HTMLInputElement>(null)
@@ -632,10 +661,15 @@ export function POSSettingsPage() {
       const response = await uploadApi.uploadReceipt([file])
       const urls = response.data?.data?.urls || []
       if (urls.length > 0) {
-        setPosReceipt(prev => ({
-          ...prev,
-          storeLogo: urls[0]
-        }))
+        setPosReceipt(prev => {
+          const updated = {
+            ...prev,
+            storeLogo: urls[0],
+            showLogo: true
+          }
+          handleSave('posReceipt', updated)
+          return updated
+        })
       }
     } catch (error) {
       console.error('Failed to upload receipt logo:', error)
@@ -667,11 +701,15 @@ export function POSSettingsPage() {
       const response = await uploadApi.uploadReceipt([file])
       const urls = response.data?.data?.urls || []
       if (urls.length > 0) {
-        setPosReceipt(prev => ({
-          ...prev,
-          qrCodeUrl: urls[0],
-          showQR: true
-        }))
+        setPosReceipt(prev => {
+          const updated = {
+            ...prev,
+            qrCodeUrl: urls[0],
+            showQR: true
+          }
+          handleSave('posReceipt', updated)
+          return updated
+        })
       }
     } catch (error) {
       console.error('Failed to upload receipt QR code:', error)
@@ -892,28 +930,6 @@ export function POSSettingsPage() {
     }
   }, [posConfig])
 
-  // ========== SAVE MUTATION ==========
-  const saveConfigMutation = useMutation({
-    mutationFn: (data: { key: string; value: any }) => {
-      const currentStoreId = user?.storeId || ''
-      return configApi.set(currentStoreId, data.key, data.value, 'pos')
-    },
-    onSuccess: () => {
-      // 使用函数式 queryKey，运行时获取最新的 storeId，避免闭包捕获 stale 值
-      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId || ''] })
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 2000)
-    },
-    onError: (error: any) => {
-      console.error('Save config error:', error)
-      alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.unknownError')))
-    }
-  })
-
-  const handleSave = useCallback((key: string, value: any) => {
-    console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
-    saveConfigMutation.mutate({ key, value })
-  }, [])
 
   // ========== SUB TABS ==========
   const subTabs: { key: POSSubTab; labelKey: string; icon: React.ReactNode }[] = [
@@ -2015,7 +2031,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.autoPrint !== false}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, autoPrint: !prev.autoPrint }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, autoPrint: !prev.autoPrint }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
                 </div>
@@ -2031,6 +2053,7 @@ export function POSSettingsPage() {
                       type="text"
                       value={_posReceipt.storePhone || ''}
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, storePhone: e.target.value }))}
+                      onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
                       placeholder="例如: +62 812-3456-7890"
                     />
@@ -2041,6 +2064,7 @@ export function POSSettingsPage() {
                       type="text"
                       value={_posReceipt.storeAddress || ''}
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, storeAddress: e.target.value }))}
+                      onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
                       placeholder="例如: Jl. Sudirman No. 12, Jakarta"
                     />
@@ -2051,6 +2075,7 @@ export function POSSettingsPage() {
                       type="text"
                       value={_posReceipt.header || _posReceipt.headerCustomText || ''}
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, header: e.target.value, headerCustomText: e.target.value }))}
+                      onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
                       placeholder="例如: 欢迎光临 YOUME TEA"
                     />
@@ -2061,6 +2086,7 @@ export function POSSettingsPage() {
                       type="text"
                       value={_posReceipt.footer || _posReceipt.footerMessage || ''}
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, footer: e.target.value, footerMessage: e.target.value }))}
+                      onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
                       placeholder="例如: TERIMA KASIH / 谢谢惠顾，欢迎再次光临"
                     />
@@ -2129,7 +2155,13 @@ export function POSSettingsPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => setPosReceipt(prev => ({ ...prev, storeLogo: '' }))}
+                          onClick={() => {
+                            setPosReceipt(prev => {
+                              const updated = { ...prev, storeLogo: '' }
+                              handleSave('posReceipt', updated)
+                              return updated
+                            })
+                          }}
                           className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
                           title={t('posSettings.removeLogo', '移除 Logo')}
                         >
@@ -2144,6 +2176,7 @@ export function POSSettingsPage() {
                         type="text"
                         value={_posReceipt.storeLogo || ''}
                         onChange={(e) => setPosReceipt(prev => ({ ...prev, storeLogo: e.target.value }))}
+                        onBlur={() => handleSave('posReceipt', _posReceipt)}
                         className="input text-xs w-full py-1.5"
                         placeholder={t('posSettings.logoUrlPlaceholder', '或直接输入图片 URL（例如: https://... 或 /youme-logo-red.png）')}
                       />
@@ -2215,7 +2248,13 @@ export function POSSettingsPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => setPosReceipt(prev => ({ ...prev, qrCodeUrl: '', showQR: false }))}
+                          onClick={() => {
+                            setPosReceipt(prev => {
+                              const updated = { ...prev, qrCodeUrl: '', showQR: false }
+                              handleSave('posReceipt', updated)
+                              return updated
+                            })
+                          }}
                           className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
                           title={t('posSettings.removeQR', '移除二维码')}
                         >
@@ -2230,6 +2269,7 @@ export function POSSettingsPage() {
                         type="text"
                         value={_posReceipt.qrCodeUrl || ''}
                         onChange={(e) => setPosReceipt(prev => ({ ...prev, qrCodeUrl: e.target.value, showQR: !!e.target.value }))}
+                        onBlur={() => handleSave('posReceipt', _posReceipt)}
                         className="input text-xs w-full py-1.5"
                         placeholder={t('posSettings.qrUrlPlaceholder', '或直接输入二维码图片 URL / 跳转网址（例如: https://... 或 /uploads/receipts/qr.png）')}
                       />
@@ -2250,7 +2290,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.showLogo !== false}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, showLogo: !prev.showLogo }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, showLogo: !prev.showLogo }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
 
@@ -2262,7 +2308,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.showQR === true}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, showQR: !prev.showQR }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, showQR: !prev.showQR }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
@@ -2272,7 +2324,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.showStaffName !== false}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, showStaffName: !prev.showStaffName }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, showStaffName: !prev.showStaffName }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
 
@@ -2283,7 +2341,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.showCustomerName === true}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, showCustomerName: !prev.showCustomerName }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, showCustomerName: !prev.showCustomerName }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
 
@@ -2294,7 +2358,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.showKitchenNote !== false}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, showKitchenNote: !prev.showKitchenNote }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, showKitchenNote: !prev.showKitchenNote }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
 
@@ -2305,7 +2375,13 @@ export function POSSettingsPage() {
                     </div>
                     <Toggle
                       enabled={_posReceipt.showBarcode !== false}
-                      onChange={() => setPosReceipt(prev => ({ ...prev, showBarcode: !prev.showBarcode }))}
+                      onChange={() => {
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, showBarcode: !prev.showBarcode }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
                     />
                   </div>
                 </div>

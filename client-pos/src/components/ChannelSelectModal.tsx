@@ -147,9 +147,22 @@ export function ChannelSelectModal({
               }
               const adminKey = codeToKeyMap[ch.code]
               let customName = (ch as any).name || (adminKey && (channelSettings as any)?.[adminKey]?.name)
-              if (!customName || customName === '堂食' || customName === '外卖') {
-                const k = (ch as any).nameKey || adminKey || ch.code
-                customName = t(`pos.${k}`) || t(`pos.channel.${k}`) || ch.code
+              const legacyMap: Record<string, string> = {
+                '堂食': 'pos.dineIn',
+                '外卖': 'pos.takeaway',
+                '自提': 'pos.takeaway',
+                '柜台': 'pos.counter',
+              }
+              if (!customName || legacyMap[customName] || customName === 'DINE_IN' || customName === 'GOFOOD' || customName === 'GRAB' || customName === 'SHOPEE') {
+                if (customName && legacyMap[customName]) {
+                  customName = (t as any)(legacyMap[customName]) || customName
+                } else {
+                  let k = (ch as any).nameKey || adminKey || ch.code
+                  if (typeof k === 'string' && k.startsWith('pos.')) {
+                    k = k.substring(4)
+                  }
+                  customName = t(`pos.${k}`) || t(`pos.channel.${k}`) || ch.code
+                }
               }
               const customIcon = (ch as any).icon || (adminKey && (channelSettings as any)?.[adminKey]?.icon) || ch.icon
               return (

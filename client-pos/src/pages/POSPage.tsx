@@ -458,9 +458,22 @@ export function POSPage() {
       const adminKey = codeToKeyMap[ch.code]
       const cfg = adminKey ? (channelSettings as any)[adminKey] : null
       let chName = cfg?.name || (ch as any).name
-      if (!chName || chName === '堂食' || chName === '外卖') {
-        const key = (ch as any).nameKey || adminKey || ch.code
-        chName = t(`pos.${key}`) || t(`pos.channel.${key}`) || ch.code
+      const legacyMap: Record<string, string> = {
+        '堂食': 'pos.dineIn',
+        '外卖': 'pos.takeaway',
+        '自提': 'pos.takeaway',
+        '柜台': 'pos.counter',
+      }
+      if (!chName || legacyMap[chName] || chName === 'DINE_IN' || chName === 'GOFOOD' || chName === 'GRAB' || chName === 'SHOPEE') {
+        if (chName && legacyMap[chName]) {
+          chName = (t as any)(legacyMap[chName]) || chName
+        } else {
+          let key = (ch as any).nameKey || adminKey || ch.code
+          if (typeof key === 'string' && key.startsWith('pos.')) {
+            key = key.substring(4)
+          }
+          chName = t(`pos.${key}`) || t(`pos.channel.${key}`) || ch.code
+        }
       }
       return {
         ...ch,
@@ -470,6 +483,33 @@ export function POSPage() {
       }
     })
   }, [posChannels, channelSettings, posLayout, t])
+
+  // 统一渠道名称国际化多重兜底解析函数
+  const getChannelDisplayName = useCallback((ch: any) => {
+    if (!ch) return ''
+    const legacyMap: Record<string, string> = {
+      '堂食': 'pos.dineIn',
+      '外卖': 'pos.takeaway',
+      '自提': 'pos.takeaway',
+      '柜台': 'pos.counter',
+    }
+    const raw = ((ch as any).name || '').trim()
+    if (raw && legacyMap[raw]) {
+      return (t as any)(legacyMap[raw]) || raw
+    }
+    if (raw && raw !== 'DINE_IN' && raw !== 'GOFOOD' && raw !== 'GRAB' && raw !== 'SHOPEE') {
+      return raw
+    }
+    let key = (ch as any).nameKey || ch.code || ''
+    if (typeof key === 'string' && key.startsWith('pos.')) {
+      key = key.substring(4)
+    }
+    const translated = t(`pos.${key}`) || t(`pos.channel.${key}`)
+    if (translated && translated !== `pos.${key}` && translated !== `pos.channel.${key}`) {
+      return translated
+    }
+    return ch.code || raw || ''
+  }, [t])
 
   // 保证当前选中的渠道必须在可用渠道内
   useEffect(() => {
@@ -921,8 +961,8 @@ export function POSPage() {
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
   const loadConfig = useCallback(() => {
     // Guard: only load when storeId is available (not during initial loading with 'default')
-    if (!user?.storeId) return
-    const storeId = user.storeId
+    const storeId = user?.storeId || localStorage.getItem('storeId') || (user as any)?.staff?.storeId
+    if (!storeId) return
     console.log('[POS] Loading config for storeId:', storeId)
     // Use configured API URL for cloud sync
     posApi.getConfigs(storeId)
@@ -2794,7 +2834,7 @@ export function POSPage() {
         storeAddress: posReceipt.storeAddress || storeInfo.address || '',
         storeLogo: posReceipt.storeLogo || storeInfo.storeLogo || '',
         language: lang || 'id',
-        channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : ''),
+        channelName: getChannelDisplayName(selectedChannel),
         tableNumber: selectedChannel?.code === 'DINE_IN' ? tableNumber : undefined,
         cashierName: user?.staff?.name || (user as any)?.name || user?.phone || '',
         customerName: member?.name || '',
@@ -2970,7 +3010,7 @@ export function POSPage() {
               className="px-3 py-1 text-white rounded-xl text-sm font-medium cursor-pointer hover:bg-white/20 transition-colors"
               style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
             >
-              {selectedChannel.icon} {(selectedChannel as any)?.name || t(selectedChannel.nameKey)}
+              {selectedChannel.icon} {getChannelDisplayName(selectedChannel)}
               {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
             </span>
           )}
@@ -3197,7 +3237,7 @@ export function POSPage() {
                 </span>
                 {availableChannels.map(ch => {
                   const isSelected = selectedChannel?.code === ch.code || selectedChannel?.id === ch.id
-                  const displayName = (ch as any).name || ((ch as any).nameKey ? t(`pos.channel.${(ch as any).nameKey}`, ch.code) : ch.code)
+                  const displayName = getChannelDisplayName(ch)
                   return (
                     <button
                       key={ch.id || ch.code}
@@ -3522,7 +3562,7 @@ export function POSPage() {
                   #{paymentModalOrderNum}
                 </span>
                 <span className="text-xs bg-black/20 px-2 py-0.5 rounded-full">
-                  {selectedChannel?.icon} {(selectedChannel as any)?.name || t(selectedChannel?.nameKey || '')}
+                  {selectedChannel?.icon} {getChannelDisplayName(selectedChannel)}
                   {selectedChannel?.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount', '人')})`}
                 </span>
               </div>
@@ -3954,7 +3994,7 @@ export function POSPage() {
                 {suspendedOrders.map(order => (
                   <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                     <div>
-                      <p className="font-medium">{order.channel.icon} {t(order.channel.nameKey)}</p>
+                      <p className="font-medium">{order.channel.icon} {getChannelDisplayName(order.channel)}</p>
                       <p className="text-xs text-gray-500">{order.time} - {order.cart.length} {t('pos.items')}</p>
                     </div>
                     <button onClick={() => resumeOrder(order)} className="px-3 py-1 bg-primary text-white rounded-lg text-sm">{t('pos.takeOrder')}</button>

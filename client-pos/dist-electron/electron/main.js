@@ -1402,7 +1402,15 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
         const rawChunks = [];
         const encoder = new TextEncoder();
         const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ 初始化
-        const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A, 0x0A]); // GS V 0 全切纸
+        const is80mm = data.paperSize === '80mm';
+        const barcodeCmd = (data.showBarcode !== false && data.orderNum)
+            ? buildEscPosBarcode(String(data.orderNum))
+            : Buffer.alloc(0);
+        const qrCmd = (data.showQR && data.qrCodeUrl)
+            ? buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4)
+            : Buffer.alloc(0);
+        // 换行走纸 4 行再切纸，避免切到文字或二维码尾部
+        const cutCmd = Buffer.from([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]); // LF*4 + GS V 0 全切纸
         for (let c = 0; c < printCopies; c++) {
             const copyData = printCopies > 1 ? {
                 ...data,
@@ -1411,10 +1419,10 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
             const text = generateReceiptText(copyData);
             // 只有第一联出纸前触发弹钱箱
             const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0);
-            rawChunks.push(Buffer.concat([firstDrawerCmd, initCmd, encoder.encode(text), cutCmd]));
+            rawChunks.push(Buffer.concat([firstDrawerCmd, initCmd, encoder.encode(text), barcodeCmd, qrCmd, cutCmd]));
         }
         const rawBytes = Buffer.concat(rawChunks);
-        writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length}`);
+        writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length} hasQR=${!qrCmd.equals(Buffer.alloc(0))} hasBarcode=${!barcodeCmd.equals(Buffer.alloc(0))}`);
         // 1. 如果打印机是 COM 口（虚拟串口）
         const isComPort = /^COM\d+/i.test(printerName);
         if (isComPort) {
@@ -2234,7 +2242,60 @@ function generateReceiptText(data) {
         lines.push(centerText(data.footer, width));
     }
     lines.push(centerText(L.thanks, width));
-    return lines.join('\n') + '\n\n\n\n\n';
+    return lines.join('\n') + '\n\n';
+}
+/**
+ * 构建 ESC/POS 2D 二维码原生指令 (Model 2, 支持 58mm / 80mm 热敏小票机)
+ */
+function buildEscPosQRCode(content, moduleSize = 5) {
+    if (!content)
+        return Buffer.alloc(0);
+    const dataBytes = Buffer.from(content, 'utf8');
+    const pL = (dataBytes.length + 3) & 0xff;
+    const pH = ((dataBytes.length + 3) >> 8) & 0xff;
+    return Buffer.concat([
+        // 居中对齐 ESC a 1
+        Buffer.from([0x1B, 0x61, 0x01]),
+        // GS ( k: Model 2 (4, 0, 49, 65, 50, 0)
+        Buffer.from([0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]),
+        // GS ( k: 设置块大小 (3, 0, 49, 67, moduleSize)
+        Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, Math.max(3, Math.min(10, moduleSize))]),
+        // GS ( k: 纠错级别 M (3, 0, 49, 69, 49)
+        Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31]),
+        // GS ( k: 存入二维码数据 (pL, pH, 49, 80, 48, ...data)
+        Buffer.from([0x1D, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30]),
+        dataBytes,
+        // GS ( k: 打印二维码 (3, 0, 49, 81, 48)
+        Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30]),
+        // 换行并重置为左对齐 ESC a 0
+        Buffer.from([0x0A, 0x0A, 0x1B, 0x61, 0x00])
+    ]);
+}
+/**
+ * 构建 ESC/POS 订单条形码 (CODE128 格式，方便扫码枪秒级反扫退单或查单)
+ */
+function buildEscPosBarcode(content) {
+    if (!content)
+        return Buffer.alloc(0);
+    const clean = content.replace(/[^A-Za-z0-9\-]/g, '');
+    if (!clean)
+        return Buffer.alloc(0);
+    const dataBytes = Buffer.from(clean, 'ascii');
+    return Buffer.concat([
+        // 居中对齐 ESC a 1
+        Buffer.from([0x1B, 0x61, 0x01]),
+        // 设置条码高度 60 dots
+        Buffer.from([0x1D, 0x68, 0x3C]),
+        // 设置条码宽度 2 dots
+        Buffer.from([0x1D, 0x77, 0x02]),
+        // 设置数字显示在条码下方 (HRI below: 0x02)
+        Buffer.from([0x1D, 0x48, 0x02]),
+        // CODE128 打印指令: GS k 73 <length> <data>
+        Buffer.from([0x1D, 0x6B, 0x49, dataBytes.length]),
+        dataBytes,
+        // 换行并重置为左对齐 ESC a 0
+        Buffer.from([0x0A, 0x0A, 0x1B, 0x61, 0x00])
+    ]);
 }
 function centerText(text, width) {
     const padding = Math.max(0, Math.floor((width - text.length) / 2));
