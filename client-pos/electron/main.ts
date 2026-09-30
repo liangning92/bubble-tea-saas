@@ -702,18 +702,11 @@ function createMainWindow() {
   mainWindow.setMenuBarVisibility(false)
   mainWindow.setAutoHideMenuBar(true)
 
-  // 确保全屏铺满无黑边
-  mainWindow.maximize()
-  mainWindow.setFullScreen(true)
-
   // 允许 F11 键切换全屏（方便运维调试）
   mainWindow.webContents.on('before-input-event', (_event, input) => {
     if (input.key === 'F11' && input.type === 'keyDown' && mainWindow && !mainWindow.isDestroyed()) {
       const isFull = mainWindow.isFullScreen()
       mainWindow.setFullScreen(!isFull)
-      if (isFull) {
-        mainWindow.maximize()
-      }
     }
   })
 

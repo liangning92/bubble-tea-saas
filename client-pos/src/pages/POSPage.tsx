@@ -210,7 +210,7 @@ export function POSPage() {
   const [socialRef, setSocialRef] = useState('')
   const [driverPickupTime, setDriverPickupTime] = useState('')
   const [orderNote, setOrderNote] = useState('')
-  const [lang, setLang] = useState(() => localStorage.getItem('pos_lang') || i18n.language || 'zh')
+  const [lang, setLang] = useState(() => localStorage.getItem('pos_lang') || i18n.language || 'id')
   const [pendingTaskCount, setPendingTaskCount] = useState(0)
   // 历史订单数据
   const [orders, setOrders] = useState<any[]>([])
@@ -457,9 +457,14 @@ export function POSPage() {
     }).map(ch => {
       const adminKey = codeToKeyMap[ch.code]
       const cfg = adminKey ? (channelSettings as any)[adminKey] : null
+      let chName = cfg?.name || (ch as any).name
+      if (!chName || chName === '堂食' || chName === '外卖') {
+        const key = (ch as any).nameKey || adminKey || ch.code
+        chName = t(`pos.${key}`) || t(`pos.channel.${key}`) || ch.code
+      }
       return {
         ...ch,
-        name: cfg?.name || (ch as any).name || ((ch as any).nameKey ? t(`pos.channel.${(ch as any).nameKey}`, ch.code) : ch.code),
+        name: chName,
         color: cfg?.color || (ch as any).color,
         icon: cfg?.icon || ch.icon
       }
@@ -3106,7 +3111,32 @@ export function POSPage() {
                     )}
                   </div>
                   <span className="text-sm mt-2 font-medium">
-                    {btn.labelKey.startsWith('toolbar.') ? t(btn.labelKey) : btn.labelKey}
+                    {(() => {
+                      const legacyChineseDefaults: Record<string, string> = {
+                        '交班': 'shift',
+                        '挂单': 'suspend',
+                        '扫码': 'scan',
+                        '扫描': 'scan',
+                        '历史': 'history',
+                        '退款': 'refund',
+                        '现金': 'cash',
+                        '支出': 'expense',
+                        '费用': 'expense',
+                        '任务': 'tasks',
+                        '自检': 'hardware',
+                        '登出': 'logout',
+                        '设置': 'setting',
+                        '设备自检': 'hardware',
+                        '设备自检 (测试打印/钱箱)': 'hardware'
+                      }
+                      if (!btn.labelKey || btn.labelKey.startsWith('toolbar.')) {
+                        return t(btn.labelKey || `toolbar.${btn.id}`)
+                      }
+                      if (legacyChineseDefaults[btn.labelKey]) {
+                        return t(`toolbar.${legacyChineseDefaults[btn.labelKey]}`)
+                      }
+                      return btn.labelKey
+                    })()}
                   </span>
                 </button>
               ))}
@@ -3581,7 +3611,7 @@ export function POSPage() {
                             <Loader2 size={14} className="animate-spin" />
                             <span>{t('pos.waitingPayment', '等待顾客扫码支付...')}</span>
                           </div>
-                          <span className="text-[10px] text-gray-400 mt-0.5">客显副屏已同步全屏展示</span>
+                          <span className="text-[10px] text-gray-400 mt-0.5">{t('pos.customerDisplaySynced', '客显副屏已同步全屏展示')}</span>
                         </div>
                       )}
                       {qrisData.status === 'paid' && (
@@ -3700,12 +3730,12 @@ export function POSPage() {
               <div className="text-xs text-gray-500 truncate hidden sm:block">
                 {paymentMethod === 'cash' ? (
                   Boolean(paidAmount) && parseInt(paidAmount) >= total ? (
-                    <span className="text-emerald-600 font-medium">✅ 实收已足额，点击确认完成结账并打印小票/杯贴</span>
+                    <span className="text-emerald-600 font-medium">{t('pos.cashExactReady', '✅ 实收已足额，点击确认完成结账并打印小票/杯贴')}</span>
                   ) : (
-                    <span>💡 输入顾客支付的现金金额，系统将自动核算找零</span>
+                    <span>{t('pos.cashChangeHint', '💡 输入顾客支付的现金金额，系统将自动核算找零')}</span>
                   )
                 ) : (
-                  <span>📱 电子支付或刷卡成功后，点击右侧按钮出单</span>
+                  <span>{t('pos.digitalPayHint', '📱 电子支付或刷卡成功后，点击右侧按钮出单')}</span>
                 )}
               </div>
               <div className="flex items-center gap-2 ml-auto">
@@ -4610,7 +4640,7 @@ export function POSPage() {
                 {/* 小票打印机 */}
                 {(() => {
                   const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt')
-                  const pName = receiptPrinter?.printerName || hardwareSettings.printerName || '系统默认打印机'
+                  const pName = receiptPrinter?.printerName || hardwareSettings.printerName || t('pos.defaultPrinter', '系统默认打印机')
                   const isNetwork = receiptPrinter?.connectionType === 'network'
                   return (
                     <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
@@ -4636,7 +4666,7 @@ export function POSPage() {
                 {(() => {
                   const labelPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'label')
                   const isEnabled = labelPrinter?.enabled ?? false
-                  const pName = labelPrinter?.printerName || (isEnabled ? '标签机已启用' : '未启用 (后台配置)')
+                  const pName = labelPrinter?.printerName || (isEnabled ? t('pos.labelPrinterEnabled', '标签机已启用') : t('pos.labelPrinterDisabled', '未启用 (后台配置)'))
                   return (
                     <div className={`p-3 rounded-xl border flex items-center justify-between ${isEnabled ? 'bg-indigo-50/50 border-indigo-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}>
                       <div className="flex items-center gap-2.5">

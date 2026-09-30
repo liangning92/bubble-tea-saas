@@ -146,7 +146,11 @@ export function ChannelSelectModal({
                 'SHOPEE': 'shopee',
               }
               const adminKey = codeToKeyMap[ch.code]
-              const customName = (ch as any).name || (adminKey && (channelSettings as any)?.[adminKey]?.name)
+              let customName = (ch as any).name || (adminKey && (channelSettings as any)?.[adminKey]?.name)
+              if (!customName || customName === '堂食' || customName === '外卖') {
+                const k = (ch as any).nameKey || adminKey || ch.code
+                customName = t(`pos.${k}`) || t(`pos.channel.${k}`) || ch.code
+              }
               const customIcon = (ch as any).icon || (adminKey && (channelSettings as any)?.[adminKey]?.icon) || ch.icon
               return (
                 <button
@@ -159,7 +163,7 @@ export function ChannelSelectModal({
                   }`}
                 >
                   <span className="text-3xl">{customIcon}</span>
-                  <span className="text-xs font-medium text-gray-700">{customName || t(ch.nameKey)}</span>
+                  <span className="text-xs font-medium text-gray-700">{customName}</span>
                 </button>
               )
             })}

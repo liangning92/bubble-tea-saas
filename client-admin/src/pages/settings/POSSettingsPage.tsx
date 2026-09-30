@@ -611,18 +611,7 @@ export function POSSettingsPage() {
     autoPrint: true,             // 自动打印
   })
 
-  // 避免首次加载触发保存
-  const receiptLoadedRef = useRef(false)
-  const receiptSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // 当 _posReceipt 变化时自动保存（首次加载完成后）
-  useEffect(() => {
-    if (!receiptLoadedRef.current) return // 跳过首次加载
-    if (receiptSaveTimerRef.current) clearTimeout(receiptSaveTimerRef.current)
-    receiptSaveTimerRef.current = setTimeout(() => {
-      handleSave('posReceipt', _posReceipt)
-    }, 800) // 防抖 800ms
-  }, [_posReceipt])
 
   // 小票 Logo 上传状态与方法
   const [uploadingReceiptLogo, setUploadingReceiptLogo] = useState(false)
@@ -708,7 +697,7 @@ export function POSSettingsPage() {
     if (!hasReceipt) {
       existing.unshift({
         id: 'receipt-1',
-        name: '小票打印机',
+        name: t('posSettings.defaultReceiptPrinterName', 'Printer Struk'),
         type: 'receipt' as PrinterType,
         enabled: true,
         connectionType: hw.printerConnectionType || 'usb',
@@ -720,7 +709,7 @@ export function POSSettingsPage() {
     if (!hasKitchen) {
       existing.push({
         id: 'kitchen-1',
-        name: '后厨打印机',
+        name: t('posSettings.defaultKitchenPrinterName', 'Printer Dapur'),
         type: 'kitchen' as PrinterType,
         enabled: false,
         connectionType: 'usb' as const,
@@ -732,7 +721,7 @@ export function POSSettingsPage() {
     if (!hasLabel) {
       existing.push({
         id: 'label-1',
-        name: '标签杯贴机',
+        name: t('posSettings.defaultLabelPrinterName', 'Printer Label'),
         type: 'label' as PrinterType,
         enabled: false,
         connectionType: 'usb' as const,
@@ -893,7 +882,6 @@ export function POSSettingsPage() {
         const receiptConfig = configs.posReceipt || configs.receiptSettings
         setPosReceipt(prev => ({ ...prev, ...receiptConfig }))
       }
-      receiptLoadedRef.current = true
       // Load hardware settings
       if (configs.hardwareSettings) {
         console.log('[Admin] Loading hw:', configs.hardwareSettings)
@@ -1154,60 +1142,67 @@ export function POSSettingsPage() {
             <p className="text-sm text-gray-500 mb-4">{t('posSettings.toolbarButtonsHint')}</p>
             <div className="space-y-3">
               {[
-                { key: 'showSuspend', labelKey: 'suspend', label: t('posSettings.suspendOrder'), defaultName: '挂单' },
-                { key: 'showHistory', labelKey: 'history', label: t('posSettings.orderHistory'), defaultName: '历史' },
-                { key: 'showScan', labelKey: 'scan', label: t('posSettings.scanBarcode'), defaultName: '扫码' },
-                { key: 'showShift', labelKey: 'shift', label: t('posSettings.shiftChange'), defaultName: '交班' },
-                { key: 'showCash', labelKey: 'cash', label: t('posSettings.cashManagement'), defaultName: '现金' },
-                { key: 'showExpense', labelKey: 'expense', label: t('posSettings.expense'), defaultName: '支出' },
-                { key: 'showTasks', labelKey: 'tasks', label: t('posSettings.hygieneTasks'), defaultName: '任务' },
-                { key: 'showHardware', labelKey: 'hardware', label: t('posSettings.hardwareCheck', '设备自检 (测试打印/钱箱)'), defaultName: '自检' },
-                { key: 'showLogout', labelKey: 'logout', label: t('posSettings.logout'), defaultName: '登出' },
-              ].map((item) => (
-                <div key={item.key} className="p-3 bg-gray-50 rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{item.label}</span>
-                    <Toggle
-                      enabled={toolbarSettings[item.key as keyof typeof toolbarSettings] as boolean}
-                      onChange={() => {
-                        const newSettings = {
-                          ...toolbarSettings,
-                          [item.key]: !toolbarSettings[item.key as keyof typeof toolbarSettings]
-                        }
-                        setToolbarSettings(newSettings)
-                        handleSave('toolbarSettings', newSettings)
-                      }}
-                    />
+                { key: 'showSuspend', labelKey: 'suspend', label: t('posSettings.suspendOrder') },
+                { key: 'showHistory', labelKey: 'history', label: t('posSettings.orderHistory') },
+                { key: 'showScan', labelKey: 'scan', label: t('posSettings.scanBarcode') },
+                { key: 'showShift', labelKey: 'shift', label: t('posSettings.shiftChange') },
+                { key: 'showCash', labelKey: 'cash', label: t('posSettings.cashManagement') },
+                { key: 'showExpense', labelKey: 'expense', label: t('posSettings.expense') },
+                { key: 'showTasks', labelKey: 'tasks', label: t('posSettings.hygieneTasks') },
+                { key: 'showHardware', labelKey: 'hardware', label: t('posSettings.hardwareCheck', '设备自检 (测试打印/钱箱)') },
+                { key: 'showLogout', labelKey: 'logout', label: t('posSettings.logout') },
+              ].map((item) => {
+                const currentRaw = toolbarSettings.toolbarLabels?.[item.labelKey as keyof typeof toolbarSettings.toolbarLabels] || ''
+                const legacyDefaults = ['挂单', '历史', '扫码', '交班', '现金', '支出', '任务', '自检', '登出']
+                const isDefaultVal = !currentRaw || currentRaw.startsWith('toolbar.') || legacyDefaults.includes(currentRaw)
+                const displayVal = isDefaultVal ? '' : currentRaw
+                return (
+                  <div key={item.key} className="p-3 bg-gray-50 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{item.label}</span>
+                      <Toggle
+                        enabled={toolbarSettings[item.key as keyof typeof toolbarSettings] as boolean}
+                        onChange={() => {
+                          const newSettings = {
+                            ...toolbarSettings,
+                            [item.key]: !toolbarSettings[item.key as keyof typeof toolbarSettings]
+                          }
+                          setToolbarSettings(newSettings)
+                          handleSave('toolbarSettings', newSettings)
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-gray-200/60">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{t('posSettings.buttonLabel', '显示文字')}:</span>
+                      <input
+                        type="text"
+                        value={displayVal}
+                        onChange={(e) => {
+                          const newLabels = {
+                            ...toolbarSettings.toolbarLabels,
+                            [item.labelKey]: e.target.value
+                          }
+                          setToolbarSettings(prev => ({ ...prev, toolbarLabels: newLabels }))
+                        }}
+                        onBlur={(e) => {
+                          const trimmed = e.target.value.trim()
+                          const newLabels = {
+                            ...toolbarSettings.toolbarLabels,
+                            [item.labelKey]: trimmed || `toolbar.${item.labelKey}`
+                          }
+                          const newSettings = {
+                            ...toolbarSettings,
+                            toolbarLabels: newLabels
+                          }
+                          handleSave('toolbarSettings', newSettings)
+                        }}
+                        placeholder={item.label}
+                        className="input text-xs py-1 px-2 h-7"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1 border-t border-gray-200/60">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">{t('posSettings.buttonLabel', '显示文字')}:</span>
-                    <input
-                      type="text"
-                      value={toolbarSettings.toolbarLabels?.[item.labelKey as keyof typeof toolbarSettings.toolbarLabels] || ''}
-                      onChange={(e) => {
-                        const newLabels = {
-                          ...toolbarSettings.toolbarLabels,
-                          [item.labelKey]: e.target.value
-                        }
-                        setToolbarSettings(prev => ({ ...prev, toolbarLabels: newLabels }))
-                      }}
-                      onBlur={(e) => {
-                        const newLabels = {
-                          ...toolbarSettings.toolbarLabels,
-                          [item.labelKey]: e.target.value
-                        }
-                        const newSettings = {
-                          ...toolbarSettings,
-                          toolbarLabels: newLabels
-                        }
-                        handleSave('toolbarSettings', newSettings)
-                      }}
-                      placeholder={item.defaultName}
-                      className="input text-xs py-1 px-2 h-7"
-                    />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
@@ -1261,6 +1256,7 @@ export function POSSettingsPage() {
                           }
                           handleSave('channelSettings', newChannels)
                         }}
+                        placeholder={t(`posSettings.${channelNameKey}`)}
                         className="input text-sm"
                       />
                     </div>
@@ -1984,7 +1980,7 @@ export function POSSettingsPage() {
                               : 'border-gray-200 bg-white text-gray-700'
                           }`}
                         >
-                          {size} {size === '80mm' ? '(标准)' : '(迷你)'}
+                          {size} {size === '80mm' ? t('posSettings.paperStandard', '(标准)') : t('posSettings.paperMini', '(迷你)')}
                         </button>
                       ))}
                     </div>
@@ -2005,7 +2001,7 @@ export function POSSettingsPage() {
                               : 'border-gray-200 bg-white text-gray-700'
                           }`}
                         >
-                          {copies} 联 {copies === 2 ? '(顾客+商户)' : ''}
+                          {copies} {t('posSettings.copiesUnit', '联')} {copies === 2 ? t('posSettings.copiesCustomerMerchant', '(顾客+商户)') : ''}
                         </button>
                       ))}
                     </div>
@@ -2128,14 +2124,14 @@ export function POSSettingsPage() {
                           </div>
                           <div className="text-[11px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
                             <CheckCircle size={12} />
-                            <span>Logo 已生效并实时同步</span>
+                            <span>{t('posSettings.logoActiveAndSynced', 'Logo 已生效并实时同步')}</span>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => setPosReceipt(prev => ({ ...prev, storeLogo: '' }))}
                           className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                          title="移除 Logo"
+                          title={t('posSettings.removeLogo', '移除 Logo')}
                         >
                           <X size={15} />
                         </button>
@@ -2149,7 +2145,7 @@ export function POSSettingsPage() {
                         value={_posReceipt.storeLogo || ''}
                         onChange={(e) => setPosReceipt(prev => ({ ...prev, storeLogo: e.target.value }))}
                         className="input text-xs w-full py-1.5"
-                        placeholder="或直接输入图片 URL（例如: https://... 或 /youme-logo-red.png）"
+                        placeholder={t('posSettings.logoUrlPlaceholder', '或直接输入图片 URL（例如: https://... 或 /youme-logo-red.png）')}
                       />
                     </div>
                   </div>
@@ -2214,14 +2210,14 @@ export function POSSettingsPage() {
                           </div>
                           <div className="text-[11px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
                             <CheckCircle size={12} />
-                            <span>小票二维码已就绪</span>
+                            <span>{t('posSettings.qrReady', '小票二维码已就绪')}</span>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => setPosReceipt(prev => ({ ...prev, qrCodeUrl: '', showQR: false }))}
                           className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                          title="移除二维码"
+                          title={t('posSettings.removeQR', '移除二维码')}
                         >
                           <X size={15} />
                         </button>
@@ -2235,7 +2231,7 @@ export function POSSettingsPage() {
                         value={_posReceipt.qrCodeUrl || ''}
                         onChange={(e) => setPosReceipt(prev => ({ ...prev, qrCodeUrl: e.target.value, showQR: !!e.target.value }))}
                         className="input text-xs w-full py-1.5"
-                        placeholder="或直接输入二维码图片 URL / 跳转网址（例如: https://... 或 /uploads/receipts/qr.png）"
+                        placeholder={t('posSettings.qrUrlPlaceholder', '或直接输入二维码图片 URL / 跳转网址（例如: https://... 或 /uploads/receipts/qr.png）')}
                       />
                     </div>
                   </div>

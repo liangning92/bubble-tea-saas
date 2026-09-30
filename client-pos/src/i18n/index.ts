@@ -56,7 +56,16 @@ const resources = {
         reload: 'Muat Ulang',
         loading: 'Memuat...',
         search: 'Cari',
-        success: 'Berhasil'
+        success: 'Berhasil',
+        required: 'Wajib',
+        remove: 'Hapus',
+        uploading: 'Sedang mengunggah...',
+        backspace: 'Hapus',
+        ready: 'Siap',
+        disabled: 'Nonaktif',
+        enabled: 'Aktif',
+        auto: 'Otomatis',
+        manual: 'Manual'
       },
       pos: {
         title: 'Kasir',
@@ -292,6 +301,49 @@ const resources = {
         expenseCreated: 'Biaya berhasil dicatat',
         expenseFailed: 'Gagal mencatat biaya',
         detectPrinter: "Deteksi Printer",
+        customerDisplaySynced: 'Layar pelanggan menampilkan QR secara penuh',
+        cashExactReady: '✅ Jumlah pembayaran cukup, klik konfirmasi untuk mencetak struk/label',
+        cashChangeHint: '💡 Masukkan uang tunai dari pelanggan, kembalian akan dihitung otomatis',
+        digitalPayHint: '📱 Setelah pembayaran digital/kartu berhasil, klik tombol konfirmasi untuk cetak',
+        paidAmount: 'Uang Diterima',
+        exactAmount: 'Uang Pas',
+        amountDue: 'Jumlah Tagihan',
+        qrisHelp: 'Arahkan pelanggan scan QRIS, struk tercetak otomatis saat sukses',
+        externalPayHelp: 'Gunakan mesin EDC/kartu untuk transaksi, lalu klik konfirmasi',
+        pleaseSelectPrinter: 'Pilih atau masukkan nama printer',
+        printerSetupSuccess: 'Printer berhasil disetel ke',
+        labelPrinterSetupSuccess: 'Printer label berhasil disetel ke',
+        testPrintSuccess: 'Uji cetak berhasil dikirim',
+        testLabelSuccess: 'Uji cetak label berhasil dikirim',
+        cashDrawerOpened: 'Perintah buka laci kasir terkirim',
+        defaultPrinter: 'Printer Default Sistem',
+        labelPrinterEnabled: 'Printer Label Aktif',
+        labelPrinterDisabled: 'Nonaktif (Pengaturan Admin)',
+        pos_no_printers: 'Tidak ada printer yang terdeteksi',
+        receiptPrinter: 'Printer Struk Kasir',
+        labelPrinter: 'Printer Label Cangkir',
+        cashDrawer: 'Laci Kasir',
+        dualScreen: 'Layar Pelanggan',
+        hardwareStatus: 'Status Perangkat & Uji Mandiri',
+        hardwareAdminManaged: 'Semua perangkat dikelola terpusat via Admin dan sinkron otomatis',
+        quickSelfTest: 'Uji Mandiri Perangkat Cepat',
+        testPrint: 'Uji Struk',
+        testLabel: 'Uji Label',
+        testCashDrawer: 'Uji Laci Kasir',
+        printersReported: 'Printer lokal berhasil disinkronkan ke server',
+        syncPrintersToAdmin: 'Sinkronisasi Printer Lokal ke Admin',
+        channel: {
+          dineIn: 'Makan Di Tempat',
+          gofood: 'GoFood',
+          grab: 'Grab',
+          shopee: 'Shopee'
+        }
+      },
+      posSettings: {
+        receiptPrinter: 'Printer Struk Kasir',
+        labelPrinter: 'Printer Label Cangkir',
+        cashDrawer: 'Laci Kasir',
+        dualScreen: 'Layar Pelanggan'
       },
       testPage: {
         environmentOk: 'Jika Anda dapat melihat ini, lingkungan berfungsi dengan benar',
@@ -578,7 +630,10 @@ const resources = {
         selfRating: 'Penilaian Sendiri',
         selfRatingTip: 'Nilai kualitas pekerjaan Anda sendiri',
         requiresApproval: 'Butuh Persetujuan',
-        due: 'Tenggat'
+        due: 'Tenggat',
+        photoEvidence: 'Foto Bukti',
+        takeOrUploadPhoto: 'Klik untuk ambil foto atau upload bukti',
+        photoRequiredError: 'Tugas ini wajib menyertakan foto bukti pembersihan'
       }
     }
   },
@@ -636,7 +691,16 @@ const resources = {
         reload: 'Reload',
         loading: 'Loading...',
         search: 'Search',
-        success: 'Success'
+        success: 'Success',
+        required: 'Required',
+        remove: 'Remove',
+        uploading: 'Uploading...',
+        backspace: 'Backspace',
+        ready: 'Ready',
+        disabled: 'Disabled',
+        enabled: 'Enabled',
+        auto: 'Auto',
+        manual: 'Manual'
       },
       pos: {
         title: 'POS',
@@ -863,6 +927,49 @@ const resources = {
         expenseCreated: 'Expense recorded successfully',
         expenseFailed: 'Failed to record expense',
         detectPrinter: "Detect Printer",
+        customerDisplaySynced: 'Customer display shows full-screen QR',
+        cashExactReady: '✅ Exact payment entered, click confirm to checkout & print',
+        cashChangeHint: '💡 Enter customer cash amount, change will be calculated',
+        digitalPayHint: '📱 After digital payment or card succeeds, click confirm',
+        paidAmount: 'Paid Amount',
+        exactAmount: 'Exact',
+        amountDue: 'Amount Due',
+        qrisHelp: 'Guide customer to scan QRIS, receipt prints automatically',
+        externalPayHelp: 'Process on EDC or card terminal, then click confirm',
+        pleaseSelectPrinter: 'Please select or enter printer name',
+        printerSetupSuccess: 'Printer successfully set to',
+        labelPrinterSetupSuccess: 'Label printer successfully set to',
+        testPrintSuccess: 'Test print sent successfully',
+        testLabelSuccess: 'Test label print sent successfully',
+        cashDrawerOpened: 'Cash drawer trigger sent',
+        defaultPrinter: 'System Default Printer',
+        labelPrinterEnabled: 'Label Printer Enabled',
+        labelPrinterDisabled: 'Disabled (Configure in Admin)',
+        pos_no_printers: 'No printers detected',
+        receiptPrinter: 'Front Receipt Printer',
+        labelPrinter: 'Cup Label Printer',
+        cashDrawer: 'Cash Drawer',
+        dualScreen: 'Customer Display',
+        hardwareStatus: 'Hardware Status & Self-Test',
+        hardwareAdminManaged: 'All hardware is centrally configured via Admin and synced automatically',
+        quickSelfTest: 'Quick Hardware Self-Test',
+        testPrint: 'Test Receipt',
+        testLabel: 'Test Label',
+        testCashDrawer: 'Test Cash Drawer',
+        printersReported: 'Local printers successfully synced to server',
+        syncPrintersToAdmin: 'Sync Local Printers to Admin',
+        channel: {
+          dineIn: 'Dine In',
+          gofood: 'GoFood',
+          grab: 'Grab',
+          shopee: 'Shopee'
+        }
+      },
+      posSettings: {
+        receiptPrinter: 'Receipt Printer',
+        labelPrinter: 'Label Printer',
+        cashDrawer: 'Cash Drawer',
+        dualScreen: 'Customer Display'
       },
       testPage: {
         environmentOk: 'If you can see this, the environment is working correctly',
@@ -1103,7 +1210,10 @@ const resources = {
         selfRating: 'Self Rating',
         selfRatingTip: 'Rate your work quality',
         requiresApproval: 'Requires Approval',
-        due: 'Due'
+        due: 'Due',
+        photoEvidence: 'Photo Evidence',
+        takeOrUploadPhoto: 'Click to take photo or upload evidence',
+        photoRequiredError: 'This task requires photo evidence of completion'
       },
       hardware: {
         title: 'Hardware Settings',
@@ -1420,8 +1530,50 @@ const resources = {
         saveExpense: '记录费用',
         expenseRequired: '请填写费用类别和金额',
         expenseCreated: '费用已记录',
-        expenseFailed: '记录费用失败',
         setting: "设置",
+        customerDisplaySynced: '客显副屏已同步全屏展示',
+        cashExactReady: '✅ 实收已足额，点击确认完成结账并打印小票/杯贴',
+        cashChangeHint: '💡 输入顾客支付的现金金额，系统将自动核算找零',
+        digitalPayHint: '📱 电子支付或刷卡成功后，点击右侧按钮出单',
+        paidAmount: '实收现金',
+        exactAmount: '正好',
+        amountDue: '支付金额',
+        qrisHelp: '请提示顾客扫码，支付成功后系统将自动出单',
+        externalPayHelp: '请引导顾客在外接刷卡机 (EDC) 或扫码机上完成刷卡/交易，完成后点击下方确认结账',
+        pleaseSelectPrinter: '请选择或输入打印机名称',
+        printerSetupSuccess: '打印机已成功设置为',
+        labelPrinterSetupSuccess: '已成功设为标签打印机',
+        testPrintSuccess: '测试打印已发送',
+        testLabelSuccess: '杯贴测试打印已发送',
+        cashDrawerOpened: '钱箱测试已触发',
+        defaultPrinter: '系统默认打印机',
+        labelPrinterEnabled: '标签机已启用',
+        labelPrinterDisabled: '未启用 (后台配置)',
+        pos_no_printers: '未检测到可用打印机',
+        receiptPrinter: '小票打印机',
+        labelPrinter: '杯贴标签机',
+        cashDrawer: '收银钱箱',
+        dualScreen: '客显副屏',
+        hardwareStatus: '外设状态与自检',
+        hardwareAdminManaged: '所有外设由后台管理统一配置并自动同步',
+        quickSelfTest: '一键外设自检测试',
+        testPrint: '测试小票',
+        testLabel: '测试杯贴',
+        testCashDrawer: '测试钱箱',
+        printersReported: '已成功同步本地打印机至后台',
+        syncPrintersToAdmin: '同步本地打印机至后台',
+        channel: {
+          dineIn: '堂食',
+          gofood: 'GoFood',
+          grab: 'Grab',
+          shopee: 'Shopee'
+        }
+      },
+      posSettings: {
+        receiptPrinter: '小票打印机',
+        labelPrinter: '标签杯贴机',
+        cashDrawer: '收银钱箱',
+        dualScreen: '客显副屏'
       },
       testPage: {
         environmentOk: '如果看到这个，说明基本环境正常',
@@ -1711,7 +1863,10 @@ const resources = {
         selfRating: '自我评分',
         selfRatingTip: '评价本次工作质量',
         requiresApproval: '需要审核',
-        due: '截止'
+        due: '截止',
+        photoEvidence: '照片凭证',
+        takeOrUploadPhoto: '点击拍照或上传凭证照片',
+        photoRequiredError: '该任务要求必须拍摄/上传清洁完成照片凭证'
       },
       common: {
         ok: '确定',
@@ -1730,6 +1885,15 @@ const resources = {
         clear: '清除',
         yes: '是',
         no: '否',
+        required: '必填',
+        remove: '移除',
+        uploading: '正在上传...',
+        backspace: '退格',
+        ready: '已就绪',
+        disabled: '未启用',
+        enabled: '已开启',
+        auto: '自动弹开',
+        manual: '手动',
         errorPageTitle: '页面出错了',
         errorPageMessage: '发生了一个错误',
         reload: '刷新页面'
@@ -1743,10 +1907,18 @@ const resources = {
   }
 }
 
+const getInitialLang = () => {
+  try {
+    const saved = localStorage.getItem('pos_lang')
+    if (saved && ['id', 'en', 'zh'].includes(saved)) return saved
+  } catch (e) {}
+  return 'id'
+}
+
 i18n.use(initReactI18next).init({
   resources,
-  lng: 'zh',
-  fallbackLng: 'en',
+  lng: getInitialLang(),
+  fallbackLng: 'id',
   interpolation: { escapeValue: false }
 })
 
