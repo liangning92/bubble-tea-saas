@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { posApi } from '../services/api'
 import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe } from 'lucide-react'
+import { YOUME_LOGO_RED } from '../assets/logo'
 
 const LANGUAGES = [
   { code: 'zh', labelKey: '中文', flag: '🇨🇳' },
@@ -159,17 +160,18 @@ export function LoginPage() {
         <div className={`w-full max-w-sm transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
 
           {/* Logo & Brand */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 flex justify-center items-center h-16 min-h-[64px]">
             {(() => {
-              const storeLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
+              const rawLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
+              const storeLogo = (rawLogo && rawLogo !== '/youme-logo-red.png' && rawLogo !== '/youme-logo-white.png') ? rawLogo : ''
               return (
                 <img
-                  src={storeLogo || '/youme-logo-red.png'}
+                  src={storeLogo || YOUME_LOGO_RED}
                   alt="YOUME"
                   onError={(e) => {
                     const target = e.currentTarget as HTMLImageElement
                     target.onerror = null
-                    target.src = '/youme-logo-red.png'
+                    target.src = YOUME_LOGO_RED
                   }}
                   className="h-16 max-w-[200px] mx-auto object-contain"
                 />

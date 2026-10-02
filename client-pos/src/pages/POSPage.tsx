@@ -12,6 +12,7 @@ import { AnnouncementBanner } from '../components/AnnouncementBanner'
 import { ChannelSelectModal } from '../components/ChannelSelectModal'
 import { AttendanceQR } from '../components/ui/AttendanceQR'
 import { UpdateNotification } from '../components/UpdateNotification'
+import { YOUME_LOGO_WHITE } from '../assets/logo'
 import { useHardwareManager } from '../hooks/useHardwareManager'
 import { useCartStore, useProductStore, useOrderStore, useUiStore } from '../stores'
 import {
@@ -2433,9 +2434,12 @@ export function POSPage() {
     try {
       const res = await electronAPI?.sendPrintReceipt?.({
         orderNum: 'TEST-' + Date.now().toString().slice(-4),
+        blocks: receiptTemplate?.blocks || null,
+        template: receiptTemplate || null,
         header: posReceipt.header || 'YOUME POS',
         footer: posReceipt.footer || 'TEST PRINT',
         paperSize: receiptTemplate?.paperSize || posReceipt.paperSize || '80mm',
+        printCopies: posReceipt.printCopies || 1,
         printerName: targetName,
         items: [{ productName: 'Signature Boba Milk Tea', specName: 'Regular', quantity: 1, unitPrice: 15000, addons: [] }],
         subtotal: 15000,
@@ -2444,7 +2448,14 @@ export function POSPage() {
         total: 15000,
         paymentMethod: 'Cash',
         paidAmount: 15000,
-        change: 0
+        change: 0,
+        openCashDrawer: false,
+        cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100,
+        itemDetailFormat: posReceipt.itemDetailFormat || receiptTemplate?.blocks?.find((b: any) => b.type === 'items')?.config?.itemFormat || 'standard',
+        showStaffName: posReceipt.showStaffName ?? true,
+        showCustomerName: posReceipt.showCustomerName ?? false,
+        showKitchenNote: posReceipt.showKitchenNote ?? true,
+        showBarcode: posReceipt.showBarcode ?? true,
       })
       if (res?.success) {
         showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
@@ -2858,6 +2869,8 @@ export function POSPage() {
     try {
       const result = await electronAPI?.sendPrintReceipt({
         orderNum,
+        blocks: receiptTemplate?.blocks || null,
+        template: receiptTemplate || null,
         header: (() => {
           const tplHeader = receiptTemplate?.blocks?.find((b: any) => b.type === 'header' && b.enabled !== false)?.config?.text
           return tplHeader || posReceipt.header || storeInfo.storeName || 'YOUME'
@@ -2888,7 +2901,7 @@ export function POSPage() {
         printerPort,
         openCashDrawer: orderData?.openCashDrawer ?? false,
         cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100,
-        itemDetailFormat: posReceipt.itemDetailFormat || 'standard',
+        itemDetailFormat: posReceipt.itemDetailFormat || receiptTemplate?.blocks?.find((b: any) => b.type === 'items')?.config?.itemFormat || 'standard',
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,
@@ -3009,14 +3022,18 @@ export function POSPage() {
         <header className="bg-primary px-3 py-2 flex items-center justify-between gap-2">
           {/* 左侧：店铺信息 */}
           <div className="flex items-center gap-3">
-            <img
-              src={storeInfo.storeLogo || '/youme-logo-white.png'}
-              alt={storeInfo.storeName || 'YOUME'}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = '/youme-logo-white.png'
-              }}
-              className="h-8 max-w-[120px] object-contain rounded"
-            />
+            <div className="h-8 min-w-[32px] max-w-[120px] flex items-center shrink-0">
+              <img
+                src={((storeInfo.storeLogo && storeInfo.storeLogo !== '/youme-logo-white.png' && storeInfo.storeLogo !== '/youme-logo-red.png') ? storeInfo.storeLogo : '') || YOUME_LOGO_WHITE}
+                alt={storeInfo.storeName || 'YOUME'}
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement
+                  target.onerror = null
+                  target.src = YOUME_LOGO_WHITE
+                }}
+                className="h-8 max-w-[120px] object-contain rounded"
+              />
+            </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <span className="text-white font-bold text-sm">{storeInfo.storeName || 'YOUME'}</span>

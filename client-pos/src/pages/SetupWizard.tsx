@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Wifi, WifiOff, AlertCircle, CheckCircle } from 'lucide-react'
 import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
+import { YOUME_LOGO_RED } from '../assets/logo'
 
 export function SetupWizard() {
   const navigate = useNavigate()
@@ -43,8 +44,19 @@ export function SetupWizard() {
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <img src="/youme-logo-red.png" alt="YOUME" className="w-32 h-16 object-contain mb-2" />
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="w-32 h-16 mb-2 flex items-center justify-center">
+            <img
+              src={YOUME_LOGO_RED}
+              alt="YOUME"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement
+                target.onerror = null
+                target.src = YOUME_LOGO_RED
+              }}
+              className="w-32 h-16 object-contain"
+            />
+          </div>
           <h1 className="text-2xl font-bold text-gray-800">YOUME POS</h1>
           <p className="text-gray-500 text-sm mt-1">{t('setup.firstSetup', 'First Setup')}</p>
         </div>

@@ -7,6 +7,7 @@ import { getApiUrl, setApiUrl, clearApiUrl } from '../config'
 import { updateApiUrl } from '../services/api'
 import { connectionManager } from '../services/ConnectionManager'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Settings, Globe } from 'lucide-react'
+import { YOUME_LOGO_RED } from '../assets/logo'
 
 export function LoginPage() {
   const { t, i18n } = useTranslation()
@@ -148,8 +149,17 @@ export function LoginPage() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <img src="/youme-logo-red.png" alt="YOUME" className="h-12 w-auto object-contain" />
+          <div className="flex justify-center mb-4 h-12">
+            <img
+              src={YOUME_LOGO_RED}
+              alt="YOUME"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement
+                target.onerror = null
+                target.src = YOUME_LOGO_RED
+              }}
+              className="h-12 w-auto object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold" style={{ color: '#EC6D88' }}>
             YOUME

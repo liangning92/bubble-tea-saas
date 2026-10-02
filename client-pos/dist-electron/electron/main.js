@@ -2327,9 +2327,9 @@ function generateReceiptText(data) {
             const cfg = block.config || {};
             switch (block.type) {
                 case 'logo': {
-                    // 若后续配置了 header 文本块且为相同店名，跳过纯文本重复标题
-                    const hasHeaderBlock = enabledBlocks.some((b) => b.type === 'header');
-                    if (!hasHeaderBlock) {
+                    // 仅在整个模板中压根没有配置 header 块且用户开启了 showLogo 时，才作为店名回退输出
+                    const existsHeaderInTemplate = rawBlocks.some((b) => b && b.type === 'header');
+                    if (!existsHeaderInTemplate && data.showLogo !== false) {
                         const storeTitle = data.storeName || data.header || 'YOUME';
                         lines.push(centerText(storeTitle, width));
                     }
@@ -2337,7 +2337,9 @@ function generateReceiptText(data) {
                 }
                 case 'header': {
                     const headerText = cfg.text || data.header || data.storeName || 'YOUME';
-                    lines.push(centerText(headerText, width));
+                    if (headerText) {
+                        lines.push(centerText(headerText, width));
+                    }
                     break;
                 }
                 case 'storeInfo': {
@@ -2373,10 +2375,12 @@ function generateReceiptText(data) {
                         const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : '';
                         lines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`);
                     }
-                    if (cfg.showCashier && data.cashierName) {
+                    const showCashier = cfg.showCashier !== undefined ? cfg.showCashier : (data.showStaffName !== false);
+                    if (showCashier && data.cashierName) {
                         lines.push(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`);
                     }
-                    if (cfg.showCustomer && data.customerName) {
+                    const showCustomer = cfg.showCustomer !== undefined ? cfg.showCustomer : data.showCustomerName;
+                    if (showCustomer && data.customerName) {
                         lines.push(`${padEndVisual(L.customer, is80mm ? 10 : 7)}: ${data.customerName}`);
                     }
                     break;
@@ -2384,7 +2388,7 @@ function generateReceiptText(data) {
                 case 'items': {
                     lines.push(`${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`);
                     lines.push(repeatChar('-', width));
-                    const isCompact = data.itemDetailFormat === 'compact';
+                    const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact';
                     if (data.items && data.items.length > 0) {
                         data.items.forEach((item) => {
                             const spec = item.specName ? ` ${item.specName}` : '';

@@ -10,10 +10,6 @@ release/
 .DS_Store
 *.local
 .vscode/
-electron/
-!src/hooks/*.ts
-*.ts
-!*.config.ts
 pnpm-lock.yaml
 yarn.lock
 package-lock.json

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../utils/helpers'
+import { YOUME_LOGO_RED, YOUME_LOGO_WHITE } from '../assets/logo'
 
 interface OrderItem {
   id: string
@@ -245,10 +246,12 @@ export function CustomerDisplayPage() {
         return (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 p-8 text-white">
             <img
-              src={storeLogo || '/youme-logo-white.png'}
+              src={((storeLogo && !storeLogo.startsWith('/youme-logo')) ? storeLogo : '') || YOUME_LOGO_WHITE}
               alt="YOUME"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/youme-logo-white.png'
+                const target = e.currentTarget as HTMLImageElement
+                target.onerror = null
+                target.src = YOUME_LOGO_WHITE
               }}
               className="max-w-[80%] max-h-48 object-contain mb-6 drop-shadow-lg"
             />
@@ -316,10 +319,12 @@ export function CustomerDisplayPage() {
         return (
           <div className="w-full h-full flex items-center justify-center bg-gray-100 p-8">
             <img
-              src={displayLogo || '/youme-logo-red.png'}
+              src={((displayLogo && !displayLogo.startsWith('/youme-logo')) ? displayLogo : '') || YOUME_LOGO_RED}
               alt="YOUME"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/youme-logo-red.png'
+                const target = e.currentTarget as HTMLImageElement
+                target.onerror = null
+                target.src = YOUME_LOGO_RED
               }}
               className="max-w-[80%] max-h-48 object-contain"
             />
