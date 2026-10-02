@@ -167,7 +167,9 @@ export function LoginPage() {
                   src={storeLogo || '/youme-logo-red.png'}
                   alt="YOUME"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/youme-logo-red.png'
+                    const target = e.currentTarget as HTMLImageElement
+                    target.onerror = null
+                    target.src = '/youme-logo-red.png'
                   }}
                   className="h-16 max-w-[200px] mx-auto object-contain"
                 />

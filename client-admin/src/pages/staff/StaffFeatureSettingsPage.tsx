@@ -197,13 +197,6 @@ export function StaffFeatureSettingsPage() {
           </div>
         ))}
       </div>
-
-      {/* Footer Note */}
-      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-        <p className="text-sm text-blue-700">
-          💡 {t('staff.features.note')}
-        </p>
-      </div>
     </div>
   )
 }

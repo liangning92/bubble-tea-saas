@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { receiptTemplateApi as ReceiptTemplateApi, uploadApi } from '../services/api'
+import { receiptTemplateApi as ReceiptTemplateApi } from '../services/api'
 import {
   GripVertical,
   Trash2,
@@ -28,7 +28,7 @@ import {
   Settings2,
   Eye,
   Palette,
-  Upload,
+  CheckCircle,
 } from 'lucide-react'
 
 // ============ TYPES ============
@@ -274,7 +274,9 @@ function getDefaultTemplate(storeId: string): ReceiptTemplate {
 const LivePreview: React.FC<{
   blocks: ReceiptBlock[]
   paperSize: '58mm' | '80mm'
-}> = ({ blocks, paperSize }) => {
+  defaultLogo?: string
+  defaultQrCode?: string
+}> = ({ blocks, paperSize, defaultLogo, defaultQrCode }) => {
   const { t } = useTranslation()
   const width = paperSize === '58mm' ? '200px' : '280px'
 
@@ -306,13 +308,14 @@ const LivePreview: React.FC<{
         const boldClass = block.style.bold ? 'font-bold' : ''
 
         switch (block.type) {
-          case 'logo':
+          case 'logo': {
+            const effectiveLogo = block.config.url || defaultLogo
             return (
               <div key={block.id} className={`${alignClass} mb-2`}>
                 <div className="border rounded p-1 inline-block">
-                  {block.config.url ? (
+                  {effectiveLogo ? (
                     <img
-                      src={block.config.url}
+                      src={effectiveLogo}
                       alt="Logo"
                       style={{ width: block.config.width ? `${block.config.width}px` : '100px' }}
                       className="max-h-20 object-contain inline-block"
@@ -328,6 +331,7 @@ const LivePreview: React.FC<{
                 </div>
               </div>
             )
+          }
           case 'header':
             return (
               <div key={block.id} className={`${alignClass} ${boldClass} border-b pb-2 mb-2`}>
@@ -405,12 +409,13 @@ const LivePreview: React.FC<{
                 )}
               </div>
             )
-          case 'qrCode':
+          case 'qrCode': {
+            const effectiveQr = block.config.url || defaultQrCode
             return (
               <div key={block.id} className={`${alignClass} border-b pb-2 mb-2`}>
-                {block.config.url ? (
+                {effectiveQr ? (
                   <img
-                    src={block.config.url}
+                    src={effectiveQr}
                     alt="QR"
                     style={{ width: block.config.size || 80, height: block.config.size || 80 }}
                     className="mx-auto object-contain inline-block"
@@ -426,6 +431,7 @@ const LivePreview: React.FC<{
                 )}
               </div>
             )
+          }
           case 'barcode':
             return (
               <div key={block.id} className={`${alignClass} border-b pb-2 mb-2`}>
@@ -548,9 +554,11 @@ const SortableBlock: React.FC<{
 
 const BlockPropertiesPanel: React.FC<{
   block: ReceiptBlock
+  defaultLogo?: string
+  defaultQrCode?: string
   onUpdate: (block: ReceiptBlock) => void
   onClose: () => void
-}> = ({ block, onUpdate, onClose }) => {
+}> = ({ block, defaultLogo, defaultQrCode, onUpdate, onClose }) => {
   const { t } = useTranslation()
   const def = getBlockDef(t, block.type)
 
@@ -665,44 +673,52 @@ const BlockPropertiesPanel: React.FC<{
               <input
                 type="number"
                 value={block.config.width || 120}
-                onChange={(e) => updateConfig('width', parseInt(e.target.value))}
+                onChange={(e) => updateConfig('width', parseInt(e.target.value) || 120)}
                 className="input mt-1 w-full"
               />
             </div>
-            <div>
-              <label className="text-sm text-gray-600">{t('posSettings.storeLogo', 'Logo 图片')}</label>
-              <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={block.config.url || ''}
-                  onChange={(e) => updateConfig('url', e.target.value)}
-                  placeholder="图片 URL 或点击上传"
-                  className="input flex-1 text-xs"
-                />
-                <label className="btn-secondary text-xs cursor-pointer flex items-center gap-1 py-2 px-3 flex-shrink-0">
-                  <Upload size={13} />
-                  <span>上传</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const files = e.target.files
-                      if (!files || files.length === 0) return
-                      try {
-                        const res = await uploadApi.uploadReceipt([files[0]])
-                        const urls = res.data?.data?.urls || []
-                        if (urls.length > 0) {
-                          updateConfig('url', urls[0])
-                        }
-                      } catch (err) {
-                        console.error('Failed to upload logo:', err)
-                        alert('上传失败，请重试')
-                      }
-                    }}
-                  />
-                </label>
+
+            {/* 单一权威源提示与当前生效图片展示 */}
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
+                <CheckCircle size={13} className="text-blue-600" />
+                <span>{t('posSettings.usingGlobalLogo', '已自动引用全局小票 Logo')}</span>
               </div>
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                {t('posSettings.receiptLogoSingleSourceNotice', '模板自动继承小票设置中上传的店铺 Logo。如需更换或上传新图片，请统一在小票设置主页面中维护。')}
+              </p>
+              {(block.config.url || defaultLogo) ? (
+                <div className="flex items-center gap-2.5 p-2 bg-white rounded border border-blue-200">
+                  <div className="w-12 h-10 bg-gray-50 rounded border flex items-center justify-center p-1 overflow-hidden shrink-0">
+                    <img
+                      src={block.config.url || defaultLogo}
+                      alt="Current Logo"
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => { (e.target as any).style.display = 'none' }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-mono text-gray-600 truncate">{block.config.url || defaultLogo}</p>
+                    <span className="text-[10px] text-emerald-600 font-medium">✓ {t('posSettings.logoInUse', '当前使用中')}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-700">
+                  {t('posSettings.noGlobalLogoConfigured', '小票设置中尚未配置 Logo，打印时将使用店铺名称文字。')}
+                </div>
+              )}
+            </div>
+
+            {/* 自定义 URL（可选覆盖） */}
+            <div>
+              <label className="text-xs text-gray-500">{t('posSettings.customLogoUrlOverride', '自定义图片 URL')}</label>
+              <input
+                type="text"
+                value={block.config.url || ''}
+                onChange={(e) => updateConfig('url', e.target.value)}
+                placeholder={defaultLogo || 'https://...'}
+                className="input mt-1 w-full text-xs"
+              />
             </div>
           </div>
         )}
@@ -847,44 +863,52 @@ const BlockPropertiesPanel: React.FC<{
               <input
                 type="number"
                 value={block.config.size || 80}
-                onChange={(e) => updateConfig('size', parseInt(e.target.value))}
+                onChange={(e) => updateConfig('size', parseInt(e.target.value) || 80)}
                 className="input mt-1 w-full"
               />
             </div>
-            <div>
-              <label className="text-sm text-gray-600">{t('posSettings.showQR', '二维码图片/内容')}</label>
-              <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={block.config.url || ''}
-                  onChange={(e) => updateConfig('url', e.target.value)}
-                  placeholder="二维码图片 URL 或跳转链接"
-                  className="input flex-1 text-xs"
-                />
-                <label className="btn-secondary text-xs cursor-pointer flex items-center gap-1 py-2 px-3 flex-shrink-0">
-                  <Upload size={13} />
-                  <span>上传</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const files = e.target.files
-                      if (!files || files.length === 0) return
-                      try {
-                        const res = await uploadApi.uploadReceipt([files[0]])
-                        const urls = res.data?.data?.urls || []
-                        if (urls.length > 0) {
-                          updateConfig('url', urls[0])
-                        }
-                      } catch (err) {
-                        console.error('Failed to upload QR code:', err)
-                        alert('上传失败，请重试')
-                      }
-                    }}
-                  />
-                </label>
+
+            {/* 单一权威源提示与当前生效二维码展示 */}
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
+                <CheckCircle size={13} className="text-blue-600" />
+                <span>{t('posSettings.usingGlobalQr', '已自动引用全局小票二维码')}</span>
               </div>
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                {t('posSettings.receiptQrSingleSourceNotice', '模板自动继承小票设置中上传的二维码。如需更换二维码图片，请统一在小票设置主页面中维护。')}
+              </p>
+              {(block.config.url || defaultQrCode) ? (
+                <div className="flex items-center gap-2.5 p-2 bg-white rounded border border-blue-200">
+                  <div className="w-12 h-12 bg-gray-50 rounded border flex items-center justify-center p-1 overflow-hidden shrink-0">
+                    <img
+                      src={block.config.url || defaultQrCode}
+                      alt="Current QR"
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => { (e.target as any).style.display = 'none' }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-mono text-gray-600 truncate">{block.config.url || defaultQrCode}</p>
+                    <span className="text-[10px] text-emerald-600 font-medium">✓ {t('posSettings.qrInUse', '当前使用中')}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-700">
+                  {t('posSettings.noGlobalQrConfigured', '小票设置中尚未配置底部二维码。')}
+                </div>
+              )}
+            </div>
+
+            {/* 自定义 URL / 内容输入 */}
+            <div>
+              <label className="text-xs text-gray-500">{t('posSettings.customQrUrlOverride', '自定义二维码图片/链接')}</label>
+              <input
+                type="text"
+                value={block.config.url || ''}
+                onChange={(e) => updateConfig('url', e.target.value)}
+                placeholder={defaultQrCode || 'https://...'}
+                className="input mt-1 w-full text-xs"
+              />
             </div>
           </div>
         )}
@@ -1032,10 +1056,12 @@ const PaletteItem: React.FC<{ type: BlockType; onAdd: () => void }> = ({ type, o
 
 interface ReceiptTemplateEditorProps {
   storeId: string
+  defaultLogo?: string
+  defaultQrCode?: string
   onSave?: () => void
 }
 
-export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ storeId, onSave }) => {
+export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ storeId, defaultLogo, defaultQrCode, onSave }) => {
   const { t } = useTranslation()
 
   const [templates, setTemplates] = useState<any[]>([])
@@ -1094,6 +1120,9 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
     try {
       const content = JSON.parse(template.content)
       setBlocks(content.blocks || [])
+      if (content.paperSize === '58mm' || content.paperSize === '80mm') {
+        setPaperSize(content.paperSize)
+      }
     } catch {
       setBlocks([])
     }
@@ -1134,7 +1163,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
     setSaving(true)
     try {
-      const content = JSON.stringify({ version: 1, blocks })
+      const content = JSON.stringify({ version: 1, paperSize, blocks })
 
       if (currentTemplateId) {
         await ReceiptTemplateApi.update(currentTemplateId, {
@@ -1169,6 +1198,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
     try {
       await ReceiptTemplateApi.setDefault(currentTemplateId!)
       await loadTemplates()
+      onSave?.()
     } catch (err) {
       console.error('Failed to set default:', err)
     }
@@ -1182,6 +1212,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
       await ReceiptTemplateApi.delete(currentTemplateId)
       setCurrentTemplateId(null)
       await loadTemplates()
+      onSave?.()
     } catch (err) {
       console.error('Failed to delete:', err)
     }
@@ -1331,6 +1362,8 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
           {selectedBlock ? (
             <BlockPropertiesPanel
               block={selectedBlock}
+              defaultLogo={defaultLogo}
+              defaultQrCode={defaultQrCode}
               onUpdate={handleUpdateBlock}
               onClose={() => setSelectedBlockId(null)}
             />
@@ -1341,7 +1374,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
                 {t('posSettings.templatePreview')}
               </h3>
               <div className="flex justify-center">
-                <LivePreview blocks={blocks} paperSize={paperSize} />
+                <LivePreview blocks={blocks} paperSize={paperSize} defaultLogo={defaultLogo} defaultQrCode={defaultQrCode} />
               </div>
               <div className="mt-3">
                 <label className="text-xs text-gray-600">{t('posSettings.paperSize')}</label>

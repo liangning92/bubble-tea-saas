@@ -156,7 +156,7 @@ export function HygieneTemplateListPage() {
                 <th className="py-3 px-4">{t('hygiene.priority')}</th>
                 <th className="py-3 px-4">{t('hygiene.assignee')}</th>
                 <th className="py-3 px-4">{t('hygiene.photoRequired')}</th>
-                <th className="py-3 px-4">Auto</th>
+                <th className="py-3 px-4">{t('hygiene.autoSchedule', '自动生成')}</th>
                 <th className="py-3 px-4 text-right">{t('common.actions')}</th>
               </tr>
             </thead>

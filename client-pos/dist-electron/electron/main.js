@@ -1246,9 +1246,9 @@ function sendRawBytesToWindowsPrinter(printerName, rawBytes) {
             });
             return;
         }
-        // Windows P/Invoke 调用 winspool.drv 的 OpenPrinterA + StartDocPrinterA + WritePrinter
-        const safePrinterName = printerName.replace(/'/g, "''").replace(/\\/g, "\\\\");
-        const safeTempFile = tempFile.replace(/'/g, "''").replace(/\\/g, "\\\\");
+        // Windows P/Invoke 调用 winspool.drv 的 OpenPrinterW + StartDocPrinterW + WritePrinter (Unicode 原生版)
+        const safePrinterName = printerName.replace(/'/g, "''");
+        const safeTempFile = tempFile.replace(/'/g, "''");
         const psScript = `
 $code = @'
 using System;
@@ -1256,20 +1256,20 @@ using System.IO;
 using System.Runtime.InteropServices;
 
 public class WinSpoolRaw {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-    public class DOCINFOA {
-        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
-        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
-        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public class DOCINFOW {
+        [MarshalAs(UnmanagedType.LPWStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pDataType;
     }
-    [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
-    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
+    [DllImport("winspool.Drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPWStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
 
     [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true)]
     public static extern bool ClosePrinter(IntPtr hPrinter);
 
-    [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
-    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+    [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOW di);
 
     [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true)]
     public static extern bool EndDocPrinter(IntPtr hPrinter);
@@ -1289,7 +1289,7 @@ public class WinSpoolRaw {
         if (bytes.Length == 0) return false;
 
         IntPtr hPrinter = IntPtr.Zero;
-        DOCINFOA di = new DOCINFOA();
+        DOCINFOW di = new DOCINFOW();
         di.pDocName = "POS_RAW_JOB";
         di.pDataType = "RAW";
 
@@ -1299,14 +1299,15 @@ public class WinSpoolRaw {
 
         bool ok = false;
         if (StartDocPrinter(hPrinter, 1, di)) {
-            if (StartPagePrinter(hPrinter)) {
-                IntPtr pBuf = Marshal.AllocCoTaskMem(bytes.Length);
-                Marshal.Copy(bytes, 0, pBuf, bytes.Length);
-                Int32 written = 0;
-                ok = WritePrinter(hPrinter, pBuf, bytes.Length, out written);
-                Marshal.FreeCoTaskMem(pBuf);
+            IntPtr pBuf = Marshal.AllocCoTaskMem(bytes.Length);
+            Marshal.Copy(bytes, 0, pBuf, bytes.Length);
+            Int32 written = 0;
+            bool pageStarted = StartPagePrinter(hPrinter);
+            ok = WritePrinter(hPrinter, pBuf, bytes.Length, out written);
+            if (pageStarted) {
                 EndPagePrinter(hPrinter);
             }
+            Marshal.FreeCoTaskMem(pBuf);
             EndDocPrinter(hPrinter);
         }
         ClosePrinter(hPrinter);
@@ -1331,9 +1332,26 @@ if ($res) {
         const proc = (0, child_process_1.spawn)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], { shell: false });
         let stderr = '';
         let stdout = '';
+        let settled = false;
+        const watchdog = setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                try {
+                    proc.kill();
+                }
+                catch { }
+                cleanup();
+                writeCrash(`[WIN-RAW] PowerShell timed out (15s) for printer '${printerName}'`);
+                reject(new Error(`PowerShell print timeout for '${printerName}'`));
+            }
+        }, 15000);
         proc.stdout.on('data', (d) => { stdout += d.toString(); });
         proc.stderr.on('data', (d) => { stderr += d.toString(); });
         proc.on('close', (code) => {
+            if (settled)
+                return;
+            settled = true;
+            clearTimeout(watchdog);
             cleanup();
             if (code === 0 && stdout.includes('SUCCESS')) {
                 writeCrash(`[WIN-RAW] Successfully sent ${rawBytes.length} bytes to printer '${printerName}'`);
@@ -1346,6 +1364,10 @@ if ($res) {
             }
         });
         proc.on('error', (err) => {
+            if (settled)
+                return;
+            settled = true;
+            clearTimeout(watchdog);
             cleanup();
             writeCrash(`[WIN-RAW] Spawn error: ${err.message}`);
             reject(err);
@@ -1365,52 +1387,46 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
         writeCrash(`[PRINT] hasBlocks=${!!(blocks && blocks.length > 0)}`);
         writeCrash(`[PRINT] openCashDrawer=${!!shouldOpenDrawer}`);
         writeCrash(`[PRINT] orderNum=${data.orderNum} total=${data.total}`);
-        if (!printerName) {
-            writeCrash('[PRINT] ERROR: No printer available on Windows system');
-            return { success: false, error: 'No printer available on system' };
-        }
-        // 钱箱开锁脉冲指令：ESC p 0 25 250 + ESC p 1 25 250 + BEL
+        // 钱箱开锁脉冲指令：根据后台配置的 cashDrawerPulse 毫秒数动态计算脉冲 (Pin 2 + Pin 5 + DLE DC4 + BEL)
+        const pulseMs = Math.max(20, Math.min(500, data.cashDrawerPulse || 100));
+        const onTime = Math.round(pulseMs / 2);
+        const offTime = Math.round(pulseMs / 2);
         const drawerCmd = shouldOpenDrawer ? Buffer.from([
-            0x1B, 0x70, 0x00, 0x19, 0xFA,
-            0x1B, 0x70, 0x01, 0x19, 0xFA,
+            0x1B, 0x70, 0x00, onTime, offTime,
+            0x1B, 0x70, 0x01, onTime, offTime,
             0x10, 0x14, 0x01, 0x00, 0x05,
             0x07
         ]) : Buffer.alloc(0);
-        // 如果有自定义格式化模板，尝试 PosPrinter 静默打印
-        if (blocks && blocks.length > 0 && PosPrinter) {
-            try {
-                if (shouldOpenDrawer) {
-                    try {
-                        await sendRawBytesToWindowsPrinter(printerName, drawerCmd);
-                    }
-                    catch (e) { }
-                }
-                await PosPrinter.print(blocks, {
-                    printerName: printerName,
-                    silent: true,
-                    preview: false,
-                });
-                writeCrash('[PRINT] PosPrinter.print success');
-                return { success: true };
-            }
-            catch (printErr) {
-                writeCrash(`[PRINT] PosPrinter.print failed: ${printErr.message}, falling back to raw print...`);
-            }
-        }
         // 生成 ESC/POS 原始打印指令 (支持多联打印 printCopies)
         const printCopies = Math.max(1, Math.min(5, data.printCopies || 1));
         const rawChunks = [];
-        const encoder = new TextEncoder();
         const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ 初始化
         const is80mm = data.paperSize === '80mm';
-        const barcodeCmd = (data.showBarcode !== false && data.orderNum)
+        // 检查模板中条形码/二维码模块是否显式启用
+        const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null);
+        let barcodeEnabled = data.showBarcode !== false;
+        let qrEnabled = !!(data.showQR && data.qrCodeUrl);
+        let qrUrl = data.qrCodeUrl || '';
+        if (rawBlocks && rawBlocks.length > 0) {
+            const barcodeBlock = rawBlocks.find((b) => b && b.type === 'barcode');
+            barcodeEnabled = barcodeBlock ? barcodeBlock.enabled !== false : false;
+            const qrBlock = rawBlocks.find((b) => b && b.type === 'qrCode');
+            qrEnabled = qrBlock ? (qrBlock.enabled !== false && !!(qrBlock.config?.url || qrUrl)) : false;
+            if (qrBlock?.config?.url)
+                qrUrl = qrBlock.config.url;
+        }
+        const barcodeCmd = (barcodeEnabled && data.orderNum)
             ? buildEscPosBarcode(String(data.orderNum))
             : Buffer.alloc(0);
-        const qrCmd = (data.showQR && data.qrCodeUrl)
-            ? buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4)
+        const qrCmd = (qrEnabled && qrUrl)
+            ? buildEscPosQRCode(String(qrUrl), is80mm ? 6 : 4)
             : Buffer.alloc(0);
-        // 换行走纸 4 行再切纸，避免切到文字或二维码尾部
-        const cutCmd = Buffer.from([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]); // LF*4 + GS V 0 全切纸
+        // 58mm 与 80mm 切纸与走纸隔离：
+        // 58mm 热敏机均为手动锯齿撕纸机，无自动切刀，坚决不发送 GS V 切刀指令（否则固件报 Cutter Error 并锁定出纸电机）
+        // 80mm 热敏机采用 LF*3 + GS V 1 (0x1D 0x56 0x01) 弹性半切，避免纸张滑落或卡刀
+        const cutCmd = is80mm
+            ? Buffer.from([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x01])
+            : Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A]);
         for (let c = 0; c < printCopies; c++) {
             const copyData = printCopies > 1 ? {
                 ...data,
@@ -1419,10 +1435,26 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
             const text = generateReceiptText(copyData);
             // 只有第一联出纸前触发弹钱箱
             const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0);
-            rawChunks.push(Buffer.concat([firstDrawerCmd, initCmd, encoder.encode(text), barcodeCmd, qrCmd, cutCmd]));
+            // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出小票文本，杜绝 ESC @ 擦除紧随其后的文本缓冲区
+            rawChunks.push(Buffer.concat([initCmd, firstDrawerCmd, encodeEscPosText(text), barcodeCmd, qrCmd, cutCmd]));
         }
         const rawBytes = Buffer.concat(rawChunks);
         writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length} hasQR=${!qrCmd.equals(Buffer.alloc(0))} hasBarcode=${!barcodeCmd.equals(Buffer.alloc(0))}`);
+        // 1. 网络小票机（优先通过 TCP Socket 发送原生 ESC/POS 数据包）
+        if (printerHost && printerPort) {
+            try {
+                await printViaNetworkRaw(rawBytes, printerHost, printerPort);
+                writeCrash(`[PRINT] printViaNetworkRaw success to ${printerHost}:${printerPort}`);
+                return { success: true };
+            }
+            catch (netErr) {
+                writeCrash(`[PRINT] printViaNetworkRaw failed: ${netErr.message}, trying local printer fallback if available...`);
+            }
+        }
+        if (!printerName) {
+            writeCrash('[PRINT] ERROR: No printer available on Windows system');
+            return { success: false, error: 'No printer available on system' };
+        }
         // 1. 如果打印机是 COM 口（虚拟串口）
         const isComPort = /^COM\d+/i.test(printerName);
         if (isComPort) {
@@ -1509,37 +1541,40 @@ function printViaComPort(comPort, rawBytes) {
     });
 }
 /**
- * 网络打印 - 直接发送 ESC/POS 命令到打印机
+ * 网络打印 - 直接发送 ESC/POS 命令或二进制流到网口热敏打印机
  */
-function printViaNetwork(text, host, port) {
+function printViaNetworkRaw(data, host, port) {
     const net = require('net');
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
+        const buffer = Buffer.isBuffer(data) ? data : encodeEscPosText(data);
         const timeout = setTimeout(() => {
             client.destroy();
-            reject(new Error('Network print timeout'));
+            reject(new Error(`Network print timeout (${host}:${port})`));
         }, 10000);
         client.connect(port, host, () => {
             clearTimeout(timeout);
-            const buffer = Buffer.from(text, 'latin1');
-            client.write(buffer, 'latin1', (err) => {
+            client.write(buffer, (err) => {
                 if (err) {
                     client.end();
                     reject(err);
                 }
                 else {
                     client.end();
-                    console.log('[PRINT] Data sent to', host + ':' + port);
+                    writeCrash(`[PRINT] Network raw data sent to ${host}:${port}`);
                     resolve();
                 }
             });
         });
         client.on('error', (err) => {
             clearTimeout(timeout);
-            console.error('[PRINT] Network error:', err.message);
+            writeCrash(`[PRINT] Network socket error (${host}:${port}): ${err.message}`);
             reject(err);
         });
     });
+}
+function printViaNetwork(text, host, port) {
+    return printViaNetworkRaw(text, host, port);
 }
 /**
  * 原生打印回退
@@ -1601,10 +1636,6 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
         writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`);
         writeCrash(`[CASH DRAWER] resolved printerName='${printerName}' (original: '${data?.printerName}')`);
         writeCrash(`[CASH DRAWER] cashDrawerPulse=${pulseMs}ms`);
-        if (!printerName) {
-            writeCrash('[CASH DRAWER] ERROR: No printer available on Windows system');
-            return { success: false, error: 'No printer available on system' };
-        }
         // 多重兼容 ESC/POS 钱箱开锁脉冲命令：
         // 1. Pin 2 脉冲: ESC p 0 on off (0x1B, 0x70, 0x00, on, off)
         // 2. Pin 5 脉冲: ESC p 1 on off (0x1B, 0x70, 0x01, on, off)
@@ -1619,6 +1650,21 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
             0x07 // BEL
         ]);
         writeCrash(`[CASH DRAWER] cmd bytes: ${drawerCmd.toString('hex')}`);
+        // 0. 网络打印机钱箱
+        if (data?.printerHost && data?.printerPort) {
+            try {
+                await printViaNetworkRaw(drawerCmd, data.printerHost, data.printerPort);
+                writeCrash('[CASH DRAWER] printViaNetworkRaw cash drawer success');
+                return { success: true };
+            }
+            catch (netErr) {
+                writeCrash(`[CASH DRAWER] printViaNetworkRaw cash drawer failed: ${netErr.message}`);
+            }
+        }
+        if (!printerName) {
+            writeCrash('[CASH DRAWER] ERROR: No printer available on Windows system');
+            return { success: false, error: 'No printer available on system' };
+        }
         // 1. COM 口（虚拟串口）
         const isComPort = /^COM\d+/i.test(printerName);
         if (isComPort) {
@@ -1684,7 +1730,7 @@ electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
             return { success: false, error: 'No order number provided' };
         }
         // 生成厨房小票文本
-        const kitchenText = generateKitchenText({ orderNum, items });
+        const kitchenText = generateKitchenText({ orderNum, items, language: data.language });
         writeCrash(`[KITCHEN] text length=${kitchenText.length}`);
         // 网络打印机（优先）
         if (printerHost && printerPort) {
@@ -1701,10 +1747,12 @@ electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
         // 本地打印机（COM 口或 Windows 打印机名）
         if (printerName) {
             const isComPort = /^COM\d+/i.test(printerName);
-            const encoder = new TextEncoder();
             const initCmd = Buffer.from([0x1B, 0x40]); // ESC @
-            const cutCmd = Buffer.from([0x1D, 0x56, 0x00]); // GS V 0 (full cut)
-            const rawBytes = Buffer.concat([initCmd, encoder.encode(kitchenText), cutCmd]);
+            const is80mm = data.paperSize === '80mm';
+            const cutCmd = is80mm
+                ? Buffer.from([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x01])
+                : Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A]);
+            const rawBytes = Buffer.concat([initCmd, encodeEscPosText(kitchenText), cutCmd]);
             if (isComPort) {
                 try {
                     await printViaComPort(printerName, rawBytes);
@@ -1717,7 +1765,15 @@ electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
                 }
             }
             else {
-                // Windows 打印机名：使用 sendRawCommand
+                // Windows 打印机名：优先尝试 winspool.drv RAW 原生打印
+                try {
+                    await sendRawBytesToWindowsPrinter(printerName, rawBytes);
+                    writeCrash('[KITCHEN] sendRawBytesToWindowsPrinter success');
+                    return { success: true };
+                }
+                catch (winRawErr) {
+                    writeCrash(`[KITCHEN] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
+                }
                 try {
                     await PosPrinter.sendRawCommand(printerName, rawBytes);
                     writeCrash('[KITCHEN] sendRawCommand success');
@@ -1758,10 +1814,12 @@ electron_1.ipcMain.handle('print-shift-report', async (_event, data) => {
         }
         if (resolvedName) {
             const isComPort = /^COM\d+/i.test(resolvedName);
-            const encoder = new TextEncoder();
             const initCmd = Buffer.from([0x1B, 0x40]); // ESC @
-            const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A, 0x0A]); // GS V 0 full cut
-            const rawBytes = Buffer.concat([initCmd, encoder.encode(text), cutCmd]);
+            const is80mm = data.paperSize === '80mm';
+            const cutCmd = is80mm
+                ? Buffer.from([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x01])
+                : Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A]);
+            const rawBytes = Buffer.concat([initCmd, encodeEscPosText(text), cutCmd]);
             if (isComPort) {
                 try {
                     await printViaComPort(resolvedName, rawBytes);
@@ -1811,24 +1869,23 @@ electron_1.ipcMain.handle('print-cup-stickers', async (_event, data) => {
             return { success: true };
         writeCrash(`[STICKER] ====== print-cup-stickers called, count=${stickers.length} ======`);
         const resolvedName = await resolvePrinterName(printerName);
-        const encoder = new TextEncoder();
         const chunks = [];
         for (const item of stickers) {
             if (isTspl) {
                 const tsplStr = generateCupStickerTspl(item);
-                chunks.push(Buffer.from(encoder.encode(tsplStr)));
+                chunks.push(encodeEscPosText(tsplStr));
             }
             else {
                 const escStr = generateCupStickerEscPos(item);
                 const initCmd = Buffer.from([0x1B, 0x40]);
                 const cutCmd = Buffer.from([0x1D, 0x56, 0x00, 0x0A]);
-                chunks.push(Buffer.concat([initCmd, Buffer.from(encoder.encode(escStr)), cutCmd]));
+                chunks.push(Buffer.concat([initCmd, encodeEscPosText(escStr), cutCmd]));
             }
         }
         const rawBytes = Buffer.concat(chunks);
         if (printerHost && printerPort) {
             try {
-                await printViaNetwork(rawBytes.toString('binary'), printerHost, printerPort);
+                await printViaNetworkRaw(rawBytes, printerHost, printerPort);
                 writeCrash('[STICKER] Network print success');
                 return { success: true };
             }
@@ -1888,57 +1945,87 @@ function generateShiftReportText(data) {
     const is80mm = data.paperSize === '80mm';
     const width = is80mm ? 48 : 32;
     const lang = (data.language || 'id').toLowerCase();
-    const L = lang === 'zh' ? {
-        title: '=== 交接班对账单 (Z-REPORT) ===',
-        store: '门店',
-        cashier: '收银员',
-        shift: '班次',
-        openedAt: '开班时间',
-        closedAt: '交班时间',
-        printTime: '打印时间',
-        secSales: '--- 营业额汇总 ---',
-        openFloat: '开班备用金',
-        cashSales: '现金实收',
-        qrisSales: 'QRIS/扫码销售',
-        gofoodSales: 'GoFood 销售',
-        grabSales: 'Grab 销售',
-        shopeeSales: 'Shopee 销售',
-        expenses: '营业支出(备用金支取)',
-        secReconcile: '--- 现金盘点对账 ---',
-        expectedCash: '钱箱应有现金',
-        actualCash: '实际盘点现金',
-        difference: '现金差额(长/短款)',
-        secStats: '--- 单据统计 ---',
-        totalOrders: '总订单数',
-        totalCups: '总制作杯数',
-        signCashier: '收银员签字: ________________',
-        signManager: '店长/主管签字: ______________'
-    } : {
-        title: '=== LAPORAN SHIFT (Z-REPORT) ===',
-        store: 'Toko',
-        cashier: 'Kasir',
-        shift: 'Shift',
-        openedAt: 'Waktu Buka',
-        closedAt: 'Waktu Tutup',
-        printTime: 'Dicetak',
-        secSales: '--- RINGKASAN PENJUALAN ---',
-        openFloat: 'Kas Awal / Float',
-        cashSales: 'Penjualan Tunai',
-        qrisSales: 'Penjualan QRIS',
-        gofoodSales: 'Penjualan GoFood',
-        grabSales: 'Penjualan Grab',
-        shopeeSales: 'Penjualan Shopee',
-        expenses: 'Pengeluaran Kas',
-        secReconcile: '--- REKONSILIASI KAS ---',
-        expectedCash: 'Kas Seharusnya',
-        actualCash: 'Kas Dihitung',
-        difference: 'Selisih (Lebih/Kurang)',
-        secStats: '--- STATISTIK TRANSAKSI ---',
-        totalOrders: 'Total Transaksi',
-        totalCups: 'Total Cup / Minuman',
-        signCashier: 'Ttd Kasir: __________________',
-        signManager: 'Ttd Supervisor: _____________'
+    const shiftI18n = {
+        zh: {
+            title: '=== 交接班对账单 (Z-REPORT) ===',
+            store: '门店',
+            cashier: '收银员',
+            shift: '班次',
+            openedAt: '开班时间',
+            closedAt: '交班时间',
+            printTime: '打印时间',
+            secSales: '--- 营业额汇总 ---',
+            openFloat: '开班备用金',
+            cashSales: '现金实收',
+            qrisSales: 'QRIS/扫码销售',
+            gofoodSales: 'GoFood 销售',
+            grabSales: 'Grab 销售',
+            shopeeSales: 'Shopee 销售',
+            expenses: '营业支出(备用金支取)',
+            secReconcile: '--- 现金盘点对账 ---',
+            expectedCash: '钱箱应有现金',
+            actualCash: '实际盘点现金',
+            difference: '现金差额(长/短款)',
+            secStats: '--- 单据统计 ---',
+            totalOrders: '总订单数',
+            totalCups: '总制作杯数',
+            signCashier: '收银员签字: ________________',
+            signManager: '店长/主管签字: ______________'
+        },
+        en: {
+            title: '=== SHIFT REPORT (Z-REPORT) ===',
+            store: 'Store',
+            cashier: 'Cashier',
+            shift: 'Shift',
+            openedAt: 'Opened At',
+            closedAt: 'Closed At',
+            printTime: 'Printed At',
+            secSales: '--- SALES SUMMARY ---',
+            openFloat: 'Opening Float',
+            cashSales: 'Cash Sales',
+            qrisSales: 'QRIS Sales',
+            gofoodSales: 'GoFood Sales',
+            grabSales: 'Grab Sales',
+            shopeeSales: 'Shopee Sales',
+            expenses: 'Expenses / Payout',
+            secReconcile: '--- CASH RECONCILIATION ---',
+            expectedCash: 'Expected Cash',
+            actualCash: 'Counted Cash',
+            difference: 'Variance (Over/Short)',
+            secStats: '--- TRANSACTION STATS ---',
+            totalOrders: 'Total Orders',
+            totalCups: 'Total Cups',
+            signCashier: 'Cashier Sign: __________________',
+            signManager: 'Manager Sign: __________________'
+        },
+        id: {
+            title: '=== LAPORAN SHIFT (Z-REPORT) ===',
+            store: 'Toko',
+            cashier: 'Kasir',
+            shift: 'Shift',
+            openedAt: 'Waktu Buka',
+            closedAt: 'Waktu Tutup',
+            printTime: 'Dicetak',
+            secSales: '--- RINGKASAN PENJUALAN ---',
+            openFloat: 'Kas Awal / Float',
+            cashSales: 'Penjualan Tunai',
+            qrisSales: 'Penjualan QRIS',
+            gofoodSales: 'Penjualan GoFood',
+            grabSales: 'Penjualan Grab',
+            shopeeSales: 'Penjualan Shopee',
+            expenses: 'Pengeluaran Kas',
+            secReconcile: '--- REKONSILIASI KAS ---',
+            expectedCash: 'Kas Seharusnya',
+            actualCash: 'Kas Dihitung',
+            difference: 'Selisih (Lebih/Kurang)',
+            secStats: '--- STATISTIK TRANSAKSI ---',
+            totalOrders: 'Total Transaksi',
+            totalCups: 'Total Cup / Minuman',
+            signCashier: 'Ttd Kasir: __________________',
+            signManager: 'Ttd Supervisor: _____________'
+        }
     };
+    const L = shiftI18n[lang] || shiftI18n.id;
     const storeName = data.storeName || 'YOUME';
     lines.push(centerText(L.title, width));
     lines.push(centerText(storeName, width));
@@ -1957,17 +2044,24 @@ function generateShiftReportText(data) {
         const spaces = Math.max(1, width - label.length - valStr.length);
         lines.push(`${label}${' '.repeat(spaces)}${valStr}`);
     };
-    addRow(L.openFloat, data.openFloat || 0);
-    addRow(L.cashSales, data.cashSales || 0);
-    if (data.qrisSales)
-        addRow(L.qrisSales, data.qrisSales);
-    if (data.gofoodSales)
+    const si = data.summaryItems || {};
+    if (si.openFloat !== false)
+        addRow(L.openFloat, data.openFloat || 0);
+    if (si.cashSales !== false)
+        addRow(L.cashSales, data.cashSales || 0);
+    if (si.qrisSales !== false && (data.qrisSales !== undefined || si.qrisSales === true))
+        addRow(L.qrisSales, data.qrisSales || 0);
+    if (si.gofoodCount !== false && data.gofoodSales)
         addRow(L.gofoodSales, data.gofoodSales);
-    if (data.grabSales)
+    if (si.grabCount !== false && data.grabSales)
         addRow(L.grabSales, data.grabSales);
-    if (data.shopeeSales)
+    if (si.shopeeCount !== false && data.shopeeSales)
         addRow(L.shopeeSales, data.shopeeSales);
-    if (data.expenses)
+    if (si.cashIn !== false && data.cashIn)
+        addRow('Kas Masuk / Cash In', data.cashIn);
+    if (si.cashOut !== false && data.cashOut)
+        addRow('Kas Keluar / Cash Out', data.cashOut);
+    if (si.expenses !== false && data.expenses)
         addRow(L.expenses, data.expenses);
     lines.push(repeatChar('-', width));
     lines.push(centerText(L.secReconcile, width));
@@ -1975,16 +2069,23 @@ function generateShiftReportText(data) {
     const actual = data.actualCash || 0;
     const diff = actual - expected;
     addRow(L.expectedCash, expected);
-    addRow(L.actualCash, actual);
+    if (si.closeCash !== false) {
+        addRow(L.actualCash, actual);
+    }
     const diffStr = (diff >= 0 ? '+' : '') + formatRp(diff);
     const diffLabel = L.difference;
     const diffSpaces = Math.max(1, width - diffLabel.length - diffStr.length);
     lines.push(`${diffLabel}${' '.repeat(diffSpaces)}${diffStr}`);
     lines.push(repeatChar('-', width));
     lines.push(centerText(L.secStats, width));
-    lines.push(`${L.totalOrders.padEnd(colWidth)}: ${data.totalOrders ?? 0}`);
+    if (si.orderCount !== false) {
+        lines.push(`${L.totalOrders.padEnd(colWidth)}: ${data.totalOrders ?? 0}`);
+    }
     if (data.totalCups !== undefined) {
         lines.push(`${L.totalCups.padEnd(colWidth)}: ${data.totalCups}`);
+    }
+    if (si.customerCount !== false && data.customerCount !== undefined) {
+        lines.push(`${padEndVisual('Pelanggan / Cust', colWidth)}: ${data.customerCount}`);
     }
     lines.push(repeatChar('-', width));
     lines.push('');
@@ -2010,9 +2111,12 @@ function generateCupStickerTspl(item) {
     const addons = (item.addons || []).map((a) => `+${a.name || a}`).join(', ').slice(0, 30);
     const time = item.time || formatDateTime().slice(11, 19);
     const channel = item.channelName ? `(${item.channelName})` : '';
+    const widthMm = Number(item.stickerWidth) || 40;
+    const heightMm = Number(item.stickerHeight) || 30;
+    const gapMm = Number(item.stickerGap) || 2;
     const tspl = [
-        'SIZE 40 mm, 30 mm',
-        'GAP 2 mm, 0 mm',
+        `SIZE ${widthMm} mm, ${heightMm} mm`,
+        `GAP ${gapMm} mm, 0 mm`,
         'DIRECTION 1',
         'CLS',
         `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${orderNum} ${cupNo}"`,
@@ -2053,27 +2157,55 @@ function generateCupStickerEscPos(item) {
 function generateKitchenText(data) {
     const lines = [];
     const width = 32;
-    lines.push(centerText('======== 厨房订单 ========', width));
-    lines.push(`桌号/订单号: ${data.orderNum || ''}`);
-    lines.push(`时间: ${formatTime()}`);
+    const lang = (data.language || 'id').toLowerCase();
+    const kitchenI18n = {
+        zh: {
+            title: '======== 厨房订单 ========',
+            order: '桌号/单号',
+            time: '时间',
+            spec: '规格',
+            sugarIce: '甜度/冰度',
+            note: '备注'
+        },
+        en: {
+            title: '====== KITCHEN ORDER ======',
+            order: 'Table/Order',
+            time: 'Time',
+            spec: 'Size/Spec',
+            sugarIce: 'Sugar/Ice',
+            note: 'Note'
+        },
+        id: {
+            title: '===== PESANAN DAPUR =====',
+            order: 'Meja/Order',
+            time: 'Waktu',
+            spec: 'Varian',
+            sugarIce: 'Gula/Es',
+            note: 'Catatan'
+        }
+    };
+    const L = kitchenI18n[lang] || kitchenI18n.id;
+    lines.push(centerText(L.title, width));
+    lines.push(`${L.order}: ${data.orderNum || ''}`);
+    lines.push(`${L.time}: ${formatTime()}`);
     lines.push(repeatChar('-', width));
     if (data.items && data.items.length > 0) {
         data.items.forEach((item) => {
             lines.push(`${item.quantity || 1} x ${item.productName || item.name || 'item'}`);
             if (item.specName) {
-                lines.push(`  规格: ${item.specName}`);
+                lines.push(`  ${L.spec}: ${item.specName}`);
             }
             if (item.sugarLevelName || item.iceLevelName) {
                 const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
-                lines.push(`  甜度/冰度: ${mods}`);
+                lines.push(`  ${L.sugarIce}: ${mods}`);
             }
             if (item.addons && item.addons.length > 0) {
                 item.addons.forEach((addon) => {
-                    lines.push(`  + ${addon.name}`);
+                    lines.push(`  + ${addon.name || addon}`);
                 });
             }
             if (item.notes || item.note || item.remark) {
-                lines.push(`  备注: ${item.notes || item.note || item.remark}`);
+                lines.push(`  ${L.note}: ${item.notes || item.note || item.remark}`);
             }
         });
     }
@@ -2087,8 +2219,32 @@ function formatTime() {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
 }
+/**
+ * ESC/POS 文本编码转换：
+ * 绝大多数热敏小票机内置 GBK / GB18030 / CP437 字库，严禁使用 UTF-8 裸字节发送多字节字符。
+ * 优先采用 gb18030 编码，确保 ASCII、印尼语及中文字符均能被硬件字库准确识别，杜绝错位乱码。
+ */
+function encodeEscPosText(text) {
+    try {
+        const iconv = require('iconv-lite');
+        if (iconv?.encode) {
+            return iconv.encode(text, 'gb18030');
+        }
+    }
+    catch (e) {
+        try {
+            const unpacked = path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'iconv-lite');
+            const iconv = require(unpacked);
+            if (iconv?.encode) {
+                return iconv.encode(text, 'gb18030');
+            }
+        }
+        catch { }
+    }
+    // 降级使用 latin1 / ascii，避免 3 字节 UTF-8 导致热敏打印机配对乱码
+    return Buffer.from(text, 'latin1');
+}
 function generateReceiptText(data) {
-    const lines = [];
     const is80mm = data.paperSize === '80mm';
     const width = is80mm ? 48 : 32;
     const lang = (data.language || 'id').toLowerCase();
@@ -2155,6 +2311,180 @@ function generateReceiptText(data) {
         }
     };
     const L = i18nMap[lang] || i18nMap.id;
+    const nameWidth = is80mm ? 28 : 16;
+    const qtyWidth = is80mm ? 6 : 4;
+    const priceWidth = is80mm ? 14 : 12;
+    const labelWidth = is80mm ? 30 : 18;
+    const valWidth = is80mm ? 18 : 14;
+    // Check if blocks template is supplied
+    const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null);
+    if (rawBlocks && rawBlocks.length > 0) {
+        const lines = [];
+        const enabledBlocks = [...rawBlocks]
+            .filter((b) => b && b.enabled !== false)
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+        for (const block of enabledBlocks) {
+            const cfg = block.config || {};
+            switch (block.type) {
+                case 'logo': {
+                    // 若后续配置了 header 文本块且为相同店名，跳过纯文本重复标题
+                    const hasHeaderBlock = enabledBlocks.some((b) => b.type === 'header');
+                    if (!hasHeaderBlock) {
+                        const storeTitle = data.storeName || data.header || 'YOUME';
+                        lines.push(centerText(storeTitle, width));
+                    }
+                    break;
+                }
+                case 'header': {
+                    const headerText = cfg.text || data.header || data.storeName || 'YOUME';
+                    lines.push(centerText(headerText, width));
+                    break;
+                }
+                case 'storeInfo': {
+                    const phone = cfg.phone || data.storePhone;
+                    const address = cfg.address || data.storeAddress;
+                    if (cfg.showPhone !== false && phone) {
+                        lines.push(centerText(`Tel: ${phone}`, width));
+                    }
+                    if (cfg.showAddress !== false && address) {
+                        lines.push(centerText(address, width));
+                    }
+                    break;
+                }
+                case 'divider': {
+                    const style = cfg.dividerStyle || 'line';
+                    if (style === 'stars')
+                        lines.push(repeatChar('*', width));
+                    else if (style === 'line')
+                        lines.push(repeatChar('=', width));
+                    else
+                        lines.push(repeatChar('-', width));
+                    break;
+                }
+                case 'orderInfo': {
+                    lines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`);
+                    const showDate = cfg.showDate !== false;
+                    const showTime = cfg.showTime !== false;
+                    if (showDate || showTime) {
+                        const dt = formatDateTime(data.orderDate || data.createdAt, showDate, showTime);
+                        lines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${dt}`);
+                    }
+                    if (cfg.showChannel && data.channelName) {
+                        const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : '';
+                        lines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`);
+                    }
+                    if (cfg.showCashier && data.cashierName) {
+                        lines.push(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`);
+                    }
+                    if (cfg.showCustomer && data.customerName) {
+                        lines.push(`${padEndVisual(L.customer, is80mm ? 10 : 7)}: ${data.customerName}`);
+                    }
+                    break;
+                }
+                case 'items': {
+                    lines.push(`${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`);
+                    lines.push(repeatChar('-', width));
+                    const isCompact = data.itemDetailFormat === 'compact';
+                    if (data.items && data.items.length > 0) {
+                        data.items.forEach((item) => {
+                            const spec = item.specName ? ` ${item.specName}` : '';
+                            const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
+                            const qty = padStartVisual(String(item.quantity), qtyWidth);
+                            const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
+                            lines.push(`${name}${qty}${price}`);
+                            if (isCompact) {
+                                const parts = [];
+                                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                                    if (mods)
+                                        parts.push(`[${mods}]`);
+                                }
+                                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                                    const addonNames = item.addons.map((a) => a.name || a).join(', ');
+                                    if (addonNames)
+                                        parts.push(`+${addonNames}`);
+                                }
+                                if (parts.length > 0) {
+                                    lines.push(`  ${truncate(parts.join(' '), width - 2)}`);
+                                }
+                            }
+                            else {
+                                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                                    item.addons.forEach((addon) => {
+                                        lines.push(`  + ${truncate(addon.name || addon, width - 4)}`);
+                                    });
+                                }
+                                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                                    lines.push(`  [${mods}]`);
+                                }
+                            }
+                        });
+                    }
+                    break;
+                }
+                case 'subtotal': {
+                    const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth);
+                    lines.push(`${subtotalLabel}${padStartVisual(formatRp(data.subtotal || 0), valWidth)}`);
+                    break;
+                }
+                case 'tax': {
+                    const taxLabel = padEndVisual(cfg.label || L.tax, labelWidth);
+                    lines.push(`${taxLabel}${padStartVisual(formatRp(data.tax || 0), valWidth)}`);
+                    break;
+                }
+                case 'total': {
+                    if (data.discount && data.discount > 0) {
+                        lines.push(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`);
+                    }
+                    const totalLabel = padEndVisual(cfg.totalLabel || L.total, labelWidth);
+                    lines.push(`${totalLabel}${padStartVisual(formatRp(data.total || 0), valWidth)}`);
+                    break;
+                }
+                case 'paymentInfo': {
+                    if (cfg.showMethod !== false) {
+                        lines.push(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`);
+                    }
+                    if (cfg.showReceived !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
+                        lines.push(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`);
+                    }
+                    if (cfg.showChange !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
+                        lines.push(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`);
+                    }
+                    break;
+                }
+                case 'footer': {
+                    if (cfg.showDivider) {
+                        lines.push(repeatChar('-', width));
+                    }
+                    const footerMsg = cfg.footerText || data.footer;
+                    if (footerMsg) {
+                        lines.push(centerText(footerMsg, width));
+                    }
+                    break;
+                }
+                case 'customText': {
+                    const customMsg = cfg.customText || cfg.text;
+                    if (customMsg) {
+                        lines.push(centerText(customMsg, width));
+                    }
+                    break;
+                }
+                case 'barcode':
+                case 'qrCode':
+                    // Rendered via binary ESC/POS commands
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (data.copyLabel) {
+            lines.push(centerText(data.copyLabel, width));
+        }
+        return lines.join('\r\n') + '\r\n\r\n';
+    }
+    // Fallback: Legacy layout if no blocks passed
+    const lines = [];
     // 1. Header (Store Name / Custom Header)
     const storeTitle = data.storeName || data.header || 'YOUME';
     lines.push(centerText(storeTitle, width));
@@ -2183,14 +2513,10 @@ function generateReceiptText(data) {
     }
     lines.push(repeatChar('-', width));
     // 3. Item Table Header
-    // 58mm: name 16 + qty 4 + price 12 = 32
-    // 80mm: name 28 + qty 6 + price 14 = 48
-    const nameWidth = is80mm ? 28 : 16;
-    const qtyWidth = is80mm ? 6 : 4;
-    const priceWidth = is80mm ? 14 : 12;
     lines.push(`${L.item.padEnd(nameWidth)}${L.qty.padStart(qtyWidth)}${L.price.padStart(priceWidth)}`);
     lines.push(repeatChar('-', width));
     // 4. Items List
+    const isCompactFallback = data.itemDetailFormat === 'compact';
     if (data.items && data.items.length > 0) {
         data.items.forEach((item) => {
             const spec = item.specName ? ` ${item.specName}` : '';
@@ -2199,22 +2525,38 @@ function generateReceiptText(data) {
             const price = formatRp(item.unitPrice * item.quantity).padStart(priceWidth);
             lines.push(`${name}${qty}${price}`);
             if (data.showKitchenNote !== false) {
-                if (item.addons && item.addons.length > 0) {
-                    item.addons.forEach((addon) => {
-                        lines.push(`  + ${truncate(addon.name, width - 4)}`);
-                    });
+                if (isCompactFallback) {
+                    const parts = [];
+                    if (item.sugarLevelName || item.iceLevelName) {
+                        const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                        if (mods)
+                            parts.push(`[${mods}]`);
+                    }
+                    if (item.addons && item.addons.length > 0) {
+                        const addonNames = item.addons.map((addon) => addon.name || addon).join(', ');
+                        if (addonNames)
+                            parts.push(`+${addonNames}`);
+                    }
+                    if (parts.length > 0) {
+                        lines.push(`  ${truncate(parts.join(' '), width - 2)}`);
+                    }
                 }
-                if (item.sugarLevelName || item.iceLevelName) {
-                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
-                    lines.push(`  [${mods}]`);
+                else {
+                    if (item.addons && item.addons.length > 0) {
+                        item.addons.forEach((addon) => {
+                            lines.push(`  + ${truncate(addon.name || addon, width - 4)}`);
+                        });
+                    }
+                    if (item.sugarLevelName || item.iceLevelName) {
+                        const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                        lines.push(`  [${mods}]`);
+                    }
                 }
             }
         });
     }
     lines.push(repeatChar('-', width));
     // 5. Totals
-    const labelWidth = is80mm ? 30 : 18;
-    const valWidth = is80mm ? 18 : 14;
     lines.push(`${L.subtotal.padEnd(labelWidth)}${formatRp(data.subtotal || 0).padStart(valWidth)}`);
     lines.push(`${L.tax.padEnd(labelWidth)}${formatRp(data.tax || 0).padStart(valWidth)}`);
     if (data.discount && data.discount > 0) {
@@ -2242,7 +2584,7 @@ function generateReceiptText(data) {
         lines.push(centerText(data.footer, width));
     }
     lines.push(centerText(L.thanks, width));
-    return lines.join('\n') + '\n\n';
+    return lines.join('\r\n') + '\r\n\r\n';
 }
 /**
  * 构建 ESC/POS 2D 二维码原生指令 (Model 2, 支持 58mm / 80mm 热敏小票机)
@@ -2273,6 +2615,7 @@ function buildEscPosQRCode(content, moduleSize = 5) {
 }
 /**
  * 构建 ESC/POS 订单条形码 (CODE128 格式，方便扫码枪秒级反扫退单或查单)
+ * 标准 ESC/POS CODE128 (GS k 73) 必须带有 Code Set B ({B 即 0x7B, 0x42) 前缀
  */
 function buildEscPosBarcode(content) {
     if (!content)
@@ -2281,43 +2624,93 @@ function buildEscPosBarcode(content) {
     if (!clean)
         return Buffer.alloc(0);
     const dataBytes = Buffer.from(clean, 'ascii');
+    // CODE128 Code Set B 前缀: {B (0x7B, 0x42)
+    const payload = Buffer.concat([Buffer.from([0x7B, 0x42]), dataBytes]);
     return Buffer.concat([
         // 居中对齐 ESC a 1
         Buffer.from([0x1B, 0x61, 0x01]),
-        // 设置条码高度 60 dots
-        Buffer.from([0x1D, 0x68, 0x3C]),
+        // 设置条码高度 50 dots
+        Buffer.from([0x1D, 0x68, 0x32]),
         // 设置条码宽度 2 dots
         Buffer.from([0x1D, 0x77, 0x02]),
         // 设置数字显示在条码下方 (HRI below: 0x02)
         Buffer.from([0x1D, 0x48, 0x02]),
         // CODE128 打印指令: GS k 73 <length> <data>
-        Buffer.from([0x1D, 0x6B, 0x49, dataBytes.length]),
-        dataBytes,
+        Buffer.from([0x1D, 0x6B, 0x49, payload.length]),
+        payload,
         // 换行并重置为左对齐 ESC a 0
         Buffer.from([0x0A, 0x0A, 0x1B, 0x61, 0x00])
     ]);
 }
+function getVisualWidth(str) {
+    if (!str)
+        return 0;
+    let w = 0;
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (code > 255 || (code >= 0x1100 && code <= 0x115F) || (code >= 0x2E80 && code <= 0x9FFF)) {
+            w += 2;
+        }
+        else {
+            w += 1;
+        }
+    }
+    return w;
+}
+function padEndVisual(str, targetWidth) {
+    const vLen = getVisualWidth(str);
+    if (vLen >= targetWidth)
+        return str;
+    return str + ' '.repeat(targetWidth - vLen);
+}
+function padStartVisual(str, targetWidth) {
+    const vLen = getVisualWidth(str);
+    if (vLen >= targetWidth)
+        return str;
+    return ' '.repeat(targetWidth - vLen) + str;
+}
 function centerText(text, width) {
-    const padding = Math.max(0, Math.floor((width - text.length) / 2));
+    if (!text)
+        return '';
+    const padding = Math.max(0, Math.floor((width - getVisualWidth(text)) / 2));
     return ' '.repeat(padding) + text;
 }
 function repeatChar(char, count) {
     return char.repeat(count);
 }
-function truncate(str, len) {
-    return str.length > len ? str.slice(0, len) : str;
+function truncate(str, maxVisualLen) {
+    if (!str)
+        return '';
+    let cur = 0;
+    let res = '';
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        const code = str.charCodeAt(i);
+        const w = (code > 255 || (code >= 0x1100 && code <= 0x115F) || (code >= 0x2E80 && code <= 0x9FFF)) ? 2 : 1;
+        if (cur + w > maxVisualLen)
+            break;
+        cur += w;
+        res += char;
+    }
+    return res;
 }
 function formatRp(amount) {
     return 'Rp ' + amount.toLocaleString('id-ID');
 }
-function formatDateTime() {
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
+function formatDateTime(dateInput, showDate = true, showTime = true) {
+    const date = dateInput ? new Date(dateInput) : new Date();
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    if (showDate && showTime)
+        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    if (showDate)
+        return `${day}/${month}/${year}`;
+    if (showTime)
+        return `${hours}:${minutes}:${seconds}`;
     return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 // 单例锁：确保只有一个实例运行

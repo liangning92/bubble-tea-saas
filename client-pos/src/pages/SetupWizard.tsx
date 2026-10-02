@@ -46,7 +46,7 @@ export function SetupWizard() {
         <div className="text-center mb-8">
           <img src="/youme-logo-red.png" alt="YOUME" className="w-32 h-16 object-contain mb-2" />
           <h1 className="text-2xl font-bold text-gray-800">YOUME POS</h1>
-          <p className="text-gray-500 text-sm mt-1">首次设置 · First Setup</p>
+          <p className="text-gray-500 text-sm mt-1">{t('setup.firstSetup', 'First Setup')}</p>
         </div>
 
         {/* Error */}
@@ -69,7 +69,7 @@ export function SetupWizard() {
             </div>
             <p className="text-gray-500 text-sm mb-4">
               {t('auth.connectCloudHint')}<br />
-              <span className="text-xs">从云端同步产品、分类和配置</span>
+              <span className="text-xs">{t('setup.syncCloudHint', 'Sync products, categories and settings from cloud')}</span>
             </p>
 
             <form onSubmit={handleConnect} className="space-y-4">

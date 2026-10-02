@@ -87,7 +87,7 @@ export function MaterialDetailPage() {
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="text-sm text-gray-500">{t('material.shelfLife')}</div>
             <div className="text-2xl font-bold">
-              {mat.shelfLife > 0 ? `${mat.shelfLife}${t('day')}` : t('material.unlimited')}
+              {mat.shelfLife > 0 ? `${mat.shelfLife} ${t('common.days')}` : t('material.unlimited')}
             </div>
           </div>
         </div>

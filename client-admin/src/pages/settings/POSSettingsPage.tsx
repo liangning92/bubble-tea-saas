@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { configApi, uploadApi } from '../../services/api'
+import { configApi, uploadApi, receiptTemplateApi } from '../../services/api'
 import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X, QrCode } from 'lucide-react'
@@ -391,12 +391,18 @@ const DualScreenPreview: React.FC<{
   )
 })
 
-export function POSSettingsPage() {
+export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSubTab } = {}) {
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
-  const [activeSubTab, setActiveSubTab] = useState<POSSubTab>('layout')
+  const [activeSubTab, setActiveSubTab] = useState<POSSubTab>(initialTab)
   const [showSuccess, setShowSuccess] = useState(false)
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveSubTab(initialTab)
+    }
+  }, [initialTab])
 
   // ========== DATA LOADING ==========
   // 确保 queryKey 和实际请求的 storeId 一致
@@ -409,6 +415,12 @@ export function POSSettingsPage() {
       return configApi.get(queryStoreId || undefined)
     }
   })
+
+  // 店铺基础信息（用于小票电话、地址的智能继承与占位）
+  const fallbackStoreInfo = useMemo(() => {
+    const raw = posConfig?.data?.data || (posConfig as any)?.data || {}
+    return raw.storeInfo || (posConfig as any)?.storeInfo || {}
+  }, [posConfig])
 
   // ========== STATE WITH DEFAULT VALUES ==========
   // 注意: 这些字段名和结构需要与POS客户端期望的一致
@@ -523,7 +535,7 @@ export function POSSettingsPage() {
   })
 
   const [displaySettings, setDisplaySettings] = useState({
-    language: 'id',
+    language: i18n.language || 'id',
     theme: 'light', // light, dark
     fontSize: 'medium', // small, medium, large
     showOfflineIndicator: true,
@@ -590,7 +602,8 @@ export function POSSettingsPage() {
   // 小票设置
   const [_posReceipt, setPosReceipt] = useState({
     header: t('posSettings.defaultReceiptHeader'),
-    footer: t('posSettings.defaultReceiptFooter'),
+    footer: 'Thank you!',
+    templateId: '',
     taxRate: 11,
     showLogo: true,
     storeLogo: '',               // 店铺Logo URL
@@ -610,6 +623,14 @@ export function POSSettingsPage() {
     showCustomerName: false,      // 显示顾客名称
     autoPrint: true,             // 自动打印
   })
+
+  // 小票模板列表
+  const { data: receiptTemplatesData } = useQuery({
+    queryKey: ['receipt-templates', user?.storeId],
+    queryFn: () => receiptTemplateApi.list(user?.storeId || ''),
+    enabled: !!user?.storeId
+  })
+  const receiptTemplates = useMemo(() => receiptTemplatesData?.data?.data || [], [receiptTemplatesData])
 
 
 
@@ -776,7 +797,7 @@ export function POSSettingsPage() {
   }
 
   // 硬件设置
-  const [hardwareSettings, setHardwareSettings] = useState(() => ({
+  const [hardwareSettings, setHardwareSettings] = useState<any>(() => ({
     printers: [
       {
         id: 'receipt-1',
@@ -819,21 +840,21 @@ export function POSSettingsPage() {
       // 空闲时布局 - 可自定义列数和内容
       idleLayout: {
         columns: [
-          { width: 60, content: 'media' },
-          { width: 40, content: 'promotions' },
+          { width: 60, content: 'media' as ColumnContent },
+          { width: 40, content: 'promotions' as ColumnContent },
         ]
       },
       // 点单时布局
       orderingLayout: {
         columns: [
-          { width: 30, content: 'media' },
-          { width: 70, content: 'order' },
+          { width: 30, content: 'media' as ColumnContent },
+          { width: 70, content: 'order' as ColumnContent },
         ]
       },
       // 共用内容
       welcomeText: t('posSettings.defaultWelcomeText'),
       promotions: ['✨', '🍓', '💳', '🎁'],
-      mediaFiles: [],
+      mediaFiles: [] as MediaFile[],
     },
   }))
 
@@ -1581,9 +1602,11 @@ export function POSSettingsPage() {
                   <select
                     value={displaySettings.language}
                     onChange={(e) => {
-                      setDisplaySettings({ ...displaySettings, language: e.target.value })
-                      handleSave('displaySettings', { ...displaySettings, language: e.target.value })
-                      i18n.changeLanguage(e.target.value)
+                      const newLang = e.target.value
+                      setDisplaySettings({ ...displaySettings, language: newLang })
+                      handleSave('displaySettings', { ...displaySettings, language: newLang })
+                      localStorage.setItem('bubble-tea-language', newLang)
+                      i18n.changeLanguage(newLang)
                     }}
                     className="input"
                   >
@@ -1672,6 +1695,106 @@ export function POSSettingsPage() {
                 <p className="text-xs text-gray-400 mt-1">{t('posSettings.lockScreenPinHint')}</p>
               </div>
             </div>
+          </div>
+
+          {/* 客显副屏与多媒体配置 */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">{t('posSettings.dualScreenSettings', '客显副屏多媒体与版式')}</h3>
+                <p className="text-sm text-gray-500 mt-1">{t('posSettings.dualScreenHint', '配置面向顾客的双屏客显内容、轮播海报、促销信息及版式排版')}</p>
+              </div>
+              <Toggle
+                enabled={hardwareSettings.dualScreen?.enabled || false}
+                onChange={() => {
+                  const newVal = !hardwareSettings.dualScreen?.enabled
+                  const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, enabled: newVal } }
+                  setHardwareSettings(newHardwareSettings)
+                  handleSave('hardwareSettings', newHardwareSettings)
+                }}
+              />
+            </div>
+
+            {hardwareSettings.dualScreen?.enabled && (
+              <div className="space-y-4 mt-4 pt-4 border-t border-gray-200">
+                {/* Welcome Text */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenWelcome')}</label>
+                  <input type="text" value={hardwareSettings.dualScreen?.welcomeText || ''} onChange={(e) => {
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, welcomeText: e.target.value } }
+                    setHardwareSettings(newHardwareSettings)
+                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input" placeholder={t('posSettings.welcomePlaceholder')} />
+                </div>
+
+                {/* Media Upload - Images and Videos */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenMedia')}</label>
+                  <p className="text-xs text-gray-500 mb-2">{t('posSettings.dualScreenMediaHint')}</p>
+                  <DualScreenMediaUpload
+                    mediaFiles={hardwareSettings.dualScreen?.mediaFiles || []}
+                    onUpload={(files) => {
+                      const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, mediaFiles: files } }
+                      setHardwareSettings(newHardwareSettings)
+                      handleSave('hardwareSettings', newHardwareSettings)
+                    }}
+                    onMediaFilesChange={(getNewFiles) => {
+                      setHardwareSettings((prev: any) => {
+                        const current = prev.dualScreen?.mediaFiles || []
+                        const updated = getNewFiles(current)
+                        const newHardwareSettings = { ...prev, dualScreen: { ...prev.dualScreen!, mediaFiles: updated } }
+                        handleSave('hardwareSettings', newHardwareSettings)
+                        return newHardwareSettings
+                      })
+                    }}
+                    onRemove={(index) => {
+                      setHardwareSettings((prev: any) => {
+                        const current = prev.dualScreen?.mediaFiles || []
+                        const newFiles = [...current]
+                        newFiles.splice(index, 1)
+                        const newHardwareSettings = { ...prev, dualScreen: { ...prev.dualScreen!, mediaFiles: newFiles } }
+                        handleSave('hardwareSettings', newHardwareSettings)
+                        return newHardwareSettings
+                      })
+                    }}
+                  />
+                </div>
+
+                {/* Promotions */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenPromotions')}</label>
+                  <textarea value={(hardwareSettings.dualScreen?.promotions || []).join('\n')} onChange={(e) => {
+                    const promotions = e.target.value.split('\n').filter(line => line.trim())
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, promotions } }
+                    setHardwareSettings(newHardwareSettings)
+                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder={t('posSettings.promotionsPlaceholder')} />
+                </div>
+
+                {/* Idle Layout Editor */}
+                <_DualScreenLayoutEditor
+                  title={t('posSettings.idleLayout')}
+                  layout={hardwareSettings.dualScreen?.idleLayout || { columns: [{ width: 100, content: 'media' as ColumnContent }] }}
+                  onChange={(idleLayout: Layout) => {
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, idleLayout } }
+                    setHardwareSettings(newHardwareSettings)
+                    handleSave('hardwareSettings', newHardwareSettings)
+                  }}
+                />
+
+                {/* Ordering Layout Editor */}
+                <_DualScreenLayoutEditor
+                  title={t('posSettings.orderingLayout')}
+                  layout={hardwareSettings.dualScreen?.orderingLayout || { columns: [{ width: 100, content: 'order' as ColumnContent }] }}
+                  onChange={(orderingLayout: Layout) => {
+                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, orderingLayout } }
+                    setHardwareSettings(newHardwareSettings)
+                    handleSave('hardwareSettings', newHardwareSettings)
+                  }}
+                />
+
+                {/* Preview */}
+                <DualScreenPreview dualScreen={hardwareSettings.dualScreen} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1973,8 +2096,51 @@ export function POSSettingsPage() {
           {receiptSubMode === 'basic' ? (
             <div className="card space-y-6 max-w-4xl">
               <div>
-                <h3 className="text-lg font-semibold mb-1">{t('posSettings.receiptPrintSettings', '小票规格与内容设置')}</h3>
-                <p className="text-sm text-gray-500">{t('posSettings.receiptPrintSettingsHint', '配置小票纸张宽度、打印联数、店铺联系方式及展示字段，实时同步至 POS 客户端')}</p>
+                <h3 className="text-lg font-semibold">{t('posSettings.receiptPrintSettings', '小票规格与内容设置')}</h3>
+              </div>
+
+              {/* 生效的视觉小票模板 */}
+              <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-gray-800 text-sm">🎨 {t('posSettings.activeTemplate', '生效的小票视觉模板')}</h4>
+                  <button
+                    type="button"
+                    onClick={() => setReceiptSubMode('template')}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    {t('posSettings.openTemplateDesigner', '打开模板设计器 →')}
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  <select
+                    value={_posReceipt.templateId || ''}
+                    onChange={(e) => {
+                      const newId = e.target.value
+                      setPosReceipt(prev => {
+                        const updated = { ...prev, templateId: newId }
+                        handleSave('posReceipt', updated)
+                        return updated
+                      })
+                    }}
+                    className="input text-sm flex-1"
+                  >
+                    <option value="">{t('posSettings.defaultTemplateAuto', '自动使用默认模板 (Default)')}</option>
+                    {receiptTemplates.map((tpl: any) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name} {tpl.isDefault ? `(${t('common.default', '默认')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {_posReceipt.templateId ? (
+                    <span className="text-xs px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg">
+                      ✓ {t('posSettings.templateAssigned', '已指定专属模板')}
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+                      ℹ️ {t('posSettings.usingDefaultTemplate', '沿用默认模板')}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* 纸张与打印基础 */}
@@ -1989,7 +2155,13 @@ export function POSSettingsPage() {
                         <button
                           key={size}
                           type="button"
-                          onClick={() => setPosReceipt(prev => ({ ...prev, paperSize: size }))}
+                          onClick={() => {
+                            setPosReceipt(prev => {
+                              const updated = { ...prev, paperSize: size }
+                              handleSave('posReceipt', updated)
+                              return updated
+                            })
+                          }}
                           className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                             _posReceipt.paperSize === size
                               ? 'border-primary bg-primary/10 text-primary'
@@ -2010,7 +2182,13 @@ export function POSSettingsPage() {
                         <button
                           key={copies}
                           type="button"
-                          onClick={() => setPosReceipt(prev => ({ ...prev, printCopies: copies }))}
+                          onClick={() => {
+                            setPosReceipt(prev => {
+                              const updated = { ...prev, printCopies: copies }
+                              handleSave('posReceipt', updated)
+                              return updated
+                            })
+                          }}
                           className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                             _posReceipt.printCopies === copies
                               ? 'border-primary bg-primary/10 text-primary'
@@ -2025,10 +2203,7 @@ export function POSSettingsPage() {
 
                   {/* 自动打印 */}
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.autoPrintReceipt', '结账自动打印')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.autoPrintReceiptHint', '订单结账后立即触发小票打印')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.autoPrintReceipt', '结账自动打印')}</div>
                     <Toggle
                       enabled={_posReceipt.autoPrint !== false}
                       onChange={() => {
@@ -2048,25 +2223,29 @@ export function POSSettingsPage() {
                 <h4 className="font-medium text-gray-800 text-sm">🏪 {t('posSettings.storeContactInfo', '小票商户与联络信息')}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('settings.phone', '店铺联系电话 (小票打印)')}</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t('settings.phone', '店铺联系电话 (小票打印)')}
+                    </label>
                     <input
                       type="text"
                       value={_posReceipt.storePhone || ''}
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, storePhone: e.target.value }))}
                       onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
-                      placeholder="例如: +62 812-3456-7890"
+                      placeholder={fallbackStoreInfo.phone || '+62 812-3456-7890'}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('settings.address', '店铺地址 (小票打印)')}</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {t('settings.address', '店铺地址 (小票打印)')}
+                    </label>
                     <input
                       type="text"
                       value={_posReceipt.storeAddress || ''}
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, storeAddress: e.target.value }))}
                       onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
-                      placeholder="例如: Jl. Sudirman No. 12, Jakarta"
+                      placeholder={fallbackStoreInfo.address || 'Jl. Sudirman No. 12, Jakarta'}
                     />
                   </div>
                   <div>
@@ -2077,7 +2256,7 @@ export function POSSettingsPage() {
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, header: e.target.value, headerCustomText: e.target.value }))}
                       onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
-                      placeholder="例如: 欢迎光临 YOUME TEA"
+                      placeholder="YOUME TEA"
                     />
                   </div>
                   <div>
@@ -2088,7 +2267,7 @@ export function POSSettingsPage() {
                       onChange={(e) => setPosReceipt(prev => ({ ...prev, footer: e.target.value, footerMessage: e.target.value }))}
                       onBlur={() => handleSave('posReceipt', _posReceipt)}
                       className="input text-sm"
-                      placeholder="例如: TERIMA KASIH / 谢谢惠顾，欢迎再次光临"
+                      placeholder="TERIMA KASIH / THANK YOU"
                     />
                   </div>
                   {/* 小票 Logo 上传与设置 */}
@@ -2098,9 +2277,6 @@ export function POSSettingsPage() {
                         <label className="block text-xs font-bold text-gray-700">
                           {t('posSettings.storeLogo', '小票 Logo')}
                         </label>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {t('posSettings.receiptLogoHint', '用于小票顶部、POS 顶栏、客显副屏及登录页品牌展示，建议黑白清晰高对比度 PNG 格式')}
-                        </p>
                       </div>
                       <div>
                         <input
@@ -2191,9 +2367,6 @@ export function POSSettingsPage() {
                           <QrCode size={14} className="text-primary" />
                           <span>{t('posSettings.showQR', '小票底部二维码')}</span>
                         </label>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {t('posSettings.showQRHint', '在小票尾部打印二维码（如商家静态 QRIS 收款码、会员注册链接、WhatsApp 客服或社交媒体）')}
-                        </p>
                       </div>
                       <div>
                         <input
@@ -2284,10 +2457,7 @@ export function POSSettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* 是否打印 Logo 开关 */}
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showLogo', '打印小票时显示 Logo')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.showLogoHint', '在小票顶部居中打印店铺品牌 Logo')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showLogo', '打印小票时显示 Logo')}</div>
                     <Toggle
                       enabled={_posReceipt.showLogo !== false}
                       onChange={() => {
@@ -2302,10 +2472,7 @@ export function POSSettingsPage() {
 
                   {/* 是否打印二维码开关 */}
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showQR', '打印小票时显示二维码')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.showQRHint', '在小票尾部居中打印商家二维码')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showQR', '打印小票时显示二维码')}</div>
                     <Toggle
                       enabled={_posReceipt.showQR === true}
                       onChange={() => {
@@ -2317,11 +2484,9 @@ export function POSSettingsPage() {
                       }}
                     />
                   </div>
+
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showStaffName', '打印收银员姓名')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.showStaffNameHint', '在小票头部打印操作收银员/Kasir')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showStaffName', '打印收银员姓名')}</div>
                     <Toggle
                       enabled={_posReceipt.showStaffName !== false}
                       onChange={() => {
@@ -2335,10 +2500,7 @@ export function POSSettingsPage() {
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showCustomerName', '打印顾客/会员姓名')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.showCustomerNameHint', '关联会员时打印顾客姓名')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showCustomerName', '打印顾客/会员姓名')}</div>
                     <Toggle
                       enabled={_posReceipt.showCustomerName === true}
                       onChange={() => {
@@ -2352,10 +2514,7 @@ export function POSSettingsPage() {
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showKitchenNote', '打印制作备注')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.showKitchenNoteHint', '打印糖度、冰度、加料及杯型规格')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showKitchenNote', '打印制作备注')}</div>
                     <Toggle
                       enabled={_posReceipt.showKitchenNote !== false}
                       onChange={() => {
@@ -2369,10 +2528,7 @@ export function POSSettingsPage() {
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.showBarcode', '打印订单条形码')}</div>
-                      <div className="text-xs text-gray-500">{t('posSettings.showBarcodeHint', '方便扫码枪快速调取历史订单')}</div>
-                    </div>
+                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showBarcode', '打印订单条形码')}</div>
                     <Toggle
                       enabled={_posReceipt.showBarcode !== false}
                       onChange={() => {
@@ -2384,12 +2540,47 @@ export function POSSettingsPage() {
                       }}
                     />
                   </div>
+
+                  {/* 商品行排版格式 */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">{t('posSettings.itemDetailFormat', '商品行排版格式')}</div>
+                      <div className="text-xs text-gray-400">{t('posSettings.itemDetailFormatHint', '紧凑模式配料单行显示更省纸，标准模式清晰换行')}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      {[
+                        { key: 'standard', label: t('posSettings.formatStandard', '标准') },
+                        { key: 'compact', label: t('posSettings.formatCompact', '紧凑') }
+                      ].map(f => (
+                        <button
+                          key={f.key}
+                          type="button"
+                          onClick={() => {
+                            setPosReceipt(prev => {
+                              const updated = { ...prev, itemDetailFormat: f.key }
+                              handleSave('posReceipt', updated)
+                              return updated
+                            })
+                          }}
+                          className={`px-3 py-1 text-xs rounded-lg font-medium border transition-colors ${
+                            (_posReceipt.itemDetailFormat || 'standard') === f.key
+                              ? 'bg-primary text-white border-primary'
+                              : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
             <ReceiptTemplateEditor
               storeId={user?.storeId || ''}
+              defaultLogo={_posReceipt.storeLogo}
+              defaultQrCode={_posReceipt.qrCodeUrl}
               onSave={() => {
                 // Refresh configs after saving template
                 queryClient.invalidateQueries({ queryKey: ['configs', user?.storeId] })
@@ -2546,6 +2737,45 @@ function PrinterConfigCard({
               </div>
             </div>
           )}
+
+          {/* Label size settings for label printer */}
+          {printerType === 'label' && (
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.labelWidth', '宽 (mm)')}</label>
+                <input
+                  type="number"
+                  value={printer.stickerWidth || 40}
+                  onChange={(e) => onUpdate({ ...printer, stickerWidth: parseInt(e.target.value) || 40 })}
+                  className="input text-sm"
+                  min="20"
+                  max="100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.labelHeight', '高 (mm)')}</label>
+                <input
+                  type="number"
+                  value={printer.stickerHeight || 30}
+                  onChange={(e) => onUpdate({ ...printer, stickerHeight: parseInt(e.target.value) || 30 })}
+                  className="input text-sm"
+                  min="15"
+                  max="100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.labelGap', '间距 (mm)')}</label>
+                <input
+                  type="number"
+                  value={printer.stickerGap || 2}
+                  onChange={(e) => onUpdate({ ...printer, stickerGap: parseInt(e.target.value) || 2 })}
+                  className="input text-sm"
+                  min="0"
+                  max="10"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2650,10 +2880,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
         <h3 className="text-lg font-semibold mb-4">{t('posSettings.hardwareSettings')}</h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <div>
-              <span className="font-medium">{t('posSettings.autoOpenCashDrawer')}</span>
-              <p className="text-sm text-gray-500">{t('posSettings.autoOpenCashDrawerHint')}</p>
-            </div>
+            <span className="font-medium">{t('posSettings.autoOpenCashDrawer')}</span>
             <Toggle
               enabled={hardwareSettings.autoOpenCashDrawer}
               onChange={() => {
@@ -2673,7 +2900,6 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
               onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
               className="w-full"
             />
-            <p className="text-xs text-gray-500 mt-1">{t('posSettings.cashDrawerPulseHint')}</p>
           </div>
 
           <div className="p-3 bg-gray-50 rounded-lg">
@@ -2712,109 +2938,6 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
               onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
               className="w-full"
             />
-          </div>
-
-          <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <span className="font-semibold text-blue-800">{t('posSettings.dualScreenSettings')}</span>
-                <p className="text-sm text-blue-700 mt-1">{t('posSettings.dualScreenHint')}</p>
-              </div>
-              <Toggle
-                enabled={hardwareSettings.dualScreen?.enabled || false}
-                onChange={() => {
-                  const newVal = !hardwareSettings.dualScreen?.enabled
-                  const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, enabled: newVal } }
-                  setHardwareSettings(newHardwareSettings)
-                  handleSave('hardwareSettings', newHardwareSettings)
-                }}
-              />
-            </div>
-
-            {hardwareSettings.dualScreen?.enabled && (
-              <div className="space-y-4 mt-4 pt-4 border-t border-blue-200">
-                {/* Welcome Text */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenWelcome')}</label>
-                  <input type="text" value={hardwareSettings.dualScreen?.welcomeText || ''} onChange={(e) => {
-                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, welcomeText: e.target.value } }
-                    setHardwareSettings(newHardwareSettings)
-                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input" placeholder={t('posSettings.welcomePlaceholder')} />
-                </div>
-
-                {/* Media Upload - Images and Videos */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenMedia')}</label>
-                  <p className="text-xs text-gray-500 mb-2">{t('posSettings.dualScreenMediaHint')}</p>
-                  <DualScreenMediaUpload
-                    mediaFiles={hardwareSettings.dualScreen?.mediaFiles || []}
-                    onUpload={(files) => {
-                      const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, mediaFiles: files } }
-                      setHardwareSettings(newHardwareSettings)
-                      handleSave('hardwareSettings', newHardwareSettings)
-                    }}
-                    onMediaFilesChange={(getNewFiles) => {
-                      setHardwareSettings((prev: any) => {
-                        const current = prev.dualScreen?.mediaFiles || []
-                        const updated = getNewFiles(current)
-                        const newHardwareSettings = { ...prev, dualScreen: { ...prev.dualScreen!, mediaFiles: updated } }
-                        handleSave('hardwareSettings', newHardwareSettings)
-                        return newHardwareSettings
-                      })
-                    }}
-                    onRemove={(index) => {
-                      setHardwareSettings((prev: any) => {
-                        const current = prev.dualScreen?.mediaFiles || []
-                        const newFiles = [...current]
-                        newFiles.splice(index, 1)
-                        const newHardwareSettings = { ...prev, dualScreen: { ...prev.dualScreen!, mediaFiles: newFiles } }
-                        handleSave('hardwareSettings', newHardwareSettings)
-                        return newHardwareSettings
-                      })
-                    }}
-                  />
-                </div>
-
-                {/* Promotions */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenPromotions')}</label>
-                  <textarea value={(hardwareSettings.dualScreen?.promotions || []).join('\n')} onChange={(e) => {
-                    const promotions = e.target.value.split('\n').filter(line => line.trim())
-                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, promotions } }
-                    setHardwareSettings(newHardwareSettings)
-                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder={t('posSettings.promotionsPlaceholder')} />
-                </div>
-
-                {/* Idle Layout Editor */}
-                <_DualScreenLayoutEditor
-                  title={t('posSettings.idleLayout')}
-                  layout={hardwareSettings.dualScreen?.idleLayout || { columns: [{ width: 100, content: 'media' }] }}
-                  onChange={(idleLayout: Layout) => {
-                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, idleLayout } }
-                    setHardwareSettings(newHardwareSettings)
-                    handleSave('hardwareSettings', newHardwareSettings)
-                  }}
-                />
-
-                {/* Ordering Layout Editor */}
-                <_DualScreenLayoutEditor
-                  title={t('posSettings.orderingLayout')}
-                  layout={hardwareSettings.dualScreen?.orderingLayout || { columns: [{ width: 100, content: 'order' }] }}
-                  onChange={(orderingLayout: Layout) => {
-                    const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, orderingLayout } }
-                    setHardwareSettings(newHardwareSettings)
-                    handleSave('hardwareSettings', newHardwareSettings)
-                  }}
-                />
-
-                {/* Preview */}
-                <DualScreenPreview dualScreen={hardwareSettings.dualScreen} />
-              </div>
-            )}
-          </div>
-
-          <div className="p-3 bg-yellow-50 rounded-xl text-yellow-800 text-sm">
-            💡 {t('posSettings.cashDrawerRj11Note')}
           </div>
         </div>
       </div>

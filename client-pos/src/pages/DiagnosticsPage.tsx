@@ -114,7 +114,7 @@ export function DiagnosticsPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">🔧 {t('diag_title', '🔧 Diagnostic Center')}</h1>
           <button onClick={loadDiagnostics} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">
-            刷新
+            {t('common.refresh', 'Segarkan')}
           </button>
         </div>
 
@@ -153,7 +153,7 @@ export function DiagnosticsPage() {
                   <span className="font-mono">{status.version}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">API地址</span>
+                  <span className="text-gray-500">{t("diag_api_url", "Alamat API")}</span>
                   <span className="font-mono text-xs">{getApiUrl()}</span>
                 </div>
                 <div className="flex justify-between">
@@ -183,7 +183,7 @@ export function DiagnosticsPage() {
         {activeTab === 'logs' && (
           <div className="bg-white rounded-xl border overflow-hidden">
             <div className="p-3 border-b bg-gray-50">
-              <span className="text-sm font-medium">{t("diag_recent_logs", "Recent Logs")} (来自 electron-log)</span>
+              <span className="text-sm font-medium">{t("diag_recent_logs", "Recent Logs")} (electron-log)</span>
             </div>
             <div className="max-h-96 overflow-y-auto">
               {status.logs.length === 0 ? (
@@ -209,18 +209,18 @@ export function DiagnosticsPage() {
               <h2 className="font-bold text-sm mb-3">{t("diag_api_test", "🌐 API Connection Test")}</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">API地址</span>
+                  <span className="text-gray-500">{t("diag_api_url", "Alamat API")}</span>
                   <span className="font-mono text-xs">{getApiUrl()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">状态</span>
+                  <span className="text-gray-500">{t("common.status", "Status")}</span>
                   <span className={`font-bold ${status.api === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
                     {status.api === 'ok' ? t('diag_reachable', '✅ Reachable') : t('diag_unreachable', '❌ Unreachable') }
                   </span>
                 </div>
                 {status.apiLatency && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">响应时间</span>
+                    <span className="text-gray-500">{t("diag_api_latency", "Latensi")}</span>
                     <span className={`font-bold ${status.apiLatency < 1000 ? 'text-green-600' : 'text-yellow-600'}`}>
                       {status.apiLatency}ms
                     </span>
@@ -233,7 +233,7 @@ export function DiagnosticsPage() {
               <h2 className="font-bold text-sm mb-3">{t("diag_indexeddb_status", "💾 IndexedDB Status")}</h2>
               <div className="text-sm space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">数据库</span>
+                  <span className="text-gray-500">{t("diag_local_db", "Database")}</span>
                   <span className={`font-bold ${status.db === 'ok' ? 'text-green-600' : 'text-gray-600'}`}>
                     {status.db === 'ok' ? t('diag_db_ok', '✅ OK') : status.db === 'error' ? t('diag_db_error', '❌ Error') : t('diag_db_unknown', '❓ Unknown') }
                   </span>

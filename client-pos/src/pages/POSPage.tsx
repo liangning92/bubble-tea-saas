@@ -551,8 +551,15 @@ export function POSPage() {
     return `${prefix}${String(currentSeq).padStart(3, '0')}`
   }
 
-  // 小票模板（从ReceiptTemplate表加载，支持拖拽编辑器自定义）
-  const [receiptTemplate, setReceiptTemplate] = useState<any>(null)
+  // 小票模板（从ReceiptTemplate表加载，支持本地持久化离线容灾）
+  const [receiptTemplate, setReceiptTemplate] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('pos_receipt_template')
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
 
   // POS 操作日志辅助函数
   const logPOSAction = useCallback((params: {
@@ -1015,6 +1022,8 @@ export function POSPage() {
             // 布局样式
             productImage: posLayoutData.productImage || prev.productImage,
             compactMode: posLayoutData.compactMode ?? prev.compactMode,
+            productSortBy: posLayoutData.productSortBy || prev.productSortBy,
+            productSortOrder: posLayoutData.productSortOrder || prev.productSortOrder,
             // 快捷键
             hotkeys: posLayoutData.hotkeys || prev.hotkeys,
           }))
@@ -1060,21 +1069,31 @@ export function POSPage() {
             autoPrint: receiptConfig.autoPrint ?? prev.autoPrint,
           }))
 
-          // 加载小票模板（如果有templateId）
-          if (receiptConfig.templateId) {
-            posApi.getReceiptTemplate(receiptConfig.templateId)
-              .then((res: any) => {
-                if (res.data?.data?.content) {
-                  try {
-                    const template = JSON.parse(res.data.data.content)
-                    setReceiptTemplate(template)
-                  } catch (e) {
-                    console.error('Failed to parse receipt template:', e)
-                  }
+          // 始终确保加载小票模板（优先根据templateId，若无则加载默认模板）
+          const loadTemplate = async () => {
+            try {
+              let res: any = null
+              if (receiptConfig?.templateId) {
+                res = await posApi.getReceiptTemplate(receiptConfig.templateId).catch(() => null)
+              }
+              if (!res?.data?.data?.content && storeId) {
+                res = await posApi.getDefaultReceiptTemplate(storeId).catch(() => null)
+              }
+              if (res?.data?.data?.content) {
+                const template = JSON.parse(res.data.data.content)
+                setReceiptTemplate(template)
+                if (template.paperSize === '58mm' || template.paperSize === '80mm') {
+                  setPosReceipt(prev => ({ ...prev, paperSize: template.paperSize }))
                 }
-              })
-              .catch((err: any) => console.error('Failed to load receipt template:', err))
+                try {
+                  localStorage.setItem('pos_receipt_template', JSON.stringify(template))
+                } catch {}
+              }
+            } catch (e) {
+              console.error('Failed to load/parse receipt template:', e)
+            }
           }
+          loadTemplate()
         }
 
         // 税费设置（包含免税商品）- 合并默认值
@@ -1365,9 +1384,11 @@ export function POSPage() {
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'YOUME',
             footer: posReceipt.footer || 'Test Print',
+            paperSize: receiptTemplate?.paperSize || posReceipt.paperSize || '80mm',
             printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt'),
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
-            subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test'
+            subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test',
+            ...(receiptTemplate?.blocks ? { blocks: receiptTemplate.blocks } : {})
           })
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testPrint: null }, 'pos')
@@ -1918,7 +1939,7 @@ export function POSPage() {
       if (sortBy === 'name') {
         return a.name.localeCompare(b.name) * orderMul
       }
-      if (sortBy === 'price_asc') {
+      if (sortBy === 'price_asc' || sortBy === 'price') {
         const priceA = a.specs?.[0]?.price ?? 0
         const priceB = b.specs?.[0]?.price ?? 0
         return (priceA - priceB) * orderMul
@@ -1927,6 +1948,11 @@ export function POSPage() {
         const priceA = a.specs?.[0]?.price ?? 0
         const priceB = b.specs?.[0]?.price ?? 0
         return (priceB - priceA) * orderMul
+      }
+      if (sortBy === 'sales') {
+        const salesA = (a as any).salesCount || (a as any).soldCount || 0
+        const salesB = (b as any).salesCount || (b as any).soldCount || 0
+        return (salesB - salesA) * orderMul
       }
       if (sortBy === 'category') {
         const catA = a.category?.name || ''
@@ -2242,7 +2268,7 @@ export function POSPage() {
         setSelectedPrinterForSetup(printerList[0])
         return printerList
       } else {
-        setPrinterDetectError(t('pos_no_printers', '未检测到可用打印机'))
+        setPrinterDetectError(t('pos_no_printers', 'No available printers detected'))
         return []
       }
     } catch (err: any) {
@@ -2258,7 +2284,7 @@ export function POSPage() {
   const handleSetupReceiptPrinter = async () => {
     const printerToSave = (selectedPrinterForSetup || '').trim()
     if (!printerToSave) {
-      showToast(t('pos.pleaseSelectPrinter') || '请选择或输入打印机名称', 'warning')
+      showToast(t('pos.pleaseSelectPrinter', 'Please select a printer'), 'warning')
       return
     }
 
@@ -2313,10 +2339,10 @@ export function POSPage() {
       }
 
       setShowPrinterDetectModal(false)
-      showToast((t('pos.printerSetupSuccess') || '打印机已成功设置为') + ' ' + printerToSave, 'success')
+      showToast((t('pos.printerSetupSuccess', 'Printer set successfully to')) + ' ' + printerToSave, 'success')
     } catch (err: any) {
       console.error('[POS] handleSetupReceiptPrinter error:', err)
-      showToast((t('common.error') || '保存失败') + ': ' + (err?.message || ''), 'error')
+      showToast((t('pos.saveFailed', 'Save failed')) + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2324,7 +2350,7 @@ export function POSPage() {
   const handleSetupLabelPrinter = async () => {
     const printerToSave = (selectedPrinterForSetup || '').trim()
     if (!printerToSave) {
-      showToast(t('pos.pleaseSelectPrinter') || '请选择或输入打印机名称', 'warning')
+      showToast(t('pos.pleaseSelectPrinter', 'Please select a printer'), 'warning')
       return
     }
 
@@ -2375,10 +2401,10 @@ export function POSPage() {
         }
       }
 
-      showToast((t('pos.labelPrinterSetupSuccess', '已成功设为标签打印机') || '已成功设为标签打印机') + ' ' + printerToSave, 'success')
+      showToast((t('pos.labelPrinterSetupSuccess', 'Successfully set as label printer')) + ' ' + printerToSave, 'success')
     } catch (err: any) {
       console.error('[POS] handleSetupLabelPrinter error:', err)
-      showToast((t('common.error') || '保存失败') + ': ' + (err?.message || ''), 'error')
+      showToast((t('pos.saveFailed', 'Save failed')) + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2392,12 +2418,12 @@ export function POSPage() {
         cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
       })
       if (res?.success) {
-        showToast(t('pos.cashDrawerOpened', '钱箱已弹开'), 'success')
+        showToast(t('pos.cashDrawerOpened', 'Cash drawer opened successfully'), 'success')
       } else {
-        showToast((t('pos.cashDrawerFailed', '钱箱打开失败') || '钱箱打开失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+        showToast((t('pos.cashDrawerFailed', 'Failed to open cash drawer')) + (res?.error ? `: ${res.error}` : ''), 'error')
       }
     } catch (err: any) {
-      showToast('钱箱打开失败: ' + (err?.message || ''), 'error')
+      showToast(t('pos.cashDrawerFailed', 'Failed to open cash drawer') + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2408,29 +2434,31 @@ export function POSPage() {
       const res = await electronAPI?.sendPrintReceipt?.({
         orderNum: 'TEST-' + Date.now().toString().slice(-4),
         header: posReceipt.header || 'YOUME POS',
-        footer: posReceipt.footer || 'TEST PRINT / 测试打印',
+        footer: posReceipt.footer || 'TEST PRINT',
+        paperSize: receiptTemplate?.paperSize || posReceipt.paperSize || '80mm',
         printerName: targetName,
-        items: [{ productName: '测试商品 (Test Item)', specName: '标准杯', quantity: 1, unitPrice: 15000, addons: [] }],
+        items: [{ productName: 'Signature Boba Milk Tea', specName: 'Regular', quantity: 1, unitPrice: 15000, addons: [] }],
         subtotal: 15000,
         tax: 0,
         discount: 0,
         total: 15000,
         paymentMethod: 'Cash',
         paidAmount: 15000,
-        change: 0,
+        change: 0
       })
       if (res?.success) {
-        showToast((t('pos.testPrintSuccess', '测试打印已发送') || '测试打印已发送') + (targetName ? ` (${targetName})` : ''), 'success')
+        showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
       } else {
-        showToast((t('pos.printFailed', '打印失败') || '打印失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+        showToast((t('pos.printFailed', 'Failed to print receipt')) + (res?.error ? `: ${res.error}` : ''), 'error')
       }
     } catch (err: any) {
-      showToast('打印失败: ' + (err?.message || ''), 'error')
+      showToast(t('pos.printFailed', 'Failed to print receipt') + ': ' + (err?.message || ''), 'error')
     }
   }
 
   // 测试打印标签杯贴
   const handleTestLabelPrint = async () => {
+    const labelPrinter = hardwareSettings?.printers?.find((p: any) => p.type === 'label' && p.enabled)
     const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'label')
     try {
       const res = await electronAPI?.sendCupStickers?.({
@@ -2439,23 +2467,26 @@ export function POSPage() {
           orderNum: 'A001',
           cupIndex: 1,
           totalCups: 1,
-          productName: '招牌珍珠奶茶 (Brown Sugar Milk Tea)',
-          specName: '大杯 Large',
-          sugarLevelName: '50% 少糖',
-          iceLevelName: 'Less Ice 微冰',
-          addons: [{ name: '波霸 Boba' }, { name: '椰果 Jelly' }],
+          productName: 'Signature Boba Milk Tea',
+          specName: 'Large',
+          sugarLevelName: '50% Sugar',
+          iceLevelName: 'Less Ice',
+          addons: [{ name: 'Boba' }, { name: 'Jelly' }],
           storeName: storeInfo.storeName || 'YOUME',
-          channelName: '堂食 (Dine-in)'
+          channelName: 'Dine-in',
+          stickerWidth: labelPrinter?.stickerWidth || 40,
+          stickerHeight: labelPrinter?.stickerHeight || 30,
+          stickerGap: labelPrinter?.stickerGap || 2,
         }],
         isTspl: true
       })
       if (res?.success) {
-        showToast((t('pos.testLabelSuccess', '杯贴测试打印已发送') || '杯贴测试打印已发送') + (targetName ? ` (${targetName})` : ''), 'success')
+        showToast((t('pos.testLabelSuccess', 'Test label print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
       } else {
-        showToast((t('pos.printFailed', '打印失败') || '打印失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+        showToast((t('pos.labelPrintFailed', 'Failed to print cup label')) + (res?.error ? `: ${res.error}` : ''), 'error')
       }
     } catch (err: any) {
-      showToast('杯贴打印失败: ' + (err?.message || ''), 'error')
+      showToast(t('pos.labelPrintFailed', 'Failed to print cup label') + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2468,12 +2499,12 @@ export function POSPage() {
         cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
       })
       if (res?.success) {
-        showToast((t('pos.cashDrawerOpened', '钱箱测试已触发') || '钱箱测试已触发') + (targetName ? ` (${targetName})` : ''), 'success')
+        showToast((t('pos.cashDrawerOpened', 'Cash drawer test triggered')) + (targetName ? ` (${targetName})` : ''), 'success')
       } else {
-        showToast((t('pos.cashDrawerFailed', '钱箱弹开失败') || '钱箱弹开失败') + (res?.error ? `: ${res.error}` : ''), 'error')
+        showToast((t('pos.cashDrawerFailed', 'Failed to open cash drawer')) + (res?.error ? `: ${res.error}` : ''), 'error')
       }
     } catch (err: any) {
-      showToast('钱箱弹开失败: ' + (err?.message || ''), 'error')
+      showToast(t('pos.cashDrawerFailed', 'Failed to open cash drawer') + ': ' + (err?.message || ''), 'error')
     }
   }
 
@@ -2720,9 +2751,11 @@ export function POSPage() {
       setSelectedCoupon(null)
       setMemberCoupons(prev => prev.filter(c => c.id !== selectedCoupon?.id))
 
-      // 现金支付：自动开钱箱
+      // 现金支付：开钱箱联动控制
+      // 若开启了自动打印小票 (posReceipt.autoPrint !== false)，开钱箱指令直接内嵌在小票打印作业首部原子发送，杜绝并发调用造成的端口争用与双击脉冲；
+      // 仅当未开启自动打印小票时，才单独下发独立的 openCashDrawer 指令。
       const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
-      if (shouldOpenDrawer) {
+      if (shouldOpenDrawer && posReceipt.autoPrint === false) {
         const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
         const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
         try {
@@ -2745,7 +2778,7 @@ export function POSPage() {
           openCashDrawer: shouldOpenDrawer
         })
         if (!printResult) {
-          showToast(t('pos.printFailed') || '小票打印失败', 'error')
+          showToast(t('pos.printFailed', 'Failed to print receipt'), 'error')
         }
       }
       // 打印厨房单
@@ -2825,9 +2858,15 @@ export function POSPage() {
     try {
       const result = await electronAPI?.sendPrintReceipt({
         orderNum,
-        header: posReceipt.header,
-        footer: posReceipt.footer,
-        paperSize: posReceipt.paperSize || '80mm',
+        header: (() => {
+          const tplHeader = receiptTemplate?.blocks?.find((b: any) => b.type === 'header' && b.enabled !== false)?.config?.text
+          return tplHeader || posReceipt.header || storeInfo.storeName || 'YOUME'
+        })(),
+        footer: (() => {
+          const tplFooter = receiptTemplate?.blocks?.find((b: any) => b.type === 'footer' && b.enabled !== false)?.config?.footerText
+          return tplFooter || posReceipt.footer || 'Thank you!'
+        })(),
+        paperSize: receiptTemplate?.paperSize || posReceipt.paperSize || '80mm',
         printCopies: posReceipt.printCopies || 1,
         storeName: storeInfo.storeName || posReceipt.header || 'YOUME',
         storePhone: posReceipt.storePhone || storeInfo.phone || '',
@@ -2848,6 +2887,8 @@ export function POSPage() {
         printerHost,
         printerPort,
         openCashDrawer: orderData?.openCashDrawer ?? false,
+        cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100,
+        itemDetailFormat: posReceipt.itemDetailFormat || 'standard',
         items: cart.map(item => ({
           productName: item.productName,
           specName: item.specName,
@@ -2865,37 +2906,7 @@ export function POSPage() {
         paidAmount: paidAmount ? parseInt(paidAmount) : 0,
         change,
         memberName: member?.name,
-        pointsRedeemed: pointsToRedeem,
-        // Pass template blocks if loaded, otherwise undefined (electron uses legacy)
-        ...(receiptTemplate?.blocks ? {
-          blocks: receiptTemplate.blocks,
-          data: {
-            header: posReceipt.header,
-            footer: posReceipt.footer,
-            storeName: storeInfo.storeName || 'YOUME',
-            storePhone: posReceipt.storePhone || storeInfo.phone || '',
-            storeAddress: posReceipt.storeAddress || storeInfo.address || '',
-            items: cart.map(item => ({
-              productName: item.productName,
-              specName: item.specName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              sugarLevelName: item.sugarLevelName,
-              iceLevelName: item.iceLevelName,
-              addons: item.addons
-            })),
-            subtotal,
-            tax,
-            total,
-            discount: discountAmount,
-            paymentMethod: t(paymentMethods.find(m => m.id === paymentMethod)?.labelKey || 'pos.paymentCash') || paymentMethod,
-            cashierName: user?.staff?.name || (user as any)?.name || user?.phone || '',
-            customerName: member?.name || '',
-            orderDate: undefined,
-            paidAmount: paidAmount ? parseInt(paidAmount) : 0,
-            change,
-          }
-        } : {})
+        pointsRedeemed: pointsToRedeem
       })
       return result?.success ?? false
     } catch (err) {
@@ -2957,7 +2968,10 @@ export function POSPage() {
           iceLevelName: item.iceLevelName || '',
           addons: item.addons || [],
           storeName: storeInfo.storeName || 'YOUME',
-          channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : '')
+          channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : ''),
+          stickerWidth: labelPrinter?.stickerWidth || 40,
+          stickerHeight: labelPrinter?.stickerHeight || 30,
+          stickerGap: labelPrinter?.stickerGap || 2,
         })
         cupIndex++
       }
@@ -2983,47 +2997,55 @@ export function POSPage() {
       </div>
     )
   }
-  return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header + Toolbar 合并 - 品牌底色 */}
-      <header className="bg-primary px-3 py-2 flex items-center justify-between gap-2">
-        {/* 左侧：店铺信息 */}
-        <div className="flex items-center gap-3">
-          <img
-            src={storeInfo.storeLogo || '/youme-logo-white.png'}
-            alt={storeInfo.storeName || 'YOUME'}
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = '/youme-logo-white.png'
-            }}
-            className="h-8 max-w-[120px] object-contain rounded"
-          />
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-white font-bold text-sm">{storeInfo.storeName || 'YOUME'}</span>
-              {appVersion && <span className="text-white/80 text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono">v{appVersion}</span>}
+    const fontSizeStyle = displaySettings.fontSize === 'small'
+      ? { fontSize: '0.875rem' }
+      : displaySettings.fontSize === 'large'
+      ? { fontSize: '1.0625rem' }
+      : undefined
+
+    return (
+      <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
+        {/* Header + Toolbar 合并 - 品牌底色 */}
+        <header className="bg-primary px-3 py-2 flex items-center justify-between gap-2">
+          {/* 左侧：店铺信息 */}
+          <div className="flex items-center gap-3">
+            <img
+              src={storeInfo.storeLogo || '/youme-logo-white.png'}
+              alt={storeInfo.storeName || 'YOUME'}
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/youme-logo-white.png'
+              }}
+              className="h-8 max-w-[120px] object-contain rounded"
+            />
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="text-white font-bold text-sm">{storeInfo.storeName || 'YOUME'}</span>
+                {appVersion && <span className="text-white/80 text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono">v{appVersion}</span>}
+              </div>
+              <span className="text-white/70 text-xs">{user?.staff?.name || t('pos.cashier')}</span>
             </div>
-            <span className="text-white/70 text-xs">{user?.staff?.name || t('pos.cashier')}</span>
+            {selectedChannel && (
+              <span
+                onClick={() => setShowChannelModal(true)}
+                className="px-3 py-1 text-white rounded-xl text-sm font-medium cursor-pointer hover:bg-white/20 transition-colors"
+                style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
+              >
+                {selectedChannel.icon} {getChannelDisplayName(selectedChannel)}
+                {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
+              </span>
+            )}
+            {displaySettings.showOfflineIndicator !== false && (
+              <span className={`px-3 py-1 rounded-xl text-sm font-medium ${
+                connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
+                'bg-red-500 text-white animate-pulse'
+              }`}>
+                {connectionStatus === 'connected' ? t('pos.online') :
+                 connectionStatus === 'connecting' ? t('pos.connecting') :
+                 t('pos.offline')}
+              </span>
+            )}
           </div>
-          {selectedChannel && (
-            <span
-              onClick={() => setShowChannelModal(true)}
-              className="px-3 py-1 text-white rounded-xl text-sm font-medium cursor-pointer hover:bg-white/20 transition-colors"
-              style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
-            >
-              {selectedChannel.icon} {getChannelDisplayName(selectedChannel)}
-              {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
-            </span>
-          )}
-          <span className={`px-3 py-1 rounded-xl text-sm font-medium ${
-            connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
-            connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
-            'bg-red-500 text-white animate-pulse'
-          }`}>
-            {connectionStatus === 'connected' ? t('pos.online') :
-             connectionStatus === 'connecting' ? t('pos.connecting') :
-             t('pos.offline')}
-          </span>
-        </div>
 
         {/* 中间：语言切换 */}
         <div className="flex items-center gap-2">
@@ -4308,6 +4330,7 @@ export function POSPage() {
                               actualCash,
                               totalOrders: (shiftData?.dineInCount || 0) + (shiftData?.gofoodCount || 0) + (shiftData?.grabCount || 0) + (shiftData?.shopeeCount || 0),
                               totalCups: shiftData?.customerCount || 0,
+                              summaryItems: shiftSettings.summaryItems || {},
                             })
                           } catch (reportErr) {
                             console.warn('[Shift] Failed to print shift report:', reportErr)
@@ -4460,9 +4483,9 @@ export function POSPage() {
             </div>
             <div className="p-4">
               {ordersLoading ? (
-                <p className="text-gray-500 text-center py-8">Loading...</p>
+                <p className="text-gray-500 text-center py-8">{t('common.loading', 'Loading...')}</p>
               ) : orders.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No orders found</p>
+                <p className="text-gray-500 text-center py-8">{t('pos.noOrdersFound', 'No orders found')}</p>
               ) : (
                 <div className="space-y-2">
                   {orders.map(order => (

@@ -126,6 +126,8 @@ export const posApi = {
   // Receipt Template
   getReceiptTemplate: (templateId: string) =>
     api.get('/receipt-templates/' + templateId),
+  getDefaultReceiptTemplate: (storeId?: string) =>
+    api.get('/receipt-templates/default', { params: { storeId } }),
 
   // POS Action Log
   logPOSAction: (data: {

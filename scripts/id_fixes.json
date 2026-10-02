@@ -1,0 +1,13 @@
+{
+  "staff.tierMultipliersHint": "Pengganda poin untuk setiap level member, 1 berarti tanpa pengganda",
+  "staff.features.note": "Tip: Beberapa fitur memerlukan muat ulang halaman agar berlaku. Data akan tetap disimpan saat dinonaktifkan.",
+  "training.labelZh": "Bahasa Mandarin",
+  "leave.kanbanTitle": "Papan Kanban - Persetujuan Cuti",
+  "kds.overdueThresholdHint": "Pesanan yang melebihi batas waktu ini akan menampilkan peringatan",
+  "kds.autoRefresh": "Interval Segarkan Otomatis (detik)",
+  "kds.enableSoundHint": "Putar suara notifikasi saat ada pesanan baru",
+  "kds.showPlatformBadgeHint": "Tampilkan lencana platform pesanan pengiriman",
+  "kds.showTimerHint": "Tampilkan waktu tunggu pesanan",
+  "settings.storeCodePlaceholder": "Contoh: BT001",
+  "finance.taxableRatioHint": "Persentase omzet yang digunakan untuk pelaporan pajak (0-100%)"
+}

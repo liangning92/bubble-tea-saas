@@ -28,6 +28,7 @@ const receiptBlockSchema = z.object({
 // Template content schema
 const templateContentSchema = z.object({
   version: z.number().optional().default(1),
+  paperSize: z.enum(['58mm', '80mm']).optional(),
   blocks: z.array(receiptBlockSchema)
 })
 
@@ -162,6 +163,12 @@ router.post('/', authenticate, validateBody(createReceiptTemplateSchema), async 
       data: { storeId, name, content, isDefault: isDefault ?? false }
     })
 
+    if (template.isDefault) {
+      let paperSize: string | undefined
+      try { paperSize = JSON.parse(content).paperSize } catch {}
+      await syncTemplateIdToPosReceipt(storeId, template.id, paperSize)
+    }
+
     res.json({
       code: 200,
       data: template,
@@ -219,6 +226,13 @@ router.put('/:id', authenticate, validateBody(updateReceiptTemplateSchema), asyn
       }
     })
 
+    if (template.isDefault) {
+      let paperSize: string | undefined
+      const effectiveContent = content || existing.content
+      try { paperSize = JSON.parse(effectiveContent).paperSize } catch {}
+      await syncTemplateIdToPosReceipt(existing.storeId, template.id, paperSize)
+    }
+
     res.json({
       code: 200,
       data: template,
@@ -229,6 +243,31 @@ router.put('/:id', authenticate, validateBody(updateReceiptTemplateSchema), asyn
     res.status(500).json({ code: 500, message: 'Failed to update template' })
   }
 })
+
+async function syncTemplateIdToPosReceipt(storeId: string, templateId: string, paperSize?: string) {
+  try {
+    const config = await prisma.config.findFirst({
+      where: {
+        storeId,
+        key: 'posReceipt'
+      }
+    })
+    if (config) {
+      let val: any = {}
+      try { val = JSON.parse(config.value) } catch {}
+      val.templateId = templateId
+      if (paperSize === '58mm' || paperSize === '80mm') {
+        val.paperSize = paperSize
+      }
+      await prisma.config.update({
+        where: { id: config.id },
+        data: { value: JSON.stringify(val) }
+      })
+    }
+  } catch (err) {
+    console.warn('[ReceiptTemplate] Failed to sync templateId to posReceipt:', err)
+  }
+}
 
 // PUT /api/receipt-templates/:id/set-default
 router.put('/:id/set-default', authenticate, async (req: AuthRequest, res) => {
@@ -252,6 +291,11 @@ router.put('/:id/set-default', authenticate, async (req: AuthRequest, res) => {
         data: { isDefault: true }
       })
     ])
+
+    // Sync templateId and paperSize to posReceipt config
+    let paperSize: string | undefined
+    try { paperSize = JSON.parse(existing.content).paperSize } catch {}
+    await syncTemplateIdToPosReceipt(existing.storeId, id, paperSize)
 
     res.json({
       code: 200,

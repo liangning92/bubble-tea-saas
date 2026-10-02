@@ -10,6 +10,7 @@ const router = Router()
 // Validation schemas
 const createProductSchema = z.object({
   storeId: z.string(),
+  code: z.string().optional(),
   name: z.string().min(1),
   description: z.string().optional(),
   categoryId: z.string(),
@@ -17,8 +18,11 @@ const createProductSchema = z.object({
   status: z.string().optional(),
   tags: z.array(z.string()).optional(),
   specs: z.array(z.object({
+    id: z.string().optional(),
     name: z.string(),
-    price: z.number().int().min(0)
+    price: z.number().int().min(0),
+    priceAdjustment: z.number().optional(),
+    isDefault: z.boolean().optional()
   })).optional(),
   addons: z.array(z.object({
     addonId: z.string(),

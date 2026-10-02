@@ -7,7 +7,7 @@ export function SalaryIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'salary', label: t('staff.salary'), path: '/staff/salary/salary', icon: Wallet },
+    { key: 'salary', label: t('staff.salaryTab', '工资'), path: '/staff/salary/salary', icon: Wallet },
     { key: 'reimbursement', label: t('nav.reimbursement'), path: '/staff/salary/reimbursement', icon: Receipt },
     { key: 'deposit', label: t('staff.deposit'), path: '/staff/salary/deposit', icon: Coins },
   ]

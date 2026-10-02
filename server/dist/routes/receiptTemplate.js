@@ -32,6 +32,7 @@ const receiptBlockSchema = zod_1.z.object({
 // Template content schema
 const templateContentSchema = zod_1.z.object({
     version: zod_1.z.number().optional().default(1),
+    paperSize: zod_1.z.enum(['58mm', '80mm']).optional(),
     blocks: zod_1.z.array(receiptBlockSchema)
 });
 // Receipt template schema
@@ -151,6 +152,14 @@ router.post('/', auth_1.authenticate, (0, validation_1.validateBody)(createRecei
         const template = await database_1.default.receiptTemplate.create({
             data: { storeId, name, content, isDefault: isDefault ?? false }
         });
+        if (template.isDefault) {
+            let paperSize;
+            try {
+                paperSize = JSON.parse(content).paperSize;
+            }
+            catch { }
+            await syncTemplateIdToPosReceipt(storeId, template.id, paperSize);
+        }
         res.json({
             code: 200,
             data: template,
@@ -202,6 +211,15 @@ router.put('/:id', auth_1.authenticate, (0, validation_1.validateBody)(updateRec
                 ...(isDefault !== undefined && { isDefault })
             }
         });
+        if (template.isDefault) {
+            let paperSize;
+            const effectiveContent = content || existing.content;
+            try {
+                paperSize = JSON.parse(effectiveContent).paperSize;
+            }
+            catch { }
+            await syncTemplateIdToPosReceipt(existing.storeId, template.id, paperSize);
+        }
         res.json({
             code: 200,
             data: template,
@@ -213,6 +231,34 @@ router.put('/:id', auth_1.authenticate, (0, validation_1.validateBody)(updateRec
         res.status(500).json({ code: 500, message: 'Failed to update template' });
     }
 });
+async function syncTemplateIdToPosReceipt(storeId, templateId, paperSize) {
+    try {
+        const config = await database_1.default.config.findFirst({
+            where: {
+                storeId,
+                key: 'posReceipt'
+            }
+        });
+        if (config) {
+            let val = {};
+            try {
+                val = JSON.parse(config.value);
+            }
+            catch { }
+            val.templateId = templateId;
+            if (paperSize === '58mm' || paperSize === '80mm') {
+                val.paperSize = paperSize;
+            }
+            await database_1.default.config.update({
+                where: { id: config.id },
+                data: { value: JSON.stringify(val) }
+            });
+        }
+    }
+    catch (err) {
+        console.warn('[ReceiptTemplate] Failed to sync templateId to posReceipt:', err);
+    }
+}
 // PUT /api/receipt-templates/:id/set-default
 router.put('/:id/set-default', auth_1.authenticate, async (req, res) => {
     try {
@@ -233,6 +279,13 @@ router.put('/:id/set-default', auth_1.authenticate, async (req, res) => {
                 data: { isDefault: true }
             })
         ]);
+        // Sync templateId and paperSize to posReceipt config
+        let paperSize;
+        try {
+            paperSize = JSON.parse(existing.content).paperSize;
+        }
+        catch { }
+        await syncTemplateIdToPosReceipt(existing.storeId, id, paperSize);
         res.json({
             code: 200,
             data: { id, isDefault: true },

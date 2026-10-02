@@ -19,7 +19,7 @@ export function ProductListPage() {
   const [categoryForm, setCategoryForm] = useState({ name: '' })
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any>(null)
-  const [editForm, setEditForm] = useState({ name: '', categoryId: '', price: '', description: '', status: 'active' })
+  const [editForm, setEditForm] = useState({ code: '', name: '', categoryId: '', price: '', description: '', status: 'active' })
 
   const createProduct = useMutation({
     mutationFn: (data: any) => productApi.create(data),
@@ -183,6 +183,7 @@ export function ProductListPage() {
   const openEditModal = (product: any) => {
     setEditingProduct(product)
     setEditForm({
+      code: product.code || '',
       name: product.name,
       categoryId: product.categoryId || '',
       price: product.specs?.[0]?.price || '',
@@ -194,7 +195,7 @@ export function ProductListPage() {
 
   const openAddModal = () => {
     setEditingProduct(null)
-    setEditForm({ name: '', categoryId: '', price: '', description: '', status: 'active' })
+    setEditForm({ code: '', name: '', categoryId: '', price: '', description: '', status: 'active' })
     setShowEditModal(true)
   }
 
@@ -207,11 +208,19 @@ export function ProductListPage() {
       description: editForm.description,
       status: editForm.status
     }
+    if (editForm.code?.trim()) {
+      data.code = editForm.code.trim().toUpperCase()
+    }
     if (editForm.categoryId) {
       data.categoryId = editForm.categoryId
     }
     if (price > 0) {
-      data.specs = [{ name: 'Default', price }]
+      const existingSpec = editingProduct?.specs?.[0]
+      data.specs = [{
+        id: existingSpec?.id,
+        name: existingSpec?.name || 'Default',
+        price
+      }]
     }
 
     if (editingProduct) {
@@ -471,15 +480,27 @@ export function ProductListPage() {
               </button>
             </div>
             <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('products.name') } *</label>
-                <input
-                  type="text"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="input w-full"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">{t('products.name')} *</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="input w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">{t('products.code')}</label>
+                  <input
+                    type="text"
+                    value={editForm.code}
+                    onChange={(e) => setEditForm({ ...editForm, code: e.target.value.toUpperCase() })}
+                    className="input w-full"
+                    placeholder={editingProduct ? '' : (t('products.codePlaceholder') || '选填，留空自动生成')}
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">{t('products.category') }</label>

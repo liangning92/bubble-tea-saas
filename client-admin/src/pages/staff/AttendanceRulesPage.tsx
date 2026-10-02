@@ -230,25 +230,25 @@ export function AttendanceRulesPage() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.lateDeduction')}</span>
                 <span className="font-medium">
-                  {rule.lateDeductionType === 'none' ? t('staff.attendanceRules.lateDeductionNone') :
+                  {rule.lateDeductionType === 'none' ? t('attendanceRules.lateDeductionNone') :
                    rule.lateDeductionType === 'fixed' ? formatCurrency(rule.lateDeductionFixed || 0) + ' /time' :
-                   t('staff.attendanceRules.lateDeductionDaily')}
+                   t('attendanceRules.lateDeductionDaily')}
                 </span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.absenceDeduction')}</span>
                 <span className="font-medium">
-                  {rule.absenceDeductionType === 'none' ? t('staff.attendanceRules.lateDeductionNone') :
+                  {rule.absenceDeductionType === 'none' ? t('attendanceRules.lateDeductionNone') :
                    rule.absenceDeductionType === 'fixed' ? formatCurrency(rule.absenceDeductionFixed || 0) :
-                   t('staff.attendanceRules.lateDeductionDaily')}
+                   t('attendanceRules.lateDeductionDaily')}
                 </span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.sickLeaveDeduction')}</span>
                 <span className="font-medium">
-                  {rule.sickLeaveDeductionType === 'none' ? t('staff.attendanceRules.lateDeductionNone') :
+                  {rule.sickLeaveDeductionType === 'none' ? t('attendanceRules.lateDeductionNone') :
                    rule.sickLeaveDeductionType === 'fixed' ? formatCurrency(rule.sickLeaveDeductionFixed || 0) :
-                   t('staff.attendanceRules.lateDeductionDaily')}
+                   t('attendanceRules.lateDeductionDaily')}
                 </span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
@@ -329,9 +329,9 @@ export function AttendanceRulesPage() {
                   onChange={e => setFormData({ ...formData, lateDeductionType: e.target.value })}
                   className="input mb-2"
                 >
-                  <option value="none">{t('staff.attendanceRules.lateDeductionNone')}</option>
-                  <option value="fixed">{t('staff.attendanceRules.lateDeductionFixed')}</option>
-                  <option value="daily_rate">{t('staff.attendanceRules.lateDeductionDaily')}</option>
+                  <option value="none">{t('attendanceRules.lateDeductionNone')}</option>
+                  <option value="fixed">{t('attendanceRules.lateDeductionFixed')}</option>
+                  <option value="daily_rate">{t('attendanceRules.lateDeductionDaily')}</option>
                 </select>
                 {formData.lateDeductionType === 'fixed' && (
                   <input
@@ -351,9 +351,9 @@ export function AttendanceRulesPage() {
                   onChange={e => setFormData({ ...formData, absenceDeductionType: e.target.value })}
                   className="input mb-2"
                 >
-                  <option value="none">{t('staff.attendanceRules.lateDeductionNone')}</option>
-                  <option value="fixed">{t('staff.attendanceRules.lateDeductionFixed')}</option>
-                  <option value="daily_rate">{t('staff.attendanceRules.lateDeductionDaily')}</option>
+                  <option value="none">{t('attendanceRules.lateDeductionNone')}</option>
+                  <option value="fixed">{t('attendanceRules.lateDeductionFixed')}</option>
+                  <option value="daily_rate">{t('attendanceRules.lateDeductionDaily')}</option>
                 </select>
                 {formData.absenceDeductionType === 'fixed' && (
                   <input
@@ -373,9 +373,9 @@ export function AttendanceRulesPage() {
                   onChange={e => setFormData({ ...formData, sickLeaveDeductionType: e.target.value })}
                   className="input mb-2"
                 >
-                  <option value="none">{t('staff.attendanceRules.lateDeductionNone')}</option>
-                  <option value="fixed">{t('staff.attendanceRules.lateDeductionFixed')}</option>
-                  <option value="daily_rate">{t('staff.attendanceRules.lateDeductionDaily')}</option>
+                  <option value="none">{t('attendanceRules.lateDeductionNone')}</option>
+                  <option value="fixed">{t('attendanceRules.lateDeductionFixed')}</option>
+                  <option value="daily_rate">{t('attendanceRules.lateDeductionDaily')}</option>
                 </select>
                 {formData.sickLeaveDeductionType === 'fixed' && (
                   <input

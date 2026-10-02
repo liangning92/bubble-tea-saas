@@ -18,6 +18,7 @@ export function ProductFormPage() {
   const [showChannelSection, setShowChannelSection] = useState(false)
 
   const [form, setForm] = useState({
+    code: '',
     name: '',
     categoryId: '',
     description: '',
@@ -64,12 +65,13 @@ export function ProductFormPage() {
     if (productData?.data) {
       const p = productData.data.data
       setForm({
+        code: p.code || '',
         name: p.name,
         categoryId: p.categoryId,
         description: p.description || '',
         image: p.image || '',
         status: p.status,
-        specs: p.specs?.length > 0 ? p.specs.filter((s: any) => s.name).map((s: any) => ({ name: s.name, price: s.price || 0 })) : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
+        specs: p.specs?.length > 0 ? p.specs.filter((s: any) => s.name).map((s: any) => ({ id: s.id, name: s.name, price: s.price || 0 })) : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
         addonIds: p.addons?.map((pa: any) => pa.addonId) || [],
         bomItems: p.bomItems?.map((b: any) => ({
           inventoryId: b.inventoryId,
@@ -149,14 +151,16 @@ export function ProductFormPage() {
         enabled: cp.enabled
       }))
 
-    const data = {
+    const data: any = {
       name: form.name,
       categoryId: form.categoryId,
       description: form.description,
       image: uploadedImages.length > 0 ? uploadedImages[0].url : '',
       status: form.status,
-      specs: form.specs.map((s, i) => ({
-        ...s,
+      specs: form.specs.map((s: any, i: number) => ({
+        id: s.id,
+        name: s.name,
+        price: s.price,
         priceAdjustment: 0,
         isDefault: i === 0
       })),
@@ -168,6 +172,9 @@ export function ProductFormPage() {
           quantity: item.quantity
         })),
       channelPrices
+    }
+    if (form.code?.trim()) {
+      data.code = form.code.trim().toUpperCase()
     }
     if (isEdit) {
       updateMutation.mutate(data)
@@ -322,17 +329,31 @@ export function ProductFormPage() {
 
       <div className="card max-w-3xl">
         <form onSubmit={handleSubmit} className="space-y-6">
-         <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('products.name')}
-            </label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="input"
-              required
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('products.name')} *
+              </label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="input"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('products.code')}
+              </label>
+              <input
+                type="text"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                className="input"
+                placeholder={id ? '' : (t('products.codePlaceholder') || '选填，留空自动生成')}
+              />
+            </div>
           </div>
 
           <div>

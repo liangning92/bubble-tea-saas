@@ -45,6 +45,7 @@ exports.productRouter = router;
 // Validation schemas
 const createProductSchema = zod_1.z.object({
     storeId: zod_1.z.string(),
+    code: zod_1.z.string().optional(),
     name: zod_1.z.string().min(1),
     description: zod_1.z.string().optional(),
     categoryId: zod_1.z.string(),
@@ -52,8 +53,11 @@ const createProductSchema = zod_1.z.object({
     status: zod_1.z.string().optional(),
     tags: zod_1.z.array(zod_1.z.string()).optional(),
     specs: zod_1.z.array(zod_1.z.object({
+        id: zod_1.z.string().optional(),
         name: zod_1.z.string(),
-        price: zod_1.z.number().int().min(0)
+        price: zod_1.z.number().int().min(0),
+        priceAdjustment: zod_1.z.number().optional(),
+        isDefault: zod_1.z.boolean().optional()
     })).optional(),
     addons: zod_1.z.array(zod_1.z.object({
         addonId: zod_1.z.string(),

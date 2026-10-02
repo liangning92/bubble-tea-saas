@@ -72,7 +72,7 @@ function transformProductForApi(product) {
 }
 // Generate product code: based on category prefix
 // Format: [CATEGORY_CODE]-[SEQUENCE]
-// Example: MILK-001, TEA-001, JUI-001
+// Example: ES-001, TB-001, TS-001, KOP-001
 async function generateProductCode(storeId, categoryId) {
     // Get category info
     const category = await database_1.default.category.findFirst({
@@ -84,24 +84,35 @@ async function generateProductCode(storeId, categoryId) {
     if (!category?.code && category?.name) {
         categoryCode = generateCategoryCode(category.name);
     }
-    // Count products in this category
-    const count = await database_1.default.product.count({
-        where: { storeId, categoryId }
+    const prefix = categoryCode.toUpperCase();
+    // Find all existing products in this category to calculate next sequence
+    const products = await database_1.default.product.findMany({
+        where: { storeId, categoryId },
+        select: { code: true }
     });
-    // Generate: CATEGORY-001, CATEGORY-002, ...
-    return `${categoryCode.toUpperCase()}-${String(count + 1).padStart(3, '0')}`;
+    let maxNum = 0;
+    const regex = new RegExp(`^${prefix}-(\\d+)$`, 'i');
+    for (const p of products) {
+        const match = (p.code || '').match(regex);
+        if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxNum)
+                maxNum = num;
+        }
+    }
+    const nextNum = maxNum > 0 ? maxNum + 1 : products.length + 1;
+    return `${prefix}-${String(nextNum).padStart(3, '0')}`;
 }
-// Generate 3-letter code from category name
+// Generate 2-3 letter code from category name
 function generateCategoryCode(name) {
-    // Remove common words
-    const cleanName = name
+    const cleanName = (name || '')
         .replace(/\s+(茶|奶茶|饮料|饮品|冰沙|奶茶店|泡泡茶)\s*/gi, '')
-        .replace(/[奶茶饮料冰沙]s*$/gi, '')
+        .replace(/[奶茶饮料冰沙]\s*$/gi, '')
         .trim();
     if (cleanName.length === 0)
         return 'PRD';
-    // Take first letter of each significant word, or first 3 letters
-    const words = cleanName.split(/\s+/);
+    // If two or more words (e.g. Teh Buah -> TB, Teh Susu -> TS)
+    const words = cleanName.split(/\s+/).filter(Boolean);
     if (words.length >= 2) {
         return words.slice(0, 3).map(w => w[0].toUpperCase()).join('');
     }
@@ -262,8 +273,19 @@ async function getProductByBarcode(barcode, storeId) {
 // Create product with specs, addons, and BOM
 async function createProduct(data) {
     return database_1.default.$transaction(async (tx) => {
-        // Generate product code based on category
-        const code = await generateProductCode(data.storeId, data.categoryId);
+        // Generate product code based on category or use manual code
+        let code = (data.code || '').trim();
+        if (!code) {
+            code = await generateProductCode(data.storeId, data.categoryId);
+        }
+        else {
+            const existing = await tx.product.findFirst({
+                where: { storeId: data.storeId, code }
+            });
+            if (existing) {
+                throw new Error(`Product code "${code}" is already in use`);
+            }
+        }
         // Create product
         const product = await tx.product.create({
             data: {
@@ -347,22 +369,77 @@ async function updateProduct(productId, data) {
             updateData.status = data.status;
         if (data.tags !== undefined)
             updateData.tags = JSON.stringify(data.tags);
+        if (data.code !== undefined && data.code.trim()) {
+            const newCode = data.code.trim();
+            const existingProduct = await tx.product.findUnique({
+                where: { id: productId }
+            });
+            if (existingProduct && existingProduct.code !== newCode) {
+                const duplicate = await tx.product.findFirst({
+                    where: { storeId: existingProduct.storeId, code: newCode, id: { not: productId } }
+                });
+                if (duplicate) {
+                    throw new Error(`Product code "${newCode}" is already in use`);
+                }
+                updateData.code = newCode;
+            }
+        }
         const product = await tx.product.update({
             where: { id: productId },
             data: updateData
         });
-        // Update specs if provided
+        // Update specs if provided (update in-place to avoid breaking OrderItem foreign keys)
         if (data.specs) {
-            await tx.spec.deleteMany({ where: { productId } });
-            await tx.spec.createMany({
-                data: data.specs.map((spec, index) => ({
-                    productId,
-                    name: String(spec.name),
-                    price: Math.floor(Number(spec.price)),
-                    priceAdjustment: 0,
-                    isDefault: index === 0
-                }))
+            const existingSpecs = await tx.spec.findMany({
+                where: { productId },
+                orderBy: { createdAt: 'asc' }
             });
+            const usedSpecIds = new Set();
+            for (let index = 0; index < data.specs.length; index++) {
+                const specInput = data.specs[index];
+                let matchedSpec;
+                if (specInput.id) {
+                    matchedSpec = existingSpecs.find(s => s.id === specInput.id);
+                }
+                else if (index < existingSpecs.length && !usedSpecIds.has(existingSpecs[index].id)) {
+                    matchedSpec = existingSpecs[index];
+                }
+                if (matchedSpec) {
+                    usedSpecIds.add(matchedSpec.id);
+                    await tx.spec.update({
+                        where: { id: matchedSpec.id },
+                        data: {
+                            name: String(specInput.name),
+                            price: Math.floor(Number(specInput.price)),
+                            priceAdjustment: specInput.priceAdjustment ?? 0,
+                            isDefault: specInput.isDefault !== undefined ? specInput.isDefault : index === 0
+                        }
+                    });
+                }
+                else {
+                    const newSpec = await tx.spec.create({
+                        data: {
+                            productId,
+                            name: String(specInput.name),
+                            price: Math.floor(Number(specInput.price)),
+                            priceAdjustment: specInput.priceAdjustment ?? 0,
+                            isDefault: specInput.isDefault !== undefined ? specInput.isDefault : index === 0
+                        }
+                    });
+                    usedSpecIds.add(newSpec.id);
+                }
+            }
+            // Safely delete removed specs only if they have no order history
+            const remainingSpecs = existingSpecs.filter(s => !usedSpecIds.has(s.id));
+            for (const remaining of remainingSpecs) {
+                const orderCount = await tx.orderItem.count({
+                    where: { specId: remaining.id }
+                });
+                if (orderCount === 0) {
+                    await tx.productAddon.deleteMany({ where: { specId: remaining.id } });
+                    await tx.spec.delete({ where: { id: remaining.id } });
+                }
+            }
         }
         // Update addons if provided (check for undefined, not just truthiness)
         if (data.addons !== undefined) {
