@@ -12,6 +12,7 @@ import { AnnouncementBanner } from '../components/AnnouncementBanner'
 import { ChannelSelectModal } from '../components/ChannelSelectModal'
 import { AttendanceQR } from '../components/ui/AttendanceQR'
 import { UpdateNotification } from '../components/UpdateNotification'
+import { WindowControls } from '../components/WindowControls'
 import { YOUME_LOGO_WHITE } from '../assets/logo'
 import { useHardwareManager } from '../hooks/useHardwareManager'
 import { useCartStore, useProductStore, useOrderStore, useUiStore } from '../stores'
@@ -1069,33 +1070,40 @@ export function POSPage() {
             showCustomerName: receiptConfig.showCustomerName ?? prev.showCustomerName,
             autoPrint: receiptConfig.autoPrint ?? prev.autoPrint,
           }))
-
-          // 始终确保加载小票模板（优先根据templateId，若无则加载默认模板）
-          const loadTemplate = async () => {
-            try {
-              let res: any = null
-              if (receiptConfig?.templateId) {
-                res = await posApi.getReceiptTemplate(receiptConfig.templateId).catch(() => null)
-              }
-              if (!res?.data?.data?.content && storeId) {
-                res = await posApi.getDefaultReceiptTemplate(storeId).catch(() => null)
-              }
-              if (res?.data?.data?.content) {
-                const template = JSON.parse(res.data.data.content)
-                setReceiptTemplate(template)
-                if (template.paperSize === '58mm' || template.paperSize === '80mm') {
-                  setPosReceipt(prev => ({ ...prev, paperSize: template.paperSize }))
-                }
-                try {
-                  localStorage.setItem('pos_receipt_template', JSON.stringify(template))
-                } catch {}
-              }
-            } catch (e) {
-              console.error('Failed to load/parse receipt template:', e)
-            }
-          }
-          loadTemplate()
         }
+
+        // 始终确保加载小票模板（优先根据templateId，若无则加载默认模板，再无则拉取第一份模板）
+        const loadTemplate = async () => {
+          try {
+            let res: any = null
+            if (receiptConfig?.templateId) {
+              res = await posApi.getReceiptTemplate(receiptConfig.templateId).catch(() => null)
+            }
+            if (!res?.data?.data?.content && storeId) {
+              res = await posApi.getDefaultReceiptTemplate(storeId).catch(() => null)
+            }
+            if (!res?.data?.data?.content && storeId) {
+              const listRes = await posApi.getReceiptTemplates(storeId).catch(() => null)
+              const list = listRes?.data?.data || []
+              if (list.length > 0 && list[0]?.content) {
+                res = { data: { data: list[0] } }
+              }
+            }
+            if (res?.data?.data?.content) {
+              const template = JSON.parse(res.data.data.content)
+              setReceiptTemplate(template)
+              if (template.paperSize === '58mm' || template.paperSize === '80mm') {
+                setPosReceipt(prev => ({ ...prev, paperSize: template.paperSize }))
+              }
+              try {
+                localStorage.setItem('pos_receipt_template', JSON.stringify(template))
+              } catch {}
+            }
+          } catch (e) {
+            console.error('Failed to load/parse receipt template:', e)
+          }
+        }
+        loadTemplate()
 
         // 税费设置（包含免税商品）- 合并默认值
         if (configs.taxSettings) {
@@ -3023,45 +3031,53 @@ export function POSPage() {
 
     return (
       <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
-        {/* Header + Toolbar 合并 - 品牌底色 */}
-        <header className="bg-primary px-3 py-2 flex items-center justify-between gap-2">
-          {/* 左侧：店铺信息 */}
-          <div className="flex items-center gap-3">
-            <div className="h-8 min-w-[32px] max-w-[120px] flex items-center shrink-0">
-              <img
-                src={((storeInfo.storeLogo && storeInfo.storeLogo !== '/youme-logo-white.png' && storeInfo.storeLogo !== '/youme-logo-red.png') ? storeInfo.storeLogo : '') || YOUME_LOGO_WHITE}
-                alt={storeInfo.storeName || 'YOUME'}
-                onError={(e) => {
-                  const target = e.currentTarget as HTMLImageElement
-                  target.onerror = null
-                  target.src = YOUME_LOGO_WHITE
-                }}
-                className="h-8 max-w-[120px] object-contain rounded"
-              />
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1.5">
-                <span className="text-white font-bold text-sm">{storeInfo.storeName || 'YOUME'}</span>
-                {appVersion && <span className="text-white/80 text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono">v{appVersion}</span>}
+        {/* Header - 品牌底色，紧凑无缝贴顶 */}
+        <header className="bg-primary px-3 py-1.5 flex items-center justify-between gap-3 select-none">
+          {/* 左侧：Logo (下方紧贴收银员) + 渠道切换标签 + Online指示器 */}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Logo 区域：上面是 Logo，下面紧贴收银员姓名 */}
+            <div className="flex flex-col items-start justify-center shrink-0">
+              <div className="h-7 min-w-[32px] max-w-[110px] flex items-center">
+                <img
+                  src={((storeInfo.storeLogo && storeInfo.storeLogo !== '/youme-logo-white.png' && storeInfo.storeLogo !== '/youme-logo-red.png') ? storeInfo.storeLogo : '') || YOUME_LOGO_WHITE}
+                  alt="Logo"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement
+                    target.onerror = null
+                    target.src = YOUME_LOGO_WHITE
+                  }}
+                  className="h-7 max-w-[110px] object-contain"
+                />
               </div>
-              <span className="text-white/70 text-xs">{user?.staff?.name || t('pos.cashier')}</span>
-            </div>
-            {selectedChannel && (
-              <span
-                onClick={() => setShowChannelModal(true)}
-                className="px-3 py-1 text-white rounded-xl text-sm font-medium cursor-pointer hover:bg-white/20 transition-colors"
-                style={{ backgroundColor: selectedChannel.color ? `${selectedChannel.color}40` : 'rgba(255,255,255,0.2)' }}
-              >
-                {selectedChannel.icon} {getChannelDisplayName(selectedChannel)}
-                {selectedChannel.code === 'DINE_IN' && ` (${dineInCount}${t('pos.dineInCount')})`}
+              <span className="text-white/80 text-[11px] font-medium leading-none mt-0.5 truncate max-w-[110px]">
+                {user?.staff?.name || t('pos.cashier')}
               </span>
+            </div>
+
+            {/* 渠道标签：精简显示，点击切换渠道，彻底移除就餐人数 */}
+            {selectedChannel && (
+              <button
+                onClick={() => setShowChannelModal(true)}
+                className="px-2.5 py-1 text-white bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                title={t('pos.switchChannel', 'Switch Channel')}
+              >
+                <span>{selectedChannel.icon}</span>
+                <span>{getChannelDisplayName(selectedChannel)}</span>
+              </button>
             )}
+
+            {/* Online 状态 */}
             {displaySettings.showOfflineIndicator !== false && (
-              <span className={`px-3 py-1 rounded-xl text-sm font-medium ${
-                connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
-                connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
+              <span className={`px-2 py-0.5 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
+                connectionStatus === 'connected' ? 'bg-emerald-500/20 text-white border border-emerald-400/40' :
+                connectionStatus === 'connecting' ? 'bg-amber-500/20 text-amber-100 border border-amber-400/40 animate-pulse' :
                 'bg-red-500 text-white animate-pulse'
               }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  connectionStatus === 'connected' ? 'bg-emerald-400' :
+                  connectionStatus === 'connecting' ? 'bg-amber-400' :
+                  'bg-red-200'
+                }`} />
                 {connectionStatus === 'connected' ? t('pos.online') :
                  connectionStatus === 'connecting' ? t('pos.connecting') :
                  t('pos.offline')}
@@ -3069,165 +3085,172 @@ export function POSPage() {
             )}
           </div>
 
-        {/* 中间：语言切换 */}
-        <div className="flex items-center gap-2">
-          {LANGS.map(l => (
-            <button
-              key={l.code}
-              onClick={async () => {
-                await i18n.changeLanguage(l.code)
-                localStorage.setItem('pos_lang', l.code)
-                setLang(l.code)
-              }}
-              className={`px-3 py-1.5 rounded-xl text-sm font-medium touch-feedback ${
-                lang === l.code ? 'bg-white text-primary' : 'bg-white/20 text-white hover:bg-white/30'
-              }`}
-            >
-              {l.code.toUpperCase()}
-            </button>
-          ))}
-        </div>
+          {/* 中间：语言切换 */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {LANGS.map(l => (
+              <button
+                key={l.code}
+                onClick={async () => {
+                  await i18n.changeLanguage(l.code)
+                  localStorage.setItem('pos_lang', l.code)
+                  setLang(l.code)
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold touch-feedback transition-colors ${
+                  lang === l.code ? 'bg-white text-primary shadow-sm' : 'bg-white/15 text-white/90 hover:bg-white/25'
+                }`}
+              >
+                {l.code.toUpperCase()}
+              </button>
+            ))}
+          </div>
 
-        {/* 右侧：工具栏 - 自动平均分配宽度 */}
-        {selectedChannel && (() => {
-          // 构建工具栏按钮数组
-          const toolbarButtons: Array<{
-            id: string
-            icon: JSX.Element
-            labelKey: string
-            onClick: () => void
-            badge?: number
-          }> = []
+          {/* 右侧：工具栏 + 窗口控制按钮 */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {selectedChannel && (() => {
+              // 构建工具栏按钮数组
+              const toolbarButtons: Array<{
+                id: string
+                icon: JSX.Element
+                labelKey: string
+                onClick: () => void
+                badge?: number
+              }> = []
 
-          if (posLayout.showShift !== false) {
-            toolbarButtons.push({
-              id: 'shift',
-              icon: <Users size={20} />,
-              labelKey: posLayout.toolbarLabels?.shift || 'toolbar.shift',
-              onClick: () => setShowShiftModal(true)
-            })
-          }
-          if (posLayout.showSuspend !== false) {
-            toolbarButtons.push({
-              id: 'suspend',
-              icon: <Clock size={20} />,
-              labelKey: posLayout.toolbarLabels?.suspend || 'toolbar.suspend',
-              onClick: () => setShowSuspendModal(true),
-              badge: suspendedOrders.length
-            })
-          }
-          if (posLayout.showScan !== false) {
-            toolbarButtons.push({
-              id: 'scan',
-              icon: <ScanLine size={20} />,
-              labelKey: posLayout.toolbarLabels?.scan || 'toolbar.scan',
-              onClick: () => setShowScanModal(true)
-            })
-          }
-          if (posLayout.showHistory !== false) {
-            toolbarButtons.push({
-              id: 'history',
-              icon: <FileText size={20} />,
-              labelKey: posLayout.toolbarLabels?.history || 'toolbar.history',
-              onClick: () => setShowHistoryModal(true)
-            })
-          }
-          if (posLayout.showCash === true) {
-            toolbarButtons.push({
-              id: 'cash',
-              icon: <Wallet size={20} />,
-              labelKey: posLayout.toolbarLabels?.cash || 'toolbar.cash',
-              onClick: () => setShowCashModal(true)
-            })
-          }
-          // 费用按钮 - 记录每日临时支出
-          if (posLayout.showExpense !== false) {
-            toolbarButtons.push({
-              id: 'expense',
-              icon: <Receipt size={20} />,
-              labelKey: posLayout.toolbarLabels?.expense || 'toolbar.expense',
-              onClick: () => setShowExpenseModal(true)
-            })
-          }
-          // 巡店卫生与员工任务
-          if (posLayout.showTasks === true) {
-            toolbarButtons.push({
-              id: 'tasks',
-              icon: <ClipboardList size={20} />,
-              labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
-              onClick: () => navigate('/hygiene')
-            })
-          }
-          // 硬件设备状态自检（仅在后台明确开启 showHardware 时开放，默认收银员无此项）
-          if (posLayout.showHardware === true) {
-            toolbarButtons.push({
-              id: 'hardware',
-              icon: <Printer size={20} />,
-              labelKey: posLayout.toolbarLabels?.hardware || 'toolbar.hardware',
-              onClick: () => {
-                setShowPrinterDetectModal(true)
+              if (posLayout.showShift !== false) {
+                toolbarButtons.push({
+                  id: 'shift',
+                  icon: <Users size={18} />,
+                  labelKey: posLayout.toolbarLabels?.shift || 'toolbar.shift',
+                  onClick: () => setShowShiftModal(true)
+                })
               }
-            })
-          }
-          if (posLayout.showLogout !== false) {
-            toolbarButtons.push({
-              id: 'logout',
-              icon: <X size={20} />,
-              labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
-              onClick: () => setShowLogoutModal(true)
-            })
-          }
+              if (posLayout.showSuspend !== false) {
+                toolbarButtons.push({
+                  id: 'suspend',
+                  icon: <Clock size={18} />,
+                  labelKey: posLayout.toolbarLabels?.suspend || 'toolbar.suspend',
+                  onClick: () => setShowSuspendModal(true),
+                  badge: suspendedOrders.length
+                })
+              }
+              if (posLayout.showScan !== false) {
+                toolbarButtons.push({
+                  id: 'scan',
+                  icon: <ScanLine size={18} />,
+                  labelKey: posLayout.toolbarLabels?.scan || 'toolbar.scan',
+                  onClick: () => setShowScanModal(true)
+                })
+              }
+              if (posLayout.showHistory !== false) {
+                toolbarButtons.push({
+                  id: 'history',
+                  icon: <FileText size={18} />,
+                  labelKey: posLayout.toolbarLabels?.history || 'toolbar.history',
+                  onClick: () => setShowHistoryModal(true)
+                })
+              }
+              if (posLayout.showCash === true) {
+                toolbarButtons.push({
+                  id: 'cash',
+                  icon: <Wallet size={18} />,
+                  labelKey: posLayout.toolbarLabels?.cash || 'toolbar.cash',
+                  onClick: () => setShowCashModal(true)
+                })
+              }
+              // 费用按钮 - 记录每日临时支出
+              if (posLayout.showExpense !== false) {
+                toolbarButtons.push({
+                  id: 'expense',
+                  icon: <Receipt size={18} />,
+                  labelKey: posLayout.toolbarLabels?.expense || 'toolbar.expense',
+                  onClick: () => setShowExpenseModal(true)
+                })
+              }
+              // 巡店卫生与员工任务
+              if (posLayout.showTasks === true) {
+                toolbarButtons.push({
+                  id: 'tasks',
+                  icon: <ClipboardList size={18} />,
+                  labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
+                  onClick: () => navigate('/hygiene')
+                })
+              }
+              // 硬件设备状态自检（仅在后台明确开启 showHardware 时开放，默认收银员无此项）
+              if (posLayout.showHardware === true) {
+                toolbarButtons.push({
+                  id: 'hardware',
+                  icon: <Printer size={18} />,
+                  labelKey: posLayout.toolbarLabels?.hardware || 'toolbar.hardware',
+                  onClick: () => {
+                    setShowPrinterDetectModal(true)
+                  }
+                })
+              }
+              if (posLayout.showLogout !== false) {
+                toolbarButtons.push({
+                  id: 'logout',
+                  icon: <X size={18} />,
+                  labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
+                  onClick: () => setShowLogoutModal(true)
+                })
+              }
 
-          return (
-            <div className="flex items-stretch gap-3">
-              {toolbarButtons.map(btn => (
-                <button
-                  key={btn.id}
-                  onClick={btn.onClick}
-                  className="flex-1 flex flex-col items-center justify-center py-2 px-2 text-white/90 hover:bg-white/20 rounded-xl touch-feedback min-h-[64px] relative"
-                >
-                  <div className="relative">
-                    {btn.icon}
-                    {btn.badge !== undefined && btn.badge > 0 && (
-                      <span className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 text-white text-xs rounded-full flex items-center justify-center">
-                        {btn.badge > 9 ? '9+' : btn.badge}
+              return (
+                <div className="flex items-center gap-1">
+                  {toolbarButtons.map(btn => (
+                    <button
+                      key={btn.id}
+                      onClick={btn.onClick}
+                      className="flex flex-col items-center justify-center py-1 px-2.5 text-white/90 hover:bg-white/20 rounded-lg touch-feedback relative transition-colors"
+                    >
+                      <div className="relative">
+                        {btn.icon}
+                        {btn.badge !== undefined && btn.badge > 0 && (
+                          <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-yellow-400 text-gray-900 text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {btn.badge > 9 ? '9+' : btn.badge}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs mt-1 font-medium leading-none whitespace-nowrap">
+                        {(() => {
+                          const legacyChineseDefaults: Record<string, string> = {
+                            '交班': 'shift',
+                            '挂单': 'suspend',
+                            '扫码': 'scan',
+                            '扫描': 'scan',
+                            '历史': 'history',
+                            '退款': 'refund',
+                            '现金': 'cash',
+                            '支出': 'expense',
+                            '费用': 'expense',
+                            '任务': 'tasks',
+                            '自检': 'hardware',
+                            '登出': 'logout',
+                            '设置': 'setting',
+                            '设备自检': 'hardware',
+                            '设备自检 (测试打印/钱箱)': 'hardware'
+                          }
+                          if (!btn.labelKey || btn.labelKey.startsWith('toolbar.')) {
+                            return t(btn.labelKey || `toolbar.${btn.id}`)
+                          }
+                          if (legacyChineseDefaults[btn.labelKey]) {
+                            return t(`toolbar.${legacyChineseDefaults[btn.labelKey]}`)
+                          }
+                          return btn.labelKey
+                        })()}
                       </span>
-                    )}
-                  </div>
-                  <span className="text-sm mt-2 font-medium">
-                    {(() => {
-                      const legacyChineseDefaults: Record<string, string> = {
-                        '交班': 'shift',
-                        '挂单': 'suspend',
-                        '扫码': 'scan',
-                        '扫描': 'scan',
-                        '历史': 'history',
-                        '退款': 'refund',
-                        '现金': 'cash',
-                        '支出': 'expense',
-                        '费用': 'expense',
-                        '任务': 'tasks',
-                        '自检': 'hardware',
-                        '登出': 'logout',
-                        '设置': 'setting',
-                        '设备自检': 'hardware',
-                        '设备自检 (测试打印/钱箱)': 'hardware'
-                      }
-                      if (!btn.labelKey || btn.labelKey.startsWith('toolbar.')) {
-                        return t(btn.labelKey || `toolbar.${btn.id}`)
-                      }
-                      if (legacyChineseDefaults[btn.labelKey]) {
-                        return t(`toolbar.${legacyChineseDefaults[btn.labelKey]}`)
-                      }
-                      return btn.labelKey
-                    })()}
-                  </span>
-                </button>
-              ))}
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
+
+            {/* 窗口控制按钮 (最小化、最大化、关闭) */}
+            <div className="border-l border-white/25 pl-1.5 ml-1">
+              <WindowControls variant="header" />
             </div>
-          )
-        })()}
-      </header>
+          </div>
+        </header>
 
       {/* 渠道选择弹窗 - 解锁后必须先选择 */}
       {showChannelModal && (

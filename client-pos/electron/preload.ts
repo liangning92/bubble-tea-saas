@@ -125,5 +125,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 保存 API URL（持久化）
   setApiUrl: (url: string) => {
     return ipcRenderer.invoke('set-api-url', url)
+  },
+
+  // ========== 窗口控制 (最小化、最大化/还原、关闭) ==========
+  minimizeWindow: () => {
+    return ipcRenderer.invoke('window-minimize')
+  },
+  maximizeWindow: () => {
+    return ipcRenderer.invoke('window-maximize')
+  },
+  closeWindow: () => {
+    return ipcRenderer.invoke('window-close')
+  },
+  isMaximized: () => {
+    return ipcRenderer.invoke('window-is-maximized')
   }
 })

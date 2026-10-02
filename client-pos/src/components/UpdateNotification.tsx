@@ -106,32 +106,9 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
     setIsVisible(false)
   }
 
-  // Don't render if not visible and no active status
-  if (!isVisible && status === 'idle') {
-    return (
-      <button
-        onClick={handleCheckUpdate}
-        className={`flex items-center gap-1 text-gray-500 hover:text-gray-700 text-xs ${className}`}
-        title={t('pos.checkUpdate')}
-      >
-        <RefreshCw size={14} />
-      </button>
-    )
-  }
-
-  // Only show banner for important statuses
-  if (!isVisible && status !== 'idle') {
-    return (
-      <button
-        onClick={handleCheckUpdate}
-        className={`flex items-center gap-1 text-gray-500 hover:text-gray-700 text-xs ${className}`}
-      >
-        {status === 'checking' && <RefreshCw size={14} className="animate-spin" />}
-        {status === 'up-to-date' && <Check size={14} className="text-green-500" />}
-        {status === 'error' && <AlertCircle size={14} className="text-red-500" />}
-        {status === 'available' && <Download size={14} className="text-blue-500" />}
-      </button>
-    )
+  // Don't render anything in document flow if notification is not visible
+  if (!isVisible) {
+    return null
   }
 
   return (

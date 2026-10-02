@@ -101,5 +101,18 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     // 保存 API URL（持久化）
     setApiUrl: (url) => {
         return electron_1.ipcRenderer.invoke('set-api-url', url);
+    },
+    // ========== 窗口控制 (最小化、最大化/还原、关闭) ==========
+    minimizeWindow: () => {
+        return electron_1.ipcRenderer.invoke('window-minimize');
+    },
+    maximizeWindow: () => {
+        return electron_1.ipcRenderer.invoke('window-maximize');
+    },
+    closeWindow: () => {
+        return electron_1.ipcRenderer.invoke('window-close');
+    },
+    isMaximized: () => {
+        return electron_1.ipcRenderer.invoke('window-is-maximized');
     }
 });

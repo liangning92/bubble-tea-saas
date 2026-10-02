@@ -91,9 +91,17 @@ router.get('/default', authenticate, async (req: AuthRequest, res) => {
       return
     }
 
-    const template = await prisma.receiptTemplate.findFirst({
+    let template = await prisma.receiptTemplate.findFirst({
       where: { storeId, isDefault: true }
     })
+
+    // 回退机制：若无明确标记默认模板，自动获取该店铺最新保存的一个模板
+    if (!template) {
+      template = await prisma.receiptTemplate.findFirst({
+        where: { storeId },
+        orderBy: { updatedAt: 'desc' }
+      })
+    }
 
     res.json({
       code: 200,
@@ -226,7 +234,8 @@ router.put('/:id', authenticate, validateBody(updateReceiptTemplateSchema), asyn
       }
     })
 
-    if (template.isDefault) {
+    const totalCount = await prisma.receiptTemplate.count({ where: { storeId: existing.storeId } })
+    if (template.isDefault || totalCount <= 1) {
       let paperSize: string | undefined
       const effectiveContent = content || existing.content
       try { paperSize = JSON.parse(effectiveContent).paperSize } catch {}

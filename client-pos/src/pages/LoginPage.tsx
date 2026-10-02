@@ -6,6 +6,7 @@ import { posApi } from '../services/api'
 import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
 import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe } from 'lucide-react'
 import { YOUME_LOGO_RED } from '../assets/logo'
+import { WindowControls } from '../components/WindowControls'
 
 const LANGUAGES = [
   { code: 'zh', labelKey: '中文', flag: '🇨🇳' },
@@ -25,6 +26,7 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [showLangMenu, setShowLangMenu] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
     setMounted(true)
@@ -34,6 +36,11 @@ export function LoginPage() {
     if (savedRemember === 'true' && savedPhone) {
       setPhone(savedPhone)
       setRememberMe(true)
+    }
+    // 获取软件版本号
+    const api = (window as any).electronAPI
+    if (api?.getAppVersion) {
+      api.getAppVersion().then((v: string) => setAppVersion(v)).catch(() => {})
     }
   }, [])
 
@@ -126,13 +133,14 @@ export function LoginPage() {
         }}
       />
 
-      {/* Language selector */}
-      <header className="absolute top-0 left-0 right-0 p-4 z-30">
-        <div className="flex justify-end">
+      {/* Top bar: Language selector and Window Controls */}
+      <header className="absolute top-0 left-0 right-0 p-3 z-30 flex items-center justify-between">
+        <div />
+        <div className="flex items-center gap-2">
           <div className="relative">
             <button
               onClick={() => setShowLangMenu(!showLangMenu)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <Globe size={16} className="text-gray-500" />
               <span className="text-sm font-medium text-gray-700">{currentLang.flag} {t(currentLang.labelKey)}</span>
@@ -152,6 +160,7 @@ export function LoginPage() {
               </div>
             )}
           </div>
+          <WindowControls variant="dark" />
         </div>
       </header>
 
@@ -289,10 +298,15 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Copyright */}
-          <p className="text-center text-gray-400 text-xs mt-8">
-            {t('auth.copyright')}
-          </p>
+          {/* Copyright & Version */}
+          <div className="text-center text-gray-400 text-xs mt-8 space-y-1">
+            <p>{t('auth.copyright')}</p>
+            {appVersion && (
+              <p className="font-mono text-[11px] text-gray-400/80">
+                v{appVersion}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

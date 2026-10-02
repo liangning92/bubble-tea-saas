@@ -89,9 +89,16 @@ router.get('/default', auth_1.authenticate, async (req, res) => {
             res.status(400).json({ code: 400, message: 'storeId is required' });
             return;
         }
-        const template = await database_1.default.receiptTemplate.findFirst({
+        let template = await database_1.default.receiptTemplate.findFirst({
             where: { storeId, isDefault: true }
         });
+        // 回退机制：若无明确标记默认模板，自动获取该店铺最新保存的一个模板
+        if (!template) {
+            template = await database_1.default.receiptTemplate.findFirst({
+                where: { storeId },
+                orderBy: { updatedAt: 'desc' }
+            });
+        }
         res.json({
             code: 200,
             data: template,
@@ -211,7 +218,8 @@ router.put('/:id', auth_1.authenticate, (0, validation_1.validateBody)(updateRec
                 ...(isDefault !== undefined && { isDefault })
             }
         });
-        if (template.isDefault) {
+        const totalCount = await database_1.default.receiptTemplate.count({ where: { storeId: existing.storeId } });
+        if (template.isDefault || totalCount <= 1) {
             let paperSize;
             const effectiveContent = content || existing.content;
             try {

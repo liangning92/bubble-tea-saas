@@ -78,6 +78,12 @@ interface ElectronAPI {
 
   // Platform info
   platform: string
+
+  // Window controls
+  minimizeWindow?: () => Promise<boolean>
+  maximizeWindow?: () => Promise<boolean>
+  closeWindow?: () => Promise<boolean>
+  isMaximized?: () => Promise<boolean>
 }
 
 declare global {

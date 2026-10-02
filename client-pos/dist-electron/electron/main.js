@@ -646,6 +646,7 @@ function createMainWindow() {
         height,
         x: screenX,
         y: screenY,
+        frame: false,
         fullscreen: true,
         autoHideMenuBar: true,
         resizable: true,
@@ -658,7 +659,7 @@ function createMainWindow() {
             enableBlinkFeatures: 'CSSColorSchemeUARendering'
         },
         title: 'YOUME POS',
-        backgroundColor: '#ffffff'
+        backgroundColor: '#EC6D88'
     });
     // 彻底移除 Windows 默认菜单栏（File, Edit, View, Window, Help）
     mainWindow.setMenu(null);
@@ -1133,6 +1134,39 @@ electron_1.ipcMain.handle('set-api-url', (_event, url) => {
         return false;
     }
 });
+// 窗口控制 IPC
+electron_1.ipcMain.handle('window-minimize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.minimize();
+        return true;
+    }
+    return false;
+});
+electron_1.ipcMain.handle('window-maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        }
+        else {
+            mainWindow.maximize();
+        }
+        return mainWindow.isMaximized();
+    }
+    return false;
+});
+electron_1.ipcMain.handle('window-close', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close();
+        return true;
+    }
+    return false;
+});
+electron_1.ipcMain.handle('window-is-maximized', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        return mainWindow.isMaximized();
+    }
+    return false;
+});
 electron_1.ipcMain.on('order-clear', () => {
     if (customerWindow && !customerWindow.isDestroyed()) {
         customerWindow.webContents.send('order-clear');
@@ -1402,25 +1436,6 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
         const rawChunks = [];
         const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ 初始化
         const is80mm = data.paperSize === '80mm';
-        // 检查模板中条形码/二维码模块是否显式启用
-        const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null);
-        let barcodeEnabled = data.showBarcode !== false;
-        let qrEnabled = !!(data.showQR && data.qrCodeUrl);
-        let qrUrl = data.qrCodeUrl || '';
-        if (rawBlocks && rawBlocks.length > 0) {
-            const barcodeBlock = rawBlocks.find((b) => b && b.type === 'barcode');
-            barcodeEnabled = barcodeBlock ? barcodeBlock.enabled !== false : false;
-            const qrBlock = rawBlocks.find((b) => b && b.type === 'qrCode');
-            qrEnabled = qrBlock ? (qrBlock.enabled !== false && !!(qrBlock.config?.url || qrUrl)) : false;
-            if (qrBlock?.config?.url)
-                qrUrl = qrBlock.config.url;
-        }
-        const barcodeCmd = (barcodeEnabled && data.orderNum)
-            ? buildEscPosBarcode(String(data.orderNum))
-            : Buffer.alloc(0);
-        const qrCmd = (qrEnabled && qrUrl)
-            ? buildEscPosQRCode(String(qrUrl), is80mm ? 6 : 4)
-            : Buffer.alloc(0);
         // 58mm 与 80mm 切纸与走纸隔离：
         // 58mm 热敏机均为手动锯齿撕纸机，无自动切刀，坚决不发送 GS V 切刀指令（否则固件报 Cutter Error 并锁定出纸电机）
         // 80mm 热敏机采用 LF*3 + GS V 1 (0x1D 0x56 0x01) 弹性半切，避免纸张滑落或卡刀
@@ -1432,14 +1447,14 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 ...data,
                 copyLabel: c === 0 ? '(Customer Copy)' : '(Merchant Copy)'
             } : data;
-            const text = generateReceiptText(copyData);
+            const receiptBuf = await buildReceiptEscPosBuffer(copyData);
             // 只有第一联出纸前触发弹钱箱
             const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0);
-            // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出小票文本，杜绝 ESC @ 擦除紧随其后的文本缓冲区
-            rawChunks.push(Buffer.concat([initCmd, firstDrawerCmd, encodeEscPosText(text), barcodeCmd, qrCmd, cutCmd]));
+            // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出全格式化 ESC/POS 数据，切纸
+            rawChunks.push(Buffer.concat([initCmd, firstDrawerCmd, receiptBuf, cutCmd]));
         }
         const rawBytes = Buffer.concat(rawChunks);
-        writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length} hasQR=${!qrCmd.equals(Buffer.alloc(0))} hasBarcode=${!barcodeCmd.equals(Buffer.alloc(0))}`);
+        writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length}`);
         // 1. 网络小票机（优先通过 TCP Socket 发送原生 ESC/POS 数据包）
         if (printerHost && printerPort) {
             try {
@@ -2244,6 +2259,509 @@ function encodeEscPosText(text) {
     // 降级使用 latin1 / ascii，避免 3 字节 UTF-8 导致热敏打印机配对乱码
     return Buffer.from(text, 'latin1');
 }
+/**
+ * 将图片 Buffer 转换为 ESC/POS 点阵位图指令 (GS v 0)
+ * 58mm 热敏纸有效点宽约为 384 dots，80mm 有效点宽约为 576 dots
+ */
+function imageBufferToEscPosRaster(imageBuf, targetWidthDots = 384) {
+    try {
+        const nImg = electron_1.nativeImage.createFromBuffer(imageBuf);
+        if (nImg.isEmpty())
+            return null;
+        const size = nImg.getSize();
+        if (!size.width || !size.height)
+            return null;
+        // 确保宽度为 8 的倍数（ESC/POS 字节对齐要求）
+        const targetW = Math.max(64, Math.min(targetWidthDots, Math.floor(targetWidthDots / 8) * 8));
+        const targetH = Math.round((size.height / size.width) * targetW);
+        if (targetH <= 0)
+            return null;
+        const resized = nImg.resize({ width: targetW, height: targetH, quality: 'best' });
+        const bitmap = resized.toBitmap(); // BGRA 缓冲区，长度 = targetW * targetH * 4
+        if (!bitmap || bitmap.length < targetW * targetH * 4)
+            return null;
+        const byteWidth = Math.ceil(targetW / 8);
+        const rasterData = Buffer.alloc(byteWidth * targetH, 0);
+        for (let y = 0; y < targetH; y++) {
+            for (let x = 0; x < targetW; x++) {
+                const idx = (y * targetW + x) * 4;
+                const b = bitmap[idx];
+                const g = bitmap[idx + 1];
+                const r = bitmap[idx + 2];
+                const a = bitmap[idx + 3];
+                // 透明通道判定：若透明度 < 128 则视为纯白背景（不打点）
+                // 灰度亮度加权判定：亮度阈值 170，低于此值视为黑色（打点）
+                const isBlack = (a >= 128) && ((0.299 * r + 0.587 * g + 0.114 * b) < 170);
+                if (isBlack) {
+                    const byteIdx = y * byteWidth + Math.floor(x / 8);
+                    const bitIdx = 7 - (x % 8);
+                    rasterData[byteIdx] |= (1 << bitIdx);
+                }
+            }
+        }
+        const xL = byteWidth & 0xff;
+        const xH = (byteWidth >> 8) & 0xff;
+        const yL = targetH & 0xff;
+        const yH = (targetH >> 8) & 0xff;
+        // ESC a 1 (居中) + GS v 0 0 xL xH yL yH + rasterData + \n + ESC a 0 (重置居左)
+        return Buffer.concat([
+            Buffer.from([0x1B, 0x61, 0x01]),
+            Buffer.from([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]),
+            rasterData,
+            Buffer.from([0x0A, 0x1B, 0x61, 0x00])
+        ]);
+    }
+    catch (err) {
+        writeCrash(`[ESC/POS RASTER] Failed to convert image to raster: ${err?.message}`);
+        return null;
+    }
+}
+/**
+ * 加载 Logo 图片字节
+ */
+async function loadLogoBuffer(logoUrlOrPath) {
+    if (!logoUrlOrPath)
+        return null;
+    try {
+        // 1. Data URL
+        if (logoUrlOrPath.startsWith('data:image/')) {
+            const parts = logoUrlOrPath.split(',');
+            if (parts[1]) {
+                return Buffer.from(parts[1], 'base64');
+            }
+        }
+        // 2. HTTP / HTTPS URL
+        if (logoUrlOrPath.startsWith('http://') || logoUrlOrPath.startsWith('https://')) {
+            return new Promise((resolve) => {
+                try {
+                    const isHttps = logoUrlOrPath.startsWith('https://');
+                    const httpModule = isHttps ? require('https') : require('http');
+                    const req = httpModule.get(logoUrlOrPath, { timeout: 3000 }, (res) => {
+                        if (res.statusCode !== 200) {
+                            resolve(null);
+                            return;
+                        }
+                        const chunks = [];
+                        res.on('data', (d) => chunks.push(d));
+                        res.on('end', () => resolve(Buffer.concat(chunks)));
+                        res.on('error', () => resolve(null));
+                    });
+                    req.on('error', () => resolve(null));
+                    req.on('timeout', () => { req.destroy(); resolve(null); });
+                }
+                catch {
+                    resolve(null);
+                }
+            });
+        }
+        // 3. Local File Path
+        if (fs_1.default.existsSync(logoUrlOrPath)) {
+            return fs_1.default.readFileSync(logoUrlOrPath);
+        }
+        // 4. Relative to resources / app
+        const relativePaths = [
+            getResourcePath(logoUrlOrPath.replace(/^\//, '')),
+            getResourcePath(path_1.default.join('dist', logoUrlOrPath.replace(/^\//, ''))),
+            path_1.default.join(electron_1.app.getAppPath(), logoUrlOrPath.replace(/^\//, '')),
+            path_1.default.join(electron_1.app.getAppPath(), 'dist', logoUrlOrPath.replace(/^\//, ''))
+        ];
+        for (const p of relativePaths) {
+            if (fs_1.default.existsSync(p)) {
+                return fs_1.default.readFileSync(p);
+            }
+        }
+    }
+    catch (e) {
+        writeCrash(`[LOGO LOAD] Failed to load logo from '${logoUrlOrPath}': ${e?.message}`);
+    }
+    return null;
+}
+/**
+ * ESC/POS 硬件原生格式化渲染引擎
+ * 完整支持后台 ReceiptTemplate 配置的所有样式：
+ * - 文字字号大小：GS ! 0x11 (大号倍宽倍高) / ESC M 1 (小号 Font B) / GS ! 0x00 (标准)
+ * - 粗细：ESC E 1 (加粗) / ESC E 0 (普通)
+ * - 对齐：ESC a 0 (居左) / ESC a 1 (居中) / ESC a 2 (居右)
+ * - Logo 点阵位图：GS v 0 原生光栅位图输出
+ * - 分割线：虚线 (dashed: - - -) / 实线 (line: ------) / 空行 (space) / 星号 (stars: ******)
+ * - 条码与二维码：按模板排布位置内联渲染
+ */
+async function buildReceiptEscPosBuffer(data) {
+    const is80mm = data.paperSize === '80mm';
+    const width = is80mm ? 48 : 32;
+    const targetDots = is80mm ? 384 : 288;
+    const lang = (data.language || 'id').toLowerCase();
+    const i18nMap = {
+        zh: {
+            orderNo: '单号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
+            customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
+            tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
+            member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
+        },
+        en: {
+            orderNo: 'Order No', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
+            customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
+            tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
+            member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
+        },
+        id: {
+            orderNo: 'No Order', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
+            customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
+            tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
+            member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
+        }
+    };
+    const L = i18nMap[lang] || i18nMap.id;
+    const nameWidth = is80mm ? 28 : 16;
+    const qtyWidth = is80mm ? 6 : 4;
+    const priceWidth = is80mm ? 14 : 12;
+    const labelWidth = is80mm ? 30 : 18;
+    const valWidth = is80mm ? 18 : 14;
+    // ESC/POS 控制码常量
+    const CMD_BOLD_ON = Buffer.from([0x1B, 0x45, 0x01]);
+    const CMD_BOLD_OFF = Buffer.from([0x1B, 0x45, 0x00]);
+    const CMD_ALIGN_LEFT = Buffer.from([0x1B, 0x61, 0x00]);
+    const CMD_ALIGN_CENTER = Buffer.from([0x1B, 0x61, 0x01]);
+    const CMD_ALIGN_RIGHT = Buffer.from([0x1B, 0x61, 0x02]);
+    const CMD_FONT_NORMAL = Buffer.from([0x1D, 0x21, 0x00, 0x1B, 0x4D, 0x00]);
+    const CMD_FONT_LARGE = Buffer.from([0x1D, 0x21, 0x11]); // 倍宽倍高
+    const CMD_FONT_SMALL = Buffer.from([0x1D, 0x21, 0x00, 0x1B, 0x4D, 0x01]); // Font B
+    const CMD_CRLF = Buffer.from([0x0D, 0x0A]);
+    function formatStyledLine(text, style) {
+        const lineChunks = [];
+        if (style?.align === 'center')
+            lineChunks.push(CMD_ALIGN_CENTER);
+        else if (style?.align === 'right')
+            lineChunks.push(CMD_ALIGN_RIGHT);
+        else
+            lineChunks.push(CMD_ALIGN_LEFT);
+        if (style?.fontSize === 'large')
+            lineChunks.push(CMD_FONT_LARGE);
+        else if (style?.fontSize === 'small')
+            lineChunks.push(CMD_FONT_SMALL);
+        else
+            lineChunks.push(CMD_FONT_NORMAL);
+        if (style?.bold)
+            lineChunks.push(CMD_BOLD_ON);
+        lineChunks.push(encodeEscPosText(text));
+        if (style?.bold)
+            lineChunks.push(CMD_BOLD_OFF);
+        if (style?.fontSize === 'large' || style?.fontSize === 'small')
+            lineChunks.push(CMD_FONT_NORMAL);
+        lineChunks.push(CMD_CRLF);
+        if (style?.align === 'center' || style?.align === 'right')
+            lineChunks.push(CMD_ALIGN_LEFT);
+        return Buffer.concat(lineChunks);
+    }
+    const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null);
+    const chunks = [];
+    // 联号标记（如 Customer Copy / Merchant Copy）
+    if (data.copyLabel) {
+        chunks.push(formatStyledLine(`*** ${data.copyLabel} ***`, { align: 'center', bold: true }));
+        chunks.push(CMD_CRLF);
+    }
+    let hasBarcodeRendered = false;
+    let hasQrRendered = false;
+    if (rawBlocks && rawBlocks.length > 0) {
+        const enabledBlocks = [...rawBlocks]
+            .filter((b) => b && b.enabled !== false)
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+        for (const block of enabledBlocks) {
+            const cfg = block.config || {};
+            const st = block.style || {};
+            switch (block.type) {
+                case 'logo': {
+                    let logoBuf = null;
+                    const logoSource = cfg.url || data.storeLogo || '';
+                    if (logoSource) {
+                        const rawImg = await loadLogoBuffer(logoSource);
+                        if (rawImg) {
+                            const customWidth = cfg.width ? Math.min(targetDots, cfg.width * 2) : targetDots;
+                            logoBuf = imageBufferToEscPosRaster(rawImg, customWidth);
+                        }
+                    }
+                    if (logoBuf) {
+                        chunks.push(logoBuf);
+                    }
+                    else if (data.showLogo !== false) {
+                        const title = data.storeName || data.header || 'YOUME';
+                        chunks.push(formatStyledLine(title, {
+                            align: st.align || 'center',
+                            bold: st.bold !== false,
+                            fontSize: st.fontSize || 'large'
+                        }));
+                    }
+                    break;
+                }
+                case 'header': {
+                    const headerText = cfg.text || data.header || data.storeName || 'YOUME';
+                    if (headerText) {
+                        chunks.push(formatStyledLine(headerText, {
+                            align: st.align || 'center',
+                            bold: st.bold !== false,
+                            fontSize: st.fontSize || 'large'
+                        }));
+                    }
+                    break;
+                }
+                case 'storeInfo': {
+                    const phone = cfg.phone || data.storePhone;
+                    const address = cfg.address || data.storeAddress;
+                    if (cfg.showPhone !== false && phone) {
+                        chunks.push(formatStyledLine(`Tel: ${phone}`, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }));
+                    }
+                    if (cfg.showAddress !== false && address) {
+                        chunks.push(formatStyledLine(address, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }));
+                    }
+                    break;
+                }
+                case 'divider': {
+                    const style = cfg.dividerStyle || 'line';
+                    if (style === 'dashed') {
+                        chunks.push(formatStyledLine(repeatChar('- ', Math.floor(width / 2)), { align: 'center' }));
+                    }
+                    else if (style === 'space') {
+                        chunks.push(CMD_CRLF);
+                    }
+                    else if (style === 'stars') {
+                        chunks.push(formatStyledLine(repeatChar('*', width), { align: 'center' }));
+                    }
+                    else {
+                        chunks.push(formatStyledLine(repeatChar('-', width), { align: 'center' }));
+                    }
+                    break;
+                }
+                case 'orderInfo': {
+                    const infoLines = [];
+                    infoLines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`);
+                    const showDate = cfg.showDate !== false;
+                    const showTime = cfg.showTime !== false;
+                    if (showDate || showTime) {
+                        const dt = formatDateTime(data.orderDate || data.createdAt, showDate, showTime);
+                        infoLines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${dt}`);
+                    }
+                    if (cfg.showChannel && data.channelName) {
+                        const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : '';
+                        infoLines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`);
+                    }
+                    const showCashier = cfg.showCashier !== undefined ? cfg.showCashier : (data.showStaffName !== false);
+                    if (showCashier && data.cashierName) {
+                        infoLines.push(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`);
+                    }
+                    const showCustomer = cfg.showCustomer !== undefined ? cfg.showCustomer : data.showCustomerName;
+                    if (showCustomer && data.customerName) {
+                        infoLines.push(`${padEndVisual(L.customer, is80mm ? 10 : 7)}: ${data.customerName}`);
+                    }
+                    for (const line of infoLines) {
+                        chunks.push(formatStyledLine(line, st));
+                    }
+                    break;
+                }
+                case 'items': {
+                    const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
+                    chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: st.fontSize }));
+                    chunks.push(formatStyledLine(repeatChar('-', width)));
+                    const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact';
+                    if (data.items && data.items.length > 0) {
+                        data.items.forEach((item) => {
+                            const spec = item.specName ? ` ${item.specName}` : '';
+                            const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
+                            const qty = padStartVisual(String(item.quantity), qtyWidth);
+                            const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
+                            chunks.push(formatStyledLine(`${name}${qty}${price}`, { bold: st.bold, fontSize: st.fontSize }));
+                            if (isCompact) {
+                                const parts = [];
+                                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                                    if (mods)
+                                        parts.push(`[${mods}]`);
+                                }
+                                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                                    const addonNames = item.addons.map((a) => a.name || a).join(', ');
+                                    if (addonNames)
+                                        parts.push(`+${addonNames}`);
+                                }
+                                if (parts.length > 0) {
+                                    chunks.push(formatStyledLine(`  ${truncate(parts.join(' '), width - 2)}`, { fontSize: 'small' }));
+                                }
+                            }
+                            else {
+                                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                                    item.addons.forEach((addon) => {
+                                        chunks.push(formatStyledLine(`  + ${truncate(addon.name || addon, width - 4)}`, { fontSize: 'small' }));
+                                    });
+                                }
+                                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                                    chunks.push(formatStyledLine(`  [${mods}]`, { fontSize: 'small' }));
+                                }
+                            }
+                        });
+                    }
+                    break;
+                }
+                case 'subtotal': {
+                    const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth);
+                    const subtotalVal = padStartVisual(formatRp(data.subtotal || 0), valWidth);
+                    chunks.push(formatStyledLine(`${subtotalLabel}${subtotalVal}`, st));
+                    break;
+                }
+                case 'tax': {
+                    const taxName = cfg.label || (cfg.rate ? `${L.tax} (${cfg.rate}%)` : L.tax);
+                    const taxLabel = padEndVisual(taxName, labelWidth);
+                    const taxVal = padStartVisual(formatRp(data.tax || 0), valWidth);
+                    chunks.push(formatStyledLine(`${taxLabel}${taxVal}`, st));
+                    break;
+                }
+                case 'total': {
+                    if (data.discount && data.discount > 0) {
+                        const discLabel = padEndVisual(L.discount, labelWidth);
+                        const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
+                        chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
+                    }
+                    const isLg = st.fontSize === 'large';
+                    const effLabelW = isLg ? (is80mm ? 14 : 9) : labelWidth;
+                    const effValW = isLg ? (is80mm ? 10 : 7) : valWidth;
+                    const totalLabel = padEndVisual(cfg.totalLabel || L.total, effLabelW);
+                    const totalVal = padStartVisual(formatRp(data.total || 0), effValW);
+                    chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
+                        bold: st.bold !== false,
+                        fontSize: st.fontSize,
+                        align: st.align
+                    }));
+                    break;
+                }
+                case 'paymentInfo': {
+                    if (cfg.showMethod !== false) {
+                        chunks.push(formatStyledLine(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`, st));
+                    }
+                    if (cfg.showReceived !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
+                        chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`, st));
+                    }
+                    if (cfg.showChange !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
+                        chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`, st));
+                    }
+                    break;
+                }
+                case 'barcode': {
+                    if (data.orderNum) {
+                        chunks.push(buildEscPosBarcode(String(data.orderNum)));
+                        hasBarcodeRendered = true;
+                    }
+                    break;
+                }
+                case 'qrCode': {
+                    const qrUrl = cfg.url || cfg.qrContent || data.qrCodeUrl || '';
+                    if (qrUrl) {
+                        const modSize = cfg.size ? Math.max(3, Math.min(8, Math.round(cfg.size / 20))) : (is80mm ? 6 : 4);
+                        chunks.push(buildEscPosQRCode(String(qrUrl), modSize));
+                        hasQrRendered = true;
+                    }
+                    break;
+                }
+                case 'footer': {
+                    if (cfg.showDivider) {
+                        chunks.push(formatStyledLine(repeatChar('-', width)));
+                    }
+                    const footerMsg = cfg.footerText || data.footer;
+                    if (footerMsg) {
+                        chunks.push(formatStyledLine(footerMsg, {
+                            align: st.align || 'center',
+                            bold: st.bold,
+                            fontSize: st.fontSize
+                        }));
+                    }
+                    break;
+                }
+                case 'customText': {
+                    const customMsg = cfg.customText || cfg.text;
+                    if (customMsg) {
+                        chunks.push(formatStyledLine(customMsg, {
+                            align: st.align || 'center',
+                            bold: st.bold,
+                            fontSize: st.fontSize
+                        }));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    else {
+        // 默认结构（当没有配置 blocks 时）
+        if (data.storeLogo) {
+            const rawImg = await loadLogoBuffer(data.storeLogo);
+            if (rawImg) {
+                const logoBuf = imageBufferToEscPosRaster(rawImg, targetDots);
+                if (logoBuf)
+                    chunks.push(logoBuf);
+            }
+        }
+        const storeTitle = data.storeName || data.header || 'YOUME';
+        chunks.push(formatStyledLine(storeTitle, { align: 'center', bold: true, fontSize: 'large' }));
+        if (data.storePhone)
+            chunks.push(formatStyledLine(`Tel: ${data.storePhone}`, { align: 'center' }));
+        if (data.storeAddress)
+            chunks.push(formatStyledLine(data.storeAddress, { align: 'center' }));
+        chunks.push(formatStyledLine(repeatChar('=', width)));
+        chunks.push(formatStyledLine(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`));
+        if (data.orderDate || data.createdAt) {
+            chunks.push(formatStyledLine(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, true)}`));
+        }
+        if (data.channelName) {
+            chunks.push(formatStyledLine(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}`));
+        }
+        if (data.cashierName && data.showStaffName !== false) {
+            chunks.push(formatStyledLine(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`));
+        }
+        chunks.push(formatStyledLine(repeatChar('-', width)));
+        const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
+        chunks.push(formatStyledLine(tableHeader, { bold: true }));
+        chunks.push(formatStyledLine(repeatChar('-', width)));
+        if (data.items && data.items.length > 0) {
+            data.items.forEach((item) => {
+                const spec = item.specName ? ` ${item.specName}` : '';
+                const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
+                const qty = padStartVisual(String(item.quantity), qtyWidth);
+                const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
+                chunks.push(formatStyledLine(`${name}${qty}${price}`));
+                if (item.addons && item.addons.length > 0) {
+                    item.addons.forEach((a) => {
+                        chunks.push(formatStyledLine(`  + ${truncate(a.name || a, width - 4)}`, { fontSize: 'small' }));
+                    });
+                }
+            });
+        }
+        chunks.push(formatStyledLine(repeatChar('-', width)));
+        chunks.push(formatStyledLine(`${padEndVisual(L.subtotal, labelWidth)}${padStartVisual(formatRp(data.subtotal || 0), valWidth)}`));
+        if (data.tax) {
+            chunks.push(formatStyledLine(`${padEndVisual(L.tax, labelWidth)}${padStartVisual(formatRp(data.tax), valWidth)}`));
+        }
+        if (data.discount) {
+            chunks.push(formatStyledLine(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`, { bold: true }));
+        }
+        chunks.push(formatStyledLine(`${padEndVisual(L.total, labelWidth)}${padStartVisual(formatRp(data.total || 0), valWidth)}`, { bold: true }));
+        if (data.paidAmount) {
+            chunks.push(formatStyledLine(repeatChar('-', width)));
+            chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`));
+            chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`));
+        }
+        if (data.footer && data.footer !== data.storeName) {
+            chunks.push(CMD_CRLF);
+            chunks.push(formatStyledLine(data.footer, { align: 'center' }));
+        }
+        chunks.push(formatStyledLine(L.thanks, { align: 'center' }));
+    }
+    // 若模板中没有显式配置条码/二维码块，但顶层开启了，在票尾安全追加
+    if (!hasBarcodeRendered && data.showBarcode !== false && data.orderNum) {
+        chunks.push(buildEscPosBarcode(String(data.orderNum)));
+    }
+    if (!hasQrRendered && data.showQR && data.qrCodeUrl) {
+        chunks.push(buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4));
+    }
+    chunks.push(Buffer.from([0x0A, 0x0A]));
+    return Buffer.concat(chunks);
+}
 function generateReceiptText(data) {
     const is80mm = data.paperSize === '80mm';
     const width = is80mm ? 48 : 32;
@@ -2355,10 +2873,12 @@ function generateReceiptText(data) {
                 }
                 case 'divider': {
                     const style = cfg.dividerStyle || 'line';
-                    if (style === 'stars')
+                    if (style === 'dashed')
+                        lines.push(repeatChar('- ', Math.floor(width / 2)));
+                    else if (style === 'space')
+                        lines.push('');
+                    else if (style === 'stars')
                         lines.push(repeatChar('*', width));
-                    else if (style === 'line')
-                        lines.push(repeatChar('=', width));
                     else
                         lines.push(repeatChar('-', width));
                     break;
@@ -2433,7 +2953,7 @@ function generateReceiptText(data) {
                     break;
                 }
                 case 'tax': {
-                    const taxLabel = padEndVisual(cfg.label || L.tax, labelWidth);
+                    const taxLabel = padEndVisual(cfg.label || (cfg.rate ? `${L.tax} (${cfg.rate}%)` : L.tax), labelWidth);
                     lines.push(`${taxLabel}${padStartVisual(formatRp(data.tax || 0), valWidth)}`);
                     break;
                 }
