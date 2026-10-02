@@ -2463,7 +2463,14 @@ export function POSPage() {
         showStaffName: posReceipt.showStaffName ?? true,
         showCustomerName: posReceipt.showCustomerName ?? false,
         showKitchenNote: posReceipt.showKitchenNote ?? true,
-        showBarcode: posReceipt.showBarcode ?? true,
+        showLogo: posReceipt.showLogo !== false,
+        showBarcode: posReceipt.showBarcode !== false,
+        showQR: posReceipt.showQR === true,
+        storeLogo: (() => {
+          const raw = posReceipt.storeLogo || storeInfo.storeLogo || ''
+          if (!raw || raw.startsWith('http') || raw.startsWith('data:')) return raw
+          return `${getApiUrl().replace(/\/api$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
+        })(),
       })
       if (res?.success) {
         showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
@@ -2897,7 +2904,11 @@ export function POSPage() {
         storeName: storeInfo.storeName || posReceipt.header || 'YOUME',
         storePhone: posReceipt.storePhone || storeInfo.phone || '',
         storeAddress: posReceipt.storeAddress || storeInfo.address || '',
-        storeLogo: posReceipt.storeLogo || storeInfo.storeLogo || '',
+        storeLogo: (() => {
+          const raw = posReceipt.storeLogo || storeInfo.storeLogo || ''
+          if (!raw || raw.startsWith('http') || raw.startsWith('data:')) return raw
+          return `${getApiUrl().replace(/\/api$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
+        })(),
         language: lang || 'id',
         channelName: getChannelDisplayName(selectedChannel),
         tableNumber: selectedChannel?.code === 'DINE_IN' ? tableNumber : undefined,
@@ -2906,9 +2917,14 @@ export function POSPage() {
         showStaffName: posReceipt.showStaffName ?? true,
         showCustomerName: posReceipt.showCustomerName ?? true,
         showKitchenNote: posReceipt.showKitchenNote ?? true,
-        showLogo: posReceipt.showLogo ?? true,
-        showQR: posReceipt.showQR ?? false,
-        qrCodeUrl: posReceipt.qrCodeUrl || '',
+        showLogo: posReceipt.showLogo !== false,
+        showBarcode: posReceipt.showBarcode !== false,
+        showQR: posReceipt.showQR === true,
+        qrCodeUrl: (() => {
+          const raw = posReceipt.qrCodeUrl || ''
+          if (!raw || raw.startsWith('http') || raw.startsWith('data:')) return raw
+          return `${getApiUrl().replace(/\/api$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
+        })(),
         printerName,
         printerHost,
         printerPort,

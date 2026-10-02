@@ -2476,6 +2476,29 @@ async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
         return fs.readFileSync(p)
       }
     }
+
+    // 5. 针对类似 /uploads/... 的相对路径，自动拼接远端域名进行兜底下载
+    if (logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//')) {
+      const remoteHosts = ['https://api.aicube.online', 'https://admin.aicube.online']
+      for (const host of remoteHosts) {
+        try {
+          const remoteUrl = `${host}${logoUrlOrPath}`
+          const remoteBuf = await new Promise<Buffer | null>((resolve) => {
+            const https = require('https')
+            const req = https.get(remoteUrl, { timeout: 3000 }, (res: any) => {
+              if (res.statusCode !== 200) return resolve(null)
+              const chunks: Buffer[] = []
+              res.on('data', (d: Buffer) => chunks.push(d))
+              res.on('end', () => resolve(Buffer.concat(chunks)))
+              res.on('error', () => resolve(null))
+            })
+            req.on('error', () => resolve(null))
+            req.on('timeout', () => { req.destroy(); resolve(null) })
+          })
+          if (remoteBuf && remoteBuf.length > 0) return remoteBuf
+        } catch {}
+      }
+    }
   } catch (e: any) {
     writeCrash(`[LOGO LOAD] Failed to load logo from '${logoUrlOrPath}': ${e?.message}`)
   }
@@ -2564,9 +2587,9 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
   const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null)
   const chunks: Buffer[] = []
 
-  // 联号标记（如 Customer Copy / Merchant Copy）
-  if (data.copyLabel) {
-    chunks.push(formatStyledLine(`*** ${data.copyLabel} ***`, { align: 'center', bold: true }))
+  // 联号标记（如 Customer Copy / Merchant Copy，仅在设置中开启多联且明确有联号标记时输出）
+  if (data.copyLabel && data.printCopies && data.printCopies > 1) {
+    chunks.push(formatStyledLine(`*** ${data.copyLabel} ***`, { align: 'center', bold: true, fontSize: 'small' }))
     chunks.push(CMD_CRLF)
   }
 
@@ -2586,7 +2609,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         case 'logo': {
           let logoBuf: Buffer | null = null
           const logoSource = cfg.url || data.storeLogo || ''
-          if (logoSource) {
+          if (logoSource && data.showLogo !== false) {
             const rawImg = await loadLogoBuffer(logoSource)
             if (rawImg) {
               const customWidth = cfg.width ? Math.min(targetDots, cfg.width * 2) : targetDots
@@ -2595,12 +2618,13 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           }
           if (logoBuf) {
             chunks.push(logoBuf)
-          } else if (data.showLogo !== false) {
+          } else if (data.showLogo !== false && !enabledBlocks.some((b: any) => b.type === 'header')) {
+            // 仅在整个模板完全没有 header 块时才作为文本备选输出，绝不多次重复输出店名
             const title = data.storeName || data.header || 'YOUME'
             chunks.push(formatStyledLine(title, {
               align: st.align || 'center',
               bold: st.bold !== false,
-              fontSize: st.fontSize || 'large'
+              fontSize: st.fontSize || 'normal'
             }))
           }
           break
@@ -2646,7 +2670,10 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
         case 'orderInfo': {
           const infoLines: string[] = []
-          infoLines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`)
+          // 仅在未显式禁用单号时才输出单号
+          if (cfg.showOrderNo !== false && data.orderNum) {
+            infoLines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum}`)
+          }
           const showDate = cfg.showDate !== false
           const showTime = cfg.showTime !== false
           if (showDate || showTime) {
@@ -2672,18 +2699,41 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'items': {
-          const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`
-          chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: st.fontSize }))
-          chunks.push(formatStyledLine(repeatChar('-', width)))
-
           const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact'
+          const isSimple = cfg.itemFormat === 'simple' || (!is80mm && !cfg.showQtyPriceHeader)
+
+          // 仅在明确开启三列表头时才打印表头，且强制使用标准正常小字，绝不使用突兀大字
+          if (cfg.showQtyPriceHeader === true) {
+            const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`
+            chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: 'normal' }))
+            chunks.push(formatStyledLine(repeatChar('-', width)))
+          } else if (cfg.showHeader !== false) {
+            // 默认打印纯净商品标题行（与设计器保持 100% 一致）
+            chunks.push(formatStyledLine(L.item, { bold: true, fontSize: st.fontSize }))
+          }
+
           if (data.items && data.items.length > 0) {
             data.items.forEach((item: any) => {
               const spec = item.specName ? ` ${item.specName}` : ''
-              const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth)
-              const qty = padStartVisual(String(item.quantity), qtyWidth)
-              const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth)
-              chunks.push(formatStyledLine(`${name}${qty}${price}`, { bold: st.bold, fontSize: st.fontSize }))
+              const qtyPrefix = item.quantity > 1 ? `x${item.quantity} ` : ''
+              const rawName = `${item.productName}${spec}`
+
+              if (isSimple || cfg.showQtyPriceHeader !== true) {
+                // 双列优雅排版（与设计器预览一致：左侧商品名称+数量，右侧总金额）
+                const priceStr = formatRp(item.unitPrice * item.quantity)
+                const priceW = Math.max(10, priceStr.length + 1)
+                const maxNameW = Math.max(8, width - priceW)
+                const truncatedName = truncate(`${qtyPrefix}${rawName}`, maxNameW)
+                const namePadded = padEndVisual(truncatedName, width - priceW)
+                const pricePadded = padStartVisual(priceStr, priceW)
+                chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }))
+              } else {
+                // 标准三列排版
+                const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth)
+                const qty = padStartVisual(String(item.quantity), qtyWidth)
+                const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth)
+                chunks.push(formatStyledLine(`${name}${qty}${price}`, { bold: st.bold, fontSize: st.fontSize }))
+              }
 
               if (isCompact) {
                 const parts: string[] = []
@@ -2735,16 +2785,43 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
             const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
             chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
           }
-          const isLg = st.fontSize === 'large'
-          const effLabelW = isLg ? (is80mm ? 14 : 9) : labelWidth
-          const effValW = isLg ? (is80mm ? 10 : 7) : valWidth
-          const totalLabel = padEndVisual(cfg.totalLabel || L.total, effLabelW)
-          const totalVal = padStartVisual(formatRp(data.total || 0), effValW)
-          chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
-            bold: st.bold !== false,
-            fontSize: st.fontSize,
-            align: st.align
-          }))
+
+          const rawTotalLabel = cfg.totalLabel || L.total
+          const rawTotalVal = formatRp(data.total || 0)
+
+          // 58mm 热敏纸大字（倍宽倍高）物理单行仅有 16 字符极限，防止任何截断换行
+          if (!is80mm && st.fontSize === 'large') {
+            const combinedLen = rawTotalLabel.length + rawTotalVal.length + 1
+            if (combinedLen > 16) {
+              // 超限时自适应：采用加粗标准字号排版，确保 100% 同行对齐永不换行截断
+              const totalLabel = padEndVisual(rawTotalLabel, labelWidth)
+              const totalVal = padStartVisual(rawTotalVal, valWidth)
+              chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
+                bold: true,
+                fontSize: 'normal',
+                align: st.align
+              }))
+            } else {
+              // 安全在 16 字符内，精准定宽输出大字
+              const spaces = Math.max(1, 16 - (rawTotalLabel.length + rawTotalVal.length))
+              const safeLine = `${rawTotalLabel}${' '.repeat(spaces)}${rawTotalVal}`
+              chunks.push(formatStyledLine(safeLine, {
+                bold: true,
+                fontSize: 'large',
+                align: st.align
+              }))
+            }
+          } else {
+            const effLabelW = st.fontSize === 'large' ? (is80mm ? 14 : 9) : labelWidth
+            const effValW = st.fontSize === 'large' ? (is80mm ? 10 : 7) : valWidth
+            const totalLabel = padEndVisual(rawTotalLabel, effLabelW)
+            const totalVal = padStartVisual(rawTotalVal, effValW)
+            chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
+              bold: st.bold !== false,
+              fontSize: st.fontSize,
+              align: st.align
+            }))
+          }
           break
         }
 
@@ -2762,7 +2839,8 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'barcode': {
-          if (data.orderNum) {
+          // 严格尊重条码禁用：只要数据标记关闭，即使模板有该块也绝不打印
+          if (data.showBarcode !== false && data.orderNum) {
             chunks.push(buildEscPosBarcode(String(data.orderNum)))
             hasBarcodeRendered = true
           }
@@ -2771,7 +2849,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
         case 'qrCode': {
           const qrUrl = cfg.url || cfg.qrContent || data.qrCodeUrl || ''
-          if (qrUrl) {
+          if (qrUrl && data.showQR !== false) {
             const modSize = cfg.size ? Math.max(3, Math.min(8, Math.round(cfg.size / 20))) : (is80mm ? 6 : 4)
             chunks.push(buildEscPosQRCode(String(qrUrl), modSize))
             hasQrRendered = true
@@ -2808,8 +2886,8 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
       }
     }
   } else {
-    // 默认结构（当没有配置 blocks 时）
-    if (data.storeLogo) {
+    // 默认结构（当完全没有配置任何 blocks 时）
+    if (data.storeLogo && data.showLogo !== false) {
       const rawImg = await loadLogoBuffer(data.storeLogo)
       if (rawImg) {
         const logoBuf = imageBufferToEscPosRaster(rawImg, targetDots)
@@ -2870,14 +2948,14 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
       chunks.push(formatStyledLine(data.footer, { align: 'center' }))
     }
     chunks.push(formatStyledLine(L.thanks, { align: 'center' }))
-  }
 
-  // 若模板中没有显式配置条码/二维码块，但顶层开启了，在票尾安全追加
-  if (!hasBarcodeRendered && data.showBarcode !== false && data.orderNum) {
-    chunks.push(buildEscPosBarcode(String(data.orderNum)))
-  }
-  if (!hasQrRendered && data.showQR && data.qrCodeUrl) {
-    chunks.push(buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4))
+    // 仅在无模板且显式开启时才兜底追加条码/二维码
+    if (!hasBarcodeRendered && data.showBarcode === true && data.orderNum) {
+      chunks.push(buildEscPosBarcode(String(data.orderNum)))
+    }
+    if (!hasQrRendered && data.showQR === true && data.qrCodeUrl) {
+      chunks.push(buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4))
+    }
   }
 
   chunks.push(Buffer.from([0x0A, 0x0A]))

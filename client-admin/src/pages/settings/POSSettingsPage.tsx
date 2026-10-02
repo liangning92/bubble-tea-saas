@@ -624,11 +624,14 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     autoPrint: true,             // 自动打印
   })
 
+  // 确保 storeId 可用于模板查询（兼容店长与超管）
+  const effectiveStoreId = user?.storeId || (posConfig?.data?.data as any)?.storeId || ''
+
   // 小票模板列表
-  const { data: receiptTemplatesData } = useQuery({
-    queryKey: ['receipt-templates', user?.storeId],
-    queryFn: () => receiptTemplateApi.list(user?.storeId || ''),
-    enabled: !!user?.storeId
+  const { data: receiptTemplatesData, refetch: refetchReceiptTemplates } = useQuery({
+    queryKey: ['receipt-templates', effectiveStoreId],
+    queryFn: () => receiptTemplateApi.list(effectiveStoreId),
+    enabled: !!effectiveStoreId
   })
   const receiptTemplates = useMemo(() => receiptTemplatesData?.data?.data || [], [receiptTemplatesData])
 
@@ -2103,43 +2106,53 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
               <div className="p-4 bg-gray-50 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium text-gray-800 text-sm">🎨 {t('posSettings.activeTemplate', '生效的小票视觉模板')}</h4>
-                  <button
-                    type="button"
-                    onClick={() => setReceiptSubMode('template')}
-                    className="text-xs text-primary hover:underline font-medium"
-                  >
-                    {t('posSettings.openTemplateDesigner', '打开模板设计器 →')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => refetchReceiptTemplates()}
+                      className="text-xs text-gray-500 hover:text-primary flex items-center gap-1 font-medium"
+                      title="重新拉取模板列表"
+                    >
+                      🔄 刷新列表 ({receiptTemplates.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceiptSubMode('template')}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      {t('posSettings.openTemplateDesigner', '打开模板设计器 →')}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                  <select
-                    value={_posReceipt.templateId || ''}
-                    onChange={(e) => {
-                      const newId = e.target.value
-                      setPosReceipt(prev => {
-                        const updated = { ...prev, templateId: newId }
-                        handleSave('posReceipt', updated)
-                        return updated
-                      })
-                    }}
-                    className="input text-sm flex-1"
-                  >
-                    <option value="">{t('posSettings.defaultTemplateAuto', '自动使用默认模板 (Default)')}</option>
-                    {receiptTemplates.map((tpl: any) => (
-                      <option key={tpl.id} value={tpl.id}>
-                        {tpl.name} {tpl.isDefault ? `(${t('common.default', '默认')})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {_posReceipt.templateId ? (
-                    <span className="text-xs px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg">
-                      ✓ {t('posSettings.templateAssigned', '已指定专属模板')}
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
-                      ℹ️ {t('posSettings.usingDefaultTemplate', '沿用默认模板')}
-                    </span>
-                  )}
+                  <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                    <select
+                      value={_posReceipt.templateId || ''}
+                      onChange={(e) => {
+                        const newId = e.target.value
+                        setPosReceipt(prev => {
+                          const updated = { ...prev, templateId: newId }
+                          handleSave('posReceipt', updated)
+                          return updated
+                        })
+                      }}
+                      className="input text-sm flex-1"
+                    >
+                      <option value="">{t('posSettings.defaultTemplateAuto', '自动使用默认模板 (Default)')}</option>
+                      {receiptTemplates.map((tpl: any) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name} {tpl.isDefault ? `(${t('common.default', '默认')})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {_posReceipt.templateId ? (
+                      <span className="text-xs px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg">
+                        ✓ {t('posSettings.templateAssigned', '已指定专属模板')}
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+                        ℹ️ {t('posSettings.usingDefaultTemplate', '沿用默认模板')}
+                      </span>
+                    )}
                 </div>
               </div>
 
@@ -2578,12 +2591,14 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
             </div>
           ) : (
             <ReceiptTemplateEditor
-              storeId={user?.storeId || ''}
+              storeId={effectiveStoreId}
               defaultLogo={_posReceipt.storeLogo}
               defaultQrCode={_posReceipt.qrCodeUrl}
               onSave={() => {
-                // Refresh configs after saving template
-                queryClient.invalidateQueries({ queryKey: ['configs', user?.storeId] })
+                // Refresh all configs and template queries after saving template
+                queryClient.invalidateQueries({ queryKey: ['receipt-templates'] })
+                queryClient.invalidateQueries({ queryKey: ['config'] })
+                refetchReceiptTemplates()
               }}
             />
           )}

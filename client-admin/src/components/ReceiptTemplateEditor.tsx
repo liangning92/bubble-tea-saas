@@ -1155,7 +1155,15 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
     setBlocks(blocks.map((b) => (b.id === updated.id ? updated : b)))
   }
 
-  const handleSave = async () => {
+  const handleNewTemplate = () => {
+    const defaultTpl = getDefaultTemplate(storeId)
+    setCurrentTemplateId(null)
+    setTemplateName(`${t('posSettings.blockCustomText', '自定义模板')} ${templates.length + 1}`)
+    setBlocks(defaultTpl.blocks)
+    setSelectedBlockId(null)
+  }
+
+  const handleSave = async (autoSetDefault = true) => {
     if (!templateName.trim()) {
       alert(t('posSettings.templateNameRequired'))
       return
@@ -1164,6 +1172,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
     setSaving(true)
     try {
       const content = JSON.stringify({ version: 1, paperSize, blocks })
+      let targetId = currentTemplateId
 
       if (currentTemplateId) {
         await ReceiptTemplateApi.update(currentTemplateId, {
@@ -1177,14 +1186,22 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
           content,
           isDefault: templates.length === 0,
         })
-        setCurrentTemplateId(res.data.data.id)
+        targetId = res.data.data.id
+        setCurrentTemplateId(targetId)
+      }
+
+      // 若标记为自动生效或这是唯一的模板，自动同步为默认模板
+      if (targetId && (autoSetDefault || templates.length <= 1)) {
+        await ReceiptTemplateApi.setDefault(targetId).catch(() => {})
       }
 
       onSave?.()
       await loadTemplates()
-    } catch (err) {
+      alert('✓ 模板保存成功并已同步设为生效模板！')
+    } catch (err: any) {
       console.error('Failed to save template:', err)
-      alert(t('posSettings.saveTemplateFailed'))
+      const msg = err?.response?.data?.message || err?.message || ''
+      alert(`${t('posSettings.saveTemplateFailed')}${msg ? ': ' + msg : ''}`)
     } finally {
       setSaving(false)
     }
@@ -1192,13 +1209,15 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
   const handleSetDefault = async () => {
     if (!currentTemplateId) {
-      await handleSave()
+      await handleSave(true)
+      return
     }
 
     try {
-      await ReceiptTemplateApi.setDefault(currentTemplateId!)
+      await ReceiptTemplateApi.setDefault(currentTemplateId)
       await loadTemplates()
       onSave?.()
+      alert('✓ 已成功设为默认生效模板！')
     } catch (err) {
       console.error('Failed to set default:', err)
     }
@@ -1267,21 +1286,58 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <input
-            type="text"
-            value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
-            className="input w-48"
-            placeholder={t('posSettings.receiptTemplateNamePlaceholder')}
-          />
-          {templates.find((t) => t.id === currentTemplateId)?.isDefault && (
-            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">{t('posSettings.templateDefault')}</span>
-          )}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">模板切换:</label>
+            <select
+              value={currentTemplateId || ''}
+              onChange={(e) => {
+                const val = e.target.value
+                if (val === '__new__') {
+                  handleNewTemplate()
+                } else {
+                  const found = templates.find((t) => t.id === val)
+                  if (found) selectTemplate(found)
+                }
+              }}
+              className="input text-xs py-1.5 font-medium max-w-[180px]"
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.isDefault ? '(默认)' : ''}
+                </option>
+              ))}
+              <option value="__new__">+ 新建模板...</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleNewTemplate}
+            className="px-2.5 py-1.5 bg-white border border-gray-300 hover:border-primary text-gray-700 hover:text-primary rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+          >
+            <span>+ 新建</span>
+          </button>
+
+          <div className="h-4 w-px bg-gray-300" />
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">名称:</label>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              className="input text-xs py-1.5 w-40 font-bold"
+              placeholder={t('posSettings.receiptTemplateNamePlaceholder')}
+            />
+            {templates.find((t) => t.id === currentTemplateId)?.isDefault && (
+              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">★ 生效中</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
+          <button onClick={() => handleSave(true)} disabled={saving} className="btn-primary flex items-center gap-2">
             {saving ? t('posSettings.templateSaving') : t('common.save')}
           </button>
           <button onClick={handleSetDefault} className="btn-secondary flex items-center gap-2">
