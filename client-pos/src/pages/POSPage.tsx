@@ -465,6 +465,14 @@ export function POSPage() {
     img.src = fullUrl
   }, [posReceipt.storeLogo, storeInfo.storeLogo])
 
+  const getPrintLogo = useCallback(() => {
+    if (cachedLogoBase64Ref.current) return cachedLogoBase64Ref.current
+    const rawLogo = posReceipt.storeLogo || storeInfo.storeLogo || ''
+    if (!rawLogo) return ''
+    if (rawLogo.startsWith('data:image/') || rawLogo.startsWith('http')) return rawLogo
+    return `${getApiUrl().replace(/\/api$/, '')}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`
+  }, [posReceipt.storeLogo, storeInfo.storeLogo])
+
   // 根据 channelSettings 与 posLayout 动态过滤并补齐自定义名称的可用渠道
   const availableChannels = useMemo(() => {
     const codeToKeyMap: Record<string, string> = {
@@ -2498,7 +2506,7 @@ export function POSPage() {
         showLogo: posReceipt.showLogo !== false,
         showBarcode: posReceipt.showBarcode !== false,
         showQR: posReceipt.showQR === true,
-        storeLogo: cachedLogoBase64Ref.current || (posReceipt.storeLogo?.startsWith('data:') ? posReceipt.storeLogo : ''),
+        storeLogo: getPrintLogo(),
       })
       if (res?.success) {
         showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
@@ -2951,7 +2959,7 @@ export function POSPage() {
         storeName: storeInfo.storeName || posReceipt.header || 'YOUME',
         storePhone: posReceipt.storePhone || storeInfo.phone || '',
         storeAddress: posReceipt.storeAddress || storeInfo.address || '',
-        storeLogo: cachedLogoBase64Ref.current || (posReceipt.storeLogo?.startsWith('data:') ? posReceipt.storeLogo : ''),
+        storeLogo: getPrintLogo(),
         language: lang || 'id',
         channelName: getChannelDisplayName(selectedChannel),
         tableNumber: selectedChannel?.code === 'DINE_IN' ? tableNumber : undefined,
