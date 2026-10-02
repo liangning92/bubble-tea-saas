@@ -433,6 +433,38 @@ export function POSPage() {
     autoPrint: true,
   })
 
+  // 预缓存 Logo 为 Base64 Data URL，彻底消除结账打印时的远端 HTTP 下载与挂起死锁
+  const cachedLogoBase64Ref = useRef<string>('')
+  useEffect(() => {
+    const rawLogo = posReceipt.storeLogo || storeInfo.storeLogo || ''
+    if (!rawLogo) {
+      cachedLogoBase64Ref.current = ''
+      return
+    }
+    if (rawLogo.startsWith('data:image/')) {
+      cachedLogoBase64Ref.current = rawLogo
+      return
+    }
+    const fullUrl = rawLogo.startsWith('http')
+      ? rawLogo
+      : `${getApiUrl().replace(/\/api$/, '')}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(img, 0, 0)
+          cachedLogoBase64Ref.current = canvas.toDataURL('image/png')
+        }
+      } catch {}
+    }
+    img.src = fullUrl
+  }, [posReceipt.storeLogo, storeInfo.storeLogo])
+
   // 根据 channelSettings 与 posLayout 动态过滤并补齐自定义名称的可用渠道
   const availableChannels = useMemo(() => {
     const codeToKeyMap: Record<string, string> = {
@@ -2466,11 +2498,7 @@ export function POSPage() {
         showLogo: posReceipt.showLogo !== false,
         showBarcode: posReceipt.showBarcode !== false,
         showQR: posReceipt.showQR === true,
-        storeLogo: (() => {
-          const raw = posReceipt.storeLogo || storeInfo.storeLogo || ''
-          if (!raw || raw.startsWith('http') || raw.startsWith('data:')) return raw
-          return `${getApiUrl().replace(/\/api$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
-        })(),
+        storeLogo: cachedLogoBase64Ref.current || (posReceipt.storeLogo?.startsWith('data:') ? posReceipt.storeLogo : ''),
       })
       if (res?.success) {
         showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
@@ -2810,6 +2838,15 @@ export function POSPage() {
         })
         if (!printResult) {
           showToast(t('pos.printFailed', 'Failed to print receipt'), 'error')
+          // 兜底：若打印失败且为现金结账，独立发送钱箱脉冲，确保钱箱 100% 弹开
+          if (shouldOpenDrawer) {
+            const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
+            const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
+            electronAPI?.openCashDrawer?.({
+              printerName: targetPrinterName,
+              cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
+            }).catch((e: any) => console.warn('[POS] Drawer fallback error:', e))
+          }
         }
       }
       // 打印厨房单
@@ -2823,6 +2860,16 @@ export function POSPage() {
       clearCart()
       setShowPaymentModal(false)
       showToast(`${t('pos.orderSuccess')} #${orderNum}`, 'success')
+      // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
+      setTableNumber('')
+      setDineInCount(1)
+      setCustomerCount(1)
+      setPlatformOrderId('')
+      setOrderNote('')
+      setMember(null)
+      setSelectedCoupon(null)
+      setPaidAmount('')
+      setShowChannelModal(true)
     } catch (error: any) {
       playSoundWithSettings('error', soundSettings.error)
       // 解析服务端错误码并翻译
@@ -2887,7 +2934,7 @@ export function POSPage() {
     const printerHost = isNetworkPrinter ? receiptPrinter?.printerIp : undefined
     const printerPort = isNetworkPrinter ? (receiptPrinter?.printerPort || 9100) : undefined
     try {
-      const result = await electronAPI?.sendPrintReceipt({
+      const printPromise = electronAPI?.sendPrintReceipt({
         orderNum,
         blocks: receiptTemplate?.blocks || null,
         template: receiptTemplate || null,
@@ -2904,11 +2951,7 @@ export function POSPage() {
         storeName: storeInfo.storeName || posReceipt.header || 'YOUME',
         storePhone: posReceipt.storePhone || storeInfo.phone || '',
         storeAddress: posReceipt.storeAddress || storeInfo.address || '',
-        storeLogo: (() => {
-          const raw = posReceipt.storeLogo || storeInfo.storeLogo || ''
-          if (!raw || raw.startsWith('http') || raw.startsWith('data:')) return raw
-          return `${getApiUrl().replace(/\/api$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
-        })(),
+        storeLogo: cachedLogoBase64Ref.current || (posReceipt.storeLogo?.startsWith('data:') ? posReceipt.storeLogo : ''),
         language: lang || 'id',
         channelName: getChannelDisplayName(selectedChannel),
         tableNumber: selectedChannel?.code === 'DINE_IN' ? tableNumber : undefined,
@@ -2920,11 +2963,7 @@ export function POSPage() {
         showLogo: posReceipt.showLogo !== false,
         showBarcode: posReceipt.showBarcode !== false,
         showQR: posReceipt.showQR === true,
-        qrCodeUrl: (() => {
-          const raw = posReceipt.qrCodeUrl || ''
-          if (!raw || raw.startsWith('http') || raw.startsWith('data:')) return raw
-          return `${getApiUrl().replace(/\/api$/, '')}${raw.startsWith('/') ? '' : '/'}${raw}`
-        })(),
+        qrCodeUrl: posReceipt.qrCodeUrl || '',
         printerName,
         printerHost,
         printerPort,
@@ -2950,6 +2989,10 @@ export function POSPage() {
         memberName: member?.name,
         pointsRedeemed: pointsToRedeem
       })
+      const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) =>
+        setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 4000)
+      )
+      const result = await Promise.race([printPromise, timeoutPromise])
       return result?.success ?? false
     } catch (err) {
       console.warn('Print error:', err)
@@ -3047,13 +3090,13 @@ export function POSPage() {
 
     return (
       <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
-        {/* Header - 品牌底色，紧凑无缝贴顶 */}
-        <header className="bg-primary px-3 py-1.5 flex items-center justify-between gap-3 select-none">
-          {/* 左侧：Logo (下方紧贴收银员) + 渠道切换标签 + Online指示器 */}
-          <div className="flex items-center gap-3 shrink-0">
+        {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
+        <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
+          {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
+          <div className="flex items-center gap-4 shrink-0">
             {/* Logo 区域：上面是 Logo，下面紧贴收银员姓名 */}
             <div className="flex flex-col items-start justify-center shrink-0">
-              <div className="h-7 min-w-[32px] max-w-[110px] flex items-center">
+              <div className="h-8 min-w-[36px] max-w-[120px] flex items-center">
                 <img
                   src={((storeInfo.storeLogo && storeInfo.storeLogo !== '/youme-logo-white.png' && storeInfo.storeLogo !== '/youme-logo-red.png') ? storeInfo.storeLogo : '') || YOUME_LOGO_WHITE}
                   alt="Logo"
@@ -3062,29 +3105,17 @@ export function POSPage() {
                     target.onerror = null
                     target.src = YOUME_LOGO_WHITE
                   }}
-                  className="h-7 max-w-[110px] object-contain"
+                  className="h-8 max-w-[120px] object-contain"
                 />
               </div>
-              <span className="text-white/80 text-[11px] font-medium leading-none mt-0.5 truncate max-w-[110px]">
+              <span className="text-white/90 text-xs font-medium leading-none mt-1 truncate max-w-[120px]">
                 {user?.staff?.name || t('pos.cashier')}
               </span>
             </div>
 
-            {/* 渠道标签：精简显示，点击切换渠道，彻底移除就餐人数 */}
-            {selectedChannel && (
-              <button
-                onClick={() => setShowChannelModal(true)}
-                className="px-2.5 py-1 text-white bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                title={t('pos.switchChannel', 'Switch Channel')}
-              >
-                <span>{selectedChannel.icon}</span>
-                <span>{getChannelDisplayName(selectedChannel)}</span>
-              </button>
-            )}
-
             {/* Online 状态 */}
             {displaySettings.showOfflineIndicator !== false && (
-              <span className={`px-2 py-0.5 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
                 connectionStatus === 'connected' ? 'bg-emerald-500/20 text-white border border-emerald-400/40' :
                 connectionStatus === 'connecting' ? 'bg-amber-500/20 text-amber-100 border border-amber-400/40 animate-pulse' :
                 'bg-red-500 text-white animate-pulse'
@@ -3311,45 +3342,6 @@ export function POSPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：分类栏 + 产品区 */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* 渠道快捷切换条 (根据后台渠道设置实时生效) */}
-          {availableChannels.length > 1 && (
-            <div className="bg-white border-b px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto flex-shrink-0 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mr-1">
-                  {t('pos.channel', '渠道')}:
-                </span>
-                {availableChannels.map(ch => {
-                  const isSelected = selectedChannel?.code === ch.code || selectedChannel?.id === ch.id
-                  const displayName = getChannelDisplayName(ch)
-                  return (
-                    <button
-                      key={ch.id || ch.code}
-                      onClick={() => {
-                        setSelectedChannel(ch)
-                        if (ch.code === 'DINE_IN' && !dineInCount) {
-                          setDineInCount(1)
-                        }
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all touch-feedback ${
-                        isSelected
-                          ? 'bg-primary text-white shadow-sm ring-2 ring-primary/20'
-                          : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200/80'
-                      }`}
-                      style={isSelected && (ch as any).color ? { backgroundColor: (ch as any).color } : {}}
-                    >
-                      <span className="text-sm">{(ch as any).icon || '🛍️'}</span>
-                      <span>{displayName}</span>
-                      {ch.code === 'DINE_IN' && isSelected && (
-                        <span className="ml-1 px-1.5 py-0.5 bg-black/20 rounded text-[10px]">
-                          {dineInCount || 1}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
 
           {/* 分类区域 - 白色背景 */}
           {selectedChannel && (
@@ -3425,6 +3417,29 @@ export function POSPage() {
 
         {/* 购物车 - 大屏设计 */}
         <div className="w-80 bg-white border-l flex flex-col">
+          {/* 当前订单渠道与桌号/人数条（点击可随时修改） */}
+          <div
+            onClick={() => setShowChannelModal(true)}
+            className="px-3.5 py-2.5 bg-gradient-to-r from-red-50 to-orange-50 border-b flex items-center justify-between cursor-pointer hover:bg-orange-100/60 transition-colors select-none"
+            title={t('settings.selectChannelHint', '点击修改渠道与桌号')}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base">{selectedChannel?.icon || '🛍️'}</span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold text-gray-800 truncate">
+                  {getChannelDisplayName(selectedChannel)}
+                  {selectedChannel?.code === 'DINE_IN' && tableNumber && ` · ${t('pos.table', '桌号')} ${tableNumber}`}
+                </span>
+                <span className="text-[11px] text-gray-500">
+                  {selectedChannel?.code === 'DINE_IN' ? `${dineInCount || 1} ${t('pos.dineInCount', '人')}` : t('pos.takeaway', '外带/自提')}
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] font-semibold text-primary px-2 py-0.5 bg-white border border-primary/20 rounded shadow-xs shrink-0">
+              {t('common.edit', '修改')}
+            </span>
+          </div>
+
           <div className="p-2 border-b flex items-center justify-between bg-gray-50">
             <h2 className="font-bold text-sm flex items-center gap-2">
               <ShoppingCart size={20} />

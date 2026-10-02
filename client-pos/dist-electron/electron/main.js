@@ -1187,11 +1187,13 @@ electron_1.ipcMain.on('payment-qr', (_event, qrData) => {
  */
 async function resolvePrinterName(providedName) {
     const trimmed = (providedName || '').trim();
-    // 获取系统已安装的所有打印机
+    // 获取系统已安装的所有打印机（限制 1.5 秒超时熔断，防止假死驱动阻塞收银线程）
     let installedPrinters = [];
     try {
         if (mainWindow && !mainWindow.isDestroyed()) {
-            installedPrinters = await mainWindow.webContents.getPrintersAsync();
+            const getPrinters = mainWindow.webContents.getPrintersAsync();
+            const timeout = new Promise((r) => setTimeout(() => r([]), 1500));
+            installedPrinters = await Promise.race([getPrinters, timeout]);
         }
     }
     catch (err) {
@@ -1447,7 +1449,14 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 ...data,
                 copyLabel: c === 0 ? '(Customer Copy)' : '(Merchant Copy)'
             } : data;
-            const receiptBuf = await buildReceiptEscPosBuffer(copyData);
+            let receiptBuf;
+            try {
+                receiptBuf = await buildReceiptEscPosBuffer(copyData);
+            }
+            catch (err) {
+                writeCrash(`[PRINT] buildReceiptEscPosBuffer call failed: ${err?.message}`);
+                receiptBuf = Buffer.concat([encodeEscPosText(generateReceiptText(copyData)), Buffer.from([0x0A, 0x0A])]);
+            }
             // 只有第一联出纸前触发弹钱箱
             const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0);
             // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出全格式化 ESC/POS 数据，切纸
@@ -1507,10 +1516,24 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
         try {
             await printViaWindowsRaw({ ...data, printerName });
             writeCrash('[PRINT] printViaWindowsRaw fallback success');
+            // printViaWindowsRaw 为纯文本通道，无法发送钱箱脉冲；若开启开钱箱，额外发送一次钱箱脉冲保底
+            if (shouldOpenDrawer && drawerCmd.length > 0) {
+                try {
+                    await sendRawBytesToWindowsPrinter(printerName, drawerCmd);
+                }
+                catch { }
+            }
             return { success: true };
         }
         catch (winErr) {
             writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winErr.message}`);
+            // 若打印彻底失败但需开钱箱，独立发送钱箱脉冲保底
+            if (shouldOpenDrawer && drawerCmd.length > 0) {
+                try {
+                    await sendRawBytesToWindowsPrinter(printerName, drawerCmd);
+                }
+                catch { }
+            }
             return { success: false, error: winErr.message };
         }
     }
@@ -2263,8 +2286,20 @@ function encodeEscPosText(text) {
  * 将图片 Buffer 转换为 ESC/POS 点阵位图指令 (GS v 0)
  * 58mm 热敏纸有效点宽约为 384 dots，80mm 有效点宽约为 576 dots
  */
+const logoMemoryCache = new Map();
 function imageBufferToEscPosRaster(imageBuf, targetWidthDots = 384) {
     try {
+        if (!imageBuf || imageBuf.length < 8)
+            return null;
+        // 基础图片魔数校验（PNG: 89 50 4E 47, JPEG: FF D8, BMP: 42 4D, GIF: 47 49 46），严禁将 HTML 404 文本喂给 nativeImage
+        const isImageMagic = ((imageBuf[0] === 0x89 && imageBuf[1] === 0x50 && imageBuf[2] === 0x4E && imageBuf[3] === 0x47) ||
+            (imageBuf[0] === 0xFF && imageBuf[1] === 0xD8) ||
+            (imageBuf[0] === 0x42 && imageBuf[1] === 0x4D) ||
+            (imageBuf[0] === 0x47 && imageBuf[1] === 0x49));
+        if (!isImageMagic) {
+            writeCrash(`[ESC/POS RASTER] Buffer is not a valid image format (magic: ${imageBuf.slice(0, 4).toString('hex')})`);
+            return null;
+        }
         const nImg = electron_1.nativeImage.createFromBuffer(imageBuf);
         if (nImg.isEmpty())
             return null;
@@ -2318,6 +2353,11 @@ function imageBufferToEscPosRaster(imageBuf, targetWidthDots = 384) {
 }
 /**
  * 加载 Logo 图片字节
+ * 铁律：打印热敏小票绝不可同步阻塞网络请求！
+ * 1. Base64 Data URL 优先（0ms 内存转换）
+ * 2. 内存缓存优先（0ms）
+ * 3. 本地文件系统直接读取（< 1ms）
+ * 4. 远端 URL 若未就绪，后台异步预拉取，当前打印瞬间返回 null，0ms 零阻塞！
  */
 async function loadLogoBuffer(logoUrlOrPath) {
     if (!logoUrlOrPath)
@@ -2330,33 +2370,15 @@ async function loadLogoBuffer(logoUrlOrPath) {
                 return Buffer.from(parts[1], 'base64');
             }
         }
-        // 2. HTTP / HTTPS URL
-        if (logoUrlOrPath.startsWith('http://') || logoUrlOrPath.startsWith('https://')) {
-            return new Promise((resolve) => {
-                try {
-                    const isHttps = logoUrlOrPath.startsWith('https://');
-                    const httpModule = isHttps ? require('https') : require('http');
-                    const req = httpModule.get(logoUrlOrPath, { timeout: 3000 }, (res) => {
-                        if (res.statusCode !== 200) {
-                            resolve(null);
-                            return;
-                        }
-                        const chunks = [];
-                        res.on('data', (d) => chunks.push(d));
-                        res.on('end', () => resolve(Buffer.concat(chunks)));
-                        res.on('error', () => resolve(null));
-                    });
-                    req.on('error', () => resolve(null));
-                    req.on('timeout', () => { req.destroy(); resolve(null); });
-                }
-                catch {
-                    resolve(null);
-                }
-            });
+        // 2. 内存缓存
+        if (logoMemoryCache.has(logoUrlOrPath)) {
+            return logoMemoryCache.get(logoUrlOrPath) || null;
         }
         // 3. Local File Path
         if (fs_1.default.existsSync(logoUrlOrPath)) {
-            return fs_1.default.readFileSync(logoUrlOrPath);
+            const buf = fs_1.default.readFileSync(logoUrlOrPath);
+            logoMemoryCache.set(logoUrlOrPath, buf);
+            return buf;
         }
         // 4. Relative to resources / app
         const relativePaths = [
@@ -2367,33 +2389,38 @@ async function loadLogoBuffer(logoUrlOrPath) {
         ];
         for (const p of relativePaths) {
             if (fs_1.default.existsSync(p)) {
-                return fs_1.default.readFileSync(p);
+                const buf = fs_1.default.readFileSync(p);
+                logoMemoryCache.set(logoUrlOrPath, buf);
+                return buf;
             }
         }
-        // 5. 针对类似 /uploads/... 的相对路径，自动拼接远端域名进行兜底下载
-        if (logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//')) {
-            const remoteHosts = ['https://api.aicube.online', 'https://admin.aicube.online'];
-            for (const host of remoteHosts) {
+        // 5. 远端 HTTP/HTTPS 图片：后台异步预加载供下次打印，当前打印坚决不阻塞！
+        if (logoUrlOrPath.startsWith('http://') || logoUrlOrPath.startsWith('https://')) {
+            setImmediate(() => {
                 try {
-                    const remoteUrl = `${host}${logoUrlOrPath}`;
-                    const remoteBuf = await new Promise((resolve) => {
-                        const https = require('https');
-                        const req = https.get(remoteUrl, { timeout: 3000 }, (res) => {
-                            if (res.statusCode !== 200)
-                                return resolve(null);
-                            const chunks = [];
-                            res.on('data', (d) => chunks.push(d));
-                            res.on('end', () => resolve(Buffer.concat(chunks)));
-                            res.on('error', () => resolve(null));
+                    const isHttps = logoUrlOrPath.startsWith('https://');
+                    const httpModule = isHttps ? require('https') : require('http');
+                    const req = httpModule.get(logoUrlOrPath, {
+                        timeout: 2500,
+                        headers: { 'User-Agent': 'Mozilla/5.0 YOUME-POS' }
+                    }, (res) => {
+                        if (res.statusCode !== 200)
+                            return;
+                        const chunks = [];
+                        res.on('data', (d) => chunks.push(d));
+                        res.on('end', () => {
+                            const fullBuf = Buffer.concat(chunks);
+                            if (fullBuf.length > 0) {
+                                logoMemoryCache.set(logoUrlOrPath, fullBuf);
+                            }
                         });
-                        req.on('error', () => resolve(null));
-                        req.on('timeout', () => { req.destroy(); resolve(null); });
+                        res.on('error', () => { });
                     });
-                    if (remoteBuf && remoteBuf.length > 0)
-                        return remoteBuf;
+                    req.on('error', () => { });
+                    req.on('timeout', () => { req.destroy(); });
                 }
                 catch { }
-            }
+            });
         }
     }
     catch (e) {
@@ -2412,435 +2439,447 @@ async function loadLogoBuffer(logoUrlOrPath) {
  * - 条码与二维码：按模板排布位置内联渲染
  */
 async function buildReceiptEscPosBuffer(data) {
-    const is80mm = data.paperSize === '80mm';
-    const width = is80mm ? 48 : 32;
-    const targetDots = is80mm ? 384 : 288;
-    const lang = (data.language || 'id').toLowerCase();
-    const i18nMap = {
-        zh: {
-            orderNo: '单号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
-            customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
-            tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
-            member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
-        },
-        en: {
-            orderNo: 'Order No', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
-            customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
-            tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
-            member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
-        },
-        id: {
-            orderNo: 'No Order', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
-            customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
-            tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
-            member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
+    try {
+        const is80mm = data.paperSize === '80mm';
+        const width = is80mm ? 48 : 32;
+        const targetDots = is80mm ? 384 : 288;
+        const lang = (data.language || 'id').toLowerCase();
+        const i18nMap = {
+            zh: {
+                orderNo: '单号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
+                customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
+                tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
+                member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
+            },
+            en: {
+                orderNo: 'Order No', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
+                customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
+                tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
+                member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
+            },
+            id: {
+                orderNo: 'No Order', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
+                customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
+                tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
+                member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
+            }
+        };
+        const L = i18nMap[lang] || i18nMap.id;
+        const nameWidth = is80mm ? 28 : 16;
+        const qtyWidth = is80mm ? 6 : 4;
+        const priceWidth = is80mm ? 14 : 12;
+        const labelWidth = is80mm ? 30 : 18;
+        const valWidth = is80mm ? 18 : 14;
+        // ESC/POS 控制码常量
+        const CMD_BOLD_ON = Buffer.from([0x1B, 0x45, 0x01]);
+        const CMD_BOLD_OFF = Buffer.from([0x1B, 0x45, 0x00]);
+        const CMD_ALIGN_LEFT = Buffer.from([0x1B, 0x61, 0x00]);
+        const CMD_ALIGN_CENTER = Buffer.from([0x1B, 0x61, 0x01]);
+        const CMD_ALIGN_RIGHT = Buffer.from([0x1B, 0x61, 0x02]);
+        const CMD_FONT_NORMAL = Buffer.from([0x1D, 0x21, 0x00, 0x1B, 0x4D, 0x00]);
+        const CMD_FONT_LARGE = Buffer.from([0x1D, 0x21, 0x11]); // 倍宽倍高
+        const CMD_FONT_SMALL = Buffer.from([0x1D, 0x21, 0x00, 0x1B, 0x4D, 0x01]); // Font B
+        const CMD_CRLF = Buffer.from([0x0D, 0x0A]);
+        function formatStyledLine(text, style) {
+            const lineChunks = [];
+            if (style?.align === 'center')
+                lineChunks.push(CMD_ALIGN_CENTER);
+            else if (style?.align === 'right')
+                lineChunks.push(CMD_ALIGN_RIGHT);
+            else
+                lineChunks.push(CMD_ALIGN_LEFT);
+            if (style?.fontSize === 'large')
+                lineChunks.push(CMD_FONT_LARGE);
+            else if (style?.fontSize === 'small')
+                lineChunks.push(CMD_FONT_SMALL);
+            else
+                lineChunks.push(CMD_FONT_NORMAL);
+            if (style?.bold)
+                lineChunks.push(CMD_BOLD_ON);
+            lineChunks.push(encodeEscPosText(text));
+            if (style?.bold)
+                lineChunks.push(CMD_BOLD_OFF);
+            if (style?.fontSize === 'large' || style?.fontSize === 'small')
+                lineChunks.push(CMD_FONT_NORMAL);
+            lineChunks.push(CMD_CRLF);
+            if (style?.align === 'center' || style?.align === 'right')
+                lineChunks.push(CMD_ALIGN_LEFT);
+            return Buffer.concat(lineChunks);
         }
-    };
-    const L = i18nMap[lang] || i18nMap.id;
-    const nameWidth = is80mm ? 28 : 16;
-    const qtyWidth = is80mm ? 6 : 4;
-    const priceWidth = is80mm ? 14 : 12;
-    const labelWidth = is80mm ? 30 : 18;
-    const valWidth = is80mm ? 18 : 14;
-    // ESC/POS 控制码常量
-    const CMD_BOLD_ON = Buffer.from([0x1B, 0x45, 0x01]);
-    const CMD_BOLD_OFF = Buffer.from([0x1B, 0x45, 0x00]);
-    const CMD_ALIGN_LEFT = Buffer.from([0x1B, 0x61, 0x00]);
-    const CMD_ALIGN_CENTER = Buffer.from([0x1B, 0x61, 0x01]);
-    const CMD_ALIGN_RIGHT = Buffer.from([0x1B, 0x61, 0x02]);
-    const CMD_FONT_NORMAL = Buffer.from([0x1D, 0x21, 0x00, 0x1B, 0x4D, 0x00]);
-    const CMD_FONT_LARGE = Buffer.from([0x1D, 0x21, 0x11]); // 倍宽倍高
-    const CMD_FONT_SMALL = Buffer.from([0x1D, 0x21, 0x00, 0x1B, 0x4D, 0x01]); // Font B
-    const CMD_CRLF = Buffer.from([0x0D, 0x0A]);
-    function formatStyledLine(text, style) {
-        const lineChunks = [];
-        if (style?.align === 'center')
-            lineChunks.push(CMD_ALIGN_CENTER);
-        else if (style?.align === 'right')
-            lineChunks.push(CMD_ALIGN_RIGHT);
-        else
-            lineChunks.push(CMD_ALIGN_LEFT);
-        if (style?.fontSize === 'large')
-            lineChunks.push(CMD_FONT_LARGE);
-        else if (style?.fontSize === 'small')
-            lineChunks.push(CMD_FONT_SMALL);
-        else
-            lineChunks.push(CMD_FONT_NORMAL);
-        if (style?.bold)
-            lineChunks.push(CMD_BOLD_ON);
-        lineChunks.push(encodeEscPosText(text));
-        if (style?.bold)
-            lineChunks.push(CMD_BOLD_OFF);
-        if (style?.fontSize === 'large' || style?.fontSize === 'small')
-            lineChunks.push(CMD_FONT_NORMAL);
-        lineChunks.push(CMD_CRLF);
-        if (style?.align === 'center' || style?.align === 'right')
-            lineChunks.push(CMD_ALIGN_LEFT);
-        return Buffer.concat(lineChunks);
-    }
-    const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null);
-    const chunks = [];
-    // 联号标记（如 Customer Copy / Merchant Copy，仅在设置中开启多联且明确有联号标记时输出）
-    if (data.copyLabel && data.printCopies && data.printCopies > 1) {
-        chunks.push(formatStyledLine(`*** ${data.copyLabel} ***`, { align: 'center', bold: true, fontSize: 'small' }));
-        chunks.push(CMD_CRLF);
-    }
-    let hasBarcodeRendered = false;
-    let hasQrRendered = false;
-    if (rawBlocks && rawBlocks.length > 0) {
-        const enabledBlocks = [...rawBlocks]
-            .filter((b) => b && b.enabled !== false)
-            .sort((a, b) => (a.order || 0) - (b.order || 0));
-        for (const block of enabledBlocks) {
-            const cfg = block.config || {};
-            const st = block.style || {};
-            switch (block.type) {
-                case 'logo': {
-                    let logoBuf = null;
-                    const logoSource = cfg.url || data.storeLogo || '';
-                    if (logoSource && data.showLogo !== false) {
-                        const rawImg = await loadLogoBuffer(logoSource);
-                        if (rawImg) {
-                            const customWidth = cfg.width ? Math.min(targetDots, cfg.width * 2) : targetDots;
-                            logoBuf = imageBufferToEscPosRaster(rawImg, customWidth);
+        const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null);
+        const chunks = [];
+        // 联号标记（如 Customer Copy / Merchant Copy，仅在设置中开启多联且明确有联号标记时输出）
+        if (data.copyLabel && data.printCopies && data.printCopies > 1) {
+            chunks.push(formatStyledLine(`*** ${data.copyLabel} ***`, { align: 'center', bold: true, fontSize: 'small' }));
+            chunks.push(CMD_CRLF);
+        }
+        let hasBarcodeRendered = false;
+        let hasQrRendered = false;
+        if (rawBlocks && rawBlocks.length > 0) {
+            const enabledBlocks = [...rawBlocks]
+                .filter((b) => b && b.enabled !== false)
+                .sort((a, b) => (a.order || 0) - (b.order || 0));
+            for (const block of enabledBlocks) {
+                const cfg = block.config || {};
+                const st = block.style || {};
+                switch (block.type) {
+                    case 'logo': {
+                        let logoBuf = null;
+                        const logoSource = cfg.url || data.storeLogo || '';
+                        if (logoSource && data.showLogo !== false) {
+                            const rawImg = await loadLogoBuffer(logoSource);
+                            if (rawImg) {
+                                const customWidth = cfg.width ? Math.min(targetDots, cfg.width * 2) : targetDots;
+                                logoBuf = imageBufferToEscPosRaster(rawImg, customWidth);
+                            }
                         }
-                    }
-                    if (logoBuf) {
-                        chunks.push(logoBuf);
-                    }
-                    else if (data.showLogo !== false && !enabledBlocks.some((b) => b.type === 'header')) {
-                        // 仅在整个模板完全没有 header 块时才作为文本备选输出，绝不多次重复输出店名
-                        const title = data.storeName || data.header || 'YOUME';
-                        chunks.push(formatStyledLine(title, {
-                            align: st.align || 'center',
-                            bold: st.bold !== false,
-                            fontSize: st.fontSize || 'normal'
-                        }));
-                    }
-                    break;
-                }
-                case 'header': {
-                    const headerText = cfg.text || data.header || data.storeName || 'YOUME';
-                    if (headerText) {
-                        chunks.push(formatStyledLine(headerText, {
-                            align: st.align || 'center',
-                            bold: st.bold !== false,
-                            fontSize: st.fontSize || 'large'
-                        }));
-                    }
-                    break;
-                }
-                case 'storeInfo': {
-                    const phone = cfg.phone || data.storePhone;
-                    const address = cfg.address || data.storeAddress;
-                    if (cfg.showPhone !== false && phone) {
-                        chunks.push(formatStyledLine(`Tel: ${phone}`, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }));
-                    }
-                    if (cfg.showAddress !== false && address) {
-                        chunks.push(formatStyledLine(address, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }));
-                    }
-                    break;
-                }
-                case 'divider': {
-                    const style = cfg.dividerStyle || 'line';
-                    if (style === 'dashed') {
-                        chunks.push(formatStyledLine(repeatChar('- ', Math.floor(width / 2)), { align: 'center' }));
-                    }
-                    else if (style === 'space') {
-                        chunks.push(CMD_CRLF);
-                    }
-                    else if (style === 'stars') {
-                        chunks.push(formatStyledLine(repeatChar('*', width), { align: 'center' }));
-                    }
-                    else {
-                        chunks.push(formatStyledLine(repeatChar('-', width), { align: 'center' }));
-                    }
-                    break;
-                }
-                case 'orderInfo': {
-                    const infoLines = [];
-                    // 仅在未显式禁用单号时才输出单号
-                    if (cfg.showOrderNo !== false && data.orderNum) {
-                        infoLines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum}`);
-                    }
-                    const showDate = cfg.showDate !== false;
-                    const showTime = cfg.showTime !== false;
-                    if (showDate || showTime) {
-                        const dt = formatDateTime(data.orderDate || data.createdAt, showDate, showTime);
-                        infoLines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${dt}`);
-                    }
-                    if (cfg.showChannel && data.channelName) {
-                        const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : '';
-                        infoLines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`);
-                    }
-                    const showCashier = cfg.showCashier !== undefined ? cfg.showCashier : (data.showStaffName !== false);
-                    if (showCashier && data.cashierName) {
-                        infoLines.push(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`);
-                    }
-                    const showCustomer = cfg.showCustomer !== undefined ? cfg.showCustomer : data.showCustomerName;
-                    if (showCustomer && data.customerName) {
-                        infoLines.push(`${padEndVisual(L.customer, is80mm ? 10 : 7)}: ${data.customerName}`);
-                    }
-                    for (const line of infoLines) {
-                        chunks.push(formatStyledLine(line, st));
-                    }
-                    break;
-                }
-                case 'items': {
-                    const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact';
-                    const isSimple = cfg.itemFormat === 'simple' || (!is80mm && !cfg.showQtyPriceHeader);
-                    // 仅在明确开启三列表头时才打印表头，且强制使用标准正常小字，绝不使用突兀大字
-                    if (cfg.showQtyPriceHeader === true) {
-                        const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
-                        chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: 'normal' }));
-                        chunks.push(formatStyledLine(repeatChar('-', width)));
-                    }
-                    else if (cfg.showHeader !== false) {
-                        // 默认打印纯净商品标题行（与设计器保持 100% 一致）
-                        chunks.push(formatStyledLine(L.item, { bold: true, fontSize: st.fontSize }));
-                    }
-                    if (data.items && data.items.length > 0) {
-                        data.items.forEach((item) => {
-                            const spec = item.specName ? ` ${item.specName}` : '';
-                            const qtyPrefix = item.quantity > 1 ? `x${item.quantity} ` : '';
-                            const rawName = `${item.productName}${spec}`;
-                            if (isSimple || cfg.showQtyPriceHeader !== true) {
-                                // 双列优雅排版（与设计器预览一致：左侧商品名称+数量，右侧总金额）
-                                const priceStr = formatRp(item.unitPrice * item.quantity);
-                                const priceW = Math.max(10, priceStr.length + 1);
-                                const maxNameW = Math.max(8, width - priceW);
-                                const truncatedName = truncate(`${qtyPrefix}${rawName}`, maxNameW);
-                                const namePadded = padEndVisual(truncatedName, width - priceW);
-                                const pricePadded = padStartVisual(priceStr, priceW);
-                                chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }));
-                            }
-                            else {
-                                // 标准三列排版
-                                const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
-                                const qty = padStartVisual(String(item.quantity), qtyWidth);
-                                const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
-                                chunks.push(formatStyledLine(`${name}${qty}${price}`, { bold: st.bold, fontSize: st.fontSize }));
-                            }
-                            if (isCompact) {
-                                const parts = [];
-                                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
-                                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
-                                    if (mods)
-                                        parts.push(`[${mods}]`);
-                                }
-                                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
-                                    const addonNames = item.addons.map((a) => a.name || a).join(', ');
-                                    if (addonNames)
-                                        parts.push(`+${addonNames}`);
-                                }
-                                if (parts.length > 0) {
-                                    chunks.push(formatStyledLine(`  ${truncate(parts.join(' '), width - 2)}`, { fontSize: 'small' }));
-                                }
-                            }
-                            else {
-                                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
-                                    item.addons.forEach((addon) => {
-                                        chunks.push(formatStyledLine(`  + ${truncate(addon.name || addon, width - 4)}`, { fontSize: 'small' }));
-                                    });
-                                }
-                                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
-                                    const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
-                                    chunks.push(formatStyledLine(`  [${mods}]`, { fontSize: 'small' }));
-                                }
-                            }
-                        });
-                    }
-                    break;
-                }
-                case 'subtotal': {
-                    const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth);
-                    const subtotalVal = padStartVisual(formatRp(data.subtotal || 0), valWidth);
-                    chunks.push(formatStyledLine(`${subtotalLabel}${subtotalVal}`, st));
-                    break;
-                }
-                case 'tax': {
-                    const taxName = cfg.label || (cfg.rate ? `${L.tax} (${cfg.rate}%)` : L.tax);
-                    const taxLabel = padEndVisual(taxName, labelWidth);
-                    const taxVal = padStartVisual(formatRp(data.tax || 0), valWidth);
-                    chunks.push(formatStyledLine(`${taxLabel}${taxVal}`, st));
-                    break;
-                }
-                case 'total': {
-                    if (data.discount && data.discount > 0) {
-                        const discLabel = padEndVisual(L.discount, labelWidth);
-                        const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
-                        chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
-                    }
-                    const rawTotalLabel = cfg.totalLabel || L.total;
-                    const rawTotalVal = formatRp(data.total || 0);
-                    // 58mm 热敏纸大字（倍宽倍高）物理单行仅有 16 字符极限，防止任何截断换行
-                    if (!is80mm && st.fontSize === 'large') {
-                        const combinedLen = rawTotalLabel.length + rawTotalVal.length + 1;
-                        if (combinedLen > 16) {
-                            // 超限时自适应：采用加粗标准字号排版，确保 100% 同行对齐永不换行截断
-                            const totalLabel = padEndVisual(rawTotalLabel, labelWidth);
-                            const totalVal = padStartVisual(rawTotalVal, valWidth);
-                            chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
-                                bold: true,
-                                fontSize: 'normal',
-                                align: st.align
+                        if (logoBuf) {
+                            chunks.push(logoBuf);
+                        }
+                        else if (data.showLogo !== false && !enabledBlocks.some((b) => b.type === 'header')) {
+                            // 仅在整个模板完全没有 header 块时才作为文本备选输出，绝不多次重复输出店名
+                            const title = data.storeName || data.header || 'YOUME';
+                            chunks.push(formatStyledLine(title, {
+                                align: st.align || 'center',
+                                bold: st.bold !== false,
+                                fontSize: st.fontSize || 'normal'
                             }));
+                        }
+                        break;
+                    }
+                    case 'header': {
+                        const headerText = cfg.text || data.header || data.storeName || 'YOUME';
+                        if (headerText) {
+                            chunks.push(formatStyledLine(headerText, {
+                                align: st.align || 'center',
+                                bold: st.bold !== false,
+                                fontSize: st.fontSize || 'large'
+                            }));
+                        }
+                        break;
+                    }
+                    case 'storeInfo': {
+                        const phone = cfg.phone || data.storePhone;
+                        const address = cfg.address || data.storeAddress;
+                        if (cfg.showPhone !== false && phone) {
+                            chunks.push(formatStyledLine(`Tel: ${phone}`, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }));
+                        }
+                        if (cfg.showAddress !== false && address) {
+                            chunks.push(formatStyledLine(address, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }));
+                        }
+                        break;
+                    }
+                    case 'divider': {
+                        const style = cfg.dividerStyle || 'line';
+                        if (style === 'dashed') {
+                            chunks.push(formatStyledLine(repeatChar('- ', Math.floor(width / 2)), { align: 'center' }));
+                        }
+                        else if (style === 'space') {
+                            chunks.push(CMD_CRLF);
+                        }
+                        else if (style === 'stars') {
+                            chunks.push(formatStyledLine(repeatChar('*', width), { align: 'center' }));
                         }
                         else {
-                            // 安全在 16 字符内，精准定宽输出大字
-                            const spaces = Math.max(1, 16 - (rawTotalLabel.length + rawTotalVal.length));
-                            const safeLine = `${rawTotalLabel}${' '.repeat(spaces)}${rawTotalVal}`;
-                            chunks.push(formatStyledLine(safeLine, {
-                                bold: true,
-                                fontSize: 'large',
+                            chunks.push(formatStyledLine(repeatChar('-', width), { align: 'center' }));
+                        }
+                        break;
+                    }
+                    case 'orderInfo': {
+                        const infoLines = [];
+                        // 仅在未显式禁用单号时才输出单号
+                        if (cfg.showOrderNo !== false && data.orderNum) {
+                            infoLines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum}`);
+                        }
+                        const showDate = cfg.showDate !== false;
+                        const showTime = cfg.showTime !== false;
+                        if (showDate || showTime) {
+                            const dt = formatDateTime(data.orderDate || data.createdAt, showDate, showTime);
+                            infoLines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${dt}`);
+                        }
+                        if (cfg.showChannel && data.channelName) {
+                            const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : '';
+                            infoLines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`);
+                        }
+                        const showCashier = cfg.showCashier !== undefined ? cfg.showCashier : (data.showStaffName !== false);
+                        if (showCashier && data.cashierName) {
+                            infoLines.push(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`);
+                        }
+                        const showCustomer = cfg.showCustomer !== undefined ? cfg.showCustomer : data.showCustomerName;
+                        if (showCustomer && data.customerName) {
+                            infoLines.push(`${padEndVisual(L.customer, is80mm ? 10 : 7)}: ${data.customerName}`);
+                        }
+                        for (const line of infoLines) {
+                            chunks.push(formatStyledLine(line, st));
+                        }
+                        break;
+                    }
+                    case 'items': {
+                        const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact';
+                        const isSimple = cfg.itemFormat === 'simple' || (!is80mm && !cfg.showQtyPriceHeader);
+                        // 仅在明确开启三列表头时才打印表头，且强制使用标准正常小字，绝不使用突兀大字
+                        if (cfg.showQtyPriceHeader === true) {
+                            const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
+                            chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: 'normal' }));
+                            chunks.push(formatStyledLine(repeatChar('-', width)));
+                        }
+                        else if (cfg.showHeader !== false) {
+                            // 默认打印纯净商品标题行（与设计器保持 100% 一致）
+                            chunks.push(formatStyledLine(L.item, { bold: true, fontSize: st.fontSize }));
+                        }
+                        if (data.items && data.items.length > 0) {
+                            data.items.forEach((item) => {
+                                const spec = item.specName ? ` ${item.specName}` : '';
+                                const qtyPrefix = item.quantity > 1 ? `x${item.quantity} ` : '';
+                                const rawName = `${item.productName}${spec}`;
+                                if (isSimple || cfg.showQtyPriceHeader !== true) {
+                                    // 双列优雅排版（与设计器预览一致：左侧商品名称+数量，右侧总金额）
+                                    const priceStr = formatRp(item.unitPrice * item.quantity);
+                                    const priceW = Math.max(10, priceStr.length + 1);
+                                    const maxNameW = Math.max(8, width - priceW);
+                                    const truncatedName = truncate(`${qtyPrefix}${rawName}`, maxNameW);
+                                    const namePadded = padEndVisual(truncatedName, width - priceW);
+                                    const pricePadded = padStartVisual(priceStr, priceW);
+                                    chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }));
+                                }
+                                else {
+                                    // 标准三列排版
+                                    const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
+                                    const qty = padStartVisual(String(item.quantity), qtyWidth);
+                                    const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
+                                    chunks.push(formatStyledLine(`${name}${qty}${price}`, { bold: st.bold, fontSize: st.fontSize }));
+                                }
+                                if (isCompact) {
+                                    const parts = [];
+                                    if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                                        const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                                        if (mods)
+                                            parts.push(`[${mods}]`);
+                                    }
+                                    if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                                        const addonNames = item.addons.map((a) => a.name || a).join(', ');
+                                        if (addonNames)
+                                            parts.push(`+${addonNames}`);
+                                    }
+                                    if (parts.length > 0) {
+                                        chunks.push(formatStyledLine(`  ${truncate(parts.join(' '), width - 2)}`, { fontSize: 'small' }));
+                                    }
+                                }
+                                else {
+                                    if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                                        item.addons.forEach((addon) => {
+                                            chunks.push(formatStyledLine(`  + ${truncate(addon.name || addon, width - 4)}`, { fontSize: 'small' }));
+                                        });
+                                    }
+                                    if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                                        const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ');
+                                        chunks.push(formatStyledLine(`  [${mods}]`, { fontSize: 'small' }));
+                                    }
+                                }
+                            });
+                        }
+                        break;
+                    }
+                    case 'subtotal': {
+                        const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth);
+                        const subtotalVal = padStartVisual(formatRp(data.subtotal || 0), valWidth);
+                        chunks.push(formatStyledLine(`${subtotalLabel}${subtotalVal}`, st));
+                        break;
+                    }
+                    case 'tax': {
+                        const taxName = cfg.label || (cfg.rate ? `${L.tax} (${cfg.rate}%)` : L.tax);
+                        const taxLabel = padEndVisual(taxName, labelWidth);
+                        const taxVal = padStartVisual(formatRp(data.tax || 0), valWidth);
+                        chunks.push(formatStyledLine(`${taxLabel}${taxVal}`, st));
+                        break;
+                    }
+                    case 'total': {
+                        if (data.discount && data.discount > 0) {
+                            const discLabel = padEndVisual(L.discount, labelWidth);
+                            const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
+                            chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
+                        }
+                        const rawTotalLabel = cfg.totalLabel || L.total;
+                        const rawTotalVal = formatRp(data.total || 0);
+                        // 58mm 热敏纸大字（倍宽倍高）物理单行仅有 16 字符极限，防止任何截断换行
+                        if (!is80mm && st.fontSize === 'large') {
+                            const combinedLen = rawTotalLabel.length + rawTotalVal.length + 1;
+                            if (combinedLen > 16) {
+                                // 超限时自适应：采用加粗标准字号排版，确保 100% 同行对齐永不换行截断
+                                const totalLabel = padEndVisual(rawTotalLabel, labelWidth);
+                                const totalVal = padStartVisual(rawTotalVal, valWidth);
+                                chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
+                                    bold: true,
+                                    fontSize: 'normal',
+                                    align: st.align
+                                }));
+                            }
+                            else {
+                                // 安全在 16 字符内，精准定宽输出大字
+                                const spaces = Math.max(1, 16 - (rawTotalLabel.length + rawTotalVal.length));
+                                const safeLine = `${rawTotalLabel}${' '.repeat(spaces)}${rawTotalVal}`;
+                                chunks.push(formatStyledLine(safeLine, {
+                                    bold: true,
+                                    fontSize: 'large',
+                                    align: st.align
+                                }));
+                            }
+                        }
+                        else {
+                            const effLabelW = st.fontSize === 'large' ? (is80mm ? 14 : 9) : labelWidth;
+                            const effValW = st.fontSize === 'large' ? (is80mm ? 10 : 7) : valWidth;
+                            const totalLabel = padEndVisual(rawTotalLabel, effLabelW);
+                            const totalVal = padStartVisual(rawTotalVal, effValW);
+                            chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
+                                bold: st.bold !== false,
+                                fontSize: st.fontSize,
                                 align: st.align
                             }));
                         }
+                        break;
                     }
-                    else {
-                        const effLabelW = st.fontSize === 'large' ? (is80mm ? 14 : 9) : labelWidth;
-                        const effValW = st.fontSize === 'large' ? (is80mm ? 10 : 7) : valWidth;
-                        const totalLabel = padEndVisual(rawTotalLabel, effLabelW);
-                        const totalVal = padStartVisual(rawTotalVal, effValW);
-                        chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
-                            bold: st.bold !== false,
-                            fontSize: st.fontSize,
-                            align: st.align
-                        }));
+                    case 'paymentInfo': {
+                        if (cfg.showMethod !== false) {
+                            chunks.push(formatStyledLine(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`, st));
+                        }
+                        if (cfg.showReceived !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
+                            chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`, st));
+                        }
+                        if (cfg.showChange !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
+                            chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`, st));
+                        }
+                        break;
                     }
-                    break;
-                }
-                case 'paymentInfo': {
-                    if (cfg.showMethod !== false) {
-                        chunks.push(formatStyledLine(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`, st));
+                    case 'barcode': {
+                        // 严格尊重条码禁用：只要数据标记关闭，即使模板有该块也绝不打印
+                        if (data.showBarcode !== false && data.orderNum) {
+                            chunks.push(buildEscPosBarcode(String(data.orderNum)));
+                            hasBarcodeRendered = true;
+                        }
+                        break;
                     }
-                    if (cfg.showReceived !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
-                        chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`, st));
+                    case 'qrCode': {
+                        const qrUrl = cfg.url || cfg.qrContent || data.qrCodeUrl || '';
+                        if (qrUrl && data.showQR !== false) {
+                            const modSize = cfg.size ? Math.max(3, Math.min(8, Math.round(cfg.size / 20))) : (is80mm ? 6 : 4);
+                            chunks.push(buildEscPosQRCode(String(qrUrl), modSize));
+                            hasQrRendered = true;
+                        }
+                        break;
                     }
-                    if (cfg.showChange !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
-                        chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`, st));
+                    case 'footer': {
+                        if (cfg.showDivider) {
+                            chunks.push(formatStyledLine(repeatChar('-', width)));
+                        }
+                        const footerMsg = cfg.footerText || data.footer;
+                        if (footerMsg) {
+                            chunks.push(formatStyledLine(footerMsg, {
+                                align: st.align || 'center',
+                                bold: st.bold,
+                                fontSize: st.fontSize
+                            }));
+                        }
+                        break;
                     }
-                    break;
-                }
-                case 'barcode': {
-                    // 严格尊重条码禁用：只要数据标记关闭，即使模板有该块也绝不打印
-                    if (data.showBarcode !== false && data.orderNum) {
-                        chunks.push(buildEscPosBarcode(String(data.orderNum)));
-                        hasBarcodeRendered = true;
+                    case 'customText': {
+                        const customMsg = cfg.customText || cfg.text;
+                        if (customMsg) {
+                            chunks.push(formatStyledLine(customMsg, {
+                                align: st.align || 'center',
+                                bold: st.bold,
+                                fontSize: st.fontSize
+                            }));
+                        }
+                        break;
                     }
-                    break;
-                }
-                case 'qrCode': {
-                    const qrUrl = cfg.url || cfg.qrContent || data.qrCodeUrl || '';
-                    if (qrUrl && data.showQR !== false) {
-                        const modSize = cfg.size ? Math.max(3, Math.min(8, Math.round(cfg.size / 20))) : (is80mm ? 6 : 4);
-                        chunks.push(buildEscPosQRCode(String(qrUrl), modSize));
-                        hasQrRendered = true;
-                    }
-                    break;
-                }
-                case 'footer': {
-                    if (cfg.showDivider) {
-                        chunks.push(formatStyledLine(repeatChar('-', width)));
-                    }
-                    const footerMsg = cfg.footerText || data.footer;
-                    if (footerMsg) {
-                        chunks.push(formatStyledLine(footerMsg, {
-                            align: st.align || 'center',
-                            bold: st.bold,
-                            fontSize: st.fontSize
-                        }));
-                    }
-                    break;
-                }
-                case 'customText': {
-                    const customMsg = cfg.customText || cfg.text;
-                    if (customMsg) {
-                        chunks.push(formatStyledLine(customMsg, {
-                            align: st.align || 'center',
-                            bold: st.bold,
-                            fontSize: st.fontSize
-                        }));
-                    }
-                    break;
                 }
             }
         }
-    }
-    else {
-        // 默认结构（当完全没有配置任何 blocks 时）
-        if (data.storeLogo && data.showLogo !== false) {
-            const rawImg = await loadLogoBuffer(data.storeLogo);
-            if (rawImg) {
-                const logoBuf = imageBufferToEscPosRaster(rawImg, targetDots);
-                if (logoBuf)
-                    chunks.push(logoBuf);
-            }
-        }
-        const storeTitle = data.storeName || data.header || 'YOUME';
-        chunks.push(formatStyledLine(storeTitle, { align: 'center', bold: true, fontSize: 'large' }));
-        if (data.storePhone)
-            chunks.push(formatStyledLine(`Tel: ${data.storePhone}`, { align: 'center' }));
-        if (data.storeAddress)
-            chunks.push(formatStyledLine(data.storeAddress, { align: 'center' }));
-        chunks.push(formatStyledLine(repeatChar('=', width)));
-        chunks.push(formatStyledLine(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`));
-        if (data.orderDate || data.createdAt) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, true)}`));
-        }
-        if (data.channelName) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}`));
-        }
-        if (data.cashierName && data.showStaffName !== false) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`));
-        }
-        chunks.push(formatStyledLine(repeatChar('-', width)));
-        const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
-        chunks.push(formatStyledLine(tableHeader, { bold: true }));
-        chunks.push(formatStyledLine(repeatChar('-', width)));
-        if (data.items && data.items.length > 0) {
-            data.items.forEach((item) => {
-                const spec = item.specName ? ` ${item.specName}` : '';
-                const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
-                const qty = padStartVisual(String(item.quantity), qtyWidth);
-                const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
-                chunks.push(formatStyledLine(`${name}${qty}${price}`));
-                if (item.addons && item.addons.length > 0) {
-                    item.addons.forEach((a) => {
-                        chunks.push(formatStyledLine(`  + ${truncate(a.name || a, width - 4)}`, { fontSize: 'small' }));
-                    });
+        else {
+            // 默认结构（当完全没有配置任何 blocks 时）
+            if (data.storeLogo && data.showLogo !== false) {
+                const rawImg = await loadLogoBuffer(data.storeLogo);
+                if (rawImg) {
+                    const logoBuf = imageBufferToEscPosRaster(rawImg, targetDots);
+                    if (logoBuf)
+                        chunks.push(logoBuf);
                 }
-            });
-        }
-        chunks.push(formatStyledLine(repeatChar('-', width)));
-        chunks.push(formatStyledLine(`${padEndVisual(L.subtotal, labelWidth)}${padStartVisual(formatRp(data.subtotal || 0), valWidth)}`));
-        if (data.tax) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.tax, labelWidth)}${padStartVisual(formatRp(data.tax), valWidth)}`));
-        }
-        if (data.discount) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`, { bold: true }));
-        }
-        chunks.push(formatStyledLine(`${padEndVisual(L.total, labelWidth)}${padStartVisual(formatRp(data.total || 0), valWidth)}`, { bold: true }));
-        if (data.paidAmount) {
+            }
+            const storeTitle = data.storeName || data.header || 'YOUME';
+            chunks.push(formatStyledLine(storeTitle, { align: 'center', bold: true, fontSize: 'large' }));
+            if (data.storePhone)
+                chunks.push(formatStyledLine(`Tel: ${data.storePhone}`, { align: 'center' }));
+            if (data.storeAddress)
+                chunks.push(formatStyledLine(data.storeAddress, { align: 'center' }));
+            chunks.push(formatStyledLine(repeatChar('=', width)));
+            chunks.push(formatStyledLine(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`));
+            if (data.orderDate || data.createdAt) {
+                chunks.push(formatStyledLine(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, true)}`));
+            }
+            if (data.channelName) {
+                chunks.push(formatStyledLine(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}`));
+            }
+            if (data.cashierName && data.showStaffName !== false) {
+                chunks.push(formatStyledLine(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`));
+            }
             chunks.push(formatStyledLine(repeatChar('-', width)));
-            chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`));
-            chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`));
+            const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
+            chunks.push(formatStyledLine(tableHeader, { bold: true }));
+            chunks.push(formatStyledLine(repeatChar('-', width)));
+            if (data.items && data.items.length > 0) {
+                data.items.forEach((item) => {
+                    const spec = item.specName ? ` ${item.specName}` : '';
+                    const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
+                    const qty = padStartVisual(String(item.quantity), qtyWidth);
+                    const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
+                    chunks.push(formatStyledLine(`${name}${qty}${price}`));
+                    if (item.addons && item.addons.length > 0) {
+                        item.addons.forEach((a) => {
+                            chunks.push(formatStyledLine(`  + ${truncate(a.name || a, width - 4)}`, { fontSize: 'small' }));
+                        });
+                    }
+                });
+            }
+            chunks.push(formatStyledLine(repeatChar('-', width)));
+            chunks.push(formatStyledLine(`${padEndVisual(L.subtotal, labelWidth)}${padStartVisual(formatRp(data.subtotal || 0), valWidth)}`));
+            if (data.tax) {
+                chunks.push(formatStyledLine(`${padEndVisual(L.tax, labelWidth)}${padStartVisual(formatRp(data.tax), valWidth)}`));
+            }
+            if (data.discount) {
+                chunks.push(formatStyledLine(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`, { bold: true }));
+            }
+            chunks.push(formatStyledLine(`${padEndVisual(L.total, labelWidth)}${padStartVisual(formatRp(data.total || 0), valWidth)}`, { bold: true }));
+            if (data.paidAmount) {
+                chunks.push(formatStyledLine(repeatChar('-', width)));
+                chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`));
+                chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`));
+            }
+            if (data.footer && data.footer !== data.storeName) {
+                chunks.push(CMD_CRLF);
+                chunks.push(formatStyledLine(data.footer, { align: 'center' }));
+            }
+            chunks.push(formatStyledLine(L.thanks, { align: 'center' }));
+            // 仅在无模板且显式开启时才兜底追加条码/二维码
+            if (!hasBarcodeRendered && data.showBarcode === true && data.orderNum) {
+                chunks.push(buildEscPosBarcode(String(data.orderNum)));
+            }
+            if (!hasQrRendered && data.showQR === true && data.qrCodeUrl) {
+                chunks.push(buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4));
+            }
         }
-        if (data.footer && data.footer !== data.storeName) {
-            chunks.push(CMD_CRLF);
-            chunks.push(formatStyledLine(data.footer, { align: 'center' }));
+        chunks.push(Buffer.from([0x0A, 0x0A]));
+        return Buffer.concat(chunks);
+    }
+    catch (renderErr) {
+        writeCrash(`[BUILD ESCPOS ERROR] Error in buildReceiptEscPosBuffer: ${renderErr?.message}, falling back to plain text`);
+        try {
+            const text = generateReceiptText(data);
+            return Buffer.concat([encodeEscPosText(text), Buffer.from([0x0A, 0x0A])]);
         }
-        chunks.push(formatStyledLine(L.thanks, { align: 'center' }));
-        // 仅在无模板且显式开启时才兜底追加条码/二维码
-        if (!hasBarcodeRendered && data.showBarcode === true && data.orderNum) {
-            chunks.push(buildEscPosBarcode(String(data.orderNum)));
-        }
-        if (!hasQrRendered && data.showQR === true && data.qrCodeUrl) {
-            chunks.push(buildEscPosQRCode(String(data.qrCodeUrl), is80mm ? 6 : 4));
+        catch {
+            return Buffer.from([0x0A, 0x0A]);
         }
     }
-    chunks.push(Buffer.from([0x0A, 0x0A]));
-    return Buffer.concat(chunks);
 }
 function generateReceiptText(data) {
     const is80mm = data.paperSize === '80mm';

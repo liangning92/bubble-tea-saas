@@ -1253,11 +1253,13 @@ ipcMain.on('payment-qr', (_event, qrData) => {
 async function resolvePrinterName(providedName?: string): Promise<string> {
   const trimmed = (providedName || '').trim()
 
-  // 获取系统已安装的所有打印机
+  // 获取系统已安装的所有打印机（限制 1.5 秒超时熔断，防止假死驱动阻塞收银线程）
   let installedPrinters: { name: string; isDefault?: boolean }[] = []
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      installedPrinters = await mainWindow.webContents.getPrintersAsync()
+      const getPrinters = mainWindow.webContents.getPrintersAsync()
+      const timeout = new Promise<{ name: string; isDefault?: boolean }[]>((r) => setTimeout(() => r([]), 1500))
+      installedPrinters = await Promise.race([getPrinters, timeout])
     }
   } catch (err: any) {
     writeCrash(`[PRINTER RESOLVE] getPrintersAsync failed: ${err.message}`)
@@ -1525,7 +1527,13 @@ ipcMain.handle('print-receipt', async (_event, data) => {
         ...data,
         copyLabel: c === 0 ? '(Customer Copy)' : '(Merchant Copy)'
       } : data
-      const receiptBuf = await buildReceiptEscPosBuffer(copyData)
+      let receiptBuf: Buffer
+      try {
+        receiptBuf = await buildReceiptEscPosBuffer(copyData)
+      } catch (err: any) {
+        writeCrash(`[PRINT] buildReceiptEscPosBuffer call failed: ${err?.message}`)
+        receiptBuf = Buffer.concat([encodeEscPosText(generateReceiptText(copyData)), Buffer.from([0x0A, 0x0A])])
+      }
       // 只有第一联出纸前触发弹钱箱
       const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0)
       // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出全格式化 ESC/POS 数据，切纸
@@ -1587,9 +1595,17 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     try {
       await printViaWindowsRaw({ ...data, printerName })
       writeCrash('[PRINT] printViaWindowsRaw fallback success')
+      // printViaWindowsRaw 为纯文本通道，无法发送钱箱脉冲；若开启开钱箱，额外发送一次钱箱脉冲保底
+      if (shouldOpenDrawer && drawerCmd.length > 0) {
+        try { await sendRawBytesToWindowsPrinter(printerName, drawerCmd) } catch {}
+      }
       return { success: true }
     } catch (winErr: any) {
       writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winErr.message}`)
+      // 若打印彻底失败但需开钱箱，独立发送钱箱脉冲保底
+      if (shouldOpenDrawer && drawerCmd.length > 0) {
+        try { await sendRawBytesToWindowsPrinter(printerName, drawerCmd) } catch {}
+      }
       return { success: false, error: winErr.message }
     }
   } catch (error: any) {
@@ -2365,8 +2381,23 @@ function encodeEscPosText(text: string): Buffer {
  * 将图片 Buffer 转换为 ESC/POS 点阵位图指令 (GS v 0)
  * 58mm 热敏纸有效点宽约为 384 dots，80mm 有效点宽约为 576 dots
  */
+const logoMemoryCache = new Map<string, Buffer>()
+
 function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384): Buffer | null {
   try {
+    if (!imageBuf || imageBuf.length < 8) return null
+    // 基础图片魔数校验（PNG: 89 50 4E 47, JPEG: FF D8, BMP: 42 4D, GIF: 47 49 46），严禁将 HTML 404 文本喂给 nativeImage
+    const isImageMagic = (
+      (imageBuf[0] === 0x89 && imageBuf[1] === 0x50 && imageBuf[2] === 0x4E && imageBuf[3] === 0x47) ||
+      (imageBuf[0] === 0xFF && imageBuf[1] === 0xD8) ||
+      (imageBuf[0] === 0x42 && imageBuf[1] === 0x4D) ||
+      (imageBuf[0] === 0x47 && imageBuf[1] === 0x49)
+    )
+    if (!isImageMagic) {
+      writeCrash(`[ESC/POS RASTER] Buffer is not a valid image format (magic: ${imageBuf.slice(0, 4).toString('hex')})`)
+      return null
+    }
+
     const nImg = nativeImage.createFromBuffer(imageBuf)
     if (nImg.isEmpty()) return null
     const size = nImg.getSize()
@@ -2423,6 +2454,11 @@ function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384): Buf
 
 /**
  * 加载 Logo 图片字节
+ * 铁律：打印热敏小票绝不可同步阻塞网络请求！
+ * 1. Base64 Data URL 优先（0ms 内存转换）
+ * 2. 内存缓存优先（0ms）
+ * 3. 本地文件系统直接读取（< 1ms）
+ * 4. 远端 URL 若未就绪，后台异步预拉取，当前打印瞬间返回 null，0ms 零阻塞！
  */
 async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
   if (!logoUrlOrPath) return null
@@ -2435,33 +2471,16 @@ async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
       }
     }
 
-    // 2. HTTP / HTTPS URL
-    if (logoUrlOrPath.startsWith('http://') || logoUrlOrPath.startsWith('https://')) {
-      return new Promise((resolve) => {
-        try {
-          const isHttps = logoUrlOrPath.startsWith('https://')
-          const httpModule = isHttps ? require('https') : require('http')
-          const req = httpModule.get(logoUrlOrPath, { timeout: 3000 }, (res: any) => {
-            if (res.statusCode !== 200) {
-              resolve(null)
-              return
-            }
-            const chunks: Buffer[] = []
-            res.on('data', (d: Buffer) => chunks.push(d))
-            res.on('end', () => resolve(Buffer.concat(chunks)))
-            res.on('error', () => resolve(null))
-          })
-          req.on('error', () => resolve(null))
-          req.on('timeout', () => { req.destroy(); resolve(null) })
-        } catch {
-          resolve(null)
-        }
-      })
+    // 2. 内存缓存
+    if (logoMemoryCache.has(logoUrlOrPath)) {
+      return logoMemoryCache.get(logoUrlOrPath) || null
     }
 
     // 3. Local File Path
     if (fs.existsSync(logoUrlOrPath)) {
-      return fs.readFileSync(logoUrlOrPath)
+      const buf = fs.readFileSync(logoUrlOrPath)
+      logoMemoryCache.set(logoUrlOrPath, buf)
+      return buf
     }
 
     // 4. Relative to resources / app
@@ -2473,31 +2492,37 @@ async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
     ]
     for (const p of relativePaths) {
       if (fs.existsSync(p)) {
-        return fs.readFileSync(p)
+        const buf = fs.readFileSync(p)
+        logoMemoryCache.set(logoUrlOrPath, buf)
+        return buf
       }
     }
 
-    // 5. 针对类似 /uploads/... 的相对路径，自动拼接远端域名进行兜底下载
-    if (logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//')) {
-      const remoteHosts = ['https://api.aicube.online', 'https://admin.aicube.online']
-      for (const host of remoteHosts) {
+    // 5. 远端 HTTP/HTTPS 图片：后台异步预加载供下次打印，当前打印坚决不阻塞！
+    if (logoUrlOrPath.startsWith('http://') || logoUrlOrPath.startsWith('https://')) {
+      setImmediate(() => {
         try {
-          const remoteUrl = `${host}${logoUrlOrPath}`
-          const remoteBuf = await new Promise<Buffer | null>((resolve) => {
-            const https = require('https')
-            const req = https.get(remoteUrl, { timeout: 3000 }, (res: any) => {
-              if (res.statusCode !== 200) return resolve(null)
-              const chunks: Buffer[] = []
-              res.on('data', (d: Buffer) => chunks.push(d))
-              res.on('end', () => resolve(Buffer.concat(chunks)))
-              res.on('error', () => resolve(null))
+          const isHttps = logoUrlOrPath.startsWith('https://')
+          const httpModule = isHttps ? require('https') : require('http')
+          const req = httpModule.get(logoUrlOrPath, {
+            timeout: 2500,
+            headers: { 'User-Agent': 'Mozilla/5.0 YOUME-POS' }
+          }, (res: any) => {
+            if (res.statusCode !== 200) return
+            const chunks: Buffer[] = []
+            res.on('data', (d: Buffer) => chunks.push(d))
+            res.on('end', () => {
+              const fullBuf = Buffer.concat(chunks)
+              if (fullBuf.length > 0) {
+                logoMemoryCache.set(logoUrlOrPath, fullBuf)
+              }
             })
-            req.on('error', () => resolve(null))
-            req.on('timeout', () => { req.destroy(); resolve(null) })
+            res.on('error', () => {})
           })
-          if (remoteBuf && remoteBuf.length > 0) return remoteBuf
+          req.on('error', () => {})
+          req.on('timeout', () => { req.destroy() })
         } catch {}
-      }
+      })
     }
   } catch (e: any) {
     writeCrash(`[LOGO LOAD] Failed to load logo from '${logoUrlOrPath}': ${e?.message}`)
@@ -2516,7 +2541,8 @@ async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
  * - 条码与二维码：按模板排布位置内联渲染
  */
 async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
-  const is80mm = data.paperSize === '80mm'
+  try {
+    const is80mm = data.paperSize === '80mm'
   const width = is80mm ? 48 : 32
   const targetDots = is80mm ? 384 : 288
 
@@ -2958,8 +2984,17 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
     }
   }
 
-  chunks.push(Buffer.from([0x0A, 0x0A]))
-  return Buffer.concat(chunks)
+    chunks.push(Buffer.from([0x0A, 0x0A]))
+    return Buffer.concat(chunks)
+  } catch (renderErr: any) {
+    writeCrash(`[BUILD ESCPOS ERROR] Error in buildReceiptEscPosBuffer: ${renderErr?.message}, falling back to plain text`)
+    try {
+      const text = generateReceiptText(data)
+      return Buffer.concat([encodeEscPosText(text), Buffer.from([0x0A, 0x0A])])
+    } catch {
+      return Buffer.from([0x0A, 0x0A])
+    }
+  }
 }
 
 function generateReceiptText(data: any): string {

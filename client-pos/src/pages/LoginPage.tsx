@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { posApi } from '../services/api'
 import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
-import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe, RefreshCw, Check } from 'lucide-react'
 import { YOUME_LOGO_RED } from '../assets/logo'
 import { WindowControls } from '../components/WindowControls'
 
@@ -27,6 +27,9 @@ export function LoginPage() {
   const [showLangMenu, setShowLangMenu] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [appVersion, setAppVersion] = useState('')
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateStatusText, setUpdateStatusText] = useState('')
+  const [isUpToDate, setIsUpToDate] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -43,6 +46,55 @@ export function LoginPage() {
       api.getAppVersion().then((v: string) => setAppVersion(v)).catch(() => {})
     }
   }, [])
+
+  const handleCheckUpdate = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.checkForUpdates) {
+      setUpdateStatusText(t('auth.notElectron', '仅客户端支持更新'))
+      setTimeout(() => setUpdateStatusText(''), 3000)
+      return
+    }
+
+    setCheckingUpdate(true)
+    setIsUpToDate(false)
+    setUpdateStatusText(t('pos.checkingUpdate', '正在检查更新...'))
+
+    api.onUpdateStatus?.((status: string, info?: any) => {
+      if (status === 'up-to-date' || status === 'not-available') {
+        setCheckingUpdate(false)
+        setIsUpToDate(true)
+        setUpdateStatusText(t('pos.upToDate', '已是最新版本'))
+        setTimeout(() => {
+          setUpdateStatusText('')
+          setIsUpToDate(false)
+        }, 4000)
+      } else if (status === 'available') {
+        setCheckingUpdate(false)
+        setIsUpToDate(false)
+        setUpdateStatusText(t('pos.newVersionReady', { version: info?.version || '' }) || t('pos.updateAvailable', '发现新版本'))
+        setTimeout(() => setUpdateStatusText(''), 5000)
+      } else if (status === 'error') {
+        setCheckingUpdate(false)
+        setIsUpToDate(false)
+        setUpdateStatusText(t('pos.updateError', '检查失败'))
+        setTimeout(() => setUpdateStatusText(''), 4000)
+      }
+    })
+
+    try {
+      await api.checkForUpdates()
+    } catch (err: any) {
+      setCheckingUpdate(false)
+      setIsUpToDate(false)
+      setUpdateStatusText(t('pos.updateError', '检查失败'))
+      setTimeout(() => setUpdateStatusText(''), 4000)
+    }
+
+    // 10秒超时防呆保护
+    setTimeout(() => {
+      setCheckingUpdate(false)
+    }, 10000)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -298,14 +350,32 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Copyright & Version */}
-          <div className="text-center text-gray-400 text-xs mt-8 space-y-1">
+          {/* Copyright & Version & Update Check */}
+          <div className="text-center text-gray-400 text-xs mt-8 space-y-2">
             <p>{t('auth.copyright')}</p>
-            {appVersion && (
-              <p className="font-mono text-[11px] text-gray-400/80">
-                v{appVersion}
-              </p>
-            )}
+            <div className="flex items-center justify-center gap-2.5 text-[11px]">
+              {appVersion && (
+                <span className="font-mono text-gray-400/80">v{appVersion}</span>
+              )}
+              <span className="text-gray-300">·</span>
+              <button
+                type="button"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all font-medium select-none ${
+                  isUpToDate
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50 shadow-2xs'
+                } disabled:opacity-60 cursor-pointer`}
+              >
+                {isUpToDate ? (
+                  <Check size={12} className="text-emerald-500" />
+                ) : (
+                  <RefreshCw size={12} className={checkingUpdate ? 'animate-spin text-primary' : 'text-gray-400'} />
+                )}
+                <span>{updateStatusText || t('pos.checkUpdate', '检查更新')}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
