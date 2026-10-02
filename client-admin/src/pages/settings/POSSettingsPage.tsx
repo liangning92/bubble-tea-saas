@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi, receiptTemplateApi } from '../../services/api'
 import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
-import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X, QrCode } from 'lucide-react'
+import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
@@ -416,11 +416,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     }
   })
 
-  // 店铺基础信息（用于小票电话、地址的智能继承与占位）
-  const fallbackStoreInfo = useMemo(() => {
-    const raw = posConfig?.data?.data || (posConfig as any)?.data || {}
-    return raw.storeInfo || (posConfig as any)?.storeInfo || {}
-  }, [posConfig])
+
 
   // ========== STATE WITH DEFAULT VALUES ==========
   // 注意: 这些字段名和结构需要与POS客户端期望的一致
@@ -666,85 +662,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     }
   }, [user?.storeId, posConfig])
 
-  // 小票 Logo 上传状态与方法
-  const [uploadingReceiptLogo, setUploadingReceiptLogo] = useState(false)
-  const receiptLogoInputRef = useRef<HTMLInputElement>(null)
 
-  const handleReceiptLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    const file = files[0]
-
-    if (!file.type.startsWith('image/')) {
-      alert(t('common.invalidImageType', '请上传有效的图片文件 (PNG, JPG, SVG 等)'))
-      return
-    }
-
-    setUploadingReceiptLogo(true)
-    try {
-      const response = await uploadApi.uploadReceipt([file])
-      const urls = response.data?.data?.urls || []
-      if (urls.length > 0) {
-        setPosReceipt(prev => {
-          const updated = {
-            ...prev,
-            storeLogo: urls[0],
-            showLogo: true
-          }
-          handleSave('posReceipt', updated)
-          return updated
-        })
-      }
-    } catch (error) {
-      console.error('Failed to upload receipt logo:', error)
-      alert(t('common.uploadFailed', '上传失败，请重试'))
-    } finally {
-      setUploadingReceiptLogo(false)
-      if (receiptLogoInputRef.current) {
-        receiptLogoInputRef.current.value = ''
-      }
-    }
-  }
-
-  // 小票二维码上传状态与方法
-  const [uploadingReceiptQr, setUploadingReceiptQr] = useState(false)
-  const receiptQrInputRef = useRef<HTMLInputElement>(null)
-
-  const handleReceiptQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    const file = files[0]
-
-    if (!file.type.startsWith('image/')) {
-      alert(t('common.invalidImageType', '请上传有效的图片文件 (PNG, JPG, SVG 等)'))
-      return
-    }
-
-    setUploadingReceiptQr(true)
-    try {
-      const response = await uploadApi.uploadReceipt([file])
-      const urls = response.data?.data?.urls || []
-      if (urls.length > 0) {
-        setPosReceipt(prev => {
-          const updated = {
-            ...prev,
-            qrCodeUrl: urls[0],
-            showQR: true
-          }
-          handleSave('posReceipt', updated)
-          return updated
-        })
-      }
-    } catch (error) {
-      console.error('Failed to upload receipt QR code:', error)
-      alert(t('common.uploadFailed', '上传失败，请重试'))
-    } finally {
-      setUploadingReceiptQr(false)
-      if (receiptQrInputRef.current) {
-        receiptQrInputRef.current.value = ''
-      }
-    }
-  }
 
   // 打印机类型定义
   type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
@@ -2164,7 +2082,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.paperSize', '纸张尺寸')}</label>
                     <div className="flex gap-2">
-                      {(['80mm', '58mm'] as const).map(size => (
+                      {(['58mm', '80mm'] as const).map(size => (
                         <button
                           key={size}
                           type="button"
@@ -2175,13 +2093,13 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                               return updated
                             })
                           }}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          className={`flex-1 h-10 rounded-lg text-sm font-semibold border transition-all flex items-center justify-center ${
                             _posReceipt.paperSize === size
-                              ? 'border-primary bg-primary/10 text-primary'
-                              : 'border-gray-200 bg-white text-gray-700'
+                              ? 'border-primary bg-primary text-white shadow-xs'
+                              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                           }`}
                         >
-                          {size} {size === '80mm' ? t('posSettings.paperStandard', '(标准)') : t('posSettings.paperMini', '(迷你)')}
+                          {size}
                         </button>
                       ))}
                     </div>
@@ -2202,391 +2120,63 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                               return updated
                             })
                           }}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          className={`flex-1 h-10 rounded-lg text-sm font-semibold border transition-all flex items-center justify-center ${
                             _posReceipt.printCopies === copies
-                              ? 'border-primary bg-primary/10 text-primary'
-                              : 'border-gray-200 bg-white text-gray-700'
+                              ? 'border-primary bg-primary text-white shadow-xs'
+                              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                           }`}
                         >
-                          {copies} {t('posSettings.copiesUnit', '联')} {copies === 2 ? t('posSettings.copiesCustomerMerchant', '(顾客+商户)') : ''}
+                          {copies}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {/* 自动打印 */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.autoPrintReceipt', '结账自动打印')}</div>
-                    <Toggle
-                      enabled={_posReceipt.autoPrint !== false}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, autoPrint: !prev.autoPrint }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 商户与联络信息 */}
-              <div className="p-4 bg-gray-50 rounded-xl space-y-4">
-                <h4 className="font-medium text-gray-800 text-sm">🏪 {t('posSettings.storeContactInfo', '小票商户与联络信息')}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('settings.phone', '店铺联系电话 (小票打印)')}
-                    </label>
-                    <input
-                      type="text"
-                      value={_posReceipt.storePhone || ''}
-                      onChange={(e) => setPosReceipt(prev => ({ ...prev, storePhone: e.target.value }))}
-                      onBlur={() => handleSave('posReceipt', _posReceipt)}
-                      className="input text-sm"
-                      placeholder={fallbackStoreInfo.phone || '+62 812-3456-7890'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('settings.address', '店铺地址 (小票打印)')}
-                    </label>
-                    <input
-                      type="text"
-                      value={_posReceipt.storeAddress || ''}
-                      onChange={(e) => setPosReceipt(prev => ({ ...prev, storeAddress: e.target.value }))}
-                      onBlur={() => handleSave('posReceipt', _posReceipt)}
-                      className="input text-sm"
-                      placeholder={fallbackStoreInfo.address || 'Jl. Sudirman No. 12, Jakarta'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.headerCustomText', '页眉宣传文案')}</label>
-                    <input
-                      type="text"
-                      value={_posReceipt.header || _posReceipt.headerCustomText || ''}
-                      onChange={(e) => setPosReceipt(prev => ({ ...prev, header: e.target.value, headerCustomText: e.target.value }))}
-                      onBlur={() => handleSave('posReceipt', _posReceipt)}
-                      className="input text-sm"
-                      placeholder="YOUME TEA"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.footerMessage', '页脚感谢文案')}</label>
-                    <input
-                      type="text"
-                      value={_posReceipt.footer || _posReceipt.footerMessage || ''}
-                      onChange={(e) => setPosReceipt(prev => ({ ...prev, footer: e.target.value, footerMessage: e.target.value }))}
-                      onBlur={() => handleSave('posReceipt', _posReceipt)}
-                      className="input text-sm"
-                      placeholder="TERIMA KASIH / THANK YOU"
-                    />
-                  </div>
-                  {/* 小票 Logo 上传与设置 */}
-                  <div className="md:col-span-2 p-3.5 bg-white border border-gray-200 rounded-xl space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700">
-                          {t('posSettings.storeLogo', '小票 Logo')}
-                        </label>
-                      </div>
-                      <div>
-                        <input
-                          ref={receiptLogoInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleReceiptLogoUpload}
-                        />
-                        <button
-                          type="button"
-                          disabled={uploadingReceiptLogo}
-                          onClick={() => receiptLogoInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-gray-50 border border-gray-300 hover:border-primary text-gray-700 hover:text-primary rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
-                        >
-                          {uploadingReceiptLogo ? (
-                            <>
-                              <Loader2 size={13} className="animate-spin text-primary" />
-                              <span>{t('common.uploading', '正在上传...')}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload size={13} />
-                              <span>{_posReceipt.storeLogo ? t('common.changeImage', '更换 Logo 图片') : t('common.uploadImage', '上传 Logo 图片')}</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Logo 预览与清除 */}
-                    {_posReceipt.storeLogo ? (
-                      <div className="flex items-center gap-3 p-2 bg-gray-50 border border-gray-200 rounded-lg">
-                        <div className="w-16 h-12 bg-white rounded border border-gray-300 flex items-center justify-center p-1 overflow-hidden flex-shrink-0">
-                          <img
-                            src={_posReceipt.storeLogo}
-                            alt="Receipt Logo Preview"
-                            className="max-w-full max-h-full object-contain"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none'
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-mono text-gray-600 truncate">
-                            {_posReceipt.storeLogo}
-                          </div>
-                          <div className="text-[11px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                            <CheckCircle size={12} />
-                            <span>{t('posSettings.logoActiveAndSynced', 'Logo 已生效并实时同步')}</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPosReceipt(prev => {
-                              const updated = { ...prev, storeLogo: '' }
-                              handleSave('posReceipt', updated)
-                              return updated
-                            })
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                          title={t('posSettings.removeLogo', '移除 Logo')}
-                        >
-                          <X size={15} />
-                        </button>
-                      </div>
-                    ) : null}
-
-                    {/* URL 辅助输入框 */}
-                    <div>
-                      <input
-                        type="text"
-                        value={_posReceipt.storeLogo || ''}
-                        onChange={(e) => setPosReceipt(prev => ({ ...prev, storeLogo: e.target.value }))}
-                        onBlur={() => handleSave('posReceipt', _posReceipt)}
-                        className="input text-xs w-full py-1.5"
-                        placeholder={t('posSettings.logoUrlPlaceholder', '或直接输入图片 URL（例如: https://... 或 /youme-logo-red.png）')}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 小票二维码设置与上传 */}
-                  <div className="md:col-span-2 p-3.5 bg-white border border-gray-200 rounded-xl space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                          <QrCode size={14} className="text-primary" />
-                          <span>{t('posSettings.showQR', '小票底部二维码')}</span>
-                        </label>
-                      </div>
-                      <div>
-                        <input
-                          ref={receiptQrInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleReceiptQrUpload}
-                        />
-                        <button
-                          type="button"
-                          disabled={uploadingReceiptQr}
-                          onClick={() => receiptQrInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-gray-50 border border-gray-300 hover:border-primary text-gray-700 hover:text-primary rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
-                        >
-                          {uploadingReceiptQr ? (
-                            <>
-                              <Loader2 size={13} className="animate-spin text-primary" />
-                              <span>{t('common.uploading', '正在上传...')}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload size={13} />
-                              <span>{_posReceipt.qrCodeUrl ? t('common.changeImage', '更换二维码图片') : t('common.uploadImage', '上传二维码图片')}</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 二维码预览与清除 */}
-                    {_posReceipt.qrCodeUrl ? (
-                      <div className="flex items-center gap-3 p-2 bg-gray-50 border border-gray-200 rounded-lg">
-                        <div className="w-16 h-16 bg-white rounded border border-gray-300 flex items-center justify-center p-1 overflow-hidden flex-shrink-0">
-                          <img
-                            src={_posReceipt.qrCodeUrl}
-                            alt="Receipt QR Preview"
-                            className="max-w-full max-h-full object-contain"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none'
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-mono text-gray-600 truncate">
-                            {_posReceipt.qrCodeUrl}
-                          </div>
-                          <div className="text-[11px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                            <CheckCircle size={12} />
-                            <span>{t('posSettings.qrReady', '小票二维码已就绪')}</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPosReceipt(prev => {
-                              const updated = { ...prev, qrCodeUrl: '', showQR: false }
-                              handleSave('posReceipt', updated)
-                              return updated
-                            })
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                          title={t('posSettings.removeQR', '移除二维码')}
-                        >
-                          <X size={15} />
-                        </button>
-                      </div>
-                    ) : null}
-
-                    {/* URL/内容辅助输入框 */}
-                    <div>
-                      <input
-                        type="text"
-                        value={_posReceipt.qrCodeUrl || ''}
-                        onChange={(e) => setPosReceipt(prev => ({ ...prev, qrCodeUrl: e.target.value, showQR: !!e.target.value }))}
-                        onBlur={() => handleSave('posReceipt', _posReceipt)}
-                        className="input text-xs w-full py-1.5"
-                        placeholder={t('posSettings.qrUrlPlaceholder', '或直接输入二维码图片 URL / 跳转网址（例如: https://... 或 /uploads/receipts/qr.png）')}
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.autoPrintReceipt', '结账自动打印')}</label>
+                    <div className="flex items-center justify-between px-3 h-10 bg-white rounded-lg border border-gray-200">
+                      <span className="text-xs font-medium text-gray-700">
+                        {_posReceipt.autoPrint !== false ? t('common.enabled', '已开启') : t('common.disabled', '已关闭')}
+                      </span>
+                      <Toggle
+                        enabled={_posReceipt.autoPrint !== false}
+                        onChange={() => {
+                          setPosReceipt(prev => {
+                            const updated = { ...prev, autoPrint: !prev.autoPrint }
+                            handleSave('posReceipt', updated)
+                            return updated
+                          })
+                        }}
                       />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 小票展示内容开关 */}
-              <div className="p-4 bg-gray-50 rounded-xl space-y-4">
-                <h4 className="font-medium text-gray-800 text-sm">📋 {t('posSettings.displayOptions', '小票字段与开关')}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* 是否打印 Logo 开关 */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showLogo', '打印小票时显示 Logo')}</div>
-                    <Toggle
-                      enabled={_posReceipt.showLogo !== false}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, showLogo: !prev.showLogo }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
+              {/* 模板设计器引导卡片 */}
+              <div className="p-4 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border border-blue-100 rounded-xl flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-600/10 text-blue-600 flex items-center justify-center text-lg shrink-0">
+                    🧾
                   </div>
-
-                  {/* 是否打印二维码开关 */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showQR', '打印小票时显示二维码')}</div>
-                    <Toggle
-                      enabled={_posReceipt.showQR === true}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, showQR: !prev.showQR }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showStaffName', '打印收银员姓名')}</div>
-                    <Toggle
-                      enabled={_posReceipt.showStaffName !== false}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, showStaffName: !prev.showStaffName }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showCustomerName', '打印顾客/会员姓名')}</div>
-                    <Toggle
-                      enabled={_posReceipt.showCustomerName === true}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, showCustomerName: !prev.showCustomerName }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showKitchenNote', '打印制作备注')}</div>
-                    <Toggle
-                      enabled={_posReceipt.showKitchenNote !== false}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, showKitchenNote: !prev.showKitchenNote }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-800">{t('posSettings.showBarcode', '打印订单条形码')}</div>
-                    <Toggle
-                      enabled={_posReceipt.showBarcode !== false}
-                      onChange={() => {
-                        setPosReceipt(prev => {
-                          const updated = { ...prev, showBarcode: !prev.showBarcode }
-                          handleSave('posReceipt', updated)
-                          return updated
-                        })
-                      }}
-                    />
-                  </div>
-
-                  {/* 商品行排版格式 */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{t('posSettings.itemDetailFormat', '商品行排版格式')}</div>
-                      <div className="text-xs text-gray-400">{t('posSettings.itemDetailFormatHint', '紧凑模式配料单行显示更省纸，标准模式清晰换行')}</div>
-                    </div>
-                    <div className="flex gap-2">
-                      {[
-                        { key: 'standard', label: t('posSettings.formatStandard', '标准') },
-                        { key: 'compact', label: t('posSettings.formatCompact', '紧凑') }
-                      ].map(f => (
-                        <button
-                          key={f.key}
-                          type="button"
-                          onClick={() => {
-                            setPosReceipt(prev => {
-                              const updated = { ...prev, itemDetailFormat: f.key }
-                              handleSave('posReceipt', updated)
-                              return updated
-                            })
-                          }}
-                          className={`px-3 py-1 text-xs rounded-lg font-medium border transition-colors ${
-                            (_posReceipt.itemDetailFormat || 'standard') === f.key
-                              ? 'bg-primary text-white border-primary'
-                              : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                          }`}
-                        >
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
+                  <div>
+                    <h5 className="text-sm font-semibold text-gray-800">
+                      {t('posSettings.visualDesignerNoticeTitle', '小票版式与内容由【模板设计器】统一管理')}
+                    </h5>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {t('posSettings.visualDesignerNoticeDesc', 'Logo、店铺联络信息、页眉页脚、商品排版、二维码与条码显示已全部集中在模板设计器中进行所见即所得编辑')}
+                    </p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setReceiptSubMode('template')}
+                  className="px-3.5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-semibold shrink-0 shadow-2xs transition-colors flex items-center gap-1.5"
+                >
+                  <span>{t('posSettings.enterTemplateDesigner', '进入模板设计器')}</span>
+                  <span>→</span>
+                </button>
               </div>
             </div>
           ) : (
