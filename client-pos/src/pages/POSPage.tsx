@@ -1442,10 +1442,10 @@ export function POSPage() {
       .then(data => {
         const apiChannels = data?.data?.list || []
         if (apiChannels.length > 0) {
-          // 将API渠道转换为POS格式，排除POS本身
+          // 将API渠道转换为POS格式
           // 使用 ch.id（数据库UUID）作为channelId，code用于翻译key
           const loadedChannels = apiChannels
-            .filter((ch: any) => ch.status === 'active' && ch.code !== 'POS')
+            .filter((ch: any) => ch.status === 'active')
             .map((ch: any) => {
               const { id, nameKey } = convertChannelCode(ch.code)
               return {
@@ -2190,7 +2190,7 @@ export function POSPage() {
       const orderData: any = {
         storeId: user?.storeId || 'default',
         staffId: user?.staff?.id || 'default',
-        channelId: selectedChannel?.id || 'POS',
+        channelId: (selectedChannel?.id && selectedChannel.id.length > 10) ? selectedChannel.id : undefined,
         channelName: selectedChannel?.code || selectedChannel?.id || 'POS',  // Use code for consistency
         items: cart.map(item => ({
           productId: item.productId,
@@ -2655,13 +2655,13 @@ export function POSPage() {
       return // Wait for payment (idle/waiting)
     }
 
-    // 渠道必填字段检查
-    const orderChannel = selectedChannel || { id: 'POS', nameKey: 'pos.counter' as const, code: 'POS' }
+    // 渠道必填字段检查与安全解析
+    const orderChannel = selectedChannel || (posChannels && posChannels.find(c => c.code === 'POS')) || { id: 'POS', nameKey: 'pos.counter' as const, code: 'POS' }
     if (orderChannel.code === 'DINE_IN' && (!dineInCount || dineInCount < 1)) {
       showToast(t('pos.dineInCountRequired'), 'error')
       return
     }
-    if (['GOFOOD', 'GRAB', 'SHOPEE'].includes(orderChannel.id) && !platformOrderId) {
+    if (['GOFOOD', 'GRAB', 'SHOPEE'].includes(orderChannel.code || orderChannel.id) && !platformOrderId) {
       showToast(t('pos.platformOrderIdRequired'), 'error')
       return
     }
@@ -2681,11 +2681,16 @@ export function POSPage() {
       severity: 'info',
     })
     const localId = `LOCAL-${Date.now()}`
+
+    // 解析出真实的数据库 channelId（仅当为有效 CUID/UUID 时传递，避免传递本地代码引发外键错误）
+    const matchedChannel = (posChannels || []).find(c => c.id === orderChannel.id || c.code === orderChannel.code)
+    const validChannelId = matchedChannel?.id && matchedChannel.id.length > 10 ? matchedChannel.id : (orderChannel.id && orderChannel.id.length > 10 ? orderChannel.id : undefined)
+
     // 发送原始数据，服务端统一计算税费和总价
     const orderData: any = {
       storeId: user?.storeId || 'default',
       staffId: user?.staff?.id || 'default',
-      channelId: orderChannel.id,
+      channelId: validChannelId,
       channelName: t(orderChannel.nameKey),
       memberId: member?.id,
       items: cart.map(item => ({

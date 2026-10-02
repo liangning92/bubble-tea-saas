@@ -530,10 +530,62 @@ async function getChannelPrice(channelId: string, productId: string, defaultPric
 export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   // DEBUG: log taxEnabled value
 
-  // Get channel info for pricing lookup
-  const channel = data.channelId
-    ? await prisma.channel.findUnique({ where: { id: data.channelId } })
-    : null
+  // Get channel info for pricing lookup with smart code resolution and foreign key protection
+  let channel: any = null
+  if (data.channelId) {
+    try {
+      // 1. 优先按 ID 精确查询
+      channel = await prisma.channel.findUnique({ where: { id: data.channelId } })
+      // 2. 若未查到，尝试按 storeId + code 查询
+      if (!channel) {
+        const codeUpper = data.channelId.toUpperCase()
+        channel = await prisma.channel.findFirst({
+          where: {
+            storeId: data.storeId,
+            code: codeUpper
+          }
+        })
+      }
+      // 3. 常见别名映射 (如 'dine_in' -> 'DINE_IN', 'counter' -> 'POS')
+      if (!channel) {
+        const aliasMap: Record<string, string> = {
+          'DINE_IN': 'DINE_IN',
+          'DINEIN': 'DINE_IN',
+          'TAKEAWAY': 'DINE_IN',
+          'COUNTER': 'POS',
+          'POS': 'POS',
+          'GOFOOD': 'GOFOOD',
+          'GRAB': 'GRAB',
+          'GRABFOOD': 'GRAB',
+          'SHOPEE': 'SHOPEE',
+          'SHOPEEFOOD': 'SHOPEE'
+        }
+        const cleaned = data.channelId.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const mappedCode = aliasMap[cleaned] || aliasMap[data.channelId.toUpperCase()]
+        if (mappedCode) {
+          channel = await prisma.channel.findFirst({
+            where: {
+              storeId: data.storeId,
+              code: mappedCode
+            }
+          })
+        }
+      }
+    } catch (chErr) {
+      console.warn('[OrderService] Channel lookup error:', chErr)
+    }
+  }
+  // 若未指定渠道或未匹配到，尝试查找该门店默认的 POS 柜台渠道兜底
+  if (!channel) {
+    try {
+      channel = await prisma.channel.findFirst({
+        where: {
+          storeId: data.storeId,
+          code: 'POS'
+        }
+      })
+    } catch {}
+  }
 
   // Calculate totals with channel-specific pricing
   let totalAmount = 0
@@ -603,7 +655,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     const newOrder = await tx.order.create({
       data: {
         storeId: data.storeId,
-        channelId: data.channelId,
+        channelId: channel ? channel.id : null,
         staffId: data.staffId,
         memberId: data.memberId,
         customerCount: data.customerCount || 1,
