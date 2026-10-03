@@ -1,7 +1,15 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
-const API_BASE = '/api'
+function getApiBase(): string {
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return '/api'
+  }
+  return 'https://api.aicube.online/api'
+}
+
+const API_BASE = getApiBase()
 
 const getAuthHeader = () => {
   const token = useAuthStore.getState().token
@@ -21,6 +29,18 @@ export const staffApi = {
       type: 'check_in',
       gpsLocation: data.location,
       date: data.date
+    }, {
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
+  // QR Attendance - 扫描前台POS动态防伪码打卡
+  checkInWithQR: async (qrData: string, type: 'check_in' | 'check_out' = 'check_in', attendanceId?: string) => {
+    const response = await axios.post(`${API_BASE}/attendance-qr/verify`, {
+      qrData,
+      type,
+      attendanceId
     }, {
       headers: getAuthHeader()
     })

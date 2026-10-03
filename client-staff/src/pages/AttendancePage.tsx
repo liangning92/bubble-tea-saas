@@ -11,7 +11,9 @@ import {
   Calendar,
   Loader2,
   Edit3,
-  PlusCircle
+  PlusCircle,
+  QrCode,
+  X
 } from 'lucide-react'
 
 export function AttendancePage() {
@@ -23,6 +25,8 @@ export function AttendancePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [history, setHistory] = useState<any[]>([])
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrInput, setQrInput] = useState('')
 
   useEffect(() => {
     if (user?.staffId) {
@@ -51,6 +55,40 @@ export function AttendancePage() {
       }
     } catch (error) {
       console.error('Failed to load history:', error)
+    }
+  }
+
+  const handleQRCheckIn = async (type: 'check_in' | 'check_out') => {
+    if (!qrInput.trim()) return
+
+    setIsLoading(true)
+    setMessage(null)
+
+    try {
+      const response = await staffApi.checkInWithQR(
+        qrInput.trim(),
+        type,
+        type === 'check_out' ? attendance?.id : undefined
+      )
+
+      if (response.code === 200 || response.code === 201) {
+        if (type === 'check_in') {
+          setAttendance(response.data)
+          setMessage({ type: 'success', text: t('attendance.checkInSuccess') })
+        } else {
+          setAttendance({ ...attendance, checkOutTime: response.data?.checkOutTime || new Date().toISOString() })
+          setMessage({ type: 'success', text: t('attendance.checkOutSuccess') })
+        }
+        setShowQRModal(false)
+        setQrInput('')
+        loadHistory()
+      } else {
+        setMessage({ type: 'error', text: response.message || t('attendance.checkInFailed') })
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.message || t('attendance.invalidQR') })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -228,39 +266,105 @@ export function AttendancePage() {
             </div>
           </div>
 
-          {/* Action Button */}
-          {isCheckedIn ? (
-            <button
-              onClick={handleCheckOut}
-              disabled={isLoading}
-              className="w-full py-4 bg-orange-500 text-white rounded-xl font-bold text-lg hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={24} />
-              ) : (
-                <>
-                  <LogOut size={24} />
-                  {t('attendance.checkOut')}
-                </>
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={handleCheckIn}
-              disabled={isLoading}
-              className="w-full py-4 bg-green-500 text-white rounded-xl font-bold text-lg hover:bg-green-600 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={24} />
-              ) : (
-                <>
-                  <CheckCircle size={24} />
-                  {t('attendance.checkIn')}
-                </>
-              )}
-            </button>
-          )}
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            {isCheckedIn ? (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleCheckOut}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-orange-500 text-white rounded-xl font-bold text-base hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    <>
+                      <LogOut size={20} />
+                      {t('attendance.checkOut')}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowQRModal(true)}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-base hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <QrCode size={20} />
+                  {t('attendance.scanQR')}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowQRModal(true)}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-100"
+                >
+                  <QrCode size={24} />
+                  {t('attendance.scanQR')}
+                </button>
+                <button
+                  onClick={handleCheckIn}
+                  disabled={isLoading}
+                  className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <MapPin size={18} />
+                      {t('attendance.gpsCheckIn')}
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* QR Code Verification Modal */}
+        {showQRModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 font-bold text-gray-900 text-lg">
+                  <QrCode className="text-indigo-600" size={24} />
+                  {t('attendance.qrModalTitle')}
+                </div>
+                <button
+                  onClick={() => { setShowQRModal(false); setQrInput(''); }}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">{t('attendance.scanQRDesc')}</p>
+              <textarea
+                value={qrInput}
+                onChange={(e) => setQrInput(e.target.value)}
+                placeholder={t('attendance.qrInputPlaceholder')}
+                className="w-full h-28 p-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono"
+              />
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowQRModal(false); setQrInput(''); }}
+                  className="flex-1 py-3 text-gray-600 font-medium text-sm rounded-xl border border-gray-200 hover:bg-gray-50"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQRCheckIn(isCheckedIn ? 'check_out' : 'check_in')}
+                  disabled={isLoading || !qrInput.trim()}
+                  className="flex-1 py-3 bg-indigo-600 text-white font-bold text-sm rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : t('attendance.qrSubmit')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Location Info */}
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 flex items-center gap-3">

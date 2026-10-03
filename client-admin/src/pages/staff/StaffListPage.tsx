@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { staffApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Clock, CheckCircle, Plus, Loader2, Edit2, Users, Search, Eye, Trash2 } from 'lucide-react'
+import { Plus, Loader2, Edit2, Users, Search, Eye, Trash2, AlertTriangle, UserCheck, UserX } from 'lucide-react'
 
 export function StaffListPage() {
   const { t } = useTranslation()
@@ -24,13 +24,19 @@ export function StaffListPage() {
     })
   })
 
-  const { data: todayAttendance } = useQuery({
-    queryKey: ['attendance-today'],
-    queryFn: () => staffApi.attendanceToday()
+  const { data: attendanceSummaryData } = useQuery({
+    queryKey: ['attendance-summary'],
+    queryFn: () => staffApi.attendanceSummary()
   })
 
   const staff = data?.data?.data?.list || []
-  const todayRecord = todayAttendance?.data
+  const summary = attendanceSummaryData?.data?.data || {
+    totalStaff: staff.length,
+    present: 0,
+    onTime: 0,
+    late: 0,
+    notCheckedIn: staff.length
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -68,6 +74,7 @@ export function StaffListPage() {
     mutationFn: (id: string) => staffApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff'] })
+      queryClient.invalidateQueries({ queryKey: ['attendance-summary'] })
     }
   })
 
@@ -85,22 +92,46 @@ export function StaffListPage() {
         </Link>
       </div>
 
-      {/* Today's Attendance Summary */}
-      <div className="card mb-6">
-        <h2 className="text-lg font-semibold mb-4">{t('staff.todaysAttendance')}</h2>
-        <div className="flex items-center gap-4">
-          {todayRecord ? (
-            <div className="flex items-center gap-2 text-success">
-              <CheckCircle size={20} />
-              <span className="font-medium">{t('staff.checkedIn')}</span>
-              <span className="text-gray-500">- {new Date(todayRecord.checkInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-gray-500">
-              <Clock size={20} />
-              <span>{t('staff.notCheckedIn')}</span>
-            </div>
-          )}
+      {/* Today's Store Attendance Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="card bg-white p-4 flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-50 text-primary rounded-xl flex items-center justify-center">
+            <Users size={24} />
+          </div>
+          <div>
+            <div className="text-sm text-gray-500">{t('staff.totalStaff')}</div>
+            <div className="text-2xl font-bold text-gray-900">{summary.totalStaff}</div>
+          </div>
+        </div>
+
+        <div className="card bg-white p-4 flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center">
+            <UserCheck size={24} />
+          </div>
+          <div>
+            <div className="text-sm text-gray-500">{t('staff.onTime')}</div>
+            <div className="text-2xl font-bold text-green-600">{summary.onTime}</div>
+          </div>
+        </div>
+
+        <div className="card bg-white p-4 flex items-center gap-4">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
+            <AlertTriangle size={24} />
+          </div>
+          <div>
+            <div className="text-sm text-gray-500">{t('staff.lateStaff')}</div>
+            <div className="text-2xl font-bold text-amber-600">{summary.late}</div>
+          </div>
+        </div>
+
+        <div className="card bg-white p-4 flex items-center gap-4">
+          <div className="w-12 h-12 bg-gray-50 text-gray-400 rounded-xl flex items-center justify-center">
+            <UserX size={24} />
+          </div>
+          <div>
+            <div className="text-sm text-gray-500">{t('staff.notCheckedIn')}</div>
+            <div className="text-2xl font-bold text-gray-600">{summary.notCheckedIn}</div>
+          </div>
         </div>
       </div>
 

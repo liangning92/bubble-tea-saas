@@ -348,19 +348,52 @@ router.post('/attendance', auth_1.authenticate, async (req, res) => {
             if (existing) {
                 return res.status(400).json({ code: 400, message: 'Already checked in today' });
             }
-            // 校验当日排班（可选 - 如果有排班记录则检查是否在班）
+            // 校验当日排班（优先根据员工排班的实际班次时间判定迟到）
             const todaySchedule = await database_1.default.schedule.findFirst({
                 where: {
                     staffId: staff.id,
                     date: { gte: startOfDay, lte: endOfDay }
                 }
             });
-            // Determine if late based on attendance rule or defaults
+            // Determine if late based on schedule shift, attendance rule, or defaults
             let status = 'normal';
+            let targetStartTime = null;
+            let gracePeriod = 15;
+            if (todaySchedule && todaySchedule.shift && todaySchedule.shift !== 'off') {
+                // 查找排班对应的班次设置
+                const shiftRecord = await database_1.default.shift.findFirst({
+                    where: {
+                        storeId,
+                        OR: [
+                            { key: todaySchedule.shift },
+                            { name: todaySchedule.shift },
+                            { id: todaySchedule.shift }
+                        ]
+                    }
+                });
+                if (shiftRecord?.startTime) {
+                    targetStartTime = shiftRecord.startTime;
+                }
+                else {
+                    // 内置常见班次备用时间
+                    const defaultShiftTimes = {
+                        morning: '08:00',
+                        afternoon: '14:00',
+                        evening: '18:00'
+                    };
+                    if (defaultShiftTimes[todaySchedule.shift]) {
+                        targetStartTime = defaultShiftTimes[todaySchedule.shift];
+                    }
+                }
+            }
             if (rule) {
-                // Parse work start time from rule
-                const [startHour, startMin] = rule.workStartTime.split(':').map(Number);
-                const gracePeriod = rule.gracePeriod || 0;
+                gracePeriod = rule.gracePeriod ?? 15;
+                if (!targetStartTime) {
+                    targetStartTime = rule.workStartTime;
+                }
+            }
+            if (targetStartTime) {
+                const [startHour, startMin] = targetStartTime.split(':').map(Number);
                 const lateThreshold = startHour * 60 + startMin + gracePeriod;
                 const currentMinutes = now.getHours() * 60 + now.getMinutes();
                 if (currentMinutes > lateThreshold) {
@@ -368,7 +401,7 @@ router.post('/attendance', auth_1.authenticate, async (req, res) => {
                 }
             }
             else {
-                // Default: 9:30 AM (no rules enabled)
+                // Default fallback: 9:30 AM (no shift, no rule)
                 const hour = now.getHours();
                 if (hour > 9 || (hour === 9 && now.getMinutes() > 30)) {
                     status = 'late';
@@ -470,6 +503,60 @@ router.get('/attendance/today', auth_1.authenticate, async (req, res) => {
     catch (error) {
         console.error('Get today attendance error:', error);
         res.status(500).json({ code: 500, message: 'Failed to get attendance' });
+    }
+});
+// GET /api/staff/attendance/summary - 门店今日全员考勤概况（后台管理员/店长概览）
+router.get('/attendance/summary', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const storeId = req.user.storeId;
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        // 获取本店所有员工
+        const staffList = await database_1.default.staff.findMany({
+            where: { storeId, status: 'active' },
+            select: { id: true, name: true, employeeNumber: true, position: true }
+        });
+        const staffIds = staffList.map(s => s.id);
+        // 获取今日所有打卡记录
+        const attendances = await database_1.default.attendance.findMany({
+            where: {
+                staffId: { in: staffIds },
+                checkInTime: { gte: startOfDay, lte: endOfDay }
+            }
+        });
+        const attendanceMap = new Map(attendances.map(a => [a.staffId, a]));
+        let present = 0;
+        let late = 0;
+        let notCheckedIn = 0;
+        staffList.forEach(s => {
+            const record = attendanceMap.get(s.id);
+            if (record) {
+                present++;
+                if (record.status === 'late') {
+                    late++;
+                }
+            }
+            else {
+                notCheckedIn++;
+            }
+        });
+        res.json({
+            code: 200,
+            data: {
+                totalStaff: staffList.length,
+                present,
+                onTime: present - late,
+                late,
+                notCheckedIn,
+                records: attendances
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Get attendance summary error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get attendance summary' });
     }
 });
 // GET /api/staff/attendance/list
@@ -705,13 +792,25 @@ router.get('/salary/my', auth_1.authenticate, async (req, res) => {
                 timestamp: new Date().toISOString()
             });
         }
+        // 查询该月份真实出勤与迟到记录
+        const [yearNum, monthNum] = targetMonth.split('-').map(Number);
+        const monthStart = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
+        const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
+        const monthAttendances = await database_1.default.attendance.findMany({
+            where: {
+                staffId: staff.id,
+                checkInTime: { gte: monthStart, lte: monthEnd }
+            }
+        });
+        const workDays = monthAttendances.length;
+        const lateDays = monthAttendances.filter(a => a.status === 'late').length;
         // Transform to match frontend expected format
         const salaryData = {
             staffName: staff.name,
             month: salaryRecord.month,
             baseSalary: salaryRecord.baseSalary,
-            workDays: 0, // Would need attendance data to calculate
-            lateDays: 0, // Would need attendance data to calculate
+            workDays,
+            lateDays,
             overtimeHours: Math.round((salaryRecord.overtime / (salaryRecord.baseSalary / 176)) * 100) / 100 || 0,
             overtimePay: salaryRecord.overtime,
             bonuses: salaryRecord.bonus,

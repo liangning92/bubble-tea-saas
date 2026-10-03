@@ -157,11 +157,67 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
         return res.status(400).json({ code: 400, message: 'Already checked in today' })
       }
 
-      // Determine if late (after 9:30 AM)
+      // 校验当日排班与迟到判定
+      const todaySchedule = await prisma.schedule.findFirst({
+        where: {
+          staffId: staff.id,
+          date: { gte: startOfDay, lte: endOfDay }
+        }
+      })
+
       let status = 'normal'
-      const hour = nowDate.getHours()
-      if (hour > 9 || (hour === 9 && nowDate.getMinutes() > 30)) {
-        status = 'late'
+      let targetStartTime: string | null = null
+      let gracePeriod = 15
+
+      if (todaySchedule && todaySchedule.shift && todaySchedule.shift !== 'off') {
+        const shiftRecord = await prisma.shift.findFirst({
+          where: {
+            storeId,
+            OR: [
+              { key: todaySchedule.shift },
+              { name: todaySchedule.shift },
+              { id: todaySchedule.shift }
+            ]
+          }
+        })
+        if (shiftRecord?.startTime) {
+          targetStartTime = shiftRecord.startTime
+        } else {
+          const defaultShiftTimes: Record<string, string> = {
+            morning: '08:00',
+            afternoon: '14:00',
+            evening: '18:00'
+          }
+          if (defaultShiftTimes[todaySchedule.shift]) {
+            targetStartTime = defaultShiftTimes[todaySchedule.shift]
+          }
+        }
+      }
+
+      const rule = await prisma.attendanceRule.findFirst({
+        where: { storeId, isActive: true, isDefault: true }
+      })
+
+      if (rule) {
+        gracePeriod = rule.gracePeriod ?? 15
+        if (!targetStartTime) {
+          targetStartTime = rule.workStartTime
+        }
+      }
+
+      if (targetStartTime) {
+        const [startHour, startMin] = targetStartTime.split(':').map(Number)
+        const lateThreshold = startHour * 60 + startMin + gracePeriod
+        const currentMinutes = nowDate.getHours() * 60 + nowDate.getMinutes()
+
+        if (currentMinutes > lateThreshold) {
+          status = 'late'
+        }
+      } else {
+        const hour = nowDate.getHours()
+        if (hour > 9 || (hour === 9 && nowDate.getMinutes() > 30)) {
+          status = 'late'
+        }
       }
 
       const attendance = await prisma.attendance.create({

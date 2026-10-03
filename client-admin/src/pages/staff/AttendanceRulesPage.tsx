@@ -66,23 +66,6 @@ export function AttendanceRulesPage() {
     loadRules()
   }, [user])
 
-  // 检测时间冲突
-  const hasTimeConflict = (newRule: { workStartTime: string; workEndTime: string }) => {
-    const newStart = newRule.workStartTime
-    const newEnd = newRule.workEndTime
-
-    for (const rule of rules) {
-      // 跳过自己（如果是编辑模式）
-      if (editingRule && rule.id === editingRule.id) continue
-
-      // 检查时间范围是否重叠
-      if (newStart < rule.workEndTime && newEnd > rule.workStartTime) {
-        return rule.name
-      }
-    }
-    return null
-  }
-
   const handleOpenModal = (rule?: AttendanceRule) => {
     if (rule) {
       setEditingRule(rule)
@@ -125,13 +108,6 @@ export function AttendanceRulesPage() {
   const handleSave = async () => {
     if (!formData.name) {
       alert(t('staff.pleaseEnterRuleName'))
-      return
-    }
-
-    // 检测时间冲突
-    const conflictRule = hasTimeConflict({ workStartTime: formData.workStartTime, workEndTime: formData.workEndTime })
-    if (conflictRule) {
-      alert(t('staff.timeConflictWithRule', { name: conflictRule }))
       return
     }
 

@@ -136,6 +136,7 @@ export const staffApi = {
   resetPassword: (id: string, newPassword: string) => api.put('/staff/' + id + '/reset-password', { newPassword }),
   attendance: (data: any) => api.post('/staff/attendance', data),
   attendanceToday: () => api.get('/staff/attendance/today'),
+  attendanceSummary: () => api.get('/staff/attendance/summary'),
   attendanceList: (params?: any) => api.get('/staff/attendance/list', { params }),
   schedule: (data: any) => api.post('/staff/schedule', data),
   scheduleList: (params?: any) => api.get('/staff/schedule/list', { params })
