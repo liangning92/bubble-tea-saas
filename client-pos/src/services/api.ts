@@ -107,6 +107,9 @@ export const posApi = {
   redeemCoupon: (memberCouponId: string, orderId: string) =>
     api.post(`/marketing/coupons/${memberCouponId}/redeem`, { orderId }),
 
+  // Marketing & Discount Rules
+  getDiscountRules: (storeId: string) => api.get('/marketing/discount-rules', { params: { storeId, status: 'active' } }),
+
   // Auth
   login: (phone: string, password: string) =>
     api.post('/auth/login', { phone, password }),

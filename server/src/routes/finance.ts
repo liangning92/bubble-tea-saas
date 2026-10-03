@@ -93,14 +93,42 @@ router.get('/profit', authenticate, authorize('admin', 'manager'), async (req: A
   }
 })
 
+function parseYearMonth(queryMonth?: string, queryYear?: string): { year: number; month: number } {
+  const now = new Date()
+  let year = parseInt(queryYear as string) || now.getFullYear()
+  let month = now.getMonth() + 1
+
+  if (queryMonth) {
+    if (queryMonth.includes('-')) {
+      const parts = queryMonth.split('-').map(Number)
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        // e.g. "2026-10" or accidental double-concat "2026-2026-10"
+        if (parts.length === 3) {
+          year = parts[0]
+          month = parts[2]
+        } else {
+          year = parts[0]
+          month = parts[1]
+        }
+      }
+    } else {
+      const parsedMonth = parseInt(queryMonth)
+      if (!isNaN(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12) {
+        month = parsedMonth
+      }
+    }
+  }
+
+  return { year, month }
+}
+
 // ==================== INCOME STATEMENT ====================
 
 // GET /api/finance/income-statement
 router.get('/income-statement', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1
-    const year = parseInt(req.query.year as string) || new Date().getFullYear()
+    const { year, month } = parseYearMonth(req.query.month as string, req.query.year as string)
     const includeDepreciation = req.query.includeDepreciation === 'true'
 
     const result = await FinanceService.getIncomeStatement(storeId, month, year, includeDepreciation)
@@ -122,8 +150,7 @@ router.get('/income-statement', authenticate, authorize('admin', 'manager'), asy
 router.get('/tax', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1
-    const year = parseInt(req.query.year as string) || new Date().getFullYear()
+    const { year, month } = parseYearMonth(req.query.month as string, req.query.year as string)
 
     const result = await FinanceService.getTaxReport(storeId, month, year)
 
@@ -169,8 +196,7 @@ router.get('/cash-flow', authenticate, authorize('admin', 'manager'), async (req
 router.get('/goal', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1
-    const year = parseInt(req.query.year as string) || new Date().getFullYear()
+    const { year, month } = parseYearMonth(req.query.month as string, req.query.year as string)
     const targetRevenue = parseInt(req.query.target as string) || 100000000 // Default Rp 100M
 
     const result = await FinanceService.getGoalTracking(storeId, month, year, targetRevenue)

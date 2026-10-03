@@ -73,7 +73,7 @@ async function getProductBomDetail(productId) {
                 costPerUnit: breakdown.cost / (item.quantity || 1),
                 totalCost: breakdown.cost,
                 currentStock: inv.currentStock,
-                avgCost: inv.avgCost,
+                avgCost: Number(inv.avgCost),
                 safetyStock: inv.safetyStock,
                 inventoryType: 'semi_finished',
                 costBreakdown: breakdown.breakdown ? {
@@ -101,7 +101,7 @@ async function getProductBomDetail(productId) {
             costPerUnit: Math.round(cpu * 100) / 100,
             totalCost: Math.round(totalCost),
             currentStock: inv?.currentStock,
-            avgCost: inv?.avgCost,
+            avgCost: Number(inv?.avgCost || 0),
             safetyStock: inv?.safetyStock,
             inventoryType: 'raw_material'
         };

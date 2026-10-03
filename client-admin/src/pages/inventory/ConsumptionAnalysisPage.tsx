@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { inventoryApi } from '../../services/api'
+import { formatItemName } from '../../utils/helpers'
 import { Loader2, AlertTriangle, AlertCircle, CheckCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 
 type VarianceStatus = 'normal' | 'warning' | 'critical'
@@ -20,7 +21,7 @@ interface ConsumptionItem {
 }
 
 export function ConsumptionAnalysisPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' })
   const [varianceThreshold, setVarianceThreshold] = useState(10)
   const [selectedStatus, setSelectedStatus] = useState<VarianceStatus | 'all'>('all')
@@ -242,7 +243,7 @@ export function ConsumptionAnalysisPage() {
             <tbody>
               {filteredAnalysis.map((item) => (
                 <tr key={item.inventoryId} className={`border-b border-border last:border-0 ${item.varianceStatus !== 'normal' ? getStatusColor(item.varianceStatus as VarianceStatus) : ''}`}>
-                  <td className="py-3 px-4 font-medium">{item.inventoryName}</td>
+                  <td className="py-3 px-4 font-medium">{formatItemName(item.inventoryName, i18n.language)}</td>
                   <td className="py-3 px-4 text-right text-gray-600">
                     {item.theoreticalConsumption.toFixed(2)} {item.unit}
                   </td>
@@ -288,9 +289,9 @@ export function ConsumptionAnalysisPage() {
               <div key={item.inventoryId} className="bg-red-50 p-4 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-red-700">{item.inventoryName}</div>
+                    <div className="font-medium text-red-700">{formatItemName(item.inventoryName, i18n.language)}</div>
                     <div className="text-sm text-red-600">
-                      {t('inventory.theoreticalVsActual')}：{item.theoreticalConsumption.toFixed(2)} {item.unit} vs {t('inventory.actualConsumption')}：{item.actualConsumption.toFixed(2)} {item.unit}
+                      {t('inventory.theoreticalVsActual')}: {item.theoreticalConsumption.toFixed(2)} {item.unit} vs {t('inventory.actualConsumption')}: {item.actualConsumption.toFixed(2)} {item.unit}
                     </div>
                   </div>
                   <div className="text-right">

@@ -236,6 +236,38 @@ router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashi
       }
     })
 
+    // 统计当前班次/今日订单折扣让利稽核（拆分系统自动营销优惠 vs 收银员手动改价折扣）
+    const shiftOrders = await prisma.order.findMany({
+      where: {
+        storeId,
+        createdAt: { gte: currentShift?.openedAt || today },
+        status: { not: 'cancelled' },
+        discountAmount: { gt: 0 }
+      },
+      select: {
+        discountAmount: true,
+        note: true
+      }
+    })
+
+    let totalDiscount = 0
+    let autoPromotionDiscount = 0
+    let manualDiscount = 0
+    let promotionOrderCount = 0
+    let manualDiscountOrderCount = 0
+
+    shiftOrders.forEach(ord => {
+      const d = ord.discountAmount || 0
+      totalDiscount += d
+      if (ord.note && ord.note.includes('[自动优惠:')) {
+        autoPromotionDiscount += d
+        promotionOrderCount++
+      } else {
+        manualDiscount += d
+        manualDiscountOrderCount++
+      }
+    })
+
     // 计算期望现金
     const expectedCash = currentShift
       ? currentShift.openFloat + todayCashSales + todayCashIns - todayCashOuts
@@ -262,7 +294,13 @@ router.get('/shifts/current', authenticate, authorize('admin', 'manager', 'cashi
         shopeeCount,
         // 新增：客户数和QRIS销售
         customerCount,
-        qrisSales: todayQrisSales._sum.totalAmount || 0
+        qrisSales: todayQrisSales._sum.totalAmount || 0,
+        // 新增：折扣让利稽核指标
+        totalDiscount,
+        autoPromotionDiscount,
+        manualDiscount,
+        promotionOrderCount,
+        manualDiscountOrderCount
       }
     })
   } catch (error) {
@@ -614,6 +652,11 @@ router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), a
     let gofoodCount = 0
     let grabCount = 0
     let shopeeCount = 0
+    let totalDiscount = 0
+    let autoPromotionDiscount = 0
+    let manualDiscount = 0
+    let promotionOrderCount = 0
+    let manualDiscountOrderCount = 0
 
     todayOrders.forEach(order => {
       customerCount += (order as any).customerCount || 1
@@ -622,6 +665,19 @@ router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), a
         case 'gofood': gofoodCount++; break
         case 'grab': grabCount++; break
         case 'shopee': shopeeCount++; break
+      }
+
+      const discount = order.discountAmount || 0
+      if (discount > 0) {
+        totalDiscount += discount
+        const note = order.note || ''
+        if (note.includes('[自动优惠:') || note.includes('自动优惠')) {
+          autoPromotionDiscount += discount
+          promotionOrderCount++
+        } else {
+          manualDiscount += discount
+          manualDiscountOrderCount++
+        }
       }
     })
 
@@ -645,7 +701,12 @@ router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), a
         dineInCount,
         gofoodCount,
         grabCount,
-        shopeeCount
+        shopeeCount,
+        totalDiscount,
+        autoPromotionDiscount,
+        manualDiscount,
+        promotionOrderCount,
+        manualDiscountOrderCount
       }
     })
   } catch (error) {

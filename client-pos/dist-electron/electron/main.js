@@ -2422,6 +2422,38 @@ async function loadLogoBuffer(logoUrlOrPath) {
                 catch { }
             });
         }
+        // 6. 针对类似 /uploads/... 相对路径：后台异步预加载，当前打印 0ms 零阻塞
+        if (logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//')) {
+            const fullRemote = `https://api.aicube.online${logoUrlOrPath}`;
+            if (logoMemoryCache.has(fullRemote)) {
+                return logoMemoryCache.get(fullRemote) || null;
+            }
+            setImmediate(() => {
+                try {
+                    const https = require('https');
+                    const req = https.get(fullRemote, {
+                        timeout: 2500,
+                        headers: { 'User-Agent': 'Mozilla/5.0 YOUME-POS' }
+                    }, (res) => {
+                        if (res.statusCode !== 200)
+                            return;
+                        const chunks = [];
+                        res.on('data', (d) => chunks.push(d));
+                        res.on('end', () => {
+                            const fullBuf = Buffer.concat(chunks);
+                            if (fullBuf.length > 0) {
+                                logoMemoryCache.set(logoUrlOrPath, fullBuf);
+                                logoMemoryCache.set(fullRemote, fullBuf);
+                            }
+                        });
+                        res.on('error', () => { });
+                    });
+                    req.on('error', () => { });
+                    req.on('timeout', () => { req.destroy(); });
+                }
+                catch { }
+            });
+        }
     }
     catch (e) {
         writeCrash(`[LOGO LOAD] Failed to load logo from '${logoUrlOrPath}': ${e?.message}`);
@@ -2525,7 +2557,9 @@ async function buildReceiptEscPosBuffer(data) {
                 switch (block.type) {
                     case 'logo': {
                         let logoBuf = null;
-                        const logoSource = cfg.url || data.storeLogo || '';
+                        const logoSource = (data.storeLogo && data.storeLogo.startsWith('data:image/'))
+                            ? data.storeLogo
+                            : (cfg.url || data.storeLogo || '');
                         if (logoSource && data.showLogo !== false) {
                             const rawImg = await loadLogoBuffer(logoSource);
                             if (rawImg) {

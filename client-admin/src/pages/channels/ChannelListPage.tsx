@@ -8,7 +8,6 @@ import { Link2, Plus, Edit2, Trash2, Loader2 } from 'lucide-react'
 // 预置渠道类型
 const PRESET_CHANNELS = [
   { nameKey: 'channels.dineIn', name: 'channels.dineIn', code: 'DINE_IN', commission: 0, icon: '🍵' },
-  { nameKey: 'channels.pos', name: 'channels.pos', code: 'POS', commission: 0, icon: '💳' },
   { nameKey: 'channels.gofood', name: 'GoFood', code: 'GOFOOD', commission: 0.2, icon: '🟢' },
   { nameKey: 'channels.grabFood', name: 'GrabFood', code: 'GRAB', commission: 0.2, icon: '🟡' },
   { nameKey: 'channels.shopeeFood', name: 'ShopeeFood', code: 'SHOPEE', commission: 0.18, icon: '🟠' },

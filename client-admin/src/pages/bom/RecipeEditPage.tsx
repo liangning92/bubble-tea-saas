@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { bomApi, inventoryApi, productApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { formatCurrency } from '../../utils/helpers'
+import { formatCurrency, formatItemName } from '../../utils/helpers'
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronDown, ChevronRight,
   AlertCircle, AlertTriangle, Package, CheckCircle
@@ -45,7 +45,7 @@ interface BOMItem {
 }
 
 export function RecipeEditPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -418,7 +418,7 @@ export function RecipeEditPage() {
                               <option disabled>{t('bom.noRawMaterials')}</option>
                             ) : groupedInventory.raw.map((inv: any) => (
                               <option key={inv.id} value={inv.id}>
-                                {inv.name} ({inv.unit})
+                                {formatItemName(inv.name, i18n.language)} ({inv.unit})
                              </option>
                             ))}
                           </optgroup>
@@ -427,7 +427,7 @@ export function RecipeEditPage() {
                               <option disabled>{t('bom.noProcessed')}</option>
                             ) : groupedInventory.semi.map((inv: any) => (
                               <option key={inv.id} value={inv.id}>
-                                {inv.name} ({inv.unit})
+                                {formatItemName(inv.name, i18n.language)} ({inv.unit})
                               </option>
                             ))}
                           </optgroup>
@@ -435,7 +435,7 @@ export function RecipeEditPage() {
                       ) : (
                         filteredInventory.map((inv: any) => (
                           <option key={inv.id} value={inv.id}>
-                            {inv.name} ({inv.unit})
+                            {formatItemName(inv.name, i18n.language)} ({inv.unit})
                           </option>
                         ))
                       )}
@@ -523,15 +523,14 @@ export function RecipeEditPage() {
                         <div className="flex items-center gap-2 mb-2 text-sm text-amber-800">
                           <AlertCircle size={14} />
                           <span className="font-medium">
-                            {t('bom.breakdown')}：
-                            {item.costBreakdown.processRecipeName || t('bom.processedRecipe')}
+                            {t('bom.breakdown')}: {item.costBreakdown.processRecipeName || t('bom.processedRecipe')}
                           </span>
                         </div>
                         <div className="space-y-1">
                           {item.costBreakdown.breakdown?.map((b, bi) => (
                             <div key={bi} className="flex items-center justify-between text-sm pl-4">
                               <span className="text-gray-600">
-                                → {b.name}：{b.quantity}{b.unit}
+                                → {formatItemName(b.name, i18n.language)}: {b.quantity} {b.unit}
                               </span>
                               <span className="text-gray-500">
                                 {formatCurrency(b.totalCost)}
@@ -541,7 +540,7 @@ export function RecipeEditPage() {
                         </div>
                         <div className="flex justify-end mt-2 pt-2 border-t border-amber-200">
                           <span className="text-sm text-amber-800">
-                            {t('bom.totalCost')}：{formatCurrency(item.costBreakdown.cost)}
+                            {t('bom.totalCost')}: {formatCurrency(item.costBreakdown.cost)}
                           </span>
                         </div>
                       </>

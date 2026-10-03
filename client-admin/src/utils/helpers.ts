@@ -91,3 +91,14 @@ export function normalizeUnit(unit: string): string {
   if (u === 'l') return 'ml'
   return unit
 }
+
+/**
+ * Format inventory or material name based on current language.
+ * When language is 'id' or 'en', strips out Chinese text in parentheses like " (小吸管/细吸管)".
+ */
+export function formatItemName(name: string, lang: string = 'id'): string {
+  if (!name) return '-'
+  if (lang === 'zh') return name
+  return name.replace(/\s*\([^\)]*[\u4e00-\u9fff]+[^\)]*\)/g, '').trim()
+}
+

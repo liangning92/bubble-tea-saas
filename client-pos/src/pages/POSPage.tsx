@@ -21,8 +21,9 @@ import {
   ShoppingCart, Trash2, Minus, Plus, Tag, User, Clock,
   Globe, FileText, Users, Printer, ScanLine, Wallet, QrCode,
   CheckSquare, ClipboardList, Lock, Settings, RotateCcw,
-  Receipt, PlusCircle, XCircle
+  Receipt, PlusCircle, XCircle, Sparkles, Gift
 } from 'lucide-react'
+import { evaluateBestPromotion, AppliedPromotion, getPromotionUpsellHint, getActivePromotionsSummary } from '../utils/promotionEngine'
 
 // Electron API
 const electronAPI = (window as any).electronAPI
@@ -315,6 +316,9 @@ export function POSPage() {
   // 本地状态
   const [discountAmount, setDiscountAmount] = useState(0)
   const [tempDiscount, setTempDiscount] = useState('')
+  const [isManualDiscount, setIsManualDiscount] = useState(false)
+  const [activeDiscountRules, setActiveDiscountRules] = useState<any[]>([])
+  const [appliedPromotion, setAppliedPromotion] = useState<AppliedPromotion | null>(null)
   // 优惠券状态
   const [memberCoupons, setMemberCoupons] = useState<any[]>([])
   const [selectedCoupon, setSelectedCoupon] = useState<any>(null)
@@ -430,6 +434,7 @@ export function POSPage() {
     itemDetailFormat: 'standard',
     showStaffName: true,
     showCustomerName: false,
+    showPromotionDetail: true,
     autoPrint: true,
   })
 
@@ -489,6 +494,9 @@ export function POSPage() {
     }
     const baseList = (posChannels && posChannels.length > 0) ? posChannels : CHANNELS
     return baseList.filter(ch => {
+      // POS 是收银机终端本身而非顾客消费/销售渠道，不在渠道列表中显示
+      if (ch.code === 'POS' || ch.id === 'pos' || (ch as any).name === 'POS收银') return false
+
       const adminKey = codeToKeyMap[ch.code]
       if (adminKey && channelSettings[adminKey]) {
         if (channelSettings[adminKey].enabled === false) return false
@@ -567,20 +575,20 @@ export function POSPage() {
     }
   }, [availableChannels, selectedChannel])
 
-  // 每日递增排队取餐号生成器 (如 A001, A002, G001...)
+  // 百位循环排队叫号生成器 (A01 ~ A99 循环模式，防竞品探单且便于呼叫)
   const getNextPickupNumber = (channelCode?: string) => {
     const now = new Date()
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
-    const storeKey = `pos_pickup_seq_${dateStr}`
+    const storeKey = `pos_pickup_cycle_${dateStr}`
     let currentSeq = 1
     try {
       const saved = localStorage.getItem(storeKey)
       if (saved) {
-        currentSeq = (parseInt(saved, 10) || 0) + 1
+        currentSeq = ((parseInt(saved, 10) || 0) % 99) + 1
       }
       localStorage.setItem(storeKey, String(currentSeq))
     } catch (e) {
-      currentSeq = Math.floor(1 + Math.random() * 999)
+      currentSeq = Math.floor(1 + Math.random() * 99)
     }
 
     let prefix = 'A'
@@ -590,7 +598,7 @@ export function POSPage() {
     else if (channelCode === 'TAKEAWAY') prefix = 'T'
     else if (channelCode === 'DINE_IN') prefix = 'A'
 
-    return `${prefix}${String(currentSeq).padStart(3, '0')}`
+    return `${prefix}${String(currentSeq).padStart(2, '0')}`
   }
 
   // 小票模板（从ReceiptTemplate表加载，支持本地持久化离线容灾）
@@ -1108,6 +1116,7 @@ export function POSPage() {
             itemDetailFormat: receiptConfig.itemDetailFormat || prev.itemDetailFormat,
             showStaffName: receiptConfig.showStaffName ?? prev.showStaffName,
             showCustomerName: receiptConfig.showCustomerName ?? prev.showCustomerName,
+            showPromotionDetail: receiptConfig.showPromotionDetail ?? prev.showPromotionDetail ?? true,
             autoPrint: receiptConfig.autoPrint ?? prev.autoPrint,
           }))
         }
@@ -1349,6 +1358,14 @@ export function POSPage() {
         if (configs.soundSettings) {
           setSoundSettings(prev => ({ ...prev, ...configs.soundSettings }))
         }
+
+        // 加载活跃营销满减与促销规则
+        posApi.getDiscountRules(storeId)
+          .then(r => {
+            const rules = r.data?.data || []
+            setActiveDiscountRules(rules)
+          })
+          .catch(e => console.warn('[POS] Failed to fetch discount rules:', e))
       })
       .catch(() => {
         showToast(t('common.error') + ' - Config', 'error')
@@ -2046,6 +2063,14 @@ export function POSPage() {
   // Sync totalRef after total is calculated
   useEffect(() => { totalRef.current = total }, [total])
 
+  // 缓存并同步门店生效的营销活动亮点，供客显副屏待机展示
+  useEffect(() => {
+    if (typeof window !== 'undefined' && activeDiscountRules && activeDiscountRules.length > 0) {
+      const summaries = getActivePromotionsSummary(selectedChannel?.code, activeDiscountRules)
+      localStorage.setItem('pos_active_promotions', JSON.stringify(summaries))
+    }
+  }, [activeDiscountRules, selectedChannel?.code])
+
   // 实时推流购物车状态到客显副屏
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2055,6 +2080,7 @@ export function POSPage() {
     if (cart.length === 0) {
       api.sendOrderClear?.()
     } else {
+      const upsell = getPromotionUpsellHint(cart, subtotal, selectedChannel?.code, activeDiscountRules)
       api.sendOrderUpdate?.({
         items: cart.map(item => ({
           id: item.id,
@@ -2067,10 +2093,13 @@ export function POSPage() {
         subtotal,
         ppn: tax,
         discount: discountAmount,
-        total
+        total,
+        promotionName: appliedPromotion?.name || (isManualDiscount && discountAmount > 0 ? t('pos.manualDiscount', '手动折扣') : ''),
+        discountNote: appliedPromotion ? appliedPromotion.description : (isManualDiscount ? t('pos.manualDiscount', '手动折扣') : ''),
+        upsellHint: upsell?.hint || ''
       })
     }
-  }, [cart, subtotal, tax, discountAmount, total])
+  }, [cart, subtotal, tax, discountAmount, total, appliedPromotion, isManualDiscount, selectedChannel?.code, activeDiscountRules])
 
   // 当选择 QRIS 且生成二维码后，推流收款二维码到副屏
   useEffect(() => {
@@ -2102,6 +2131,35 @@ export function POSPage() {
       }
     }
   }, [selectedCoupon, subtotal, tax])
+
+  // 自动营销促销计算引擎（第二杯半价、买一送一、满减、满折）
+  useEffect(() => {
+    // 优先使用会员手动选择的特定优惠券
+    if (selectedCoupon?.coupon) {
+      setAppliedPromotion(null)
+      return
+    }
+
+    // 若收银员已手动输入折扣，保持收银员的手动设置
+    if (isManualDiscount) {
+      return
+    }
+
+    if (cart.length === 0 || !activeDiscountRules || activeDiscountRules.length === 0) {
+      setAppliedPromotion(null)
+      setDiscountAmount(0)
+      return
+    }
+
+    const promo = evaluateBestPromotion(cart, subtotal, selectedChannel?.code, activeDiscountRules)
+    if (promo) {
+      setAppliedPromotion(promo)
+      setDiscountAmount(promo.amount)
+    } else {
+      setAppliedPromotion(null)
+      setDiscountAmount(0)
+    }
+  }, [cart, subtotal, selectedChannel?.code, activeDiscountRules, isManualDiscount, selectedCoupon])
 
   // 最大可用积分（不能超过总价）
   const maxRedeemablePoints = member ? Math.min(member.points || 0, Math.floor(total * 100)) : 0
@@ -2217,6 +2275,8 @@ export function POSPage() {
     }
     setCart([])
     setDiscountAmount(0)
+    setIsManualDiscount(false)
+    setAppliedPromotion(null)
     setMember(null)
     setDineInCount(1) // 重置堂食人数
     setCustomerCount(1) // 重置顾客人数
@@ -2707,7 +2767,7 @@ export function POSPage() {
     }
 
     // 渠道必填字段检查与安全解析
-    const orderChannel = selectedChannel || (posChannels && posChannels.find(c => c.code === 'POS')) || { id: 'POS', nameKey: 'pos.counter' as const, code: 'POS' }
+    const orderChannel = selectedChannel || (posChannels && posChannels.find(c => c.code === 'DINE_IN')) || { id: 'dine_in', nameKey: 'pos.dineIn' as const, code: 'DINE_IN' }
     if (orderChannel.code === 'DINE_IN' && (!dineInCount || dineInCount < 1)) {
       showToast(t('pos.dineInCountRequired'), 'error')
       return
@@ -2757,7 +2817,7 @@ export function POSPage() {
       discountAmount,              // 折扣金额（客户端计算）
       pointsRedeemed: pointsToRedeem,  // 积分抵扣（客户端计算）
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
-      orderNumber: paymentModalOrderNum
+      pickupNumber: paymentModalOrderNum || getNextPickupNumber(selectedChannel?.code)
     }
     // 所有订单都记录顾客人数
     orderData.customerCount = customerCount
@@ -2770,22 +2830,29 @@ export function POSPage() {
     if (orderChannel.code === 'GOFOOD' || orderChannel.code === 'GRAB' || orderChannel.code === 'SHOPEE') {
       orderData.platformOrderId = platformOrderId
     }
-    // 订单备注
-    if (orderNote) {
-      orderData.note = orderNote
+    // 订单备注（含自动营销活动标记，便于小票打印与防飞单审计）
+    const promoNote = (appliedPromotion && !isManualDiscount)
+      ? `[自动优惠: ${appliedPromotion.name} -${formatCurrency(appliedPromotion.amount)}]`
+      : (isManualDiscount && discountAmount > 0)
+      ? `[手动折扣: -${formatCurrency(discountAmount)}]`
+      : ''
+    const finalNote = [orderNote, promoNote].filter(Boolean).join(' ')
+    if (finalNote) {
+      orderData.note = finalNote
     }
 
-    const initialOrderNum = orderData.orderNumber || getNextPickupNumber(selectedChannel?.code) || localId.replace('LOCAL-', '')
-    orderData.orderNumber = initialOrderNum
+    const fallbackOrderNum = `OFFLINE-${localId.replace('LOCAL-', '')}`
     const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
-    let orderNum = initialOrderNum
+    let orderNum = fallbackOrderNum
+    let finalPickupNum = orderData.pickupNumber
 
     try {
       const res = await posApi.createOrder(orderData)
-      orderNum = res.data?.data?.orderNumber || initialOrderNum
+      orderNum = res.data?.data?.orderNumber || fallbackOrderNum
+      finalPickupNum = res.data?.data?.pickupNumber || orderData.pickupNumber
       // 使用服务端计算的权威金额（包含税费、折扣、积分）
       const serverGrandTotal = res.data?.data?.grandTotal || total
-      setOrderSuccess(orderNum)
+      setOrderSuccess(`${finalPickupNum} (${orderNum})`)
       playSoundWithSettings('orderComplete', soundSettings.orderComplete)
 
       // 审计日志
@@ -2793,15 +2860,15 @@ export function POSPage() {
       logPOSAction({
         action: 'checkout_complete',
         entityId: orderNum,
-        description: `结账完成，订单: ${orderNum}`,
-        metadata: { orderId: res.data?.data?.id, orderNum, totalAmount: serverGrandTotal, paymentMethod, itemCount: cart.length },
+        description: `结账完成，订单: ${orderNum} [${finalPickupNum}]`,
+        metadata: { orderId: res.data?.data?.id, orderNum, pickupNumber: finalPickupNum, totalAmount: serverGrandTotal, paymentMethod, itemCount: cart.length },
         severity: 'info',
       })
       logPOSAction({
         action: 'order_created',
         entityId: res.data?.data?.id || orderNum,
-        description: `订单创建: ${orderNum}`,
-        metadata: { orderId: res.data?.data?.id, orderNum, totalAmount: serverGrandTotal },
+        description: `订单创建: ${orderNum} [${finalPickupNum}]`,
+        metadata: { orderId: res.data?.data?.id, orderNum, pickupNumber: finalPickupNum, totalAmount: serverGrandTotal },
         severity: 'info',
       })
 
@@ -2842,6 +2909,7 @@ export function POSPage() {
       if (posReceipt.autoPrint !== false) {
         const printResult = await printReceipt(orderNum, {
           ...orderData,
+          pickupNumber: finalPickupNum,
           openCashDrawer: shouldOpenDrawer
         })
         if (!printResult) {
@@ -2858,16 +2926,16 @@ export function POSPage() {
         }
       }
       // 打印厨房单
-      printKitchenOrder(orderNum, cart)
+      printKitchenOrder(orderNum, cart, finalPickupNum)
       // 打印茶饮单杯杯贴 (TSPL)
-      printCupStickers(orderNum, cart)
+      printCupStickers(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
-      electronAPI?.sendOrderComplete?.(orderNum)
+      electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart()
       setShowPaymentModal(false)
-      showToast(`${t('pos.orderSuccess')} #${orderNum}`, 'success')
+      showToast(`${t('pos.orderSuccess')} #${finalPickupNum}`, 'success')
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
       setDineInCount(1)
@@ -2900,7 +2968,9 @@ export function POSPage() {
           items: orderData.items, subtotal, ppn: tax, totalAmount: subtotal,
           finalAmount: total, discountAmount, paymentMethod,
           taxEnabled: orderData.taxEnabled, pointsRedeemed: orderData.pointsRedeemed,
-          orderNumber: orderData.orderNumber, customerCount: orderData.customerCount || 1,
+          orderNumber: fallbackOrderNum,
+          pickupNumber: finalPickupNum,
+          customerCount: orderData.customerCount || 1,
           status: 'pending', syncAttempts: 0, createdAt: new Date()
         })
       } catch (dbErr) {
@@ -2908,11 +2978,11 @@ export function POSPage() {
       }
       // 离线模式同样下发打印和副屏通知
       if (posReceipt.autoPrint !== false) {
-        printReceipt(orderNum, { ...orderData, openCashDrawer: shouldOpenDrawer })
+        printReceipt(fallbackOrderNum, { ...orderData, pickupNumber: finalPickupNum, openCashDrawer: shouldOpenDrawer })
       }
-      printKitchenOrder(orderNum, cart)
-      printCupStickers(orderNum, cart)
-      electronAPI?.sendOrderComplete?.(orderNum)
+      printKitchenOrder(fallbackOrderNum, cart, finalPickupNum)
+      printCupStickers(fallbackOrderNum, cart, finalPickupNum)
+      electronAPI?.sendOrderComplete?.(finalPickupNum || fallbackOrderNum)
       // Don't show success banner - order is pending sync
       // 清空购物车让用户可以开始新的订单
       clearCart()
@@ -2944,6 +3014,7 @@ export function POSPage() {
     try {
       const printPromise = electronAPI?.sendPrintReceipt({
         orderNum,
+        pickupNumber: orderData?.pickupNumber,
         blocks: receiptTemplate?.blocks || null,
         template: receiptTemplate || null,
         header: (() => {
@@ -2990,6 +3061,14 @@ export function POSPage() {
         subtotal,
         tax,
         discount: discountAmount,
+        discountNote: (appliedPromotion && !isManualDiscount)
+          ? appliedPromotion.name
+          : (isManualDiscount && discountAmount > 0 ? t('pos.manualDiscount', '手动折扣') : undefined),
+        promotionName: (appliedPromotion && !isManualDiscount)
+          ? appliedPromotion.name
+          : (isManualDiscount && discountAmount > 0 ? t('pos.manualDiscount', '手动折扣') : undefined),
+        promotionDescription: (appliedPromotion && !isManualDiscount) ? appliedPromotion.description : undefined,
+        showPromotionDetail: posReceipt.showPromotionDetail !== false,
         total,
         paymentMethod: t(paymentMethods.find(m => m.id === paymentMethod)?.labelKey || 'pos.paymentCash') || paymentMethod,
         paidAmount: paidAmount ? parseInt(paidAmount) : 0,
@@ -3008,7 +3087,7 @@ export function POSPage() {
     }
   }
 
-  const printKitchenOrder = (orderNum: string, items: any[]) => {
+  const printKitchenOrder = (orderNum: string, items: any[], pickupNumber?: string) => {
     const kitchenPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'kitchen' && p.enabled)
     if (!kitchenPrinter) {
       return
@@ -3023,14 +3102,14 @@ export function POSPage() {
     const printerHost = isNetworkKitchenPrinter ? kitchenPrinter.printerIp : undefined
     const printerPort = isNetworkKitchenPrinter ? (kitchenPrinter.printerPort || 9100) : undefined
     try {
-      electronAPI?.sendKitchenOrder?.({ orderNum, printerName, printerHost, printerPort, items })
+      electronAPI?.sendKitchenOrder?.({ orderNum, pickupNumber, printerName, printerHost, printerPort, items })
     } catch (err) {
       console.warn('Kitchen print error:', err)
     }
   }
 
   // 打印茶饮单杯杯贴/不干胶标签 (TSPL)
-  const printCupStickers = (orderNum: string, items: any[]) => {
+  const printCupStickers = (orderNum: string, items: any[], pickupNumber?: string) => {
     const labelPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'label' && p.enabled)
     const isNetworkLabelPrinter = labelPrinter?.connectionType === 'network'
     const printerName = isNetworkLabelPrinter
@@ -3051,10 +3130,27 @@ export function POSPage() {
     items.forEach((item: any) => {
       const qty = item.quantity || 1
       for (let q = 0; q < qty; q++) {
+        let promoTag = ''
+        if (appliedPromotion) {
+          if (appliedPromotion.type === 'second_half') {
+            if (cupIndex % 2 === 0 && cupIndex <= (appliedPromotion.pairsCount || 1) * 2) {
+              promoTag = t('pos.halfPriceTag', '半价')
+            }
+          } else if (appliedPromotion.type === 'bogo') {
+            if (cupIndex % 2 === 0 && cupIndex <= (appliedPromotion.pairsCount || 1) * 2) {
+              promoTag = t('pos.freeTag', '赠杯')
+            }
+          } else {
+            promoTag = t('pos.promoTag', '特惠')
+          }
+        }
+
         stickerList.push({
           orderNum,
+          pickupNumber,
           cupIndex,
           totalCups,
+          promoTag,
           productName: item.productName || item.name || '',
           specName: item.specName || '',
           sugarLevelName: item.sugarLevelName || '',
@@ -3539,9 +3635,16 @@ export function POSPage() {
               </div>
             )}
             {discountAmount > 0 && (
-              <div className="flex justify-between text-green-500">
-                <span>{t('pos.discount')}</span>
-                <span>-{formatCurrency(discountAmount)}</span>
+              <div className="flex justify-between items-center text-emerald-600 font-medium">
+                <span className="flex items-center gap-1.5 truncate max-w-[70%]">
+                  <span>{t('pos.discount')}</span>
+                  {appliedPromotion && !isManualDiscount && (
+                    <span className="text-[11px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-semibold truncate">
+                      {appliedPromotion.name}
+                    </span>
+                  )}
+                </span>
+                <span className="font-bold">-{formatCurrency(discountAmount)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-base pt-2 border-t">
@@ -3549,6 +3652,20 @@ export function POSPage() {
               <span className="text-primary">{formatCurrency(total)}</span>
             </div>
           </div>
+
+          {/* 自动促销生效高亮横幅 */}
+          {appliedPromotion && !isManualDiscount && (
+            <div className="mx-3 mt-2 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-sm">🎁</span>
+                <span className="font-semibold truncate">{appliedPromotion.name}</span>
+                {appliedPromotion.description && (
+                  <span className="text-[11px] text-emerald-600 truncate">({appliedPromotion.description})</span>
+                )}
+              </div>
+              <span className="font-bold text-emerald-700 whitespace-nowrap ml-2">已省 {formatCurrency(appliedPromotion.amount)}</span>
+            </div>
+          )}
 
           {/* 操作按钮 */}
           <div className="p-3 border-t space-y-2 bg-white">
@@ -3938,6 +4055,40 @@ export function POSPage() {
               </button>
             </div>
             <div className="p-4">
+              {/* 自动促销提示或手动提示 */}
+              {appliedPromotion && !isManualDiscount && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3 text-xs text-emerald-800">
+                  <div className="font-semibold flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <span>🎉</span>
+                      <span>{t('pos.autoPromoApplied')}: {appliedPromotion.name}</span>
+                    </span>
+                    <span className="font-bold text-sm text-emerald-700">-{formatCurrency(appliedPromotion.amount)}</span>
+                  </div>
+                  {appliedPromotion.description && (
+                    <div className="text-[11px] text-emerald-600">{appliedPromotion.description}</div>
+                  )}
+                  <p className="text-[11px] text-emerald-600/80 mt-1">如需改用特殊自定义折扣，可在下方输入金额覆盖。</p>
+                </div>
+              )}
+
+              {isManualDiscount && (
+                <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-amber-800">
+                  <span>⚠️ 当前为收银员手动输入折扣</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsManualDiscount(false)
+                      setTempDiscount('')
+                      setShowDiscountModal(false)
+                    }}
+                    className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg font-bold transition-colors"
+                  >
+                    恢复自动营销
+                  </button>
+                </div>
+              )}
+
               {/* 金额显示 */}
               <div className="bg-gray-100 rounded-xl p-4 mb-4 text-right">
                 <span className="text-3xl font-bold text-primary">{formatCurrency(parseInt(tempDiscount) || 0)}</span>
@@ -3987,8 +4138,30 @@ export function POSPage() {
               ))}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback">{t('common.cancel')}</button>
-              <button onClick={() => { setDiscountAmount(Math.min(parseInt(tempDiscount) || 0, total)); setShowDiscountModal(false) }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('common.confirm')}</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManualDiscount(true)
+                  setDiscountAmount(0)
+                  setTempDiscount('0')
+                  setShowDiscountModal(false)
+                }}
+                className="px-4 py-3 border border-red-200 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-50 touch-feedback"
+              >
+                {t('pos.clearDiscount', '清空')}
+              </button>
+              <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback text-sm font-medium">{t('common.cancel')}</button>
+              <button
+                onClick={() => {
+                  const val = Math.min(parseInt(tempDiscount) || 0, subtotal + tax)
+                  setIsManualDiscount(true)
+                  setDiscountAmount(val)
+                  setShowDiscountModal(false)
+                }}
+                className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback text-sm font-bold"
+              >
+                {t('common.confirm')}
+              </button>
             </div>
             </div>
           </div>
@@ -4287,6 +4460,58 @@ export function POSPage() {
                     </div>
                   )}
 
+                  {/* 营销优惠与手动折扣稽核 (Anti-Fraud Audit) */}
+                  <div className="p-3 bg-gradient-to-r from-amber-50/70 to-orange-50/70 border border-amber-200/80 rounded-xl mb-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
+                        <Gift className="w-4 h-4 text-amber-600" />
+                        {t('pos.shiftDiscountAudit', '折扣与让利稽核')}
+                      </p>
+                      <span className="text-xs font-semibold text-gray-600">
+                        {t('pos.totalDiscount', '总让利')}: {formatCurrency(shiftData?.totalDiscount || 0)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {/* 自动营销优惠 */}
+                      <div className="p-2.5 bg-white/90 rounded-lg border border-green-100 shadow-xs">
+                        <div className="flex justify-between text-gray-500 mb-0.5">
+                          <span>{t('pos.autoPromotion', '营销自动优惠')}</span>
+                          <span className="text-green-600 font-bold">{shiftData?.promotionOrderCount || 0}单</span>
+                        </div>
+                        <p className="font-bold text-green-600 text-sm">
+                          {formatCurrency(shiftData?.autoPromotionDiscount || 0)}
+                        </p>
+                      </div>
+
+                      {/* 手动打折/改价 (重点防飞单) */}
+                      <div className={`p-2.5 rounded-lg border shadow-xs ${
+                        (shiftData?.manualDiscount || 0) > 0
+                          ? 'bg-rose-50/90 border-rose-200'
+                          : 'bg-white/90 border-gray-100'
+                      }`}>
+                        <div className="flex justify-between text-gray-500 mb-0.5">
+                          <span className="flex items-center gap-1">
+                            {t('pos.manualDiscount', '收银手动折扣')}
+                            {(shiftData?.manualDiscount || 0) > 0 && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                            )}
+                          </span>
+                          <span className={`font-bold ${
+                            (shiftData?.manualDiscountOrderCount || 0) > 0 ? 'text-rose-600' : 'text-gray-400'
+                          }`}>
+                            {shiftData?.manualDiscountOrderCount || 0}单
+                          </span>
+                        </div>
+                        <p className={`font-bold text-sm ${
+                          (shiftData?.manualDiscount || 0) > 0 ? 'text-rose-600' : 'text-gray-700'
+                        }`}>
+                          {formatCurrency(shiftData?.manualDiscount || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 渠道订单统计 */}
                   {shiftSettings.showSummary && (
                     <div className="grid grid-cols-2 gap-3 mb-4">
@@ -4415,6 +4640,11 @@ export function POSPage() {
                               totalOrders: (shiftData?.dineInCount || 0) + (shiftData?.gofoodCount || 0) + (shiftData?.grabCount || 0) + (shiftData?.shopeeCount || 0),
                               totalCups: shiftData?.customerCount || 0,
                               summaryItems: shiftSettings.summaryItems || {},
+                              totalDiscount: shiftData?.totalDiscount || 0,
+                              autoPromotionDiscount: shiftData?.autoPromotionDiscount || 0,
+                              manualDiscount: shiftData?.manualDiscount || 0,
+                              promotionOrderCount: shiftData?.promotionOrderCount || 0,
+                              manualDiscountOrderCount: shiftData?.manualDiscountOrderCount || 0,
                             })
                           } catch (reportErr) {
                             console.warn('[Shift] Failed to print shift report:', reportErr)

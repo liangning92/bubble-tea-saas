@@ -229,36 +229,106 @@ async function getInventoryStats(storeId) {
     const totalItems = items.reduce((sum, i) => sum + i.currentStock, 0);
     return { total, lowStock, outOfStock, totalValue, totalItems };
 }
-// Get stock in logs
-async function getStockInLogs(storeId, inventoryId) {
-    const where = { storeId };
-    if (inventoryId)
-        where.inventoryId = inventoryId;
+async function getStockInLogs(storeIdOrFilter, inventoryId) {
+    const filter = typeof storeIdOrFilter === 'string'
+        ? { storeId: storeIdOrFilter, inventoryId }
+        : storeIdOrFilter;
+    const where = {
+        inventory: {
+            storeId: filter.storeId
+        }
+    };
+    if (filter.inventoryId) {
+        where.inventoryId = filter.inventoryId;
+    }
+    if (filter.category) {
+        where.inventory.category = filter.category;
+    }
+    if (filter.search) {
+        where.inventory.name = { contains: filter.search, mode: 'insensitive' };
+    }
+    if (filter.startDate || filter.endDate) {
+        where.createdAt = {};
+        if (filter.startDate) {
+            const start = new Date(filter.startDate);
+            start.setHours(0, 0, 0, 0);
+            where.createdAt.gte = start;
+        }
+        if (filter.endDate) {
+            const end = new Date(filter.endDate);
+            end.setHours(23, 59, 59, 999);
+            where.createdAt.lte = end;
+        }
+    }
     const logs = await database_1.default.stockInLog.findMany({
         where,
         include: {
-            inventory: { select: { id: true, name: true, unit: true } },
+            inventory: { select: { id: true, name: true, unit: true, category: true, avgCost: true } },
             supplier: { select: { id: true, name: true } }
         },
         orderBy: { createdAt: 'desc' },
-        take: 100
+        take: filter.take || 200
     });
-    return logs;
+    return logs.map((l) => ({
+        ...l,
+        unitCost: Number(l.unitCost || 0),
+        totalAmount: Number(l.totalAmount || 0),
+        inventory: l.inventory ? {
+            ...l.inventory,
+            avgCost: Number(l.inventory.avgCost || 0)
+        } : null
+    }));
 }
 // Get stock out logs
-async function getStockOutLogs(storeId, inventoryId) {
-    const where = { storeId };
-    if (inventoryId)
-        where.inventoryId = inventoryId;
+async function getStockOutLogs(storeIdOrFilter, inventoryId) {
+    const filter = typeof storeIdOrFilter === 'string'
+        ? { storeId: storeIdOrFilter, inventoryId }
+        : storeIdOrFilter;
+    const where = {
+        inventory: {
+            storeId: filter.storeId
+        }
+    };
+    if (filter.inventoryId) {
+        where.inventoryId = filter.inventoryId;
+    }
+    if (filter.reason) {
+        where.reason = filter.reason;
+    }
+    if (filter.category) {
+        where.inventory.category = filter.category;
+    }
+    if (filter.search) {
+        where.inventory.name = { contains: filter.search, mode: 'insensitive' };
+    }
+    if (filter.startDate || filter.endDate) {
+        where.createdAt = {};
+        if (filter.startDate) {
+            const start = new Date(filter.startDate);
+            start.setHours(0, 0, 0, 0);
+            where.createdAt.gte = start;
+        }
+        if (filter.endDate) {
+            const end = new Date(filter.endDate);
+            end.setHours(23, 59, 59, 999);
+            where.createdAt.lte = end;
+        }
+    }
     const logs = await database_1.default.stockOutLog.findMany({
         where,
         include: {
-            inventory: { select: { id: true, name: true, unit: true } }
+            inventory: { select: { id: true, name: true, unit: true, category: true, avgCost: true } }
         },
         orderBy: { createdAt: 'desc' },
-        take: 100
+        take: filter.take || 200
     });
-    return logs;
+    return logs.map((l) => ({
+        ...l,
+        inventory: l.inventory ? {
+            ...l.inventory,
+            avgCost: Number(l.inventory.avgCost || 0)
+        } : null
+    }));
 }
 // Create inventory item
 async function createInventory(data) {

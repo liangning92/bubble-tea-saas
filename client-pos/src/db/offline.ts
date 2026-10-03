@@ -32,6 +32,7 @@ export interface LocalOrder {
   taxEnabled: boolean
   pointsRedeemed: number
   orderNumber: string
+  pickupNumber?: string
   customerCount: number
   status: 'pending' | 'syncing' | 'synced' | 'failed'
   syncAttempts: number
@@ -175,6 +176,7 @@ export class SyncManager {
             taxEnabled: order.taxEnabled,
             pointsRedeemed: order.pointsRedeemed,
             orderNumber: order.orderNumber,
+            pickupNumber: order.pickupNumber,
             customerCount: order.customerCount || 1
           }))
 
@@ -260,6 +262,7 @@ export class SyncManager {
               taxEnabled: order.taxEnabled,
               pointsRedeemed: order.pointsRedeemed,
               orderNumber: order.orderNumber,
+              pickupNumber: order.pickupNumber,
               customerCount: order.customerCount || 1
             })
           })

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { orderApi, channelApi, adminApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
-import { Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { Loader2, CheckCircle, XCircle, Search } from 'lucide-react'
 
 interface RefundRequest {
   id: string
@@ -31,6 +31,7 @@ export function OrderListPage() {
   const [subTab, setSubTab] = useState<OrderSubTab>('orders')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
+  const [search, setSearch] = useState('')
 
   // Refund requests state
   const [refundRequests, setRefundRequests] = useState<RefundRequest[]>([])
@@ -46,11 +47,12 @@ export function OrderListPage() {
   const channels = channelsData?.data?.data?.list || []
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['orders', statusFilter, channelFilter],
+    queryKey: ['orders', statusFilter, channelFilter, search],
     queryFn: () => orderApi.list({
       pageSize: 100,
       status: statusFilter || undefined,
-      channelId: channelFilter || undefined
+      channelId: channelFilter || undefined,
+      search: search.trim() || undefined
     })
   })
 
@@ -143,7 +145,17 @@ export function OrderListPage() {
       {subTab === 'orders' && (
         <>
       {/* Filters */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('orders.searchPlaceholder', 'Search order number, queue, customer...')}
+            className="input pl-9 w-full"
+          />
+        </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-40">
           <option value="">{t('common.all')} {t('orders.status')}</option>
           <option value="pending">{t('orders.pending')}</option>
@@ -189,7 +201,16 @@ export function OrderListPage() {
               <tbody>
                 {orders.map((order: any) => (
                   <tr key={order.id} className="border-b last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/finance/orders/${order.id}`)}>
-                    <td className="py-3 font-mono text-sm">{order.orderNumber || order.id}</td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-2">
+                        {order.pickupNumber && (
+                          <span className="px-2 py-0.5 text-xs font-bold font-mono rounded bg-primary/10 text-primary border border-primary/20">
+                            #{order.pickupNumber}
+                          </span>
+                        )}
+                        <span className="font-mono text-sm text-gray-800">{order.orderNumber || order.id}</span>
+                      </div>
+                    </td>
                     <td className="py-3">
                       {order.channel ? (
                         <span className="flex items-center gap-1">

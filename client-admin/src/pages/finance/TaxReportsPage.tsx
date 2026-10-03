@@ -31,7 +31,7 @@ export function TaxReportsPage() {
   // Tax report data for preview
   const { data: taxData, isLoading: taxLoading } = useQuery({
     queryKey: ['finance', 'tax', monthStr],
-    queryFn: () => financeApi.tax({ month: monthStr }),
+    queryFn: () => financeApi.tax({ month: selectedMonth, year: selectedYear }),
   })
 
   const handlePreview = () => {

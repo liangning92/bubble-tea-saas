@@ -4,11 +4,11 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { productApi, categoryApi, addonApi, uploadApi, inventoryApi, channelApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { formatCurrency } from '../../utils/helpers'
+import { formatCurrency, formatItemName } from '../../utils/helpers'
 import { ArrowLeft, Upload, X, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 
 export function ProductFormPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -351,7 +351,7 @@ export function ProductFormPage() {
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                 className="input"
-                placeholder={id ? '' : (t('products.codePlaceholder') || '选填，留空自动生成')}
+                placeholder={id ? '' : t('products.codePlaceholder')}
               />
             </div>
           </div>
@@ -554,7 +554,7 @@ export function ProductFormPage() {
                       <option value="">{t('products.selectIngredient')}</option>
                       {inventoryItems.map((inv: any) => (
                         <option key={inv.id} value={inv.id}>
-                          {inv.name} ({inv.unit}) - {formatCurrency(inv.avgCost || 0)}{t('products.ingredientUnit')}
+                          {formatItemName(inv.name, i18n.language)} ({inv.unit}) - {formatCurrency(inv.avgCost || 0)}{t('products.ingredientUnit')}
                         </option>
                       ))}
                     </select>

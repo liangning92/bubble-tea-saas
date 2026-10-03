@@ -106,15 +106,24 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 router.get('/logs', auth_1.authenticate, async (req, res) => {
     try {
         const storeId = (0, storeHelper_1.getStoreId)(req);
-        const inventoryId = req.query.inventoryId;
-        const type = req.query.type;
+        const { inventoryId, type, reason, category, search, startDate, endDate, limit } = req.query;
+        const take = limit ? parseInt(limit) : 200;
         let logs = [];
+        const filter = {
+            storeId,
+            inventoryId: inventoryId,
+            category: category,
+            search: search,
+            startDate: startDate,
+            endDate: endDate,
+            take
+        };
         if (!type || type === 'stock_in') {
-            const stockInLogs = await InventoryService.getStockInLogs(storeId, inventoryId);
+            const stockInLogs = await InventoryService.getStockInLogs(filter);
             logs = logs.concat(stockInLogs.map((l) => ({ ...l, type: 'stock_in' })));
         }
         if (!type || type === 'stock_out') {
-            const stockOutLogs = await InventoryService.getStockOutLogs(storeId, inventoryId);
+            const stockOutLogs = await InventoryService.getStockOutLogs({ ...filter, reason: reason });
             logs = logs.concat(stockOutLogs.map((l) => ({ ...l, type: 'stock_out' })));
         }
         logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -126,7 +135,7 @@ router.get('/logs', auth_1.authenticate, async (req, res) => {
     }
     catch (error) {
         console.error('Get inventory logs error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to get inventory logs' });
+        res.status(500).json({ code: 500, message: error.message || 'Failed to get inventory logs' });
     }
 });
 // GET /api/inventory/:id

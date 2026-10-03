@@ -67,7 +67,7 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { not: 'refunded' }
+        status: { in: ['completed', 'paid'] }
       },
       include: { items: true, refundRequests: { where: { status: 'approved' } } }
     }),
@@ -139,7 +139,7 @@ export async function getDailyRevenueTrend(storeId: string, days: number = 30) {
     where: {
       storeId,
       createdAt: { gte: startDate, lte: endDate },
-      status: { not: 'refunded' }
+      status: { in: ['completed', 'paid'] }
     },
     include: { items: true }
   })
@@ -181,7 +181,7 @@ export async function getHourlyRevenueDistribution(storeId: string, date: Date) 
     where: {
       storeId,
       createdAt: { gte: start, lte: end },
-      status: { not: 'refunded' }
+      status: { in: ['completed', 'paid'] }
     }
   })
 
@@ -208,7 +208,7 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { not: 'refunded' }
+        status: { in: ['completed', 'paid'] }
       },
       include: { items: true }
     }),
@@ -329,7 +329,7 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
     where: {
       storeId,
       createdAt: { gte: startDate, lte: endDate },
-      status: { not: 'refunded' },
+      status: { in: ['completed', 'paid'] },
       paymentMethod: 'cash'
     },
     _sum: { finalAmount: true }
@@ -396,7 +396,7 @@ export async function getTaxReport(storeId: string, month: number, year: number)
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { not: 'refunded' }
+        status: { in: ['completed', 'paid'] }
       }
     }),
     getPpnRate(storeId),

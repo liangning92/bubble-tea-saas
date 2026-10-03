@@ -87,7 +87,7 @@ const DEFAULT_CATEGORY_DEFS: ExpenseCategory[] = [
 ]
 
 export function ExpenseListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -276,7 +276,26 @@ export function ExpenseListPage() {
   const loadCustomTypes = async () => {
     try {
       const res = await expenseApi.getCategories()
-      setExpenseTypes(res.data.data.list || DEFAULT_CATEGORY_DEFS)
+      const list = res.data?.data?.list
+      if (list && Array.isArray(list) && list.length > 0) {
+        const defaultBuiltinLabels = [
+          'sewa', 'rent', '租金',
+          'utilitas', 'utilities', '水电费', '公用事业',
+          'perlengkapan', 'supplies', '用品',
+          'gaji', 'salary', '工资',
+          'ganti rugi', 'reimbursement', '报销',
+          'lainnya', 'other', '其他'
+        ]
+        const cleanedList = list.map((item: any) => {
+          if (item.isDefault && item.label && defaultBuiltinLabels.includes(item.label.toLowerCase().trim())) {
+            return { ...item, label: '' }
+          }
+          return item
+        })
+        setExpenseTypes(cleanedList)
+      } else {
+        setExpenseTypes(DEFAULT_CATEGORY_DEFS)
+      }
     } catch (error) {
       console.error('Failed to load expense categories:', error)
       // Fallback to defaults
@@ -390,18 +409,35 @@ export function ExpenseListPage() {
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[]
 
         const expenses: any[] = []
+        const categoryMap: Record<string, string> = {
+          '租金': 'rent', 'sewa': 'rent', 'rent': 'rent',
+          '水电费': 'utilities', '公用事业': 'utilities', 'utilitas': 'utilities', 'utilities': 'utilities',
+          '用品': 'supplies', 'perlengkapan': 'supplies', 'supplies': 'supplies',
+          '工资': 'salary', 'gaji': 'salary', 'salary': 'salary',
+          '报销': 'reimbursement', 'ganti rugi': 'reimbursement', 'reimbursement': 'reimbursement',
+          '其他': 'other', 'lainnya': 'other', 'other': 'other'
+        }
+        const typeMap: Record<string, string> = {
+          '运营': 'operational', 'operasional': 'operational', 'operational': 'operational',
+          '资产': 'asset', 'aset': 'asset', 'asset': 'asset',
+          '资产处置': 'asset_disposal', 'disposal': 'asset_disposal', 'asset_disposal': 'asset_disposal'
+        }
+
         for (const row of jsonData) {
-          const dateStr = row.Date || row.Tanggal || row.date
-          const category = row.Category || row.Kategori || row.category || 'other'
-          const amount = row.Amount || row.Jumlah || row.amount
-          const description = row.Description || row.Deskripsi || row.description || ''
-          const type = row.Type || row.Tipe || row.type || 'operational'
+          const dateStr = row.Date || row.Tanggal || row.date || row['日期']
+          const rawCategory = String(row.Category || row.Kategori || row.category || row['分类'] || row['类别'] || 'other').trim()
+          const amount = row.Amount || row.Jumlah || row.amount || row['金额']
+          const description = row.Description || row.Deskripsi || row.description || row['描述'] || row['说明'] || ''
+          const rawType = String(row.Type || row.Tipe || row.type || row['类型'] || 'operational').trim()
+
+          const mappedCategory = categoryMap[rawCategory.toLowerCase()] || categoryMap[rawCategory] || rawCategory.toLowerCase()
+          const mappedType = typeMap[rawType.toLowerCase()] || typeMap[rawType] || 'operational'
 
           if (dateStr && amount) {
             expenses.push({
-              type,
-              category: category.toLowerCase(),
-              amount: Math.round(parseFloat(amount) * 100),
+              type: mappedType,
+              category: mappedCategory,
+              amount: Math.round(parseFloat(String(amount).replace(/,/g, '')) * 100),
               description: String(description),
               date: new Date(dateStr).toISOString()
             })
@@ -529,8 +565,15 @@ export function ExpenseListPage() {
     }).format(amount / 100)
   }
 
+  const getDateLocale = () => {
+    const lang = i18n.language || 'id'
+    if (lang === 'zh' || lang.startsWith('zh')) return 'zh-CN'
+    if (lang === 'en' || lang.startsWith('en')) return 'en-US'
+    return 'id-ID'
+  }
+
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    return new Date(dateStr).toLocaleDateString(getDateLocale(), {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -543,10 +586,11 @@ export function ExpenseListPage() {
 
   // Helper: get category display label (custom label or translated default)
   const getCategoryLabel = (key: string) => {
-    const cat = expenseTypes.find(c => c.key === key)
-    if (cat?.label) return cat.label
-    // fallback to translation key
-    const keyMap: Record<string, string> = {
+    const normalizedKey = (key || '').toLowerCase().trim()
+    const cat = expenseTypes.find(c => c.key === normalizedKey || c.key === key)
+
+    // 系统预置默认分类 key
+    const defaultKeyMap: Record<string, string> = {
       rent: 'expense.categoryRent',
       utilities: 'expense.categoryUtilities',
       supplies: 'expense.categorySupplies',
@@ -554,12 +598,50 @@ export function ExpenseListPage() {
       reimbursement: 'expense.categoryReimbursement',
       other: 'expense.categoryOther'
     }
-    return keyMap[key] ? t(keyMap[key]) : key
+
+    // 默认内置语言预设词汇（若 label 匹配内置名称，仍应根据当前界面语言翻译）
+    const defaultBuiltinLabels = [
+      'sewa', 'rent', '租金',
+      'utilitas', 'utilities', '水电费', '公用事业',
+      'perlengkapan', 'supplies', '用品',
+      'gaji', 'salary', '工资',
+      'ganti rugi', 'reimbursement', '报销',
+      'lainnya', 'other', '其他'
+    ]
+
+    // 如果属于系统预置类别
+    if (defaultKeyMap[normalizedKey]) {
+      const isDefault = cat ? cat.isDefault : true
+      const hasCustomLabel = Boolean(cat?.label && !defaultBuiltinLabels.includes(cat.label.toLowerCase().trim()))
+      if (isDefault && !hasCustomLabel) {
+        return t(defaultKeyMap[normalizedKey])
+      }
+      if (cat?.label && hasCustomLabel) return cat.label
+      return t(defaultKeyMap[normalizedKey])
+    }
+
+    // 对于自定义类别：若有多语言字段则使用对应语言
+    if (cat) {
+      const lang = i18n.language || 'id'
+      if ((lang === 'zh' || lang.startsWith('zh')) && (cat as any).labelZh) return (cat as any).labelZh
+      if ((lang === 'en' || lang.startsWith('en')) && (cat as any).labelEn) return (cat as any).labelEn
+      if (cat.label) return cat.label
+    }
+
+    const i18nKey = `expense.category${normalizedKey.charAt(0).toUpperCase() + normalizedKey.slice(1)}`
+    const translated = t(i18nKey)
+    if (translated && translated !== i18nKey) return translated
+
+    return cat?.label || key
   }
 
   // Helper: get category color
   const getCategoryColor = (key: string) => {
-    return expenseTypes.find(c => c.key === key)?.color || 'bg-gray-100 text-gray-700'
+    const cat = expenseTypes.find(c => c.key === key)
+    const def = DEFAULT_CATEGORY_DEFS.find(d => d.key === key)
+    if (cat?.color && cat.color.includes('bg-')) return cat.color
+    if (def?.color) return def.color
+    return 'bg-gray-100 text-gray-700'
   }
 
   // Helper: get category icon background class (strip text class for bg-only use)
@@ -577,6 +659,17 @@ export function ExpenseListPage() {
       case 'medical': return t('reimbursement.typeMedical')
       case 'other': return t('reimbursement.typeOther')
       default: return type
+    }
+  }
+
+  const getReimbStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': return t('reimbursement.statusPending', '待审批')
+      case 'approved': return t('reimbursement.statusApproved', '已批准')
+      case 'paid': return t('reimbursement.statusPaid', '已支付')
+      case 'rejected': return t('reimbursement.statusRejected', '已拒绝')
+      case 'cancelled': return t('reimbursement.statusCancelled', '已取消')
+      default: return status
     }
   }
 
@@ -607,7 +700,7 @@ export function ExpenseListPage() {
   }
 
   const formatReimbDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    return new Date(dateStr).toLocaleDateString(getDateLocale(), {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
@@ -904,7 +997,7 @@ export function ExpenseListPage() {
                           reimb.status === 'pending' ? 'badge-warning' :
                           reimb.status === 'approved' ? 'badge-success' :
                           reimb.status === 'paid' ? 'badge-info' : 'badge-error'
-                        }`}>{reimb.status}</span>
+                        }`}>{getReimbStatusLabel(reimb.status)}</span>
                       </td>
                       <td className="p-4 text-sm">{formatReimbDate(reimb.createdAt)}</td>
                       <td className="p-4">
@@ -1218,7 +1311,7 @@ export function ExpenseListPage() {
             <div className="space-y-2">
               {expenseTypes.map((type) => (
                 <div key={type.key} className="flex items-center justify-between bg-gray-50 rounded-xl p-3">
-                  <span className="font-medium">{type.label || t(`expense.category${type.key.charAt(0).toUpperCase() + type.key.slice(1)}`) || type.key}</span>
+                  <span className="font-medium">{getCategoryLabel(type.key)}</span>
                   {!type.isDefault && (
                     <button
                       onClick={() => handleRemoveType(type.key)}

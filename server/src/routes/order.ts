@@ -34,13 +34,14 @@ const createOrderSchema = z.object({
   dineInCount: z.number().int().optional(),
   tableNumber: z.string().optional(),
   platformOrderId: z.string().optional(),
-  orderNumber: z.string().optional()
+  orderNumber: z.string().optional(),
+  pickupNumber: z.string().optional()
 })
 
 // GET /api/orders
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date } = req.query
+    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search } = req.query
 
     const result = await OrderService.getOrders({
       storeId: storeId as string,
@@ -49,6 +50,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       status: status as string,
       paymentMethod: paymentMethod as string,
       channelId: channelId as string,
+      search: search as string,
       startDate: startDate as string,
       endDate: endDate as string,
       date: date as string,

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { purchaseOrderApi, supplierApi, inventoryApi } from '../../services/api'
+import { formatItemName } from '../../utils/helpers'
 import { Plus, X, Package, Truck, CheckCircle, XCircle, Clock } from 'lucide-react'
 
 interface PurchaseOrderItem {
@@ -47,7 +48,7 @@ const STATUS_CONFIG: Record<string, { labelKey: string; color: string; icon: any
 }
 
 export function PurchaseOrderListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
 
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
@@ -268,7 +269,7 @@ export function PurchaseOrderListPage() {
                   <div className="space-y-1">
                     {order.items.slice(0, 3).map((item) => (
                       <div key={item.id} className="flex justify-between text-sm">
-                        <span>{item.inventory?.name || t('purchases.items')}</span>
+                        <span>{formatItemName(item.inventory?.name || t('purchases.items'), i18n.language)}</span>
                         <span className="text-gray-500">{item.quantity} x {formatCurrency(item.unitCost)}</span>
                       </div>
                     ))}
@@ -382,7 +383,7 @@ export function PurchaseOrderListPage() {
                         >
                           <option value="">{t('purchases.selectItem')}</option>
                           {inventory.map((inv) => (
-                            <option key={inv.id} value={inv.id}>{inv.name} ({inv.unit})</option>
+                            <option key={inv.id} value={inv.id}>{formatItemName(inv.name, i18n.language)} ({inv.unit})</option>
                           ))}
                         </select>
                       </div>

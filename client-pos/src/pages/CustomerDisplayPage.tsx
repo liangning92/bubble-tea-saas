@@ -18,6 +18,9 @@ interface OrderData {
   ppn: number
   discount: number
   total: number
+  promotionName?: string
+  discountNote?: string
+  upsellHint?: string
 }
 
 interface MediaFile {
@@ -45,10 +48,13 @@ interface DualScreenConfig {
   welcomeText: string
   mediaFiles: MediaFile[]
   promotions: string[]
+  showPromotionDetail?: boolean
+  showUpsellHint?: boolean
+  autoSyncPromotions?: boolean
 }
 
 // Default promotions
-const DEFAULT_PROMOTIONS = ['✨', '🍓', '💳', '🎁']
+const DEFAULT_PROMOTIONS = ['🧋', '🍓', '💳', '🎁']
 
 // Default layouts
 const DEFAULT_IDLE_LAYOUT: Layout = {
@@ -81,7 +87,11 @@ export function CustomerDisplayPage() {
     welcomeText: 'YOUME',
     mediaFiles: [],
     promotions: DEFAULT_PROMOTIONS,
+    showPromotionDetail: true,
+    showUpsellHint: true,
+    autoSyncPromotions: true,
   })
+  const [activePromotions, setActivePromotions] = useState<string[]>([])
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -96,9 +106,25 @@ export function CustomerDisplayPage() {
             ...config,
             idleLayout: config.idleLayout || DEFAULT_IDLE_LAYOUT,
             orderingLayout: config.orderingLayout || DEFAULT_ORDERING_LAYOUT,
+            showPromotionDetail: config.showPromotionDetail !== false,
+            showUpsellHint: config.showUpsellHint !== false,
+            autoSyncPromotions: config.autoSyncPromotions !== false,
           })
         } catch (e) {
           console.error('Failed to parse dualScreenConfig:', e)
+        }
+      }
+
+      // 实时同步 POS 端生效中的营销活动
+      const savedActivePromos = localStorage.getItem('pos_active_promotions')
+      if (savedActivePromos) {
+        try {
+          const parsed = JSON.parse(savedActivePromos)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setActivePromotions(parsed)
+          }
+        } catch (e) {
+          console.error('Failed to parse pos_active_promotions:', e)
         }
       }
     }
@@ -108,7 +134,9 @@ export function CustomerDisplayPage() {
   }, [])
 
   const mediaFiles = dualScreenConfig.mediaFiles || []
-  const promotions = dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS
+  const promotions = (dualScreenConfig.autoSyncPromotions !== false && activePromotions.length > 0)
+    ? activePromotions
+    : (dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS)
 
   // Use refs to avoid stale closure in interval callbacks
   const mediaFilesRef = useRef(mediaFiles)
@@ -226,21 +254,47 @@ export function CustomerDisplayPage() {
             <span className="text-6xl">{promotion}</span>
           </div>
         )
-      case 'promotions':
+      case 'promotions': {
+        const isPromoText = typeof promotion === 'string' && promotion.length > 2
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4">
-            <div className="text-5xl mb-4">{promotion}</div>
-            <div className="text-xl text-center">{dualScreenConfig.welcomeText || t('customer_welcome', 'Welcome')}</div>
-            <div className="flex gap-2 mt-4">
-              {promotions.map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-2 h-2 rounded-full ${i === currentPromotion ? 'bg-white' : 'bg-white/40'}`}
-                />
-              ))}
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 text-white p-6 shadow-inner relative overflow-hidden">
+            <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
+            <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
+            <div className="relative z-10 flex flex-col items-center text-center max-w-md w-full">
+              {isPromoText ? (
+                <div className="bg-white/15 backdrop-blur-md border border-white/20 p-6 rounded-2xl shadow-xl w-full">
+                  <span className="inline-block px-3 py-1 bg-yellow-400 text-purple-950 font-black text-xs rounded-full mb-3 tracking-wider uppercase">
+                    {t('pos.specialOffer', 'HOT DEAL • 特惠')}
+                  </span>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold tracking-wide mb-2 leading-tight drop-shadow-sm">
+                    {promotion}
+                  </h3>
+                  <p className="text-white/80 text-sm">
+                    {dualScreenConfig.welcomeText || t('customer_welcome', 'Welcome')}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-6xl mb-4 animate-bounce">{promotion}</div>
+                  <div className="text-2xl font-bold tracking-wide text-center drop-shadow-sm">
+                    {dualScreenConfig.welcomeText || t('customer_welcome', 'Welcome')}
+                  </div>
+                </>
+              )}
+              <div className="flex gap-2 mt-6">
+                {promotions.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      i === currentPromotion ? 'w-6 bg-white' : 'w-2 bg-white/40'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         )
+      }
       case 'welcome': {
         const storeLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
         return (
@@ -285,6 +339,20 @@ export function CustomerDisplayPage() {
                 </div>
               ))}
             </div>
+
+            {/* 智能凑单 / 促单诱导横幅 (Upsell Hint) */}
+            {dualScreenConfig.showUpsellHint !== false && orderData?.upsellHint && (
+              <div className="mx-4 mb-2 p-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-orange-200 rounded-xl flex items-center justify-between text-orange-800 text-xs sm:text-sm font-medium animate-pulse shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">✨</span>
+                  <span>{orderData.upsellHint}</span>
+                </div>
+                <span className="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider whitespace-nowrap">
+                  {t('pos.promoDeal', '特惠')}
+                </span>
+              </div>
+            )}
+
             <div className="bg-white border-t p-4">
               <div className="space-y-1 mb-3">
                 <div className="flex justify-between text-gray-500 text-sm">
@@ -296,8 +364,15 @@ export function CustomerDisplayPage() {
                   <span>{formatCurrency(orderData?.ppn || 0)}</span>
                 </div>
                 {(orderData?.discount || 0) > 0 && (
-                  <div className="flex justify-between text-green-500 text-sm">
-                    <span>{t('pos.discount', 'Discount')}</span>
+                  <div className="flex justify-between items-center text-green-600 text-sm font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <span>{t('pos.discount', 'Discount')}</span>
+                      {dualScreenConfig.showPromotionDetail !== false && orderData?.promotionName && (
+                        <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-semibold">
+                          {orderData.promotionName}
+                        </span>
+                      )}
+                    </div>
                     <span>-{formatCurrency(orderData?.discount || 0)}</span>
                   </div>
                 )}

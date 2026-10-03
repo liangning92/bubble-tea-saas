@@ -681,18 +681,25 @@ router.get('/balance-logs', auth_1.authenticate, (0, auth_1.authorize)('admin', 
 });
 // ==================== DISCOUNT RULES ====================
 // GET /api/marketing/discount-rules - Get all discount rules
-router.get('/discount-rules', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+router.get('/discount-rules', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager', 'cashier', 'staff'), async (req, res) => {
     try {
         const storeId = req.user.storeId;
+        const { status } = req.query;
+        const where = { storeId };
+        if (status) {
+            where.status = String(status);
+        }
         const rules = await database_1.default.discountRule.findMany({
-            where: { storeId },
+            where,
             orderBy: { priority: 'desc' }
         });
         res.json({
             code: 200,
             data: rules.map(r => ({
                 ...r,
-                applicableChannels: r.applicableChannels ? JSON.parse(r.applicableChannels) : []
+                applicableChannels: r.applicableChannels ? JSON.parse(r.applicableChannels) : [],
+                applicableProducts: r.applicableProducts ? JSON.parse(r.applicableProducts) : [],
+                excludeProducts: r.excludeProducts ? JSON.parse(r.excludeProducts) : []
             })),
             timestamp: new Date().toISOString()
         });
@@ -706,29 +713,42 @@ router.get('/discount-rules', auth_1.authenticate, (0, auth_1.authorize)('admin'
 router.post('/discount-rules', auth_1.authenticate, (0, auth_1.authorize)('admin'), async (req, res) => {
     try {
         const storeId = req.user.storeId;
-        const { name, minOrderAmount, discountValue, discountType, maxDiscount, applicableChannels, validFrom, validUntil, priority, status } = req.body;
-        if (!name || !minOrderAmount || !discountValue) {
+        const { name, minOrderAmount, discountValue, discountType = 'fixed', maxDiscount, applicableChannels, applicableProducts, excludeProducts, validFrom, validUntil, priority, status } = req.body;
+        const resolvedMinOrderAmount = minOrderAmount !== undefined && minOrderAmount !== null
+            ? Number(minOrderAmount)
+            : (discountType === 'second_half' || discountType === 'bogo' ? 2 : 0);
+        const resolvedDiscountValue = discountValue !== undefined && discountValue !== null
+            ? Number(discountValue)
+            : (discountType === 'second_half' ? 50 : discountType === 'bogo' ? 100 : 0);
+        if (!name || resolvedMinOrderAmount === undefined || resolvedDiscountValue === undefined) {
             return res.status(400).json({ code: 400, message: 'Missing required fields' });
         }
         const rule = await database_1.default.discountRule.create({
             data: {
                 storeId,
                 name,
-                minOrderAmount,
-                discountValue,
+                minOrderAmount: resolvedMinOrderAmount,
+                discountValue: resolvedDiscountValue,
                 discountType: discountType || 'fixed',
-                maxDiscount: maxDiscount || null,
-                applicableChannels: applicableChannels ? JSON.stringify(applicableChannels) : null,
+                maxDiscount: maxDiscount ? Number(maxDiscount) : null,
+                applicableChannels: applicableChannels && Array.isArray(applicableChannels) ? JSON.stringify(applicableChannels) : null,
+                applicableProducts: applicableProducts && Array.isArray(applicableProducts) ? JSON.stringify(applicableProducts) : null,
+                excludeProducts: excludeProducts && Array.isArray(excludeProducts) ? JSON.stringify(excludeProducts) : null,
                 validFrom: validFrom ? new Date(validFrom) : null,
                 validUntil: validUntil ? new Date(validUntil) : null,
-                priority: priority || 0,
+                priority: priority ? Number(priority) : 0,
                 status: status || 'active'
             }
         });
         res.status(201).json({
             code: 201,
             message: 'Discount rule created',
-            data: rule,
+            data: {
+                ...rule,
+                applicableChannels: rule.applicableChannels ? JSON.parse(rule.applicableChannels) : [],
+                applicableProducts: rule.applicableProducts ? JSON.parse(rule.applicableProducts) : [],
+                excludeProducts: rule.excludeProducts ? JSON.parse(rule.excludeProducts) : []
+            },
             timestamp: new Date().toISOString()
         });
     }
@@ -741,30 +761,43 @@ router.post('/discount-rules', auth_1.authenticate, (0, auth_1.authorize)('admin
 router.put('/discount-rules/:id', auth_1.authenticate, (0, auth_1.authorize)('admin'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, minOrderAmount, discountValue, discountType, maxDiscount, applicableChannels, validFrom, validUntil, priority, status } = req.body;
+        const { name, minOrderAmount, discountValue, discountType = 'fixed', maxDiscount, applicableChannels, applicableProducts, excludeProducts, validFrom, validUntil, priority, status } = req.body;
         const existing = await database_1.default.discountRule.findUnique({ where: { id } });
         if (!existing || existing.storeId !== req.user.storeId) {
             return res.status(404).json({ code: 404, message: 'Discount rule not found' });
         }
+        const resolvedMinOrderAmount = minOrderAmount !== undefined && minOrderAmount !== null
+            ? Number(minOrderAmount)
+            : existing.minOrderAmount;
+        const resolvedDiscountValue = discountValue !== undefined && discountValue !== null
+            ? Number(discountValue)
+            : existing.discountValue;
         const rule = await database_1.default.discountRule.update({
             where: { id },
             data: {
                 name,
-                minOrderAmount,
-                discountValue,
+                minOrderAmount: resolvedMinOrderAmount,
+                discountValue: resolvedDiscountValue,
                 discountType,
-                maxDiscount: maxDiscount || null,
-                applicableChannels: applicableChannels ? JSON.stringify(applicableChannels) : null,
+                maxDiscount: maxDiscount ? Number(maxDiscount) : null,
+                applicableChannels: applicableChannels && Array.isArray(applicableChannels) ? JSON.stringify(applicableChannels) : null,
+                applicableProducts: applicableProducts && Array.isArray(applicableProducts) ? JSON.stringify(applicableProducts) : null,
+                excludeProducts: excludeProducts && Array.isArray(excludeProducts) ? JSON.stringify(excludeProducts) : null,
                 validFrom: validFrom ? new Date(validFrom) : null,
                 validUntil: validUntil ? new Date(validUntil) : null,
-                priority,
-                status
+                priority: priority !== undefined ? Number(priority) : existing.priority,
+                status: status || existing.status
             }
         });
         res.json({
             code: 200,
             message: 'Discount rule updated',
-            data: rule,
+            data: {
+                ...rule,
+                applicableChannels: rule.applicableChannels ? JSON.parse(rule.applicableChannels) : [],
+                applicableProducts: rule.applicableProducts ? JSON.parse(rule.applicableProducts) : [],
+                excludeProducts: rule.excludeProducts ? JSON.parse(rule.excludeProducts) : []
+            },
             timestamp: new Date().toISOString()
         });
     }

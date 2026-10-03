@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { inventoryApi, configApi, processRecipeApi } from '../../services/api'
-import { formatCurrency, formatStockDisplay } from '../../utils/helpers'
+import { formatCurrency, formatStockDisplay, formatItemName } from '../../utils/helpers'
 import { AlertTriangle, TrendingUp, TrendingDown, Search, Loader2, Package, Plus, Edit2, Trash2, X } from 'lucide-react'
 
 const DEFAULT_CATEGORIES = [
@@ -13,7 +13,7 @@ const DEFAULT_CATEGORIES = [
 ]
 
 export function InventoryPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
    const [showStockIn, setShowStockIn] = useState(false)
@@ -345,7 +345,7 @@ export function InventoryPage() {
           <div className="flex flex-wrap gap-2">
             {alerts.slice(0, 10).map((item: any) => (
               <span key={item.id} className="badge badge-error">
-                {item.name}: {formatStockDisplay(item.currentStock, item.unit)}
+                {formatItemName(item.name, i18n.language)}: {formatStockDisplay(item.currentStock, item.unit)}
               </span>
             ))}
             {alerts.length > 10 && <span className="text-red-600 text-sm">+{alerts.length - 10} {t('inventory.moreItems')}</span>}
@@ -403,7 +403,7 @@ export function InventoryPage() {
                   return (
                     <tr key={item.id} className={`border-b last:border-0 hover:bg-gray-50 ${isLow ? 'bg-red-50/30' : ''}`}>
                       <td className="py-3 pr-4">
-                        <span className="font-medium text-gray-900">{item.name}</span>
+                        <span className="font-medium text-gray-900">{formatItemName(item.name, i18n.language)}</span>
                         {isLow && <AlertTriangle size={16} className="inline ml-2 text-red-500" />}
                       </td>
                       <td className="py-3 px-2 text-gray-600">{getCategoryName(item.category)}</td>
@@ -657,7 +657,7 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">{t('inventory.stockIn') || 'Stock In'} - {selectedItem.name}</h3>
+              <h3 className="text-lg font-semibold">{t('inventory.stockIn')} - {formatItemName(selectedItem.name, i18n.language)}</h3>
               <button onClick={() => setShowStockIn(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
@@ -711,7 +711,7 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">{t('inventory.stockOut') || 'Stock Out'} - {selectedItem.name}</h3>
+              <h3 className="text-lg font-semibold">{t('inventory.stockOut')} - {formatItemName(selectedItem.name, i18n.language)}</h3>
               <button onClick={() => setShowStockOut(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>

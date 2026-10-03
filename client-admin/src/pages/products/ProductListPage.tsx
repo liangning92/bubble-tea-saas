@@ -498,7 +498,7 @@ export function ProductListPage() {
                     value={editForm.code}
                     onChange={(e) => setEditForm({ ...editForm, code: e.target.value.toUpperCase() })}
                     className="input w-full"
-                    placeholder={editingProduct ? '' : (t('products.codePlaceholder') || '选填，留空自动生成')}
+                    placeholder={editingProduct ? '' : t('products.codePlaceholder')}
                   />
                 </div>
               </div>

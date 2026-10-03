@@ -69,12 +69,13 @@ const createOrderSchema = zod_1.z.object({
     dineInCount: zod_1.z.number().int().optional(),
     tableNumber: zod_1.z.string().optional(),
     platformOrderId: zod_1.z.string().optional(),
-    orderNumber: zod_1.z.string().optional()
+    orderNumber: zod_1.z.string().optional(),
+    pickupNumber: zod_1.z.string().optional()
 });
 // GET /api/orders
 router.get('/', auth_1.authenticate, async (req, res) => {
     try {
-        const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date } = req.query;
+        const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search } = req.query;
         const result = await OrderService.getOrders({
             storeId: storeId,
             userId: req.user.id,
@@ -82,6 +83,7 @@ router.get('/', auth_1.authenticate, async (req, res) => {
             status: status,
             paymentMethod: paymentMethod,
             channelId: channelId,
+            search: search,
             startDate: startDate,
             endDate: endDate,
             date: date,

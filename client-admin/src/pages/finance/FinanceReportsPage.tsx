@@ -92,7 +92,11 @@ export function FinanceReportsPage() {
 
   // Preview handlers
   const handlePreview = async (type: string) => {
-    const monthStr = `${selectedYear}-${selectedMonth.padStart(2, '0')}`
+    const monthPart = selectedMonth.includes('-') ? selectedMonth.split('-')[1] : selectedMonth.padStart(2, '0')
+    const monthNum = parseInt(monthPart) || (new Date().getMonth() + 1)
+    const yearNum = selectedYear || new Date().getFullYear()
+    const monthStr = `${yearNum}-${String(monthNum).padStart(2, '0')}`
+
     try {
       let data = null
       if (type === 'income_statement') {
@@ -102,7 +106,10 @@ export function FinanceReportsPage() {
         const res = await financeApi.incomeStatement({ month: monthStr, includeDepreciation })
         data = res.data?.data
       } else if (type === 'cash_flow') {
-        const res = await financeApi.cashFlow({ startDate: `${monthStr}-01`, endDate: `${monthStr}-31` })
+        const lastDay = new Date(yearNum, monthNum, 0).getDate()
+        const startDate = `${monthStr}-01`
+        const endDate = `${monthStr}-${String(lastDay).padStart(2, '0')}`
+        const res = await financeApi.cashFlow({ startDate, endDate })
         data = res.data?.data
       }
       setPreviewData({ type, data })
@@ -116,7 +123,10 @@ export function FinanceReportsPage() {
   const handleDownload = async (type: string, format: string) => {
     setDownloading(`${type}-${format}`)
     try {
-      const monthStr = `${selectedYear}-${selectedMonth.padStart(2, '0')}`
+      const monthPart = selectedMonth.includes('-') ? selectedMonth.split('-')[1] : selectedMonth.padStart(2, '0')
+      const monthNum = parseInt(monthPart) || (new Date().getMonth() + 1)
+      const yearNum = selectedYear || new Date().getFullYear()
+      const monthStr = `${yearNum}-${String(monthNum).padStart(2, '0')}`
       const response = await financeApi.downloadReport({
         type,
         month: monthStr,
@@ -596,28 +606,44 @@ export function FinanceReportsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <p className="text-sm text-gray-500">{t('finance.totalSales')}</p>
-                      <p className="text-xl font-bold">{formatCurrency(previewData.data.totalSales || 0)}</p>
+                      <p className="text-xl font-bold">{formatCurrency(previewData.data.revenue?.totalSales ?? previewData.data.totalSales ?? 0)}</p>
                     </div>
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <p className="text-sm text-gray-500">{t('finance.ppnCollected')}</p>
-                      <p className="text-xl font-bold">{formatCurrency(previewData.data.ppnCollected || 0)}</p>
+                      <p className="text-xl font-bold">{formatCurrency(previewData.data.revenue?.ppnCollected ?? previewData.data.ppnCollected ?? 0)}</p>
                     </div>
                   </div>
                   <div className="p-4 bg-green-50 rounded-lg">
                     <p className="text-sm text-gray-500">{t('finance.grossProfit')}</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(previewData.data.grossProfit?.amount || 0)}</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(previewData.data.grossProfit?.amount ?? 0)}</p>
                   </div>
                   <div className="p-4 bg-primary/10 rounded-lg">
                     <p className="text-sm text-gray-500">{t('finance.netProfit')}</p>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(previewData.data.netProfit?.amount || 0)}</p>
+                    <p className="text-2xl font-bold text-primary">{formatCurrency(previewData.data.netProfit?.amount ?? 0)}</p>
                   </div>
                 </>
+              )}
+              {previewData.type === 'balance_sheet' && previewData.data && (
+                <div className="space-y-3">
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-gray-500">{t('finance.totalSales', '期间营业额')}</p>
+                    <p className="text-xl font-bold text-blue-600">{formatCurrency(previewData.data.revenue?.totalSales ?? 0)}</p>
+                  </div>
+                  <div className="p-4 bg-emerald-50 rounded-lg">
+                    <p className="text-sm text-gray-500">{t('finance.grossProfit', '毛利')}</p>
+                    <p className="text-xl font-bold text-emerald-600">{formatCurrency(previewData.data.grossProfit?.amount ?? 0)}</p>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded-lg">
+                    <p className="text-sm text-gray-500">{t('finance.netProfit', '本期未分配利润')}</p>
+                    <p className="text-xl font-bold text-purple-600">{formatCurrency(previewData.data.netProfit?.amount ?? 0)}</p>
+                  </div>
+                </div>
               )}
               {previewData.type === 'cash_flow' && previewData.data && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 bg-green-50 rounded-lg">
                     <p className="text-sm text-gray-500">{t('finance.totalInflows')}</p>
-                    <p className="text-xl font-bold text-green-600">{formatCurrency(previewData.data.totalInflows || 0)}</p>
+                    <p className="text-xl font-bold text-green-600">{formatCurrency((previewData.data.inflows?.cashSales || 0) + (previewData.data.inflows?.otherSales || 0) || previewData.data.totalInflows || 0)}</p>
                   </div>
                   <div className="p-4 bg-red-50 rounded-lg">
                     <p className="text-sm text-gray-500">{t('finance.totalOutflows')}</p>

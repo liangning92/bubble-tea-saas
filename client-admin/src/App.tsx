@@ -6,7 +6,6 @@ import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProductsIndexPage } from './pages/products/ProductsIndexPage'
 import { ProductListPage } from './pages/products/ProductListPage'
-import { ProductCostPage } from './pages/products/ProductCostPage'
 import { ProductFormPage } from './pages/products/ProductFormPage'
 import { OrderListPage } from './pages/orders/OrderListPage'
 import { OrderDetailPage } from './pages/orders/OrderDetailPage'
@@ -150,7 +149,7 @@ function App() {
           <Route path="new" element={<ProductFormPage />} />
           <Route path=":id/edit" element={<ProductFormPage />} />
           <Route path=":id/recipe" element={<RecipeEditPage />} />
-          <Route path="costs" element={<ProductCostPage />} />
+          <Route path="costs" element={<Navigate to="/products/recipes" replace />} />
           <Route path="recipes" element={<BomAnalysisPage />} />
           <Route path="analysis" element={<ProductAnalysisPage />} />
           <Route path="categories" element={<CategoryListPage />} />

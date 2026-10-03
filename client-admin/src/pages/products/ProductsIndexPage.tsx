@@ -7,9 +7,8 @@ export function ProductsIndexPage() {
 
   const tabs = [
     { key: 'products', label: t('products.title'), path: '/products' },
-    { key: 'costs', label: t('products.costAnalysis'), path: '/products/costs' },
+    { key: 'recipes', label: t('products.recipeAndCost'), path: '/products/recipes' },
     { key: 'addons', label: t('nav.addons'), path: '/products/addons' },
-    { key: 'recipes', label: t('nav.recipes'), path: '/products/recipes' },
     { key: 'analysis', label: t('nav.analysis'), path: '/products/analysis' },
   ]
 

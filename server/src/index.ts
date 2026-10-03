@@ -1,3 +1,8 @@
+// Global BigInt JSON serialization support
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this)
+}
+
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'

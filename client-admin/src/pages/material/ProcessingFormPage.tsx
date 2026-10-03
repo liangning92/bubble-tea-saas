@@ -4,10 +4,11 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { processRecipeApi, materialApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
+import { formatItemName } from '../../utils/helpers'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 
 export function ProcessingFormPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { id } = useParams()
   const { user } = useAuthStore()
@@ -157,7 +158,7 @@ export function ProcessingFormPage() {
               >
                 <option value="ml">{t('material.unitMl')}</option>
                 <option value="g">{t('material.unitG')}</option>
-                <option value="个">{t('material.unitPiece')}</option>
+                <option value="pcs">{t('material.unitPiece')}</option>
               </select>
             </div>
           </div>
@@ -182,7 +183,7 @@ export function ProcessingFormPage() {
                   >
                     <option value="">{t('material.selectMaterial')}</option>
                     {materials.map((m: any) => (
-                      <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                      <option key={m.id} value={m.id}>{formatItemName(m.name, i18n.language)} ({m.unit})</option>
                     ))}
                   </select>
                   <input

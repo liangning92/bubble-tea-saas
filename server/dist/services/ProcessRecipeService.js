@@ -87,17 +87,21 @@ async function executeRecipe(recipeId, multiplier = 1) {
                 continue;
             const inv = input.inventory;
             const deductQty = input.quantity * multiplier;
-            const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes((inv.unit || '').toLowerCase());
+            const unit = (inv.unit || '').toLowerCase();
+            const isPerPiece = ['个', '支', '卷', 'pce', '件', '张', 'pcs'].includes(unit);
+            const isKgOrL = ['kg', 'l', 'liter', 'kilogram'].includes(unit);
             const ratio = inv.concentrateRatio || 1;
             // 防止除零
             const safeRatio = ratio === 0 ? 1 : ratio;
             // 计算单位成本
             let unitCost = Number(inv.avgCost || 0);
-            if (!isPerPiece) {
+            if (isKgOrL) {
                 // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
                 unitCost = unitCost / 1000 / safeRatio;
             }
-            // 个/件等：直接使用，不需要转换
+            else if (!isPerPiece) {
+                unitCost = unitCost / safeRatio;
+            }
             totalInputCost += deductQty * unitCost;
             // 扣减投入库存
             await tx.inventory.update({

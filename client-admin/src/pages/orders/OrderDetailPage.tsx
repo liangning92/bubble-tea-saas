@@ -62,7 +62,14 @@ export function OrderDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm text-gray-500">{t('orders.orderNumber')}</p>
-                <p className="text-lg font-bold text-gray-900">{order.orderNumber || order.id}</p>
+                <div className="flex items-center gap-2">
+                  {order.pickupNumber && (
+                    <span className="px-2 py-0.5 text-xs font-bold font-mono rounded bg-primary/10 text-primary border border-primary/20">
+                      #{order.pickupNumber}
+                    </span>
+                  )}
+                  <p className="text-lg font-bold text-gray-900">{order.orderNumber || order.id}</p>
+                </div>
               </div>
               <div className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig[order.status]?.color}`}>
                 {statusConfig[order.status]?.label}

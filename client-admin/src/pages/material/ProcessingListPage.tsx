@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { processRecipeApi, materialApi } from '../../services/api'
-import { formatCurrency } from '../../utils/helpers'
+import { formatCurrency, formatItemName } from '../../utils/helpers'
 import { Plus, Play, Loader2, Clock, Package, Edit2, Trash2 } from 'lucide-react'
 
 export function ProcessingListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [executingId, setExecutingId] = useState<string | null>(null)
@@ -133,7 +133,7 @@ export function ProcessingListPage() {
                     <div className="text-xs text-gray-500 mb-1">{t('material.inputs') || 'Inputs'}</div>
                     {inputItems.map((item: any) => (
                       <div key={item.id} className="text-sm flex justify-between">
-                        <span>{item.inventory?.name || '-'}</span>
+                        <span>{formatItemName(item.inventory?.name || '-', i18n.language)}</span>
                         <span className="text-gray-500">
                           {item.quantity} {item.inventory?.unit || ''}
                         </span>
@@ -146,7 +146,7 @@ export function ProcessingListPage() {
                     <div className="text-xs text-gray-500 mb-1">{t('material.outputs') || 'Outputs'}</div>
                     {outputItems.map((item: any) => (
                       <div key={item.id} className="text-sm flex justify-between">
-                        <span>{item.inventory?.name || '-'}</span>
+                        <span>{formatItemName(item.inventory?.name || '-', i18n.language)}</span>
                         <span className="text-green-600 font-medium">
                           {item.quantity} {item.inventory?.unit || ''}
                         </span>

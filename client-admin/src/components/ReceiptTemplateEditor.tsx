@@ -67,6 +67,8 @@ export interface BlockConfig {
   phone?: string
   address?: string
   // orderInfo
+  showPickupNumber?: boolean
+  showOrderNo?: boolean
   showDate?: boolean
   showTime?: boolean
   showCashier?: boolean
@@ -86,6 +88,8 @@ export interface BlockConfig {
   subtotalLabel?: string
   // total
   totalLabel?: string
+  showDiscountDetail?: boolean
+  discountLabel?: string
   // paymentInfo
   showMethod?: boolean
   showReceived?: boolean
@@ -164,7 +168,7 @@ const BLOCK_DEFINITIONS: Record<
   orderInfo: {
     label: 'Order Info',
     icon: '📋',
-    defaultConfig: { showDate: true, showTime: true, showCashier: true, showCustomer: true, showChannel: true },
+    defaultConfig: { showPickupNumber: true, showOrderNo: true, showDate: true, showTime: true, showCashier: true, showCustomer: true, showChannel: true },
   },
   items: {
     label: 'Items',
@@ -345,9 +349,21 @@ const LivePreview: React.FC<{
                 {block.config.showAddress && <div>{block.config.address || t('posSettings.receiptSampleAddress')}</div>}
               </div>
             )
-          case 'orderInfo':
+          case 'orderInfo': {
+            const showPickup = block.config.showPickupNumber !== false
+            const showOrder = block.config.showOrderNo !== false
             return (
               <div key={block.id} className={`${alignClass} ${sizeClass} border-b pb-2 mb-2`}>
+                {showPickup && (
+                  <div className="text-center font-bold text-sm my-1 tracking-wider py-1 border border-dashed border-gray-300 rounded bg-gray-50/60">
+                    *** {t('posSettings.receiptQueueNumber', '取餐号')}: A01 ***
+                  </div>
+                )}
+                {showOrder && (
+                  <div className="font-mono text-[11px] text-gray-700">
+                    {t('posSettings.orderNumber', '订单号')}: ORD{new Date().toISOString().slice(0, 10).replace(/-/g, '')}-829102
+                  </div>
+                )}
                 {block.config.showDate && <div>{t('posSettings.receiptDate')}: {new Date().toLocaleDateString('id-ID')}</div>}
                 {block.config.showTime && <div>{t('posSettings.receiptTime')}: {new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</div>}
                 {block.config.showCashier && <div>{t('posSettings.receiptCashier')}: {t('posSettings.receiptSampleCashier')}</div>}
@@ -355,6 +371,7 @@ const LivePreview: React.FC<{
                 {block.config.showChannel && <div>{t('posSettings.receiptChannel')}: POS</div>}
               </div>
             )
+          }
           case 'items':
             return (
               <div key={block.id} className={`border-b pb-2 mb-2 ${sizeClass}`}>
@@ -385,13 +402,23 @@ const LivePreview: React.FC<{
                 <span>3,850</span>
               </div>
             )
-          case 'total':
+          case 'total': {
+            const showDisc = block.config.showDiscountDetail !== false
             return (
-              <div key={block.id} className={`flex justify-between font-bold ${sizeClass} border-b pb-2 mb-2`}>
-                <span>{block.config.totalLabel || t('posSettings.receiptTotal')}</span>
-                <span>38,850</span>
+              <div key={block.id} className="border-b pb-2 mb-2 space-y-1">
+                {showDisc && (
+                  <div className={`flex justify-between text-emerald-700 ${sizeClass} font-medium`}>
+                    <span>{block.config.discountLabel || t('posSettings.receiptDiscount', '优惠 (第二杯半价)')}</span>
+                    <span>-10,000</span>
+                  </div>
+                )}
+                <div className={`flex justify-between font-bold ${sizeClass}`}>
+                  <span>{block.config.totalLabel || t('posSettings.receiptTotal')}</span>
+                  <span>38,850</span>
+                </div>
               </div>
             )
+          }
           case 'paymentInfo':
             return (
               <div key={block.id} className={`border-b pb-2 mb-2 ${sizeClass}`}>
@@ -762,26 +789,31 @@ const BlockPropertiesPanel: React.FC<{
         {/* Order Info */}
         {block.type === 'orderInfo' && (
           <>
-            {(['showDate', 'showTime', 'showCashier', 'showCustomer', 'showChannel'] as const).map((key) => {
+            {(['showPickupNumber', 'showOrderNo', 'showDate', 'showTime', 'showCashier', 'showCustomer', 'showChannel'] as const).map((key) => {
               const labels: Record<string, string> = {
-                showDate: t('posSettings.blockShowDate'),
-                showTime: t('posSettings.blockShowTime'),
-                showCashier: t('posSettings.blockShowCashier'),
-                showCustomer: t('posSettings.blockShowCustomer'),
-                showChannel: t('posSettings.blockShowChannel'),
+                showPickupNumber: t('posSettings.blockShowPickupNumber', '显示取餐号 (突出)'),
+                showOrderNo: t('posSettings.blockShowOrderNo', '显示订单号'),
+                showDate: t('posSettings.blockShowDate', '显示日期'),
+                showTime: t('posSettings.blockShowTime', '显示时间'),
+                showCashier: t('posSettings.blockShowCashier', '显示收银员'),
+                showCustomer: t('posSettings.blockShowCustomer', '显示顾客'),
+                showChannel: t('posSettings.blockShowChannel', '显示渠道'),
               }
+              const isEnabled = block.config[key] !== undefined
+                ? !!block.config[key]
+                : (key === 'showPickupNumber' || key === 'showOrderNo' ? true : !!block.config[key])
               return (
               <div key={key} className="flex items-center justify-between">
                 <span className="text-sm">{labels[key]}</span>
                 <button
-                  onClick={() => updateConfig(key, !block.config[key])}
+                  onClick={() => updateConfig(key, !isEnabled)}
                   className={`w-10 h-6 rounded-full transition-colors relative ${
-                    block.config[key] ? 'bg-primary' : 'bg-gray-300'
+                    isEnabled ? 'bg-primary' : 'bg-gray-300'
                   }`}
                 >
                   <div
                     className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
-                      block.config[key] ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                      isEnabled ? 'translate-x-[22px]' : 'translate-x-[2px]'
                     }`}
                   />
                 </button>
@@ -853,6 +885,48 @@ const BlockPropertiesPanel: React.FC<{
               />
             </div>
           </>
+        )}
+
+        {/* Total & Discount */}
+        {block.type === 'total' && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.receiptTotalLabel', '总计标签')}</label>
+              <input
+                type="text"
+                value={block.config.totalLabel || ''}
+                onChange={(e) => updateConfig('totalLabel', e.target.value)}
+                className="input mt-1 w-full"
+                placeholder={t('posSettings.receiptTotal', 'TOTAL')}
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.discountLabel', '优惠折扣自定义标签')}</label>
+              <input
+                type="text"
+                value={block.config.discountLabel || ''}
+                onChange={(e) => updateConfig('discountLabel', e.target.value)}
+                className="input mt-1 w-full"
+                placeholder="Diskon / 优惠"
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div>
+                <span className="text-xs font-semibold text-gray-800 block">
+                  {t('posSettings.showPromotionDetail', '打印营销活动名称与明细')}
+                </span>
+                <span className="text-[11px] text-gray-500">
+                  {t('posSettings.showPromotionDetailHint', '在小票总计上方打印活动名称（如：第二杯半价、买一送一）与减免金额')}
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={block.config.showDiscountDetail !== false}
+                onChange={(e) => updateConfig('showDiscountDetail', e.target.checked)}
+                className="w-4 h-4 rounded text-primary focus:ring-primary"
+              />
+            </div>
+          </div>
         )}
 
         {/* QR Code */}

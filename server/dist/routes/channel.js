@@ -29,10 +29,9 @@ const updateChannelSchema = createChannelSchema.partial();
 // 默认渠道配置
 const DEFAULT_CHANNELS = [
     { name: '堂食', code: 'DINE_IN', icon: '🍵', commission: 0, sortOrder: 1, availableDays: '1,2,3,4,5,6,7', availableHours: '08:00-22:00', minOrderAmount: 0, dailyOrderLimit: 0 },
-    { name: 'POS收银', code: 'POS', icon: '💳', commission: 0, sortOrder: 2, availableDays: '1,2,3,4,5,6,7', availableHours: '00:00-23:59', minOrderAmount: 0, dailyOrderLimit: 0 },
-    { name: 'GoFood', code: 'GOFOOD', icon: '🟢', commission: 0.2, sortOrder: 3, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 25000, dailyOrderLimit: 50 },
-    { name: 'GrabFood', code: 'GRAB', icon: '🟡', commission: 0.2, sortOrder: 4, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 25000, dailyOrderLimit: 50 },
-    { name: 'ShopeeFood', code: 'SHOPEE', icon: '🟠', commission: 0.18, sortOrder: 5, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 20000, dailyOrderLimit: 30 },
+    { name: 'GoFood', code: 'GOFOOD', icon: '🟢', commission: 0.2, sortOrder: 2, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 25000, dailyOrderLimit: 50 },
+    { name: 'GrabFood', code: 'GRAB', icon: '🟡', commission: 0.2, sortOrder: 3, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 25000, dailyOrderLimit: 50 },
+    { name: 'ShopeeFood', code: 'SHOPEE', icon: '🟠', commission: 0.18, sortOrder: 4, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 20000, dailyOrderLimit: 30 },
 ];
 // GET /api/channels - 获取渠道列表
 router.get('/', auth_1.authenticate, async (req, res) => {

@@ -95,7 +95,7 @@ async function getRevenueSummary(storeId, startDate, endDate) {
             where: {
                 storeId,
                 createdAt: { gte: startDate, lte: endDate },
-                status: { not: 'refunded' }
+                status: { in: ['completed', 'paid'] }
             },
             include: { items: true, refundRequests: { where: { status: 'approved' } } }
         }),
@@ -156,7 +156,7 @@ async function getDailyRevenueTrend(storeId, days = 30) {
         where: {
             storeId,
             createdAt: { gte: startDate, lte: endDate },
-            status: { not: 'refunded' }
+            status: { in: ['completed', 'paid'] }
         },
         include: { items: true }
     });
@@ -192,7 +192,7 @@ async function getHourlyRevenueDistribution(storeId, date) {
         where: {
             storeId,
             createdAt: { gte: start, lte: end },
-            status: { not: 'refunded' }
+            status: { in: ['completed', 'paid'] }
         }
     });
     const hourlyMap = new Array(24).fill(0).map(() => ({ orders: 0, revenue: 0 }));
@@ -214,7 +214,7 @@ async function getProfitAnalysis(storeId, startDate, endDate) {
             where: {
                 storeId,
                 createdAt: { gte: startDate, lte: endDate },
-                status: { not: 'refunded' }
+                status: { in: ['completed', 'paid'] }
             },
             include: { items: true }
         }),
@@ -321,7 +321,7 @@ async function getCashFlow(storeId, startDate, endDate) {
         where: {
             storeId,
             createdAt: { gte: startDate, lte: endDate },
-            status: { not: 'refunded' },
+            status: { in: ['completed', 'paid'] },
             paymentMethod: 'cash'
         },
         _sum: { finalAmount: true }
@@ -380,7 +380,7 @@ async function getTaxReport(storeId, month, year) {
             where: {
                 storeId,
                 createdAt: { gte: startDate, lte: endDate },
-                status: { not: 'refunded' }
+                status: { in: ['completed', 'paid'] }
             }
         }),
         getPpnRate(storeId),

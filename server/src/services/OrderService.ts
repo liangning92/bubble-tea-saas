@@ -10,7 +10,8 @@ export interface CreateOrderData {
   staffId: string
   memberId?: string
   customerCount?: number
-  orderNumber?: string       // 自定义订单号（客户端生成）
+  orderNumber?: string       // 自定义订单号（若未传则由服务端生成安全的非线性流水号）
+  pickupNumber?: string      // 取餐号/叫号凭据（如 A01 ~ A99 循环模式）
   // 渠道扩展信息
   platformOrderId?: string   // 平台订单号(GoFood/Grab/Shopee)
   tableNumber?: string       // 桌号(堂食)
@@ -38,6 +39,7 @@ export interface CreateOrderData {
 export interface OrderResult {
   id: string
   orderNumber: string
+  pickupNumber?: string | null
   totalAmount: number
   ppnAmount: number
   grandTotal: number
@@ -47,9 +49,9 @@ export interface OrderResult {
   createdAt: Date
 }
 
-// Generate order number: {prefix}{YYYYMMDD}{NNNN}
-// Sequential number, resets daily, pure numeric
-export async function generateOrderNumber(storeId: string, prefix: string = ''): Promise<string> {
+// Generate secure non-sequential order number: {prefix}{YYYYMMDD}-{scrambled}
+// Uses Knuth multiplicative hashing on daily counter to prevent competitors from guessing daily sales volume
+export async function generateOrderNumber(storeId: string, prefix: string = 'ORD'): Promise<string> {
   const date = new Date()
   const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '') // YYYYMMDD
   const today = dateStr
@@ -70,10 +72,11 @@ export async function generateOrderNumber(storeId: string, prefix: string = ''):
     }
   })
 
-  // Format: PREFIX{YYYYMMDD}{NNNN}
-  // Example: BT202606110001 (4 digit sequence)
-  const sequence = counter.counter.toString().padStart(4, '0')
-  return `${prefix}${today}${sequence}`
+  // Knuth's multiplicative hash to scramble the sequential counter into an unpredictable 6-digit number
+  // Formula: ((counter * 2654435761) ^ 0x5bf03635) >>> 0) % 900000 + 100000
+  const seq = counter.counter
+  const scrambled = (((seq * 2654435761) ^ 0x5bf03635) >>> 0) % 900000 + 100000
+  return `${prefix}${today}-${scrambled}`
 }
 
 // Calculate cost for a single inventory item (recursive for semi_finished)
@@ -401,6 +404,7 @@ export async function getOrders(params: {
   status?: string
   paymentMethod?: string
   channelId?: string
+  search?: string
   startDate?: string
   endDate?: string
   date?: string  // Single date for "show orders on this date"
@@ -414,6 +418,7 @@ export async function getOrders(params: {
     status,
     paymentMethod,
     channelId,
+    search,
     startDate,
     endDate,
     page = 1,
@@ -432,6 +437,15 @@ export async function getOrders(params: {
   if (status) where.status = status
   if (paymentMethod) where.paymentMethod = paymentMethod
   if (channelId) where.channelId = channelId
+
+  if (search && search.trim()) {
+    const s = search.trim()
+    where.OR = [
+      { orderNumber: { contains: s, mode: 'insensitive' } },
+      { pickupNumber: { contains: s, mode: 'insensitive' } }
+    ]
+  }
+
   if (startDate || endDate) {
     where.createdAt = {}
     if (startDate) where.createdAt.gte = new Date(startDate)
@@ -467,6 +481,7 @@ export async function getOrders(params: {
       where,
       include: {
         items: true,
+        channel: { select: { id: true, name: true, code: true, icon: true } },
         member: { select: { id: true, name: true, phone: true } }
       },
       orderBy: { createdAt: 'desc' },
@@ -575,15 +590,23 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
       console.warn('[OrderService] Channel lookup error:', chErr)
     }
   }
-  // 若未指定渠道或未匹配到，尝试查找该门店默认的 POS 柜台渠道兜底
+  // 若未指定渠道或未匹配到，尝试查找该门店默认渠道（优先堂食 DINE_IN，兼容 POS 兜底）
   if (!channel) {
     try {
       channel = await prisma.channel.findFirst({
         where: {
           storeId: data.storeId,
-          code: 'POS'
+          code: 'DINE_IN'
         }
       })
+      if (!channel) {
+        channel = await prisma.channel.findFirst({
+          where: {
+            storeId: data.storeId,
+            code: 'POS'
+          }
+        })
+      }
     } catch {}
   }
 
@@ -646,7 +669,36 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   }
 
   // Generate order number BEFORE transaction (upsert uses its own transaction, must not be nested)
-  const orderNumber = data.orderNumber || await generateOrderNumber(data.storeId)
+  let orderNumber = data.orderNumber
+  let pickupNumber = data.pickupNumber
+
+  // 如果客户端传入的是短取餐号（如 A01, A037），将其分离并作为 pickupNumber，生成权威安全 orderNumber
+  const isShortPickupNum = orderNumber && /^[A-Z]\d{2,4}$/i.test(orderNumber)
+  if (isShortPickupNum) {
+    if (!pickupNumber) pickupNumber = orderNumber
+    orderNumber = undefined
+  }
+
+  // 确保系统订单号为安全非线性流水号
+  if (!orderNumber) {
+    orderNumber = await generateOrderNumber(data.storeId)
+  }
+
+  // 若未指定取餐号，根据渠道和当天的订单计数生成 A01 ~ A99 循环取餐号
+  if (!pickupNumber) {
+    let prefix = 'A'
+    if (channel?.code === 'GOFOOD') prefix = 'G'
+    else if (channel?.code === 'GRAB') prefix = 'B'
+    else if (channel?.code === 'SHOPEE') prefix = 'S'
+    else if (channel?.code === 'TAKEAWAY') prefix = 'T'
+
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const counter = await prisma.orderCounter.findUnique({
+      where: { storeId_date: { storeId: data.storeId, date: today } }
+    })
+    const cycleSeq = (((counter?.counter || 1) - 1) % 99) + 1
+    pickupNumber = `${prefix}${cycleSeq.toString().padStart(2, '0')}`
+  }
 
   // Create order with transaction
   const order = await prisma.$transaction(async (tx) => {
@@ -660,6 +712,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
         memberId: data.memberId,
         customerCount: data.customerCount || 1,
         orderNumber,
+        pickupNumber,
         totalAmount,  // 服务端计算的订单总额（含渠道调价）
         discountAmount: data.discountAmount || 0,
         finalAmount: grandTotal,

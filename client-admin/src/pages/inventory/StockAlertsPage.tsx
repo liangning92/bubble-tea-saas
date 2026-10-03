@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { bomApi } from '../../services/api'
+import { formatItemName } from '../../utils/helpers'
 import { Loader2, AlertTriangle, Package } from 'lucide-react'
 
 export function StockAlertsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [forecastDays, setForecastDays] = useState(30)
 
   // 低库存预警
@@ -101,7 +102,7 @@ export function StockAlertsPage() {
                 <AlertTriangle size={24} />
               </div>
               <div className="flex-1">
-                <div className="font-medium">{alert.name}</div>
+                <div className="font-medium">{formatItemName(alert.name, i18n.language)}</div>
                 <div className="text-sm text-gray-500">
                   {t('inventory.currentStock')}: {alert.currentStock} {alert.unit} |
                   {t('inventory.daysLeft')}: {alert.daysUntilStockOut} {t('bom.days')}

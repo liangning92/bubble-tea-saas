@@ -50,6 +50,9 @@ export function ChannelSelectModal({
   const [activeInput, setActiveInput] = useState<'count' | 'table'>('count')
 
   const availableChannels = channels.filter(ch => {
+    // POS 是收银机终端本身而非顾客消费/销售渠道，不在渠道弹窗中显示
+    if (ch.code === 'POS' || ch.id === 'pos' || (ch as any).name === 'POS收银') return false
+
     // Use ch.code (e.g., 'DINE_IN') to map to channelSettings key (e.g., 'dineIn')
     const codeToKeyMap: Record<string, string> = {
       'DINE_IN': 'dineIn',

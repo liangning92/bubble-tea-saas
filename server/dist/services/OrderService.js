@@ -20,9 +20,9 @@ const database_1 = __importDefault(require("../config/database"));
 const env_1 = require("../config/env");
 const ReferralService_1 = require("./ReferralService");
 const PointsRuleService_1 = require("./PointsRuleService");
-// Generate order number: {prefix}{YYYYMMDD}{NNNN}
-// Sequential number, resets daily, pure numeric
-async function generateOrderNumber(storeId, prefix = '') {
+// Generate secure non-sequential order number: {prefix}{YYYYMMDD}-{scrambled}
+// Uses Knuth multiplicative hashing on daily counter to prevent competitors from guessing daily sales volume
+async function generateOrderNumber(storeId, prefix = 'ORD') {
     const date = new Date();
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
     const today = dateStr;
@@ -41,10 +41,11 @@ async function generateOrderNumber(storeId, prefix = '') {
             counter: { increment: 1 }
         }
     });
-    // Format: PREFIX{YYYYMMDD}{NNNN}
-    // Example: BT202606110001 (4 digit sequence)
-    const sequence = counter.counter.toString().padStart(4, '0');
-    return `${prefix}${today}${sequence}`;
+    // Knuth's multiplicative hash to scramble the sequential counter into an unpredictable 6-digit number
+    // Formula: ((counter * 2654435761) ^ 0x5bf03635) >>> 0) % 900000 + 100000
+    const seq = counter.counter;
+    const scrambled = (((seq * 2654435761) ^ 0x5bf03635) >>> 0) % 900000 + 100000;
+    return `${prefix}${today}-${scrambled}`;
 }
 // Calculate cost for a single inventory item (recursive for semi_finished)
 /**
@@ -307,7 +308,7 @@ async function updateMemberPoints(memberId, amount, storeId) {
 }
 // Get orders with filtering and pagination
 async function getOrders(params) {
-    const { storeId, userId, userRole, status, paymentMethod, channelId, startDate, endDate, page = 1, pageSize = 20 } = params;
+    const { storeId, userId, userRole, status, paymentMethod, channelId, search, startDate, endDate, page = 1, pageSize = 20 } = params;
     const where = {};
     // Access control
     if (storeId) {
@@ -322,6 +323,13 @@ async function getOrders(params) {
         where.paymentMethod = paymentMethod;
     if (channelId)
         where.channelId = channelId;
+    if (search && search.trim()) {
+        const s = search.trim();
+        where.OR = [
+            { orderNumber: { contains: s, mode: 'insensitive' } },
+            { pickupNumber: { contains: s, mode: 'insensitive' } }
+        ];
+    }
     if (startDate || endDate) {
         where.createdAt = {};
         if (startDate)
@@ -360,6 +368,7 @@ async function getOrders(params) {
             where,
             include: {
                 items: true,
+                channel: { select: { id: true, name: true, code: true, icon: true } },
                 member: { select: { id: true, name: true, phone: true } }
             },
             orderBy: { createdAt: 'desc' },
@@ -463,15 +472,23 @@ async function createOrder(data) {
             console.warn('[OrderService] Channel lookup error:', chErr);
         }
     }
-    // 若未指定渠道或未匹配到，尝试查找该门店默认的 POS 柜台渠道兜底
+    // 若未指定渠道或未匹配到，尝试查找该门店默认渠道（优先堂食 DINE_IN，兼容 POS 兜底）
     if (!channel) {
         try {
             channel = await database_1.default.channel.findFirst({
                 where: {
                     storeId: data.storeId,
-                    code: 'POS'
+                    code: 'DINE_IN'
                 }
             });
+            if (!channel) {
+                channel = await database_1.default.channel.findFirst({
+                    where: {
+                        storeId: data.storeId,
+                        code: 'POS'
+                    }
+                });
+            }
         }
         catch { }
     }
@@ -524,7 +541,37 @@ async function createOrder(data) {
         });
     }
     // Generate order number BEFORE transaction (upsert uses its own transaction, must not be nested)
-    const orderNumber = data.orderNumber || await generateOrderNumber(data.storeId);
+    let orderNumber = data.orderNumber;
+    let pickupNumber = data.pickupNumber;
+    // 如果客户端传入的是短取餐号（如 A01, A037），将其分离并作为 pickupNumber，生成权威安全 orderNumber
+    const isShortPickupNum = orderNumber && /^[A-Z]\d{2,4}$/i.test(orderNumber);
+    if (isShortPickupNum) {
+        if (!pickupNumber)
+            pickupNumber = orderNumber;
+        orderNumber = undefined;
+    }
+    // 确保系统订单号为安全非线性流水号
+    if (!orderNumber) {
+        orderNumber = await generateOrderNumber(data.storeId);
+    }
+    // 若未指定取餐号，根据渠道和当天的订单计数生成 A01 ~ A99 循环取餐号
+    if (!pickupNumber) {
+        let prefix = 'A';
+        if (channel?.code === 'GOFOOD')
+            prefix = 'G';
+        else if (channel?.code === 'GRAB')
+            prefix = 'B';
+        else if (channel?.code === 'SHOPEE')
+            prefix = 'S';
+        else if (channel?.code === 'TAKEAWAY')
+            prefix = 'T';
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const counter = await database_1.default.orderCounter.findUnique({
+            where: { storeId_date: { storeId: data.storeId, date: today } }
+        });
+        const cycleSeq = (((counter?.counter || 1) - 1) % 99) + 1;
+        pickupNumber = `${prefix}${cycleSeq.toString().padStart(2, '0')}`;
+    }
     // Create order with transaction
     const order = await database_1.default.$transaction(async (tx) => {
         // Use pre-generated order number
@@ -536,6 +583,7 @@ async function createOrder(data) {
                 memberId: data.memberId,
                 customerCount: data.customerCount || 1,
                 orderNumber,
+                pickupNumber,
                 totalAmount, // 服务端计算的订单总额（含渠道调价）
                 discountAmount: data.discountAmount || 0,
                 finalAmount: grandTotal,

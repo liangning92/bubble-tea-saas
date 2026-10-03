@@ -1837,10 +1837,10 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
  */
 ipcMain.handle('send-kitchen-order', async (_event, data) => {
   try {
-    const { orderNum, printerName, printerHost, printerPort, items } = data
+    const { orderNum, pickupNumber, printerName, printerHost, printerPort, items } = data
 
     writeCrash(`[KITCHEN] ====== send-kitchen-order called ======`)
-    writeCrash(`[KITCHEN] orderNum='${orderNum}' printerName='${printerName}'`)
+    writeCrash(`[KITCHEN] orderNum='${orderNum}' pickupNumber='${pickupNumber || ''}' printerName='${printerName}'`)
     writeCrash(`[KITCHEN] printerHost='${printerHost}' port=${printerPort}`)
 
     if (!orderNum) {
@@ -1849,7 +1849,7 @@ ipcMain.handle('send-kitchen-order', async (_event, data) => {
     }
 
     // 生成厨房小票文本
-    const kitchenText = generateKitchenText({ orderNum, items, language: data.language })
+    const kitchenText = generateKitchenText({ orderNum, pickupNumber, items, language: data.language })
     writeCrash(`[KITCHEN] text length=${kitchenText.length}`)
 
     // 网络打印机（优先）
@@ -2088,6 +2088,10 @@ function generateShiftReportText(data: any): string {
       secStats: '--- 单据统计 ---',
       totalOrders: '总订单数',
       totalCups: '总制作杯数',
+      secDiscount: '--- 折扣与让利稽核 ---',
+      autoPromo: '营销自动优惠',
+      manualDisc: '收银手动折扣',
+      totalDisc: '总让利金额',
       signCashier: '收银员签字: ________________',
       signManager: '店长/主管签字: ______________'
     },
@@ -2114,6 +2118,10 @@ function generateShiftReportText(data: any): string {
       secStats: '--- TRANSACTION STATS ---',
       totalOrders: 'Total Orders',
       totalCups: 'Total Cups',
+      secDiscount: '--- DISCOUNT AUDIT ---',
+      autoPromo: 'Auto Promo Discount',
+      manualDisc: 'Manual Cashier Discount',
+      totalDisc: 'Total Discount Amount',
       signCashier: 'Cashier Sign: __________________',
       signManager: 'Manager Sign: __________________'
     },
@@ -2140,6 +2148,10 @@ function generateShiftReportText(data: any): string {
       secStats: '--- STATISTIK TRANSAKSI ---',
       totalOrders: 'Total Transaksi',
       totalCups: 'Total Cup / Minuman',
+      secDiscount: '--- AUDIT DISKON ---',
+      autoPromo: 'Diskon Promo Otomatis',
+      manualDisc: 'Diskon Manual Kasir',
+      totalDisc: 'Total Potongan Diskon',
       signCashier: 'Ttd Kasir: __________________',
       signManager: 'Ttd Supervisor: _____________'
     }
@@ -2177,6 +2189,21 @@ function generateShiftReportText(data: any): string {
   if (si.cashIn !== false && data.cashIn) addRow('Kas Masuk / Cash In', data.cashIn)
   if (si.cashOut !== false && data.cashOut) addRow('Kas Keluar / Cash Out', data.cashOut)
   if (si.expenses !== false && data.expenses) addRow(L.expenses, data.expenses)
+
+  // 折扣与让利稽核 (防飞单)
+  if ((data.totalDiscount || 0) > 0 || (data.autoPromotionDiscount || 0) > 0 || (data.manualDiscount || 0) > 0) {
+    lines.push(repeatChar('-', width))
+    lines.push(centerText(L.secDiscount, width))
+    if (data.autoPromotionDiscount) {
+      const promoText = `${L.autoPromo} (${data.promotionOrderCount || 0})`
+      addRow(promoText, data.autoPromotionDiscount)
+    }
+    if (data.manualDiscount) {
+      const manualText = `* ${L.manualDisc} (${data.manualDiscountOrderCount || 0})`
+      addRow(manualText, data.manualDiscount)
+    }
+    addRow(L.totalDisc, data.totalDiscount || ((data.autoPromotionDiscount || 0) + (data.manualDiscount || 0)))
+  }
 
   lines.push(repeatChar('-', width))
   lines.push(centerText(L.secReconcile, width))
@@ -2223,8 +2250,9 @@ function generateShiftReportText(data: any): string {
  */
 function generateCupStickerTspl(item: any): string {
   const store = item.storeName || 'YOUME'
-  const orderNum = item.orderNum || ''
+  const displayNo = item.pickupNumber || item.orderNum || ''
   const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : ''
+  const promoBadge = item.promoTag ? ` [${item.promoTag}]` : ''
   const name = (item.productName || item.name || '').slice(0, 24)
   const spec = item.specName || ''
   const sugar = item.sugarLevelName ? `Sugar: ${item.sugarLevelName}` : ''
@@ -2243,7 +2271,7 @@ function generateCupStickerTspl(item: any): string {
     `GAP ${gapMm} mm, 0 mm`,
     'DIRECTION 1',
     'CLS',
-    `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${orderNum} ${cupNo}"`,
+    `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${displayNo} ${cupNo}${promoBadge}"`,
     `TEXT 15,48,"TSS24.BF2",0,1,1,"${name}"`,
     spec ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${spec}  ${mods}"` : (mods ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${mods}"` : ''),
     addons ? `TEXT 15,112,"TSS24.BF2",0,1,1,"${addons}"` : '',
@@ -2264,7 +2292,8 @@ function generateCupStickerEscPos(item: any): string {
   const store = item.storeName || 'YOUME'
   const orderNum = item.orderNum || ''
   const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : ''
-  lines.push(centerText(`${store} #${orderNum} ${cupNo}`, width))
+  const promoBadge = item.promoTag ? ` [${item.promoTag}]` : ''
+  lines.push(centerText(`${store} #${orderNum} ${cupNo}${promoBadge}`, width))
   lines.push(repeatChar('-', width))
   lines.push(`${item.productName || item.name || ''} (${item.specName || 'Reg'})`)
   const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(' / ')
@@ -2315,6 +2344,9 @@ function generateKitchenText(data: any): string {
   const L = kitchenI18n[lang] || kitchenI18n.id
 
   lines.push(centerText(L.title, width))
+  if (data.pickupNumber) {
+    lines.push(centerText(`*** ${data.pickupNumber} ***`, width))
+  }
   lines.push(`${L.order}: ${data.orderNum || ''}`)
   lines.push(`${L.time}: ${formatTime()}`)
   lines.push(repeatChar('-', width))
@@ -2580,19 +2612,19 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
   const lang = (data.language || 'id').toLowerCase()
   const i18nMap: Record<string, Record<string, string>> = {
     zh: {
-      orderNo: '单号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
+      orderNo: '订单号', queueNo: '取餐号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
       customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
       tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
       member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
     },
     en: {
-      orderNo: 'Order No', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
+      orderNo: 'Order No', queueNo: 'QUEUE NO', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
       customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
       tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
       member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
     },
     id: {
-      orderNo: 'No Order', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
+      orderNo: 'No. Pesanan', queueNo: 'NO. ANTREAN', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
       customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
       tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
       member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
@@ -2728,6 +2760,11 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'orderInfo': {
+          if (cfg.showPickupNumber !== false && data.pickupNumber) {
+            chunks.push(CMD_CRLF)
+            chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }))
+            chunks.push(CMD_CRLF)
+          }
           const infoLines: string[] = []
           // 仅在未显式禁用单号时才输出单号
           if (cfg.showOrderNo !== false && data.orderNum) {
@@ -2840,9 +2877,27 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
         case 'total': {
           if (data.discount && data.discount > 0) {
-            const discLabel = padEndVisual(L.discount, labelWidth)
-            const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
-            chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
+            const promoName = data.promotionName || data.discountNote || ''
+            const showDetail = cfg.showDiscountDetail !== false && data.showPromotionDetail !== false
+            const baseDiscLabel = cfg.discountLabel || L.discount
+
+            if (showDetail && promoName) {
+              const fullDiscLabel = `${baseDiscLabel} (${promoName})`
+              if (fullDiscLabel.length + 12 <= width) {
+                const discLabel = padEndVisual(fullDiscLabel, labelWidth)
+                const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
+                chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
+              } else {
+                const discLabel = padEndVisual(baseDiscLabel, labelWidth)
+                const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
+                chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
+                chunks.push(formatStyledLine(`  [${promoName}]`, { fontSize: 'small', bold: true }))
+              }
+            } else {
+              const discLabel = padEndVisual(baseDiscLabel, labelWidth)
+              const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
+              chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
+            }
           }
 
           const rawTotalLabel = cfg.totalLabel || L.total
@@ -2958,6 +3013,12 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
     if (data.storePhone) chunks.push(formatStyledLine(`Tel: ${data.storePhone}`, { align: 'center' }))
     if (data.storeAddress) chunks.push(formatStyledLine(data.storeAddress, { align: 'center' }))
     chunks.push(formatStyledLine(repeatChar('=', width)))
+
+    if (data.pickupNumber) {
+      chunks.push(CMD_CRLF)
+      chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }))
+      chunks.push(CMD_CRLF)
+    }
 
     chunks.push(formatStyledLine(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`))
     if (data.orderDate || data.createdAt) {
@@ -3225,7 +3286,21 @@ function generateReceiptText(data: any): string {
         }
         case 'total': {
           if (data.discount && data.discount > 0) {
-            lines.push(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`)
+            const promoName = data.promotionName || data.discountNote || ''
+            const showDetail = cfg.showDiscountDetail !== false && data.showPromotionDetail !== false
+            const baseDiscLabel = cfg.discountLabel || L.discount
+
+            if (showDetail && promoName) {
+              const fullDiscLabel = `${baseDiscLabel} (${promoName})`
+              if (fullDiscLabel.length + 12 <= width) {
+                lines.push(`${padEndVisual(fullDiscLabel, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`)
+              } else {
+                lines.push(`${padEndVisual(baseDiscLabel, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`)
+                lines.push(`  [${promoName}]`)
+              }
+            } else {
+              lines.push(`${padEndVisual(baseDiscLabel, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`)
+            }
           }
           const totalLabel = padEndVisual(cfg.totalLabel || L.total, labelWidth)
           lines.push(`${totalLabel}${padStartVisual(formatRp(data.total || 0), valWidth)}`)
@@ -3362,7 +3437,13 @@ function generateReceiptText(data: any): string {
   lines.push(`${L.subtotal.padEnd(labelWidth)}${formatRp(data.subtotal || 0).padStart(valWidth)}`)
   lines.push(`${L.tax.padEnd(labelWidth)}${formatRp(data.tax || 0).padStart(valWidth)}`)
   if (data.discount && data.discount > 0) {
-    lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`)
+    const promoName = data.promotionName || data.discountNote || ''
+    if (data.showPromotionDetail !== false && promoName) {
+      lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`)
+      lines.push(`  [${promoName}]`)
+    } else {
+      lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`)
+    }
   }
   lines.push(repeatChar('-', width))
   lines.push(`${L.total.padEnd(labelWidth)}${formatRp(data.total || 0).padStart(valWidth)}`)

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { inventoryApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
+import { formatItemName } from '../../utils/helpers'
 import { Loader2, Plus, Package, Check, X, Clock, AlertTriangle, RotateCcw } from 'lucide-react'
 
 interface InventoryCount {
@@ -37,7 +38,7 @@ interface InventoryCountItem {
 type TabType = 'list' | 'detail' | 'new'
 
 export function InventoryCountPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const storeId = user?.storeId || ''
@@ -328,7 +329,7 @@ export function InventoryCountPage() {
               {varianceItems.slice(0, 5).map(item => (
                 <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg">
                   <div>
-                    <span className="font-medium">{item.inventory?.name || 'Unknown'}</span>
+                    <span className="font-medium">{formatItemName(item.inventory?.name || 'Unknown', i18n.language)}</span>
                     <span className="text-sm text-gray-500 ml-2">({item.inventory?.unit})</span>
                   </div>
                   <div className="flex items-center gap-4">
@@ -378,7 +379,7 @@ export function InventoryCountPage() {
                   return (
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="py-3">
-                        <span className="font-medium">{item.inventory?.name || 'Unknown'}</span>
+                        <span className="font-medium">{formatItemName(item.inventory?.name || 'Unknown', i18n.language)}</span>
                         <span className="text-sm text-gray-500 ml-2">({item.inventory?.unit})</span>
                       </td>
                       <td className="py-3 text-right text-gray-600">{item.systemQty}</td>

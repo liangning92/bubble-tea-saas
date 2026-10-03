@@ -328,9 +328,28 @@ const DualScreenPreview: React.FC<{
                   <div className="text-gray-500">{t('posSettings.sampleQuantity')}</div>
                 </div>
               </div>
+
+              {dualScreen?.showUpsellHint !== false && (
+                <div className="p-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-orange-200 rounded-lg text-xs text-orange-800 font-medium flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <span>✨</span>
+                    <span>💡 再点 1 杯同款，立享第二杯半价！</span>
+                  </div>
+                  <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">特惠</span>
+                </div>
+              )}
             </div>
-            <div className="bg-white border-t p-2">
-              <div className="flex justify-between text-sm">
+            <div className="bg-white border-t p-2 space-y-1">
+              {dualScreen?.showPromotionDetail !== false && (
+                <div className="flex justify-between items-center text-xs text-green-600 font-medium">
+                  <div className="flex items-center gap-1">
+                    <span>{t('posSettings.discount', '优惠')}</span>
+                    <span className="bg-green-100 text-green-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">第二杯半价</span>
+                  </div>
+                  <span>-Rp 10.000</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm pt-1 border-t">
                 <span>{t('common.total')}</span>
                 <span className="font-bold text-primary">{t('posSettings.samplePrice')}</span>
               </div>
@@ -617,6 +636,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     itemDetailFormat: 'standard', // 明细格式: standard / compact
     showStaffName: true,          // 显示收款员
     showCustomerName: false,      // 显示顾客名称
+    showPromotionDetail: true,    // 打印营销活动明细 (第二杯半价、买一送一等)
     autoPrint: true,             // 自动打印
   })
 
@@ -1712,6 +1732,70 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                   }}
                 />
 
+                {/* 营销联动与副屏交互设置 */}
+                <div className="p-4 bg-purple-50/60 rounded-xl border border-purple-100 space-y-3">
+                  <h4 className="text-sm font-bold text-purple-900 flex items-center gap-2">
+                    <span>✨</span>
+                    {t('posSettings.dualScreenMarketingTitle', '副屏营销与促单交互')}
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-purple-100">
+                      <div>
+                        <div className="text-sm font-medium text-gray-800">{t('posSettings.showPromotionDetail', '点单时展示营销活动名称')}</div>
+                        <div className="text-xs text-gray-500">{t('posSettings.showPromotionDetailDesc', '在副屏折抵金额旁标明【第二杯半价】等活动名称，让顾客明白消费')}</div>
+                      </div>
+                      <Toggle
+                        enabled={hardwareSettings.dualScreen?.showPromotionDetail !== false}
+                        onChange={() => {
+                          const newVal = hardwareSettings.dualScreen?.showPromotionDetail === false
+                          const newHardwareSettings = {
+                            ...hardwareSettings,
+                            dualScreen: { ...hardwareSettings.dualScreen!, showPromotionDetail: newVal }
+                          }
+                          setHardwareSettings(newHardwareSettings)
+                          handleSave('hardwareSettings', newHardwareSettings)
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-purple-100">
+                      <div>
+                        <div className="text-sm font-medium text-gray-800">{t('posSettings.showUpsellHint', '副屏智能凑单与升杯提醒')}</div>
+                        <div className="text-xs text-gray-500">{t('posSettings.showUpsellHintDesc', '当顾客加购单杯时，副屏醒目提示“再加1杯即享半价”，刺激现场追加消费')}</div>
+                      </div>
+                      <Toggle
+                        enabled={hardwareSettings.dualScreen?.showUpsellHint !== false}
+                        onChange={() => {
+                          const newVal = hardwareSettings.dualScreen?.showUpsellHint === false
+                          const newHardwareSettings = {
+                            ...hardwareSettings,
+                            dualScreen: { ...hardwareSettings.dualScreen!, showUpsellHint: newVal }
+                          }
+                          setHardwareSettings(newHardwareSettings)
+                          handleSave('hardwareSettings', newHardwareSettings)
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-purple-100">
+                      <div>
+                        <div className="text-sm font-medium text-gray-800">{t('posSettings.autoSyncPromotions', '待机自动同步当前营销活动')}</div>
+                        <div className="text-xs text-gray-500">{t('posSettings.autoSyncPromotionsDesc', '待机时无需重新设计海报，自动提取后台生效中的第二杯半价、满减活动进行轮播')}</div>
+                      </div>
+                      <Toggle
+                        enabled={hardwareSettings.dualScreen?.autoSyncPromotions !== false}
+                        onChange={() => {
+                          const newVal = hardwareSettings.dualScreen?.autoSyncPromotions === false
+                          const newHardwareSettings = {
+                            ...hardwareSettings,
+                            dualScreen: { ...hardwareSettings.dualScreen!, autoSyncPromotions: newVal }
+                          }
+                          setHardwareSettings(newHardwareSettings)
+                          handleSave('hardwareSettings', newHardwareSettings)
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* Preview */}
                 <DualScreenPreview dualScreen={hardwareSettings.dualScreen} />
               </div>
@@ -2144,6 +2228,26 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                         onChange={() => {
                           setPosReceipt(prev => {
                             const updated = { ...prev, autoPrint: !prev.autoPrint }
+                            handleSave('posReceipt', updated)
+                            return updated
+                          })
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 打印营销活动明细 (第二杯半价、买一送一等) */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.showPromotionDetail', '小票打印营销活动明细')}</label>
+                    <div className="flex items-center justify-between px-3 h-10 bg-white rounded-lg border border-gray-200">
+                      <span className="text-xs font-medium text-gray-700">
+                        {_posReceipt.showPromotionDetail !== false ? t('common.enabled', '已开启 (推荐)') : t('common.disabled', '已关闭')}
+                      </span>
+                      <Toggle
+                        enabled={_posReceipt.showPromotionDetail !== false}
+                        onChange={() => {
+                          setPosReceipt(prev => {
+                            const updated = { ...prev, showPromotionDetail: prev.showPromotionDetail === false ? true : false }
                             handleSave('posReceipt', updated)
                             return updated
                           })

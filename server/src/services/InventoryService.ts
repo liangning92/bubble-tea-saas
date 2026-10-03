@@ -259,38 +259,149 @@ export async function getInventoryStats(storeId: string) {
 }
 
 // Get stock in logs
-export async function getStockInLogs(storeId: string, inventoryId?: string) {
-  const where: any = { storeId }
-  if (inventoryId) where.inventoryId = inventoryId
+export interface StockLogInFilter {
+  storeId: string
+  inventoryId?: string
+  startDate?: string
+  endDate?: string
+  category?: string
+  search?: string
+  take?: number
+}
+
+export interface StockLogOutFilter {
+  storeId: string
+  inventoryId?: string
+  startDate?: string
+  endDate?: string
+  reason?: string
+  category?: string
+  search?: string
+  take?: number
+}
+
+export async function getStockInLogs(
+  storeIdOrFilter: string | StockLogInFilter,
+  inventoryId?: string
+) {
+  const filter: StockLogInFilter = typeof storeIdOrFilter === 'string'
+    ? { storeId: storeIdOrFilter, inventoryId }
+    : storeIdOrFilter
+
+  const where: any = {
+    inventory: {
+      storeId: filter.storeId
+    }
+  }
+
+  if (filter.inventoryId) {
+    where.inventoryId = filter.inventoryId
+  }
+
+  if (filter.category) {
+    where.inventory.category = filter.category
+  }
+
+  if (filter.search) {
+    where.inventory.name = { contains: filter.search, mode: 'insensitive' }
+  }
+
+  if (filter.startDate || filter.endDate) {
+    where.createdAt = {}
+    if (filter.startDate) {
+      const start = new Date(filter.startDate)
+      start.setHours(0, 0, 0, 0)
+      where.createdAt.gte = start
+    }
+    if (filter.endDate) {
+      const end = new Date(filter.endDate)
+      end.setHours(23, 59, 59, 999)
+      where.createdAt.lte = end
+    }
+  }
 
   const logs = await prisma.stockInLog.findMany({
     where,
     include: {
-      inventory: { select: { id: true, name: true, unit: true } },
+      inventory: { select: { id: true, name: true, unit: true, category: true, avgCost: true } },
       supplier: { select: { id: true, name: true } }
     },
     orderBy: { createdAt: 'desc' },
-    take: 100
+    take: filter.take || 200
   })
 
-  return logs
+  return logs.map((l: any) => ({
+    ...l,
+    unitCost: Number(l.unitCost || 0),
+    totalAmount: Number(l.totalAmount || 0),
+    inventory: l.inventory ? {
+      ...l.inventory,
+      avgCost: Number(l.inventory.avgCost || 0)
+    } : null
+  }))
 }
 
 // Get stock out logs
-export async function getStockOutLogs(storeId: string, inventoryId?: string) {
-  const where: any = { storeId }
-  if (inventoryId) where.inventoryId = inventoryId
+export async function getStockOutLogs(
+  storeIdOrFilter: string | StockLogOutFilter,
+  inventoryId?: string
+) {
+  const filter: StockLogOutFilter = typeof storeIdOrFilter === 'string'
+    ? { storeId: storeIdOrFilter, inventoryId }
+    : storeIdOrFilter
+
+  const where: any = {
+    inventory: {
+      storeId: filter.storeId
+    }
+  }
+
+  if (filter.inventoryId) {
+    where.inventoryId = filter.inventoryId
+  }
+
+  if (filter.reason) {
+    where.reason = filter.reason
+  }
+
+  if (filter.category) {
+    where.inventory.category = filter.category
+  }
+
+  if (filter.search) {
+    where.inventory.name = { contains: filter.search, mode: 'insensitive' }
+  }
+
+  if (filter.startDate || filter.endDate) {
+    where.createdAt = {}
+    if (filter.startDate) {
+      const start = new Date(filter.startDate)
+      start.setHours(0, 0, 0, 0)
+      where.createdAt.gte = start
+    }
+    if (filter.endDate) {
+      const end = new Date(filter.endDate)
+      end.setHours(23, 59, 59, 999)
+      where.createdAt.lte = end
+    }
+  }
 
   const logs = await prisma.stockOutLog.findMany({
     where,
     include: {
-      inventory: { select: { id: true, name: true, unit: true } }
+      inventory: { select: { id: true, name: true, unit: true, category: true, avgCost: true } }
     },
     orderBy: { createdAt: 'desc' },
-    take: 100
+    take: filter.take || 200
   })
 
-  return logs
+  return logs.map((l: any) => ({
+    ...l,
+    inventory: l.inventory ? {
+      ...l.inventory,
+      avgCost: Number(l.inventory.avgCost || 0)
+    } : null
+  }))
 }
 
 // Create inventory item

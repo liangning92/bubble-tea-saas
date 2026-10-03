@@ -141,10 +141,10 @@ export function MaterialFormPage() {
               <option value="g">{t('material.unitG')}</option>
               <option value="ml">{t('material.unitMl')}</option>
               <option value="L">{t('material.unitL')}</option>
-              <option value="个">{t('material.unitPiece')}</option>
-              <option value="瓶">{t('material.unitBottle')}</option>
-              <option value="袋">{t('material.unitBag')}</option>
-              <option value="箱">{t('material.unitBox')}</option>
+              <option value="pcs">{t('material.unitPiece')}</option>
+              <option value="bottle">{t('material.unitBottle')}</option>
+              <option value="bag">{t('material.unitBag')}</option>
+              <option value="box">{t('material.unitBox')}</option>
             </select>
           </div>
 
