@@ -123,9 +123,30 @@ httpServer.on('error', (err) => {
 });
 // Security & Logging Middlewares
 app.set('trust proxy', 1);
-app.use((0, helmet_1.default)());
+const allowedOrigins = env_1.config.corsOrigin.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+app.use((0, helmet_1.default)({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }
+}));
 app.use((0, cors_1.default)({
-    origin: env_1.config.corsOrigin.split(/[,\s]+/).map(s => s.trim()).filter(Boolean),
+    origin: (origin, callback) => {
+        // 1. Mobile app, curl, server-to-server (no Origin header)
+        if (!origin)
+            return callback(null, true);
+        // 2. Electron packaged app (file://, null, app://, vscode-file://)
+        if (origin === 'null' || origin === 'file://' || origin.startsWith('file:') || origin.startsWith('app:') || origin.startsWith('vscode-file:')) {
+            return callback(null, true);
+        }
+        // 3. Explicitly allowed web origins or wildcard
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+            return callback(null, true);
+        }
+        // 4. Local dev servers
+        if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+            return callback(null, true);
+        }
+        callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept']

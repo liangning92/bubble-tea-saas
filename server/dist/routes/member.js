@@ -227,10 +227,18 @@ router.post('/', auth_1.authenticate, (0, validation_1.validateBody)(createMembe
         }
         // 自动生成推荐码
         const referralCode = generateReferralCode();
-        // 如果有推荐人手机号，找到推荐人
+        // 如果填写了推荐码或推荐人手机号，查找推荐人
         let referredById = null;
-        if (referredByPhone) {
-            const referrer = await database_1.default.member.findUnique({ where: { phone: referredByPhone } });
+        if (referredByPhone && referredByPhone.trim()) {
+            const inputCode = referredByPhone.trim();
+            const referrer = await database_1.default.member.findFirst({
+                where: {
+                    OR: [
+                        { phone: inputCode },
+                        { referralCode: inputCode.toUpperCase() }
+                    ]
+                }
+            });
             referredById = referrer?.id || null;
         }
         const member = await database_1.default.member.create({

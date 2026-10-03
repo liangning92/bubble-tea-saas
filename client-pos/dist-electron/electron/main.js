@@ -1759,16 +1759,16 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
  */
 electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
     try {
-        const { orderNum, printerName, printerHost, printerPort, items } = data;
+        const { orderNum, pickupNumber, printerName, printerHost, printerPort, items } = data;
         writeCrash(`[KITCHEN] ====== send-kitchen-order called ======`);
-        writeCrash(`[KITCHEN] orderNum='${orderNum}' printerName='${printerName}'`);
+        writeCrash(`[KITCHEN] orderNum='${orderNum}' pickupNumber='${pickupNumber || ''}' printerName='${printerName}'`);
         writeCrash(`[KITCHEN] printerHost='${printerHost}' port=${printerPort}`);
         if (!orderNum) {
             writeCrash('[KITCHEN] ERROR: orderNum is empty');
             return { success: false, error: 'No order number provided' };
         }
         // 生成厨房小票文本
-        const kitchenText = generateKitchenText({ orderNum, items, language: data.language });
+        const kitchenText = generateKitchenText({ orderNum, pickupNumber, items, language: data.language });
         writeCrash(`[KITCHEN] text length=${kitchenText.length}`);
         // 网络打印机（优先）
         if (printerHost && printerPort) {
@@ -2007,6 +2007,10 @@ function generateShiftReportText(data) {
             secStats: '--- 单据统计 ---',
             totalOrders: '总订单数',
             totalCups: '总制作杯数',
+            secDiscount: '--- 折扣与让利稽核 ---',
+            autoPromo: '营销自动优惠',
+            manualDisc: '收银手动折扣',
+            totalDisc: '总让利金额',
             signCashier: '收银员签字: ________________',
             signManager: '店长/主管签字: ______________'
         },
@@ -2033,6 +2037,10 @@ function generateShiftReportText(data) {
             secStats: '--- TRANSACTION STATS ---',
             totalOrders: 'Total Orders',
             totalCups: 'Total Cups',
+            secDiscount: '--- DISCOUNT AUDIT ---',
+            autoPromo: 'Auto Promo Discount',
+            manualDisc: 'Manual Cashier Discount',
+            totalDisc: 'Total Discount Amount',
             signCashier: 'Cashier Sign: __________________',
             signManager: 'Manager Sign: __________________'
         },
@@ -2059,6 +2067,10 @@ function generateShiftReportText(data) {
             secStats: '--- STATISTIK TRANSAKSI ---',
             totalOrders: 'Total Transaksi',
             totalCups: 'Total Cup / Minuman',
+            secDiscount: '--- AUDIT DISKON ---',
+            autoPromo: 'Diskon Promo Otomatis',
+            manualDisc: 'Diskon Manual Kasir',
+            totalDisc: 'Total Potongan Diskon',
             signCashier: 'Ttd Kasir: __________________',
             signManager: 'Ttd Supervisor: _____________'
         }
@@ -2101,6 +2113,20 @@ function generateShiftReportText(data) {
         addRow('Kas Keluar / Cash Out', data.cashOut);
     if (si.expenses !== false && data.expenses)
         addRow(L.expenses, data.expenses);
+    // 折扣与让利稽核 (防飞单)
+    if ((data.totalDiscount || 0) > 0 || (data.autoPromotionDiscount || 0) > 0 || (data.manualDiscount || 0) > 0) {
+        lines.push(repeatChar('-', width));
+        lines.push(centerText(L.secDiscount, width));
+        if (data.autoPromotionDiscount) {
+            const promoText = `${L.autoPromo} (${data.promotionOrderCount || 0})`;
+            addRow(promoText, data.autoPromotionDiscount);
+        }
+        if (data.manualDiscount) {
+            const manualText = `* ${L.manualDisc} (${data.manualDiscountOrderCount || 0})`;
+            addRow(manualText, data.manualDiscount);
+        }
+        addRow(L.totalDisc, data.totalDiscount || ((data.autoPromotionDiscount || 0) + (data.manualDiscount || 0)));
+    }
     lines.push(repeatChar('-', width));
     lines.push(centerText(L.secReconcile, width));
     const expected = data.expectedCash || 0;
@@ -2139,8 +2165,9 @@ function generateShiftReportText(data) {
  */
 function generateCupStickerTspl(item) {
     const store = item.storeName || 'YOUME';
-    const orderNum = item.orderNum || '';
+    const displayNo = item.pickupNumber || item.orderNum || '';
     const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : '';
+    const promoBadge = item.promoTag ? ` [${item.promoTag}]` : '';
     const name = (item.productName || item.name || '').slice(0, 24);
     const spec = item.specName || '';
     const sugar = item.sugarLevelName ? `Sugar: ${item.sugarLevelName}` : '';
@@ -2157,7 +2184,7 @@ function generateCupStickerTspl(item) {
         `GAP ${gapMm} mm, 0 mm`,
         'DIRECTION 1',
         'CLS',
-        `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${orderNum} ${cupNo}"`,
+        `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${displayNo} ${cupNo}${promoBadge}"`,
         `TEXT 15,48,"TSS24.BF2",0,1,1,"${name}"`,
         spec ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${spec}  ${mods}"` : (mods ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${mods}"` : ''),
         addons ? `TEXT 15,112,"TSS24.BF2",0,1,1,"${addons}"` : '',
@@ -2176,7 +2203,8 @@ function generateCupStickerEscPos(item) {
     const store = item.storeName || 'YOUME';
     const orderNum = item.orderNum || '';
     const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : '';
-    lines.push(centerText(`${store} #${orderNum} ${cupNo}`, width));
+    const promoBadge = item.promoTag ? ` [${item.promoTag}]` : '';
+    lines.push(centerText(`${store} #${orderNum} ${cupNo}${promoBadge}`, width));
     lines.push(repeatChar('-', width));
     lines.push(`${item.productName || item.name || ''} (${item.specName || 'Reg'})`);
     const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(' / ');
@@ -2224,6 +2252,9 @@ function generateKitchenText(data) {
     };
     const L = kitchenI18n[lang] || kitchenI18n.id;
     lines.push(centerText(L.title, width));
+    if (data.pickupNumber) {
+        lines.push(centerText(`*** ${data.pickupNumber} ***`, width));
+    }
     lines.push(`${L.order}: ${data.orderNum || ''}`);
     lines.push(`${L.time}: ${formatTime()}`);
     lines.push(repeatChar('-', width));
@@ -2478,19 +2509,19 @@ async function buildReceiptEscPosBuffer(data) {
         const lang = (data.language || 'id').toLowerCase();
         const i18nMap = {
             zh: {
-                orderNo: '单号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
+                orderNo: '订单号', queueNo: '取餐号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
                 customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
                 tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
                 member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
             },
             en: {
-                orderNo: 'Order No', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
+                orderNo: 'Order No', queueNo: 'QUEUE NO', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
                 customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
                 tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
                 member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
             },
             id: {
-                orderNo: 'No Order', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
+                orderNo: 'No. Pesanan', queueNo: 'NO. ANTREAN', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
                 customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
                 tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
                 member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
@@ -2605,21 +2636,34 @@ async function buildReceiptEscPosBuffer(data) {
                     }
                     case 'divider': {
                         const style = cfg.dividerStyle || 'line';
+                        const safeW = Math.max(20, width - 2);
                         if (style === 'dashed') {
-                            chunks.push(formatStyledLine(repeatChar('- ', Math.floor(width / 2)), { align: 'center' }));
+                            chunks.push(formatStyledLine(repeatChar('- ', Math.floor(safeW / 2)), { align: 'center' }));
                         }
                         else if (style === 'space') {
                             chunks.push(CMD_CRLF);
                         }
                         else if (style === 'stars') {
-                            chunks.push(formatStyledLine(repeatChar('*', width), { align: 'center' }));
+                            chunks.push(formatStyledLine(repeatChar('*', safeW), { align: 'center' }));
                         }
                         else {
-                            chunks.push(formatStyledLine(repeatChar('-', width), { align: 'center' }));
+                            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }));
                         }
                         break;
                     }
                     case 'orderInfo': {
+                        if (cfg.showPickupNumber !== false && data.pickupNumber) {
+                            const safeW = Math.max(20, width - 2);
+                            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }));
+                            if (!is80mm) {
+                                chunks.push(formatStyledLine(`*** ${L.queueNo} ***`, { align: 'center', bold: true, fontSize: 'normal' }));
+                                chunks.push(formatStyledLine(String(data.pickupNumber), { align: 'center', bold: true, fontSize: 'large' }));
+                            }
+                            else {
+                                chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }));
+                            }
+                            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }));
+                        }
                         const infoLines = [];
                         // 仅在未显式禁用单号时才输出单号
                         if (cfg.showOrderNo !== false && data.orderNum) {
@@ -2655,7 +2699,7 @@ async function buildReceiptEscPosBuffer(data) {
                         if (cfg.showQtyPriceHeader === true) {
                             const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`;
                             chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: 'normal' }));
-                            chunks.push(formatStyledLine(repeatChar('-', width)));
+                            chunks.push(formatStyledLine(repeatChar('-', Math.max(20, width - 2)), { align: 'center' }));
                         }
                         else if (cfg.showHeader !== false) {
                             // 默认打印纯净商品标题行（与设计器保持 100% 一致）
@@ -2667,14 +2711,21 @@ async function buildReceiptEscPosBuffer(data) {
                                 const qtyPrefix = item.quantity > 1 ? `x${item.quantity} ` : '';
                                 const rawName = `${item.productName}${spec}`;
                                 if (isSimple || cfg.showQtyPriceHeader !== true) {
-                                    // 双列优雅排版（与设计器预览一致：左侧商品名称+数量，右侧总金额）
+                                    // 双列优雅排版（长品名自适应换行，永不截断）
                                     const priceStr = formatRp(item.unitPrice * item.quantity);
                                     const priceW = Math.max(10, priceStr.length + 1);
                                     const maxNameW = Math.max(8, width - priceW);
-                                    const truncatedName = truncate(`${qtyPrefix}${rawName}`, maxNameW);
-                                    const namePadded = padEndVisual(truncatedName, width - priceW);
-                                    const pricePadded = padStartVisual(priceStr, priceW);
-                                    chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }));
+                                    const fullName = `${qtyPrefix}${rawName}`;
+                                    if (getVisualWidth(fullName) <= maxNameW) {
+                                        const namePadded = padEndVisual(fullName, width - priceW);
+                                        const pricePadded = padStartVisual(priceStr, priceW);
+                                        chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }));
+                                    }
+                                    else {
+                                        // 长商品名：首行完整输出商品名称，次行右对齐金额
+                                        chunks.push(formatStyledLine(fullName, { bold: st.bold, fontSize: st.fontSize }));
+                                        chunks.push(formatStyledLine(padStartVisual(priceStr, width - 2), { bold: st.bold, fontSize: st.fontSize, align: 'right' }));
+                                    }
                                 }
                                 else {
                                     // 标准三列排版
@@ -2715,6 +2766,8 @@ async function buildReceiptEscPosBuffer(data) {
                         break;
                     }
                     case 'subtotal': {
+                        const safeW = Math.max(20, width - 2);
+                        chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }));
                         const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth);
                         const subtotalVal = padStartVisual(formatRp(data.subtotal || 0), valWidth);
                         chunks.push(formatStyledLine(`${subtotalLabel}${subtotalVal}`, st));
@@ -2729,9 +2782,28 @@ async function buildReceiptEscPosBuffer(data) {
                     }
                     case 'total': {
                         if (data.discount && data.discount > 0) {
-                            const discLabel = padEndVisual(L.discount, labelWidth);
-                            const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
-                            chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
+                            const promoName = data.promotionName || data.discountNote || '';
+                            const showDetail = cfg.showDiscountDetail !== false && data.showPromotionDetail !== false;
+                            const baseDiscLabel = cfg.discountLabel || L.discount;
+                            if (showDetail && promoName) {
+                                const fullDiscLabel = `${baseDiscLabel} (${promoName})`;
+                                if (fullDiscLabel.length + 12 <= width) {
+                                    const discLabel = padEndVisual(fullDiscLabel, labelWidth);
+                                    const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
+                                    chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
+                                }
+                                else {
+                                    const discLabel = padEndVisual(baseDiscLabel, labelWidth);
+                                    const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
+                                    chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
+                                    chunks.push(formatStyledLine(`  [${promoName}]`, { fontSize: 'small', bold: true }));
+                                }
+                            }
+                            else {
+                                const discLabel = padEndVisual(baseDiscLabel, labelWidth);
+                                const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth);
+                                chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }));
+                            }
                         }
                         const rawTotalLabel = cfg.totalLabel || L.total;
                         const rawTotalVal = formatRp(data.total || 0);
@@ -2773,6 +2845,8 @@ async function buildReceiptEscPosBuffer(data) {
                         break;
                     }
                     case 'paymentInfo': {
+                        const safeW = Math.max(20, width - 2);
+                        chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }));
                         if (cfg.showMethod !== false) {
                             chunks.push(formatStyledLine(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`, st));
                         }
@@ -2846,6 +2920,11 @@ async function buildReceiptEscPosBuffer(data) {
             if (data.storeAddress)
                 chunks.push(formatStyledLine(data.storeAddress, { align: 'center' }));
             chunks.push(formatStyledLine(repeatChar('=', width)));
+            if (data.pickupNumber) {
+                chunks.push(CMD_CRLF);
+                chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }));
+                chunks.push(CMD_CRLF);
+            }
             chunks.push(formatStyledLine(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`));
             if (data.orderDate || data.createdAt) {
                 chunks.push(formatStyledLine(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, true)}`));
@@ -3037,6 +3116,12 @@ function generateReceiptText(data) {
                     break;
                 }
                 case 'orderInfo': {
+                    if (cfg.showPickupNumber !== false && data.pickupNumber) {
+                        const safeW = Math.max(20, width - 2);
+                        lines.push(repeatChar('-', safeW));
+                        lines.push(centerText(`*** ${L.queueNo}: ${data.pickupNumber} ***`, width));
+                        lines.push(repeatChar('-', safeW));
+                    }
                     lines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`);
                     const showDate = cfg.showDate !== false;
                     const showTime = cfg.showTime !== false;
@@ -3060,15 +3145,22 @@ function generateReceiptText(data) {
                 }
                 case 'items': {
                     lines.push(`${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`);
-                    lines.push(repeatChar('-', width));
+                    lines.push(repeatChar('-', Math.max(20, width - 2)));
                     const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact';
                     if (data.items && data.items.length > 0) {
                         data.items.forEach((item) => {
                             const spec = item.specName ? ` ${item.specName}` : '';
-                            const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth);
+                            const fullName = `${item.productName}${spec}`;
                             const qty = padStartVisual(String(item.quantity), qtyWidth);
                             const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth);
-                            lines.push(`${name}${qty}${price}`);
+                            if (getVisualWidth(fullName) <= nameWidth) {
+                                const name = padEndVisual(fullName, nameWidth);
+                                lines.push(`${name}${qty}${price}`);
+                            }
+                            else {
+                                lines.push(fullName);
+                                lines.push(`${' '.repeat(nameWidth)}${qty}${price}`);
+                            }
                             if (isCompact) {
                                 const parts = [];
                                 if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
@@ -3112,7 +3204,22 @@ function generateReceiptText(data) {
                 }
                 case 'total': {
                     if (data.discount && data.discount > 0) {
-                        lines.push(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`);
+                        const promoName = data.promotionName || data.discountNote || '';
+                        const showDetail = cfg.showDiscountDetail !== false && data.showPromotionDetail !== false;
+                        const baseDiscLabel = cfg.discountLabel || L.discount;
+                        if (showDetail && promoName) {
+                            const fullDiscLabel = `${baseDiscLabel} (${promoName})`;
+                            if (fullDiscLabel.length + 12 <= width) {
+                                lines.push(`${padEndVisual(fullDiscLabel, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`);
+                            }
+                            else {
+                                lines.push(`${padEndVisual(baseDiscLabel, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`);
+                                lines.push(`  [${promoName}]`);
+                            }
+                        }
+                        else {
+                            lines.push(`${padEndVisual(baseDiscLabel, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`);
+                        }
                     }
                     const totalLabel = padEndVisual(cfg.totalLabel || L.total, labelWidth);
                     lines.push(`${totalLabel}${padStartVisual(formatRp(data.total || 0), valWidth)}`);
@@ -3237,7 +3344,14 @@ function generateReceiptText(data) {
     lines.push(`${L.subtotal.padEnd(labelWidth)}${formatRp(data.subtotal || 0).padStart(valWidth)}`);
     lines.push(`${L.tax.padEnd(labelWidth)}${formatRp(data.tax || 0).padStart(valWidth)}`);
     if (data.discount && data.discount > 0) {
-        lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`);
+        const promoName = data.promotionName || data.discountNote || '';
+        if (data.showPromotionDetail !== false && promoName) {
+            lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`);
+            lines.push(`  [${promoName}]`);
+        }
+        else {
+            lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`);
+        }
     }
     lines.push(repeatChar('-', width));
     lines.push(`${L.total.padEnd(labelWidth)}${formatRp(data.total || 0).padStart(valWidth)}`);

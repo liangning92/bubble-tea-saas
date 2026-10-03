@@ -2747,23 +2747,30 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
         case 'divider': {
           const style = cfg.dividerStyle || 'line'
+          const safeW = Math.max(20, width - 2)
           if (style === 'dashed') {
-            chunks.push(formatStyledLine(repeatChar('- ', Math.floor(width / 2)), { align: 'center' }))
+            chunks.push(formatStyledLine(repeatChar('- ', Math.floor(safeW / 2)), { align: 'center' }))
           } else if (style === 'space') {
             chunks.push(CMD_CRLF)
           } else if (style === 'stars') {
-            chunks.push(formatStyledLine(repeatChar('*', width), { align: 'center' }))
+            chunks.push(formatStyledLine(repeatChar('*', safeW), { align: 'center' }))
           } else {
-            chunks.push(formatStyledLine(repeatChar('-', width), { align: 'center' }))
+            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
           }
           break
         }
 
         case 'orderInfo': {
           if (cfg.showPickupNumber !== false && data.pickupNumber) {
-            chunks.push(CMD_CRLF)
-            chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }))
-            chunks.push(CMD_CRLF)
+            const safeW = Math.max(20, width - 2)
+            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
+            if (!is80mm) {
+              chunks.push(formatStyledLine(`*** ${L.queueNo} ***`, { align: 'center', bold: true, fontSize: 'normal' }))
+              chunks.push(formatStyledLine(String(data.pickupNumber), { align: 'center', bold: true, fontSize: 'large' }))
+            } else {
+              chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }))
+            }
+            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
           }
           const infoLines: string[] = []
           // 仅在未显式禁用单号时才输出单号
@@ -2802,7 +2809,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           if (cfg.showQtyPriceHeader === true) {
             const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`
             chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: 'normal' }))
-            chunks.push(formatStyledLine(repeatChar('-', width)))
+            chunks.push(formatStyledLine(repeatChar('-', Math.max(20, width - 2)), { align: 'center' }))
           } else if (cfg.showHeader !== false) {
             // 默认打印纯净商品标题行（与设计器保持 100% 一致）
             chunks.push(formatStyledLine(L.item, { bold: true, fontSize: st.fontSize }))
@@ -2815,14 +2822,20 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
               const rawName = `${item.productName}${spec}`
 
               if (isSimple || cfg.showQtyPriceHeader !== true) {
-                // 双列优雅排版（与设计器预览一致：左侧商品名称+数量，右侧总金额）
+                // 双列优雅排版（长品名自适应换行，永不截断）
                 const priceStr = formatRp(item.unitPrice * item.quantity)
                 const priceW = Math.max(10, priceStr.length + 1)
                 const maxNameW = Math.max(8, width - priceW)
-                const truncatedName = truncate(`${qtyPrefix}${rawName}`, maxNameW)
-                const namePadded = padEndVisual(truncatedName, width - priceW)
-                const pricePadded = padStartVisual(priceStr, priceW)
-                chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }))
+                const fullName = `${qtyPrefix}${rawName}`
+                if (getVisualWidth(fullName) <= maxNameW) {
+                  const namePadded = padEndVisual(fullName, width - priceW)
+                  const pricePadded = padStartVisual(priceStr, priceW)
+                  chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }))
+                } else {
+                  // 长商品名：首行完整输出商品名称，次行右对齐金额
+                  chunks.push(formatStyledLine(fullName, { bold: st.bold, fontSize: st.fontSize }))
+                  chunks.push(formatStyledLine(padStartVisual(priceStr, width - 2), { bold: st.bold, fontSize: st.fontSize, align: 'right' }))
+                }
               } else {
                 // 标准三列排版
                 const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth)
@@ -2861,6 +2874,8 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'subtotal': {
+          const safeW = Math.max(20, width - 2)
+          chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
           const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth)
           const subtotalVal = padStartVisual(formatRp(data.subtotal || 0), valWidth)
           chunks.push(formatStyledLine(`${subtotalLabel}${subtotalVal}`, st))
@@ -2940,6 +2955,8 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'paymentInfo': {
+          const safeW = Math.max(20, width - 2)
+          chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
           if (cfg.showMethod !== false) {
             chunks.push(formatStyledLine(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`, st))
           }
@@ -3213,6 +3230,12 @@ function generateReceiptText(data: any): string {
           break
         }
         case 'orderInfo': {
+          if (cfg.showPickupNumber !== false && data.pickupNumber) {
+            const safeW = Math.max(20, width - 2)
+            lines.push(repeatChar('-', safeW))
+            lines.push(centerText(`*** ${L.queueNo}: ${data.pickupNumber} ***`, width))
+            lines.push(repeatChar('-', safeW))
+          }
           lines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`)
           const showDate = cfg.showDate !== false
           const showTime = cfg.showTime !== false
@@ -3236,15 +3259,21 @@ function generateReceiptText(data: any): string {
         }
         case 'items': {
           lines.push(`${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`)
-          lines.push(repeatChar('-', width))
+          lines.push(repeatChar('-', Math.max(20, width - 2)))
           const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact'
           if (data.items && data.items.length > 0) {
             data.items.forEach((item: any) => {
               const spec = item.specName ? ` ${item.specName}` : ''
-              const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth)
+              const fullName = `${item.productName}${spec}`
               const qty = padStartVisual(String(item.quantity), qtyWidth)
               const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth)
-              lines.push(`${name}${qty}${price}`)
+              if (getVisualWidth(fullName) <= nameWidth) {
+                const name = padEndVisual(fullName, nameWidth)
+                lines.push(`${name}${qty}${price}`)
+              } else {
+                lines.push(fullName)
+                lines.push(`${' '.repeat(nameWidth)}${qty}${price}`)
+              }
 
               if (isCompact) {
                 const parts: string[] = []

@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { posApi } from '../services/api'
+import { posApi, updateApiUrl } from '../services/api'
 import { syncConnect, syncFull, checkSyncStatus } from '../services/syncApi'
-import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe, RefreshCw, Check } from 'lucide-react'
+import { getApiUrl, setApiUrl, normalizeApiUrl, CLOUD_API_URL } from '../config'
+import { Eye, EyeOff, Loader2, Phone, Lock, ArrowRight, Globe, RefreshCw, Check, Settings, Server, Wifi, WifiOff, X } from 'lucide-react'
 import { YOUME_LOGO_RED } from '../assets/logo'
 import { WindowControls } from '../components/WindowControls'
 
@@ -30,6 +31,14 @@ export function LoginPage() {
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const [updateStatusText, setUpdateStatusText] = useState('')
   const [isUpToDate, setIsUpToDate] = useState(false)
+
+  // Server Settings Modal State
+  const [showServerModal, setShowServerModal] = useState(false)
+  const [serverUrl, setServerUrl] = useState(getApiUrl())
+  const [testingServer, setTestingServer] = useState(false)
+  const [serverStatus, setServerStatus] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [serverLatency, setServerLatency] = useState<number | null>(null)
+  const [serverErrorMsg, setServerErrorMsg] = useState('')
 
   useEffect(() => {
     setMounted(true)
@@ -94,6 +103,41 @@ export function LoginPage() {
     setTimeout(() => {
       setCheckingUpdate(false)
     }, 10000)
+  }
+
+  const handleTestServer = async (urlToTest = serverUrl) => {
+    setTestingServer(true)
+    setServerStatus('idle')
+    setServerErrorMsg('')
+    try {
+      const normalized = normalizeApiUrl(urlToTest)
+      const start = Date.now()
+      const res = await fetch(`${normalized}/health`, { method: 'GET', signal: AbortSignal.timeout(5000) })
+      if (res.ok) {
+        setServerLatency(Date.now() - start)
+        setServerStatus('ok')
+      } else {
+        setServerStatus('error')
+        setServerErrorMsg(`HTTP ${res.status}`)
+      }
+    } catch (err: any) {
+      setServerStatus('error')
+      setServerErrorMsg(err.message || t('pos.serverConnectFailed', '无法连接服务器'))
+    } finally {
+      setTestingServer(false)
+    }
+  }
+
+  const handleSaveServer = () => {
+    const normalized = normalizeApiUrl(serverUrl)
+    setApiUrl(normalized)
+    updateApiUrl(normalized)
+    setShowServerModal(false)
+  }
+
+  const handleResetCloud = () => {
+    setServerUrl(CLOUD_API_URL)
+    handleTestServer(CLOUD_API_URL)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,6 +233,21 @@ export function LoginPage() {
       <header className="absolute top-0 left-0 right-0 p-3 z-30 flex items-center justify-between">
         <div />
         <div className="flex items-center gap-2">
+          {/* Server Settings button */}
+          <button
+            type="button"
+            onClick={() => {
+              setServerUrl(getApiUrl())
+              setShowServerModal(true)
+              handleTestServer(getApiUrl())
+            }}
+            title={t('pos.serverSettings', '服务器设置')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-gray-700 cursor-pointer"
+          >
+            <Settings size={16} className="text-gray-500" />
+            <span className="text-sm font-medium hidden sm:inline">{t('pos.serverSettings', '服务器')}</span>
+          </button>
+
           <div className="relative">
             <button
               onClick={() => setShowLangMenu(!showLangMenu)}
@@ -379,6 +438,116 @@ export function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Server Settings Modal */}
+      {showServerModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-200 p-6 space-y-5 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-gray-900 font-semibold text-base">
+                <Server size={18} className="text-primary" />
+                <span>{t('pos.serverSettings', '服务器连接设置')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowServerModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1.5">
+                  {t('pos.serverUrl', 'API 服务器地址')}
+                </label>
+                <input
+                  type="text"
+                  value={serverUrl}
+                  onChange={(e) => {
+                    setServerUrl(e.target.value)
+                    setServerStatus('idle')
+                  }}
+                  placeholder="https://api.aicube.online/api"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 font-mono text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              {/* Status Indicator */}
+              <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  {serverStatus === 'ok' && (
+                    <>
+                      <Wifi size={16} className="text-emerald-500" />
+                      <span className="text-emerald-600 font-medium">
+                        {t('pos.serverConnected', '连接成功')} ({serverLatency}ms)
+                      </span>
+                    </>
+                  )}
+                  {serverStatus === 'error' && (
+                    <>
+                      <WifiOff size={16} className="text-red-500" />
+                      <span className="text-red-600 font-medium text-xs">
+                        {t('pos.serverConnectFailed', '连接失败')}: {serverErrorMsg}
+                      </span>
+                    </>
+                  )}
+                  {serverStatus === 'idle' && !testingServer && (
+                    <>
+                      <Server size={16} className="text-gray-400" />
+                      <span className="text-gray-500 text-xs">{t('pos.serverClickTest', '点击测试以验证连通性')}</span>
+                    </>
+                  )}
+                  {testingServer && (
+                    <>
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                      <span className="text-gray-500 text-xs">{t('pos.testingConnection', '正在测试连接...')}</span>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleTestServer()}
+                  disabled={testingServer}
+                  className="text-xs font-medium px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {t('pos.testConnect', '测试连接')}
+                </button>
+              </div>
+
+              {/* Fast presets */}
+              <div className="flex gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={handleResetCloud}
+                  className="flex-1 py-1.5 px-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium text-center cursor-pointer"
+                >
+                  {t('pos.resetToCloud', '恢复默认云端服务器')}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowServerModal(false)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm rounded-xl transition-colors cursor-pointer"
+              >
+                {t('common.cancel', '取消')}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveServer}
+                className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white font-medium text-sm rounded-xl transition-colors cursor-pointer"
+              >
+                {t('common.save', '保存并应用')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

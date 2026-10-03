@@ -254,7 +254,7 @@ function getProvider(provider, config) {
     }
 }
 // Send message to member
-async function sendMessageToMember(storeId, memberId, type, channelType, templateId, customBody) {
+async function sendMessageToMember(storeId, memberId, type, channelType, templateId, customBody, extraVariables) {
     // Get member info
     const member = await database_1.default.member.findUnique({
         where: { id: memberId }
@@ -282,13 +282,33 @@ async function sendMessageToMember(storeId, memberId, type, channelType, templat
             body = template.body;
         }
     }
+    // Look up member's latest coupon if not provided in extraVariables
+    let couponCode = extraVariables?.coupon_code ? String(extraVariables.coupon_code) : '';
+    let discountStr = extraVariables?.discount ? String(extraVariables.discount) : '';
+    if (!couponCode) {
+        const latestCoupon = await database_1.default.memberCoupon.findFirst({
+            where: { memberId },
+            include: { coupon: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        if (latestCoupon?.coupon) {
+            couponCode = latestCoupon.coupon.code;
+            discountStr = latestCoupon.coupon.type === 'discount_percentage'
+                ? `${latestCoupon.coupon.value}%`
+                : `Rp ${Number(latestCoupon.coupon.value).toLocaleString('id-ID')}`;
+        }
+    }
     // Prepare variables
     const variables = {
         member_name: member.name,
         member_phone: member.phone,
         store_name: store?.name || '',
         store_phone: store?.phone || '',
-        tier_name: member.level
+        tier_name: member.level,
+        points: member.points || 0,
+        coupon_code: couponCode,
+        discount: discountStr,
+        ...extraVariables
     };
     // Replace variables in body
     const finalBody = replaceVariables(body, variables);

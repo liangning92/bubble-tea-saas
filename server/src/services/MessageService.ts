@@ -330,7 +330,8 @@ export async function sendMessageToMember(
   type: string,
   channelType: string,
   templateId: string | null,
-  customBody?: string
+  customBody?: string,
+  extraVariables?: Record<string, string | number>
 ): Promise<SendMessageResult> {
   // Get member info
   const member = await prisma.member.findUnique({
@@ -363,13 +364,34 @@ export async function sendMessageToMember(
     }
   }
 
+  // Look up member's latest coupon if not provided in extraVariables
+  let couponCode = extraVariables?.coupon_code ? String(extraVariables.coupon_code) : ''
+  let discountStr = extraVariables?.discount ? String(extraVariables.discount) : ''
+  if (!couponCode) {
+    const latestCoupon = await prisma.memberCoupon.findFirst({
+      where: { memberId },
+      include: { coupon: true },
+      orderBy: { createdAt: 'desc' }
+    })
+    if (latestCoupon?.coupon) {
+      couponCode = latestCoupon.coupon.code
+      discountStr = latestCoupon.coupon.type === 'discount_percentage'
+        ? `${latestCoupon.coupon.value}%`
+        : `Rp ${Number(latestCoupon.coupon.value).toLocaleString('id-ID')}`
+    }
+  }
+
   // Prepare variables
   const variables: Record<string, string | number> = {
     member_name: member.name,
     member_phone: member.phone,
     store_name: store?.name || '',
     store_phone: store?.phone || '',
-    tier_name: member.level
+    tier_name: member.level,
+    points: member.points || 0,
+    coupon_code: couponCode,
+    discount: discountStr,
+    ...extraVariables
   }
 
   // Replace variables in body

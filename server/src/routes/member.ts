@@ -206,10 +206,18 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
     // 自动生成推荐码
     const referralCode = generateReferralCode()
 
-    // 如果有推荐人手机号，找到推荐人
+    // 如果填写了推荐码或推荐人手机号，查找推荐人
     let referredById = null
-    if (referredByPhone) {
-      const referrer = await prisma.member.findUnique({ where: { phone: referredByPhone } })
+    if (referredByPhone && referredByPhone.trim()) {
+      const inputCode = referredByPhone.trim()
+      const referrer = await prisma.member.findFirst({
+        where: {
+          OR: [
+            { phone: inputCode },
+            { referralCode: inputCode.toUpperCase() }
+          ]
+        }
+      })
       referredById = referrer?.id || null
     }
 
