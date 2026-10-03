@@ -104,6 +104,8 @@ export const posApi = {
   getMemberByBarcode: (barcode: string) => api.get(`/members/barcode/${barcode}`),
   createMember: (data: any) => api.post('/members', data),
   getMemberCoupons: (memberId: string) => api.get(`/marketing/members/${memberId}/coupons`),
+  verifyCoupon: (code: string, memberId?: string) =>
+    api.post('/marketing/coupons/verify', { code, memberId }),
   redeemCoupon: (memberCouponId: string, orderId: string) =>
     api.post(`/marketing/coupons/${memberCouponId}/redeem`, { orderId }),
 

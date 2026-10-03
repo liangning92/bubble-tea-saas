@@ -21,7 +21,7 @@ import {
   ShoppingCart, Trash2, Minus, Plus, Tag, User, Clock,
   Globe, FileText, Users, Printer, ScanLine, Wallet, QrCode,
   CheckSquare, ClipboardList, Lock, Settings, RotateCcw,
-  Receipt, PlusCircle, XCircle, Sparkles, Gift
+  Receipt, PlusCircle, XCircle, Sparkles, Gift, Ticket
 } from 'lucide-react'
 import { evaluateBestPromotion, AppliedPromotion, getPromotionUpsellHint, getActivePromotionsSummary } from '../utils/promotionEngine'
 
@@ -323,6 +323,9 @@ export function POSPage() {
   const [memberCoupons, setMemberCoupons] = useState<any[]>([])
   const [selectedCoupon, setSelectedCoupon] = useState<any>(null)
   const [isLoadingCoupons, setIsLoadingCoupons] = useState(false)
+  const [showCouponModal, setShowCouponModal] = useState(false)
+  const [couponCodeInput, setCouponCodeInput] = useState('')
+  const [isVerifyingCoupon, setIsVerifyingCoupon] = useState(false)
 
   // Confirm Modal
   const [confirmModal, setConfirmModal] = useState<{
@@ -2707,6 +2710,52 @@ export function POSPage() {
     }
   }
 
+  // 验证与兑换优惠券码（支持扫码枪录入或手动输入）
+  const verifyCouponByCode = async (codeToVerify?: string) => {
+    const rawCode = codeToVerify || couponCodeInput
+    const code = rawCode.trim().toUpperCase()
+    if (!code) {
+      showToast(t('pos.enterCouponCode', '请输入优惠券码'), 'warning')
+      return
+    }
+
+    setIsVerifyingCoupon(true)
+    try {
+      const res = await posApi.verifyCoupon(code, member?.id)
+      if (res.data?.data) {
+        const { coupon, memberCoupon } = res.data.data
+
+        // 检查满额门槛
+        if (coupon.minOrder && subtotal < coupon.minOrder) {
+          showToast(`${t('pos.minOrderRequirement', '未满足最低消费')}: ${formatCurrency(coupon.minOrder)}`, 'warning')
+          setIsVerifyingCoupon(false)
+          return
+        }
+
+        const couponPayload = memberCoupon || {
+          id: `virtual-${coupon.id}`,
+          couponId: coupon.id,
+          coupon,
+          status: 'unused'
+        }
+
+        setSelectedCoupon(couponPayload)
+        setIsManualDiscount(false)
+        setShowCouponModal(false)
+        setCouponCodeInput('')
+        playSoundWithSettings('keypress', soundSettings.keypress)
+        showToast(`已应用优惠券: ${coupon.code}`, 'success')
+      } else {
+        showToast(t('pos.invalidCouponCode', '无效或不可用的优惠券码'), 'error')
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || t('pos.invalidCouponCode', '无效或不可用的优惠券码')
+      showToast(msg, 'error')
+    } finally {
+      setIsVerifyingCoupon(false)
+    }
+  }
+
   // 结账
   const handleCheckout = async () => {
     if (cart.length === 0 || isCheckingOut) return
@@ -3568,14 +3617,73 @@ export function POSPage() {
                   <Trash2 size={18} />
                 </button>
               )}
-              <button onClick={() => setShowSuspendModal(true)} className="w-10 h-10 flex items-center justify-center text-yellow-600 bg-yellow-50 rounded-lg hover:bg-yellow-100">
+              <button onClick={() => setShowSuspendModal(true)} className="w-10 h-10 flex items-center justify-center text-yellow-600 bg-yellow-50 rounded-lg hover:bg-yellow-100" title={t('pos.suspendOrderTitle', '挂单')}>
                 <Clock size={20} />
               </button>
-              <button onClick={() => setShowMemberModal(true)} className="w-10 h-10 flex items-center justify-center text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">
+              <button onClick={() => setShowMemberModal(true)} className={`w-10 h-10 flex items-center justify-center rounded-lg ${member ? 'text-white bg-blue-600' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`} title={member ? member.name : t('pos.member', '会员')}>
                 <User size={20} />
+              </button>
+              <button
+                onClick={() => {
+                  playSoundWithSettings('keypress', soundSettings.keypress)
+                  setShowCouponModal(true)
+                }}
+                className={`relative w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                  selectedCoupon ? 'text-white bg-primary' : 'text-primary bg-pink-50 hover:bg-pink-100'
+                }`}
+                title={t('pos.coupon', '优惠券')}
+              >
+                <Ticket size={20} />
+                {memberCoupons.length > 0 && !selectedCoupon && (
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-red-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                    {memberCoupons.length}
+                  </span>
+                )}
               </button>
             </div>
           </div>
+
+          {/* 会员与优惠券激活条 */}
+          {(member || selectedCoupon) && (
+            <div className="mx-3 mt-2 p-2 bg-gradient-to-r from-blue-50 to-pink-50 border border-blue-100 rounded-xl flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                {member && (
+                  <div className="flex items-center gap-1 font-medium text-blue-900 truncate">
+                    <span className="font-bold">{member.name}</span>
+                    <span className="text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.2 rounded-full">
+                      {member.points || 0}分
+                    </span>
+                  </div>
+                )}
+                {selectedCoupon && (
+                  <div className="flex items-center gap-1 text-primary font-bold bg-white px-2 py-0.5 rounded border border-pink-200">
+                    <Ticket size={12} />
+                    <span className="truncate">{selectedCoupon.coupon?.code || '优惠券'}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowCouponModal(true)}
+                  className="text-primary hover:underline font-semibold"
+                >
+                  {selectedCoupon ? t('common.edit', '修改') : `选券(${memberCoupons.length})`}
+                </button>
+                {selectedCoupon && (
+                  <button
+                    onClick={() => {
+                      setSelectedCoupon(null)
+                      setDiscountAmount(0)
+                    }}
+                    className="text-gray-400 hover:text-red-500 ml-1"
+                    title="移除优惠券"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 商品列表 */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -4089,6 +4197,31 @@ export function POSPage() {
                 </div>
               )}
 
+              {/* 优惠券快捷入口 */}
+              <div className="mb-4 p-3 bg-pink-50 border border-pink-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Ticket size={18} className="text-primary" />
+                  <div>
+                    <p className="text-xs font-bold text-gray-800">
+                      {selectedCoupon ? `已用卡券: ${selectedCoupon.coupon?.code}` : '使用优惠券/扫码验券'}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {memberCoupons.length > 0 ? `当前会员有 ${memberCoupons.length} 张可用券` : '支持扫码枪录入或输入券码'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDiscountModal(false)
+                    setShowCouponModal(true)
+                  }}
+                  className="px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-hover touch-feedback"
+                >
+                  {selectedCoupon ? '修改卡券' : '选择/扫码 >'}
+                </button>
+              </div>
+
               {/* 金额显示 */}
               <div className="bg-gray-100 rounded-xl p-4 mb-4 text-right">
                 <span className="text-3xl font-bold text-primary">{formatCurrency(parseInt(tempDiscount) || 0)}</span>
@@ -4240,6 +4373,23 @@ export function POSPage() {
                     <p className="text-xs text-right text-green-600">-{formatCurrency(pointsDiscount)}</p>
                   </div>
                 )}
+                {/* 会员优惠券快捷展示 */}
+                <div className="mt-3 pt-2 border-t border-green-200 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <Ticket size={14} className="text-primary" />
+                    <span>{t('pos.availableCoupons', '可用优惠券')}: <strong className="text-primary">{memberCoupons.length}</strong> 张</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMemberModal(false)
+                      setShowCouponModal(true)
+                    }}
+                    className="px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-hover touch-feedback"
+                  >
+                    {selectedCoupon ? t('common.edit', '更改') : t('pos.useCoupon', '使用优惠券')}
+                  </button>
+                </div>
               </div>
             ) : memberPhone && !isSearchingMember ? (
               <div className="p-3 bg-red-50 rounded-xl mb-4 text-center text-red-500 text-sm">
@@ -4247,6 +4397,216 @@ export function POSPage() {
               </div>
             ) : null}
             <button onClick={() => setShowMemberModal(false)} className="w-full py-2 border rounded-xl">{t('common.close')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 优惠券选择与核销弹窗 */}
+      {showCouponModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCouponModal(false)}>
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
+            <div className="bg-primary text-white px-5 py-4 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <Ticket size={22} />
+                <h3 className="font-bold text-lg">{t('pos.couponsTitle', '卡券优惠与核销')}</h3>
+              </div>
+              <button onClick={() => setShowCouponModal(false)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-4">
+              {/* 扫码/输码核销区域 */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  <ScanLine size={14} className="text-primary" />
+                  <span>{t('pos.scanOrEnterCoupon', '扫码枪扫券 / 输入券码')}</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCodeInput}
+                    onChange={e => setCouponCodeInput(e.target.value.toUpperCase())}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        verifyCouponByCode()
+                      }
+                    }}
+                    placeholder={t('pos.couponCodePlaceholder', '例如：VIP888 / 扫描券二维码')}
+                    className="flex-1 px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-mono uppercase focus:outline-hidden focus:border-primary"
+                    disabled={isVerifyingCoupon}
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => verifyCouponByCode()}
+                    disabled={isVerifyingCoupon || !couponCodeInput.trim()}
+                    className="px-4 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-hover disabled:opacity-50 flex items-center gap-1.5 touch-feedback"
+                  >
+                    {isVerifyingCoupon ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <span>{t('pos.verifyCoupon', '核销/兑换')}</span>
+                    )}
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1.5">
+                  💡 支持条形码/二维码扫码枪直扫，光标聚焦输入框后直接扫码即可兑换。
+                </p>
+              </div>
+
+              {/* 当前已选中的优惠券 */}
+              {selectedCoupon && (
+                <div className="p-3 bg-pink-50 border-2 border-primary rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-bold">
+                      <Ticket size={18} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-gray-900">{selectedCoupon.coupon?.code}</span>
+                        <span className="text-[10px] bg-primary text-white px-1.5 py-0.2 rounded font-semibold">
+                          当前使用
+                        </span>
+                      </div>
+                      <p className="text-xs text-primary font-medium mt-0.5">
+                        {selectedCoupon.coupon?.type === 'discount_fixed'
+                          ? `立减 ${formatCurrency(selectedCoupon.coupon.value)}`
+                          : selectedCoupon.coupon?.type === 'discount_percent'
+                          ? `享受 ${selectedCoupon.coupon.value}% 折扣`
+                          : '特惠券'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedCoupon(null)
+                      setDiscountAmount(0)
+                      showToast(t('pos.couponRemoved', '已取消使用优惠券'), 'info')
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded-lg bg-white"
+                  >
+                    {t('pos.removeCoupon', '不使用')}
+                  </button>
+                </div>
+              )}
+
+              {/* 会员名下卡券列表 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                    <User size={13} className="text-blue-600" />
+                    {member ? `${member.name} 的可用卡券 (${memberCoupons.length})` : '会员卡券'}
+                  </span>
+                  {!member && (
+                    <button
+                      onClick={() => {
+                        setShowCouponModal(false)
+                        setShowMemberModal(true)
+                      }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      关联会员查看专属券 &gt;
+                    </button>
+                  )}
+                </div>
+
+                {memberCoupons.length === 0 ? (
+                  <div className="p-6 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-xs">
+                    {member
+                      ? '该会员暂无未使用的有效优惠券'
+                      : '请先关联会员以加载会员名下卡券，或在上方直接输入券码'}
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {memberCoupons.map((mc: any) => {
+                      const c = mc.coupon || {}
+                      const isSelected = selectedCoupon?.id === mc.id
+                      const isEligible = !c.minOrder || subtotal >= c.minOrder
+
+                      return (
+                        <div
+                          key={mc.id}
+                          onClick={() => {
+                            if (!isEligible) {
+                              showToast(`需满 ${formatCurrency(c.minOrder)} 可用`, 'warning')
+                              return
+                            }
+                            if (isSelected) {
+                              setSelectedCoupon(null)
+                              setDiscountAmount(0)
+                            } else {
+                              setSelectedCoupon(mc)
+                              setIsManualDiscount(false)
+                              setShowCouponModal(false)
+                              showToast(`已应用优惠券: ${c.code}`, 'success')
+                            }
+                          }}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-pink-50 border-primary shadow-xs'
+                              : isEligible
+                              ? 'bg-white border-gray-200 hover:border-pink-300'
+                              : 'bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm ${
+                              isSelected ? 'bg-primary text-white' : 'bg-pink-50 text-primary'
+                            }`}>
+                              {c.type === 'discount_percent' ? `${c.value}%` : '券'}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-gray-900">{c.code}</span>
+                                {c.minOrder > 0 && (
+                                  <span className="text-[10px] text-gray-500 bg-gray-100 px-1 rounded">
+                                    满{formatCurrency(c.minOrder)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {c.type === 'discount_fixed'
+                                  ? `立减 ${formatCurrency(c.value)}`
+                                  : c.type === 'discount_percent'
+                                  ? `打 ${100 - c.value}% 折${c.maxDiscount ? ` (最高减${formatCurrency(c.maxDiscount)})` : ''}`
+                                  : '特惠券'}
+                              </p>
+                              <p className="text-[10px] text-gray-400">
+                                有效期至: {c.validUntil ? new Date(c.validUntil).toLocaleDateString() : '长期有效'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <button
+                              type="button"
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                isSelected
+                                  ? 'bg-primary text-white'
+                                  : isEligible
+                                  ? 'bg-primary/10 text-primary hover:bg-primary hover:text-white'
+                                  : 'bg-gray-100 text-gray-400'
+                              }`}
+                            >
+                              {isSelected ? '使用中' : isEligible ? '立即使用' : '未达门槛'}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3 border-t bg-gray-50 flex gap-2 shrink-0">
+              <button
+                onClick={() => setShowCouponModal(false)}
+                className="w-full py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold hover:bg-gray-100 touch-feedback"
+              >
+                {t('common.close', '关闭')}
+              </button>
             </div>
           </div>
         </div>

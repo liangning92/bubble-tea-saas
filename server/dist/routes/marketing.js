@@ -250,6 +250,70 @@ router.delete('/coupons/:id', auth_1.authenticate, (0, auth_1.authorize)('admin'
         res.status(500).json({ code: 500, message: 'Failed to delete coupon' });
     }
 });
+// POST /api/marketing/coupons/verify - POS/顾客核销验券或扫码查询
+router.post('/coupons/verify', auth_1.authenticate, async (req, res) => {
+    try {
+        const { code, memberId } = req.body;
+        if (!code) {
+            return res.status(400).json({ code: 400, message: 'Coupon code is required' });
+        }
+        const trimmedCode = String(code).trim().toUpperCase();
+        const now = new Date();
+        // 1. 查询优惠券母券
+        const coupon = await database_1.default.coupon.findUnique({
+            where: { code: trimmedCode }
+        });
+        if (!coupon) {
+            return res.status(404).json({ code: 404, message: 'Coupon not found' });
+        }
+        if (coupon.status !== 'active') {
+            return res.status(400).json({ code: 400, message: 'Coupon is not active' });
+        }
+        if (new Date(coupon.validFrom) > now || new Date(coupon.validUntil) < now) {
+            return res.status(400).json({ code: 400, message: 'Coupon is expired or not yet valid' });
+        }
+        if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) {
+            return res.status(400).json({ code: 400, message: 'Coupon usage limit reached' });
+        }
+        // 2. 如果关联了 memberId，查询或准备 memberCoupon 记录
+        let memberCoupon = null;
+        if (memberId) {
+            memberCoupon = await database_1.default.memberCoupon.findFirst({
+                where: {
+                    memberId,
+                    couponId: coupon.id
+                },
+                include: { coupon: true }
+            });
+            if (memberCoupon && memberCoupon.status !== 'unused') {
+                return res.status(400).json({ code: 400, message: 'Member already used this coupon' });
+            }
+            // 如果会员名下尚未领过该全局券，自动为该会员发券以便核销
+            if (!memberCoupon) {
+                memberCoupon = await database_1.default.memberCoupon.create({
+                    data: {
+                        memberId,
+                        couponId: coupon.id,
+                        status: 'unused'
+                    },
+                    include: { coupon: true }
+                });
+            }
+        }
+        res.json({
+            code: 200,
+            data: {
+                coupon,
+                memberCoupon
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Verify coupon error:', error);
+        res.status(500).json({ code: 500, message: error.message || 'Failed to verify coupon' });
+    }
+});
 // GET /api/marketing/members/:memberId/coupons
 router.get('/members/:memberId/coupons', auth_1.authenticate, async (req, res) => {
     try {
