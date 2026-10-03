@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateOrderNumber = generateOrderNumber;
 exports.calculateBOMCost = calculateBOMCost;
+exports.isNegativeStockAllowed = isNegativeStockAllowed;
 exports.deductInventory = deductInventory;
 exports.updateMemberPoints = updateMemberPoints;
 exports.getOrders = getOrders;
@@ -136,8 +137,24 @@ async function calculateBOMCost(productId) {
     }
     return Math.round(totalCost);
 }
+// 门店是否允许负库存销售（Config: inventory/allow_negative_stock，默认 true）
+async function isNegativeStockAllowed(storeId) {
+    try {
+        const cfg = await database_1.default.config.findFirst({
+            where: { key: 'allow_negative_stock', storeId: { in: [storeId, ''] } },
+            orderBy: { storeId: 'desc' } // 门店级优先于全局
+        });
+        if (!cfg)
+            return true;
+        const v = JSON.parse(cfg.value);
+        return v !== false && v !== 'false';
+    }
+    catch {
+        return true;
+    }
+}
 // Recursive deduct inventory - handles multi-level BOM
-async function deductInventoryRecursive(tx, inventoryId, qty, orderId, depth = 0) {
+async function deductInventoryRecursive(tx, inventoryId, qty, orderId, depth = 0, allowNegative = false) {
     // Prevent infinite recursion
     if (depth > 10) {
         return { success: false, error: `Max recursion depth reached for inventory: ${inventoryId}` };
@@ -150,7 +167,9 @@ async function deductInventoryRecursive(tx, inventoryId, qty, orderId, depth = 0
     }
     // If raw_material, deduct directly (with stock check)
     if (inv.type === 'raw_material') {
-        if (inv.currentStock < qty) {
+        // 行业惯例（哗啦啦/客如云）：前台收银不能因账面库存滞后而拒单。
+        // 开启负库存销售时允许扣成负数，事后由店长补录入库/盘点对冲。
+        if (inv.currentStock < qty && !allowNegative) {
             return {
                 success: false,
                 insufficientStock: {
@@ -201,7 +220,7 @@ async function deductInventoryRecursive(tx, inventoryId, qty, orderId, depth = 0
             // If 1kg + 2600ml -> 2600ml output, and we need qty ml of output:
             // input_qty = (qty / outputRatio) * input.quantity
             const inputQty = (qty / outputRatio) * input.quantity;
-            const result = await deductInventoryRecursive(tx, input.inventoryId, inputQty, orderId, depth + 1);
+            const result = await deductInventoryRecursive(tx, input.inventoryId, inputQty, orderId, depth + 1, allowNegative);
             if (!result.success)
                 return result;
         }
@@ -217,6 +236,8 @@ async function deductInventory(storeId, orderId, items, tx) {
     const lowStockWarnings = [];
     // Collect all inventory IDs used in this order for post-check
     const usedInventoryIds = new Set();
+    // 读取门店"允许负库存销售"开关（默认开启，避免高峰期因账面库存滞后卡单）
+    const allowNegative = await isNegativeStockAllowed(storeId);
     // Use provided transaction or create new one
     const doDeduct = async (transactionClient) => {
         for (const item of items) {
@@ -227,7 +248,7 @@ async function deductInventory(storeId, orderId, items, tx) {
             for (const bom of bomItems) {
                 usedInventoryIds.add(bom.inventoryId);
                 const deductQty = bom.quantity * item.quantity;
-                const result = await deductInventoryRecursive(transactionClient, bom.inventoryId, deductQty, orderId);
+                const result = await deductInventoryRecursive(transactionClient, bom.inventoryId, deductQty, orderId, 0, allowNegative);
                 if (!result.success) {
                     if (result.insufficientStock) {
                         const { name, available, needed } = result.insufficientStock;
@@ -253,7 +274,7 @@ async function deductInventory(storeId, orderId, items, tx) {
             where: { id: { in: Array.from(usedInventoryIds) } }
         });
         for (const inv of usedInventories) {
-            if (inv.safetyStock > 0 && inv.currentStock <= inv.safetyStock) {
+            if ((inv.safetyStock > 0 && inv.currentStock <= inv.safetyStock) || inv.currentStock < 0) {
                 lowStockWarnings.push({
                     inventoryId: inv.id,
                     name: inv.name,
@@ -506,8 +527,17 @@ async function createOrder(data) {
         };
     }));
     // 统一计算订单金额（服务端作为权威数据源）
+    // 积分抵扣必须绑定会员且不超过会员真实余额（防止积分被无限重复抵扣）
+    let effectivePointsRedeemed = 0;
+    if (data.memberId && (data.pointsRedeemed || 0) > 0) {
+        const redeemMember = await database_1.default.member.findUnique({
+            where: { id: data.memberId },
+            select: { points: true }
+        });
+        effectivePointsRedeemed = Math.min(data.pointsRedeemed || 0, Math.max(0, redeemMember?.points || 0));
+    }
     // Points discount: 100 points = 1 IDR (same as client calculation)
-    const pointsDiscount = Math.floor((data.pointsRedeemed || 0) / 100);
+    const pointsDiscount = Math.floor(effectivePointsRedeemed / 100);
     const finalAmount = totalAmount - (data.discountAmount || 0) - pointsDiscount;
     // Add PPN (Indonesian tax 11%) - only if taxEnabled is not explicitly false
     const ppnAmount = data.taxEnabled !== false ? Math.round(finalAmount * env_1.config.indonesia.ppnRate) : 0;
@@ -616,6 +646,25 @@ async function createOrder(data) {
         const inventoryResult = data.status === 'suspended'
             ? { success: true, errors: [], lowStockWarnings: [] }
             : await deductInventory(data.storeId, newOrder.id, data.items, tx);
+        // 扣减积分抵扣（条件更新防并发重复使用；挂单不扣，恢复挂单时会重新下单）
+        if (data.memberId && effectivePointsRedeemed > 0 && data.status !== 'suspended') {
+            const redeemed = await tx.member.updateMany({
+                where: { id: data.memberId, points: { gte: effectivePointsRedeemed } },
+                data: { points: { decrement: effectivePointsRedeemed } }
+            });
+            if (redeemed.count === 0) {
+                throw new Error('INSUFFICIENT_POINTS');
+            }
+            await tx.pointLog.create({
+                data: {
+                    memberId: data.memberId,
+                    type: 'redeem',
+                    points: -effectivePointsRedeemed,
+                    orderId: newOrder.id,
+                    note: `Order redeem #${newOrder.orderNumber}`
+                }
+            });
+        }
         // Update member points (skip for suspended orders)
         if (data.memberId && calculatedPoints > 0 && data.status !== 'suspended') {
             await tx.member.update({
@@ -671,35 +720,80 @@ async function updateOrderStatus(orderId, status) {
         data: { status }
     });
 }
-// Refund order
-async function refundOrder(orderId, reason) {
-    const order = await database_1.default.order.update({
-        where: { id: orderId },
-        data: { status: 'refunded' },
-        include: { items: true, member: true }
+// Refund order (idempotent, transactional, full rollback of points / coupons / cash)
+async function refundOrder(orderId, reason, operatorStaffId, refundAmount) {
+    const note = `Refund: ${reason || 'No reason provided'}`;
+    const order = await database_1.default.$transaction(async (tx) => {
+        // Idempotency guard: only flip status once (atomic conditional update)
+        const flipped = await tx.order.updateMany({
+            where: { id: orderId, status: { notIn: ['refunded', 'cancelled'] } },
+            data: { status: 'refunded' }
+        });
+        if (flipped.count === 0) {
+            const exists = await tx.order.findUnique({ where: { id: orderId }, select: { id: true } });
+            if (!exists)
+                throw new Error('Order not found');
+            throw new Error('ORDER_ALREADY_REFUNDED');
+        }
+        const o = await tx.order.findUniqueOrThrow({
+            where: { id: orderId },
+            include: { items: true }
+        });
+        // 1. Member points & spend rollback (based on actual point logs of this order)
+        if (o.memberId) {
+            const logs = await tx.pointLog.findMany({
+                where: { memberId: o.memberId, orderId: o.id, type: { in: ['earn', 'redeem'] } }
+            });
+            const earned = logs.filter(l => l.type === 'earn').reduce((s, l) => s + Math.max(0, l.points), 0);
+            const redeemed = logs.filter(l => l.type === 'redeem').reduce((s, l) => s + Math.abs(l.points), 0);
+            const member = await tx.member.findUnique({ where: { id: o.memberId } });
+            if (member) {
+                // Never drive points negative (member may have already spent the earned points)
+                const deductEarned = Math.min(earned, member.points + redeemed);
+                const netChange = redeemed - deductEarned;
+                await tx.member.update({
+                    where: { id: o.memberId },
+                    data: {
+                        points: { increment: netChange },
+                        totalSpent: { decrement: Math.min(o.finalAmount, member.totalSpent ?? o.finalAmount) }
+                    }
+                });
+                if (deductEarned > 0) {
+                    await tx.pointLog.create({
+                        data: { memberId: o.memberId, type: 'adjust', points: -deductEarned, orderId: o.id, note: `${note} (reverse earned)` }
+                    });
+                }
+                if (redeemed > 0) {
+                    await tx.pointLog.create({
+                        data: { memberId: o.memberId, type: 'adjust', points: redeemed, orderId: o.id, note: `${note} (return redeemed)` }
+                    });
+                }
+            }
+        }
+        // 2. Restore coupons used on this order (POS stores orderNumber, others may store id)
+        await tx.memberCoupon.updateMany({
+            where: { orderId: { in: [o.id, o.orderNumber] }, status: 'used' },
+            data: { status: 'unused', usedAt: null }
+        });
+        // 3. Cash refund → cash_out so drawer reconciliation stays accurate
+        const cashRefund = refundAmount && refundAmount > 0 ? Math.min(refundAmount, o.finalAmount) : o.finalAmount;
+        if (o.paymentMethod === 'cash' && cashRefund > 0) {
+            await tx.cashEvent.create({
+                data: {
+                    storeId: o.storeId,
+                    staffId: operatorStaffId || o.staffId,
+                    type: 'cash_out',
+                    amount: cashRefund,
+                    paymentMethod: 'cash',
+                    orderId: o.orderNumber,
+                    note: `Refund #${o.orderNumber}${reason ? ` - ${reason}` : ''}`
+                }
+            });
+        }
+        return o;
     });
-    // Return inventory to stock
+    // 4. Return inventory to stock (own transaction)
     await returnInventory(order.id, order.items);
-    // Reverse member points
-    if (order.memberId) {
-        const pointsToDeduct = Math.floor(order.finalAmount / 10000);
-        await database_1.default.member.update({
-            where: { id: order.memberId },
-            data: {
-                points: { decrement: pointsToDeduct },
-                totalSpent: { decrement: order.finalAmount }
-            }
-        });
-        await database_1.default.pointLog.create({
-            data: {
-                memberId: order.memberId,
-                type: 'adjust',
-                points: -pointsToDeduct,
-                orderId: order.id,
-                note: `Refund: ${reason || 'No reason provided'}`
-            }
-        });
-    }
     return order;
 }
 // Create refund request (from POS)

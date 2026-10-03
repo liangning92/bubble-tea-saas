@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Settings, Save, RotateCcw } from 'lucide-react'
+import { useAuthStore } from '../../stores/auth'
+import { configApi } from '../../services/api'
 
 interface KDSConfig {
   orderDisplayTime: number // minutes
@@ -24,14 +26,30 @@ const defaultConfig: KDSConfig = {
 
 export function KDSConfigPage() {
   const { t } = useTranslation()
+  const { user } = useAuthStore()
+  const storeId = user?.storeId || ''
   const [config, setConfig] = useState<KDSConfig>(defaultConfig)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const handleSave = () => {
-    // TODO: 后续应迁移到服务端 API，当前使用 localStorage 是临时方案
-    localStorage.setItem('kds-config', JSON.stringify(config))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  useEffect(() => {
+    configApi.get(storeId || undefined).then(resp => {
+      const remote = resp.data?.data?.kds_config
+      if (remote && typeof remote === 'object') setConfig({ ...defaultConfig, ...remote })
+    }).catch(() => { /* fall back to defaults */ })
+  }, [storeId])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await configApi.set(storeId, 'kds_config', config, 'pos')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      alert(t('common.saveFailed'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleReset = () => {
@@ -171,7 +189,8 @@ export function KDSConfigPage() {
 
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover"
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50"
           >
             <Save size={18} />
             {saved ? t('kds.saved') : t('kds.saveSettings')}

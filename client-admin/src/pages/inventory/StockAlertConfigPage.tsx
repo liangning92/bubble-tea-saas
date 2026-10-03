@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { inventoryApi } from '../../services/api'
-import { Loader2, Save, RotateCcw, AlertTriangle, TrendingUp, Settings } from 'lucide-react'
+import { inventoryApi, configApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
+import { Loader2, Save, RotateCcw, AlertTriangle, TrendingUp, Settings, ShieldAlert } from 'lucide-react'
 
 interface AlertConfig {
   lowStockWarningDays: number
@@ -12,6 +13,58 @@ interface AlertConfig {
   enableLowStockAlert: boolean
   enableConsumptionAlert: boolean
   autoCheckIntervalHours: number
+}
+
+// Negative stock policy (allow_negative_stock config, read by server on checkout)
+function NegativeStockPolicyCard() {
+  const { t } = useTranslation()
+  const { user } = useAuthStore()
+  const storeId = user?.storeId || ''
+  const queryClient = useQueryClient()
+
+  const { data: allowNegative } = useQuery({
+    queryKey: ['config', 'allow_negative_stock', storeId],
+    queryFn: async () => {
+      const v = (await configApi.get(storeId || undefined)).data?.data?.allow_negative_stock
+      return v === undefined || v === null ? true : (v === true || v === 'true')
+    }
+  })
+
+  const mutation = useMutation({
+    mutationFn: (value: boolean) => configApi.set(storeId, 'allow_negative_stock', value, 'inventory'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['config', 'allow_negative_stock', storeId] }),
+    onError: () => alert(t('common.saveFailed'))
+  })
+
+  const enabled = allowNegative ?? true
+
+  return (
+    <div className="card">
+      <div className="flex items-center gap-3">
+        <div className="p-3 rounded-xl bg-amber-100">
+          <ShieldAlert size={24} className="text-amber-600" />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold">{t('inventory.negativeStockPolicy')}</h2>
+          <p className="text-sm text-gray-500">
+            {enabled ? t('inventory.negativeStockAllowedDesc') : t('inventory.negativeStockBlockedDesc')}
+          </p>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={mutation.isPending}
+            onChange={(e) => mutation.mutate(e.target.checked)}
+            className="toggle toggle-primary"
+          />
+          <span className="text-sm text-gray-600">
+            {enabled ? t('inventory.allowNegativeStock') : t('inventory.blockNegativeStock')}
+          </span>
+        </label>
+      </div>
+    </div>
+  )
 }
 
 export function StockAlertConfigPage() {
@@ -119,6 +172,8 @@ export function StockAlertConfigPage() {
           </button>
         </div>
       </div>
+
+      <NegativeStockPolicyCard />
 
       {/* Low Stock Alert Section */}
       <div className="card">

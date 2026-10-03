@@ -258,7 +258,7 @@ router.post('/:id/refund', auth_1.authenticate, (0, auth_1.authorize)('admin', '
     try {
         const { id } = req.params;
         const { reason } = req.body;
-        const order = await OrderService.refundOrder(id, reason);
+        const order = await OrderService.refundOrder(id, reason, req.user.staffId);
         res.json({
             code: 200,
             message: 'Order refunded',
@@ -267,6 +267,9 @@ router.post('/:id/refund', auth_1.authenticate, (0, auth_1.authorize)('admin', '
         });
     }
     catch (error) {
+        if (error?.message === 'ORDER_ALREADY_REFUNDED') {
+            return res.status(400).json({ code: 400, message: 'Order already refunded' });
+        }
         console.error('Refund order error:', error);
         res.status(500).json({ code: 500, message: 'Failed to refund order' });
     }
@@ -297,6 +300,11 @@ router.post('/refund-requests/:id/approve', auth_1.authenticate, (0, auth_1.auth
                 message: 'Refund amount must be greater than 0'
             });
         }
+        if (request.status !== 'pending') {
+            return res.status(400).json({ code: 400, message: 'Refund request already processed' });
+        }
+        // Full rollback first (status, points, coupons, cash, inventory) — idempotent
+        await OrderService.refundOrder(request.orderId, note || request.reason, req.user.staffId, request.amount);
         // Update refund request status
         await prisma.refundRequest.update({
             where: { id },
@@ -307,15 +315,6 @@ router.post('/refund-requests/:id/approve', auth_1.authenticate, (0, auth_1.auth
                 note
             }
         });
-        // Update order status to refunded
-        await prisma.order.update({
-            where: { id: request.orderId },
-            data: { status: 'refunded' }
-        });
-        // Return inventory and reverse member points
-        if (request.order) {
-            await OrderService.refundOrder(request.orderId, note);
-        }
         res.json({
             code: 200,
             message: 'Refund approved',
@@ -323,6 +322,9 @@ router.post('/refund-requests/:id/approve', auth_1.authenticate, (0, auth_1.auth
         });
     }
     catch (error) {
+        if (error?.message === 'ORDER_ALREADY_REFUNDED') {
+            return res.status(400).json({ code: 400, message: 'Order already refunded' });
+        }
         console.error('Approve refund error:', error);
         res.status(500).json({ code: 500, message: 'Failed to approve refund' });
     }

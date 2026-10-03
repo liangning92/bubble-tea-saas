@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { orderApi } from '../../services/api'
+import { orderApi, configApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import {
   ChefHat,
@@ -46,11 +46,35 @@ export function KDSPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [lastOrderCount, setLastOrderCount] = useState(0)
 
+  // Store-level KDS config (set in KDS Config page)
+  const { data: kdsConfigData } = useQuery({
+    queryKey: ['kds-config', user?.storeId],
+    queryFn: async () => (await configApi.get(user?.storeId || undefined)).data?.data?.kds_config || null,
+    staleTime: 60_000
+  })
+  const kdsConfig = {
+    orderDisplayTime: 60,
+    overdueThreshold: 15,
+    displayOrder: 'fifo' as 'fifo' | 'priority' | 'platform',
+    soundEnabled: true,
+    autoRefreshInterval: 10,
+    showPlatformBadges: true,
+    showTimer: true,
+    ...(kdsConfigData || {})
+  }
+
+  // Apply configured default sound setting once loaded
+  useEffect(() => {
+    if (kdsConfigData && typeof kdsConfigData.soundEnabled === 'boolean') {
+      setSoundEnabled(kdsConfigData.soundEnabled)
+    }
+  }, [kdsConfigData])
+
   // Fetch KDS orders
   const { data: ordersData, isLoading, refetch } = useQuery({
     queryKey: ['kds-orders'],
     queryFn: () => orderApi.getKDS(user?.storeId || '', { limit: 50 }),
-    refetchInterval: 5000 // Refresh every 5 seconds for real-time updates
+    refetchInterval: Math.max(3, Number(kdsConfig.autoRefreshInterval) || 10) * 1000
   })
 
   const orders: KDSOrder[] = ordersData?.data?.data?.list || []
@@ -75,12 +99,30 @@ export function KDSPage() {
   })
 
   // Calculate elapsed time and check for overdue
-  const processedOrders = orders.map(order => {
-    const createdAt = new Date(order.createdAt)
-    const now = new Date()
-    const elapsedMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000)
-    return { ...order, elapsedMinutes }
-  })
+  const overdueThreshold = Number(kdsConfig.overdueThreshold) || 15
+  const platformRank: Record<string, number> = { grabfood: 0, gofood: 0, shopee: 0, direct: 1 }
+  const processedOrders = orders
+    .map(order => {
+      const createdAt = new Date(order.createdAt)
+      const now = new Date()
+      const elapsedMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000)
+      return { ...order, elapsedMinutes }
+    })
+    // Hide stale orders older than configured display time
+    .filter(o => !kdsConfig.orderDisplayTime || o.elapsedMinutes <= Number(kdsConfig.orderDisplayTime))
+    .sort((a, b) => {
+      if (kdsConfig.displayOrder === 'priority') {
+        // Overdue first, then oldest first
+        const ao = a.elapsedMinutes > overdueThreshold ? 0 : 1
+        const bo = b.elapsedMinutes > overdueThreshold ? 0 : 1
+        if (ao !== bo) return ao - bo
+      } else if (kdsConfig.displayOrder === 'platform') {
+        const ap = platformRank[a.platform || 'direct'] ?? 1
+        const bp = platformRank[b.platform || 'direct'] ?? 1
+        if (ap !== bp) return ap - bp
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    })
 
   const filteredOrders = filterStatus === 'all'
     ? processedOrders
@@ -194,7 +236,7 @@ export function KDSPage() {
             {filteredOrders.map(order => {
               const statusConfig = getStatusConfig(order.status)
               const nextAction = getNextAction(order.status)
-              const isOverdue = order.elapsedMinutes && order.elapsedMinutes > 15
+              const isOverdue = !!order.elapsedMinutes && order.elapsedMinutes > overdueThreshold
 
               return (
                 <div
@@ -221,7 +263,7 @@ export function KDSPage() {
                     </div>
 
                     {/* Platform Badge */}
-                    {order.platform && (
+                    {kdsConfig.showPlatformBadges && order.platform && (
                       <div className="mt-2">
                         <span className={`px-2 py-1 rounded text-xs font-medium border ${PLATFORM_COLORS[order.platform]}`}>
                           {getPlatformLabel(order.platform)}
@@ -230,6 +272,7 @@ export function KDSPage() {
                     )}
 
                     {/* Timer */}
+                    {kdsConfig.showTimer && (
                     <div className={`mt-2 flex items-center gap-1 text-sm ${
                       isOverdue ? 'text-red-600 font-bold' : 'text-gray-500'
                     }`}>
@@ -237,6 +280,7 @@ export function KDSPage() {
                       <span>{order.elapsedMinutes} {t('kds.minutes')}</span>
                       {isOverdue && <AlertCircle size={14} className="text-red-600" />}
                    </div>
+                    )}
                   </div>
 
                   {/* Order Items */}

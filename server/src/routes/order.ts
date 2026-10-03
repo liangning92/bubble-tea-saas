@@ -242,7 +242,7 @@ router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (r
     const { id } = req.params
     const { reason } = req.body
 
-    const order = await OrderService.refundOrder(id, reason)
+    const order = await OrderService.refundOrder(id, reason, req.user!.staffId)
 
     res.json({
       code: 200,
@@ -250,7 +250,10 @@ router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (r
       data: order,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'ORDER_ALREADY_REFUNDED') {
+      return res.status(400).json({ code: 400, message: 'Order already refunded' })
+    }
     console.error('Refund order error:', error)
     res.status(500).json({ code: 500, message: 'Failed to refund order' })
   }
@@ -287,6 +290,13 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
       })
     }
 
+    if (request.status !== 'pending') {
+      return res.status(400).json({ code: 400, message: 'Refund request already processed' })
+    }
+
+    // Full rollback first (status, points, coupons, cash, inventory) — idempotent
+    await OrderService.refundOrder(request.orderId, note || request.reason, req.user!.staffId, request.amount)
+
     // Update refund request status
     await prisma.refundRequest.update({
       where: { id },
@@ -298,23 +308,15 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
       }
     })
 
-    // Update order status to refunded
-    await prisma.order.update({
-      where: { id: request.orderId },
-      data: { status: 'refunded' }
-    })
-
-    // Return inventory and reverse member points
-    if (request.order) {
-      await OrderService.refundOrder(request.orderId, note)
-    }
-
     res.json({
       code: 200,
       message: 'Refund approved',
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'ORDER_ALREADY_REFUNDED') {
+      return res.status(400).json({ code: 400, message: 'Order already refunded' })
+    }
     console.error('Approve refund error:', error)
     res.status(500).json({ code: 500, message: 'Failed to approve refund' })
   }
