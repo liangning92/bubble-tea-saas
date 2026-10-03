@@ -70,6 +70,19 @@ services:
       - "5175:80"
     restart: unless-stopped
 
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: bubble-tea-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=120
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+    command: bubble-tea-api bubble-tea-admin bubble-tea-pos bubble-tea-staff
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
