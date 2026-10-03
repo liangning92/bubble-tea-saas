@@ -4,6 +4,8 @@ import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import { getStoreId } from '../utils/storeHelper'
+import * as MarketingService from '../services/MarketingAutomationService'
+import { sendMessageToMember } from '../services/MessageService'
 
 const router = Router()
 
@@ -250,6 +252,30 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
         where: { id: referredById },
         data: { points: { increment: 500 } }
       })
+    }
+
+    // 自动触发新会员欢迎营销活动 (自动发券并推送欢迎 WhatsApp)
+    try {
+      const welcomeCampaign = await prisma.campaign.findFirst({
+        where: {
+          storeId,
+          type: 'welcome',
+          status: 'active'
+        }
+      })
+      if (welcomeCampaign && welcomeCampaign.actions) {
+        const actions = JSON.parse(welcomeCampaign.actions)
+        if (actions.couponId) {
+          await MarketingService.generateMemberCoupon(member.id, actions.couponId)
+        }
+        if (actions.messageTemplateId) {
+          sendMessageToMember(storeId, member.id, 'welcome', actions.channelType || 'whatsapp', actions.messageTemplateId).catch(err => {
+            console.error('[Welcome WhatsApp Send Error]:', err)
+          })
+        }
+      }
+    } catch (campaignErr) {
+      console.error('[Welcome Campaign Trigger Error]:', campaignErr)
     }
 
     res.status(201).json({

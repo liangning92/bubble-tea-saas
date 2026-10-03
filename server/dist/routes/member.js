@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -10,6 +43,8 @@ const database_1 = __importDefault(require("../config/database"));
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const storeHelper_1 = require("../utils/storeHelper");
+const MarketingService = __importStar(require("../services/MarketingAutomationService"));
+const MessageService_1 = require("../services/MessageService");
 const router = (0, express_1.Router)();
 exports.memberRouter = router;
 // Validation schemas
@@ -234,6 +269,30 @@ router.post('/', auth_1.authenticate, (0, validation_1.validateBody)(createMembe
                 where: { id: referredById },
                 data: { points: { increment: 500 } }
             });
+        }
+        // 自动触发新会员欢迎营销活动 (自动发券并推送欢迎 WhatsApp)
+        try {
+            const welcomeCampaign = await database_1.default.campaign.findFirst({
+                where: {
+                    storeId,
+                    type: 'welcome',
+                    status: 'active'
+                }
+            });
+            if (welcomeCampaign && welcomeCampaign.actions) {
+                const actions = JSON.parse(welcomeCampaign.actions);
+                if (actions.couponId) {
+                    await MarketingService.generateMemberCoupon(member.id, actions.couponId);
+                }
+                if (actions.messageTemplateId) {
+                    (0, MessageService_1.sendMessageToMember)(storeId, member.id, 'welcome', actions.channelType || 'whatsapp', actions.messageTemplateId).catch(err => {
+                        console.error('[Welcome WhatsApp Send Error]:', err);
+                    });
+                }
+            }
+        }
+        catch (campaignErr) {
+            console.error('[Welcome Campaign Trigger Error]:', campaignErr);
         }
         res.status(201).json({
             code: 201,
