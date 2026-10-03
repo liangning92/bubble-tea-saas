@@ -240,14 +240,65 @@ class MockSMSProvider implements SMSProvider {
   }
 }
 
-// Mock WhatsApp Provider
-class MockWhatsAppProvider implements WhatsAppProvider {
-  async send(phone: string, templateName: string, variables: Record<string, string>): Promise<SendMessageResult> {
-    await new Promise(resolve => setTimeout(resolve, 100))
-    return {
-      success: true,
-      messageId: `mock_wa_${Date.now()}`,
-      cost: 500 // 500 IDR per WhatsApp message
+// Real Fonnte WhatsApp Provider (Indonesia WhatsApp Gateway)
+class FonnteWhatsAppProvider implements WhatsAppProvider {
+  private token: string
+
+  constructor(token: string) {
+    this.token = token
+  }
+
+  async send(phone: string, templateNameOrMessage: string, variables?: Record<string, string>): Promise<SendMessageResult> {
+    try {
+      // 格式化印尼电话号码: 08xx -> 628xx
+      let target = phone.replace(/[^0-9]/g, '')
+      if (target.startsWith('0')) {
+        target = '62' + target.slice(1)
+      } else if (!target.startsWith('62')) {
+        target = '62' + target
+      }
+
+      // 如果有 variables 则替换，或者直接使用文本
+      let message = templateNameOrMessage
+      if (variables && Object.keys(variables).length > 0) {
+        for (const [key, value] of Object.entries(variables)) {
+          message = message.replace(new RegExp(`\\{${key}\\}`, 'g'), String(value))
+        }
+      }
+
+      const response = await fetch('https://api.fonnte.com/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': this.token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          target,
+          message,
+          countryCode: '62'
+        })
+      })
+
+      const data: any = await response.json()
+      if (data.status) {
+        return {
+          success: true,
+          messageId: data.id?.[0] || `fonnte_${Date.now()}`,
+          cost: 0 // Fonnte 为包月订阅制
+        }
+      } else {
+        console.error('[Fonnte WhatsApp Error]:', data)
+        return {
+          success: false,
+          error: data.reason || 'Failed to send WhatsApp via Fonnte'
+        }
+      }
+    } catch (err: any) {
+      console.error('[Fonnte Request Exception]:', err)
+      return {
+        success: false,
+        error: err.message || 'Network exception when calling Fonnte API'
+      }
     }
   }
 }
@@ -255,16 +306,19 @@ class MockWhatsAppProvider implements WhatsAppProvider {
 // Get provider instance based on type
 function getProvider(provider: string, config: Record<string, string>): SMSProvider | WhatsAppProvider {
   switch (provider) {
+    case 'fonnte':
+    case 'whatsapp': {
+      const token = config.token || config.apiKey || 'HGt2zDh3URhKLNfbYdk3'
+      return new FonnteWhatsAppProvider(token)
+    }
     case 'twilio':
-      // In production, implement actual Twilio integration
-      // const twilio = require('twilio')(config.accountSid, config.authToken)
       return new MockSMSProvider()
     case 'nexmo':
-      // In production, implement actual Nexmo/Vonage integration
       return new MockSMSProvider()
-    case 'whatsapp':
-      return new MockWhatsAppProvider()
     default:
+      if (config.token || config.apiKey) {
+        return new FonnteWhatsAppProvider(config.token || config.apiKey)
+      }
       return new MockSMSProvider()
   }
 }
@@ -325,16 +379,11 @@ export async function sendMessageToMember(
   const provider = getProvider(channel.provider, JSON.parse(channel.config))
 
   let result: SendMessageResult
-  if (channelType === 'whatsapp' && template) {
-    // Convert all variables to strings for WhatsApp
-    const stringVars: Record<string, string> = {}
-    for (const [key, value] of Object.entries(variables)) {
-      stringVars[key] = String(value)
-    }
+  if (channelType === 'whatsapp') {
     result = await (provider as WhatsAppProvider).send(
       member.phone,
-      template.name,
-      stringVars
+      finalBody || template?.body || 'Hello!',
+      variables as Record<string, string>
     )
   } else {
     result = await (provider as SMSProvider).send(member.phone, finalBody)
