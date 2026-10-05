@@ -573,6 +573,7 @@ async function startLocalServer(): Promise<void> {
       ...process.env,
       NODE_ENV: 'production',
       PORT: '7072',
+      JWT_SECRET: getOrCreateLocalJwtSecret(),
       // 覆盖数据库路径为用户可写目录
       // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
       DATABASE_URL: `file:${userDbPath}`,
@@ -582,7 +583,7 @@ async function startLocalServer(): Promise<void> {
       // 需要同时包含 server/node_modules 和根目录的 node_modules（prisma 相关）
       NODE_PATH: nodePath,
       // CORS: 允许所有来源，因为 Electron app 从 file:// 加载
-      CORS_ORIGIN: '*'
+      CORS_ORIGIN: 'null,file://,http://localhost:6063,http://localhost:5173'
     },
     stdio: ['pipe', 'pipe', 'pipe', 'ipc']
   })

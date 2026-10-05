@@ -83,6 +83,14 @@ jobs:
           npm install --prefer-offline=false
           Set-Location ..
 
+      - name: Configure desktop SQLite database
+        run: |
+          $schemaPath = 'server/prisma/schema.prisma'
+          $schema = Get-Content $schemaPath -Raw
+          if ($schema -notmatch 'provider\s*=\s*"postgresql"') { throw "Expected PostgreSQL source schema" }
+          $schema = $schema -replace 'provider\s*=\s*"postgresql"', 'provider = "sqlite"'
+          Set-Content $schemaPath $schema -Encoding utf8
+
       - name: Generate Prisma client
         run: |
           cd server
