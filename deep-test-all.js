@@ -339,4 +339,24 @@ async function testModules() {
   console.log('\n========== 测试总结 ==========');
 
   const total = testResults.length;
-  const passed = testResults.filter(r => r.status 
+  const passed = testResults.filter(r => r.status === true).length;
+  const failed = testResults.filter(r => r.status === false).length;
+
+  console.log(`\n总测试数: ${total}`);
+  console.log(`✅ 通过: ${passed}`);
+  console.log(`❌ 失败: ${failed}`);
+
+  if (failed > 0) {
+    console.log('\n❌ 失败的测试:');
+    testResults.filter(r => r.status === false).forEach(r => {
+      console.log(`  - ${r.module}.${r.action} (${r.role}): ${r.details}`);
+    });
+  }
+
+  console.log('\n========== 测试完成 ==========\n');
+
+  return { total, passed, failed };
+}
+
+// 运行测试
+testModules().catch(console.error);

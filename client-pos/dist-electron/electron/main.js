@@ -4,11 +4,36 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+const crypto_1 = require("crypto");
 const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
 // 彻底禁用并隐藏 Windows / Linux 默认顶部菜单栏（File, Edit, View, Window, Help）
 electron_1.Menu.setApplicationMenu(null);
 const fs_1 = __importDefault(require("fs"));
+function getOrCreateLocalJwtSecret() {
+    if (!electron_1.safeStorage.isEncryptionAvailable()) {
+        throw new Error('OS secure storage is unavailable; cannot start the local API securely');
+    }
+    const secretPath = path_1.default.join(electron_1.app.getPath('userData'), 'jwt-secret.bin');
+    try {
+        return electron_1.safeStorage.decryptString(fs_1.default.readFileSync(secretPath));
+    }
+    catch (error) {
+        if (error?.code !== 'ENOENT')
+            throw error;
+    }
+    const secret = (0, crypto_1.randomBytes)(32).toString('hex');
+    fs_1.default.mkdirSync(path_1.default.dirname(secretPath), { recursive: true });
+    try {
+        fs_1.default.writeFileSync(secretPath, electron_1.safeStorage.encryptString(secret), { flag: 'wx', mode: 0o600 });
+        return secret;
+    }
+    catch (error) {
+        if (error?.code !== 'EEXIST')
+            throw error;
+        return electron_1.safeStorage.decryptString(fs_1.default.readFileSync(secretPath));
+    }
+}
 const child_process_1 = require("child_process");
 const net_1 = __importDefault(require("net"));
 const main_1 = __importDefault(require("electron-log/main"));

@@ -523,4 +523,214 @@ router.post('/summary', authenticate, authorize('admin', 'manager'), async (req:
       }
     })
 
-    const expectedCash = openFloat + cashSales + 
+    const expectedCash = openFloat + cashSales + cashIns - cashOuts
+
+    const summary = await prisma.cashSummary.upsert({
+      where: {
+        storeId_date_shift: {
+          storeId,
+          date: date || new Date().toISOString().split('T')[0],
+          shift: shift || 'morning'
+        }
+      },
+      create: {
+        storeId,
+        date: date || new Date().toISOString().split('T')[0],
+        shift: shift || 'morning',
+        openFloat,
+        cashSales,
+        cashIns,
+        cashOuts,
+        expectedCash,
+        staffId
+      },
+      update: {
+        openFloat,
+        cashSales,
+        cashIns,
+        cashOuts,
+        expectedCash,
+        staffId
+      }
+    })
+
+    res.json({ code: 200, data: summary })
+  } catch (error) {
+    console.error('Create cash summary error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to create cash summary' })
+  }
+})
+
+// GET /api/pos-cash/today - 获取今日现金情况
+router.get('/today', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const today = new Date().toISOString().split('T')[0]
+
+    // 获取今日所有班次的汇总
+    const summaries = await prisma.cashSummary.findMany({
+      where: { storeId, date: today }
+    })
+
+    // 获取今日所有现金事件
+    const todayStart = startOfTodayJakarta()
+
+    const events = await prisma.cashEvent.findMany({
+      where: {
+        storeId,
+        createdAt: { gte: todayStart }
+      }
+    })
+
+    // 计算今日总计
+    let totalCashSales = 0
+    let totalCashIns = 0
+    let totalCashOuts = 0
+    let totalOpenFloat = 0
+
+    events.forEach(event => {
+      switch (event.type) {
+        case 'float': totalOpenFloat += event.amount; break
+        case 'cash_sale': totalCashSales += event.amount; break
+        case 'cash_in': totalCashIns += event.amount; break
+        case 'cash_out': totalCashOuts += event.amount; break
+      }
+    })
+
+    const expectedCash = totalOpenFloat + totalCashSales + totalCashIns - totalCashOuts
+
+    // 获取当前打开的班次
+    const openShift = await prisma.shiftSession.findFirst({
+      where: { storeId, status: 'open' }
+    })
+
+    res.json({
+      code: 200,
+      data: {
+        date: today,
+        summaries,
+        totals: {
+          openFloat: totalOpenFloat,
+          cashSales: totalCashSales,
+          cashIns: totalCashIns,
+          cashOuts: totalCashOuts,
+          expectedCash
+        },
+        openShift
+      }
+    })
+  } catch (error) {
+    console.error('Get today cash error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get today cash' })
+  }
+})
+
+// GET /api/pos-cash/summary - 获取交接班汇总数据
+router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const today = startOfTodayJakarta()
+
+    // 获取今日所有事件
+    const todayEvents = await prisma.cashEvent.findMany({
+      where: { storeId, createdAt: { gte: today } }
+    })
+
+    // 计算现金数据
+    let openFloat = 0
+    let cashSales = 0
+    let cashIn = 0
+    let cashOut = 0
+    let qrisSales = 0
+    let debitSales = 0
+
+    todayEvents.forEach(event => {
+      switch (event.type) {
+        case 'float': openFloat += event.amount; break
+        case 'cash_sale': cashSales += event.amount; break
+        case 'cash_in': cashIn += event.amount; break
+        case 'cash_out': cashOut += event.amount; break
+      }
+      if (event.paymentMethod === 'qris') qrisSales += event.amount
+      if (event.paymentMethod === 'debit') debitSales += event.amount
+    })
+
+    // 获取今日订单统计（按渠道）
+    const todayOrders = await prisma.order.findMany({
+      where: {
+        storeId,
+        createdAt: { gte: today },
+        status: { not: 'cancelled' }
+      }
+    })
+
+    let orderCount = todayOrders.length
+    let customerCount = 0
+    let dineInCount = 0
+    let gofoodCount = 0
+    let grabCount = 0
+    let shopeeCount = 0
+    let totalDiscount = 0
+    let autoPromotionDiscount = 0
+    let manualDiscount = 0
+    let promotionOrderCount = 0
+    let manualDiscountOrderCount = 0
+
+    todayOrders.forEach(order => {
+      customerCount += (order as any).customerCount || 1
+      switch (order.channelId) {
+        case 'dine_in': dineInCount++; break
+        case 'gofood': gofoodCount++; break
+        case 'grab': grabCount++; break
+        case 'shopee': shopeeCount++; break
+      }
+
+      const discount = order.discountAmount || 0
+      if (discount > 0) {
+        totalDiscount += discount
+        const note = order.note || ''
+        if (note.includes('[自动优惠:') || note.includes('自动优惠')) {
+          autoPromotionDiscount += discount
+          promotionOrderCount++
+        } else {
+          manualDiscount += discount
+          manualDiscountOrderCount++
+        }
+      }
+    })
+
+    // 获取挂单数量（从POS端 localStorage，POS端处理）
+
+    // 计算期末现金
+    const closeCash = openFloat + cashSales + cashIn - cashOut
+
+    res.json({
+      code: 200,
+      data: {
+        orderCount,
+        customerCount,
+        cashSales,
+        qrisSales,
+        debitSales,
+        cashIn,
+        cashOut,
+        openFloat,
+        closeCash,
+        dineInCount,
+        gofoodCount,
+        grabCount,
+        shopeeCount,
+        totalDiscount,
+        autoPromotionDiscount,
+        manualDiscount,
+        promotionOrderCount,
+        manualDiscountOrderCount
+      }
+    })
+  } catch (error) {
+    console.error('Get shift summary error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get shift summary' })
+  }
+})
+
+export { router as posCashRouter }

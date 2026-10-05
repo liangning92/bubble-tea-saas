@@ -156,7 +156,7 @@ echo ""
 # ─────────────────────────────────────────
 echo "━━━ 3.2 SQL 注入 ━━━"
 
-if grep -rn "eval\|new Function\|executeSql\|query.*\+" server/src/routes/ server/src/services/ 2>/dev/null | grep -v ".map\|node_modules\|//"; then
+if grep -rnE '\beval[[:space:]]*\(|new[[:space:]]+Function[[:space:]]*\(|executeSql[[:space:]]*\(|query[^[:space:]]*[[:space:]]*\([^)]*\+' server/src/routes/ server/src/services/ 2>/dev/null | grep -v ".map\|node_modules\|//"; then
     fail "发现潜在 SQL 注入或动态代码执行！"
 else
     ok "未发现 eval/new Function/字符串拼接 SQL"

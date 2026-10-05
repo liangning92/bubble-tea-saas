@@ -31,7 +31,7 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck:server && npm run typecheck:admin && npm run typecheck:pos && npm run typecheck:staff",
     "typecheck:pos": "cd client-pos && npx tsc --noEmit",
     "typecheck:admin": "cd client-admin && npx tsc --noEmit",
     "typecheck:staff": "cd client-staff && npx tsc --noEmit",
@@ -45,7 +45,8 @@
     "version:update": "node scripts/update-version.js",
     "electron:compile": "tsc -p client-pos/tsconfig.electron.json",
     "electron:dev": "npm run build:pos && npm run build:server && npm run electron:compile && electron .",
-    "electron:start": "npm run electron:compile && electron ."
+    "electron:start": "npm run electron:compile && electron .",
+    "typecheck:server": "cd server && tsc --noEmit"
   },
   "engines": {
     "node": ">=18.0.0",

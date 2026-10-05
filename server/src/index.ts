@@ -142,8 +142,8 @@ app.use(cors({
       return callback(null, true)
     }
 
-    // 3. Explicitly allowed web origins or wildcard
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    // 3. Explicitly allowed web origins
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true)
     }
 
