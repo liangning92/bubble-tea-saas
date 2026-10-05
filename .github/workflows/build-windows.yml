@@ -135,6 +135,43 @@ jobs:
           DEBUG: electron-builder
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
 
+      - name: Smoke test packaged local API
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $appPath = (Resolve-Path 'release/win-unpacked/BTPS.exe').Path
+          $resources = (Resolve-Path 'release/win-unpacked/resources/app.asar.unpacked').Path
+          $dbPath = Join-Path $env:RUNNER_TEMP 'pos-smoke.db'
+          Copy-Item (Join-Path $resources 'server/prisma/seed.db') $dbPath
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          $env:NODE_ENV = 'production'
+          $env:JWT_SECRET = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+          $env:DATABASE_URL = "file:$($dbPath.Replace('\', '/'))"
+          $env:PORT = '17072'
+          $env:CORS_ORIGIN = 'null,http://localhost:6063'
+          $env:NODE_PATH = "$(Join-Path $resources 'server/node_modules');$(Join-Path $resources 'node_modules')"
+          $entry = Join-Path $resources 'server/dist/index.js'
+          $stdout = Join-Path $env:RUNNER_TEMP 'pos-api-smoke.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'pos-api-smoke-error.log'
+          $api = Start-Process $appPath -ArgumentList "`"$entry`"" -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $healthy = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 2
+              if ($api.HasExited) { break }
+              try {
+                $health = Invoke-RestMethod 'http://127.0.0.1:17072/health' -TimeoutSec 2
+                if ($health.status -eq 'ok') { $healthy = $true; break }
+              } catch { }
+            }
+            if (!$healthy) {
+              Get-Content $stdout, $stderr -ErrorAction SilentlyContinue
+              throw 'Packaged POS API failed startup validation'
+            }
+            Write-Host 'Packaged POS API startup passed'
+          } finally {
+            if (!$api.HasExited) { Stop-Process -Id $api.Id -Force }
+          }
+
       - name: List ASAR contents (debug)
         run: |
           $asar = Get-ChildItem -Path release -Filter "*.asar" -Recurse | Select-Object -First 1

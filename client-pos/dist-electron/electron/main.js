@@ -555,6 +555,7 @@ async function startLocalServer() {
             NODE_ENV: 'production',
             PORT: '7072',
             JWT_SECRET: getOrCreateLocalJwtSecret(),
+            ELECTRON_RUN_AS_NODE: '1',
             // 覆盖数据库路径为用户可写目录
             // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
             DATABASE_URL: `file:${userDbPath}`,
