@@ -14,6 +14,7 @@ exports.requireStoreAccess = requireStoreAccess;
 exports.filterSensitiveFields = filterSensitiveFields;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const env_1 = require("../config/env");
+const database_1 = __importDefault(require("../config/database"));
 // Permission definitions
 exports.PERMISSIONS = {
     // Dashboard & Reports
@@ -95,7 +96,9 @@ function canViewField(user, field) {
     return false;
 }
 // Authentication middleware
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
+    if (req.user)
+        return requireStoreAccess(req, res, next);
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -113,8 +116,27 @@ function authenticate(req, res, next) {
                 message: 'Invalid role'
             });
         }
-        req.user = decoded;
-        next();
+        const user = await database_1.default.user.findUnique({
+            where: { id: decoded.id },
+            include: { staff: true }
+        });
+        if (!user || (user.staff && user.staff.status !== 'active') ||
+            typeof decoded.issuedAtMs !== 'number' || user.updatedAt.getTime() > decoded.issuedAtMs) {
+            return res.status(401).json({ code: 401, message: 'Invalid or expired token' });
+        }
+        const currentUser = {
+            id: user.id,
+            phone: user.phone,
+            role: user.role,
+            storeId: user.staff?.storeId || user.storeId || '',
+            staffId: user.staff?.id || '',
+            issuedAtMs: decoded.issuedAtMs
+        };
+        if (decoded.role !== currentUser.role || decoded.storeId !== currentUser.storeId || decoded.staffId !== currentUser.staffId) {
+            return res.status(401).json({ code: 401, message: 'Invalid or expired token' });
+        }
+        req.user = currentUser;
+        return requireStoreAccess(req, res, next);
     }
     catch (error) {
         return res.status(401).json({
@@ -171,20 +193,18 @@ function requireStoreAccess(req, res, next) {
     if (req.user.role === 'admin') {
         return next();
     }
-    // Get storeId from request params, query, or body
-    const targetStoreId = req.params.storeId || req.query.storeId || req.body?.storeId;
-    if (targetStoreId && targetStoreId !== req.user.storeId) {
+    // Every explicit store selector must match the authenticated user's store.
+    const requestedStoreIds = [req.params.storeId, req.query.storeId, req.body?.storeId]
+        .filter((value) => typeof value === 'string' && value.length > 0);
+    if (requestedStoreIds.some(storeId => storeId !== req.user.storeId)) {
         return res.status(403).json({
             code: 403,
             message: 'Access denied: Store mismatch'
         });
     }
-    // For cashier/staff, always use their assigned store
-    if (req.user.role === 'cashier' || req.user.role === 'staff') {
-        if (!req.query.storeId && !req.body?.storeId) {
-            // Automatically use their store if not specified
-            req.query.storeId = req.user.storeId;
-        }
+    // Default list queries to the assigned store for every non-admin role.
+    if (!req.query.storeId && !req.body?.storeId && !req.params.storeId) {
+        req.query.storeId = req.user.storeId;
     }
     next();
 }

@@ -7,7 +7,7 @@ export function MembersIndexPage() {
 
   const tabs = [
     { key: 'members', label: t('marketing.members'), path: '/marketing/members' },
-    { key: 'tier-benefits', label: t('marketing.tierBenefits'), path: '/marketing/tier-benefits' },
+    { key: 'tier-benefits', label: t('marketing.tierBenefits'), path: '/marketing/members/tier-benefits' },
   ]
 
   const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'members'

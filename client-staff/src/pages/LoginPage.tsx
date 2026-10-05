@@ -49,7 +49,15 @@ export function LoginPage() {
     try {
       const response = await staffApi.login(phone, password)
       if (response.code === 200) {
-        login(response.data.token, response.data.user)
+        const rawUser = response.data.user
+        // The API returns the employee profile under `staff`; page requests use
+        // a flat `staffId`, so normalize once when establishing the session.
+        login(response.data.token, {
+          ...rawUser,
+          staffId: rawUser.staffId || rawUser.staff?.id || '',
+          name: rawUser.name || rawUser.staff?.name || '',
+          position: rawUser.position || rawUser.staff?.position || ''
+        })
 
         // Handle remember me - only store phone number, never password
         if (rememberMe) {

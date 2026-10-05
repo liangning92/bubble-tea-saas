@@ -147,7 +147,7 @@ Severity: P1
 Status: OPEN
 Reproductions:
   - Prisma schema push 或数据库文件被覆盖后
-  - 登录 `081234567890/admin123` 返回 401
+  - 登录 `[configured test phone]/[configured test password]` 返回 401
   - 需手动 `cd server && npx prisma db seed` 恢复账户
 Expected: 数据库损坏后应可自恢复，或有初始化机制
 Actual: 无自动初始化，User 表为空，所有登录失败
@@ -162,7 +162,7 @@ Severity: P1
 Status: OPEN
 Reproductions:
   - 开发测试阶段频繁登录约10次后
-  - 任何账户（081234567890/081234567891等）均返回 401 并提示 "Too many login attempts, please try again after 15 minutes"
+  - 任何账户（[configured test phone]/[configured test phone]等）均返回 401 并提示 "Too many login attempts, please try again after 15 minutes"
   - 15分钟内所有账户无法登录
 Expected: 合理的登录限流策略（生产环境应允许更多尝试）
 Actual: `server/src/routes/auth.ts` - `max: 10` attempts per 15min，测试环境过于严格
@@ -191,7 +191,7 @@ Title: Cloud API 测试账户不存在（本地/云端账户隔离）
 Severity: P1
 Status: OPEN
 Reproductions:
-  - `POST https://api.aicube.online/api/auth/login` with `081234567890/admin123` → 401 Invalid credentials
+  - `POST https://api.aicube.online/api/auth/login` with `[configured test phone]/[configured test password]` → 401 Invalid credentials
   - Cloud 数据库和本地 SQLite 数据库账户完全独立
   - cloud 仅有 storeId 但无对应 User 记录
 Expected: 同一套账户体系（门店在云端有对应账户）

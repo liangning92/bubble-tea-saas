@@ -3,10 +3,13 @@
 // Use the same API URL configuration as the rest of the POS app.
 // In packaged mode (file://), getApiUrl() returns CLOUD_API_URL (api.aicube.online).
 // This ensures SetupWizard works in the packaged app, not just dev mode.
-import { getApiUrl } from '../config'
+import { getApiUrl, LOCAL_API_URL } from '../config'
 
 function getSyncApiBase(): string {
   // Remove /api suffix to get base URL for sync endpoints
+  if (window.location.protocol === 'file:') {
+    return LOCAL_API_URL.replace(/\/api$/, '')
+  }
   return getApiUrl().replace(/\/api$/, '')
 }
 
@@ -14,9 +17,7 @@ export interface SyncConnectResult {
   storeId: string
   storeName: string
   tenantId: string
-  token: string
-  phone: string
-  passwordHash: string
+  syncTicket: string
 }
 
 export interface SyncFullResult {
@@ -66,14 +67,12 @@ export async function syncConnect(phone: string, password: string): Promise<Sync
 
 export async function syncFull(
   storeId: string,
-  token: string,
-  phone: string,
-  passwordHash: string
+  syncTicket: string
 ): Promise<SyncFullResult> {
   const res = await fetch(`${getSyncApiBase()}/api/sync/full`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ storeId, token, phone, passwordHash })
+    body: JSON.stringify({ storeId, syncTicket })
   })
   const data = await res.json()
   if (!res.ok) {

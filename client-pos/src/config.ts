@@ -5,7 +5,8 @@ const API_URL_KEY = 'pos-api-url'
 
 // API URLs for different modes
 const LOCAL_API_URL = 'http://localhost:7072/api'
-const CLOUD_API_URL = 'https://api.aicube.online/api'
+const configuredApiUrl = (import.meta.env.VITE_API_BASE_URL || 'https://api.aicube.online/api').replace(/\/$/, '')
+const CLOUD_API_URL = configuredApiUrl.endsWith('/api') ? configuredApiUrl : `${configuredApiUrl}/api`
 
 // Default to relative path (uses Vite proxy in dev)
 const DEFAULT_API_URL = '/api'

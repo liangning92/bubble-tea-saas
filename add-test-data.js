@@ -6,8 +6,8 @@ async function main() {
   // 1. 登录获取token
   console.log('1. 登录...');
   const loginRes = await axios.post('http://localhost:7072/api/auth/login', {
-    phone: '081234567890',
-    password: 'admin123'
+    phone: (process.env.TEST_ADMIN_PHONE || ''),
+    password: (process.env.TEST_ADMIN_PASSWORD || '')
   });
   const token = loginRes.data.data.token;
   const staffId = loginRes.data.data.user.staffId;

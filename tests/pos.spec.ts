@@ -13,16 +13,16 @@ test.describe('POS Tests - Point of Sale', () => {
     try {
       const response = await page.goto(`${posBase}/login`, { timeout: 5000 })
       if (!response || response.status() >= 500) {
-        test.skip('POS app not running')
+        test.skip(true, 'POS app not running')
         return
       }
     } catch {
-      test.skip('POS app not running')
+      test.skip(true, 'POS app not running')
       return
     }
 
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForTimeout(3000)
   })

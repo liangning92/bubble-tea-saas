@@ -57,7 +57,7 @@ async function runUserTests() {
     console.log('   尝试输入手机号...');
     const phoneInput = await page.$('input');
     if (phoneInput) {
-      await phoneInput.fill('081234567890');
+      await phoneInput.fill((process.env.TEST_ADMIN_PHONE || ''));
       await sleep(500);
 
       // 查找登录按钮

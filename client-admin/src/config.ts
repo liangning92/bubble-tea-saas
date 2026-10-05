@@ -5,15 +5,8 @@ const API_URL_KEY = 'pos-api-url'
 
 // Auto-detect API URL based on current host
 function autoDetectApiUrl(): string {
-  const host = window.location.hostname
-
-  // Local development: use Vite proxy
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return '/api'
-  }
-
-  // Remote access via cloudflare tunnel → use api.aicube.online/api
-  return 'https://api.aicube.online/api'
+  const configured = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+  return configured.endsWith('/api') ? configured : `${configured}/api`
 }
 
 export function getApiUrl(): string {

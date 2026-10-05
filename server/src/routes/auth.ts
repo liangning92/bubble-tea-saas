@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import rateLimit from 'express-rate-limit'
+import { timingSafeEqual } from 'crypto'
 import prisma from '../config/database'
 import { config } from '../config/env'
 import { authenticate, AuthRequest } from '../middlewares/auth'
@@ -22,63 +23,49 @@ const authLimiter = rateLimit({
 // Validation schemas
 const registerSchema = z.object({
   phone: z.string().min(10).max(15),
-  password: z.string().min(6),
+  password: z.string().min(10).refine(value => Buffer.byteLength(value, 'utf8') <= 72),
   name: z.string().min(1).max(50),
-  storeId: z.string().optional(),
-  role: z.enum(['admin', 'manager', 'staff', 'cashier']).default('staff')
+  storeName: z.string().min(1).max(100)
 })
 
 const loginSchema = z.object({
   phone: z.string(),
-  password: z.string()
+  password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72)
 })
 
 // POST /api/auth/register
 router.post('/register', authLimiter, validateBody(registerSchema), async (req, res) => {
   try {
-    const { phone, password, name, storeId, role } = req.body
-
-    // Check if user exists
-    const existing = await prisma.user.findUnique({ where: { phone } })
-    if (existing) {
-      return res.status(400).json({
-        code: 400,
-        message: 'Phone number already registered'
-      })
+    const { phone, password, name, storeName } = req.body
+    const expectedSecret = process.env.BOOTSTRAP_SECRET || ''
+    const suppliedSecret = req.get('x-bootstrap-secret') || ''
+    const secretMatches = expectedSecret.length > 0 &&
+      Buffer.byteLength(expectedSecret) === Buffer.byteLength(suppliedSecret) &&
+      timingSafeEqual(Buffer.from(expectedSecret), Buffer.from(suppliedSecret))
+    if (!secretMatches) {
+      return res.status(expectedSecret ? 401 : 503).json({ code: expectedSecret ? 401 : 503, message: 'Initial setup is unavailable' })
     }
 
-    // Hash password
-    const hashed = await bcrypt.hash(password, 10)
-
-    // Create user first
-    const user = await prisma.user.create({
-      data: {
-        phone,
-        password: hashed,
-        role,
-        storeId
-      }
-    })
-
-    // Create staff profile if storeId provided
-    let staffData = null
-    if (storeId) {
-      const staff = await prisma.staff.create({
+    const hashed = await bcrypt.hash(password, 12)
+    const { user, store, staff } = await prisma.$transaction(async (tx) => {
+      if (await tx.user.count() !== 0) throw new Error('BOOTSTRAP_CLOSED')
+      const tenant = await tx.tenant.create({ data: { name: storeName } })
+      const store = await tx.store.create({ data: { tenantId: tenant.id, name: storeName } })
+      const user = await tx.user.create({
+        data: { phone, password: hashed, role: 'admin', storeId: store.id }
+      })
+      const staff = await tx.staff.create({
         data: {
           userId: user.id,
-          storeId,
+          storeId: store.id,
           name,
           employeeNumber: `EMP${Date.now().toString().slice(-6)}`,
-          position: role === 'cashier' ? '收银员' : '店员'
+          position: 'Manager',
+          status: 'active'
         }
       })
-      staffData = {
-        id: staff.id,
-        name: staff.name,
-        employeeNumber: staff.employeeNumber,
-        position: staff.position
-      }
-    }
+      return { user, store, staff }
+    }, { isolationLevel: 'Serializable' })
 
     // Generate token - include staffId if user has a staff profile
     const token = jwt.sign(
@@ -86,8 +73,9 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
         id: user.id,
         phone: user.phone,
         role: String(user.role),
-        storeId: user.storeId || '',
-        staffId: staffData?.id || ''
+        storeId: store.id,
+        staffId: staff.id,
+        issuedAtMs: Date.now()
       },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn as any }
@@ -102,13 +90,16 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
           id: user.id,
           phone: user.phone,
           role: user.role as string,
-          storeId: user.storeId,
-          staff: staffData
+          storeId: store.id,
+          staff: { id: staff.id, name: staff.name, employeeNumber: staff.employeeNumber, position: staff.position }
         }
       },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'BOOTSTRAP_CLOSED') {
+      return res.status(409).json({ code: 409, message: 'Initial setup has already been completed' })
+    }
     console.error('Register error:', error)
     res.status(500).json({ code: 500, message: 'Registration failed' })
   }
@@ -118,12 +109,6 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
 router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) => {
   try {
     const { phone, password } = req.body
-    console.log('[DEBUG LOGIN]', new Date().toISOString(), {
-      body: req.body,
-      ip: req.ip,
-      ua: req.headers['user-agent']?.substring(0, 50)
-    })
-
     // Find user
     const user = await prisma.user.findUnique({
       where: { phone },
@@ -135,6 +120,10 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
         code: 401,
         message: 'Invalid phone or password'
       })
+    }
+
+    if (user.staff && user.staff.status !== 'active') {
+      return res.status(401).json({ code: 401, message: 'Invalid phone or password' })
     }
 
     // Check password
@@ -153,7 +142,8 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
         phone: user.phone,
         role: String(user.role),
         storeId: user.storeId || '',
-        staffId: user.staff?.id || ''
+        staffId: user.staff?.id || '',
+        issuedAtMs: Date.now()
       },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn as any }
@@ -235,7 +225,10 @@ router.put('/password', authenticate, async (req: AuthRequest, res) => {
       return res.status(400).json({ code: 400, message: 'Incorrect old password' })
     }
 
-    const hashed = await bcrypt.hash(newPassword, 10)
+    if (typeof newPassword !== 'string' || Buffer.byteLength(newPassword, 'utf8') < 10 || Buffer.byteLength(newPassword, 'utf8') > 72) {
+      return res.status(400).json({ code: 400, message: 'New password must be 10–72 bytes' })
+    }
+    const hashed = await bcrypt.hash(newPassword, 12)
     await prisma.user.update({
       where: { id: user.id },
       data: { password: hashed }

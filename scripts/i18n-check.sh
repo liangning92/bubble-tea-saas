@@ -176,7 +176,7 @@ ACCEPTABLE = {
     'http', 'https', 'www', 'com', 'io', 'app', 'id', 'en', 'zh',
     'admin', 'staff', 'POS', 'B2B', 'B2C', 'SaaS', 'PDF', 'PNG', 'JPG', 'JPEG',
     'CSV', 'Excel', 'JSON', 'XML', 'HTML', 'CSS', 'JS', 'URL', 'IP', 'localhost',
-    'admin123', 'password', 'pin', 'code', 'ok', 'id', 'en', 'zh',
+    'password', 'pin', 'code', 'ok', 'id', 'en', 'zh',
     '08xxxxxxxxxx', '12.34', '10.5', '0.0', 'null', 'undefined',
     '2026', '2025', '2024',
     'BOM', 'FIFO', 'LIFO', 'POS', 'KDS', 'CRM', 'ERP', 'HRM',

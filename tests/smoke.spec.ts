@@ -41,8 +41,8 @@ test.describe('Smoke Tests - Critical User Flows', () => {
     await page.goto('/login')
 
     // Login with test account
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
 
     // Wait for redirect to dashboard
@@ -59,8 +59,8 @@ test.describe('Smoke Tests - Critical User Flows', () => {
   test('3. All main navigation pages load', async ({ page }) => {
     // Login first
     await page.goto('/login')
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 10000 })
 
@@ -85,14 +85,14 @@ test.describe('Smoke Tests - Critical User Flows', () => {
       } else {
         console.log(`✓ ${p.name} page loaded (${textLength} chars)`)
       }
-      expect(bodyText?.length).toBeGreaterThan(50, `Page ${p.path} appears blank (${textLength} chars): "${bodyText}"`)
+      expect(bodyText?.length, `Page ${p.path} appears blank (${textLength} chars): "${bodyText}"`).toBeGreaterThan(50)
     }
   })
 
   test('4. Expense form can be opened and filled', async ({ page }) => {
     await page.goto('/login')
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 10000 })
 
@@ -115,8 +115,8 @@ test.describe('Smoke Tests - Critical User Flows', () => {
     // This test verifies the ErrorBoundary is properly set up
     // by checking that the app doesn't crash on a bad route
     await page.goto('/login')
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 10000 })
 

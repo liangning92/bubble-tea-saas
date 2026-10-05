@@ -196,7 +196,7 @@ class ConnectionManagerClass {
    */
   async checkServerConfigApiUrl(): Promise<string | null> {
     try {
-      const token = localStorage.getItem('pos-auth')
+      const token = sessionStorage.getItem('pos-auth')
       if (!token) return null
 
       const { state } = JSON.parse(token)

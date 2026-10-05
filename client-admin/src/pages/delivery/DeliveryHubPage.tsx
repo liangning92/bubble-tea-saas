@@ -74,7 +74,7 @@ export function DeliveryHubPage() {
           platform: 'gofood',
           platformOrderId: 'GF-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
           customerName: 'Ahmad Wijaya',
-          customerPhone: '081234567890',
+          customerPhone: '08xxxxxxxxxx',
           deliveryAddress: 'Jl. Utama No.' + Math.floor(Math.random() * 999 + 1),
           items: [
             { productName: 'Pearl Milk Tea', specName: 'Large', quantity: 2, notes: 'Less Ice' },
@@ -93,7 +93,7 @@ export function DeliveryHubPage() {
           platform: 'grabfood',
           platformOrderId: 'GR-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
           customerName: 'Siti Nurhaliza',
-          customerPhone: '081234567891',
+          customerPhone: '08xxxxxxxxxx',
           deliveryAddress: 'Jl. Besar No.' + Math.floor(Math.random() * 999 + 1),
           items: [
             { productName: 'Mango Smoothie', specName: 'Large', quantity: 1 }
@@ -111,7 +111,7 @@ export function DeliveryHubPage() {
           platform: 'shopee',
           platformOrderId: 'SH-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
           customerName: 'Budi Santoso',
-          customerPhone: '081234567892',
+          customerPhone: '08xxxxxxxxxx',
           items: [
             { productName: 'Green Tea', specName: 'Medium', quantity: 3 },
             { productName: 'Pearl Milk Tea', specName: 'Large', quantity: 2 }
@@ -408,130 +408,4 @@ export function DeliveryHubPage() {
                     </span>
                   </div>
 
-                  {/* Customer Info */}
-                  <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">{order.customerName}</p>
-                        <p className="text-sm text-gray-600">{order.customerPhone}</p>
-                      </div>
-                      {order.estimatedReadyTime && order.status !== 'delivered' && (
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500">{t('delivery.estimate')}</p>
-                          <p className="font-bold text-primary">{order.estimatedReadyTime} {t('kds.minutes')}</p>
-                        </div>
-                      )}
-                    </div>
-                    {order.deliveryAddress && (
-                      <p className="text-sm text-gray-500 mt-1">{order.deliveryAddress}</p>
-                    )}
-                  </div>
-
-                  {/* Order Items */}
-                  <div className="p-4">
-                    <div className="space-y-3">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-3">
-                          <span className="w-8 h-8 rounded-full bg-primary text-white text-sm flex items-center justify-center font-bold">
-                            {item.quantity}
-                          </span>
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900">{item.productName}</p>
-                            <p className="text-sm text-gray-500">{item.specName}</p>
-                            {item.notes && (
-                              <p className="text-xs text-orange-500 mt-1">📝 {item.notes}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Order Summary */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">{t('orders.subtotal')}</span>
-                        <span>{formatCurrency(order.subtotal)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">{t('delivery.deliveryFee')}</span>
-                        <span>{formatCurrency(order.deliveryFee)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">{t('delivery.platformFee')}</span>
-                        <span className="text-red-500">-{formatCurrency(order.platformFee)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t border-gray-200">
-                        <span>{t('common.total')}</span>
-                        <span className="text-primary">{formatCurrency(order.finalAmount)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center gap-2">
-                    {nextStatus ? (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, nextStatus)}
-                        className={`flex-1 py-3 rounded-lg text-white font-medium transition-colors ${
-                          order.status === 'new' ? 'bg-blue-500 hover:bg-blue-600' :
-                          order.status === 'confirmed' ? 'bg-purple-500 hover:bg-purple-600' :
-                          order.status === 'preparing' ? 'bg-green-500 hover:bg-green-600' :
-                          order.status === 'ready' ? 'bg-indigo-500 hover:bg-indigo-600' :
-                          'bg-gray-500 hover:bg-gray-600'
-                        }`}
-                      >
-                        {statusConfig.nextLabel}
-                      </button>
-                    ) : (
-                      <div className="flex-1 py-3 rounded-lg bg-green-100 text-green-800 font-medium text-center">
-                        <CheckCircle size={18} className="inline mr-2" />
-                        {order.status === 'delivered' ? t('delivery.delivered') : t('delivery.cancelled')}
-                      </div>
-                    )}
-
-                    {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                        className="px-4 py-3 rounded-lg bg-red-100 text-red-600 hover:bg-red-200"
-                      >
-                        <XCircle size={20} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Stat Card Component
-function StatCard({ icon: Icon, label, count, bgColor, highlight }: {
-  icon: any
-  label: string
-  count: number
-  bgColor: string
-  highlight?: boolean
-}) {
-  const colors: Record<string, { bg: string; border: string; text: string; icon: string }> = {
-    yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800', icon: 'text-yellow-600' },
-    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', icon: 'text-blue-600' },
-    purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800', icon: 'text-purple-600' },
-    green: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', icon: 'text-green-600' },
-    indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-800', icon: 'text-indigo-600' }
-  }
-  const c = colors[bgColor] || colors.yellow
-
-  return (
-    <div className={`${c.bg} border ${c.border} rounded-xl p-4 ${highlight ? 'ring-2 ring-yellow-400' : ''}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon size={18} className={c.icon} />
-        <span className={`text-sm font-medium ${c.text}`}>{label}</span>
-      </div>
-      <p className={`text-2xl font-bold ${c.text.replace('-800', '-900')}`}>{count}</p>
-    </div>
-  )
-}
+            

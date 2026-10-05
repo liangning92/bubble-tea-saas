@@ -51,8 +51,8 @@ async function runPOSTest() {
 
     // 2. 执行登录
     if (phoneInput > 0) {
-      await page.locator('input[type="tel"], input[placeholder*="08"]').first().fill('081234567890');
-      await page.locator('input[type="password"]').first().fill('admin123');
+      await page.locator('input[type="tel"], input[placeholder*="08"]').first().fill((process.env.TEST_ADMIN_PHONE || ''));
+      await page.locator('input[type="password"]').first().fill((process.env.TEST_ADMIN_PASSWORD || ''));
       await sleep(500);
 
       const loginBtn = await page.locator('button[type="submit"], button:has-text("Masuk"), button:has-text("Login")').count();

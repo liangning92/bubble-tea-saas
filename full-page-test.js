@@ -23,8 +23,8 @@ async function testAllPages() {
   console.log('登录中...');
   await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
   await sleep(1000);
-  await page.locator('input[type="tel"]').fill('081234567890');
-  await page.locator('input[type="password"]').fill('admin123');
+  await page.locator('input[type="tel"]').fill((process.env.TEST_ADMIN_PHONE || ''));
+  await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
   await page.locator('button[type="submit"]').click();
   await page.waitForTimeout(3000);
   console.log('已登录\n');

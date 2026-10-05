@@ -40,8 +40,8 @@ async function runFullUserTests() {
     await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
     await sleep(1000);
 
-    await page.locator('input[type="tel"]').fill('081234567890');
-    await page.locator('input[type="password"]').fill('admin123');
+    await page.locator('input[type="tel"]').fill((process.env.TEST_ADMIN_PHONE || ''));
+    await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
     await page.locator('button[type="submit"]').click();
     await page.waitForTimeout(3000);
 
@@ -181,8 +181,8 @@ async function runFullUserTests() {
       // 查找手机号输入框
       const posPhoneInput = page.locator('input[type="tel"]');
       if (await posPhoneInput.count() > 0) {
-        await posPhoneInput.fill('081234567892'); // cashier 账号
-        await page.locator('input[type="password"]').fill('admin123');
+        await posPhoneInput.fill((process.env.TEST_CASHIER_PHONE || '')); // cashier 账号
+        await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
         await page.locator('button[type="submit"]').click();
         await page.waitForTimeout(3000);
 
@@ -214,8 +214,8 @@ async function runFullUserTests() {
     await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
     await sleep(1000);
 
-    await page.locator('input[type="tel"]').fill('081234567891');
-    await page.locator('input[type="password"]').fill('admin123');
+    await page.locator('input[type="tel"]').fill((process.env.TEST_MANAGER_PHONE || ''));
+    await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
     await page.locator('button[type="submit"]').click();
     await page.waitForTimeout(3000);
 
@@ -238,8 +238,8 @@ async function runFullUserTests() {
     await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
     await sleep(1000);
 
-    await page.locator('input[type="tel"]').fill('081234567892');
-    await page.locator('input[type="password"]').fill('admin123');
+    await page.locator('input[type="tel"]').fill((process.env.TEST_CASHIER_PHONE || ''));
+    await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
     await page.locator('button[type="submit"]').click();
     await page.waitForTimeout(3000);
 

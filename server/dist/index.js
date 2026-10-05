@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.app = void 0;
 // Global BigInt JSON serialization support
 BigInt.prototype.toJSON = function () {
     return Number(this);
@@ -80,7 +81,9 @@ const MarketingSchedulerService_1 = require("./services/MarketingSchedulerServic
 const errorHandler_1 = require("./middlewares/errorHandler");
 const notFound_1 = require("./middlewares/notFound");
 const socket_1 = require("./socket");
+const auth_2 = require("./middlewares/auth");
 const app = (0, express_1.default)();
+exports.app = app;
 const httpServer = http_1.default.createServer(app);
 console.log('[Server] Starting initialization...');
 // Socket.IO Setup
@@ -191,6 +194,19 @@ app.get('/api/version', (req, res) => {
 });
 // API Routes
 app.use('/api/auth', auth_1.authRouter);
+// Enforce authentication for every API route by default. Only credential entry,
+// one-time setup/sync tickets, health checks, and the signed payment webhook are public.
+app.use('/api', (req, res, next) => {
+    const apiPath = req.originalUrl.split('?')[0].replace(/^\/api(?=\/|$)/, '') || '/';
+    const publicPaths = new Set([
+        '/auth/login', '/auth/register',
+        '/sync/connect', '/sync/full', '/sync/status',
+        '/payments/qris/webhook', '/health', '/version'
+    ]);
+    if (publicPaths.has(apiPath))
+        return next();
+    return (0, auth_2.authenticate)(req, res, next);
+});
 app.use('/api/stores', store_1.storeRouter);
 app.use('/api/categories', category_1.categoryRouter);
 app.use('/api/products', product_1.productRouter);
@@ -257,9 +273,10 @@ app.use('/api/sync', sync_1.default);
 app.use(notFound_1.notFoundHandler);
 app.use(errorHandler_1.errorHandler);
 // Start Server with Socket.IO
-console.log('[Server] About to listen on port', env_1.config.port);
-httpServer.listen(env_1.config.port, '0.0.0.0', () => {
-    console.log(`
+if (process.env.NODE_ENV !== 'test') {
+    console.log('[Server] About to listen on port', env_1.config.port);
+    httpServer.listen(env_1.config.port, '0.0.0.0', () => {
+        console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║   🧋 YOUME POS API Server                                ║
@@ -281,14 +298,15 @@ httpServer.listen(env_1.config.port, '0.0.0.0', () => {
 ║   • /api/hygiene       - Hygiene Management           ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
-    // 启动卫生任务调度器
-    console.log('[Server] Starting hygiene scheduler...');
-    (0, SchedulerService_1.startHygieneScheduler)();
-    console.log('[Server] Hygiene scheduler started');
-    // 启动营销自动化调度器
-    console.log('[Server] Starting marketing scheduler...');
-    (0, MarketingSchedulerService_1.startMarketingScheduler)();
-    console.log('[Server] Marketing scheduler started');
-});
+        // 启动卫生任务调度器
+        console.log('[Server] Starting hygiene scheduler...');
+        (0, SchedulerService_1.startHygieneScheduler)();
+        console.log('[Server] Hygiene scheduler started');
+        // 启动营销自动化调度器
+        console.log('[Server] Starting marketing scheduler...');
+        (0, MarketingSchedulerService_1.startMarketingScheduler)();
+        console.log('[Server] Marketing scheduler started');
+    });
+}
 exports.default = app;
 //# sourceMappingURL=index.js.map

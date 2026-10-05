@@ -1,6 +1,11 @@
 import request from 'supertest'
+import { beforeAll, describe, expect, it } from '@jest/globals'
 import { app } from '../index'
-import { prisma } from './setup'
+import { createTestCredentials, prisma } from './setup'
+
+const registrationCredentials = createTestCredentials()
+const loginCredentials = createTestCredentials()
+const missingAccountPhone = createTestCredentials().phone
 
 describe('Auth API', () => {
   let storeId: string
@@ -25,8 +30,8 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          phone: '081234567999',
-          password: 'password123',
+          phone: registrationCredentials.phone,
+          password: registrationCredentials.password,
           name: 'Test User',
           storeId: storeId,
           role: 'cashier'
@@ -35,15 +40,15 @@ describe('Auth API', () => {
       expect(res.status).toBe(201)
       expect(res.body.code).toBe(201)
       expect(res.body.data).toHaveProperty('token')
-      expect(res.body.data.user).toHaveProperty('phone', '081234567999')
+      expect(res.body.data.user).toHaveProperty('phone', registrationCredentials.phone)
     })
 
     it('should reject duplicate phone', async () => {
       await request(app)
         .post('/api/auth/register')
         .send({
-          phone: '081234567999',
-          password: 'password123',
+          phone: registrationCredentials.phone,
+          password: registrationCredentials.password,
           name: 'Test User',
           storeId: storeId,
           role: 'cashier'
@@ -52,8 +57,8 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          phone: '081234567999',
-          password: 'password123',
+          phone: registrationCredentials.phone,
+          password: registrationCredentials.password,
           name: 'Test User',
           storeId: storeId,
           role: 'cashier'
@@ -69,8 +74,8 @@ describe('Auth API', () => {
       await request(app)
         .post('/api/auth/register')
         .send({
-          phone: '081234568000',
-          password: 'password123',
+          phone: loginCredentials.phone,
+          password: loginCredentials.password,
           name: 'Login Test',
           storeId: storeId,
           role: 'cashier'
@@ -81,8 +86,8 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({
-          phone: '081234568000',
-          password: 'password123'
+          phone: loginCredentials.phone,
+          password: loginCredentials.password
         })
 
       expect(res.status).toBe(200)
@@ -95,7 +100,7 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({
-          phone: '081234568000',
+          phone: loginCredentials.phone,
           password: 'wrongpassword'
         })
 
@@ -107,8 +112,8 @@ describe('Auth API', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({
-          phone: '089999999999',
-          password: 'password123'
+          phone: missingAccountPhone,
+          password: createTestCredentials().password
         })
 
       expect(res.status).toBe(401)

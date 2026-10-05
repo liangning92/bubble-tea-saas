@@ -2,8 +2,18 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.hardwareRouter = void 0;
 const express_1 = require("express");
+const auth_1 = require("../middlewares/auth");
 const router = (0, express_1.Router)();
 exports.hardwareRouter = router;
+router.use(auth_1.authenticate);
+function requestedStore(req, res, storeId) {
+    const target = storeId || req.user?.storeId || '';
+    if (!req.user || (target && !(0, auth_1.canAccessStore)(req.user, target))) {
+        res.status(403).json({ success: false, error: 'Access denied: Store mismatch' });
+        return null;
+    }
+    return target;
+}
 // In-memory store for detected printers (persisted via POS client)
 // This gets updated when POS client detects printers
 let detectedPrinters = [];
@@ -15,9 +25,11 @@ const storePrintersMap = {};
  */
 router.get('/printers', async (req, res) => {
     try {
-        const storeId = req.query.storeId || '';
+        const storeId = requestedStore(req, res, req.query.storeId);
+        if (storeId === null)
+            return;
         const storeData = storeId ? storePrintersMap[storeId] : null;
-        const printers = storeData ? storeData.printers : detectedPrinters;
+        const printers = storeData ? storeData.printers : (req.user?.role === 'admin' && !storeId ? detectedPrinters : []);
         const lastDetection = storeData ? storeData.lastDetection : lastDetectionTime;
         res.json({
             success: true,
@@ -40,14 +52,17 @@ router.get('/printers', async (req, res) => {
 router.post('/printers', async (req, res) => {
     try {
         const { printers, storeId } = req.body;
-        if (!Array.isArray(printers)) {
+        if (!Array.isArray(printers) || printers.length > 100 || printers.some((name) => typeof name !== 'string' || name.length > 200)) {
             res.status(400).json({ success: false, error: 'printers must be an array' });
             return;
         }
+        const targetStoreId = requestedStore(req, res, storeId);
+        if (targetStoreId === null)
+            return;
         detectedPrinters = printers;
         lastDetectionTime = new Date();
-        if (storeId) {
-            storePrintersMap[storeId] = {
+        if (targetStoreId) {
+            storePrintersMap[targetStoreId] = {
                 printers,
                 lastDetection: lastDetectionTime
             };
@@ -71,6 +86,8 @@ router.post('/printers', async (req, res) => {
 router.post('/detect', async (req, res) => {
     try {
         const { storeId } = req.body;
+        if (requestedStore(req, res, storeId) === null)
+            return;
         // Store detection request - POS client will poll this
         // For now, just acknowledge the request
         res.json({
@@ -89,6 +106,8 @@ router.post('/detect', async (req, res) => {
  * Check detection request status
  */
 router.get('/detect', async (req, res) => {
+    if (requestedStore(req, res, req.query.storeId) === null)
+        return;
     res.json({
         success: true,
         lastDetection: lastDetectionTime,
@@ -102,6 +121,8 @@ router.get('/detect', async (req, res) => {
 router.post('/test-print', async (req, res) => {
     try {
         const { printerName, storeId } = req.body;
+        if (requestedStore(req, res, storeId) === null)
+            return;
         // Store test print request - POS client will poll this
         res.json({
             success: true,
@@ -122,6 +143,8 @@ router.post('/test-print', async (req, res) => {
 router.post('/test-drawer', async (req, res) => {
     try {
         const { printerName, storeId } = req.body;
+        if (requestedStore(req, res, storeId) === null)
+            return;
         res.json({
             success: true,
             message: 'Cash drawer test requested. POS client will process shortly.',

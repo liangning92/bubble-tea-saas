@@ -190,8 +190,6 @@ async function calculateRestockSuggestions(storeId, daysAhead = 7) {
         },
         include: { items: true }
     });
-    if (orders.length === 0)
-        return [];
     const productSales = {};
     for (const order of orders) {
         for (const item of order.items) {
@@ -231,6 +229,14 @@ async function calculateRestockSuggestions(storeId, daysAhead = 7) {
             materialUsage[inv.id].dailyUsage += usagePerProduct;
         }
     }
+    // Include inventory with a configured minimum/safety stock even when it had
+    // no sales in the lookback period, so suggestions stay tied to live stock.
+    const storeInventory = await database_1.default.inventory.findMany({ where: { storeId } });
+    for (const inv of storeInventory) {
+        if (!materialUsage[inv.id]) {
+            materialUsage[inv.id] = { inventoryId: inv.id, name: inv.name, unit: inv.unit, dailyUsage: 0 };
+        }
+    }
     const suggestions = [];
     for (const usage of Object.values(materialUsage)) {
         const inv = await database_1.default.inventory.findUnique({ where: { id: usage.inventoryId } });
@@ -238,8 +244,14 @@ async function calculateRestockSuggestions(storeId, daysAhead = 7) {
             continue;
         const neededQty = usage.dailyUsage * daysAhead;
         const currentStock = inv.currentStock;
-        if (currentStock < neededQty) {
-            const suggestQty = Math.ceil(neededQty - currentStock);
+        const targetStock = Math.max(neededQty, Number(inv.safetyStock || 0), Number(inv.minStock || 0));
+        if (currentStock < targetStock) {
+            const uncappedQty = Math.ceil(targetStock - currentStock);
+            const suggestQty = inv.maxStock > 0
+                ? Math.min(uncappedQty, Math.max(0, Math.ceil(inv.maxStock - currentStock)))
+                : uncappedQty;
+            if (suggestQty <= 0)
+                continue;
             suggestions.push({
                 inventoryId: inv.id,
                 name: inv.name,

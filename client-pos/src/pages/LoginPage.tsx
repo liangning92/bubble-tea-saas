@@ -147,8 +147,8 @@ export function LoginPage() {
     try {
       // Try online login first
       const response = await posApi.login(phone, password)
-      const { token, user, passwordHash } = response.data.data
-      await login(token, user, passwordHash)
+      const { token, user } = response.data.data
+      await login(token, user, password)
 
       // Handle remember me - only store phone number, never password
       if (rememberMe) {
@@ -165,7 +165,7 @@ export function LoginPage() {
         if (!syncStatus.isSetUp) {
           // Local DB is empty, auto-sync from cloud
           const connResult = await syncConnect(phone, password)
-          await syncFull(connResult.storeId, connResult.token, connResult.phone, connResult.passwordHash)
+          await syncFull(connResult.storeId, connResult.syncTicket)
         }
       } catch (syncErr) {
         console.warn('[Login] Auto-sync failed:', syncErr)
@@ -392,21 +392,6 @@ export function LoginPage() {
                 )}
               </button>
             </form>
-          </div>
-
-          {/* Test account card */}
-          <div className="mt-4 p-4 bg-white/80 border border-gray-200 rounded-xl">
-            <p className="text-center text-xs text-gray-400 uppercase tracking-wider mb-3">{t('auth.testAccount')}</p>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
-                <div className="text-gray-400 text-xs mb-1">{t('auth.phone')}</div>
-                <div className="font-mono text-gray-700 text-sm">081234567890</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
-                <div className="text-gray-400 text-xs mb-1">{t('auth.password')}</div>
-                <div className="font-mono text-gray-700 text-sm">admin123</div>
-              </div>
-            </div>
           </div>
 
           {/* Copyright & Version & Update Check */}

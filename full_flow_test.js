@@ -1,8 +1,8 @@
 const { chromium } = require('playwright');
 
 const BASE_URL = 'http://localhost:5173';
-const PHONE = '081234567890';
-const PASS = 'admin123';
+const PHONE = (process.env.TEST_ADMIN_PHONE || '');
+const PASS = (process.env.TEST_ADMIN_PASSWORD || '');
 const TS = Date.now().toString().slice(-8);
 
 async function runTests() {
@@ -392,42 +392,4 @@ async function runTests() {
       await page.waitForTimeout(2000);
       
       // 找添加按钮
-      const addBtn = await page.locator('button:has-text("Tambah"), button:has-text("Add"), button:has-text("添加")').first();
-      
-      if (await addBtn.isVisible().catch(() => false)) {
-        await addBtn.click();
-        await page.waitForTimeout(1500);
-        console.log('  - 已点击添加配方按钮');
-        
-        // 检查弹窗内容
-        const hasForm = await page.locator('input, select').count();
-        console.log('  - 弹窗中表单元素数量:', hasForm);
-      } else {
-        console.log('  - ⚠️ 未找到添加按钮');
-        const content = await page.locator('body').innerText();
-        console.log('  - 页面内容预览:', content.substring(0, 200));
-      }
-    });
-    
-  } catch (error) {
-    console.error('\n❌ 测试过程出错:', error.message);
-  } finally {
-    await browser.close();
-  }
-  
-  // 打印总结
-  console.log('\n' + '='.repeat(60));
-  console.log('完整业务流程测试总结');
-  console.log('='.repeat(60));
-  
-  const passed = results.filter(r => r.status.includes('PASS')).length;
-  const failed = results.filter(r => r.status.includes('FAIL')).length;
-  
-  results.forEach(r => console.log(`${r.status} - ${r.name}`));
-  
-  console.log('='.repeat(60));
-  console.log(`总计: ${passed} 通过, ${failed} 失败`);
-  console.log(`测试数据: 产品=${productName}, 员工=${staffName}`);
-}
-
-runTests();
+      const addBtn = await page.locato

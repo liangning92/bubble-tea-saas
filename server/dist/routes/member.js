@@ -65,12 +65,14 @@ const redeemPointsSchema = zod_1.z.object({
 // GET /api/members
 router.get('/', auth_1.authenticate, async (req, res) => {
     try {
-        const { storeId, level, search } = req.query;
+        const { storeId: requestedStoreId, level, search } = req.query;
+        const storeId = req.user.storeId;
+        if (requestedStoreId && requestedStoreId !== storeId)
+            return res.status(403).json({ code: 403, message: 'Store access denied' });
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 20;
         const where = {};
-        if (storeId)
-            where.storeId = storeId;
+        where.storeId = storeId;
         if (level)
             where.level = level;
         if (search) {
@@ -150,27 +152,37 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { type, limit } = req.query;
+        const orderPage = Math.max(1, parseInt(req.query.ordersPage) || 1);
+        const orderPageSize = 20;
         // Build pointLogs where clause
         const pointLogsWhere = {};
         if (type)
             pointLogsWhere.type = type;
-        const member = await database_1.default.member.findUnique({
-            where: { id },
+        const storeId = (0, storeHelper_1.getStoreId)(req);
+        const member = await database_1.default.member.findFirst({
+            where: { id, storeId },
             include: {
-                orders: { orderBy: { createdAt: 'desc' }, take: 20 },
+                orders: { orderBy: { createdAt: 'desc' }, skip: (orderPage - 1) * orderPageSize, take: orderPageSize, include: { items: true, channel: true } },
+                coupons: { orderBy: { createdAt: 'desc' }, include: { coupon: true } },
                 pointLogs: {
                     where: pointLogsWhere,
                     orderBy: { createdAt: 'desc' },
-                    take: limit ? parseInt(limit) : 50
-                }
+                    take: Math.min(200, Math.max(1, parseInt(limit) || 50))
+                },
+                _count: { select: { orders: true } }
             }
         });
         if (!member) {
             return res.status(404).json({ code: 404, message: 'Member not found' });
         }
+        const [spent, lastOrder, visitCount] = await Promise.all([
+            database_1.default.order.aggregate({ where: { memberId: id, storeId, status: { in: ['completed', 'paid'] } }, _sum: { finalAmount: true } }),
+            database_1.default.order.findFirst({ where: { memberId: id, storeId, status: { in: ['completed', 'paid'] } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+            database_1.default.order.count({ where: { memberId: id, storeId, status: { in: ['completed', 'paid'] } } })
+        ]);
         res.json({
             code: 200,
-            data: member,
+            data: { ...member, orderCount: member._count.orders, visitCount, ordersPage: orderPage, ordersPageSize: orderPageSize, totalSpent: spent._sum.finalAmount || 0, lastVisit: lastOrder?.createdAt || null, _count: undefined },
             timestamp: new Date().toISOString()
         });
     }
@@ -410,83 +422,4 @@ router.get('/:id/points-history', auth_1.authenticate, async (req, res) => {
     }
     catch (error) {
         console.error('Get points history error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to get points history' });
-    }
-});
-// POST /api/members/:id/adjust-points
-router.post('/:id/adjust-points', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { points, note } = req.body;
-        const member = await database_1.default.member.findUnique({ where: { id } });
-        if (!member) {
-            return res.status(404).json({ code: 404, message: 'Member not found' });
-        }
-        const newPoints = Math.max(0, member.points + points);
-        await database_1.default.member.update({
-            where: { id },
-            data: { points: newPoints }
-        });
-        await database_1.default.pointLog.create({
-            data: {
-                memberId: id,
-                type: 'adjust',
-                points,
-                note: note || 'Manual adjustment'
-            }
-        });
-        res.json({
-            code: 200,
-            message: 'Points adjusted',
-            data: { newPoints },
-            timestamp: new Date().toISOString()
-        });
-    }
-    catch (error) {
-        console.error('Adjust points error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to adjust points' });
-    }
-});
-// GET /api/members/stats/summary
-router.get('/stats/summary', auth_1.authenticate, async (req, res) => {
-    try {
-        const { storeId } = req.query;
-        const where = {};
-        if (storeId)
-            where.storeId = storeId;
-        const [totalMembers, byLevel, recentActivity] = await Promise.all([
-            database_1.default.member.count({ where }),
-            database_1.default.member.groupBy({
-                by: ['level'],
-                where,
-                _count: { id: true }
-            }),
-            database_1.default.member.count({
-                where: {
-                    ...where,
-                    lastVisit: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
-                }
-            })
-        ]);
-        res.json({
-            code: 200,
-            data: {
-                totalMembers,
-                activeLast30Days: recentActivity,
-                byLevel: byLevel.map(l => ({ level: l.level, count: l._count.id })),
-                newThisMonth: await database_1.default.member.count({
-                    where: {
-                        ...where,
-                        createdAt: { gte: new Date(new Date().setDate(1)) }
-                    }
-                })
-            },
-            timestamp: new Date().toISOString()
-        });
-    }
-    catch (error) {
-        console.error('Get member stats error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to get member stats' });
-    }
-});
-//# sourceMappingURL=member.js.map
+        res.status(500).json({ code: 500, message: 'Failed to g

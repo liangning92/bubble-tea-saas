@@ -54,6 +54,10 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
       return res.status(404).json({ code: 404, message: 'Store not found' })
     }
 
+    if (req.user!.role !== 'admin' && req.user!.storeId !== store.id) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    }
+
     res.json({
       code: 200,
       data: store

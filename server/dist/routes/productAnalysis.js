@@ -132,6 +132,21 @@ router.get('/abc', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'
     }
 });
 // ==================== PRODUCT SCORE ====================
+router.get('/trend', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const days = Math.min(366, Math.max(1, parseInt(req.query.days) || 30));
+        const endDate = new Date();
+        const startDate = new Date(endDate);
+        startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
+        startDate.setUTCHours(0, 0, 0, 0);
+        const result = await ProductManagementService.getProductSalesTrend(req.user.storeId, startDate, endDate);
+        res.json({ code: 200, data: { list: result }, timestamp: new Date().toISOString() });
+    }
+    catch (error) {
+        console.error('Get product sales trend error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get product sales trend' });
+    }
+});
 // GET /api/product-analysis/score/:productId
 router.get('/score/:productId', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {

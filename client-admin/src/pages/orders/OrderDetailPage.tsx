@@ -13,7 +13,7 @@ export function OrderDetailPage() {
   const [refundReason, setRefundReason] = useState('')
   const [showRefund, setShowRefund] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['order', id],
     queryFn: () => orderApi.get(id!),
     enabled: !!id
@@ -32,8 +32,9 @@ export function OrderDetailPage() {
     }
   })
 
-  const order = data?.data
+  const order = data?.data?.data
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
+  if (isError) return <div className="card text-center py-8 text-red-600">{String((error as any)?.response?.data?.message || (error as any)?.message || t('common.error'))}</div>
   if (!order) return <div className="text-center py-8">{t('common.noData')}</div>
 
   const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
@@ -92,7 +93,7 @@ export function OrderDetailPage() {
                     <p className="font-medium text-gray-900">{item.productName}</p>
                     <p className="text-sm text-gray-500">{item.specName} x {item.quantity}</p>
                   </div>
-                  <p className="font-medium">{formatCurrency(item.price * item.quantity)}</p>
+                  <p className="font-medium">{formatCurrency(item.unitPrice * item.quantity)}</p>
                 </div>
               ))}
             </div>
@@ -103,7 +104,7 @@ export function OrderDetailPage() {
           </div>
 
           {/* Notes */}
-          {order.notes && <div className="card"><h2 className="font-semibold text-gray-900 mb-2">{t('orders.notes')}</h2><p className="text-gray-600">{order.notes}</p></div>}
+          {order.note && <div className="card"><h2 className="font-semibold text-gray-900 mb-2">{t('orders.notes')}</h2><p className="text-gray-600">{order.note}</p></div>}
         </div>
 
         {/* Actions Sidebar */}

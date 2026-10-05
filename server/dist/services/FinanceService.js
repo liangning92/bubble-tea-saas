@@ -41,6 +41,7 @@ exports.getDailyRevenueTrend = getDailyRevenueTrend;
 exports.getHourlyRevenueDistribution = getHourlyRevenueDistribution;
 exports.getProfitAnalysis = getProfitAnalysis;
 exports.getIncomeStatement = getIncomeStatement;
+exports.getBalanceSheet = getBalanceSheet;
 exports.getCashFlow = getCashFlow;
 exports.getTaxReport = getTaxReport;
 exports.getGoalTracking = getGoalTracking;
@@ -315,6 +316,43 @@ async function getIncomeStatement(storeId, month, year, includeDepreciation = fa
     };
 }
 // ==================== CASH FLOW ====================
+async function getBalanceSheet(storeId, month, year) {
+    const startDate = (0, dateUtils_1.startOfMonth)(new Date(year, month - 1));
+    const endDate = (0, dateUtils_1.endOfMonth)(new Date(year, month - 1));
+    const [orders, expenses, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
+        database_1.default.order.findMany({
+            where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid'] } },
+            include: { items: true }
+        }),
+        database_1.default.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } } }),
+        FixedAssetService.getDepreciationSchedule(storeId),
+        database_1.default.bankAccount.findMany({ where: { storeId } }),
+        database_1.default.inventory.findMany({ where: { storeId } }),
+        database_1.default.purchaseOrder.aggregate({ where: { storeId, status: { in: ['pending', 'approved'] } }, _sum: { totalAmount: true } })
+    ]);
+    const revenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const cost = orders.reduce((sum, order) => sum + order.items.reduce((subtotal, item) => subtotal + (item.bomCost || 0) * item.quantity, 0), 0);
+    const expensesTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const cash = bankAccounts.reduce((sum, account) => sum + account.balance, 0);
+    const inventoryValue = inventories.reduce((sum, item) => sum + Math.max(0, item.currentStock * Number(item.avgCost || 0)), 0);
+    const fixedAssetValue = fixedAssets.reduce((sum, asset) => sum + asset.currentValue, 0);
+    const totalAssets = cash + inventoryValue + fixedAssetValue;
+    const taxPayable = Math.max(0, Math.round((revenue - cost) * 0.11));
+    const accountsPayable = pendingPOs._sum.totalAmount || 0;
+    const totalLiabilities = taxPayable + accountsPayable;
+    const grossProfit = revenue - cost;
+    return {
+        period: `${year}-${String(month).padStart(2, '0')}`,
+        revenue: { totalSales: revenue },
+        grossProfit: { amount: grossProfit },
+        netProfit: { amount: grossProfit - expensesTotal },
+        totalAssets,
+        totalLiabilities,
+        equity: totalAssets - totalLiabilities,
+        assets: { cash, inventory: inventoryValue, fixedAssets: fixedAssetValue },
+        liabilities: { taxPayable, accountsPayable }
+    };
+}
 async function getCashFlow(storeId, startDate, endDate) {
     // Cash inflows (orders) - filtered by storeId
     const cashSales = await database_1.default.order.aggregate({
@@ -329,160 +367,4 @@ async function getCashFlow(storeId, startDate, endDate) {
     // Cash outflows (inventory purchases) - join through Inventory to filter by storeId
     const inventoryPurchases = await database_1.default.stockInLog.aggregate({
         where: {
-            createdAt: { gte: startDate, lte: endDate },
-            inventory: { storeId }
-        },
-        _sum: { totalAmount: true }
-    });
-    // Staff salaries - join through Staff to filter by storeId
-    const salaries = await database_1.default.salary.aggregate({
-        where: {
-            createdAt: { gte: startDate, lte: endDate },
-            staff: { storeId }
-        },
-        _sum: { finalAmount: true }
-    });
-    // Get actual expenses for cash outflows - filtered by storeId
-    const expenseOutflows = await database_1.default.expense.aggregate({
-        where: {
-            storeId,
-            date: { gte: startDate, lte: endDate }
-        },
-        _sum: { amount: true }
-    });
-    const totalOutflows = (inventoryPurchases._sum.totalAmount || 0) +
-        (salaries._sum.finalAmount || 0) +
-        (expenseOutflows._sum.amount || 0);
-    return {
-        period: {
-            start: startDate.toISOString().slice(0, 10),
-            end: endDate.toISOString().slice(0, 10)
-        },
-        inflows: {
-            cashSales: cashSales._sum.finalAmount || 0,
-            otherSales: 0
-        },
-        outflows: {
-            inventoryPurchases: inventoryPurchases._sum.totalAmount || 0,
-            staffSalaries: salaries._sum.finalAmount || 0,
-            otherExpenses: expenseOutflows._sum.amount || 0
-        },
-        totalOutflows,
-        netCashFlow: (cashSales._sum.finalAmount || 0) - totalOutflows
-    };
-}
-// ==================== TAX REPORTING ====================
-async function getTaxReport(storeId, month, year) {
-    const startDate = (0, dateUtils_1.startOfMonth)(new Date(year, month - 1));
-    const endDate = (0, dateUtils_1.endOfMonth)(new Date(year, month - 1));
-    const [orders, ppnRate, taxableRatio, refunds] = await Promise.all([
-        database_1.default.order.findMany({
-            where: {
-                storeId,
-                createdAt: { gte: startDate, lte: endDate },
-                status: { in: ['completed', 'paid'] }
-            }
-        }),
-        getPpnRate(storeId),
-        getTaxableRatio(storeId),
-        // Get approved refunds for this period to calculate PPN refund
-        database_1.default.refundRequest.findMany({
-            where: {
-                status: 'approved',
-                order: { storeId },
-                approvedAt: { gte: startDate, lte: endDate }
-            }
-        })
-    ]);
-    const discountAmount = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0);
-    // Apply tax category from Order.taxCategory field (taxable | exempt)
-    const taxableOrders = orders.filter(o => o.taxCategory !== 'exempt');
-    const taxExemptRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0) -
-        taxableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-    const rawTaxableBase = taxableOrders.reduce((sum, o) => sum + o.totalAmount, 0) - discountAmount;
-    // Apply user-configurable taxable ratio (申报比例)
-    const taxableBase = Math.round(rawTaxableBase * taxableRatio / 100);
-    const ppnCollected = Math.round(taxableBase * ppnRate);
-    // Calculate total refunded amount and proportional PPN refund
-    const totalRefunded = refunds.reduce((sum, r) => sum + (r.amount || 0), 0);
-    const ppnRefunded = Math.round(totalRefunded * ppnRate);
-    // Group by payment method for PPH reporting
-    const byPaymentMethod = {};
-    for (const order of orders) {
-        if (!byPaymentMethod[order.paymentMethod]) {
-            byPaymentMethod[order.paymentMethod] = 0;
-        }
-        byPaymentMethod[order.paymentMethod] += order.finalAmount;
-    }
-    // PPH (Pajak Penghasilan) calculation structure
-    // PPH rates (Indonesian tax law):
-    // - PPH 21 (employee income tax): 5% (income up to 60M), 15% (60M-250M), 25% (250M-500M), 30% (>500M)
-    // - PPH 23 (contractor/service provider): 2% on gross income
-    // - PPH 25 (monthly installment): Based on annual tax estimate / 12
-    //
-    // DATA REQUIREMENTS:
-    // - PPH 21: Requires Salary model with employeeId, grossSalary, pph21Withheld per period
-    // - PPH 23: Requires SupplierPayment model with amount, pph23Withheld per payment
-    // - PPH 25: Requires monthly salary payments integrated with pph21 calculation
-    //
-    // Current implementation returns structure with data requirements documented.
-    // Full implementation requires:
-    // 1. Salary table with pph21 field (already exists via Salary model)
-    // 2. Supplier payment records linked to finance
-    // 3. Monthly tax installment calculation
-    const pphData = {
-        status: 'requires_integration',
-        note: 'PPH calculation requires Salary and SupplierPayment data integration',
-        // PPH 21 - Employee income tax (withheld from salary)
-        pph21: {
-            amount: 0,
-            note: 'Sum of PPH 21 withheld from employee salaries in period',
-            dataRequired: ['Salary.pph21Withheld', 'Staff data']
-        },
-        // PPH 23 - Service provider tax (2% on contractor payments)
-        pph23: {
-            amount: 0,
-            rate: 0.02,
-            note: '2% of gross payments to service providers/contractors',
-            dataRequired: ['SupplierPayment.pph23Withheld', 'Contractor invoices']
-        },
-        // PPH 25 - Monthly income tax installment
-        pph25: {
-            amount: 0,
-            note: 'Monthly tax installment based on annual estimate',
-            dataRequired: ['Annual tax estimate / 12']
-        }
-    };
-    return {
-        period: `${year}-${month.toString().padStart(2, '0')}`,
-        taxId: '01', // Simplified tax ID
-        totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
-        taxExemptRevenue,
-        taxableRevenue: Math.max(0, taxableBase),
-        rawTaxableBase, // Before ratio adjustment
-        taxableRatio, // User-configured ratio (0-100%)
-        ppnCollected,
-        ppnRefunded, // PPN refunded due to partial/total refunds
-        ppnRate,
-        totalRefunded, // Total refund amount for the period
-        revenueByPaymentMethod: byPaymentMethod,
-        orderCount: orders.length,
-        pph: pphData
-    };
-}
-// ==================== GOAL TRACKING ====================
-async function getGoalTracking(storeId, month, year, targetRevenue) {
-    const startDate = (0, dateUtils_1.startOfMonth)(new Date(year, month - 1));
-    const endDate = (0, dateUtils_1.endOfMonth)(new Date(year, month - 1));
-    const summary = await getRevenueSummary(storeId, startDate, endDate);
-    return {
-        period: `${year}-${month.toString().padStart(2, '0')}`,
-        target: targetRevenue,
-        actual: summary.totalRevenue,
-        achievement: targetRevenue > 0 ? Math.round(summary.totalRevenue / targetRevenue * 100) : 0,
-        variance: summary.totalRevenue - targetRevenue,
-        orderCount: summary.totalOrders,
-        avgOrderValue: summary.avgOrderValue
-    };
-}
-//# sourceMappingURL=FinanceService.js.map
+            createdAt: { gt

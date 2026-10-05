@@ -2,11 +2,8 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 function getApiBase(): string {
-  const host = window.location.hostname
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return '/api'
-  }
-  return 'https://api.aicube.online/api'
+  const configured = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+  return configured.endsWith('/api') ? configured : `${configured}/api`
 }
 
 const API_BASE = getApiBase()

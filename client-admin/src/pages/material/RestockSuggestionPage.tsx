@@ -11,12 +11,16 @@ export function RestockSuggestionPage() {
 
   const { data: suggestionsData, isLoading } = useQuery({
     queryKey: ['restock-suggestions', days],
-    queryFn: () => materialApi.restockSuggestions(days)
+    queryFn: () => materialApi.restockSuggestions(days),
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true
   })
 
   const { data: expiryData } = useQuery({
     queryKey: ['expiry-alerts', days],
-    queryFn: () => materialApi.expiryAlerts(days)
+    queryFn: () => materialApi.expiryAlerts(days),
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true
   })
 
   // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }

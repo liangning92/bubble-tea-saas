@@ -9,8 +9,8 @@ const { chromium } = require('playwright');
 
   // Login
   await page.goto('http://localhost:6063/login', { waitUntil: 'networkidle' });
-  await page.fill('input[type="tel"]', '081234567890');
-  await page.fill('input[type="password"]', 'admin123');
+  await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''));
+  await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
   await page.click('button[type="submit"]');
   await page.waitForTimeout(3000);
   await page.screenshot({ path: 'test-results/pos-e2e-01-login.png' });

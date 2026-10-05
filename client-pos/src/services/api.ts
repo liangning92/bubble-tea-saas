@@ -27,7 +27,7 @@ connectionManager.addListener((event: ConnectionEvent) => {
 // Fetch API URL from server config (Admin can change this)
 export async function fetchApiUrlFromServer(): Promise<string | null> {
   try {
-    const token = localStorage.getItem('pos-auth')
+    const token = sessionStorage.getItem('pos-auth')
     if (!token) return null
 
     const { state } = JSON.parse(token)
@@ -55,7 +55,7 @@ export async function fetchApiUrlFromServer(): Promise<string | null> {
 }
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('pos-auth')
+  const token = sessionStorage.getItem('pos-auth')
   if (token) {
     try {
       const { state } = JSON.parse(token)

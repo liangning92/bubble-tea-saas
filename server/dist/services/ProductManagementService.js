@@ -9,6 +9,7 @@ exports.createProcessRecipe = createProcessRecipe;
 exports.calculateRecipeCost = calculateRecipeCost;
 exports.getProductMixAnalysis = getProductMixAnalysis;
 exports.getABCAnalysis = getABCAnalysis;
+exports.getProductSalesTrend = getProductSalesTrend;
 exports.getProductPerformanceScore = getProductPerformanceScore;
 const database_1 = __importDefault(require("../config/database"));
 // Get all process recipes
@@ -85,7 +86,7 @@ async function getProductMixAnalysis(storeId, startDate, endDate) {
         where: {
             storeId,
             createdAt: { gte: startDate, lte: endDate },
-            status: { not: 'refunded' }
+            status: { in: ['completed', 'paid'] }
         },
         include: {
             items: {
@@ -93,27 +94,41 @@ async function getProductMixAnalysis(storeId, startDate, endDate) {
             }
         }
     });
-    // Group by category
-    const categoryStats = {};
+    const productStats = new Map();
     for (const order of orders) {
         for (const item of order.items) {
-            const catName = item.product?.category?.name || 'Uncategorized';
-            if (!categoryStats[catName]) {
-                categoryStats[catName] = { name: catName, quantity: 0, revenue: 0, cost: 0, profit: 0 };
-            }
-            categoryStats[catName].quantity += item.quantity;
-            categoryStats[catName].revenue += item.unitPrice * item.quantity;
-            categoryStats[catName].cost += item.bomCost * item.quantity;
-            categoryStats[catName].profit += (item.unitPrice - item.bomCost) * item.quantity;
+            const row = productStats.get(item.productId) || {
+                productId: item.productId,
+                productName: item.productName,
+                category: item.product?.category?.name || 'Uncategorized',
+                quantity: 0,
+                revenue: 0,
+                cost: 0,
+                profit: 0,
+                orderIds: new Set()
+            };
+            const grossRevenue = item.unitPrice * item.quantity;
+            // Allocate order-level discounts in proportion to line revenue so product
+            // margins use the same discounted sales basis as the finance report.
+            const discount = order.totalAmount > 0 ? Math.max(0, order.discountAmount || 0) * grossRevenue / order.totalAmount : 0;
+            const revenue = Math.max(0, grossRevenue - discount);
+            const cost = (item.bomCost || 0) * item.quantity;
+            row.quantity += item.quantity;
+            row.revenue += revenue;
+            row.cost += cost;
+            row.profit += revenue - cost;
+            row.orderIds.add(order.id);
+            productStats.set(item.productId, row);
         }
     }
     // Calculate percentages
-    const totalRevenue = Object.values(categoryStats).reduce((sum, c) => sum + c.revenue, 0);
-    return Object.values(categoryStats)
-        .map(c => ({
-        ...c,
-        revenuePercent: totalRevenue > 0 ? Math.round(c.revenue / totalRevenue * 100) : 0,
-        margin: c.revenue > 0 ? Math.round(c.profit / c.revenue * 100) : 0
+    const totalRevenue = [...productStats.values()].reduce((sum, p) => sum + p.revenue, 0);
+    return [...productStats.values()]
+        .map(({ orderIds, ...p }) => ({
+        ...p,
+        orderCount: orderIds.size,
+        revenuePercent: totalRevenue > 0 ? Math.round(p.revenue / totalRevenue * 100) : 0,
+        margin: p.revenue > 0 ? Math.round(p.profit / p.revenue * 100) : 0
     }))
         .sort((a, b) => b.revenue - a.revenue);
 }
@@ -123,7 +138,7 @@ async function getABCAnalysis(storeId, startDate, endDate) {
         where: {
             storeId,
             createdAt: { gte: startDate, lte: endDate },
-            status: { not: 'refunded' }
+            status: { in: ['completed', 'paid'] }
         },
         include: { items: true }
     });
@@ -135,15 +150,21 @@ async function getABCAnalysis(storeId, startDate, endDate) {
                 productSales[item.productId] = {
                     name: item.productName,
                     quantity: 0,
-                    revenue: 0
+                    revenue: 0,
+                    cost: 0,
+                    orderIds: new Set()
                 };
             }
             productSales[item.productId].quantity += item.quantity;
-            productSales[item.productId].revenue += item.unitPrice * item.quantity;
+            const grossRevenue = item.unitPrice * item.quantity;
+            const discount = order.totalAmount > 0 ? Math.max(0, order.discountAmount || 0) * grossRevenue / order.totalAmount : 0;
+            productSales[item.productId].revenue += Math.max(0, grossRevenue - discount);
+            productSales[item.productId].cost += (item.bomCost || 0) * item.quantity;
+            productSales[item.productId].orderIds.add(order.id);
         }
     }
     const sorted = Object.entries(productSales)
-        .map(([id, data]) => ({ productId: id, ...data }))
+        .map(([id, data]) => ({ productId: id, ...data, orderCount: data.orderIds.size, margin: data.revenue > 0 ? Math.round((data.revenue - data.cost) / data.revenue * 100) : 0 }))
         .sort((a, b) => b.revenue - a.revenue);
     const totalRevenue = sorted.reduce((sum, p) => sum + p.revenue, 0);
     let cumulative = 0;
@@ -157,8 +178,33 @@ async function getABCAnalysis(storeId, startDate, endDate) {
             category = 'B';
         else
             category = 'C';
-        return { ...p, rank: idx + 1, category };
+        const { orderIds: _orderIds, ...row } = p;
+        return { ...row, productName: p.name, rank: idx + 1, category, class: category, percentage: totalRevenue > 0 ? p.revenue / totalRevenue : 0 };
     });
+}
+async function getProductSalesTrend(storeId, startDate, endDate) {
+    const orders = await database_1.default.order.findMany({
+        where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid'] } },
+        include: { items: true }
+    });
+    const daily = new Map();
+    for (let day = new Date(startDate); day <= endDate; day.setUTCDate(day.getUTCDate() + 1)) {
+        const date = day.toISOString().slice(0, 10);
+        daily.set(date, { date, revenue: 0, cost: 0, quantity: 0, orders: 0 });
+    }
+    for (const order of orders) {
+        const date = order.createdAt.toISOString().slice(0, 10);
+        const row = daily.get(date);
+        if (!row)
+            continue;
+        const grossRevenue = order.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+        const discount = order.totalAmount > 0 ? Math.max(0, order.discountAmount || 0) * grossRevenue / order.totalAmount : 0;
+        row.revenue += Math.max(0, grossRevenue - discount);
+        row.cost += order.items.reduce((sum, item) => sum + (item.bomCost || 0) * item.quantity, 0);
+        row.quantity += order.items.reduce((sum, item) => sum + item.quantity, 0);
+        row.orders += 1;
+    }
+    return [...daily.values()].map(row => ({ ...row, grossProfit: row.revenue - row.cost, margin: row.revenue > 0 ? Math.round((row.revenue - row.cost) / row.revenue * 100) : 0 }));
 }
 // Get product performance score
 async function getProductPerformanceScore(productId, days = 30) {

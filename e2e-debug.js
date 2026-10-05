@@ -16,8 +16,8 @@ const API_URL = 'http://localhost:7072';
     console.log('【步骤1: 登录获取认证Token】\n');
 
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' });
-    await page.fill('input[type="tel"]', '081234567890');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
 

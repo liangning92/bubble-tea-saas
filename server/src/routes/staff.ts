@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import prisma from '../config/database'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import { isFeatureEnabled, getStaffConfig } from '../services/StaffConfigService'
 import { getApprovedLeavesInRange, hasApprovedLeaveOnDate } from '../services/LeaveService'
 import { validateBody } from '../utils/validation'
@@ -29,7 +29,7 @@ const createStaffSchema = z.object({
   storeId: z.string(),
   name: z.string().min(1).max(50),
   phone: z.string().min(10).max(15),
-  password: z.string().min(6),
+  password: z.string().min(6).refine(value => Buffer.byteLength(value, 'utf8') <= 72),
   position: z.string().optional().default('店员'),
   role: z.enum(['manager', 'staff', 'cashier']).default('staff'),
   employmentType: z.enum(['full_time', 'part_time', 'contract', 'intern']).optional(),
@@ -81,10 +81,11 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     const pageSize = parseInt(req.query.pageSize as string) || 20
 
     const where: any = {}
-    if (storeId) where.storeId = storeId as string
-    else if (req.user!.role === 'staff' || req.user!.role === 'cashier') {
-      where.storeId = req.user!.storeId
+    if (storeId && !canAccessStore(req.user!, storeId as string)) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     }
+    if (req.user!.role !== 'admin') where.storeId = req.user!.storeId
+    else if (storeId) where.storeId = storeId as string
     if (status) where.status = status as string
     if (position) where.position = position as string
 
@@ -122,7 +123,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/staff/:id
-router.get('/:id', authenticate, async (req: AuthRequest, res) => {
+router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
@@ -138,6 +139,9 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     if (!staff) {
       return res.status(404).json({ code: 404, message: 'Staff not found' })
+    }
+    if (!canAccessStore(req.user!, staff.storeId)) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     }
 
     res.json({
@@ -158,6 +162,9 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 // POST /api/staff
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createStaffSchema), async (req: AuthRequest, res) => {
   try {
+    if (req.user!.role !== 'admin' && req.body.storeId !== req.user!.storeId) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    }
     const {
       storeId, name, phone, password, position, role,
       employmentType, hourlyRate, weeklyHours, hireDate,
@@ -172,7 +179,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
     }
 
     const staff = await prisma.$transaction(async (tx) => {
-      const hashed = await bcrypt.hash(password, 10)
+      const hashed = await bcrypt.hash(password, 12)
 
       const user = await tx.user.create({
         data: {
@@ -235,6 +242,11 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true } })
+    if (!existing) return res.status(404).json({ code: 404, message: 'Staff not found' })
+    if (!canAccessStore(req.user!, existing.storeId)) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    }
     const {
       name, position, status, employmentType, hourlyRate, weeklyHours,
       hireDate, terminationDate, emergencyContact, emergencyPhone,
@@ -257,9 +269,12 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     if (email !== undefined) updateData.email = email
     if (address !== undefined) updateData.address = address
 
-    const staff = await prisma.staff.update({
-      where: { id },
-      data: updateData
+    const staff = await prisma.$transaction(async tx => {
+      const staff = await tx.staff.update({ where: { id }, data: updateData })
+      if (status !== undefined) {
+        await tx.user.update({ where: { id: existing.userId }, data: { updatedAt: new Date() } })
+      }
+      return staff
     })
 
     res.json({
@@ -278,9 +293,9 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const { role } = req.body
+    const role = z.enum(['admin', 'manager', 'cashier', 'staff']).safeParse(req.body?.role)
 
-    if (!['admin', 'manager', 'cashier', 'staff'].includes(role)) {
+    if (!role.success) {
       return res.status(400).json({ code: 400, message: 'Invalid role' })
     }
 
@@ -297,7 +312,7 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthReques
     // 更新 user 的 role
     await prisma.user.update({
       where: { id: staff.userId },
-      data: { role }
+      data: { role: role.data }
     })
 
     res.json({
@@ -320,6 +335,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
       where: { id },
       data: { status: 'resigned' }
     })
+    await prisma.user.update({ where: { id: staff.userId }, data: { updatedAt: new Date() } })
 
     res.json({
       code: 200,
@@ -480,449 +496,4 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
         })
       }
 
-      if (!attendance) {
-        return res.status(400).json({ code: 400, message: 'No check in record found today' })
-      }
-
-      const updated = await prisma.attendance.update({
-        where: { id: attendance.id },
-        data: {
-          checkOutTime: now,
-          gpsLocation: gpsLocation || undefined
-        }
-      })
-
-      res.json({
-        code: 200,
-        message: 'Check out successful',
-        data: { ...updated, id: attendance.id }, // 确保返回id
-        timestamp: new Date().toISOString()
-      })
-    } else {
-      return res.status(400).json({ code: 400, message: 'Invalid attendance type' })
-    }
-  } catch (error) {
-    console.error('Attendance error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to record attendance' })
-  }
-})
-
-// GET /api/staff/attendance/today
-router.get('/attendance/today', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const staff = await prisma.staff.findFirst({
-      where: { userId: req.user!.id }
-    })
-
-    if (!staff) {
-      return res.status(404).json({ code: 404, message: 'Staff profile not found' })
-    }
-
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
-
-    const attendance = await prisma.attendance.findFirst({
-      where: {
-        staffId: staff.id,
-        checkInTime: { gte: startOfDay }
-      }
-    })
-
-    res.json({
-      code: 200,
-      data: attendance || null,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get today attendance error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get attendance' })
-  }
-})
-
-// GET /api/staff/attendance/summary - 门店今日全员考勤概况（后台管理员/店长概览）
-router.get('/attendance/summary', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
-  try {
-    const storeId = req.user!.storeId
-    const now = new Date()
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-
-    // 获取本店所有员工
-    const staffList = await prisma.staff.findMany({
-      where: { storeId, status: 'active' },
-      select: { id: true, name: true, employeeNumber: true, position: true }
-    })
-
-    const staffIds = staffList.map(s => s.id)
-
-    // 获取今日所有打卡记录
-    const attendances = await prisma.attendance.findMany({
-      where: {
-        staffId: { in: staffIds },
-        checkInTime: { gte: startOfDay, lte: endOfDay }
-      }
-    })
-
-    const attendanceMap = new Map(attendances.map(a => [a.staffId, a]))
-
-    let present = 0
-    let late = 0
-    let notCheckedIn = 0
-
-    staffList.forEach(s => {
-      const record = attendanceMap.get(s.id)
-      if (record) {
-        present++
-        if (record.status === 'late') {
-          late++
-        }
-      } else {
-        notCheckedIn++
-      }
-    })
-
-    res.json({
-      code: 200,
-      data: {
-        totalStaff: staffList.length,
-        present,
-        onTime: present - late,
-        late,
-        notCheckedIn,
-        records: attendances
-      },
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get attendance summary error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get attendance summary' })
-  }
-})
-
-// GET /api/staff/attendance/list
-router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { staffId, startDate, endDate } = req.query
-
-    const where: any = {}
-    if (staffId) where.staffId = staffId as string
-    if (startDate || endDate) {
-      where.checkInTime = {}
-      if (startDate) where.checkInTime.gte = new Date(startDate as string)
-      if (endDate) where.checkInTime.lte = new Date(endDate as string)
-    }
-
-    const attendances = await prisma.attendance.findMany({
-      where,
-      include: { staff: { select: { id: true, name: true, employeeNumber: true } } },
-      orderBy: { checkInTime: 'desc' },
-      take: 100
-    })
-
-    res.json({
-      code: 200,
-      data: attendances,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get attendance list error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get attendance list' })
-  }
-})
-
-// POST /api/staff/schedule
-router.post('/schedule', authenticate, authorize('admin', 'manager'), validateBody(scheduleSchema), async (req: AuthRequest, res) => {
-  try {
-    const { staffId, date, shift } = req.body
-    const storeId = req.user!.storeId
-
-    // Check if leave-schedule linkage is enabled
-    const leaveLinkageEnabled = await isFeatureEnabled(storeId, 'leaveScheduleLinkage')
-
-    // If linkage enabled, check if staff has approved leave on this date
-    if (leaveLinkageEnabled) {
-      const hasLeave = await hasApprovedLeaveOnDate(staffId, new Date(date))
-      if (hasLeave) {
-        return res.status(400).json({
-          code: 400,
-          message: 'Cannot schedule: Staff has approved leave on this date',
-          timestamp: new Date().toISOString()
-        })
-      }
-    }
-
-    // Check if schedule exists
-    const existing = await prisma.schedule.findFirst({
-      where: {
-        staffId,
-        date: new Date(date)
-      }
-    })
-
-    if (existing) {
-      const updated = await prisma.schedule.update({
-        where: { id: existing.id },
-        data: { shift }
-      })
-      return res.json({
-        code: 200,
-        message: 'Schedule updated',
-        data: updated,
-        timestamp: new Date().toISOString()
-      })
-    }
-
-    const schedule = await prisma.schedule.create({
-      data: {
-        staffId,
-        date: new Date(date),
-        shift
-      }
-    })
-
-    res.status(201).json({
-      code: 201,
-      message: 'Schedule created',
-      data: schedule,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Create schedule error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to create schedule' })
-  }
-})
-
-// GET /api/staff/schedule/list
-router.get('/schedule/list', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { staffId, month } = req.query
-    const storeId = req.user!.storeId
-
-    const where: any = {}
-    if (staffId) where.staffId = staffId as string
-    if (month) {
-      const [year, m] = (month as string).split('-')
-      const startDate = new Date(parseInt(year), parseInt(m) - 1, 1)
-      const endDate = new Date(parseInt(year), parseInt(m), 0)
-      where.date = { gte: startDate, lte: endDate }
-    }
-
-    const schedules = await prisma.schedule.findMany({
-      where,
-      include: { staff: { select: { id: true, name: true, employeeNumber: true } } },
-      orderBy: { date: 'asc' }
-    })
-
-    // Check if leave-schedule linkage is enabled
-    const leaveLinkageEnabled = await isFeatureEnabled(storeId, 'leaveScheduleLinkage')
-
-    let leaves: any[] = []
-    if (leaveLinkageEnabled && month) {
-      const [year, m] = (month as string).split('-')
-      const startDate = new Date(parseInt(year), parseInt(m) - 1, 1)
-      const endDate = new Date(parseInt(year), parseInt(m), 0)
-      leaves = await getApprovedLeavesInRange(storeId, startDate, endDate)
-    }
-
-    res.json({
-      code: 200,
-      data: schedules,
-      leaves: leaves,
-      leaveLinkageEnabled,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get schedule list error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get schedule list' })
-  }
-})
-
-// GET /api/staff/schedule/my - Get current staff's schedule
-router.get('/schedule/my', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { weekStart } = req.query
-
-    const staff = await prisma.staff.findFirst({
-      where: { userId: req.user!.id }
-    })
-
-    if (!staff) {
-      return res.status(404).json({ code: 404, message: 'Staff profile not found' })
-    }
-
-    const startOfWeek = weekStart ? new Date(weekStart as string) : new Date()
-    const endOfWeek = new Date(startOfWeek)
-    endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-    const schedules = await prisma.schedule.findMany({
-      where: {
-        staffId: staff.id,
-        date: { gte: startOfWeek, lte: endOfWeek }
-      },
-      orderBy: { date: 'asc' }
-    })
-
-    // Format as weekly object with day keys
-    const weeklySchedule: any = {
-      sunday: 'off',
-      monday: 'off',
-      tuesday: 'off',
-      wednesday: 'off',
-      thursday: 'off',
-      friday: 'off',
-      saturday: 'off'
-    }
-
-    const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    schedules.forEach(s => {
-      const dayIndex = new Date(s.date).getDay()
-      weeklySchedule[dayKeys[dayIndex]] = s.shift
-    })
-
-    res.json({
-      code: 200,
-      data: weeklySchedule,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get my schedule error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get schedule' })
-  }
-})
-
-// GET /api/staff/attendance/history - Get current staff's attendance history
-router.get('/attendance/history', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { month, year } = req.query
-
-    const staff = await prisma.staff.findFirst({
-      where: { userId: req.user!.id }
-    })
-
-    if (!staff) {
-      return res.status(404).json({ code: 404, message: 'Staff profile not found' })
-    }
-
-    const now = new Date()
-    const targetMonth = month ? parseInt(month as string) : now.getMonth() + 1
-    const targetYear = year ? parseInt(year as string) : now.getFullYear()
-
-    const startDate = new Date(targetYear, targetMonth - 1, 1)
-    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59)
-
-    const attendances = await prisma.attendance.findMany({
-      where: {
-        staffId: staff.id,
-        checkInTime: { gte: startDate, lte: endDate }
-      },
-      orderBy: { checkInTime: 'desc' }
-    })
-
-    res.json({
-      code: 200,
-      data: attendances,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get attendance history error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get attendance history' })
-  }
-})
-
-// GET /api/staff/salary/my - Get current staff's salary
-router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { month, year } = req.query
-
-    const staff = await prisma.staff.findFirst({
-      where: { userId: req.user!.id }
-    })
-
-    if (!staff) {
-      return res.status(404).json({ code: 404, message: 'Staff profile not found' })
-    }
-
-    const now = new Date()
-    const targetMonth = month ? `${year}-${String(month).padStart(2, '0')}` : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-
-    const salaryRecord = await prisma.salary.findFirst({
-      where: {
-        staffId: staff.id,
-        month: targetMonth
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    if (!salaryRecord) {
-      return res.json({
-        code: 200,
-        data: null,
-        timestamp: new Date().toISOString()
-      })
-    }
-
-    // 查询该月份真实出勤与迟到记录
-    const [yearNum, monthNum] = targetMonth.split('-').map(Number)
-    const monthStart = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0)
-    const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999)
-
-    const monthAttendances = await prisma.attendance.findMany({
-      where: {
-        staffId: staff.id,
-        checkInTime: { gte: monthStart, lte: monthEnd }
-      }
-    })
-
-    const workDays = monthAttendances.length
-    const lateDays = monthAttendances.filter(a => a.status === 'late').length
-
-    // Transform to match frontend expected format
-    const salaryData = {
-      staffName: staff.name,
-      month: salaryRecord.month,
-      baseSalary: salaryRecord.baseSalary,
-      workDays,
-      lateDays,
-      overtimeHours: Math.round((salaryRecord.overtime / (salaryRecord.baseSalary / 176)) * 100) / 100 || 0,
-      overtimePay: salaryRecord.overtime,
-      bonuses: salaryRecord.bonus,
-      commissions: salaryRecord.commission,
-      deductions: salaryRecord.deduction,
-      totalSalary: salaryRecord.finalAmount
-    }
-
-    res.json({
-      code: 200,
-      data: salaryData,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get salary error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get salary' })
-  }
-})
-
-// PUT /api/staff/:id/reset-password - Reset staff password (admin only)
-router.put('/:id/reset-password', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params
-    const { newPassword } = req.body
-
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ code: 400, message: 'Password must be at least 6 characters' })
-    }
-
-    const hashed = await bcrypt.hash(newPassword, 10)
-    await prisma.user.update({
-      where: { id },
-      data: { password: hashed }
-    })
-
-    res.json({ code: 200, message: 'Password reset successfully', timestamp: new Date().toISOString() })
-  } catch (error) {
-    console.error('Reset password error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to reset password' })
-  }
-})
-
-export { router as staffRouter }
+      

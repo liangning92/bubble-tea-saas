@@ -84,8 +84,8 @@ async function stockIn(data) {
     const { inventoryId, storeId, quantity, unitCost, note, staffId, supplierId } = data;
     return database_1.default.$transaction(async (tx) => {
         // Get current inventory
-        const inventory = await tx.inventory.findUnique({
-            where: { id: inventoryId }
+        const inventory = await tx.inventory.findFirst({
+            where: { id: inventoryId, storeId }
         });
         if (!inventory) {
             throw new Error('Inventory not found');
@@ -126,8 +126,8 @@ async function stockOut(data) {
     const { inventoryId, storeId, quantity, reason, note, staffId, orderId } = data;
     return database_1.default.$transaction(async (tx) => {
         // Get current inventory
-        const inventory = await tx.inventory.findUnique({
-            where: { id: inventoryId }
+        const inventory = await tx.inventory.findFirst({
+            where: { id: inventoryId, storeId }
         });
         if (!inventory) {
             throw new Error('Inventory not found');
@@ -419,14 +419,18 @@ async function getExpiringBatches(storeId, daysAhead = 7) {
  */
 async function getConsumptionAnalysis(filter) {
     const { storeId, startDate, endDate, varianceThreshold = 10, // 默认10%阈值
-    category } = filter;
+    varianceCriticalThreshold = varianceThreshold * 2, category } = filter;
+    const rangeStart = new Date(startDate);
+    const rangeEnd = new Date(endDate);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(endDate))
+        rangeEnd.setUTCHours(23, 59, 59, 999);
     // 获取时间范围内的订单
     const orders = await database_1.default.order.findMany({
         where: {
             storeId,
             createdAt: {
-                gte: new Date(startDate),
-                lte: new Date(endDate)
+                gte: rangeStart,
+                lte: rangeEnd
             },
             status: { in: ['completed', 'refunded'] }
         },
@@ -479,10 +483,10 @@ async function getConsumptionAnalysis(filter) {
         where: {
             inventory: { storeId },
             createdAt: {
-                gte: new Date(startDate),
-                lte: new Date(endDate)
+                gte: rangeStart,
+                lte: rangeEnd
             },
-            reason: { in: ['sold', 'adjust'] }
+            reason: { in: ['sold', 'adjust', 'loss', 'expired', 'transfer', 'process'] }
         },
         include: { inventory: true }
     });
@@ -516,10 +520,10 @@ async function getConsumptionAnalysis(filter) {
         // 判断状态
         let varianceStatus = 'normal';
         if (data.theoretical > 0) {
-            if (variancePercent > varianceThreshold * 2) {
+            if (variancePercent >= varianceCriticalThreshold) {
                 varianceStatus = 'critical';
             }
-            else if (variancePercent > varianceThreshold) {
+            else if (variancePercent >= varianceThreshold) {
                 varianceStatus = 'warning';
             }
         }

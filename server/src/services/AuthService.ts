@@ -64,7 +64,8 @@ export async function login(data: LoginData) {
       phone: user.phone,
       role: user.role as string,
       storeId: user.staff?.storeId || '',
-      staffId: user.staff?.id || ''
+      staffId: user.staff?.id || '',
+      issuedAtMs: Date.now()
     },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn as any }
@@ -101,7 +102,7 @@ export async function register(data: RegisterData) {
   }
 
   // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10)
+  const hashedPassword = await bcrypt.hash(password, 12)
 
   // Create user and staff in transaction
   const result = await prisma.$transaction(async (tx) => {
@@ -134,7 +135,8 @@ export async function register(data: RegisterData) {
       phone: result.user.phone,
       role: result.user.role as string,
       storeId,
-      staffId: result.staff.id
+      staffId: result.staff.id,
+      issuedAtMs: Date.now()
     },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn as any }
@@ -203,7 +205,7 @@ export async function changePassword(userId: string, oldPassword: string, newPas
   }
 
   // Hash new password
-  const hashedPassword = await bcrypt.hash(newPassword, 10)
+  const hashedPassword = await bcrypt.hash(newPassword, 12)
 
   await prisma.user.update({
     where: { id: userId },
@@ -215,7 +217,7 @@ export async function changePassword(userId: string, oldPassword: string, newPas
 
 // Reset password (admin function)
 export async function resetPassword(userId: string, newPassword: string) {
-  const hashedPassword = await bcrypt.hash(newPassword, 10)
+  const hashedPassword = await bcrypt.hash(newPassword, 12)
 
   await prisma.user.update({
     where: { id: userId },
@@ -246,7 +248,8 @@ export async function refreshToken(token: string) {
         phone: user.phone,
         role: user.role as string,
         storeId: user.staff?.storeId || '',
-        staffId: user.staff?.id || ''
+        staffId: user.staff?.id || '',
+        issuedAtMs: Date.now()
       },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn as any }

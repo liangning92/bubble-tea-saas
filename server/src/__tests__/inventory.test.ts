@@ -1,6 +1,8 @@
 import request from 'supertest'
 import { app } from '../index'
-import { prisma } from './setup'
+import { createTestCredentials, prisma } from './setup'
+
+const credentials = createTestCredentials()
 
 describe('Inventory API', () => {
   let authToken: string
@@ -16,10 +18,10 @@ describe('Inventory API', () => {
     storeId = store.id
 
     // Create user
-    const hashedPassword = await require('bcryptjs').hash('password123', 10)
+    const hashedPassword = await require('bcryptjs').hash(credentials.password, 12)
     const user = await prisma.user.create({
       data: {
-        phone: '081234568300',
+        phone: credentials.phone,
         password: hashedPassword,
         role: 'admin',
         storeId: storeId
@@ -43,7 +45,7 @@ describe('Inventory API', () => {
     // Get token
     const loginRes = await request(app)
       .post('/api/auth/login')
-      .send({ phone: '081234568300', password: 'password123' })
+      .send({ phone: credentials.phone, password: credentials.password })
 
     authToken = loginRes.body.data.token
   })
@@ -121,3 +123,4 @@ describe('Inventory API', () => {
     })
   })
 })
+import { beforeAll, describe, expect, it } from '@jest/globals'

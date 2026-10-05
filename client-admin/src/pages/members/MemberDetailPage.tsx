@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { memberApi } from '../../services/api'
@@ -17,14 +17,16 @@ const POINT_TYPE_LABELS: Record<string, string> = {
 export function MemberDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const [redeemPoints, setRedeemPoints] = useState('')
   const [showRedeem, setShowRedeem] = useState(false)
   const [filterType, setFilterType] = useState<string>('')
+  const [ordersPage, setOrdersPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['member', id, filterType],
-    queryFn: () => memberApi.get(id!, filterType ? { type: filterType } : undefined),
+    queryKey: ['member', id, filterType, ordersPage],
+    queryFn: () => memberApi.get(id!, { ...(filterType ? { type: filterType } : {}), ordersPage }),
     enabled: !!id
   })
 
@@ -37,7 +39,7 @@ export function MemberDetailPage() {
     }
   })
 
-  const member = data?.data
+  const member = data?.data?.data
 
   if (isLoading) return <div className="text-center py-8">{t('common.loading')}</div>
   if (!member) return <div className="text-center py-8">{t('common.noData')}</div>
@@ -56,7 +58,7 @@ export function MemberDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/members" className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft size={20} /></Link>
+        <Link to={location.pathname.startsWith('/marketing/') ? '/marketing/members' : '/members'} className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft size={20} /></Link>
         <h1 className="text-2xl font-bold text-gray-900">{member.name}</h1>
       </div>
 
@@ -73,9 +75,47 @@ export function MemberDetailPage() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">{t('members.phone')}:</span> <span className="font-medium">{member.phone}</span></div>
               <div><span className="text-gray-500">{t('members.birthday')}:</span> <span className="font-medium">{member.birthday || '-'}</span></div>
+              <div><span className="text-gray-500">{t('members.email', 'Email')}:</span> <span className="font-medium">{member.email || '-'}</span></div>
               <div><span className="text-gray-500">{t('members.points')}:</span> <span className="font-medium text-primary">{member.points?.toLocaleString()}</span></div>
               <div><span className="text-gray-500">{t('members.totalSpent')}:</span> <span className="font-medium">{formatCurrency(member.totalSpent || 0)}</span></div>
+              <div><span className="text-gray-500">{t('members.balance', 'Balance')}:</span> <span className="font-medium">{formatCurrency(member.balance || 0)}</span></div>
+              <div><span className="text-gray-500">{t('members.status', 'Status')}:</span> <span className="font-medium">{member.status || '-'}</span></div>
+              <div><span className="text-gray-500">{t('members.referralCode', 'Referral code')}:</span> <span className="font-medium">{member.referralCode || '-'}</span></div>
+              <div><span className="text-gray-500">{t('members.memberSince')}:</span> <span className="font-medium">{member.createdAt ? formatDateTime(member.createdAt) : '-'}</span></div>
             </div>
+          </div>
+
+          <div className="card">
+            <h2 className="font-semibold text-gray-900 mb-4">{t('members.coupons', 'Coupons')} ({member.coupons?.length || 0})</h2>
+            {member.coupons?.length ? (
+              <div className="divide-y">
+                {member.coupons.map((entry: any) => (
+                  <div key={entry.id} className="py-3 flex items-center justify-between gap-4 text-sm">
+                    <div>
+                      <p className="font-medium">{entry.coupon?.code || '-'}</p>
+                      <p className="text-gray-500">{entry.coupon?.type || '-'} · {entry.coupon?.value ?? '-'}</p>
+                      <p className="text-xs text-gray-400">{entry.coupon?.validUntil ? formatDateTime(entry.coupon.validUntil) : '-'}</p>
+                    </div>
+                    <span className={`badge ${entry.status === 'unused' ? 'badge-success' : 'badge'}`}>{entry.status}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-center py-4 text-gray-500">{t('common.noData')}</p>}
+          </div>
+
+          <div className="card">
+            <h2 className="font-semibold text-gray-900 mb-4">{t('members.orders', 'Orders')} ({member.orderCount || 0})</h2>
+            {member.orders?.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">{t('orders.orderNumber')}</th><th>{t('orders.date')}</th><th>{t('orders.status')}</th><th className="text-right">{t('orders.amount')}</th></tr></thead>
+                  <tbody>{member.orders.map((order: any) => (
+                    <tr key={order.id} className="border-b last:border-0"><td className="py-2 font-mono">{order.orderNumber}</td><td>{formatDateTime(order.createdAt)}</td><td>{order.status}</td><td className="text-right">{formatCurrency(order.finalAmount ?? order.totalAmount)}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            ) : <p className="text-center py-4 text-gray-500">{t('common.noData')}</p>}
+            {member.orderCount > 20 && <div className="mt-3 flex items-center justify-between text-sm"><span className="text-gray-500">{t('common.page', 'Page')} {member.ordersPage} / {Math.ceil(member.orderCount / member.ordersPageSize)}</span><div className="flex gap-2"><button className="btn btn-outline btn-sm" disabled={ordersPage <= 1} onClick={() => setOrdersPage(p => Math.max(1, p - 1))}>{t('common.previous', 'Previous')}</button><button className="btn btn-outline btn-sm" disabled={ordersPage * member.ordersPageSize >= member.orderCount} onClick={() => setOrdersPage(p => p + 1)}>{t('common.next', 'Next')}</button></div></div>}
           </div>
 
           {/* Points History */}

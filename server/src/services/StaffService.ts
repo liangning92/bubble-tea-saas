@@ -1,4 +1,5 @@
 import prisma from '../config/database'
+import bcrypt from 'bcryptjs'
 
 export interface StaffFilter {
   storeId?: string
@@ -58,7 +59,7 @@ export async function createStaff(data: {
   position: string
   email?: string
   address?: string
-  password?: string
+  password: string
   employmentType?: string
   hourlyRate?: number
   weeklyHours?: number
@@ -68,11 +69,15 @@ export async function createStaff(data: {
   bankAccount?: string
   bankName?: string
 }) {
+  if (Buffer.byteLength(data.password, 'utf8') < 6 || Buffer.byteLength(data.password, 'utf8') > 72) {
+    throw new Error('Staff password must be 6–72 bytes')
+  }
+
   // First create the User
   const user = await prisma.user.create({
     data: {
       phone: data.phone,
-      password: data.password || 'password123',
+      password: await bcrypt.hash(data.password, 12),
       role: 'staff',
       storeId: data.storeId
     }

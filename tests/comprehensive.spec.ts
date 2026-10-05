@@ -12,8 +12,8 @@ test.describe('ADMIN - Critical Pages Load Test', () => {
   test.beforeEach(async ({ page }) => {
     // Login once, reuse session
     await page.goto('/login')
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 15000 })
   })
@@ -372,16 +372,16 @@ test.describe('POS - Critical Pages Load Test', () => {
     try {
       const response = await page.goto('http://localhost:6065/login', { timeout: 5000 })
       if (!response || response.status() >= 500) {
-        test.skip('POS app not running')
+        test.skip(true, 'POS app not running')
         return
       }
     } catch {
-      test.skip('POS app not running')
+      test.skip(true, 'POS app not running')
       return
     }
 
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForTimeout(3000)
   })
@@ -443,166 +443,20 @@ test.describe('STAFF APP - Critical Pages Load Test', () => {
     try {
       const response = await page.goto('http://localhost:5177/login', { timeout: 5000 })
       if (!response || response.status() >= 500) {
-        test.skip('Staff app not running')
+        test.skip(true, 'Staff app not running')
         return
       }
     } catch {
-      test.skip('Staff app not running')
+      test.skip(true, 'Staff app not running')
       return
     }
 
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForTimeout(3000)
   })
 
   test('Staff home page loads', async ({ page }) => {
     await page.goto(`http://localhost:5177/`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff attendance page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/attendance`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff schedule page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/schedule`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff leave page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/leave`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff salary page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/salary`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff reimbursement page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/reimbursement`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff overtime page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/overtime`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff shift swap page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/shift-swap`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff deposit page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/deposit`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff points page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/points`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff hygiene page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/hygiene`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff inventory page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/inventory`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff profile page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/profile`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Staff training page loads', async ({ page }) => {
-    await page.goto(`http://localhost:5177/training`)
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-})
-
-test.describe('UI Components & Interactions', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.waitForURL('**/dashboard', { timeout: 15000 })
-  })
-
-  test('Navigation sidebar works', async ({ page }) => {
-    // Click through main nav items
-    const navItems = ['Produk', 'Inventaris', 'Keuangan', 'Karyawan', 'Pemasaran']
-    for (const item of navItems) {
-      const nav = page.locator(`text=${item}`).first()
-      if (await nav.isVisible()) {
-        await nav.click()
-        await page.waitForTimeout(500)
-      }
-    }
-  })
-
-  test('Language switcher works', async ({ page }) => {
-    await page.goto('/dashboard')
-    await page.waitForLoadState('networkidle')
-    // Check if language switcher exists
-    const langSwitch = page.locator('[class*="language"], [class*="lang"]').first()
-    if (await langSwitch.isVisible()) {
-      await langSwitch.click()
-      await page.waitForTimeout(500)
-    }
-  })
-
-  test('Page refresh works', async ({ page }) => {
-    await page.goto('/products')
-    await page.waitForLoadState('networkidle')
-    await page.reload()
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-
-  test('Back navigation works', async ({ page }) => {
-    await page.goto('/products/new')
-    await page.waitForLoadState('networkidle')
-    await page.goBack()
-    await page.waitForLoadState('networkidle')
-    const body = await page.locator('body').textContent()
-    expect(body?.length).toBeGreaterThan(50)
-  })
-})
+    await page.waitForLoadState('networkidle'

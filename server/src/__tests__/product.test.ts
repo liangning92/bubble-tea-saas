@@ -1,6 +1,8 @@
 import request from 'supertest'
 import { app } from '../index'
-import { prisma } from './setup'
+import { createTestCredentials, prisma } from './setup'
+
+const credentials = createTestCredentials()
 
 describe('Product API', () => {
   let authToken: string
@@ -16,10 +18,10 @@ describe('Product API', () => {
     storeId = store.id
 
     // Create user and get token
-    const hashedPassword = await require('bcryptjs').hash('password123', 10)
+    const hashedPassword = await require('bcryptjs').hash(credentials.password, 12)
     const user = await prisma.user.create({
       data: {
-        phone: '081234568100',
+        phone: credentials.phone,
         password: hashedPassword,
         role: 'admin',
         storeId: storeId
@@ -28,7 +30,7 @@ describe('Product API', () => {
 
     const loginRes = await request(app)
       .post('/api/auth/login')
-      .send({ phone: '081234568100', password: 'password123' })
+      .send({ phone: credentials.phone, password: credentials.password })
 
     authToken = loginRes.body.data.token
 
@@ -103,8 +105,9 @@ describe('Product API', () => {
     beforeAll(async () => {
       const product = await prisma.product.create({
         data: {
-          storeId: storeId,
-          categoryId: categoryId,
+          store: { connect: { id: storeId } },
+          category: { connect: { id: categoryId } },
+          code: 'TEST-PROD-STATUS-001',
           name: 'Status Test Product',
           status: 'active'
         }
@@ -123,3 +126,4 @@ describe('Product API', () => {
     })
   })
 })
+import { beforeAll, describe, expect, it } from '@jest/globals'

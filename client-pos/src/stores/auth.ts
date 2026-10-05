@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import bcrypt from 'bcryptjs'
 import { saveOfflineCredentials, clearOfflineCredentials, getOfflineCredentials, OfflineCredentials } from '../db/offline'
 import { clearApiUrl } from '../config'
@@ -17,7 +17,7 @@ interface AuthState {
   token: string | null
   user: User | null
   isAuthenticated: boolean
-  login: (token: string, user: User, passwordHash?: string) => Promise<void>
+  login: (token: string, user: User, password: string) => Promise<void>
   logout: () => void
   loginOffline: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>
   hasCachedCredentials: () => Promise<boolean>
@@ -30,19 +30,17 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
 
-      login: async (token: string, user: User, passwordHash?: string) => {
+      login: async (token: string, user: User, password: string) => {
         set({ token, user, isAuthenticated: true })
 
         // Cache credentials for offline login
-        if (passwordHash) {
-          await saveOfflineCredentials({
-            phone: user.phone,
-            passwordHash,
-            user,
-            token,
-            cachedAt: new Date()
-          })
-        }
+        const passwordHash = await bcrypt.hash(password, 12)
+        await saveOfflineCredentials({
+          phone: user.phone,
+          passwordHash,
+          user,
+          cachedAt: new Date()
+        })
       },
 
       logout: () => {
@@ -72,7 +70,7 @@ export const useAuthStore = create<AuthState>()(
 
           // Set auth state with cached user
           set({
-            token: cached.token,
+            token: null,
             user: cached.user,
             isAuthenticated: true
           })
@@ -89,6 +87,6 @@ export const useAuthStore = create<AuthState>()(
         return !!cached
       }
     }),
-    { name: 'pos-auth' }
+    { name: 'pos-auth', storage: createJSONStorage(() => sessionStorage) }
   )
 )

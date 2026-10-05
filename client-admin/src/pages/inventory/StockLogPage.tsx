@@ -243,6 +243,7 @@ export function StockLogPage() {
     if (isNaN(qty) || qty <= 0) return
 
     const wasteLabelMap: Record<string, string> = {
+      manual: t('inventory.reasonAdjust'),
       spill: t('inventory.lossSpill'),
       spoiled: t('inventory.lossSpoiled'),
       expired: t('inventory.lossExpired'),
@@ -256,7 +257,7 @@ export function StockLogPage() {
     wasteMutation.mutate({
       inventoryId: wasteForm.inventoryId,
       quantity: qty,
-      reason: wasteForm.wasteType === 'expired' ? 'expired' : 'loss',
+      reason: wasteForm.wasteType === 'expired' ? 'expired' : wasteForm.wasteType === 'manual' ? 'adjust' : 'loss',
       note: fullNote
     })
   }
@@ -867,6 +868,7 @@ export function StockLogPage() {
                     onChange={(e) => setWasteForm({ ...wasteForm, wasteType: e.target.value })}
                     className="input w-full"
                   >
+                    <option value="manual">{t('inventory.reasonAdjust')}</option>
                     <option value="spill">{t('inventory.lossSpill')}</option>
                     <option value="spoiled">{t('inventory.lossSpoiled')}</option>
                     <option value="expired">{t('inventory.lossExpired')}</option>

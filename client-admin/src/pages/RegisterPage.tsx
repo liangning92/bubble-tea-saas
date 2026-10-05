@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, Loader2, User, Phone, Lock, Store, ArrowLeft, ArrowRight, Globe, Check } from 'lucide-react'
-import { authApi, storeApi } from '../services/api'
+import { authApi } from '../services/api'
 
 const LANGUAGES = [
   { code: 'zh', labelKey: 'lang.zhName', flag: '🇨🇳' },
@@ -18,7 +18,8 @@ export function RegisterPage() {
     phone: '',
     password: '',
     confirmPassword: '',
-    storeName: ''
+    storeName: '',
+    bootstrapSecret: ''
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -49,7 +50,7 @@ export function RegisterPage() {
       setError(t('auth.invalidPhone'))
       return false
     }
-    if (formData.password.length < 6) {
+    if (formData.password.length < 10 || new TextEncoder().encode(formData.password).length > 72) {
       setError(t('auth.passwordMinLength'))
       return false
     }
@@ -72,25 +73,12 @@ export function RegisterPage() {
     setError('')
 
     try {
-      // Step 1: Create store (required)
-      const storeResponse = await storeApi.create({
-        name: formData.storeName || formData.name + "'s Store"
-      })
-
-      if (!storeResponse.data?.data?.id) {
-        throw new Error('Failed to create store')
-      }
-
-      const storeId = storeResponse.data.data.id
-
-      // Step 2: Register user with store
       const response = await authApi.register({
         phone: formData.phone,
         password: formData.password,
         name: formData.name,
-        storeId,
-        role: 'admin'
-      })
+        storeName: formData.storeName || formData.name + "'s Store"
+      }, formData.bootstrapSecret)
 
       if (response.data?.code === 201 || response.data?.token) {
         navigate('/login', { replace: true })
@@ -303,6 +291,22 @@ export function RegisterPage() {
                   <p className="mt-2 text-xs text-gray-500">
                     {t('auth.storeNameHint')}
                   </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="bootstrapSecret">
+                    One-time setup code
+                  </label>
+                  <input
+                    id="bootstrapSecret"
+                    name="bootstrapSecret"
+                    type="password"
+                    autoComplete="off"
+                    required
+                    value={formData.bootstrapSecret}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary focus:outline-none"
+                  />
                 </div>
 
                 {/* Summary */}

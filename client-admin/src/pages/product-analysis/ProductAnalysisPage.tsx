@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { productAnalysisApi } from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 
 const COLORS = ['#22c55e', '#eab308', '#ef4444']
 
@@ -21,15 +21,21 @@ export function ProductAnalysisPage() {
     queryFn: () => productAnalysisApi.mix(days)
   })
 
+  const { data: trendData, isLoading: trendLoading } = useQuery({
+    queryKey: ['product-analysis', 'trend', days],
+    queryFn: () => productAnalysisApi.trend(days)
+  })
+
   const abcList = abcData?.data?.data?.list || []
   const mixList = mixData?.data?.data?.list || []
+  const trendList = trendData?.data?.data?.list || []
 
   const totalRevenue = mixList.reduce((sum: number, item: any) => sum + (item.revenue || 0), 0)
 
   const getCategoryData = () => {
     const catMap: any = {}
     mixList.forEach((item: any) => {
-      const cat = item.category || 'Other'
+      const cat = item.category || t('productAnalysis.otherCategory')
       if (!catMap[cat]) catMap[cat] = { name: cat, revenue: 0, orders: 0 }
       catMap[cat].revenue += item.revenue || 0
       catMap[cat].orders += item.quantity || 0
@@ -41,7 +47,8 @@ export function ProductAnalysisPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">{t('productAnalysis.title')}</h1>
         <select
           value={days}
           onChange={(e) => setDays(parseInt(e.target.value))}
@@ -52,6 +59,24 @@ export function ProductAnalysisPage() {
           <option value={90}>90 {t('productAnalysis.days')}</option>
           <option value={365}>1 {t('productAnalysis.year')}</option>
         </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('productAnalysis.salesTrend')}</h2>
+        {trendLoading ? <div className="text-center py-8">{t('common.loading')}</div> : (
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendList}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => formatCurrency(v)} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Line type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={false} name={t('productAnalysis.revenue')} />
+                <Line type="monotone" dataKey="grossProfit" stroke="#6366f1" strokeWidth={2} dot={false} name={t('productAnalysis.grossProfit')} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {/* ABC Analysis */}
@@ -73,6 +98,7 @@ export function ProductAnalysisPage() {
                   <th className="pb-3 font-medium">{t('productAnalysis.revenue')}</th>
                   <th className="pb-3 font-medium">% {t('productAnalysis.total')}</th>
                   <th className="pb-3 font-medium">{t('productAnalysis.orders')}</th>
+                  <th className="pb-3 font-medium">{t('productAnalysis.grossMargin')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -91,7 +117,8 @@ export function ProductAnalysisPage() {
                     </td>
                     <td className="py-3 font-medium">{formatCurrency(item.revenue)}</td>
                     <td className="py-3 text-gray-500">{(item.percentage * 100).toFixed(1)}%</td>
-                    <td className="py-3 text-gray-500">{item.quantity}</td>
+                    <td className="py-3 text-gray-500">{item.orderCount}</td>
+                    <td className="py-3 text-gray-500">{(item.margin || 0)}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -148,6 +175,16 @@ export function ProductAnalysisPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('productAnalysis.productMargins')}</h2>
+        {mixLoading ? <div className="text-center py-8">{t('common.loading')}</div> : (
+          <div className="overflow-x-auto"><table className="w-full">
+            <thead><tr className="text-left text-sm text-gray-500 border-b"><th className="pb-3">{t('products.name')}</th><th>{t('productAnalysis.category')}</th><th className="text-right">{t('productAnalysis.revenue')}</th><th className="text-right">{t('productAnalysis.cost')}</th><th className="text-right">{t('productAnalysis.grossMargin')}</th></tr></thead>
+            <tbody>{mixList.map((item: any) => <tr key={item.productId} className="border-b last:border-0"><td className="py-3 font-medium">{item.productName}</td><td>{item.category}</td><td className="text-right">{formatCurrency(item.revenue)}</td><td className="text-right">{formatCurrency(item.cost)}</td><td className="text-right">{item.margin || 0}%</td></tr>)}</tbody>
+          </table></div>
+        )}
       </div>
 
       {/* Summary Stats */}

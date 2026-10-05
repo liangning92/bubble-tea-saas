@@ -264,7 +264,7 @@ export function CustomerDisplayPage() {
               {isPromoText ? (
                 <div className="bg-white/15 backdrop-blur-md border border-white/20 p-6 rounded-2xl shadow-xl w-full">
                   <span className="inline-block px-3 py-1 bg-yellow-400 text-purple-950 font-black text-xs rounded-full mb-3 tracking-wider uppercase">
-                    {t('pos.specialOffer', 'HOT DEAL • 特惠')}
+                    {t('pos.specialOffer')}
                   </span>
                   <h3 className="text-2xl sm:text-3xl font-extrabold tracking-wide mb-2 leading-tight drop-shadow-sm">
                     {promotion}
@@ -348,7 +348,7 @@ export function CustomerDisplayPage() {
                   <span>{orderData.upsellHint}</span>
                 </div>
                 <span className="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider whitespace-nowrap">
-                  {t('pos.promoDeal', '特惠')}
+                  {t('pos.promoDeal')}
                 </span>
               </div>
             )}
@@ -417,52 +417,4 @@ export function CustomerDisplayPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center p-8 text-white">
         <div className="bg-white text-gray-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in duration-300">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-2xl">📱</span>
-            <span className="font-bold text-lg text-primary">{t('pos.scanToPay', 'Scan QR to Pay')}</span>
-          </div>
-          {paymentQr.orderNumber && (
-            <p className="text-xs text-gray-400 font-mono mb-2">#{paymentQr.orderNumber}</p>
-          )}
-          <div className="p-3 bg-white border-2 border-indigo-100 rounded-2xl shadow-sm mb-4 flex items-center justify-center">
-            <img src={paymentQr.qrImage} alt="Payment QR" className="w-56 h-56 object-contain" />
-          </div>
-          <p className="text-gray-500 text-xs mb-1 uppercase tracking-wider">{t('pos.total', 'Total Amount')}</p>
-          <p className="text-3xl font-extrabold text-primary mb-4">{formatCurrency(paymentQr.amount)}</p>
-          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span>QRIS / GoPay / OVO / Dana / BCA</span>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Order complete state - show thank you message (always full screen)
-  if (displayState === 'complete') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-500 to-green-600 flex flex-col items-center justify-center text-white">
-        <div className="text-8xl mb-6">✓</div>
-        <h1 className="text-5xl font-bold mb-2">{t('customerDisplay.thankYou')}</h1>
-        <p className="text-2xl opacity-90">
-          {t('customerDisplay.orderNumber')}: {orderComplete.orderNumber}
-        </p>
-        <p className="text-xl mt-8 opacity-80">{t('customerDisplay.pleaseWait')}</p>
-      </div>
-    )
-  }
-
-  // Render dynamic layout
-  return (
-    <div className="min-h-screen bg-gray-900 flex">
-      {currentLayout?.columns.map((col, index) => (
-        <div
-          key={index}
-          className="h-screen overflow-hidden"
-          style={{ width: `${col.width}%` }}
-        >
-          {renderColumnContent(col.content, index === 0 ? videoRef : undefined)}
-        </div>
-      ))}
-    </div>
-  )
-}
+       

@@ -160,7 +160,7 @@ case $choice in
         echo "📱 管理后台: http://localhost:5173"
         echo "💻 API: http://localhost:7072"
         echo "🖥️  POS收银台: http://localhost:6063"
-        echo "测试账号: 081234567890 / admin123"
+        echo "测试账号: [configured test phone] / [configured test password]"
         echo ""
         echo "查看状态: pm2 status"
         echo "查看日志: pm2 logs"

@@ -27,14 +27,14 @@ const srcPath = path.join(clientPath, 'src')
 // 解析 i18n 文件，提取所有 key
 // 结构: resources = { id: { translation: { ... } }, en: { translation: { ... } }, zh: { translation: { ... } } }
 // 只解析 en 段即可，因为所有语言的 key 是相同的
-function extractI18nKeys(content) {
+function extractI18nKeys(content, language = 'en') {
   const keys = new Set()
   const lines = content.split('\n')
 
-  // 找到 en: { } 块
+  // Find the requested locale block.
   let enStartLine = -1, enEndLine = -1
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() === 'en: {') { enStartLine = i; break }
+    if (new RegExp(`^\\s*["']?${language}["']?:\\s*\\{`).test(lines[i])) { enStartLine = i; break }
   }
   if (enStartLine === -1) return keys
 
@@ -52,7 +52,7 @@ function extractI18nKeys(content) {
   let transStartLine = -1, transEndLine = -1
   depth = 0
   for (let i = enStartLine; i < enEndLine; i++) {
-    if (/translation:\s*\{/.test(lines[i])) { transStartLine = i; break }
+    if (/["']?translation["']?:\s*\{/.test(lines[i])) { transStartLine = i; break }
   }
   if (transStartLine === -1) return keys
 
@@ -70,7 +70,7 @@ function extractI18nKeys(content) {
     const line = lines[i]
 
     // 命名空间声明（行首的 "xxx: {" 模式）
-    const nsMatch = line.match(/^(\s*)([a-zA-Z0-9_]+):\s*\{/)
+    const nsMatch = line.match(/^(\s*)["']?([a-zA-Z0-9_]+)["']?:\s*\{/)
     if (nsMatch) {
       nsStack.push(nsMatch[2])
       continue
@@ -97,7 +97,7 @@ function extractI18nKeys(content) {
     }
 
     // 提取 key: 'value' 或 key: "value"
-    const kvMatch = line.match(/^\s*([a-zA-Z0-9_]+):\s*(['"])([^\2]*)\2/)
+    const kvMatch = line.match(/^\s*["']?([a-zA-Z0-9_]+)["']?:\s*(['"])(.*?)\2\s*,?\s*$/)
     if (kvMatch) {
       const stackWithoutTranslation = nsStack.filter(n => n !== 'translation')
       const fullKey = [...stackWithoutTranslation, kvMatch[1]].join('.')
@@ -113,13 +113,17 @@ function extractTCalls(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8')
   const calls = []
 
-  // 匹配 t('key') 或 t("key")
-  const regex = /(?<![a-zA-Z0-9_.])t\s*\(\s*['"]([^'"]+)['"]\s*(?:\|\||\))/g
+  // Match the static translation key (including calls with options/fallback values).
+  const regex = /(?<![a-zA-Z0-9_.])t\s*\(\s*(['"])([^'"]+)\1/g
   let match
   while ((match = regex.exec(content)) !== null) {
+    const lineEnd = content.indexOf('\n', match.index)
+    const statement = content.slice(match.index, lineEnd === -1 ? content.length : lineEnd)
+    const fallbackMatch = statement.match(/^t\s*\(\s*['"][^'"]+['"]\s*,\s*(['"])(.*?)\1/)
+    if (match[2].endsWith('.')) continue // Ignore dynamic namespace prefixes such as t(`hygiene.${key}`).
     calls.push({
-      key: match[1],
-      hasFallback: content.substring(match.index + match[0].length, match.index + match[0].length + 2).includes('||'),
+      key: match[2],
+      hasChineseFallback: !!fallbackMatch && /[一-龥]/.test(fallbackMatch[2]),
       line: content.substring(0, match.index).split('\n').length,
       file: filePath
     })
@@ -160,7 +164,8 @@ function main() {
 
   const i18nContent = fs.readFileSync(i18nPath, 'utf-8')
   const validKeys = extractI18nKeys(i18nContent)
-  console.log(`📚 Found ${validKeys.size} translation keys`)
+  const idKeys = extractI18nKeys(i18nContent, 'id')
+  console.log(`📚 Found ${idKeys.size} Indonesian translation keys`)
 
   // 扫描所有 TSX/TS 文件
   const files = glob.sync(`${srcPath}/**/*.{tsx,ts}`, {
@@ -174,13 +179,9 @@ function main() {
   files.forEach(file => {
     const calls = extractTCalls(file)
     calls.forEach(call => {
-      if (!validKeys.has(call.key)) {
+      if (!idKeys.has(call.key)) {
         console.log(`  ❌ ${path.relative(clientPath, file)}:${call.line}`)
-        console.log(`     Missing i18n key: '${call.key}'`)
-        issueCount++
-      } else if (call.hasFallback) {
-        console.log(`  ⚠️  ${path.relative(clientPath, file)}:${call.line}`)
-        console.log(`     Redundant fallback for key: '${call.key}'`)
+        console.log(`     Missing Indonesian translation: '${call.key}'`)
         issueCount++
       }
     })

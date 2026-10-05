@@ -211,8 +211,6 @@ export async function calculateRestockSuggestions(storeId: string, daysAhead: nu
     include: { items: true }
   })
 
-  if (orders.length === 0) return []
-
   const productSales: Record<string, { productId: string; quantity: number }> = {}
   for (const order of orders) {
     for (const item of order.items) {
@@ -260,6 +258,15 @@ export async function calculateRestockSuggestions(storeId: string, daysAhead: nu
     }
   }
 
+  // Include inventory with a configured minimum/safety stock even when it had
+  // no sales in the lookback period, so suggestions stay tied to live stock.
+  const storeInventory = await prisma.inventory.findMany({ where: { storeId } })
+  for (const inv of storeInventory) {
+    if (!materialUsage[inv.id]) {
+      materialUsage[inv.id] = { inventoryId: inv.id, name: inv.name, unit: inv.unit, dailyUsage: 0 }
+    }
+  }
+
   const suggestions = []
   for (const usage of Object.values(materialUsage)) {
     const inv = await prisma.inventory.findUnique({ where: { id: usage.inventoryId } })
@@ -267,9 +274,14 @@ export async function calculateRestockSuggestions(storeId: string, daysAhead: nu
 
     const neededQty = usage.dailyUsage * daysAhead
     const currentStock = inv.currentStock
+    const targetStock = Math.max(neededQty, Number(inv.safetyStock || 0), Number(inv.minStock || 0))
 
-    if (currentStock < neededQty) {
-      const suggestQty = Math.ceil(neededQty - currentStock)
+    if (currentStock < targetStock) {
+      const uncappedQty = Math.ceil(targetStock - currentStock)
+      const suggestQty = inv.maxStock > 0
+        ? Math.min(uncappedQty, Math.max(0, Math.ceil(inv.maxStock - currentStock)))
+        : uncappedQty
+      if (suggestQty <= 0) continue
       suggestions.push({
         inventoryId: inv.id,
         name: inv.name,

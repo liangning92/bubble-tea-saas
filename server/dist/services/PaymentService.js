@@ -283,8 +283,15 @@ async function handleQrisWebhook(payload) {
         console.error('QRIS payment not found:', external_id);
         return { success: false };
     }
+    if (payload.amount !== undefined && payload.amount !== qrisPayment.amount) {
+        console.error('QRIS webhook amount mismatch:', external_id);
+        return { success: false };
+    }
+    if (qrisPayment.status === 'completed')
+        return { success: true, orderId: qrisPayment.orderId || undefined };
     // Update status
-    const newStatus = status === 'PAID' ? 'completed' : status === 'EXPIRED' ? 'expired' : 'failed';
+    const newStatus = ['PAID', 'COMPLETED'].includes(status.toUpperCase()) ? 'completed' :
+        status.toUpperCase() === 'EXPIRED' ? 'expired' : 'failed';
     await database_1.default.qrisPayment.update({
         where: { id: qrisPayment.id },
         data: {
@@ -314,10 +321,9 @@ async function getQrisPaymentStatus(externalId) {
         return { status: 'not_found' };
     }
     return {
+        storeId: payment.storeId,
         status: payment.status,
         amount: payment.amount,
-        qrString: payment.qrString,
-        qrImage: payment.qrImage,
         createdAt: payment.createdAt,
         expiresAt: payment.expiresAt
     };

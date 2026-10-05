@@ -24,7 +24,7 @@ export function SetupWizard() {
       const connResult = await syncConnect(phone, password)
 
       setStep('syncing')
-      const fullResult = await syncFull(connResult.storeId, connResult.token, connResult.phone, connResult.passwordHash)
+      const fullResult = await syncFull(connResult.storeId, connResult.syncTicket)
 
       setSyncResult(fullResult)
       setStep('done')

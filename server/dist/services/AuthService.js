@@ -43,7 +43,8 @@ async function login(data) {
         phone: user.phone,
         role: user.role,
         storeId: user.staff?.storeId || '',
-        staffId: user.staff?.id || ''
+        staffId: user.staff?.id || '',
+        issuedAtMs: Date.now()
     }, env_1.config.jwt.secret, { expiresIn: env_1.config.jwt.expiresIn });
     return {
         token,
@@ -72,7 +73,7 @@ async function register(data) {
         throw new Error('Phone number already registered');
     }
     // Hash password
-    const hashedPassword = await bcryptjs_1.default.hash(password, 10);
+    const hashedPassword = await bcryptjs_1.default.hash(password, 12);
     // Create user and staff in transaction
     const result = await database_1.default.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -100,7 +101,8 @@ async function register(data) {
         phone: result.user.phone,
         role: result.user.role,
         storeId,
-        staffId: result.staff.id
+        staffId: result.staff.id,
+        issuedAtMs: Date.now()
     }, env_1.config.jwt.secret, { expiresIn: env_1.config.jwt.expiresIn });
     return {
         token,
@@ -158,7 +160,7 @@ async function changePassword(userId, oldPassword, newPassword) {
         throw new Error('Current password is incorrect');
     }
     // Hash new password
-    const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
+    const hashedPassword = await bcryptjs_1.default.hash(newPassword, 12);
     await database_1.default.user.update({
         where: { id: userId },
         data: { password: hashedPassword }
@@ -167,7 +169,7 @@ async function changePassword(userId, oldPassword, newPassword) {
 }
 // Reset password (admin function)
 async function resetPassword(userId, newPassword) {
-    const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
+    const hashedPassword = await bcryptjs_1.default.hash(newPassword, 12);
     await database_1.default.user.update({
         where: { id: userId },
         data: { password: hashedPassword }
@@ -191,7 +193,8 @@ async function refreshToken(token) {
             phone: user.phone,
             role: user.role,
             storeId: user.staff?.storeId || '',
-            staffId: user.staff?.id || ''
+            staffId: user.staff?.id || '',
+            issuedAtMs: Date.now()
         }, env_1.config.jwt.secret, { expiresIn: env_1.config.jwt.expiresIn });
         return { token: newToken };
     }

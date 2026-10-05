@@ -11,7 +11,7 @@ const router = Router()
 // Validation schemas
 const stockInSchema = z.object({
   inventoryId: z.string(),
-  storeId: z.string(),
+  storeId: z.string().optional(),
   quantity: z.number().positive(),
   unitCost: z.number().int().optional(),
   note: z.string().optional(),
@@ -21,7 +21,7 @@ const stockInSchema = z.object({
 
 const stockOutSchema = z.object({
   inventoryId: z.string(),
-  storeId: z.string(),
+  storeId: z.string().optional(),
   quantity: z.number().positive(),
   reason: z.enum(['sold', 'loss', 'adjust', 'expired', 'transfer']),
   note: z.string().optional(),
@@ -140,8 +140,10 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 // POST /api/inventory/stock-in
 router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), validateBody(stockInSchema), async (req: AuthRequest, res) => {
   try {
+    if (req.body.storeId && req.body.storeId !== req.user!.storeId) return res.status(403).json({ code: 403, message: 'Store access denied' })
     const item = await InventoryService.stockIn({
       ...req.body,
+      storeId: req.user!.storeId,
       staffId: req.body.staffId || req.user!.staffId
     })
 
@@ -160,8 +162,10 @@ router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), v
 // POST /api/inventory/stock-out
 router.post('/stock-out', authenticate, authorize('admin', 'manager', 'staff'), validateBody(stockOutSchema), async (req: AuthRequest, res) => {
   try {
+    if (req.body.storeId && req.body.storeId !== req.user!.storeId) return res.status(403).json({ code: 403, message: 'Store access denied' })
     const item = await InventoryService.stockOut({
       ...req.body,
+      storeId: req.user!.storeId,
       staffId: req.body.staffId || req.user!.staffId
     })
 
@@ -362,11 +366,13 @@ router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'),
       return res.status(400).json({ code: 400, message: 'startDate and endDate are required' })
     }
 
+    const alertConfig = await getInventoryAlertConfig(storeId)
     const analysis = await InventoryService.getConsumptionAnalysis({
       storeId,
       startDate: startDate as string,
       endDate: endDate as string,
-      varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold as string) : 10,
+      varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold as string) : alertConfig.varianceWarningPercent,
+      varianceCriticalThreshold: alertConfig.varianceCriticalPercent,
       category: category as string
     })
 
@@ -391,11 +397,13 @@ router.get('/anomaly-summary', authenticate, authorize('admin', 'manager'), asyn
       return res.status(400).json({ code: 400, message: 'startDate and endDate are required' })
     }
 
+    const alertConfig = await getInventoryAlertConfig(storeId)
     const summary = await InventoryService.getAnomalySummary({
       storeId,
       startDate: startDate as string,
       endDate: endDate as string,
-      varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold as string) : 10,
+      varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold as string) : alertConfig.varianceWarningPercent,
+      varianceCriticalThreshold: alertConfig.varianceCriticalPercent,
       category: category as string
     })
 

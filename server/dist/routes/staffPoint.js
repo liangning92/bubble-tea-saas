@@ -1,15 +1,56 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.staffPointRouter = void 0;
 const express_1 = require("express");
 const auth_1 = require("../middlewares/auth");
+const database_1 = __importDefault(require("../config/database"));
 const StaffPointService_1 = require("../services/StaffPointService");
 const router = (0, express_1.Router)();
 exports.staffPointRouter = router;
+async function enforceStaffScope(req, res, staffId) {
+    if (req.user?.role === 'admin')
+        return true;
+    const staff = await database_1.default.staff.findUnique({
+        where: { id: staffId }, select: { storeId: true }
+    });
+    if (!staff || !req.user || !(0, auth_1.canAccessStore)(req.user, staff.storeId)) {
+        res.status(staff ? 403 : 404).json({ code: staff ? 403 : 404, message: staff ? 'Access denied: Store mismatch' : 'Staff not found' });
+        return false;
+    }
+    return true;
+}
+async function enforceRedemptionScope(req, res, redemptionId) {
+    if (req.user?.role === 'admin')
+        return true;
+    const redemption = await database_1.default.staffPointRedemption.findUnique({
+        where: { id: redemptionId },
+        include: { staff: { select: { storeId: true } } }
+    });
+    if (!redemption || !req.user || !(0, auth_1.canAccessStore)(req.user, redemption.staff.storeId)) {
+        res.status(redemption ? 403 : 404).json({ code: redemption ? 403 : 404, message: redemption ? 'Access denied: Store mismatch' : 'Redemption not found' });
+        return false;
+    }
+    return true;
+}
+async function enforceRewardScope(req, res, rewardId) {
+    if (req.user?.role === 'admin')
+        return true;
+    const reward = await database_1.default.staffPointReward.findUnique({ where: { id: rewardId }, select: { storeId: true } });
+    if (!reward || !req.user || !(0, auth_1.canAccessStore)(req.user, reward.storeId)) {
+        res.status(reward ? 403 : 404).json({ code: reward ? 403 : 404, message: reward ? 'Access denied: Store mismatch' : 'Reward not found' });
+        return false;
+    }
+    return true;
+}
 // GET /api/staff-points/balance/:staffId
 router.get('/balance/:staffId', auth_1.authenticate, async (req, res) => {
     try {
         const { staffId } = req.params;
+        if (!await enforceStaffScope(req, res, staffId))
+            return;
         const result = await (0, StaffPointService_1.getStaffPointBalance)(staffId);
         res.json({ code: 200, data: result, timestamp: new Date().toISOString() });
     }
@@ -22,6 +63,9 @@ router.get('/balance/:staffId', auth_1.authenticate, async (req, res) => {
 router.get('/store/:storeId', auth_1.authenticate, async (req, res) => {
     try {
         const { storeId } = req.params;
+        if (!req.user || !(0, auth_1.canAccessStore)(req.user, storeId)) {
+            return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' });
+        }
         const result = await (0, StaffPointService_1.getStaffPointBalancesByStore)(storeId);
         res.json({ code: 200, data: result, timestamp: new Date().toISOString() });
     }
@@ -34,6 +78,8 @@ router.get('/store/:storeId', auth_1.authenticate, async (req, res) => {
 router.get('/history/:staffId', auth_1.authenticate, async (req, res) => {
     try {
         const { staffId } = req.params;
+        if (!await enforceStaffScope(req, res, staffId))
+            return;
         const limit = parseInt(req.query.limit) || 50;
         const result = await (0, StaffPointService_1.getStaffPointHistory)(staffId, limit);
         res.json({ code: 200, data: result, timestamp: new Date().toISOString() });
@@ -50,6 +96,8 @@ router.post('/earn', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manage
         if (!staffId || !points || !reason) {
             return res.status(400).json({ code: 400, message: 'Missing required fields' });
         }
+        if (!await enforceStaffScope(req, res, staffId))
+            return;
         const result = await (0, StaffPointService_1.awardPoints)({
             staffId,
             storeId: req.user.storeId,
@@ -74,6 +122,11 @@ router.post('/redeem', auth_1.authenticate, async (req, res) => {
         if (!staffId || !points || !reason) {
             return res.status(400).json({ code: 400, message: 'Missing required fields' });
         }
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.staffId !== staffId) {
+            return res.status(403).json({ code: 403, message: 'Can only redeem your own points' });
+        }
+        if (!await enforceStaffScope(req, res, staffId))
+            return;
         const result = await (0, StaffPointService_1.redeemPoints)({
             staffId,
             storeId: req.user.storeId,
@@ -96,6 +149,8 @@ router.post('/adjust', auth_1.authenticate, (0, auth_1.authorize)('admin', 'mana
         if (!staffId || points === undefined || !reason) {
             return res.status(400).json({ code: 400, message: 'Missing required fields' });
         }
+        if (!await enforceStaffScope(req, res, staffId))
+            return;
         const result = await (0, StaffPointService_1.adjustPoints)({
             staffId,
             storeId: req.user.storeId,
@@ -159,6 +214,8 @@ router.post('/rewards', auth_1.authenticate, (0, auth_1.authorize)('admin', 'man
 router.put('/rewards/:id', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
         const { id } = req.params;
+        if (!await enforceRewardScope(req, res, id))
+            return;
         const result = await (0, StaffPointService_1.updateReward)(id, req.body);
         res.json({ code: 200, data: result, timestamp: new Date().toISOString() });
     }
@@ -171,6 +228,8 @@ router.put('/rewards/:id', auth_1.authenticate, (0, auth_1.authorize)('admin', '
 router.delete('/rewards/:id', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
         const { id } = req.params;
+        if (!await enforceRewardScope(req, res, id))
+            return;
         await (0, StaffPointService_1.deleteReward)(id);
         res.json({ code: 200, message: 'Reward deleted', timestamp: new Date().toISOString() });
     }
@@ -218,6 +277,8 @@ router.get('/redemption/pending', auth_1.authenticate, (0, auth_1.authorize)('ad
 router.post('/redemption/:id/fulfill', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
         const { id } = req.params;
+        if (!await enforceRedemptionScope(req, res, id))
+            return;
         const result = await (0, StaffPointService_1.fulfillRedemption)(id, req.user.id);
         res.json({ code: 200, data: result, timestamp: new Date().toISOString() });
     }
@@ -230,6 +291,8 @@ router.post('/redemption/:id/fulfill', auth_1.authenticate, (0, auth_1.authorize
 router.post('/redemption/:id/cancel', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
         const { id } = req.params;
+        if (!await enforceRedemptionScope(req, res, id))
+            return;
         const result = await (0, StaffPointService_1.cancelRedemption)(id);
         res.json({ code: 200, data: result, timestamp: new Date().toISOString() });
     }
@@ -241,7 +304,7 @@ router.post('/redemption/:id/cancel', auth_1.authenticate, (0, auth_1.authorize)
 // GET /api/staff-points/my - Get current staff's points (Staff APP)
 router.get('/my', auth_1.authenticate, async (req, res) => {
     try {
-        const staff = await prisma.staff.findFirst({
+        const staff = await database_1.default.staff.findFirst({
             where: { userId: req.user.id }
         });
         if (!staff) {
@@ -268,7 +331,7 @@ router.get('/my', auth_1.authenticate, async (req, res) => {
 router.get('/logs/my', auth_1.authenticate, async (req, res) => {
     try {
         const { type, startDate, endDate } = req.query;
-        const staff = await prisma.staff.findFirst({
+        const staff = await database_1.default.staff.findFirst({
             where: { userId: req.user.id }
         });
         if (!staff) {
@@ -284,7 +347,7 @@ router.get('/logs/my', auth_1.authenticate, async (req, res) => {
             if (endDate)
                 where.createdAt.lte = new Date(endDate);
         }
-        const logs = await prisma.staffPointLog.findMany({
+        const logs = await database_1.default.staffPointLog.findMany({
             where,
             orderBy: { createdAt: 'desc' },
             take: 100
@@ -326,62 +389,4 @@ router.get('/rewards/available', auth_1.authenticate, async (req, res) => {
 });
 // ==================== Points Rule Config ====================
 const zod_1 = require("zod");
-const pointsRuleSchema = zod_1.z.object({
-    perfectAttendancePoints: zod_1.z.number().optional(),
-    goodPerformancePoints: zod_1.z.number().optional(),
-    completedTrainingPoints: zod_1.z.number().optional(),
-    holidayWorkPoints: zod_1.z.number().optional(),
-    overtimePerHourPoints: zod_1.z.number().optional(),
-    isActive: zod_1.z.boolean().optional()
-});
-// GET /api/staff-points/rules - Get store points rule
-router.get('/rules', auth_1.authenticate, async (req, res) => {
-    try {
-        const storeId = req.user.storeId;
-        let rule = await prisma.staffPointRule.findUnique({ where: { storeId } });
-        // Create default if not exists
-        if (!rule) {
-            rule = await prisma.staffPointRule.create({
-                data: {
-                    storeId,
-                    perfectAttendancePoints: 50,
-                    goodPerformancePoints: 100,
-                    completedTrainingPoints: 30,
-                    holidayWorkPoints: 20,
-                    overtimePerHourPoints: 5,
-                    isActive: true
-                }
-            });
-        }
-        res.json({ code: 200, data: rule, timestamp: new Date().toISOString() });
-    }
-    catch (error) {
-        console.error('Get points rule error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to get points rule' });
-    }
-});
-// PUT /api/staff-points/rules - Update store points rule
-router.put('/rules', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
-    try {
-        const storeId = req.user.storeId;
-        const data = pointsRuleSchema.parse(req.body);
-        let rule = await prisma.staffPointRule.findUnique({ where: { storeId } });
-        if (rule) {
-            rule = await prisma.staffPointRule.update({
-                where: { storeId },
-                data
-            });
-        }
-        else {
-            rule = await prisma.staffPointRule.create({
-                data: { storeId, ...data }
-            });
-        }
-        res.json({ code: 200, message: 'Points rule updated', data: rule, timestamp: new Date().toISOString() });
-    }
-    catch (error) {
-        console.error('Update points rule error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to update points rule' });
-    }
-});
-//# sourceMappingURL=staffPoint.js.map
+const points

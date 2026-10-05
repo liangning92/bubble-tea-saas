@@ -22,8 +22,8 @@ async function runFullFlowTest() {
     console.log('【1】登录');
     await page.goto('http://localhost:6063/login', { waitUntil: 'networkidle' });
     await page.waitForTimeout(1000);
-    await page.fill('input[type="tel"]', '081234567890');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
     console.log(page.url().includes('dashboard') ? '✅ 登录成功' : '❌ 登录失败');

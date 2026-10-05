@@ -46,7 +46,7 @@ exports.inventoryRouter = router;
 // Validation schemas
 const stockInSchema = zod_1.z.object({
     inventoryId: zod_1.z.string(),
-    storeId: zod_1.z.string(),
+    storeId: zod_1.z.string().optional(),
     quantity: zod_1.z.number().positive(),
     unitCost: zod_1.z.number().int().optional(),
     note: zod_1.z.string().optional(),
@@ -55,7 +55,7 @@ const stockInSchema = zod_1.z.object({
 });
 const stockOutSchema = zod_1.z.object({
     inventoryId: zod_1.z.string(),
-    storeId: zod_1.z.string(),
+    storeId: zod_1.z.string().optional(),
     quantity: zod_1.z.number().positive(),
     reason: zod_1.z.enum(['sold', 'loss', 'adjust', 'expired', 'transfer']),
     note: zod_1.z.string().optional(),
@@ -160,8 +160,11 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
 // POST /api/inventory/stock-in
 router.post('/stock-in', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager', 'staff'), (0, validation_1.validateBody)(stockInSchema), async (req, res) => {
     try {
+        if (req.body.storeId && req.body.storeId !== req.user.storeId)
+            return res.status(403).json({ code: 403, message: 'Store access denied' });
         const item = await InventoryService.stockIn({
             ...req.body,
+            storeId: req.user.storeId,
             staffId: req.body.staffId || req.user.staffId
         });
         res.status(201).json({
@@ -179,8 +182,11 @@ router.post('/stock-in', auth_1.authenticate, (0, auth_1.authorize)('admin', 'ma
 // POST /api/inventory/stock-out
 router.post('/stock-out', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager', 'staff'), (0, validation_1.validateBody)(stockOutSchema), async (req, res) => {
     try {
+        if (req.body.storeId && req.body.storeId !== req.user.storeId)
+            return res.status(403).json({ code: 403, message: 'Store access denied' });
         const item = await InventoryService.stockOut({
             ...req.body,
+            storeId: req.user.storeId,
             staffId: req.body.staffId || req.user.staffId
         });
         res.json({
@@ -364,11 +370,13 @@ router.get('/consumption-analysis', auth_1.authenticate, (0, auth_1.authorize)('
         if (!startDate || !endDate) {
             return res.status(400).json({ code: 400, message: 'startDate and endDate are required' });
         }
+        const alertConfig = await (0, InventoryAlertConfigService_1.getInventoryAlertConfig)(storeId);
         const analysis = await InventoryService.getConsumptionAnalysis({
             storeId,
             startDate: startDate,
             endDate: endDate,
-            varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold) : 10,
+            varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold) : alertConfig.varianceWarningPercent,
+            varianceCriticalThreshold: alertConfig.varianceCriticalPercent,
             category: category
         });
         res.json({
@@ -390,11 +398,13 @@ router.get('/anomaly-summary', auth_1.authenticate, (0, auth_1.authorize)('admin
         if (!startDate || !endDate) {
             return res.status(400).json({ code: 400, message: 'startDate and endDate are required' });
         }
+        const alertConfig = await (0, InventoryAlertConfigService_1.getInventoryAlertConfig)(storeId);
         const summary = await InventoryService.getAnomalySummary({
             storeId,
             startDate: startDate,
             endDate: endDate,
-            varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold) : 10,
+            varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold) : alertConfig.varianceWarningPercent,
+            varianceCriticalThreshold: alertConfig.varianceCriticalPercent,
             category: category
         });
         res.json({

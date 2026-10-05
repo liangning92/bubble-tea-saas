@@ -5,6 +5,12 @@ import * as ProductManagementService from '../services/ProductManagementService'
 
 const router = Router()
 
+function parseReportDate(value: unknown, fallback: Date, endOfDay = false): Date {
+  const date = value ? new Date(String(value)) : fallback
+  if (endOfDay && value && /^\d{4}-\d{2}-\d{2}$/.test(String(value))) date.setUTCHours(23, 59, 59, 999)
+  return date
+}
+
 // ==================== REVENUE ====================
 
 // GET /api/finance/revenue
@@ -15,8 +21,8 @@ router.get('/revenue', authenticate, authorize('admin', 'manager'), async (req: 
 
     const result = await FinanceService.getRevenueSummary(
       storeId,
-      startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      endDate ? new Date(endDate as string) : new Date()
+      parseReportDate(startDate, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+      parseReportDate(endDate, new Date(), true)
     )
 
     res.json({
@@ -78,8 +84,8 @@ router.get('/profit', authenticate, authorize('admin', 'manager'), async (req: A
 
     const result = await FinanceService.getProfitAnalysis(
       storeId,
-      startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      endDate ? new Date(endDate as string) : new Date()
+      parseReportDate(startDate, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+      parseReportDate(endDate, new Date(), true)
     )
 
     res.json({
@@ -146,6 +152,19 @@ router.get('/income-statement', authenticate, authorize('admin', 'manager'), asy
 
 // ==================== TAX ====================
 
+// GET /api/finance/balance-sheet
+router.get('/balance-sheet', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const { year, month } = parseYearMonth(req.query.month as string, req.query.year as string)
+    const result = await FinanceService.getBalanceSheet(storeId, month, year)
+    res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('Get balance sheet error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get balance sheet' })
+  }
+})
+
 // GET /api/finance/tax
 router.get('/tax', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
@@ -175,8 +194,8 @@ router.get('/cash-flow', authenticate, authorize('admin', 'manager'), async (req
 
     const result = await FinanceService.getCashFlow(
       storeId,
-      startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      endDate ? new Date(endDate as string) : new Date()
+      parseReportDate(startDate, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+      parseReportDate(endDate, new Date(), true)
     )
 
     res.json({

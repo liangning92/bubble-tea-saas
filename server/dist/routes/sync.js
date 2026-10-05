@@ -1,7 +1,16 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
+const crypto_1 = require("crypto");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const env_1 = require("../config/env");
+const auth_1 = require("../middlewares/auth");
+const zod_1 = require("zod");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient({
     transactionOptions: {
@@ -11,22 +20,26 @@ const prisma = new client_1.PrismaClient({
 });
 // CLOUD API base URL
 const CLOUD_API = 'https://api.aicube.online';
-// Config key for cloud auth token
-const CLOUD_TOKEN_KEY = 'sync.cloud_token';
+const syncConnectLimiter = (0, express_rate_limit_1.default)({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+const consumedSyncTickets = new Map();
 // POST /api/sync/connect
 // Body: { phone: string, password: string }
-// Returns: { storeId, storeName, tenantId, token, phone, passwordHash }
-router.post('/connect', async (req, res) => {
+// Returns a short-lived local ticket after cloud credentials are verified.
+router.post('/connect', syncConnectLimiter, async (req, res) => {
     try {
-        const { phone, password } = req.body;
-        if (!phone || !password) {
-            return res.status(400).json({ code: 400, message: 'Phone and password required' });
-        }
+        const parsed = zod_1.z.object({
+            phone: zod_1.z.string().min(10).max(15),
+            password: zod_1.z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72)
+        }).safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ code: 400, message: 'Invalid credentials request' });
+        const { phone, password } = parsed.data;
         // Step 1: Call cloud API to login
         const loginRes = await fetch(`${CLOUD_API}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, password })
+            body: JSON.stringify({ phone, password }),
+            signal: AbortSignal.timeout(10000)
         });
         const loginData = await loginRes.json();
         // Cloud returns: { code, data: { token, user: { storeId } } }
@@ -36,43 +49,33 @@ router.post('/connect', async (req, res) => {
         const token = loginData.data.token;
         const cloudUser = loginData.data.user;
         const storeId = cloudUser?.storeId;
-        const passwordHash = loginData.data.passwordHash;
         if (!storeId) {
             return res.status(401).json({ code: 401, message: 'Account not linked to any store' });
         }
         // Step 2: Get store details (storeName, tenantId)
         const storeRes = await fetch(`${CLOUD_API}/api/stores/${storeId}`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(10000)
         });
+        if (!storeRes.ok)
+            return res.status(403).json({ code: 403, message: 'Account cannot access its store' });
         const storeInfo = storeRes.ok ? (await storeRes.json()) : null;
         const store = storeInfo?.data || {};
-        // Step 3: Save cloud token to local Config so we can push orders to cloud later
-        try {
-            await prisma.config.upsert({
-                where: { storeId_key: { storeId, key: CLOUD_TOKEN_KEY } },
-                create: {
-                    storeId,
-                    key: CLOUD_TOKEN_KEY,
-                    value: token,
-                    category: 'sync',
-                },
-                update: {
-                    value: token,
-                },
-            });
-        }
-        catch (e) {
-            console.warn('[sync/connect] Failed to save cloud token to Config:', e);
-        }
+        if (store.id !== storeId)
+            return res.status(403).json({ code: 403, message: 'Store authorization failed' });
+        const syncTicket = jsonwebtoken_1.default.sign({
+            purpose: 'pos-full-sync',
+            jti: (0, crypto_1.randomUUID)(),
+            storeId,
+            cloudToken: token
+        }, env_1.config.jwt.secret, { expiresIn: '5m' });
         return res.json({
             code: 200,
             data: {
                 storeId,
                 storeName: store.name || 'My Store',
                 tenantId: store.tenantId || 'default-tenant',
-                token,
-                phone, // needed to create local User
-                passwordHash, // bcrypt hash from cloud, needed for local User
+                syncTicket,
             }
         });
     }
@@ -81,31 +84,64 @@ router.post('/connect', async (req, res) => {
     }
 });
 // POST /api/sync/full
-// Body: { storeId, token, phone, passwordHash }
+// Body: { syncTicket }
 // Fetches all data from cloud and writes to local SQLite
-// Also creates local User record so login works after wizard
 router.post('/full', async (req, res) => {
     try {
-        const { storeId, token, phone, passwordHash } = req.body;
-        if (!storeId || !token) {
-            return res.status(400).json({ code: 400, message: 'storeId and token required' });
+        const { syncTicket } = req.body;
+        if (typeof syncTicket !== 'string') {
+            return res.status(400).json({ code: 400, message: 'Sync ticket required' });
         }
+        let ticket;
+        try {
+            ticket = jsonwebtoken_1.default.verify(syncTicket, env_1.config.jwt.secret);
+        }
+        catch {
+            return res.status(401).json({ code: 401, message: 'Invalid or expired sync ticket' });
+        }
+        if (ticket.purpose !== 'pos-full-sync' || !ticket.jti || !ticket.storeId || !ticket.cloudToken) {
+            return res.status(401).json({ code: 401, message: 'Invalid sync ticket' });
+        }
+        const now = Math.floor(Date.now() / 1000);
+        for (const [jti, expiresAt] of consumedSyncTickets) {
+            if (expiresAt <= now)
+                consumedSyncTickets.delete(jti);
+        }
+        if (consumedSyncTickets.has(ticket.jti)) {
+            return res.status(409).json({ code: 409, message: 'Sync ticket has already been used' });
+        }
+        if (typeof ticket.exp !== 'number' || ticket.exp <= now) {
+            return res.status(401).json({ code: 401, message: 'Invalid or expired sync ticket' });
+        }
+        consumedSyncTickets.set(ticket.jti, ticket.exp);
+        const storeId = ticket.storeId;
+        const token = ticket.cloudToken;
         const headers = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         };
         // Fetch all data (products/pos includes nested specs and addons)
         const [storeRes, categoriesRes, productsRes, addonsRes] = await Promise.all([
-            fetch(`${CLOUD_API}/api/stores/${storeId}`, { headers }).catch(() => null),
-            fetch(`${CLOUD_API}/api/categories?storeId=${storeId}`, { headers }).catch(() => null),
-            fetch(`${CLOUD_API}/api/products/pos?storeId=${storeId}`, { headers }).catch(() => null),
-            fetch(`${CLOUD_API}/api/addons?storeId=${storeId}`, { headers }).catch(() => null),
+            fetch(`${CLOUD_API}/api/stores/${storeId}`, { headers }),
+            fetch(`${CLOUD_API}/api/categories?storeId=${encodeURIComponent(storeId)}`, { headers }),
+            fetch(`${CLOUD_API}/api/products/pos?storeId=${encodeURIComponent(storeId)}`, { headers }),
+            fetch(`${CLOUD_API}/api/addons?storeId=${encodeURIComponent(storeId)}`, { headers }),
         ]);
+        if (![storeRes, categoriesRes, productsRes, addonsRes].every(response => response.ok)) {
+            return res.status(502).json({ code: 502, message: 'Could not fetch complete store data; local data was not changed' });
+        }
         const storeData = storeRes ? await storeRes.json() : null;
         const categoriesData = categoriesRes ? await categoriesRes.json() : { data: [] };
         const productsData = productsRes ? await productsRes.json() : { data: { list: [] } };
         const addonsData = addonsRes ? await addonsRes.json() : { data: [] };
         const store = storeData?.data || {};
+        if (store.id !== storeId) {
+            return res.status(502).json({ code: 502, message: 'Cloud returned a different store; local data was not changed' });
+        }
+        const existingOtherStore = await prisma.store.findFirst({ where: { id: { not: storeId } }, select: { id: true } });
+        if (existingOtherStore) {
+            return res.status(409).json({ code: 409, message: 'This POS database is already linked to another store' });
+        }
         // products/pos returns { data: { list: [...] } }
         const products = (productsData.data?.list || []);
         const categories = (categoriesData.data || []);
@@ -125,39 +161,25 @@ router.post('/full', async (req, res) => {
                 await tx.addon.deleteMany();
                 await tx.category.deleteMany();
                 await tx.config.deleteMany();
-                await tx.staff.deleteMany();
-                await tx.user.deleteMany();
-                await tx.store.deleteMany();
-                await tx.tenant.deleteMany();
                 // Create Tenant
-                const tenant = await tx.tenant.create({
-                    data: {
-                        id: store.tenantId || 'default-tenant',
-                        name: store.tenantName || store.name || 'My Store',
-                    }
+                const tenantId = store.tenantId || 'default-tenant';
+                await tx.tenant.upsert({
+                    where: { id: tenantId },
+                    create: { id: tenantId, name: store.tenantName || store.name || 'My Store' },
+                    update: { name: store.tenantName || store.name || 'My Store' }
                 });
                 // Create Store
-                await tx.store.create({
-                    data: {
+                await tx.store.upsert({
+                    where: { id: storeId },
+                    create: {
                         id: storeId,
-                        tenantId: tenant.id,
+                        tenantId,
                         name: store.name || 'My Store',
                         address: store.address || '',
                         phone: store.phone || '',
-                    }
+                    },
+                    update: { tenantId, name: store.name || 'My Store', address: store.address || '', phone: store.phone || '' }
                 });
-                // Create local User record so login works after wizard
-                // phone and passwordHash come from /connect response
-                if (phone && passwordHash) {
-                    await tx.user.create({
-                        data: {
-                            phone,
-                            password: passwordHash, // bcrypt hash from cloud
-                            role: 'admin',
-                            storeId,
-                        }
-                    }).catch(() => { });
-                }
                 // Create Categories
                 for (const cat of categories) {
                     await tx.category.create({
@@ -266,7 +288,6 @@ router.get('/status', async (req, res) => {
             code: 200,
             data: {
                 isSetUp: storeCount > 0,
-                storeCount,
             }
         });
     }
@@ -278,11 +299,14 @@ router.get('/status', async (req, res) => {
 // Receives an order from local POS and upserts into cloud DB.
 // Called by local server after creating an order locally.
 // Uses order ID as unique key so duplicate syncs are idempotent.
-router.post('/order', async (req, res) => {
+router.post('/order', auth_1.authenticate, async (req, res) => {
     try {
         const { order } = req.body;
         if (!order?.id || !order?.storeId) {
             return res.status(400).json({ code: 400, message: 'order.id and order.storeId required' });
+        }
+        if (!req.user || !(0, auth_1.canAccessStore)(req.user, order.storeId)) {
+            return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' });
         }
         // Upsert order - idempotent, safe to retry
         await prisma.$transaction(async (tx) => {
@@ -314,48 +338,4 @@ router.post('/order', async (req, res) => {
                     note: order.note || null,
                     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
                     items: {
-                        create: (order.items || []).map((item) => ({
-                            id: item.id,
-                            productId: item.productId,
-                            productName: item.productName,
-                            specId: item.specId,
-                            specName: item.specName,
-                            quantity: item.quantity,
-                            unitPrice: item.unitPrice,
-                            addons: typeof item.addons === 'string' ? item.addons : JSON.stringify(item.addons || '[]'),
-                            bomCost: item.bomCost || 0,
-                        }))
-                    },
-                },
-                update: {
-                    totalAmount: order.totalAmount,
-                    discountAmount: order.discountAmount || 0,
-                    finalAmount: order.finalAmount,
-                    status: order.status,
-                    paymentMethod: order.paymentMethod,
-                    items: {
-                        deleteMany: {},
-                        create: (order.items || []).map((item) => ({
-                            id: item.id,
-                            productId: item.productId,
-                            productName: item.productName,
-                            specId: item.specId,
-                            specName: item.specName,
-                            quantity: item.quantity,
-                            unitPrice: item.unitPrice,
-                            addons: typeof item.addons === 'string' ? item.addons : JSON.stringify(item.addons || '[]'),
-                            bomCost: item.bomCost || 0,
-                        }))
-                    },
-                },
-            });
-        });
-        return res.json({ code: 200, message: 'Order synced to cloud' });
-    }
-    catch (err) {
-        console.error('[sync/order] Error:', err);
-        return res.status(500).json({ code: 500, message: err.message || 'Order sync failed' });
-    }
-});
-exports.default = router;
-//# sourceMappingURL=sync.js.map
+                        create: (or

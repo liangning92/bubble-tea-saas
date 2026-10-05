@@ -47,7 +47,7 @@ async function runCRUDTests() {
 
   // ========== 1. 登录获取token ==========
   console.log('\n========== 1. 登录获取凭证 ==========');
-  const loginRes = await apiRequest('POST', '/auth/login', { phone: '081234567890', password: 'admin123' });
+  const loginRes = await apiRequest('POST', '/auth/login', { phone: (process.env.TEST_ADMIN_PHONE || ''), password: (process.env.TEST_ADMIN_PASSWORD || '') });
   const adminToken = loginRes.data?.data?.token;
   log('Admin登录API', loginRes.ok && !!adminToken, `Token: ${adminToken ? '获取成功' : '获取失败'}`);
 
@@ -177,8 +177,8 @@ async function runCRUDTests() {
 
   await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
   await sleep(1000);
-  await page.locator('input[type="tel"]').fill('081234567890');
-  await page.locator('input[type="password"]').fill('admin123');
+  await page.locator('input[type="tel"]').fill((process.env.TEST_ADMIN_PHONE || ''));
+  await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
   await page.locator('button[type="submit"]').click();
   await page.waitForTimeout(3000);
   log('浏览器-Admin登录成功', !page.url().includes('login'));
@@ -214,8 +214,8 @@ async function runCRUDTests() {
   // POS登录
   const posLogin = page.locator('input[type="tel"]');
   if (await posLogin.count() > 0) {
-    await posLogin.fill('081234567892');
-    await page.locator('input[type="password"]').fill('admin123');
+    await posLogin.fill((process.env.TEST_CASHIER_PHONE || ''));
+    await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
     await page.locator('button[type="submit"]').click();
     await page.waitForTimeout(3000);
     log('浏览器-POS登录成功', !page.url().includes('login'));

@@ -71,14 +71,15 @@ docker-compose logs -f
 docker-compose down
 ```
 
-## 测试账号
+## 生产认证配置
 
-| 角色 | 手机号 | 密码 |
-|------|--------|------|
-| 管理员 | 081234567890 | admin123 |
-| 经理 | 081234567891 | admin123 |
-| 收银员 | 081234567892 | admin123 |
-| 店员 | 081234567893 | admin123 |
+生产启动前必须通过部署平台的密钥管理功能配置认证签名密钥、一次性管理员初始化密钥和支付回调校验密钥。不要把这些值写入代码、文档或版本控制。生产启动时认证签名密钥必须至少 32 字节；初始化管理员后应从运行环境删除一次性初始化密钥。
+
+数据库 seed 脚本不再创建内置账号。运行 seed 前，需在安全的运行环境中为管理员、经理、收银员和店员分别设置手机号及密码变量；脚本会验证密码长度并且不会将凭据写入日志。
+
+首次创建管理员时，在注册页输入部署时配置的一次性初始化密钥。注册接口只在数据库尚无用户时接受请求，并同时创建租户、门店、管理员和员工档案。密码至少 10 字符且最多 72 UTF-8 字节。轮换认证签名密钥会使现有令牌失效。
+
+POS 登录令牌仅保存在当前会话中。离线登录使用设备本地的 bcrypt 密码验证记录；全量目录同步每次从云端验证账户并签发一个五分钟、只能使用一次的本地同步票据。不要把云端访问令牌写入本地配置数据库。
 
 ## 项目结构
 
@@ -162,21 +163,7 @@ bubble-tea-saas/
 
 ### 环境变量
 
-```bash
-# Server
-DATABASE_URL=postgresql://user:pass@host:5432/bubble_tea
-JWT_SECRET=your-super-secret-key
-JWT_EXPIRES_IN=7d
-NODE_ENV=production
-PORT=3000
-CORS_ORIGIN=https://admin.bubbletea-id.com
-PPN_RATE=0.11
-
-# Indonesia Settings
-DEFAULT_TIMEZONE=Asia/Jakarta
-DEFAULT_CURRENCY=IDR
-DEFAULT_LOCALE=id
-```
+通过部署平台的密钥管理功能设置数据库连接及认证、初始化和支付回调凭据；普通运行参数可通过环境变量配置。不要将凭据复制到仓库文档或提交记录。
 
 ### Docker 生产部署
 
@@ -184,9 +171,7 @@ DEFAULT_LOCALE=id
 # 复制生产配置
 cp .github/workflows/docker-compose.production.yml docker-compose.yml
 
-# 设置环境变量
-export DB_PASSWORD=your-secure-password
-export JWT_SECRET=your-jwt-secret
+# 在部署平台配置数据库、认证和支付回调凭据
 export CORS_ORIGIN=https://admin.yourdomain.com
 
 # 启动

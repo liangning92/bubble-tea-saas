@@ -1,10 +1,16 @@
-name: CI - Test on push
+name: CI - Build and verify
 
 on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -22,4 +28,10 @@ jobs:
         run: npm install
 
       - name: Check TypeScript
-        run: npm run typecheck || npm run build --workspaces --if-present
+        run: npm run typecheck
+
+      - name: Check translations
+        run: npm run i18n:check
+
+      - name: Build API and frontend applications
+        run: npm run build

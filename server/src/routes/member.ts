@@ -30,12 +30,14 @@ const redeemPointsSchema = z.object({
 // GET /api/members
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { storeId, level, search } = req.query
+    const { storeId: requestedStoreId, level, search } = req.query
+    const storeId = req.user!.storeId
+    if (requestedStoreId && requestedStoreId !== storeId) return res.status(403).json({ code: 403, message: 'Store access denied' })
     const page = parseInt(req.query.page as string) || 1
     const pageSize = parseInt(req.query.pageSize as string) || 20
 
     const where: any = {}
-    if (storeId) where.storeId = storeId as string
+    where.storeId = storeId
     if (level) where.level = level as string
     if (search) {
       where.OR = [
@@ -119,20 +121,25 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { type, limit } = req.query
+    const orderPage = Math.max(1, parseInt(req.query.ordersPage as string) || 1)
+    const orderPageSize = 20
 
     // Build pointLogs where clause
     const pointLogsWhere: any = {}
     if (type) pointLogsWhere.type = type as string
 
-    const member = await prisma.member.findUnique({
-      where: { id },
+    const storeId = getStoreId(req)
+    const member = await prisma.member.findFirst({
+      where: { id, storeId },
       include: {
-        orders: { orderBy: { createdAt: 'desc' }, take: 20 },
+        orders: { orderBy: { createdAt: 'desc' }, skip: (orderPage - 1) * orderPageSize, take: orderPageSize, include: { items: true, channel: true } },
+        coupons: { orderBy: { createdAt: 'desc' }, include: { coupon: true } },
         pointLogs: {
           where: pointLogsWhere,
           orderBy: { createdAt: 'desc' },
-          take: limit ? parseInt(limit as string) : 50
-        }
+          take: Math.min(200, Math.max(1, parseInt(limit as string) || 50))
+        },
+        _count: { select: { orders: true } }
       }
     })
 
@@ -140,9 +147,15 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ code: 404, message: 'Member not found' })
     }
 
+    const [spent, lastOrder, visitCount] = await Promise.all([
+      prisma.order.aggregate({ where: { memberId: id, storeId, status: { in: ['completed', 'paid'] } }, _sum: { finalAmount: true } }),
+      prisma.order.findFirst({ where: { memberId: id, storeId, status: { in: ['completed', 'paid'] } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.order.count({ where: { memberId: id, storeId, status: { in: ['completed', 'paid'] } } })
+    ])
+
     res.json({
       code: 200,
-      data: member,
+      data: { ...member, orderCount: member._count.orders, visitCount, ordersPage: orderPage, ordersPageSize: orderPageSize, totalSpent: spent._sum.finalAmount || 0, lastVisit: lastOrder?.createdAt || null, _count: undefined },
       timestamp: new Date().toISOString()
     })
   } catch (error) {

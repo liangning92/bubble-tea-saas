@@ -8,8 +8,8 @@ async function testCreateOrder() {
     // 1. 先登录获取 token
     console.log('=== 1. Login ===');
     const loginRes = await axios.post(`${apiUrl}/api/auth/login`, {
-      phone: '081234567890',
-      password: 'admin123'
+      phone: (process.env.TEST_ADMIN_PHONE || ''),
+      password: (process.env.TEST_ADMIN_PASSWORD || '')
     });
     const token = loginRes.data?.data?.token;
     console.log('Token:', token ? ' obtained' : ' NOT obtained');

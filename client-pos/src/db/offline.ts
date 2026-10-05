@@ -1,6 +1,5 @@
 import Dexie, { Table } from 'dexie'
 import { connectionManager } from '../services/ConnectionManager'
-import { syncFull } from '../services/syncApi'
 
 export interface LocalProduct {
   id: string
@@ -20,6 +19,7 @@ export interface LocalOrder {
   serverId?: string
   storeId: string
   staffId: string
+  shiftSessionId?: string
   memberId?: string
   channelId?: string  // 订单渠道：DINE_IN, GOFOOD, GRAB, SHOPEE, POS
   items: any[]
@@ -80,7 +80,6 @@ export const db = new POSDatabase()
 export class SyncManager {
   private isOnline = navigator.onLine
   private syncInterval: number | null = null
-  private fullSyncInterval: number | null = null
   private isSyncing = false
   private listeners: Set<(event: SyncEvent) => void> = new Set()
   private boundOnlineHandler = () => this.handleOnline()
@@ -124,10 +123,10 @@ export class SyncManager {
     this.emit({ type: 'offline' })
   }
 
-  // Get auth token from localStorage
+  // Auth tokens are session-only and are not retained for offline use.
   private getToken(): string {
     try {
-      const stored = localStorage.getItem('pos-auth')
+      const stored = sessionStorage.getItem('pos-auth')
       if (stored) {
         const parsed = JSON.parse(stored)
         return parsed.state?.token || ''
@@ -164,6 +163,7 @@ export class SyncManager {
           const bulkPayload = pendingOrders.map(order => ({
             storeId: order.storeId,
             staffId: order.staffId,
+            shiftSessionId: order.shiftSessionId,
             channelId: order.channelId || 'POS',
             memberId: order.memberId,
             items: order.items,
@@ -250,6 +250,7 @@ export class SyncManager {
             body: JSON.stringify({
               storeId: order.storeId,
               staffId: order.staffId,
+              shiftSessionId: order.shiftSessionId,
               channelId: order.channelId || 'POS',
               memberId: order.memberId,
               items: order.items,
@@ -310,46 +311,15 @@ export class SyncManager {
     }
   }
 
-  // Sync all data (products, categories, addons) from cloud to local DB
-  // Uses stored credentials (token + storeId) to re-authenticate
-  // Runs independently from syncPendingOrders (no isSyncing lock)
-  async syncAllData(): Promise<void> {
-    try {
-      const creds = await getOfflineCredentials()
-      if (!creds?.token || !creds.user.storeId) {
-        // No stored credentials — skip sync (first-time setup not complete)
-        return
-      }
-      await syncFull(
-        creds.user.storeId,
-        creds.token,
-        creds.phone,
-        creds.passwordHash
-      )
-    } catch (error) {
-      console.error('[SyncManager] syncAllData failed:', error)
-      this.emit({ type: 'sync:error', error: String(error) })
-    }
-  }
-
-  // Start periodic sync (order upload + periodic full data sync)
+  // Start periodic order upload. Full catalog sync requires a fresh credential
+  // exchange and is performed during online setup/login only.
   startSync(intervalMs = 30000) {
     if (this.syncInterval) clearInterval(this.syncInterval)
     this.syncInterval = window.setInterval(() => {
       if (this.isOnline) this.syncPendingOrders()
     }, intervalMs)
 
-    // Full data sync every 5 minutes (products/categories/addons from cloud)
-    if (this.fullSyncInterval) clearInterval(this.fullSyncInterval)
-    this.fullSyncInterval = window.setInterval(() => {
-      if (this.isOnline) this.syncAllData()
-    }, 5 * 60 * 1000)
-
-    // Initial sync
-    if (this.isOnline) {
-      this.syncPendingOrders()
-      this.syncAllData()
-    }
+    if (this.isOnline) this.syncPendingOrders()
   }
 
   // Stop sync
@@ -357,10 +327,6 @@ export class SyncManager {
     if (this.syncInterval) {
       clearInterval(this.syncInterval)
       this.syncInterval = null
-    }
-    if (this.fullSyncInterval) {
-      clearInterval(this.fullSyncInterval)
-      this.fullSyncInterval = null
     }
   }
 
@@ -577,7 +543,6 @@ export interface OfflineCredentials {
     storeId: string | null
     staff: { id: string; name: string; employeeNumber?: string; position?: string } | null
   }
-  token: string
   cachedAt: Date
 }
 

@@ -2,8 +2,8 @@ import { test, expect, chromium } from '@playwright/test'
 import { spawn } from 'child_process'
 import * as http from 'http'
 
-const TEST_PHONE = '081234567890'
-const TEST_PASSWORD = 'admin123'
+const TEST_PHONE = (process.env.TEST_ADMIN_PHONE || '')
+const TEST_PASSWORD = (process.env.TEST_ADMIN_PASSWORD || '')
 
 async function getDevToolsTarget(port: number): Promise<{ wsUrl: string; pageUrl: string } | null> {
   return new Promise((resolve) => {
@@ -105,11 +105,11 @@ test.describe('POS App E2E', () => {
       await expect(phoneInput).toBeVisible({ timeout: 20000 })
       await expect(passwordInput).toBeVisible({ timeout: 5000 })
       await expect(submitButton).toBeVisible({ timeout: 5000 })
-      await expect(page.getByText(TEST_PHONE)).toBeVisible()
-
-      await phoneInput.fill(TEST_PHONE)
-      await passwordInput.fill(TEST_PASSWORD)
-      expect(await phoneInput.inputValue()).toBe(TEST_PHONE)
+      const formPhone = TEST_PHONE || '0000000000'
+      const formPassword = TEST_PASSWORD || 'non-authenticating-test-value'
+      await phoneInput.fill(formPhone)
+      await passwordInput.fill(formPassword)
+      expect(await phoneInput.inputValue()).toBe(formPhone)
 
       const fatalErrors = consoleErrors.filter(e =>
         !e.includes('favicon') &&

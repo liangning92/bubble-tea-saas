@@ -3,6 +3,12 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+function requiredSeedValue(name: string): string {
+  const value = process.env[name]?.trim()
+  if (!value) throw new Error(`${name} must be configured to seed user accounts`)
+  return value
+}
+
 // Generate product code: PROD-001, PROD-002, ...
 async function generateProductCode(storeId: string): Promise<string> {
   const lastProduct = await prisma.product.findFirst({
@@ -16,6 +22,20 @@ async function generateProductCode(storeId: string): Promise<string> {
 
 async function main() {
   console.log('🌱 Seeding database...')
+
+  const seedAccounts = [
+    { role: 'admin', phone: requiredSeedValue('SEED_ADMIN_PHONE'), password: requiredSeedValue('SEED_ADMIN_PASSWORD') },
+    { role: 'manager', phone: requiredSeedValue('SEED_MANAGER_PHONE'), password: requiredSeedValue('SEED_MANAGER_PASSWORD') },
+    { role: 'cashier', phone: requiredSeedValue('SEED_CASHIER_PHONE'), password: requiredSeedValue('SEED_CASHIER_PASSWORD') },
+    { role: 'staff', phone: requiredSeedValue('SEED_STAFF_PHONE'), password: requiredSeedValue('SEED_STAFF_PASSWORD') }
+  ]
+  for (const account of seedAccounts) {
+    if (!/^\+?[0-9]{8,15}$/.test(account.phone)) throw new Error(`Invalid phone format for seed role ${account.role}`)
+    const minPasswordBytes = account.role === 'admin' ? 10 : 6
+    if (Buffer.byteLength(account.password, 'utf8') < minPasswordBytes || Buffer.byteLength(account.password, 'utf8') > 72) {
+      throw new Error(`Seed password for ${account.role} must be ${minPasswordBytes}–72 bytes`)
+    }
+  }
 
   // Create Tenant
   const tenant = await prisma.tenant.create({
@@ -38,11 +58,11 @@ async function main() {
   console.log('✓ Created store:', store.name)
 
   // Create Admin User
-  const hashedPassword = await bcrypt.hash('admin123', 10)
+  const adminPasswordHash = await bcrypt.hash(seedAccounts[0].password, 12)
   const admin = await prisma.user.create({
     data: {
-      phone: '081234567890',
-      password: hashedPassword,
+      phone: seedAccounts[0].phone,
+      password: adminPasswordHash,
       role: 'admin',
       storeId: store.id
     }
@@ -57,13 +77,13 @@ async function main() {
       position: '店长'
     }
   })
-  console.log('✓ Created admin user (phone: 081234567890, password: admin123)')
+  console.log('✓ Created admin user')
 
   // Create Manager User
   const managerUser = await prisma.user.create({
     data: {
-      phone: '081234567891',
-      password: hashedPassword,
+      phone: seedAccounts[1].phone,
+      password: await bcrypt.hash(seedAccounts[1].password, 12),
       role: 'manager',
       storeId: store.id
     }
@@ -78,13 +98,13 @@ async function main() {
       position: '经理'
     }
   })
-  console.log('✓ Created manager (phone: 081234567891, password: admin123)')
+  console.log('✓ Created manager')
 
   // Create Staff Users
   const staffUser1 = await prisma.user.create({
     data: {
-      phone: '081234567892',
-      password: hashedPassword,
+      phone: seedAccounts[2].phone,
+      password: await bcrypt.hash(seedAccounts[2].password, 12),
       role: 'cashier',
       storeId: store.id
     }
@@ -102,8 +122,8 @@ async function main() {
 
   const staffUser2 = await prisma.user.create({
     data: {
-      phone: '081234567893',
-      password: hashedPassword,
+      phone: seedAccounts[3].phone,
+      password: await bcrypt.hash(seedAccounts[3].password, 12),
       role: 'staff',
       storeId: store.id
     }
@@ -273,13 +293,7 @@ async function main() {
   console.log('✓ Created configs')
 
   console.log('\n🎉 Database seeded successfully!\n')
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  console.log('📱 Test Accounts:')
-  console.log('   Admin:   081234567890 / admin123')
-  console.log('   Manager: 081234567891 / admin123')
-  console.log('   Cashier: 081234567892 / admin123')
-  console.log('   Staff:   081234567893 / admin123')
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+  console.log('Seed accounts created. Credentials were read from the runtime environment and were not logged.')
 }
 
 main()

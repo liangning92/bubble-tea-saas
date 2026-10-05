@@ -12,8 +12,8 @@ test.describe('i18n Tests - Translation Coverage', () => {
 
     // Login first
     await page.goto(`${baseURL}/login`)
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 10000 })
 
@@ -71,8 +71,8 @@ test.describe('i18n Tests - Translation Coverage', () => {
 
     // Login
     await page.goto(`${baseURL}/login`)
-    await page.fill('input[type="tel"]', '081234567890')
-    await page.fill('input[type="password"]', 'admin123')
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''))
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''))
     await page.click('button[type="submit"]')
     await page.waitForURL('**/dashboard', { timeout: 10000 })
 

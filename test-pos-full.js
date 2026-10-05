@@ -42,8 +42,8 @@ async function runPOSTest() {
     const title = await page.title();
     results.push(log('1.1 POS页面加载', title.includes('POS') ? 'PASS' : 'FAIL', `Title: ${title}`));
 
-    await page.fill('input[type="tel"], input[placeholder*="08"]', '081234567890');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="tel"], input[placeholder*="08"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await page.click('button[type="submit"]');
     await sleep(3000);
 

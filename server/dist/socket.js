@@ -7,6 +7,7 @@ exports.socketManager = void 0;
 const socket_io_1 = require("socket.io");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const env_1 = require("./config/env");
+const database_1 = __importDefault(require("./config/database"));
 class SocketManager {
     io = null;
     connectedUsers = new Map();
@@ -21,14 +22,31 @@ class SocketManager {
             }
         });
         // Authentication middleware
-        this.io.use((socket, next) => {
-            const token = socket.handshake.auth.token || socket.handshake.query.token;
-            if (!token) {
+        this.io.use(async (socket, next) => {
+            const token = socket.handshake.auth.token;
+            if (typeof token !== 'string' || !token) {
                 return next(new Error('Authentication required'));
             }
             try {
                 const decoded = jsonwebtoken_1.default.verify(token, env_1.config.jwt.secret);
-                socket.data.user = decoded;
+                const user = await database_1.default.user.findUnique({ where: { id: decoded.id }, include: { staff: true } });
+                if (!user || (user.staff && user.staff.status !== 'active') ||
+                    typeof decoded.issuedAtMs !== 'number' || user.updatedAt.getTime() > decoded.issuedAtMs) {
+                    return next(new Error('Invalid token'));
+                }
+                const currentStoreId = user.staff?.storeId || user.storeId || '';
+                const currentStaffId = user.staff?.id || '';
+                if (decoded.role !== user.role || decoded.storeId !== currentStoreId || decoded.staffId !== currentStaffId) {
+                    return next(new Error('Invalid token'));
+                }
+                socket.data.user = {
+                    id: user.id,
+                    phone: user.phone,
+                    role: user.role,
+                    storeId: currentStoreId,
+                    staffId: currentStaffId,
+                    issuedAtMs: decoded.issuedAtMs
+                };
                 next();
             }
             catch (error) {

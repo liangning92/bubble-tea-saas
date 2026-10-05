@@ -33,8 +33,8 @@ const { chromium } = require('playwright');
   const phoneInput = page.locator('input').first();
   const passwordInput = page.locator('input[type="password"]');
 
-  await phoneInput.fill('081234567890');
-  await passwordInput.fill('admin123');
+  await phoneInput.fill((process.env.TEST_ADMIN_PHONE || ''));
+  await passwordInput.fill((process.env.TEST_ADMIN_PASSWORD || ''));
   await page.waitForTimeout(500);
 
   const loginBtn = page.locator('button[type="submit"]');

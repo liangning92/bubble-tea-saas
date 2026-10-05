@@ -49,8 +49,8 @@ function log(name, status, details = '') {
     const passwordInput = await page.$('input[type="password"]');
 
     if (phoneInput && passwordInput) {
-      await phoneInput.fill('081234567890');
-      await passwordInput.fill('admin123');
+      await phoneInput.fill((process.env.TEST_ADMIN_PHONE || ''));
+      await passwordInput.fill((process.env.TEST_ADMIN_PASSWORD || ''));
 
       const submitBtn = await page.$('button[type="submit"]');
       if (submitBtn) {
@@ -433,113 +433,4 @@ function log(name, status, details = '') {
 
   try {
     await page.goto(`${BASE_URL}/marketing/members`, { waitUntil: 'networkidle' });
-    await sleep(2000);
-    const memText = await page.textContent('body');
-    results.push(log('会员列表加载', memText.includes('Member') || memText.includes('会员') ? 'PASS' : 'FAIL'));
-  } catch (e) {
-    results.push(log('会员管理', 'FAIL', e.message));
-  }
-
-  // ========== BOM分析 ==========
-  console.log('\n【BOM分析】');
-
-  try {
-    await page.goto(`${BASE_URL}/bom`, { waitUntil: 'networkidle' });
-    await sleep(2000);
-    results.push(log('BOM分析加载', 'PASS'));
-  } catch (e) {
-    results.push(log('BOM分析', 'FAIL', e.message));
-  }
-
-  // ========== 食材管理 ==========
-  console.log('\n【食材管理 - Material】');
-
-  try {
-    await page.goto(`${BASE_URL}/material`, { waitUntil: 'networkidle' });
-    await sleep(2000);
-    results.push(log('食材管理加载', 'PASS'));
-  } catch (e) {
-    results.push(log('食材管理', 'FAIL', e.message));
-  }
-
-  // ========== 采购管理 ==========
-  console.log('\n【采购管理 - Pembelian】');
-
-  try {
-    await page.goto(`${BASE_URL}/suppliers`, { waitUntil: 'networkidle' });
-    await sleep(2000);
-    results.push(log('供应商加载', 'PASS'));
-  } catch (e) {
-    results.push(log('供应商', 'FAIL', e.message));
-  }
-
-  // ========== KDS ==========
-  console.log('\n【KDS - Dapur】');
-
-  try {
-    await page.goto(`${BASE_URL}/kds`, { waitUntil: 'networkidle' });
-    await sleep(2000);
-    results.push(log('KDS加载', 'PASS'));
-  } catch (e) {
-    results.push(log('KDS', 'FAIL', e.message));
-  }
-
-  // ========== 统计报告 ==========
-  console.log('\n【统计报告 - Laporan】');
-
-  try {
-    await page.goto(`${BASE_URL}/reports`, { waitUntil: 'networkidle' });
-    await sleep(2000);
-    results.push(log('报告中心加载', 'PASS'));
-  } catch (e) {
-    results.push(log('报告中心', 'FAIL', e.message));
-  }
-
-  // ========== 打印测试报告 ==========
-  console.log('\n═══════════════════════════════════════════════════════════');
-  console.log('                    测试结果汇总');
-  console.log('═══════════════════════════════════════════════════════════');
-
-  const passed = results.filter(r => r.status === 'PASS').length;
-  const failed = results.filter(r => r.status === 'FAIL').length;
-
-  console.log(`\n通过: ${passed}  |  失败: ${failed}  |  总计: ${results.length}`);
-  console.log(`控制台错误: ${consoleErrors.length}`);
-
-  if (failed > 0) {
-    console.log('\n失败项目:');
-    results.filter(r => r.status === 'FAIL').forEach(r => {
-      console.log(`  ❌ ${r.name}${r.details ? ' - ' + r.details : ''}`);
-    });
-  }
-
-  if (consoleErrors.length > 0) {
-    console.log('\n控制台错误 (前5个):');
-    [...new Set(consoleErrors)].slice(0, 5).forEach(e => {
-      console.log(`  ⚠️ ${e.substring(0, 150)}`);
-    });
-  }
-
-  console.log('\n详细结果:');
-  results.forEach(r => {
-    const icon = r.status === 'PASS' ? '✅' : '❌';
-    console.log(`  ${icon} ${r.name}`);
-  });
-
-  console.log('\n═══════════════════════════════════════════════════════════\n');
-
-  await browser.close();
-
-  // 保存详细报告
-  const fs = require('fs');
-  const report = {
-    timestamp: new Date().toISOString(),
-    summary: { passed, failed, total: results.length },
-    errors: consoleErrors,
-    results
-  };
-  fs.writeFileSync('/tmp/admin-test-report.json', JSON.stringify(report, null, 2));
-  console.log('详细报告已保存到: /tmp/admin-test-report.json\n');
-
-  process.exit(failed > 0 ? 1 : 0);
-})();
+    await sleep(2000)

@@ -76,6 +76,7 @@ import { startMarketingScheduler } from './services/MarketingSchedulerService'
 import { errorHandler } from './middlewares/errorHandler'
 import { notFoundHandler } from './middlewares/notFound'
 import { socketManager } from './socket'
+import { authenticate, AuthRequest } from './middlewares/auth'
 
 const app = express()
 const httpServer = http.createServer(app)
@@ -202,6 +203,18 @@ app.get('/api/version', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRouter)
+// Enforce authentication for every API route by default. Only credential entry,
+// one-time setup/sync tickets, health checks, and the signed payment webhook are public.
+app.use('/api', (req, res, next) => {
+  const apiPath = req.originalUrl.split('?')[0].replace(/^\/api(?=\/|$)/, '') || '/'
+  const publicPaths = new Set([
+    '/auth/login', '/auth/register',
+    '/sync/connect', '/sync/full', '/sync/status',
+    '/payments/qris/webhook', '/health', '/version'
+  ])
+  if (publicPaths.has(apiPath)) return next()
+  return authenticate(req as AuthRequest, res, next)
+})
 app.use('/api/stores', storeRouter)
 app.use('/api/categories', categoryRouter)
 app.use('/api/products', productRouter)
@@ -270,8 +283,9 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // Start Server with Socket.IO
-console.log('[Server] About to listen on port', config.port)
-httpServer.listen(config.port, '0.0.0.0', () => {
+if (process.env.NODE_ENV !== 'test') {
+  console.log('[Server] About to listen on port', config.port)
+  httpServer.listen(config.port, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -304,6 +318,8 @@ httpServer.listen(config.port, '0.0.0.0', () => {
   console.log('[Server] Starting marketing scheduler...')
   startMarketingScheduler()
   console.log('[Server] Marketing scheduler started')
-})
+  })
+}
 
+export { app }
 export default app

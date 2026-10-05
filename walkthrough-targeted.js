@@ -7,7 +7,7 @@ const BASE_URLS = {
 };
 
 const CREDENTIALS = {
-  admin: { phone: '081234567890', password: 'admin123' }
+  admin: { phone: (process.env.TEST_ADMIN_PHONE || ''), password: (process.env.TEST_ADMIN_PASSWORD || '') }
 };
 
 async function sleep(ms) {

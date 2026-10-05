@@ -1,5 +1,6 @@
-import { Router } from 'express'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { Router, Response } from 'express'
+import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
+import prisma from '../config/database'
 import {
   getStaffPointBalance,
   getStaffPointBalancesByStore,
@@ -20,10 +21,46 @@ import {
 
 const router = Router()
 
+async function enforceStaffScope(req: AuthRequest, res: Response, staffId: string): Promise<boolean> {
+  if (req.user?.role === 'admin') return true
+  const staff = await prisma.staff.findUnique({
+    where: { id: staffId }, select: { storeId: true }
+  })
+  if (!staff || !req.user || !canAccessStore(req.user, staff.storeId)) {
+    res.status(staff ? 403 : 404).json({ code: staff ? 403 : 404, message: staff ? 'Access denied: Store mismatch' : 'Staff not found' })
+    return false
+  }
+  return true
+}
+
+async function enforceRedemptionScope(req: AuthRequest, res: Response, redemptionId: string): Promise<boolean> {
+  if (req.user?.role === 'admin') return true
+  const redemption = await prisma.staffPointRedemption.findUnique({
+    where: { id: redemptionId },
+    include: { staff: { select: { storeId: true } } }
+  })
+  if (!redemption || !req.user || !canAccessStore(req.user, redemption.staff.storeId)) {
+    res.status(redemption ? 403 : 404).json({ code: redemption ? 403 : 404, message: redemption ? 'Access denied: Store mismatch' : 'Redemption not found' })
+    return false
+  }
+  return true
+}
+
+async function enforceRewardScope(req: AuthRequest, res: Response, rewardId: string): Promise<boolean> {
+  if (req.user?.role === 'admin') return true
+  const reward = await prisma.staffPointReward.findUnique({ where: { id: rewardId }, select: { storeId: true } })
+  if (!reward || !req.user || !canAccessStore(req.user, reward.storeId)) {
+    res.status(reward ? 403 : 404).json({ code: reward ? 403 : 404, message: reward ? 'Access denied: Store mismatch' : 'Reward not found' })
+    return false
+  }
+  return true
+}
+
 // GET /api/staff-points/balance/:staffId
 router.get('/balance/:staffId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { staffId } = req.params
+    if (!await enforceStaffScope(req, res, staffId)) return
     const result = await getStaffPointBalance(staffId)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -36,6 +73,9 @@ router.get('/balance/:staffId', authenticate, async (req: AuthRequest, res) => {
 router.get('/store/:storeId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId } = req.params
+    if (!req.user || !canAccessStore(req.user, storeId)) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    }
     const result = await getStaffPointBalancesByStore(storeId)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -48,6 +88,7 @@ router.get('/store/:storeId', authenticate, async (req: AuthRequest, res) => {
 router.get('/history/:staffId', authenticate, async (req: AuthRequest, res) => {
   try {
     const { staffId } = req.params
+    if (!await enforceStaffScope(req, res, staffId)) return
     const limit = parseInt(req.query.limit as string) || 50
     const result = await getStaffPointHistory(staffId, limit)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
@@ -65,6 +106,7 @@ router.post('/earn', authenticate, authorize('admin', 'manager'), async (req: Au
     if (!staffId || !points || !reason) {
       return res.status(400).json({ code: 400, message: 'Missing required fields' })
     }
+    if (!await enforceStaffScope(req, res, staffId)) return
 
     const result = await awardPoints({
       staffId,
@@ -92,6 +134,10 @@ router.post('/redeem', authenticate, async (req: AuthRequest, res) => {
     if (!staffId || !points || !reason) {
       return res.status(400).json({ code: 400, message: 'Missing required fields' })
     }
+    if (req.user!.role !== 'admin' && req.user!.role !== 'manager' && req.user!.staffId !== staffId) {
+      return res.status(403).json({ code: 403, message: 'Can only redeem your own points' })
+    }
+    if (!await enforceStaffScope(req, res, staffId)) return
 
     const result = await redeemPoints({
       staffId,
@@ -117,6 +163,7 @@ router.post('/adjust', authenticate, authorize('admin', 'manager'), async (req: 
     if (!staffId || points === undefined || !reason) {
       return res.status(400).json({ code: 400, message: 'Missing required fields' })
     }
+    if (!await enforceStaffScope(req, res, staffId)) return
 
     const result = await adjustPoints({
       staffId,
@@ -185,6 +232,7 @@ router.post('/rewards', authenticate, authorize('admin', 'manager'), async (req:
 router.put('/rewards/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    if (!await enforceRewardScope(req, res, id)) return
     const result = await updateReward(id, req.body)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -197,6 +245,7 @@ router.put('/rewards/:id', authenticate, authorize('admin', 'manager'), async (r
 router.delete('/rewards/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    if (!await enforceRewardScope(req, res, id)) return
     await deleteReward(id)
     res.json({ code: 200, message: 'Reward deleted', timestamp: new Date().toISOString() })
   } catch (error) {
@@ -248,6 +297,7 @@ router.get('/redemption/pending', authenticate, authorize('admin', 'manager'), a
 router.post('/redemption/:id/fulfill', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    if (!await enforceRedemptionScope(req, res, id)) return
     const result = await fulfillRedemption(id, req.user!.id)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -260,6 +310,7 @@ router.post('/redemption/:id/fulfill', authenticate, authorize('admin', 'manager
 router.post('/redemption/:id/cancel', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    if (!await enforceRedemptionScope(req, res, id)) return
     const result = await cancelRedemption(id)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {

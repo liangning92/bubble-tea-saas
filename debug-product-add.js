@@ -10,8 +10,8 @@ async function debugProductModal() {
 
   // 登录
   await page.goto('http://localhost:5173/login', { waitUntil: 'networkidle', timeout: 30000 });
-  await page.locator('input[type="tel"]').fill('081234567890');
-  await page.locator('input[type="password"]').fill('admin123');
+  await page.locator('input[type="tel"]').fill((process.env.TEST_ADMIN_PHONE || ''));
+  await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
   await page.locator('button[type="submit"]').click();
   await page.waitForTimeout(3000);
 

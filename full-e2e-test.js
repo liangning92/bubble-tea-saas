@@ -32,8 +32,8 @@ async function sleep(ms) {
   await page.waitForLoadState('networkidle');
   await test('打开登录页面', (await page.textContent('body')).includes('Bubble Tea'));
   
-  await page.fill('input[type="tel"]', '081234567890');
-  await page.fill('input[type="password"]', 'admin123');
+  await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''));
+  await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
   await page.click('button[type="submit"]');
   await sleep(3000);
   

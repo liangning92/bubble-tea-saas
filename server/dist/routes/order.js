@@ -152,6 +152,18 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
 // POST /api/orders
 router.post('/', auth_1.authenticate, (0, validation_1.validateBody)(createOrderSchema), async (req, res) => {
     try {
+        // Enforce the cash session at the API boundary so a client cannot bypass it.
+        const storeId = req.user.storeId;
+        if (!storeId || req.body.storeId !== storeId) {
+            return res.status(403).json({ code: 403, message: 'Store access denied' });
+        }
+        const openShift = await prisma.shiftSession.findFirst({
+            where: { storeId, status: 'open' },
+            select: { id: true }
+        });
+        if (!openShift) {
+            return res.status(409).json({ code: 409, message: 'OPEN_SHIFT_REQUIRED' });
+        }
         const order = await OrderService.createOrder(req.body);
         res.status(201).json({
             code: 201,
@@ -173,6 +185,30 @@ router.post('/bulk-sync', auth_1.authenticate, async (req, res) => {
         const { orders } = req.body;
         if (!Array.isArray(orders) || orders.length === 0) {
             return res.status(400).json({ code: 400, message: 'Invalid or empty orders array' });
+        }
+        const storeId = req.user.storeId;
+        if (!storeId || orders.some((order) => order.storeId !== storeId)) {
+            return res.status(403).json({ code: 403, message: 'Store access denied' });
+        }
+        // Offline orders may arrive after their shift was closed, but each must
+        // belong to a real shift at this store. Legacy queued orders without a
+        // session id can only sync while a shift is currently open.
+        const openShift = await prisma.shiftSession.findFirst({
+            where: { storeId, status: 'open' },
+            select: { id: true }
+        });
+        const referencedShiftIds = [...new Set(orders.map((order) => order.shiftSessionId).filter((id) => typeof id === 'string'))];
+        const referencedShifts = referencedShiftIds.length
+            ? await prisma.shiftSession.findMany({ where: { id: { in: referencedShiftIds }, storeId }, select: { id: true } })
+            : [];
+        const validShiftIds = new Set(referencedShifts.map(shift => shift.id));
+        const hasInvalidShift = orders.some((order) => {
+            if (order.shiftSessionId)
+                return !validShiftIds.has(order.shiftSessionId);
+            return !openShift;
+        });
+        if (hasInvalidShift) {
+            return res.status(409).json({ code: 409, message: 'OPEN_SHIFT_REQUIRED' });
         }
         const results = await OrderService.bulkCreateOrders(orders);
         res.json({

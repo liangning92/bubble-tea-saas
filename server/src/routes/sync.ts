@@ -1,5 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { PrismaClient } from '@prisma/client'
+import { randomUUID } from 'crypto'
+import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
+import { config } from '../config/env'
+import { authenticate, AuthRequest, canAccessStore } from '../middlewares/auth'
+import { z } from 'zod'
 
 const router = Router()
 const prisma = new PrismaClient({
@@ -12,24 +18,27 @@ const prisma = new PrismaClient({
 // CLOUD API base URL
 const CLOUD_API = 'https://api.aicube.online'
 
-// Config key for cloud auth token
-const CLOUD_TOKEN_KEY = 'sync.cloud_token'
+const syncConnectLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false })
+const consumedSyncTickets = new Map<string, number>()
 
 // POST /api/sync/connect
 // Body: { phone: string, password: string }
-// Returns: { storeId, storeName, tenantId, token, phone, passwordHash }
-router.post('/connect', async (req: Request, res: Response) => {
+// Returns a short-lived local ticket after cloud credentials are verified.
+router.post('/connect', syncConnectLimiter, async (req: Request, res: Response) => {
   try {
-    const { phone, password } = req.body
-    if (!phone || !password) {
-      return res.status(400).json({ code: 400, message: 'Phone and password required' })
-    }
+    const parsed = z.object({
+      phone: z.string().min(10).max(15),
+      password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72)
+    }).safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ code: 400, message: 'Invalid credentials request' })
+    const { phone, password } = parsed.data
 
     // Step 1: Call cloud API to login
     const loginRes = await fetch(`${CLOUD_API}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password })
+      body: JSON.stringify({ phone, password }),
+      signal: AbortSignal.timeout(10000)
     })
     const loginData = await loginRes.json() as any
 
@@ -41,7 +50,6 @@ router.post('/connect', async (req: Request, res: Response) => {
     const token = loginData.data.token as string
     const cloudUser = loginData.data.user
     const storeId = cloudUser?.storeId as string
-    const passwordHash = loginData.data.passwordHash as string | undefined
 
     if (!storeId) {
       return res.status(401).json({ code: 401, message: 'Account not linked to any store' })
@@ -49,28 +57,20 @@ router.post('/connect', async (req: Request, res: Response) => {
 
     // Step 2: Get store details (storeName, tenantId)
     const storeRes = await fetch(`${CLOUD_API}/api/stores/${storeId}`, {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10000)
     })
+    if (!storeRes.ok) return res.status(403).json({ code: 403, message: 'Account cannot access its store' })
     const storeInfo = storeRes.ok ? (await storeRes.json()) as any : null
     const store = storeInfo?.data || {}
+    if (store.id !== storeId) return res.status(403).json({ code: 403, message: 'Store authorization failed' })
 
-    // Step 3: Save cloud token to local Config so we can push orders to cloud later
-    try {
-      await prisma.config.upsert({
-        where: { storeId_key: { storeId, key: CLOUD_TOKEN_KEY } },
-        create: {
-          storeId,
-          key: CLOUD_TOKEN_KEY,
-          value: token,
-          category: 'sync',
-        },
-        update: {
-          value: token,
-        },
-      })
-    } catch (e) {
-      console.warn('[sync/connect] Failed to save cloud token to Config:', e)
-    }
+    const syncTicket = jwt.sign({
+      purpose: 'pos-full-sync',
+      jti: randomUUID(),
+      storeId,
+      cloudToken: token
+    }, config.jwt.secret, { expiresIn: '5m' })
 
     return res.json({
       code: 200,
@@ -78,9 +78,7 @@ router.post('/connect', async (req: Request, res: Response) => {
         storeId,
         storeName: store.name || 'My Store',
         tenantId: store.tenantId || 'default-tenant',
-        token,
-        phone,          // needed to create local User
-        passwordHash,   // bcrypt hash from cloud, needed for local User
+        syncTicket,
       }
     })
   } catch (err: any) {
@@ -89,15 +87,36 @@ router.post('/connect', async (req: Request, res: Response) => {
 })
 
 // POST /api/sync/full
-// Body: { storeId, token, phone, passwordHash }
+// Body: { syncTicket }
 // Fetches all data from cloud and writes to local SQLite
-// Also creates local User record so login works after wizard
 router.post('/full', async (req: Request, res: Response) => {
   try {
-    const { storeId, token, phone, passwordHash } = req.body
-    if (!storeId || !token) {
-      return res.status(400).json({ code: 400, message: 'storeId and token required' })
+    const { syncTicket } = req.body
+    if (typeof syncTicket !== 'string') {
+      return res.status(400).json({ code: 400, message: 'Sync ticket required' })
     }
+    let ticket: any
+    try {
+      ticket = jwt.verify(syncTicket, config.jwt.secret)
+    } catch {
+      return res.status(401).json({ code: 401, message: 'Invalid or expired sync ticket' })
+    }
+    if (ticket.purpose !== 'pos-full-sync' || !ticket.jti || !ticket.storeId || !ticket.cloudToken) {
+      return res.status(401).json({ code: 401, message: 'Invalid sync ticket' })
+    }
+    const now = Math.floor(Date.now() / 1000)
+    for (const [jti, expiresAt] of consumedSyncTickets) {
+      if (expiresAt <= now) consumedSyncTickets.delete(jti)
+    }
+    if (consumedSyncTickets.has(ticket.jti)) {
+      return res.status(409).json({ code: 409, message: 'Sync ticket has already been used' })
+    }
+    if (typeof ticket.exp !== 'number' || ticket.exp <= now) {
+      return res.status(401).json({ code: 401, message: 'Invalid or expired sync ticket' })
+    }
+    consumedSyncTickets.set(ticket.jti, ticket.exp)
+    const storeId = ticket.storeId as string
+    const token = ticket.cloudToken as string
 
     const headers = {
       'Content-Type': 'application/json',
@@ -106,18 +125,28 @@ router.post('/full', async (req: Request, res: Response) => {
 
     // Fetch all data (products/pos includes nested specs and addons)
     const [storeRes, categoriesRes, productsRes, addonsRes] = await Promise.all([
-      fetch(`${CLOUD_API}/api/stores/${storeId}`, { headers }).catch(() => null),
-      fetch(`${CLOUD_API}/api/categories?storeId=${storeId}`, { headers }).catch(() => null),
-      fetch(`${CLOUD_API}/api/products/pos?storeId=${storeId}`, { headers }).catch(() => null),
-      fetch(`${CLOUD_API}/api/addons?storeId=${storeId}`, { headers }).catch(() => null),
+      fetch(`${CLOUD_API}/api/stores/${storeId}`, { headers }),
+      fetch(`${CLOUD_API}/api/categories?storeId=${encodeURIComponent(storeId)}`, { headers }),
+      fetch(`${CLOUD_API}/api/products/pos?storeId=${encodeURIComponent(storeId)}`, { headers }),
+      fetch(`${CLOUD_API}/api/addons?storeId=${encodeURIComponent(storeId)}`, { headers }),
     ])
+    if (![storeRes, categoriesRes, productsRes, addonsRes].every(response => response.ok)) {
+      return res.status(502).json({ code: 502, message: 'Could not fetch complete store data; local data was not changed' })
+    }
 
-    const storeData = storeRes ? await storeRes.json() : null
-    const categoriesData = categoriesRes ? await categoriesRes.json() : { data: [] }
-    const productsData = productsRes ? await productsRes.json() : { data: { list: [] } }
-    const addonsData = addonsRes ? await addonsRes.json() : { data: [] }
+    const storeData = storeRes ? await storeRes.json() as any : null
+    const categoriesData = categoriesRes ? await categoriesRes.json() as any : { data: [] }
+    const productsData = productsRes ? await productsRes.json() as any : { data: { list: [] } }
+    const addonsData = addonsRes ? await addonsRes.json() as any : { data: [] }
 
     const store = storeData?.data || {}
+    if (store.id !== storeId) {
+      return res.status(502).json({ code: 502, message: 'Cloud returned a different store; local data was not changed' })
+    }
+    const existingOtherStore = await prisma.store.findFirst({ where: { id: { not: storeId } }, select: { id: true } })
+    if (existingOtherStore) {
+      return res.status(409).json({ code: 409, message: 'This POS database is already linked to another store' })
+    }
     // products/pos returns { data: { list: [...] } }
     const products = (productsData.data?.list || []) as any[]
     const categories = (categoriesData.data || []) as any[]
@@ -139,42 +168,27 @@ router.post('/full', async (req: Request, res: Response) => {
         await tx.addon.deleteMany()
         await tx.category.deleteMany()
         await tx.config.deleteMany()
-        await tx.staff.deleteMany()
-        await tx.user.deleteMany()
-        await tx.store.deleteMany()
-        await tx.tenant.deleteMany()
 
         // Create Tenant
-        const tenant = await tx.tenant.create({
-          data: {
-            id: store.tenantId || 'default-tenant',
-            name: store.tenantName || store.name || 'My Store',
-          }
+        const tenantId = store.tenantId || 'default-tenant'
+        await tx.tenant.upsert({
+          where: { id: tenantId },
+          create: { id: tenantId, name: store.tenantName || store.name || 'My Store' },
+          update: { name: store.tenantName || store.name || 'My Store' }
         })
 
         // Create Store
-        await tx.store.create({
-          data: {
+        await tx.store.upsert({
+          where: { id: storeId },
+          create: {
             id: storeId,
-            tenantId: tenant.id,
+            tenantId,
             name: store.name || 'My Store',
             address: store.address || '',
             phone: store.phone || '',
-          }
+          },
+          update: { tenantId, name: store.name || 'My Store', address: store.address || '', phone: store.phone || '' }
         })
-
-        // Create local User record so login works after wizard
-        // phone and passwordHash come from /connect response
-        if (phone && passwordHash) {
-          await tx.user.create({
-            data: {
-              phone,
-              password: passwordHash,   // bcrypt hash from cloud
-              role: 'admin',
-              storeId,
-            }
-          }).catch(() => {})
-        }
 
         // Create Categories
         for (const cat of categories) {
@@ -291,7 +305,6 @@ router.get('/status', async (req: Request, res: Response) => {
       code: 200,
       data: {
         isSetUp: storeCount > 0,
-        storeCount,
       }
     })
   } catch (err: any) {
@@ -303,11 +316,14 @@ router.get('/status', async (req: Request, res: Response) => {
 // Receives an order from local POS and upserts into cloud DB.
 // Called by local server after creating an order locally.
 // Uses order ID as unique key so duplicate syncs are idempotent.
-router.post('/order', async (req: Request, res: Response) => {
+router.post('/order', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { order } = req.body
     if (!order?.id || !order?.storeId) {
       return res.status(400).json({ code: 400, message: 'order.id and order.storeId required' })
+    }
+    if (!req.user || !canAccessStore(req.user, order.storeId)) {
+      return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     }
 
     // Upsert order - idempotent, safe to retry

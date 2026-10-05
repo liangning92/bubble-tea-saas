@@ -36,8 +36,8 @@ async function runCorrectedTests() {
     await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
     await sleep(1000);
 
-    await page.locator('input[type="tel"]').fill('081234567890');
-    await page.locator('input[type="password"]').fill('admin123');
+    await page.locator('input[type="tel"]').fill((process.env.TEST_ADMIN_PHONE || ''));
+    await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
     await page.locator('button[type="submit"]').click();
     await page.waitForTimeout(3000);
     log('Admin 登录成功', !page.url().includes('login'), page.url());
@@ -151,8 +151,8 @@ async function runCorrectedTests() {
     // POS 登录
     const posPhoneInput = page.locator('input[type="tel"]');
     if (await posPhoneInput.count() > 0) {
-      await posPhoneInput.fill('081234567892');
-      await page.locator('input[type="password"]').fill('admin123');
+      await posPhoneInput.fill((process.env.TEST_CASHIER_PHONE || ''));
+      await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
       await page.locator('button[type="submit"]').click();
       await page.waitForTimeout(3000);
 
@@ -168,8 +168,8 @@ async function runCorrectedTests() {
     await page.goto(ADMIN_URL + '/login', { waitUntil: 'networkidle', timeout: 30000 });
     await sleep(1000);
 
-    await page.locator('input[type="tel"]').fill('081234567892');
-    await page.locator('input[type="password"]').fill('admin123');
+    await page.locator('input[type="tel"]').fill((process.env.TEST_CASHIER_PHONE || ''));
+    await page.locator('input[type="password"]').fill((process.env.TEST_ADMIN_PASSWORD || ''));
     await page.locator('button[type="submit"]').click();
     await page.waitForTimeout(3000);
     log('Cashier 登录', !page.url().includes('login'));

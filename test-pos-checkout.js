@@ -23,8 +23,8 @@ async function testPOSCheckout() {
     await page.waitForTimeout(2000);
 
     console.log('2. 登录...');
-    await page.fill('input[type="tel"], input[placeholder*="08"]', '081234567890');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="tel"], input[placeholder*="08"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await page.click('button[type="submit"]');
     await page.waitForTimeout(5000);
 

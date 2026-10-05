@@ -54,8 +54,8 @@ async function comprehensiveSyncTest() {
     // ========== 1. 登录 Admin ==========
     console.log('📱 Step 1: Login to Admin');
     await adminPage.goto('http://localhost:5173/login', { waitUntil: 'networkidle' });
-    await adminPage.fill('input[type="tel"], input[placeholder*="08"]', '081234567890');
-    await adminPage.fill('input[type="password"]', 'admin123');
+    await adminPage.fill('input[type="tel"], input[placeholder*="08"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await adminPage.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await adminPage.click('button[type="submit"]');
     await adminPage.waitForTimeout(3000);
     console.log('   ✅ Admin logged in\n');
@@ -223,8 +223,8 @@ async function comprehensiveSyncTest() {
     console.log('\n📦 Verifying POS Sync...');
     const posPage = await context.newPage();
     await posPage.goto('http://localhost:6063/login', { waitUntil: 'networkidle' });
-    await posPage.fill('input[type="tel"], input[placeholder*="08"]', '081234567890');
-    await posPage.fill('input[type="password"]', 'admin123');
+    await posPage.fill('input[type="tel"], input[placeholder*="08"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await posPage.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await posPage.click('button[type="submit"]');
     await posPage.waitForTimeout(5000);
     await posPage.reload({ waitUntil: 'networkidle' });

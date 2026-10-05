@@ -108,6 +108,21 @@ router.get('/abc', authenticate, authorize('admin', 'manager'), async (req: Auth
 
 // ==================== PRODUCT SCORE ====================
 
+router.get('/trend', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const days = Math.min(366, Math.max(1, parseInt(req.query.days as string) || 30))
+    const endDate = new Date()
+    const startDate = new Date(endDate)
+    startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
+    startDate.setUTCHours(0, 0, 0, 0)
+    const result = await ProductManagementService.getProductSalesTrend(req.user!.storeId, startDate, endDate)
+    res.json({ code: 200, data: { list: result }, timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('Get product sales trend error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get product sales trend' })
+  }
+})
+
 // GET /api/product-analysis/score/:productId
 router.get('/score/:productId', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {

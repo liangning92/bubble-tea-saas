@@ -1,6 +1,17 @@
-import { Router, Request, Response } from 'express'
+import { Router, Response } from 'express'
+import { authenticate, AuthRequest, canAccessStore } from '../middlewares/auth'
 
 const router = Router()
+router.use(authenticate)
+
+function requestedStore(req: AuthRequest, res: Response, storeId?: string): string | null {
+  const target = storeId || req.user?.storeId || ''
+  if (!req.user || (target && !canAccessStore(req.user, target))) {
+    res.status(403).json({ success: false, error: 'Access denied: Store mismatch' })
+    return null
+  }
+  return target
+}
 
 // In-memory store for detected printers (persisted via POS client)
 // This gets updated when POS client detects printers
@@ -12,11 +23,12 @@ const storePrintersMap: Record<string, { printers: string[]; lastDetection: Date
  * GET /api/hardware/printers
  * Returns list of detected printers from POS client
  */
-router.get('/printers', async (req: Request, res: Response) => {
+router.get('/printers', async (req: AuthRequest, res: Response) => {
   try {
-    const storeId = (req.query.storeId as string) || ''
+    const storeId = requestedStore(req, res, req.query.storeId as string)
+    if (storeId === null) return
     const storeData = storeId ? storePrintersMap[storeId] : null
-    const printers = storeData ? storeData.printers : detectedPrinters
+    const printers = storeData ? storeData.printers : (req.user?.role === 'admin' && !storeId ? detectedPrinters : [])
     const lastDetection = storeData ? storeData.lastDetection : lastDetectionTime
 
     res.json({
@@ -37,20 +49,22 @@ router.get('/printers', async (req: Request, res: Response) => {
  * POST /api/hardware/printers
  * POS client posts detected printers list
  */
-router.post('/printers', async (req: Request, res: Response) => {
+router.post('/printers', async (req: AuthRequest, res: Response) => {
   try {
     const { printers, storeId } = req.body
     
-    if (!Array.isArray(printers)) {
+    if (!Array.isArray(printers) || printers.length > 100 || printers.some((name: unknown) => typeof name !== 'string' || name.length > 200)) {
       res.status(400).json({ success: false, error: 'printers must be an array' })
       return
     }
     
+    const targetStoreId = requestedStore(req, res, storeId)
+    if (targetStoreId === null) return
     detectedPrinters = printers
     lastDetectionTime = new Date()
 
-    if (storeId) {
-      storePrintersMap[storeId] = {
+    if (targetStoreId) {
+      storePrintersMap[targetStoreId] = {
         printers,
         lastDetection: lastDetectionTime
       }
@@ -72,9 +86,10 @@ router.post('/printers', async (req: Request, res: Response) => {
  * Admin triggers printer detection on POS client
  * POS client polls this endpoint and responds with detected printers
  */
-router.post('/detect', async (req: Request, res: Response) => {
+router.post('/detect', async (req: AuthRequest, res: Response) => {
   try {
     const { storeId } = req.body
+    if (requestedStore(req, res, storeId) === null) return
     
     // Store detection request - POS client will poll this
     // For now, just acknowledge the request
@@ -93,7 +108,8 @@ router.post('/detect', async (req: Request, res: Response) => {
  * GET /api/hardware/detect
  * Check detection request status
  */
-router.get('/detect', async (req: Request, res: Response) => {
+router.get('/detect', async (req: AuthRequest, res: Response) => {
+  if (requestedStore(req, res, req.query.storeId as string) === null) return
   res.json({
     success: true,
     lastDetection: lastDetectionTime,
@@ -105,9 +121,10 @@ router.get('/detect', async (req: Request, res: Response) => {
  * POST /api/hardware/test-print
  * Trigger a test print from POS client
  */
-router.post('/test-print', async (req: Request, res: Response) => {
+router.post('/test-print', async (req: AuthRequest, res: Response) => {
   try {
     const { printerName, storeId } = req.body
+    if (requestedStore(req, res, storeId) === null) return
     
     // Store test print request - POS client will poll this
     res.json({
@@ -126,9 +143,10 @@ router.post('/test-print', async (req: Request, res: Response) => {
  * POST /api/hardware/test-drawer
  * Trigger a test cash drawer open from POS client
  */
-router.post('/test-drawer', async (req: Request, res: Response) => {
+router.post('/test-drawer', async (req: AuthRequest, res: Response) => {
   try {
     const { printerName, storeId } = req.body
+    if (requestedStore(req, res, storeId) === null) return
     
     res.json({
       success: true,

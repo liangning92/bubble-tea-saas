@@ -14,6 +14,7 @@ exports.createSchedule = createSchedule;
 exports.getSchedule = getSchedule;
 exports.calculateSalary = calculateSalary;
 const database_1 = __importDefault(require("../config/database"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 // Get staff list
 async function getStaff(filter) {
     const where = {};
@@ -58,11 +59,14 @@ async function getStaffById(staffId) {
 }
 // Create staff (creates User first, then Staff linked to it)
 async function createStaff(data) {
+    if (Buffer.byteLength(data.password, 'utf8') < 6 || Buffer.byteLength(data.password, 'utf8') > 72) {
+        throw new Error('Staff password must be 6–72 bytes');
+    }
     // First create the User
     const user = await database_1.default.user.create({
         data: {
             phone: data.phone,
-            password: data.password || 'password123',
+            password: await bcryptjs_1.default.hash(data.password, 12),
             role: 'staff',
             storeId: data.storeId
         }

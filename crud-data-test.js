@@ -13,14 +13,14 @@ async function api(method, path, body, token) {
   if (body) opt.body = JSON.stringify(body);
   try {
     const r = await fetch(`${API}${path}`, opt);
-    return { status: r.status, data: await r.json().catch(() => ()) };
+    return { status: r.status, data: await r.json().catch(() => null) };
   } catch (e) { return { status: 0, data: { error: e.message } };
   }
 }
 
 async function run() {
   // 登录
-  const login = await api('POST', '/auth/login', { phone: '081234567890', password: 'admin123' });
+  const login = await api('POST', '/auth/login', { phone: (process.env.TEST_ADMIN_PHONE || ''), password: (process.env.TEST_ADMIN_PASSWORD || '') });
   const token = login.data?.data?.token;
   console.log('✅ 登录成功');
 

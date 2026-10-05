@@ -18,8 +18,8 @@ async function verifyHygieneModule() {
     console.log('\n=== Step 1: Login ===');
     await page.goto('http://localhost:5173/login', { waitUntil: 'networkidle' });
     await page.waitForTimeout(2000);
-    await page.fill('input[type="tel"]', '081234567890');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="tel"]', (process.env.TEST_ADMIN_PHONE || ''));
+    await page.fill('input[type="password"]', (process.env.TEST_ADMIN_PASSWORD || ''));
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
     console.log('Logged in');

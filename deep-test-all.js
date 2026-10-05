@@ -7,10 +7,10 @@ const API_BASE = 'http://localhost:7072/api';
 
 // 模拟用户角色
 const USERS = {
-  admin: { phone: '081234567890', role: 'admin' },
-  manager: { phone: '081234567891', role: 'manager' },
-  cashier: { phone: '081234567892', role: 'cashier' },
-  staff: { phone: '081234567893', role: 'staff' }
+  admin: { phone: (process.env.TEST_ADMIN_PHONE || ''), role: 'admin' },
+  manager: { phone: (process.env.TEST_MANAGER_PHONE || ''), role: 'manager' },
+  cashier: { phone: (process.env.TEST_CASHIER_PHONE || ''), role: 'cashier' },
+  staff: { phone: (process.env.TEST_STAFF_PHONE || ''), role: 'staff' }
 };
 
 let authToken = null;
@@ -45,7 +45,7 @@ async function apiRequest(method, path, body = null, token = null) {
   }
 }
 
-async function login(phone, password = 'admin123') {
+async function login(phone, password = (process.env.TEST_ADMIN_PASSWORD || '')) {
   const result = await apiRequest('POST', '/auth/login', { phone, password });
   if (result.ok && result.data.data?.token) {
     authToken = result.data.data.token;
@@ -339,24 +339,4 @@ async function testModules() {
   console.log('\n========== 测试总结 ==========');
 
   const total = testResults.length;
-  const passed = testResults.filter(r => r.status === true).length;
-  const failed = testResults.filter(r => r.status === false).length;
-
-  console.log(`\n总测试数: ${total}`);
-  console.log(`✅ 通过: ${passed}`);
-  console.log(`❌ 失败: ${failed}`);
-
-  if (failed > 0) {
-    console.log('\n❌ 失败的测试:');
-    testResults.filter(r => r.status === false).forEach(r => {
-      console.log(`  - ${r.module}.${r.action} (${r.role}): ${r.details}`);
-    });
-  }
-
-  console.log('\n========== 测试完成 ==========\n');
-
-  return { total, passed, failed };
-}
-
-// 运行测试
-testModules().catch(console.error);
+  const passed = testResults.filter(r => r.status 

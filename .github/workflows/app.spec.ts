@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 
 const APP_URL = process.env.APP_URL || 'http://localhost:9222'
-const TEST_PHONE = '081234567890'
-const TEST_PASSWORD = 'admin123'
+const TEST_PHONE = (process.env.TEST_ADMIN_PHONE || '')
+const TEST_PASSWORD = (process.env.TEST_ADMIN_PASSWORD || '')
 
 test.describe('POS App E2E', () => {
   test('login page renders', async ({ page }) => {
@@ -22,9 +22,7 @@ test.describe('POS App E2E', () => {
     await expect(page.locator('input[type="password"]').first()).toBeVisible()
     await expect(page.locator('button[type="submit"]').first()).toBeVisible()
 
-    // Check test account card is visible
-    await expect(page.getByText(TEST_PHONE)).toBeVisible()
-    await expect(page.getByText(TEST_PASSWORD)).toBeVisible()
+    // Test credentials are injected only through the test environment and are never rendered.
 
     // Report console errors
     if (consoleErrors.length > 0) {
@@ -41,11 +39,13 @@ test.describe('POS App E2E', () => {
     const phoneInput = page.locator('input[type="tel"], input[type="text"]').first()
     const passwordInput = page.locator('input[type="password"]').first()
 
-    await phoneInput.fill(TEST_PHONE)
-    await passwordInput.fill(TEST_PASSWORD)
+    const formPhone = TEST_PHONE || '0000000000'
+    const formPassword = TEST_PASSWORD || 'non-authenticating-test-value'
+    await phoneInput.fill(formPhone)
+    await passwordInput.fill(formPassword)
 
-    expect(await phoneInput.inputValue()).toBe(TEST_PHONE)
-    expect(await passwordInput.inputValue()).toBe(TEST_PASSWORD)
+    expect(await phoneInput.inputValue()).toBe(formPhone)
+    expect(await passwordInput.inputValue()).toBe(formPassword)
   })
 
   test('login attempt (no server - should show error or offline fallback)', async ({ page }) => {
@@ -63,6 +63,7 @@ test.describe('POS App E2E', () => {
     const passwordInput = page.locator('input[type="password"]').first()
     const submitButton = page.locator('button[type="submit"]').first()
 
+    test.skip(!TEST_PHONE || !TEST_PASSWORD, 'Set TEST_ADMIN_PHONE and TEST_ADMIN_PASSWORD to exercise authentication')
     await phoneInput.fill(TEST_PHONE)
     await passwordInput.fill(TEST_PASSWORD)
     await submitButton.click()
