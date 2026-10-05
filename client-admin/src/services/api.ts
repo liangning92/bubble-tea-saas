@@ -184,6 +184,7 @@ export const productAnalysisApi = {
   mix: (days?: number) => api.get('/product-analysis/mix', { params: days ? { days } : undefined }),
   trend: (days?: number) => api.get('/product-analysis/trend', { params: days ? { days } : undefined }),
   abc: (days?: number) => api.get('/product-analysis/abc', { params: days ? { days } : undefined }),
+  matrix: (days?: number) => api.get('/product-analysis/matrix', { params: days ? { days } : undefined }),
   score: (productId: string, days?: number) => api.get('/product-analysis/score/' + productId, { params: days ? { days } : undefined })
 }
 

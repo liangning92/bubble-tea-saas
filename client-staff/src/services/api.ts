@@ -396,6 +396,15 @@ export const staffApi = {
     return response.data
   },
 
+  // Recipe book: active products with specs + BOM (ingredients)
+  getRecipes: async () => {
+    const response = await axios.get(`${API_BASE}/products`, {
+      params: { status: 'active' },
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
   // Shift Swap
   getMyShiftSwaps: async () => {
     const response = await axios.get(`${API_BASE}/shift-swap/my`, {

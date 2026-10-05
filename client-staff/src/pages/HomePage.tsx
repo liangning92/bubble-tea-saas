@@ -171,7 +171,7 @@ export function HomePage() {
         <div className="bg-white/10 rounded-2xl p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-white/80 text-sm">Shift {getCurrentShift()}</p>
+              <p className="text-white/80 text-sm">{getCurrentShift()}</p>
               <p className="text-white/80 text-sm">{user?.position || 'Staff'}</p>
             </div>
             <div className="text-right">
@@ -374,60 +374,22 @@ export function HomePage() {
           </button>
         </div>
 
-        {/* Recent Activity */}
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <h3 className="font-bold text-gray-900 mb-3">{t('home.recentActivity')}</h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-gray-500">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-sm">{t('home.checkInToday')}</span>
-            </div>
-            <div className="flex items-center gap-3 text-gray-500">
-              <div className="w-2 h-2 rounded-full bg-blue-500" />
-              <span className="text-sm">{t('home.scheduleTomorrow')}</span>
-            </div>
+        {/* Training Academy CTA */}
+        <button
+          onClick={() => navigate('/training')}
+          className="w-full bg-gradient-to-r from-pink-500 to-orange-400 text-white rounded-2xl shadow-sm p-4 text-left flex items-center gap-3 mb-4"
+        >
+          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <BookOpen size={24} />
           </div>
-        </div>
+          <div className="flex-1">
+            <p className="font-bold">{t('home.training')}</p>
+            <p className="text-sm text-white/90">
+              {i18n.language === 'zh' ? '服务 · 卫生 · 原料 · 配方制作 · 安全' : i18n.language === 'en' ? 'Service · Hygiene · Materials · Recipes · Safety' : 'Layanan · Kebersihan · Bahan · Resep · Keselamatan'}
+            </p>
+          </div>
+        </button>
       </div>
-
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 flex justify-around">
-        <button
-          onClick={() => navigate('/')}
-          className="flex flex-col items-center gap-1 text-primary"
-        >
-          <Clock size={22} />
-          <span className="text-xs">{t('nav.attendance')}</span>
-        </button>
-        <button
-          onClick={() => navigate('/schedule')}
-          className="flex flex-col items-center gap-1 text-gray-400"
-        >
-          <Calendar size={22} />
-          <span className="text-xs">{t('nav.schedule')}</span>
-        </button>
-        <button
-          onClick={() => navigate('/leave')}
-          className="flex flex-col items-center gap-1 text-gray-400"
-        >
-          <CalendarDays size={22} />
-          <span className="text-xs">{t('nav.leave')}</span>
-        </button>
-        <button
-          onClick={() => navigate('/reimbursement')}
-          className="flex flex-col items-center gap-1 text-gray-400"
-        >
-          <Receipt size={22} />
-          <span className="text-xs">{t('nav.reimbursement')}</span>
-        </button>
-        <button
-          onClick={() => navigate('/profile')}
-          className="flex flex-col items-center gap-1 text-gray-400"
-        >
-          <User size={22} />
-          <span className="text-xs">{t('nav.profile')}</span>
-        </button>
-      </nav>
     </div>
   )
 }

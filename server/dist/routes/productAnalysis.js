@@ -131,6 +131,26 @@ router.get('/abc', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'
         res.status(500).json({ code: 500, message: 'Failed to get ABC analysis' });
     }
 });
+// ==================== MENU ENGINEERING MATRIX ====================
+// GET /api/product-analysis/matrix
+router.get('/matrix', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const storeId = req.user.storeId;
+        const days = parseInt(req.query.days) || 30;
+        const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const endDate = new Date();
+        const result = await ProductManagementService.getMenuEngineeringMatrix(storeId, startDate, endDate);
+        res.json({
+            code: 200,
+            data: result,
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Get matrix analysis error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get matrix analysis' });
+    }
+});
 // ==================== PRODUCT SCORE ====================
 router.get('/trend', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
