@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (空=自动日期, 例: 2024.07.14)'
+        description: 'Version (空=自动生成，例: 2026.10.293)'
         required: false
         default: ''
 
@@ -46,12 +46,19 @@ jobs:
 
       - name: Set version
         id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           $year = Get-Date -Format 'yyyy'
           $month = [int](Get-Date -Format 'MM')
           $day = Get-Date -Format 'dd'
           $runNum = $env:GITHUB_RUN_NUMBER
           $version = "$year.$month.$runNum"
+          $requestedVersion = $env:REQUESTED_VERSION
+          if ($requestedVersion) {
+            if ($requestedVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be major.minor.patch" }
+            $version = $requestedVersion
+          }
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
           echo "VERSION_STR=$year.$month.$day.$runNum" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
 
@@ -150,70 +157,34 @@ jobs:
           name: BTPS-build-dist
           path: release/
 
-      - name: Download latest tag info
-        id: latest_tag
-        run: |
-          $version = "${{ needs.build.outputs.version }}"
-          echo "TAG=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-
-      - name: Create GitHub Release
+      - name: Validate and publish complete update
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          $version = "${{ needs.build.outputs.version }}"
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_VERSION
           $tag = "v$version"
-          
-          # Delete existing release for this tag if it exists
-          $existing = gh release view "$tag" --repo "$env:GITHUB_REPOSITORY" 2>$null
-          if ($existing) {
-            Write-Host "Deleting existing release $tag"
-            gh release delete "$tag" --yes --repo "$env:GITHUB_REPOSITORY" 2>$null
-          }
-          
-          # Create release
-          gh release create "$tag" `
-            --title "BTPS $version" `
-            --notes "BTPS Version $version" `
-            --repo "$env:GITHUB_REPOSITORY"
-
-      - name: Upload exe asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $version = "${{ needs.build.outputs.version }}"
           $exePath = "release/BTPS-$version-Windows-x64.exe"
-          $tag = "v$version"
-          
-          Write-Host "Uploading $exePath to release $tag"
-          gh release upload "$tag" "$exePath" `
-            --repo "$env:GITHUB_REPOSITORY" `
-            --clobber
-
-      - name: Upload blockmap asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $version = "${{ needs.build.outputs.version }}"
-          $blockmapPath = "release/BTPS-$version-Windows-x64.exe.blockmap"
-          $tag = "v$version"
-          
-          Write-Host "Uploading $blockmapPath to release $tag"
-          if (Test-Path "$blockmapPath") {
-            gh release upload "$tag" "$blockmapPath" `
-              --repo "$env:GITHUB_REPOSITORY" `
-              --clobber
-          }
-
-      - name: Upload latest.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tag = "v${{ needs.build.outputs.version }}"
+          $blockmapPath = "$exePath.blockmap"
           $latestYml = "release/latest.yml"
-          
-          Write-Host "Uploading $latestYml to release $tag"
-          if (Test-Path "$latestYml") {
-            gh release upload "$tag" "$latestYml" `
-              --repo "$env:GITHUB_REPOSITORY" `
-              --clobber
+          foreach ($file in @($exePath, $blockmapPath, $latestYml)) {
+            if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) { throw "Missing update artifact: $file" }
           }
+          $manifest = Get-Content $latestYml -Raw
+          if ($manifest -notmatch "(?m)^version: $([regex]::Escape($version))\s*$") { throw "Update version mismatch" }
+          if (!$manifest.Contains("BTPS-$version-Windows-x64.exe")) { throw "Update installer mismatch" }
+          $actualHash = [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.IO.File]::ReadAllBytes((Resolve-Path $exePath))))
+          if (!$manifest.Contains($actualHash)) { throw "Update installer checksum mismatch" }
+          $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (!(($existing | ConvertFrom-Json).isDraft)) { throw "Published release already exists: $tag" }
+          } else {
+            gh release create $tag --draft --target $env:RELEASE_SHA --title "BTPS $version" --notes "POS source repairs, product analysis and automatic update notifications." --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Release creation failed" }
+          }
+          gh release upload $tag $exePath $blockmapPath $latestYml --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw "Update artifact upload failed" }
+          gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }

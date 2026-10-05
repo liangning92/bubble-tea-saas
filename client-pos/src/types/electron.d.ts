@@ -72,9 +72,9 @@ interface ElectronAPI {
   getAppVersion: () => Promise<string>
 
   // Event listeners for updates
-  onUpdateStatus: (callback: (status: string, info?: any) => void) => void
-  onUpdateProgress: (callback: (progress: number) => void) => void
-  onUpdateError: (callback: (error: string) => void) => void
+  onUpdateStatus: (callback: (status: string, info?: any) => void) => () => void
+  onUpdateProgress: (callback: (progress: number) => void) => () => void
+  onUpdateError: (callback: (error: string) => void) => () => void
 
   // Platform info
   platform: string

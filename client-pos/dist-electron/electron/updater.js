@@ -6,6 +6,21 @@ const electron_1 = require("electron");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { autoUpdater } = require('electron-updater');
 let mainWindow = null;
+let checkInFlight = false;
+let downloadInProgress = false;
+let updateDownloaded = false;
+let updateTimer = null;
+async function checkForUpdates() {
+    if (!electron_1.app.isPackaged || checkInFlight || downloadInProgress || updateDownloaded)
+        return;
+    checkInFlight = true;
+    try {
+        return await autoUpdater.checkForUpdates();
+    }
+    finally {
+        checkInFlight = false;
+    }
+}
 // Log helper
 function log(level, message, ...args) {
     const prefix = '[Updater]';
@@ -60,10 +75,13 @@ function setupUpdater(window) {
         });
     });
     autoUpdater.on('update-downloaded', (info) => {
+        downloadInProgress = false;
+        updateDownloaded = true;
         log('info', 'Update downloaded:', info.version);
         sendToRenderer('update-status', 'downloaded', { version: info.version });
     });
     autoUpdater.on('error', (err) => {
+        downloadInProgress = false;
         log('error', 'Error:', err.message);
         sendToRenderer('update-error', err.message);
     });
@@ -89,7 +107,7 @@ function setupIpcHandlers() {
             log('info', 'Current version:', currentVersion);
             // Use electron-updater to check GitHub for updates
             try {
-                await autoUpdater.checkForUpdates();
+                await checkForUpdates();
             }
             catch (error) {
                 log('warn', 'Check for updates failed:', error.message);
@@ -107,6 +125,7 @@ function setupIpcHandlers() {
     // Download update
     electron_1.ipcMain.handle('download-update', async () => {
         try {
+            downloadInProgress = true;
             log('info', 'Starting download...');
             sendToRenderer('update-status', 'downloading');
             sendToRenderer('update-progress', { percent: 0 });
@@ -114,6 +133,7 @@ function setupIpcHandlers() {
             return true;
         }
         catch (error) {
+            downloadInProgress = false;
             log('error', 'Download failed:', error.message);
             sendToRenderer('update-error', error.message);
             return false;
@@ -129,26 +149,20 @@ function setupIpcHandlers() {
  * Check for updates automatically (call on app start in packaged mode)
  */
 function checkForUpdatesOnStart() {
-    if (!electron_1.app.isPackaged) {
-        log('info', 'Skipping auto-check in development mode');
+    if (!electron_1.app.isPackaged || updateTimer)
         return;
-    }
-    log('info', 'Checking for updates on startup...');
-    // Delay initial check by 5 seconds to let app fully start
-    setTimeout(() => {
-        // 不要在这里发送 'checking' 状态 - autoUpdater.checkForUpdates() 内部会发送
-        // 添加超时处理 - 如果 30 秒后还没返回，认为检查失败
-        const timeout = setTimeout(() => {
-            log('warn', 'Check for updates timeout');
-            sendToRenderer('update-error', 'Check timeout - please try again');
-        }, 30000);
-        autoUpdater.checkForUpdates()
-            .catch((err) => {
-            log('warn', 'Initial check failed:', err.message);
-        })
-            .finally(() => {
-            clearTimeout(timeout);
+    const check = () => {
+        void checkForUpdates().catch((err) => {
+            log('warn', 'Automatic update check failed:', err.message);
         });
-    }, 5000);
+    };
+    const initialTimer = setTimeout(check, 5000);
+    updateTimer = setInterval(check, 15 * 60 * 1000);
+    electron_1.app.once('before-quit', () => {
+        clearTimeout(initialTimer);
+        if (updateTimer)
+            clearInterval(updateTimer);
+        updateTimer = null;
+    });
 }
 exports.default = autoUpdater;

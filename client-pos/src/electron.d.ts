@@ -19,9 +19,9 @@ declare global {
       installUpdate: () => Promise<void>
 
       // Event listeners
-      onUpdateStatus: (callback: (status: string, info?: any) => void) => void
-      onUpdateProgress: (callback: (progress: number) => void) => void
-      onUpdateError: (callback: (error: string) => void) => void
+      onUpdateStatus: (callback: (status: string, info?: any) => void) => () => void
+      onUpdateProgress: (callback: (progress: number) => void) => () => void
+      onUpdateError: (callback: (error: string) => void) => () => void
 
       // App info
       getAppVersion: () => Promise<string>

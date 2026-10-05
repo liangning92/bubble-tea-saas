@@ -11,7 +11,6 @@ import { showToast, ConfirmModal } from '../components/ui'
 import { AnnouncementBanner } from '../components/AnnouncementBanner'
 import { ChannelSelectModal } from '../components/ChannelSelectModal'
 import { AttendanceQR } from '../components/ui/AttendanceQR'
-import { UpdateNotification } from '../components/UpdateNotification'
 import { WindowControls } from '../components/WindowControls'
 import { YOUME_LOGO_WHITE } from '../assets/logo'
 import { useHardwareManager } from '../hooks/useHardwareManager'
@@ -5573,7 +5572,6 @@ export function POSPage() {
       )}
 
       {/* 自动更新通知 */}
-      <UpdateNotification />
     </div>
   )
 }
