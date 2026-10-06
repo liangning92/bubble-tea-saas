@@ -1,3 +1,4 @@
+import { ShiftSummaryEvidence, ShiftEvidence } from '../components/ShiftSummaryEvidence'
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -25,11 +26,12 @@ interface ShiftInfo {
 }
 
 interface CashBalance {
-  currentBalance: number
-  todayCashSales: number
-  todayCashIns: number
-  todayCashOuts: number
-  openFloat: number
+  currentBalance: number | null
+  todayCashSales: number | null
+  todayCashIns: number | null
+  todayCashOuts: number | null
+  openFloat: number | null
+  summaryEvidence?: ShiftEvidence
   shift: ShiftInfo | null
 }
 
@@ -97,6 +99,7 @@ export function CashManagementPage() {
         setEvents(eventsRes.data.data?.list || [])
       }
     } catch (error) {
+      setBalance(previous => previous ? { ...previous, summaryEvidence: undefined, openFloat: null } : null)
       console.error('Failed to load cash data:', error)
     } finally {
       setIsLoading(false)
@@ -206,6 +209,10 @@ export function CashManagementPage() {
   }
 
   const handleCloseShift = async () => {
+    if (closeAmount.trim() === '' || !Number.isFinite(Number(closeAmount)) || Number(closeAmount) < 0) {
+      showToast(t('shiftEvidence.enterCount'), 'error')
+      return
+    }
     try {
       await posApi.closeShift({
         actualCash: Math.round(parseFloat(closeAmount || '0')),
@@ -278,26 +285,7 @@ export function CashManagementPage() {
         <>
           {/* Current Cash Balance */}
           <div className="p-4">
-            <div className="bg-gradient-to-r from-primary to-pink-500 rounded-2xl shadow-lg p-6 mb-4 text-white">
-              <div className="text-center">
-                <p className="text-sm opacity-80 mb-1">{t('cash.currentCash')}</p>
-                <p className="text-4xl font-bold">{formatCurrency(balance?.currentBalance || 0)}</p>
-              </div>
-              <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-white/20">
-                <div className="text-center">
-                  <p className="text-xs opacity-70">{t('cash.todaySales')}</p>
-                  <p className="font-semibold">{formatCurrency(balance?.todayCashSales || 0)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs opacity-70">{t('cash.cashIn')}</p>
-                  <p className="font-semibold text-purple-200">{formatCurrency(balance?.todayCashIns || 0)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs opacity-70">{t('cash.cashOut')}</p>
-                  <p className="font-semibold text-orange-200">{formatCurrency(balance?.todayCashOuts || 0)}</p>
-                </div>
-              </div>
-            </div>
+            <ShiftSummaryEvidence evidence={balance?.summaryEvidence} openFloat={balance?.openFloat} storeId={user?.storeId} />
 
             {/* Quick Actions */}
             <div className="grid grid-cols-4 gap-2 mb-4">
@@ -542,14 +530,10 @@ export function CashManagementPage() {
                   type="number"
                   value={closeAmount}
                   onChange={(e) => setCloseAmount(e.target.value)}
-                  placeholder="0"
+                  placeholder={t('shiftEvidence.enterCount')}
                   className="w-full p-3 border border-gray-200 rounded-xl text-lg"
                 />
-                {balance && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {t('cash.expected')}: {formatCurrency(balance.currentBalance)}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-1">{t('shiftEvidence.manualCloseNotice')}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('cash.note')}</label>

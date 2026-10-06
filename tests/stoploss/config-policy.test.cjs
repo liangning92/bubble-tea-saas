@@ -10,7 +10,7 @@ function moduleAt(path, deps){
 const auth={authenticate:(req,res,next)=>next(),authorize:(...roles)=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({message:'Forbidden'})};
 function routes(path,db,extra={}){
  const handlers={};const router={};for(const method of ['get','post','put','delete'])router[method]=(url,...fns)=>{handlers[method+url]=fns;};
- moduleAt(path,{'express':{Router:()=>router},'../middlewares/auth':auth,'../config/database':{__esModule:true,default:db,prisma:db},'../utils/dateUtils':{},...extra});
+ moduleAt(path,{'express':{Router:()=>router},'../middlewares/auth':auth,'../config/database':{__esModule:true,default:db,prisma:db},'../utils/dateUtils':{},'../services/ShiftSummaryEvidence':moduleAt('server/src/services/ShiftSummaryEvidence.ts',{}),...extra});
  return async (key,req)=>{const res={code:200,status(n){this.code=n;return this;},json(data){this.data=data;return this;}};
  const chain=handlers[key];let i=0;async function next(){if(i<chain.length)return chain[i++](req,res,next);}await next();return res;};
 }
@@ -116,7 +116,7 @@ test('off cannot open or create a new sale even when active',async()=>{
 });
 test('historical off session is readable and closable without active configuration',async()=>{
  let updated,events=[];const historic={id:'historic-off',shift:'off',openFloat:100,status:'open',openedAt:new Date()};
- const db={config:{findFirst:async()=>null},shiftSession:{findFirst:async()=>historic,update:async q=>{updated=q;return {...historic,...q.data};}},cashEvent:{findMany:async()=>[],create:async q=>{events.push(q);return {};}},order:{count:async()=>0,aggregate:async()=>({_sum:{}}),groupBy:async()=>[],findMany:async()=>[]},channel:{findMany:async()=>[]}};
+ const db={config:{findFirst:async()=>null},shiftSession:{findMany:async()=>[historic],findFirst:async()=>historic,update:async q=>{updated=q;return {...historic,...q.data};}},cashEvent:{findMany:async()=>[],create:async q=>{events.push(q);return {};}},order:{count:async()=>0,aggregate:async()=>({_sum:{}}),groupBy:async()=>[],findMany:async()=>[]},channel:{findMany:async()=>[]}};
  const run=routes('server/src/routes/posCash.ts',db,{'../utils/dateUtils':{startOfTodayJakarta:()=>new Date('2026-10-06T17:00:00Z')}});
  const read=await run('get/shifts/current',{user});assert.equal(read.code,200);assert.equal(read.data.data.shift.shift,'off');assert.equal(read.data.data.hasOpenShift,true);
  const closed=await run('post/shifts/close',{user,body:{actualCash:100}});assert.equal(closed.code,200);assert.equal(updated.where.id,'historic-off');assert.equal(updated.data.status,'closed');assert.equal(events[0].data.shift,'off');

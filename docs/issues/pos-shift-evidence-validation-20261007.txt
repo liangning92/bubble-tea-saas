@@ -1,0 +1,84 @@
+Isolated shift display evidence (2026-10-07). No production DB or physical device verification.
+
+Synthetic tests
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 31
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1467.222967
+
+Actual shift pages
+PASS real POS shift evidence: healthy; zero unverified Z-report and zero page errors
+PASS real POS shift evidence: legacy; zero unverified Z-report and zero page errors
+PASS real POS shift evidence: refund; zero unverified Z-report and zero page errors
+PASS real POS shift evidence: queued; zero unverified Z-report and zero page errors
+PASS real POS shift evidence: read-failure; zero unverified Z-report and zero page errors
+PASS real POS shift evidence: manual; zero unverified Z-report and zero page errors
+PASS real POS shift evidence: cash-page; zero unverified Z-report and zero page errors
+
+Existing payment regression
+Re-optimizing dependencies because vite config has changed
+PASS actual POS success: real IndexedDB committed one pending order; receipt/kitchen/cup/display once; cart cleared and modal closed; page errors zero. External requests blocked: 0
+PASS actual POS: controlled native IndexedDB order-add refusal retains cart, payment modal and amount; visible caution; zero print/completion; double click one POST.
+PASS actual POS refused: real IndexedDB committed one pending order; receipt/kitchen/cup/display once; cart cleared and modal closed; page errors zero. External requests blocked: 0
+PASS actual POS: HTTP 409 retains payment/cart; zero local queue, print and completion.
+PASS actual POS configuration: disabled default, real 10s polling while paying, all-off, config read 503, reconnect; cart retained and zero print/queue.
+PASS actual POS shifts: [off,morning] defaults morning; all-off blocks; custom submitted; historical off still displayed.
+
+Typechecks
+
+> bubble-tea-saas@2026.10.02.1748 typecheck
+> npm run typecheck:server && npm run typecheck:admin && npm run typecheck:pos && npm run typecheck:staff
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:server
+> cd server && tsc --noEmit
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:admin
+> cd client-admin && npx tsc --noEmit
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:pos
+> cd client-pos && npx tsc --noEmit
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:staff
+> cd client-staff && npx tsc --noEmit
+
+
+API build
+
+> bubble-tea-server@1.0.0 build
+> tsc --outDir /tmp/pos-shift-build/server
+
+
+POS build
+
+rendering chunks...
+computing gzip size...
+../../../../../../../../tmp/pos-shift-build/pos/index.html                   0.43 kB │ gzip:   0.29 kB
+../../../../../../../../tmp/pos-shift-build/pos/assets/index-CysuKtI2.css   51.42 kB │ gzip:   8.93 kB
+../../../../../../../../tmp/pos-shift-build/pos/assets/index-a2bVd4uj.js   848.16 kB │ gzip: 295.88 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.68s
+
+Same translation check command
+🔍 i18n Lint: client-pos
+📚 Found 729 Indonesian translation keys
+✅ No i18n issues found
+🔍 i18n Lint: client-admin
+📚 Found 3539 Indonesian translation keys
+✅ No i18n issues found
+🔍 i18n Lint: client-staff
+📚 Found 428 Indonesian translation keys
+✅ No i18n issues found

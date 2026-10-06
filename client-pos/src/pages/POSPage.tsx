@@ -8,6 +8,7 @@ import { db, syncManager, productCache, LocalProduct, getLockScreenPin, saveLock
 import { connectionManager } from '../services/ConnectionManager'
 import { formatCurrency, playSound, playSoundWithSettings } from '../utils/helpers'
 import { showToast, ConfirmModal } from '../components/ui'
+import { ShiftSummaryEvidence } from '../components/ShiftSummaryEvidence'
 import { AnnouncementBanner } from '../components/AnnouncementBanner'
 import { ChannelSelectModal } from '../components/ChannelSelectModal'
 import { AttendanceQR } from '../components/ui/AttendanceQR'
@@ -1897,7 +1898,10 @@ export function POSPage() {
       }),
       // An unavailable active-list must not hide the existing session or block closing it.
       posApi.getCurrentShift().then(res => setShiftData(res.data?.data))
-        .catch(e => console.error('Failed to fetch shift data:', e))
+        .catch(e => {
+          setShiftData((previous: Record<string, unknown> | null) => previous ? { ...previous, summaryEvidence: undefined, openFloat: null } : null)
+          console.error('Failed to fetch shift data:', e)
+        })
     ])
   }
 
@@ -4803,184 +4807,11 @@ export function POSPage() {
                     </div>
                   </div>
 
-                  {/* 开班金额和应收现金 */}
-                  {shiftSettings.showSummary && (
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      {shiftSettings.summaryItems?.openFloat && (
-                        <div className="p-3 bg-blue-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.openFloat')}</p>
-                          <p className="font-bold text-blue-600">{formatCurrency(shiftData?.openFloat || 0)}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.closeCash && (
-                        <div className="p-3 bg-green-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.expectedCash')}</p>
-                          <p className="font-bold text-green-600">{formatCurrency(shiftData?.expectedCash || 0)}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 今日汇总 */}
-                  {shiftSettings.showSummary && (
-                    <div className="p-3 bg-gray-50 rounded-xl mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">{t('pos.todaySummary')}</p>
-                      <div className="space-y-1">
-                        {shiftSettings.summaryItems?.cashSales && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">{t('pos.cashSales')}</span>
-                            <span className="font-medium">{formatCurrency(shiftData?.todayCashSales || 0)}</span>
-                          </div>
-                        )}
-                        {shiftSettings.summaryItems?.cashIn && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">{t('pos.cashIn')}</span>
-                            <span className="font-medium text-green-600">+{formatCurrency(shiftData?.todayCashIns || 0)}</span>
-                          </div>
-                        )}
-                        {shiftSettings.summaryItems?.cashOut && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">{t('pos.cashOut')}</span>
-                            <span className="font-medium text-red-600">-{formatCurrency(shiftData?.todayCashOuts || 0)}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 订单统计 */}
-                  {shiftSettings.showSummary && (
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      {shiftSettings.summaryItems?.orderCount && (
-                        <div className="p-3 bg-orange-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.todayOrders')}</p>
-                          <p className="font-bold text-orange-600">{shiftData?.todayOrderCount || 0}</p>
-                        </div>
-                      )}
-                      {shiftData?.todayOrderAmount > 0 && (
-                        <div className="p-3 bg-orange-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.todaySales')}</p>
-                          <p className="font-bold text-orange-600">{formatCurrency(shiftData?.todayOrderAmount || 0)}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.suspendedOrders && (
-                        <div className="p-3 bg-purple-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('pos.suspendedOrders')}</p>
-                          <p className="font-bold text-purple-600">{shiftData?.suspendedOrderCount || 0}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.customerCount && (
-                        <div className="p-3 bg-teal-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('settings.customerCount')}</p>
-                          <p className="font-bold text-teal-600">{shiftData?.customerCount || 0}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.qrisSales && (
-                        <div className="p-3 bg-indigo-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('settings.qrisSales')}</p>
-                          <p className="font-bold text-indigo-600">{formatCurrency(shiftData?.qrisSales || 0)}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 营销优惠与手动折扣稽核 (Anti-Fraud Audit) */}
-                  <div className="p-3 bg-gradient-to-r from-amber-50/70 to-orange-50/70 border border-amber-200/80 rounded-xl mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
-                        <Gift className="w-4 h-4 text-amber-600" />
-                        {t('pos.shiftDiscountAudit', '折扣与让利稽核')}
-                      </p>
-                      <span className="text-xs font-semibold text-gray-600">
-                        {t('pos.totalDiscount', '总让利')}: {formatCurrency(shiftData?.totalDiscount || 0)}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {/* 自动营销优惠 */}
-                      <div className="p-2.5 bg-white/90 rounded-lg border border-green-100 shadow-xs">
-                        <div className="flex justify-between text-gray-500 mb-0.5">
-                          <span>{t('pos.autoPromotion', '营销自动优惠')}</span>
-                          <span className="text-green-600 font-bold">{shiftData?.promotionOrderCount || 0}单</span>
-                        </div>
-                        <p className="font-bold text-green-600 text-sm">
-                          {formatCurrency(shiftData?.autoPromotionDiscount || 0)}
-                        </p>
-                      </div>
-
-                      {/* 手动打折/改价 (重点防飞单) */}
-                      <div className={`p-2.5 rounded-lg border shadow-xs ${
-                        (shiftData?.manualDiscount || 0) > 0
-                          ? 'bg-rose-50/90 border-rose-200'
-                          : 'bg-white/90 border-gray-100'
-                      }`}>
-                        <div className="flex justify-between text-gray-500 mb-0.5">
-                          <span className="flex items-center gap-1">
-                            {t('pos.manualDiscount', '收银手动折扣')}
-                            {(shiftData?.manualDiscount || 0) > 0 && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                            )}
-                          </span>
-                          <span className={`font-bold ${
-                            (shiftData?.manualDiscountOrderCount || 0) > 0 ? 'text-rose-600' : 'text-gray-400'
-                          }`}>
-                            {shiftData?.manualDiscountOrderCount || 0}单
-                          </span>
-                        </div>
-                        <p className={`font-bold text-sm ${
-                          (shiftData?.manualDiscount || 0) > 0 ? 'text-rose-600' : 'text-gray-700'
-                        }`}>
-                          {formatCurrency(shiftData?.manualDiscount || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 渠道订单统计 */}
-                  {shiftSettings.showSummary && (
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      {shiftSettings.summaryItems?.dineInCount && (
-                        <div className="p-3 bg-pink-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('settings.dineInOrders')}</p>
-                          <p className="font-bold text-pink-600">{shiftData?.dineInCount || 0}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.gofoodCount && (
-                        <div className="p-3 bg-yellow-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('settings.gofoodOrders')}</p>
-                          <p className="font-bold text-yellow-600">{shiftData?.gofoodCount || 0}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.grabCount && (
-                        <div className="p-3 bg-green-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('settings.grabOrders')}</p>
-                          <p className="font-bold text-green-600">{shiftData?.grabCount || 0}</p>
-                        </div>
-                      )}
-                      {shiftSettings.summaryItems?.shopeeCount && (
-                        <div className="p-3 bg-orange-50 rounded-xl">
-                          <p className="text-xs text-gray-500">{t('settings.shopeeOrders')}</p>
-                          <p className="font-bold text-orange-600">{shiftData?.shopeeCount || 0}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 状态信息 */}
-                  {shiftSettings.showSummary && shiftSettings.summaryItems?.pendingSync && (
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">{t('pos.pendingSync')}</span>
-                        <span className="font-medium">{suspendedOrders.length}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">{t('pos.offlineMode')}</span>
-                        <span className={isOnline ? 'text-green-600' : 'text-red-600'}>
-                          {isOnline ? t('common.yes') : t('common.no')}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  <ShiftSummaryEvidence evidence={shiftData?.summaryEvidence} openFloat={shiftData?.openFloat} storeId={user?.storeId}
+                    showValues={shiftSettings.showSummary} visibleFields={{ openingFloat: shiftSettings.summaryItems?.openFloat,
+                      cashSales: shiftSettings.summaryItems?.cashSales, cashIn: shiftSettings.summaryItems?.cashIn,
+                      cashOut: shiftSettings.summaryItems?.cashOut, qrisReceipts: shiftSettings.summaryItems?.qrisSales,
+                      orders: shiftSettings.summaryItems?.orderCount, expected: shiftSettings.summaryItems?.closeCash }} />
 
                   {/* 实际现金输入 */}
                   <div className="mb-4">
@@ -4989,13 +4820,8 @@ export function POSPage() {
                       className="w-full px-4 py-3 border-2 border-primary/30 bg-primary/5 rounded-xl text-lg font-bold text-center cursor-pointer"
                       onClick={() => setShiftInputTarget('actualCash')}
                     >
-                      {shiftActualCash ? formatCurrency(parseInt(shiftActualCash) || 0) : (shiftData?.expectedCash ? formatCurrency(shiftData.expectedCash) : '0')}
+                      {shiftActualCash !== '' ? formatCurrency(parseInt(shiftActualCash) || 0) : t('shiftEvidence.enterCount')}
                     </div>
-                    {shiftData?.expectedCash && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {t('pos.expectedHint')} {formatCurrency(shiftData.expectedCash)}
-                      </p>
-                    )}
                   </div>
 
                   {/* 主管确认 */}
@@ -5027,51 +4853,57 @@ export function POSPage() {
                             return
                           }
                         }
+                        if (shiftActualCash.trim() === '' || !Number.isFinite(Number(shiftActualCash)) || Number(shiftActualCash) < 0) {
+                          showToast(t('shiftEvidence.enterCount'), 'error')
+                          return
+                        }
                         const actualCash = parseInt(shiftActualCash) || 0
                         try {
                           await posApi.closeShift({
                             actualCash,
                             closeNote: ''
                           })
-                          // 自动打印交接班对账小票 (Z-Report)
-                          try {
-                            const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
-                            const isNetwork = receiptPrinter?.connectionType === 'network'
-                            const printerName = isNetwork ? undefined : (receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt'))
-                            const printerHost = isNetwork ? receiptPrinter?.printerIp : undefined
-                            const printerPort = isNetwork ? (receiptPrinter?.printerPort || 9100) : undefined
+                          // Provisional/unavailable evidence must never print a financial Z-report.
+                          if (shiftData?.summaryEvidence?.verified === true) {
+                            try {
+                              const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
+                              const isNetwork = receiptPrinter?.connectionType === 'network'
+                              const printerName = isNetwork ? undefined : (receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt'))
+                              const printerHost = isNetwork ? receiptPrinter?.printerIp : undefined
+                              const printerPort = isNetwork ? (receiptPrinter?.printerPort || 9100) : undefined
 
-                            await electronAPI?.sendPrintShiftReport?.({
-                              printerName,
-                              printerHost,
-                              printerPort,
-                              paperSize: posReceipt.paperSize || '80mm',
-                              language: lang || 'id',
-                              storeName: storeInfo.storeName || 'YOUME',
-                              cashierName: user?.staff?.name || (user as any)?.name || user?.phone || 'Kasir',
-                              shiftType: selectedShiftType || shiftData?.shift?.shift || 'Regular',
-                              openedAt: shiftData?.shift?.openedAt ? new Date(shiftData.shift.openedAt).toLocaleString() : '',
-                              closedAt: new Date().toLocaleString(),
-                              openFloat: shiftData?.openFloat || 0,
-                              cashSales: shiftData?.cashSales || 0,
-                              qrisSales: shiftData?.qrisSales || 0,
-                              gofoodSales: shiftData?.gofoodSales || 0,
-                              grabSales: shiftData?.grabSales || 0,
-                              shopeeSales: shiftData?.shopeeSales || 0,
-                              expenses: shiftData?.expenses || 0,
-                              expectedCash: shiftData?.expectedCash || 0,
-                              actualCash,
-                              totalOrders: (shiftData?.dineInCount || 0) + (shiftData?.gofoodCount || 0) + (shiftData?.grabCount || 0) + (shiftData?.shopeeCount || 0),
-                              totalCups: shiftData?.customerCount || 0,
-                              summaryItems: shiftSettings.summaryItems || {},
-                              totalDiscount: shiftData?.totalDiscount || 0,
-                              autoPromotionDiscount: shiftData?.autoPromotionDiscount || 0,
-                              manualDiscount: shiftData?.manualDiscount || 0,
-                              promotionOrderCount: shiftData?.promotionOrderCount || 0,
-                              manualDiscountOrderCount: shiftData?.manualDiscountOrderCount || 0,
-                            })
-                          } catch (reportErr) {
-                            console.warn('[Shift] Failed to print shift report:', reportErr)
+                              await electronAPI?.sendPrintShiftReport?.({
+                                printerName,
+                                printerHost,
+                                printerPort,
+                                paperSize: posReceipt.paperSize || '80mm',
+                                language: lang || 'id',
+                                storeName: storeInfo.storeName || 'YOUME',
+                                cashierName: user?.staff?.name || (user as any)?.name || user?.phone || 'Kasir',
+                                shiftType: selectedShiftType || shiftData?.shift?.shift || 'Regular',
+                                openedAt: shiftData?.shift?.openedAt ? new Date(shiftData.shift.openedAt).toLocaleString() : '',
+                                closedAt: new Date().toLocaleString(),
+                                openFloat: shiftData?.openFloat || 0,
+                                cashSales: shiftData?.cashSales || 0,
+                                qrisSales: shiftData?.qrisSales || 0,
+                                gofoodSales: shiftData?.gofoodSales || 0,
+                                grabSales: shiftData?.grabSales || 0,
+                                shopeeSales: shiftData?.shopeeSales || 0,
+                                expenses: shiftData?.expenses || 0,
+                                expectedCash: shiftData?.expectedCash || 0,
+                                actualCash,
+                                totalOrders: (shiftData?.dineInCount || 0) + (shiftData?.gofoodCount || 0) + (shiftData?.grabCount || 0) + (shiftData?.shopeeCount || 0),
+                                totalCups: shiftData?.customerCount || 0,
+                                summaryItems: shiftSettings.summaryItems || {},
+                                totalDiscount: shiftData?.totalDiscount || 0,
+                                autoPromotionDiscount: shiftData?.autoPromotionDiscount || 0,
+                                manualDiscount: shiftData?.manualDiscount || 0,
+                                promotionOrderCount: shiftData?.promotionOrderCount || 0,
+                                manualDiscountOrderCount: shiftData?.manualDiscountOrderCount || 0,
+                              })
+                            } catch (reportErr) {
+                              console.warn('[Shift] Failed to print shift report:', reportErr)
+                            }
                           }
                           clearCart()
                           setSuspendedOrders([])
