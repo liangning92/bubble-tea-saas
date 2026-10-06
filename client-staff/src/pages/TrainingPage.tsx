@@ -1,3 +1,5 @@
+import { Link, useSearchParams } from 'react-router-dom'
+import { TrainingLibraryPage } from './TrainingLibraryPage'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -29,12 +31,13 @@ interface TrainingCategory {
   labelId?: string
 }
 
-export function TrainingPage() {
+function TrainingRecords() {
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const [trainings, setTrainings] = useState<Training[]>([])
   const [categories, setCategories] = useState<TrainingCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>('')
 
   const STATUS_ICONS: Record<string, JSX.Element> = {
@@ -53,16 +56,17 @@ export function TrainingPage() {
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadError(false)
     try {
       const [trainingRes, categoryRes] = await Promise.all([
         staffApi.getMyTraining(),
         staffApi.getTrainingCategories()
       ])
-      setTrainings(trainingRes.data?.data || [])
-      if (categoryRes.data?.data) {
-        setCategories(categoryRes.data.data)
-      }
+      if (!Array.isArray(trainingRes.data) || !Array.isArray(categoryRes.data)) throw new Error('Invalid training response')
+      setTrainings(trainingRes.data)
+      setCategories(categoryRes.data)
     } catch (error) {
+      setLoadError(true)
       console.error('Failed to load training:', error)
     } finally {
       setIsLoading(false)
@@ -167,7 +171,7 @@ export function TrainingPage() {
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
-        ) : filteredTrainings.length === 0 ? (
+        ) : loadError ? <p role="alert">{t('common.error')}</p> : filteredTrainings.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <BookOpen size={48} className="mx-auto mb-4 opacity-50" />
             <p>{t('training.noTraining')}</p>
@@ -269,4 +273,13 @@ export function TrainingPage() {
       </div>
     </div>
   )
+}
+export function TrainingPage() {
+  const [params] = useSearchParams()
+  const { t } = useTranslation()
+  const records = params.get('tab') === 'records'
+  return <div><nav aria-label={t('trainingMedia.nav')} className="flex gap-4 border-b p-4">
+    <Link aria-current={!records ? 'page' : undefined} className={!records ? 'font-bold text-primary' : ''} to="/training">{t('trainingMedia.courses')}</Link>
+    <Link aria-current={records ? 'page' : undefined} className={records ? 'font-bold text-primary' : ''} to="/training?tab=records">{t('trainingMedia.records')}</Link>
+  </nav>{records ? <TrainingRecords /> : <TrainingLibraryPage embedded />}</div>
 }

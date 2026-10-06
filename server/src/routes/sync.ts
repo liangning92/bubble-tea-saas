@@ -1,3 +1,4 @@
+import { clearOrdinarySyncedConfigs } from '../services/TrainingLibraryStore'
 import { Router, Request, Response } from 'express'
 import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
@@ -167,7 +168,7 @@ router.post('/full', async (req: Request, res: Response) => {
         await tx.product.deleteMany()
         await tx.addon.deleteMany()
         await tx.category.deleteMany()
-        await tx.config.deleteMany()
+        await clearOrdinarySyncedConfigs(tx)
 
         // Create Tenant
         const tenantId = store.tenantId || 'default-tenant'

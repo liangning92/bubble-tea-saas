@@ -17,7 +17,8 @@ interface TrainingRecord {
   trainingType: string
   title: string
   provider: string
-  date: string
+  startDate: string
+  date?: string
   duration: number
   certificate?: string
   status: string
@@ -44,7 +45,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
     trainingType: editData?.trainingType || '',
     title: editData?.title || '',
     provider: editData?.provider || '',
-    date: editData?.date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+    date: (editData?.startDate || editData?.date)?.slice(0, 10) || new Date().toISOString().slice(0, 10),
     duration: editData?.duration || 1,
     certificate: editData?.certificate || '',
     status: editData?.status || 'scheduled',

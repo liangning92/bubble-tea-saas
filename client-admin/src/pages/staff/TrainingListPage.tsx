@@ -1,3 +1,5 @@
+import { Link, useSearchParams } from 'react-router-dom'
+import { TrainingLibraryPage } from '../../pages/TrainingLibraryPage'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -12,7 +14,8 @@ interface TrainingRecord {
   trainingType: string
   title: string
   provider: string
-  date: string
+  startDate: string
+  date?: string
   duration: number
   certificate?: string
   status: string
@@ -36,13 +39,14 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-500'
 }
 
-export function TrainingListPage() {
+function TrainingRecords() {
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const [records, setRecords] = useState<TrainingRecord[]>([])
   const [staffList, setStaffList] = useState<any[]>([])
   const [categories, setCategories] = useState<TrainingCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [filterStaff, setFilterStaff] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -65,6 +69,7 @@ export function TrainingListPage() {
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadError(false)
     try {
       // 批量获取所有数据（一次API调用替代 N+1）
       const [staffResponse, trainingResponse] = await Promise.all([
@@ -76,11 +81,13 @@ export function TrainingListPage() {
       setStaffList(staffData)
       await loadCategories()
 
-      const allRecords: TrainingRecord[] = Array.isArray(trainingResponse.data?.data) ? trainingResponse.data.data : []
+      if (!Array.isArray(trainingResponse.data?.data)) throw new Error('Invalid training response')
+      const allRecords: TrainingRecord[] = trainingResponse.data.data
 
-      allRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      allRecords.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
       setRecords(allRecords)
     } catch (error) {
+      setLoadError(true)
       console.error('Failed to load training data:', error)
     } finally {
       setIsLoading(false)
@@ -208,7 +215,7 @@ export function TrainingListPage() {
           <div className="flex justify-center py-12">
             <RefreshCw size={24} className="animate-spin text-gray-400" />
           </div>
-        ) : filteredRecords.length === 0 ? (
+        ) : loadError ? <p role="alert">{t('common.error')}</p> : filteredRecords.length === 0 ? (
           <div className="text-center py-12 text-gray-500">{t('common.noData')}</div>
         ) : (
           <div className="overflow-x-auto">
@@ -233,7 +240,7 @@ export function TrainingListPage() {
                     <td className="px-4 py-3 text-sm">{getTypeLabel(record.trainingType)}</td>
                     <td className="px-4 py-3 text-sm">{record.title}</td>
                     <td className="px-4 py-3 text-sm">{record.provider}</td>
-                    <td className="px-4 py-3 text-sm">{(new Date(record.date).getTime() && !isNaN(new Date(record.date).getTime())) ? new Date(record.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}</td>
+                    <td className="px-4 py-3 text-sm">{(new Date(record.startDate).getTime() && !isNaN(new Date(record.startDate).getTime())) ? new Date(record.startDate).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}</td>
                     <td className="px-4 py-3 text-sm">{record.duration}h</td>
                     <td className="px-4 py-3 text-sm">{record.score || '-'}</td>
                     <td className="px-4 py-3">
@@ -242,7 +249,7 @@ export function TrainingListPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => handleEdit(record)} className="p-1 hover:bg-gray-100 rounded">
+                      <button aria-label={t('common.edit')} onClick={() => handleEdit(record)} className="p-1 hover:bg-gray-100 rounded">
                         <Edit2 size={16} className="text-gray-500" />
                       </button>
                       <button onClick={() => handleDelete(record)} className="p-1 hover:bg-gray-100 rounded ml-1">
@@ -321,4 +328,13 @@ export function TrainingListPage() {
       )}
     </div>
   )
+}
+export function TrainingListPage() {
+  const [params] = useSearchParams()
+  const { t } = useTranslation()
+  const records = params.get('tab') === 'records'
+  return <div><nav aria-label={t('trainingMedia.nav')} className="flex gap-4 border-b p-4">
+    <Link aria-current={!records ? 'page' : undefined} className={!records ? 'font-bold text-primary' : ''} to="/staff/training">{t('trainingMedia.courses')}</Link>
+    <Link aria-current={records ? 'page' : undefined} className={records ? 'font-bold text-primary' : ''} to="/staff/training?tab=records">{t('trainingMedia.records')}</Link>
+  </nav>{records ? <TrainingRecords /> : <TrainingLibraryPage embedded />}</div>
 }

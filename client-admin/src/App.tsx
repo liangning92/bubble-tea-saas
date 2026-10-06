@@ -1,3 +1,4 @@
+import { TrainingLibraryPage } from './pages/TrainingLibraryPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
@@ -212,6 +213,7 @@ function App() {
 
           {/* 培训管理 */}
           <Route path="training" element={<TrainingListPage />} />
+          <Route path="training/library" element={<TrainingLibraryPage />} />
 
           {/* 薪资管理 */}
           <Route path="salary" element={<SalaryIndexPage />}>

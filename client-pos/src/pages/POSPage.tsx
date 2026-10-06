@@ -313,6 +313,8 @@ export function POSPage() {
     isSearchingMember, setIsSearchingMember
   } = useOrderStore()
 
+  const [offlineSaveFailed, setOfflineSaveFailed] = useState(false)
+
   // 本地状态
   const [discountAmount, setDiscountAmount] = useState(0)
   const [tempDiscount, setTempDiscount] = useState('')
@@ -2758,7 +2760,8 @@ export function POSPage() {
 
   // 结账
   const handleCheckout = async () => {
-    if (cart.length === 0 || isCheckingOut) return
+    // Read the synchronous store value too: two clicks can share one render.
+    if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut) return
 
     // QRIS: Generate QR code first
     if (paymentMethod === 'qris' && qrisData.status === 'idle') {
@@ -2897,6 +2900,7 @@ export function POSPage() {
 
     try {
       const res = await posApi.createOrder(orderData)
+      setOfflineSaveFailed(false)
       orderNum = res.data?.data?.orderNumber || fallbackOrderNum
       finalPickupNum = res.data?.data?.pickupNumber || orderData.pickupNumber
       // 使用服务端计算的权威金额（包含税费、折扣、积分）
@@ -3010,7 +3014,6 @@ export function POSPage() {
       } else {
         displayMsg = rawMsg || t('pos.paymentError')
       }
-      showToast(displayMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
       try {
         await db.orders.add({
           localId, storeId: orderData.storeId, staffId: orderData.staffId,
@@ -3024,7 +3027,12 @@ export function POSPage() {
         })
       } catch (dbErr) {
         console.error('[POS] Failed to add offline order to DB:', dbErr)
+        setOfflineSaveFailed(true)
+        showToast(t('pos.offlineSaveFailed'), 'error')
+        return // Keep cart/payment context; finally releases the in-flight guard.
       }
+      setOfflineSaveFailed(false)
+      showToast(displayMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
       // 离线模式同样下发打印和副屏通知
       if (posReceipt.autoPrint !== false) {
         printReceipt(fallbackOrderNum, { ...orderData, pickupNumber: finalPickupNum, openCashDrawer: shouldOpenDrawer })
@@ -4096,6 +4104,11 @@ export function POSPage() {
               </div>
             </div>
 
+            {offlineSaveFailed && (
+              <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
+                {t('pos.offlineSaveFailed')}
+              </div>
+            )}
             {/* 确认支付操作栏 - 紧凑固定底栏 */}
             <div className="flex-shrink-0 px-4 py-2.5 bg-gray-50 border-t flex items-center justify-between gap-3">
               <div className="text-xs text-gray-500 truncate hidden sm:block">

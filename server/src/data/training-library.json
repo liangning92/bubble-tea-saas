@@ -1,0 +1,3055 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "key": "training-01",
+      "reviewed": true,
+      "title": {
+        "zh": "岗位责任与食品安全",
+        "id": "Peran kerja dan tanggung jawab keamanan pangan"
+      },
+      "subtitle": {
+        "zh": "先确认职责和批准文件，再执行、记录与上报。",
+        "id": "Pastikan tugas dan dokumen yang disetujui sebelum bekerja, mencatat, dan melapor."
+      },
+      "minutes": 45,
+      "sections": [
+        {
+          "key": "training_01_1",
+          "title": {
+            "zh": "岗位与授权",
+            "id": "Tugas dan kewenangan"
+          },
+          "points": [
+            {
+              "zh": "到岗先找当班主管，确认自己的岗位、带教人、交接事项和不得独立操作的任务。",
+              "id": "Saat mulai bekerja, temui penyelia untuk memastikan posisi kerja, pendamping, informasi serah terima, dan tugas yang belum boleh dilakukan sendiri."
+            },
+            {
+              "zh": "找到本岗位当前批准的操作卡及异常记录表，核对版本和批准人；找不到时先问主管，不靠记忆补写。",
+              "id": "Temukan kartu kerja dan formulir penyimpangan yang telah disetujui. Periksa versi serta pemberi persetujuan; jika tidak tersedia, tanyakan kepada penyelia, jangan mengarang berdasarkan ingatan."
+            },
+            {
+              "zh": "按实际发生时间记录操作和异常；主管负责取得有效标准并分派处理，员工不得擅自改流程或签他人姓名。",
+              "id": "Catat tindakan dan penyimpangan sesuai kejadian sebenarnya. Penyelia memperoleh standar yang sah dan menentukan tindak lanjut; karyawan tidak boleh mengubah prosedur atau menandatangani atas nama orang lain."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把口头猜测当批准标准，或替同事补签。",
+              "id": "Menganggap perkiraan lisan sebagai standar yang disetujui atau menandatangani untuk rekan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟接班：指出操作卡、带教人和异常表，并复述自己的授权边界。",
+            "id": "Simulasikan pergantian shift: tunjukkan kartu kerja, pendamping, dan formulir penyimpangan, lalu jelaskan batas kewenangan Anda."
+          },
+          "checklist": [
+            {
+              "zh": "已确认岗位及带教人；能指出当前批准卡。",
+              "id": "Tugas dan pendamping sudah jelas; kartu kerja yang berlaku dapat ditunjukkan."
+            },
+            {
+              "zh": "能指出自己不得独立执行的操作。",
+              "id": "Dapat menyebutkan pekerjaan yang belum boleh dilakukan sendiri."
+            }
+          ]
+        },
+        {
+          "key": "training_01_2",
+          "title": {
+            "zh": "识别并隔离风险",
+            "id": "Mengenali dan memisahkan risiko"
+          },
+          "points": [
+            {
+              "zh": "作业前检查原料、用水、器具、台面及个人卫生；把污染风险和质量偏差分开描述。",
+              "id": "Sebelum bekerja, periksa bahan, air, alat, permukaan kerja, dan kebersihan diri. Jelaskan risiko pencemaran dan penyimpangan mutu secara jelas."
+            },
+            {
+              "zh": "发现身份不明、标签缺失或安全条件不明的原料，停止使用，移入指定隔离区，标注品名、批次、发现时间、问题和报告人。",
+              "id": "Jika identitas, label, atau kondisi keamanan bahan tidak jelas, hentikan penggunaannya. Pisahkan di area karantina dan beri keterangan nama, lot, waktu temuan, masalah, dan pelapor."
+            },
+            {
+              "zh": "报告主管，由其依据批准标准决定处理并留下记录；未解除隔离前不得混入正常库存或出品。",
+              "id": "Laporkan kepada penyelia agar keputusan penanganan didasarkan pada standar yang disetujui dan dicatat. Jangan mengembalikan bahan ke stok siap pakai sebelum karantina dicabut secara sah."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "闻着正常就继续用，或把隔离标签撕掉。",
+              "id": "Tetap memakai bahan karena baunya normal atau melepas label karantina."
+            }
+          ],
+          "practice": {
+            "zh": "用空容器模拟无标签原料，完成停用、隔离、标识和上报。",
+            "id": "Gunakan wadah kosong untuk simulasi bahan tanpa label: hentikan penggunaan, pisahkan, beri label, dan laporkan."
+          },
+          "checklist": [
+            {
+              "zh": "隔离品与可用品分开；异常有记录。",
+              "id": "Bahan karantina terpisah dari bahan siap pakai; penyimpangan tercatat."
+            },
+            {
+              "zh": "未取得有效处理决定前没有使用。",
+              "id": "Tidak digunakan sebelum ada keputusan penanganan yang sah."
+            }
+          ]
+        },
+        {
+          "key": "training_01_3",
+          "title": {
+            "zh": "事件上报与证据",
+            "id": "Pelaporan kejadian dan bukti"
+          },
+          "points": [
+            {
+              "zh": "接到投诉先停止相关问题产品继续交付，记录订单号、产品、时间、顾客描述和涉及批次；不要作医学判断。",
+              "id": "Jika ada keluhan tentang produk bermasalah, hentikan penyerahan produk terkait. Catat nomor pesanan, produk, waktu, keterangan pelanggan, dan lot terkait; jangan membuat diagnosis medis."
+            },
+            {
+              "zh": "向当班主管或管理员报告，保存原始记录和必要证据，按批准方式限制访问，不在公开群聊传播顾客资料。",
+              "id": "Laporkan kepada penyelia atau administrator. Simpan catatan asli dan bukti yang diperlukan melalui cara yang disetujui dengan akses terbatas; jangan membagikan data pelanggan di grup terbuka."
+            },
+            {
+              "zh": "若有人出现紧急健康危险，立即按门店应急联系人和当地救援流程求助；退款或补偿另走授权流程，不以删单消除事件。",
+              "id": "Jika ada keadaan darurat kesehatan, segera minta bantuan melalui kontak darurat toko dan layanan setempat. Pengembalian dana atau kompensasi mengikuti kewenangan terpisah; jangan menghapus pesanan untuk menghilangkan kejadian."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "擅自承诺赔偿、删掉原始订单或替顾客判断病因。",
+              "id": "Menjanjikan kompensasi sendiri, menghapus pesanan asli, atau menentukan penyebab sakit pelanggan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟接到异物投诉，填写事件记录并口头交接给带教人。",
+            "id": "Simulasikan keluhan benda asing, isi catatan kejadian, lalu serahkan informasinya kepada pendamping."
+          },
+          "checklist": [
+            {
+              "zh": "产品、订单、时间、批次及上报对象可追溯。",
+              "id": "Produk, pesanan, waktu, lot, dan penerima laporan dapat ditelusuri."
+            },
+            {
+              "zh": "未删证据、未越权承诺。",
+              "id": "Bukti tidak dihapus dan tidak ada janji di luar kewenangan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_01_q1",
+          "q": {
+            "zh": "找不到当前操作卡时应怎么办？",
+            "id": "Apa yang dilakukan jika kartu kerja yang berlaku tidak ditemukan?"
+          },
+          "options": [
+            {
+              "zh": "暂停该项操作并向主管索取批准版本。",
+              "id": "Tunda pekerjaan tersebut dan minta versi yang disetujui kepada penyelia."
+            },
+            {
+              "zh": "按记忆操作，再补一张记录。",
+              "id": "Kerjakan berdasarkan ingatan lalu buat catatan belakangan."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "缺文件不等于获准自行设定标准。",
+            "id": "Tidak adanya dokumen bukan izin untuk menetapkan standar sendiri."
+          }
+        },
+        {
+          "key": "training_01_q2",
+          "q": {
+            "zh": "无标签容器闻起来正常，能使用吗？",
+            "id": "Bolehkah isi wadah tanpa label dipakai jika baunya normal?"
+          },
+          "options": [
+            {
+              "zh": "可以，只要先尝一口。",
+              "id": "Boleh, asalkan dicicipi terlebih dahulu."
+            },
+            {
+              "zh": "不能；隔离并请主管核实。",
+              "id": "Tidak; pisahkan dan minta penyelia memeriksa."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "气味或试尝不能证明来源、期限与安全条件。",
+            "id": "Bau atau rasa tidak membuktikan asal, batas penggunaan, dan kondisi keamanan."
+          }
+        },
+        {
+          "key": "training_01_q3",
+          "q": {
+            "zh": "顾客投诉后，怎样保留处理依据？",
+            "id": "Bagaimana menjaga bukti setelah pelanggan mengeluh?"
+          },
+          "options": [
+            {
+              "zh": "记录事实、保存原始证据并上报。",
+              "id": "Catat fakta, simpan bukti asli, dan laporkan."
+            },
+            {
+              "zh": "先删单再重新建立一单。",
+              "id": "Hapus pesanan lalu buat pesanan baru."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "原始记录支持追溯，删单会破坏处理依据。",
+            "id": "Catatan asli mendukung penelusuran; menghapus pesanan merusak bukti."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：接班找不到当前操作卡",
+          "id": "Praktik modul ini: Kartu kerja yang berlaku tidak ditemukan saat pergantian shift"
+        },
+        {
+          "zh": "应留证据：岗位卡版本、异常记录、上报对象。",
+          "id": "Bukti yang diperlukan: Versi kartu tugas, catatan penyimpangan, penerima laporan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "WHO: Five keys to safer food — general principles, not shop recipe parameters",
+          "url": "https://www.who.int/docs/librariesprovider2/default-document-library/5keys_en.pdf"
+        }
+      ]
+    },
+    {
+      "key": "training-02",
+      "reviewed": true,
+      "title": {
+        "zh": "仪容、洗手与健康报告",
+        "id": "Penampilan, cuci tangan, dan pelaporan kesehatan"
+      },
+      "subtitle": {
+        "zh": "围绕污染风险要求整洁，不因宗教或个人身份区别对待。",
+        "id": "Jaga kebersihan berdasarkan risiko pencemaran tanpa membedakan agama atau identitas pribadi."
+      },
+      "minutes": 40,
+      "sections": [
+        {
+          "key": "training_02_1",
+          "title": {
+            "zh": "上岗仪容检查",
+            "id": "Pemeriksaan penampilan sebelum bekerja"
+          },
+          "points": [
+            {
+              "zh": "穿清洁工作服和包脚防滑鞋；围裙脏污后按门店流程更换，不用围裙擦手或器具。",
+              "id": "Gunakan pakaian kerja bersih dan sepatu tertutup antiselip. Ganti apron yang kotor sesuai prosedur toko; jangan memakainya untuk mengelap tangan atau alat."
+            },
+            {
+              "zh": "按卫生要求固定头发和头部覆盖物，避免碰到食品；指甲保持短净，按批准要求去除可能脱落或藏污的饰物。",
+              "id": "Rapikan rambut dan penutup kepala agar tidak menyentuh pangan. Jaga kuku pendek dan bersih serta lepaskan perhiasan yang dapat lepas atau menahan kotoran sesuai ketentuan yang disetujui."
+            },
+            {
+              "zh": "私人物品放指定位置；带教人按同一污染风险标准检查所有员工，宗教服饰采用安全合适的固定方式。",
+              "id": "Simpan barang pribadi di tempat yang ditentukan. Pendamping menggunakan kriteria risiko yang sama bagi semua karyawan, termasuk cara aman merapikan pakaian keagamaan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "用围裙擦手；让饰物或头发接触原料。",
+              "id": "Mengelap tangan dengan apron atau membiarkan perhiasan dan rambut menyentuh bahan."
+            }
+          ],
+          "practice": {
+            "zh": "对照镜子自查，再请带教人指出一项需纠正的污染风险。",
+            "id": "Periksa diri di cermin lalu minta pendamping menunjukkan risiko pencemaran yang perlu diperbaiki."
+          },
+          "checklist": [
+            {
+              "zh": "服装、鞋和头发符合岗位卫生要求。",
+              "id": "Pakaian, sepatu, dan rambut sesuai kebutuhan kebersihan kerja."
+            },
+            {
+              "zh": "私人物品已移离食品操作区。",
+              "id": "Barang pribadi sudah dijauhkan dari area penanganan pangan."
+            }
+          ]
+        },
+        {
+          "key": "training_02_2",
+          "title": {
+            "zh": "洗手与手套",
+            "id": "Cuci tangan dan sarung tangan"
+          },
+          "points": [
+            {
+              "zh": "准备食品前、如厕后、处理垃圾或接触手机现金等污染源后，以及更换有交叉接触风险的任务时，先洗手。",
+              "id": "Cuci tangan sebelum menyiapkan pangan, setelah ke toilet, menangani sampah, menyentuh ponsel atau uang, serta saat berganti tugas yang berisiko memindahkan pencemaran."
+            },
+            {
+              "zh": "在指定洗手设施用安全流动水和洗手用品，按张贴的批准步骤清洁手掌、手背、指缝、指尖和拇指，再冲净并卫生干手。",
+              "id": "Gunakan fasilitas cuci tangan, air mengalir yang aman, dan sabun. Ikuti langkah yang dipasang untuk membersihkan telapak, punggung tangan, sela jari, ujung jari, dan ibu jari, lalu bilas dan keringkan secara higienis."
+            },
+            {
+              "zh": "需要手套时在洗手后佩戴；脏污、损坏或换任务时按流程更换。手套不能代替洗手，不戴同一副手套收钱再碰即食原料。",
+              "id": "Jika tugas memerlukan sarung tangan, pakai setelah mencuci tangan. Ganti ketika kotor, rusak, atau berganti tugas sesuai prosedur. Sarung tangan tidak menggantikan cuci tangan; jangan menangani uang lalu bahan siap santap dengan sarung tangan yang sama."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "只冲水不按步骤清洁；把戴手套当免洗手。",
+              "id": "Hanya membilas tanpa langkah pembersihan atau menganggap sarung tangan menggantikan cuci tangan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟收钱后回制作岗，演示停止接触食品、洗手及必要的换手套。",
+            "id": "Simulasikan kembali ke bagian produksi setelah menerima uang: hentikan kontak dengan pangan, cuci tangan, dan ganti sarung tangan bila diperlukan."
+          },
+          "checklist": [
+            {
+              "zh": "能识别换任务后的洗手时机。",
+              "id": "Dapat mengenali kapan perlu cuci tangan setelah berganti tugas."
+            },
+            {
+              "zh": "完整演示批准步骤和卫生干手。",
+              "id": "Dapat memperagakan seluruh langkah yang disetujui dan pengeringan higienis."
+            }
+          ]
+        },
+        {
+          "key": "training_02_3",
+          "title": {
+            "zh": "健康状况与伤口",
+            "id": "Kondisi kesehatan dan luka"
+          },
+          "points": [
+            {
+              "zh": "出现呕吐、腹泻、发热或其他可能影响食品安全的症状，以及手部伤口时，立即向主管报告，不隐瞒继续制作。",
+              "id": "Segera laporkan muntah, diare, demam, gejala lain yang dapat memengaruhi keamanan pangan, atau luka di tangan kepada penyelia; jangan menyembunyikannya sambil tetap menyiapkan produk."
+            },
+            {
+              "zh": "先停止可能污染食品的操作，由主管按适用健康要求安排离岗、替代工作或医疗建议；员工不自行判定可继续上岗。",
+              "id": "Hentikan pekerjaan yang berisiko mencemari pangan. Penyelia menentukan penghentian tugas, tugas pengganti, atau rujukan medis sesuai ketentuan kesehatan yang berlaku; karyawan tidak memutuskan sendiri untuk melanjutkan."
+            },
+            {
+              "zh": "复岗和伤口防护按批准要求执行；仅向需要知情的负责人报告健康信息，不公开传播同事情况。",
+              "id": "Ikuti persyaratan yang disetujui untuk kembali bekerja dan melindungi luka. Sampaikan informasi kesehatan hanya kepada pihak yang perlu mengetahui, bukan kepada umum."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "怕影响排班而隐瞒症状；自己贴好伤口就宣称安全。",
+              "id": "Menyembunyikan gejala karena khawatir mengganggu jadwal atau menganggap luka otomatis aman setelah ditutup sendiri."
+            }
+          ],
+          "practice": {
+            "zh": "角色演练：向主管说明症状、当前岗位及已接触食品，等待任务安排。",
+            "id": "Bermain peran melapor kepada penyelia tentang gejala, tugas saat itu, dan pangan yang sudah ditangani, lalu menunggu penugasan."
+          },
+          "checklist": [
+            {
+              "zh": "能及时报告并停止风险操作。",
+              "id": "Dapat melapor segera dan menghentikan pekerjaan berisiko."
+            },
+            {
+              "zh": "知道复岗由授权人员按要求确认。",
+              "id": "Mengetahui bahwa kembali bekerja harus dikonfirmasi pihak berwenang sesuai ketentuan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_02_q1",
+          "q": {
+            "zh": "围裙可以用来擦洗好的手吗？",
+            "id": "Bolehkah apron digunakan untuk mengeringkan tangan yang sudah dicuci?"
+          },
+          "options": [
+            {
+              "zh": "不能，使用指定的卫生干手方式。",
+              "id": "Tidak, gunakan cara pengeringan tangan yang higienis dan ditetapkan."
+            },
+            {
+              "zh": "可以，看上去干净就行。",
+              "id": "Boleh jika terlihat bersih."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "衣物可能把污染带回手部。",
+            "id": "Pakaian dapat memindahkan pencemaran kembali ke tangan."
+          }
+        },
+        {
+          "key": "training_02_q2",
+          "q": {
+            "zh": "戴着手套摸手机后应如何处理？",
+            "id": "Apa yang dilakukan setelah menyentuh ponsel saat memakai sarung tangan?"
+          },
+          "options": [
+            {
+              "zh": "手套还在就直接继续制作。",
+              "id": "Langsung lanjut membuat minuman karena masih memakai sarung tangan."
+            },
+            {
+              "zh": "按流程脱下污染手套、洗手，再为需要的任务换新手套。",
+              "id": "Lepaskan sarung tangan yang tercemar, cuci tangan, lalu gunakan yang baru jika tugas memerlukannya."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "手套表面也会携带污染。",
+            "id": "Permukaan sarung tangan juga dapat membawa pencemaran."
+          }
+        },
+        {
+          "key": "training_02_q3",
+          "q": {
+            "zh": "制作中出现呕吐症状应怎么办？",
+            "id": "Apa yang dilakukan jika muncul muntah saat menyiapkan produk?"
+          },
+          "options": [
+            {
+              "zh": "停止食品操作并立即报告主管。",
+              "id": "Hentikan penanganan pangan dan segera lapor kepada penyelia."
+            },
+            {
+              "zh": "坚持做完当前批次再说。",
+              "id": "Selesaikan dahulu seluruh produksi baru melapor."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "隐瞒或延迟报告会扩大污染风险。",
+            "id": "Menyembunyikan atau menunda laporan dapat memperluas risiko pencemaran."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：收钱后返回食品制作岗",
+          "id": "Praktik modul ini: Kembali menyiapkan pangan setelah menerima uang"
+        },
+        {
+          "zh": "应留证据：仪容与洗手观察、健康报告演练。",
+          "id": "Bukti yang diperlukan: Pengamatan penampilan dan cuci tangan, simulasi laporan kesehatan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "WHO: Five keys to safer food — general principles, not shop recipe parameters",
+          "url": "https://www.who.int/docs/librariesprovider2/default-document-library/5keys_en.pdf"
+        }
+      ]
+    },
+    {
+      "key": "training-03",
+      "reviewed": true,
+      "title": {
+        "zh": "迎宾、点单与客诉",
+        "id": "Menyambut pelanggan, menerima pesanan, dan menangani keluhan"
+      },
+      "subtitle": {
+        "zh": "以下话术为本店服务建议，不是任何品牌内部标准。",
+        "id": "Contoh ucapan berikut adalah saran layanan toko ini, bukan standar internal suatu merek."
+      },
+      "minutes": 50,
+      "sections": [
+        {
+          "key": "training_03_1",
+          "title": {
+            "zh": "迎宾与复述订单",
+            "id": "Menyambut dan mengulang pesanan"
+          },
+          "points": [
+            {
+              "zh": "本店建议：以礼貌语气问候，留意顾客需求，不根据外貌或宗教作判断。示例：您好，请问想选哪款饮品？",
+              "id": "Saran toko: sapa dengan sopan, perhatikan kebutuhan pelanggan, dan jangan menilai berdasarkan penampilan atau agama. Contoh: Selamat datang, ingin memilih minuman yang mana?"
+            },
+            {
+              "zh": "逐项确认品名、杯型、冷热或冰量、糖量和加料；只提供菜单和批准配方允许的选项，缺货先说明。",
+              "id": "Pastikan nama minuman, ukuran gelas, pilihan panas atau es, gula, dan tambahan. Tawarkan hanya pilihan pada menu dan resep yang disetujui; jelaskan jika bahan tidak tersedia."
+            },
+            {
+              "zh": "付款前复述订单及应付金额，请顾客确认；过敏问题转入模块04核实，不凭经验保证。",
+              "id": "Sebelum pembayaran, ulangi rincian pesanan dan jumlah yang harus dibayar, lalu minta konfirmasi. Tangani pertanyaan alergi sesuai modul04; jangan memberi jaminan berdasarkan perkiraan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "没复述就收款；擅自推荐无法确认成分的替代品。",
+              "id": "Menerima pembayaran tanpa mengulang pesanan atau menyarankan pengganti yang komposisinya belum dipastikan."
+            }
+          ],
+          "practice": {
+            "zh": "两人模拟一单含杯型、糖冰及加料的订单，由顾客纠正一次再确认。",
+            "id": "Berpasangan, simulasikan pesanan dengan ukuran, gula, es, dan tambahan. Pelanggan memberi satu koreksi sebelum konfirmasi akhir."
+          },
+          "checklist": [
+            {
+              "zh": "订单选项与金额已复述并获确认。",
+              "id": "Pilihan pesanan dan jumlah pembayaran sudah diulang dan dikonfirmasi."
+            },
+            {
+              "zh": "缺货及不可提供的选项已说明。",
+              "id": "Bahan yang tidak tersedia dan pilihan yang tidak dapat dilayani sudah dijelaskan."
+            }
+          ]
+        },
+        {
+          "key": "training_03_2",
+          "title": {
+            "zh": "排队与交付",
+            "id": "Antrean dan penyerahan pesanan"
+          },
+          "points": [
+            {
+              "zh": "依门店排队规则接单，说明当前等待情况；不承诺未经制作岗确认的准确完成时间。",
+              "id": "Ikuti aturan antrean toko dan jelaskan kondisi menunggu; jangan menjanjikan waktu selesai yang tepat tanpa konfirmasi bagian produksi."
+            },
+            {
+              "zh": "缺料、设备异常或延误时及时告知主管和顾客，说明可确认的选择，不让顾客反复猜测。",
+              "id": "Jika bahan habis, alat bermasalah, atau terjadi keterlambatan, beri tahu penyelia dan pelanggan. Sampaikan pilihan yang sudah dipastikan, bukan membiarkan pelanggan menebak."
+            },
+            {
+              "zh": "交付时核对订单标识、杯数和定制选项，再以尊重隐私的方式叫号交付；打包稳定，避免烫伤或泄漏。",
+              "id": "Saat menyerahkan, cocokkan identitas pesanan, jumlah gelas, dan pilihan khusus. Panggil nomor dengan menjaga privasi; kemas dengan stabil untuk menghindari luka bakar atau kebocoran."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把大声催促等同优先权；未核对就给错顾客。",
+              "id": "Mendahulukan orang hanya karena mendesak keras atau menyerahkan pesanan tanpa mencocokkannya."
+            }
+          ],
+          "practice": {
+            "zh": "模拟两张相近订单，逐杯对标识交付，并说明一次延误。",
+            "id": "Simulasikan dua pesanan yang mirip, cocokkan identitas setiap gelas, dan jelaskan satu keterlambatan."
+          },
+          "checklist": [
+            {
+              "zh": "排队处理一致，延误有沟通。",
+              "id": "Antrean ditangani secara konsisten dan keterlambatan dikomunikasikan."
+            },
+            {
+              "zh": "订单号、杯数及定制项相符。",
+              "id": "Nomor pesanan, jumlah gelas, dan pilihan khusus sesuai."
+            }
+          ]
+        },
+        {
+          "key": "training_03_3",
+          "title": {
+            "zh": "倾听投诉与授权处理",
+            "id": "Mendengar keluhan dan penanganan berwenang"
+          },
+          "points": [
+            {
+              "zh": "先听完问题并复述事实；本店建议话术：谢谢您告诉我们，我先核对这杯和订单。避免争辩或责怪顾客。",
+              "id": "Dengarkan sampai selesai dan ulangi faktanya. Saran ucapan toko: Terima kasih sudah memberi tahu, saya akan memeriksa minuman dan pesanannya dahulu. Hindari berdebat atau menyalahkan pelanggan."
+            },
+            {
+              "zh": "记录不满意的具体产品和原因，区分质量、过敏或安全事件；有安全风险先停止相关交付并升级。",
+              "id": "Catat produk yang tidak memuaskan dan alasannya. Bedakan masalah mutu, alergi, atau keamanan; hentikan penyerahan terkait dan eskalasikan jika ada risiko keamanan."
+            },
+            {
+              "zh": "重做、退款或补偿按批准权限办理，不能承诺无条件免费；向顾客说明申请状态，保留原订单。",
+              "id": "Pembuatan ulang, pengembalian dana, dan kompensasi mengikuti kewenangan yang disetujui. Jangan menjanjikan gratis tanpa syarat; jelaskan status permohonan dan pertahankan pesanan asli."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "用“系统会自动退款”安抚顾客，或自行承诺免费重做。",
+              "id": "Menenangkan pelanggan dengan janji pengembalian dana otomatis atau menjanjikan pembuatan ulang gratis sendiri."
+            }
+          ],
+          "practice": {
+            "zh": "模拟口味不满意，记录指定产品并向管理员提出处理请求。",
+            "id": "Simulasikan keluhan rasa, catat produk tertentu, lalu ajukan penanganan kepada administrator."
+          },
+          "checklist": [
+            {
+              "zh": "事实与所求处理清楚，无越权承诺。",
+              "id": "Fakta dan permintaan penanganan jelas tanpa janji di luar kewenangan."
+            },
+            {
+              "zh": "安全事件与一般口味投诉正确区分。",
+              "id": "Keluhan rasa dibedakan dengan benar dari kejadian keamanan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_03_q1",
+          "q": {
+            "zh": "顾客改变糖量，应在哪一步确认？",
+            "id": "Kapan perubahan jumlah gula pelanggan dikonfirmasi?"
+          },
+          "options": [
+            {
+              "zh": "更新订单后在付款前再次复述确认。",
+              "id": "Setelah memperbarui pesanan, ulangi dan konfirmasikan lagi sebelum pembayaran."
+            },
+            {
+              "zh": "制作人员自己猜顾客意思。",
+              "id": "Biarkan pembuat minuman menebak maksud pelanggan."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "复述可让收银、制作和顾客使用同一订单信息。",
+            "id": "Pengulangan menyamakan informasi antara kasir, pembuat minuman, dan pelanggan."
+          }
+        },
+        {
+          "key": "training_03_q2",
+          "q": {
+            "zh": "有人催促时应直接插队制作吗？",
+            "id": "Haruskah pelanggan yang mendesak langsung didahulukan?"
+          },
+          "options": [
+            {
+              "zh": "谁催得急就先做谁的。",
+              "id": "Dahulukan siapa pun yang paling keras mendesak."
+            },
+            {
+              "zh": "按排队规则处理并说明等待情况。",
+              "id": "Ikuti aturan antrean dan jelaskan kondisi menunggu."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "一致的规则和清楚沟通比临时改变顺序更可靠。",
+            "id": "Aturan yang konsisten dan komunikasi jelas lebih dapat diandalkan daripada mengubah urutan secara sepihak."
+          }
+        },
+        {
+          "key": "training_03_q3",
+          "q": {
+            "zh": "投诉一杯口味不满意，员工能自动退整单吗？",
+            "id": "Bolehkah karyawan otomatis mengembalikan seluruh pesanan karena keluhan rasa pada satu gelas?"
+          },
+          "options": [
+            {
+              "zh": "不能，记录具体产品并按审批规则申请。",
+              "id": "Tidak, catat produk terkait dan ajukan sesuai aturan persetujuan."
+            },
+            {
+              "zh": "可以，省去核对更快。",
+              "id": "Boleh agar lebih cepat tanpa pemeriksaan."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "处理需对应产品和授权，不能越权扩大退款。",
+            "id": "Penanganan harus sesuai produk dan kewenangan, bukan memperluas pengembalian dana sendiri."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：相近订单并发且一位顾客投诉",
+          "id": "Praktik modul ini: Pesanan mirip datang bersamaan dan ada keluhan pelanggan"
+        },
+        {
+          "zh": "应留证据：复述后的模拟订单、交付核对、投诉记录。",
+          "id": "Bukti yang diperlukan: Pesanan simulasi setelah diulang, pemeriksaan penyerahan, catatan keluhan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Starbucks: public customer experience principles (not an internal manual)",
+          "url": "https://about.starbucks.com/press/2025/elevating-every-visit-starbucks-biggest-investment-in-operating-standards-and-customer-experience/"
+        }
+      ]
+    },
+    {
+      "key": "training-04",
+      "reviewed": true,
+      "title": {
+        "zh": "过敏原与交叉接触",
+        "id": "Alergen dan kontak silang"
+      },
+      "subtitle": {
+        "zh": "依据准确标签和配方说明风险，不猜测、不保证零接触。",
+        "id": "Jelaskan risiko berdasarkan label dan resep yang tepat; jangan menebak atau menjamin tanpa kontak silang."
+      },
+      "minutes": 45,
+      "sections": [
+        {
+          "key": "training_04_1",
+          "title": {
+            "zh": "询问并核对成分",
+            "id": "Menanyakan alergi dan memeriksa komposisi"
+          },
+          "points": [
+            {
+              "zh": "顾客提出过敏需求时，询问需避开的具体成分并记录；不要替顾客诊断或判断过敏轻重。",
+              "id": "Saat pelanggan menyebut alergi, tanyakan bahan tertentu yang harus dihindari dan catat. Jangan mendiagnosis atau menilai tingkat keparahan alerginya."
+            },
+            {
+              "zh": "对照当前批准配方、供应商标签和过敏原表，逐项核对基底、奶类、粉料、糖浆和加料；资料不全停止确认。",
+              "id": "Bandingkan resep yang disetujui, label pemasok, dan daftar alergen. Periksa bahan dasar, susu, bubuk, sirup, dan tambahan satu per satu; jangan memberi kepastian bila informasi belum lengkap."
+            },
+            {
+              "zh": "将核实结果和无法保证的限制告诉顾客，由主管确认能否安全承接；不能确定时不制作该过敏需求订单。",
+              "id": "Sampaikan hasil pemeriksaan dan batas yang tidak dapat dijamin. Minta penyelia memastikan apakah permintaan dapat dilayani dengan aman; jika tidak pasti, jangan buat pesanan khusus alergi tersebut."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "凭产品名称猜成分；把植物奶当成必然无乳。",
+              "id": "Menebak komposisi dari nama produk atau menganggap susu nabati pasti bebas susu."
+            }
+          ],
+          "practice": {
+            "zh": "用现有标签查找一款加料和一款奶基底的成分，并找出未知项。",
+            "id": "Gunakan label yang tersedia untuk memeriksa satu tambahan dan satu bahan dasar susu, lalu tunjukkan informasi yang belum diketahui."
+          },
+          "checklist": [
+            {
+              "zh": "使用当前标签和配方，不靠记忆。",
+              "id": "Menggunakan label dan resep yang berlaku, bukan ingatan."
+            },
+            {
+              "zh": "未知项已明确上报，未承诺安全。",
+              "id": "Hal yang belum diketahui sudah dilaporkan tanpa menjanjikan keamanan."
+            }
+          ]
+        },
+        {
+          "key": "training_04_2",
+          "title": {
+            "zh": "控制交叉接触",
+            "id": "Mengendalikan kontak silang"
+          },
+          "points": [
+            {
+              "zh": "核对批准的专用器具、存放位置及清洗程序；不要仅换杯子就认为过敏原风险消失。",
+              "id": "Periksa alat khusus, tempat penyimpanan, dan prosedur pembersihan yang disetujui. Mengganti gelas saja tidak menghilangkan risiko alergen."
+            },
+            {
+              "zh": "按批准流程清洁接触面，洗手并在需要时换手套；分开管理不同原料的勺具，避免伸入错误容器。",
+              "id": "Bersihkan permukaan kontak sesuai prosedur, cuci tangan, dan ganti sarung tangan bila diperlukan. Pisahkan sendok bahan dan jangan memasukkannya ke wadah yang salah."
+            },
+            {
+              "zh": "若无法执行所需隔离或有效清洁，立即告诉主管和顾客，停止该特殊订单制作，不承诺零交叉接触。",
+              "id": "Jika pemisahan atau pembersihan yang diperlukan tidak dapat dilakukan, segera beri tahu penyelia dan pelanggan. Hentikan pembuatan pesanan khusus tersebut dan jangan menjamin nol kontak silang."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "共用未清洁雪克杯；用抹布随便擦一下就称无过敏原。",
+              "id": "Memakai pengocok bersama yang belum dibersihkan atau menganggap lap singkat membuat alat bebas alergen."
+            }
+          ],
+          "practice": {
+            "zh": "模拟切换过敏相关任务，展示器具、台面与手部处理，指出不能完成的条件。",
+            "id": "Simulasikan pergantian tugas terkait alergi: tunjukkan penanganan alat, permukaan, dan tangan, serta kondisi yang tidak dapat dipenuhi."
+          },
+          "checklist": [
+            {
+              "zh": "所需器具和有效清洁条件具备。",
+              "id": "Alat dan kondisi pembersihan yang diperlukan tersedia."
+            },
+            {
+              "zh": "无法控制接触时会停做并说明。",
+              "id": "Dapat menghentikan pekerjaan dan menjelaskan saat kontak tidak dapat dikendalikan."
+            }
+          ]
+        },
+        {
+          "key": "training_04_3",
+          "title": {
+            "zh": "沟通限制与应急",
+            "id": "Menyampaikan keterbatasan dan keadaan darurat"
+          },
+          "points": [
+            {
+              "zh": "本店建议话术：我会查标签和配方，但共用环境可能存在接触风险；我先请主管核实。不能用“大概没事”代替核实。",
+              "id": "Saran ucapan toko: Saya akan memeriksa label dan resep, tetapi lingkungan bersama dapat menimbulkan risiko kontak; saya akan meminta penyelia memastikannya. Jangan mengganti pemeriksaan dengan perkiraan aman."
+            },
+            {
+              "zh": "未经核实不擅自替换原料；把顾客要求和主管决定清楚交给制作岗，交付前再次核对。",
+              "id": "Jangan mengganti bahan tanpa pemeriksaan. Sampaikan permintaan pelanggan dan keputusan penyelia kepada bagian produksi, lalu periksa kembali sebelum penyerahan."
+            },
+            {
+              "zh": "若顾客出现疑似严重反应，立即按门店应急流程呼叫帮助并停止相关产品交付；保留配方、标签和订单信息，不自行提供诊断或治疗。",
+              "id": "Jika pelanggan menunjukkan dugaan reaksi serius, segera minta bantuan sesuai prosedur darurat toko dan hentikan penyerahan produk terkait. Simpan informasi resep, label, dan pesanan; jangan mendiagnosis atau memberikan pengobatan sendiri."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "承诺绝对不会过敏；发生紧急情况只办理退款。",
+              "id": "Menjamin tidak mungkin alergi atau hanya mengurus pengembalian dana saat keadaan darurat."
+            }
+          ],
+          "practice": {
+            "zh": "演练告知限制和紧急求助，带教核对信息交接是否完整。",
+            "id": "Latih penyampaian keterbatasan dan permintaan bantuan darurat; pendamping memeriksa kelengkapan informasi."
+          },
+          "checklist": [
+            {
+              "zh": "不作零风险承诺，不自行替换。",
+              "id": "Tidak menjanjikan nol risiko dan tidak mengganti bahan sendiri."
+            },
+            {
+              "zh": "知道紧急求助路径并保留追溯信息。",
+              "id": "Mengetahui cara meminta bantuan darurat dan menjaga informasi penelusuran."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_04_q1",
+          "q": {
+            "zh": "顾客乳过敏，换植物奶就能保证安全吗？",
+            "id": "Apakah mengganti dengan susu nabati menjamin aman bagi pelanggan yang alergi susu?"
+          },
+          "options": [
+            {
+              "zh": "不能；仍须核查全部配方、标签和接触风险。",
+              "id": "Tidak; seluruh resep, label, dan risiko kontak tetap harus diperiksa."
+            },
+            {
+              "zh": "能，名称写植物就足够。",
+              "id": "Ya, kata nabati pada nama sudah cukup."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "其他配料或共用设备仍可能涉及乳成分。",
+            "id": "Bahan lain atau alat bersama masih dapat melibatkan komponen susu."
+          }
+        },
+        {
+          "key": "training_04_q2",
+          "q": {
+            "zh": "没有可执行的过敏原清洁方案时应怎样？",
+            "id": "Apa yang dilakukan jika tidak ada prosedur pembersihan alergen yang dapat dijalankan?"
+          },
+          "options": [
+            {
+              "zh": "换一个新杯就照常制作。",
+              "id": "Ganti gelas baru lalu buat seperti biasa."
+            },
+            {
+              "zh": "说明限制并停止该特殊订单制作。",
+              "id": "Jelaskan keterbatasan dan hentikan pembuatan pesanan khusus itu."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "风险涉及器具和流程，不只涉及杯子。",
+            "id": "Risiko mencakup alat dan proses, bukan hanya gelas."
+          }
+        },
+        {
+          "key": "training_04_q3",
+          "q": {
+            "zh": "出现疑似严重反应时，首要行动是什么？",
+            "id": "Apa tindakan pertama saat terlihat dugaan reaksi serius?"
+          },
+          "options": [
+            {
+              "zh": "立即按应急流程求助并停止相关交付。",
+              "id": "Segera minta bantuan sesuai prosedur darurat dan hentikan penyerahan terkait."
+            },
+            {
+              "zh": "只问顾客要不要退款。",
+              "id": "Hanya bertanya apakah pelanggan ingin pengembalian dana."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "紧急健康风险优先处理，退款不是救援措施。",
+            "id": "Risiko kesehatan darurat harus didahulukan; pengembalian dana bukan pertolongan darurat."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：顾客乳过敏但替代原料标签不全",
+          "id": "Praktik modul ini: Pelanggan alergi susu tetapi label bahan pengganti tidak lengkap"
+        },
+        {
+          "zh": "应留证据：标签配方对照、接触风险与限制说明。",
+          "id": "Bukti yang diperlukan: Pencocokan label dan resep, penjelasan risiko kontak serta keterbatasan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Codex: CXC 80 allergen management — reference supplied in the review pack",
+          "url": "https://www.fao.org/fao-who-codexalimentarius/sh-proxy/en/?lnk=1&url=https%3A%2F%2Fworkspace.fao.org%2Fsites%2Fcodex%2FStandards%2FCXC+80-2020%2FCXC_080e.pdf"
+        }
+      ]
+    },
+    {
+      "key": "training-05",
+      "reviewed": true,
+      "title": {
+        "zh": "收货、批次与储存",
+        "id": "Penerimaan, lot, dan penyimpanan"
+      },
+      "subtitle": {
+        "zh": "从到货证据到批次标签，按批准储存条件与先到期先出执行。",
+        "id": "Telusuri bahan dari penerimaan hingga label lot, dengan kondisi simpan yang disetujui dan masa berlaku terdekat digunakan dahulu."
+      },
+      "minutes": 45,
+      "sections": [
+        {
+          "key": "training_05_1",
+          "title": {
+            "zh": "到货与Cek KLIK",
+            "id": "Penerimaan dan Cek KLIK"
+          },
+          "points": [
+            {
+              "zh": "核对采购或送货单、供应商、品名、规格、数量和单位；检查包装破损、渗漏、污染及需要的运输温控证据。",
+              "id": "Cocokkan pesanan pembelian atau surat jalan, pemasok, nama, spesifikasi, jumlah, dan satuan. Periksa kerusakan, kebocoran, pencemaran kemasan, serta bukti pengendalian suhu pengiriman jika diperlukan."
+            },
+            {
+              "zh": "执行Cek KLIK：检查包装、标签、按产品类别适用的流通许可和有效期；许可与供应商资料由主管按适用要求核实。",
+              "id": "Lakukan Cek KLIK: periksa Kemasan, Label, Izin Edar yang sesuai kategori produk, dan Kedaluwarsa. Penyelia memverifikasi perizinan serta dokumen pemasok sesuai persyaratan yang berlaku."
+            },
+            {
+              "zh": "记录批次、到货时间、实收数量、检查结果和检查人；异常品隔离并标识，交主管决定接收、拒收或进一步核实，未放行不入可用库存。",
+              "id": "Catat lot, waktu kedatangan, jumlah diterima, hasil pemeriksaan, dan pemeriksa. Pisahkan serta tandai bahan bermasalah; penyelia menentukan penerimaan, penolakan, atau pemeriksaan lanjutan. Jangan masukkan ke stok siap pakai sebelum dinyatakan boleh digunakan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "先签合格再检查；把所有产品一概套用同一种许可要求。",
+              "id": "Menandatangani layak sebelum memeriksa atau menerapkan satu jenis izin kepada semua kategori produk."
+            }
+          ],
+          "practice": {
+            "zh": "用一份模拟送货单和包装，完成KLIK检查及一项异常隔离记录。",
+            "id": "Gunakan contoh surat jalan dan kemasan untuk melakukan Cek KLIK serta mencatat karantina satu bahan bermasalah."
+          },
+          "checklist": [
+            {
+              "zh": "四项KLIK检查及数量单位已核对。",
+              "id": "Empat unsur KLIK serta jumlah dan satuan sudah diperiksa."
+            },
+            {
+              "zh": "问题批次可追溯且未混入可用库存。",
+              "id": "Lot bermasalah dapat ditelusuri dan tidak tercampur dengan stok siap pakai."
+            }
+          ]
+        },
+        {
+          "key": "training_05_2",
+          "title": {
+            "zh": "开封标签与先到期先出",
+            "id": "Label setelah dibuka dan urutan masa berlaku"
+          },
+          "points": [
+            {
+              "zh": "按原标签和批准卡给开封或分装容器标注名称、原批次、开封或分装时间、储存条件、允许使用截止信息及操作人。",
+              "id": "Sesuai label asal dan kartu yang disetujui, beri wadah yang dibuka atau dipindahkan label nama, lot asal, waktu dibuka atau dipindahkan, kondisi simpan, batas penggunaan, dan petugas."
+            },
+            {
+              "zh": "未开封保质期不能代替开封后期限；批准卡未提供开封期限或条件时停止使用并隔离，请主管取得有效依据。",
+              "id": "Masa berlaku kemasan tertutup tidak menggantikan batas penggunaan setelah dibuka. Jika kartu tidak menyediakan batas atau kondisi tersebut, hentikan penggunaan dan pisahkan sampai penyelia memperoleh dasar yang sah."
+            },
+            {
+              "zh": "在均满足安全条件的批次中，优先用最早到期的；保持标签可见，不混批、不覆盖旧日期、不把到期品重新贴新标签。",
+              "id": "Di antara lot yang memenuhi kondisi keamanan, gunakan yang masa berlakunya paling dekat terlebih dahulu. Jaga label terlihat; jangan mencampur lot, menutupi tanggal lama, atau memberi tanggal baru pada bahan yang sudah mencapai batas penggunaan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把到货日期当作唯一出库顺序；开封后仍直接沿用原包装截止日。",
+              "id": "Hanya memakai tanggal kedatangan untuk menentukan urutan atau langsung memakai tanggal kemasan tertutup setelah dibuka."
+            }
+          ],
+          "practice": {
+            "zh": "给两个不同批次的模拟容器排使用顺序，并指出开封标签缺失项。",
+            "id": "Urutkan dua wadah contoh dari lot berbeda dan tunjukkan informasi yang kurang pada label setelah dibuka."
+          },
+          "checklist": [
+            {
+              "zh": "开封标签字段完整，可追溯原批次。",
+              "id": "Label setelah dibuka lengkap dan dapat ditelusuri ke lot asal."
+            },
+            {
+              "zh": "使用顺序基于有效截止信息。",
+              "id": "Urutan penggunaan berdasarkan batas penggunaan yang sah."
+            }
+          ]
+        },
+        {
+          "key": "training_05_3",
+          "title": {
+            "zh": "储存与异常温控",
+            "id": "Penyimpanan dan penyimpangan suhu"
+          },
+          "points": [
+            {
+              "zh": "按批准标签把原料放入指定区域或设备，保持包装封闭、避免污染和挤压，食品与化学品分开存放。",
+              "id": "Simpan bahan di area atau peralatan yang ditentukan pada label yang disetujui. Jaga kemasan tertutup dan terlindung dari pencemaran serta tekanan; pisahkan pangan dari bahan kimia."
+            },
+            {
+              "zh": "需要温控的原料按已批准范围和频次检查记录，使用规定测量方式；教材不设定茶汤、珍珠、奶盖或冷藏设备的统一数值。",
+              "id": "Untuk bahan yang memerlukan pengendalian suhu, periksa dan catat sesuai rentang, jadwal, dan metode ukur yang disetujui. Materi ini tidak menetapkan satu angka universal untuk teh, boba, lapisan susu, atau alat pendingin."
+            },
+            {
+              "zh": "温度异常、停电或记录缺失时，标识受影响批次并隔离；报告主管核实暴露情况与处置依据，不仅把设备重新开机就视作恢复安全。",
+              "id": "Jika suhu menyimpang, listrik padam, atau catatan hilang, tandai dan pisahkan lot terdampak. Laporkan agar penyelia memeriksa riwayat paparan dan dasar penanganannya; menyalakan alat kembali saja tidak membuktikan bahan aman."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "靠手摸判断合格；温控失常后不记录就继续用。",
+              "id": "Menentukan kelayakan dengan menyentuh atau terus memakai bahan setelah gangguan suhu tanpa catatan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟一次冷藏异常，列出受影响批次、发现时间、测量记录与上报对象。",
+            "id": "Simulasikan gangguan pendinginan dan catat lot terdampak, waktu temuan, hasil ukur, serta penerima laporan."
+          },
+          "checklist": [
+            {
+              "zh": "储存位置、标签与批准条件相符。",
+              "id": "Lokasi, label, dan kondisi simpan sesuai persetujuan."
+            },
+            {
+              "zh": "异常批次有隔离及处置记录。",
+              "id": "Lot terdampak memiliki catatan karantina dan penanganan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_05_q1",
+          "q": {
+            "zh": "到货包装破损但未过期，应如何处理？",
+            "id": "Bagaimana menangani kemasan rusak yang belum kedaluwarsa?"
+          },
+          "options": [
+            {
+              "zh": "隔离标识并上报，等待有效处理决定。",
+              "id": "Pisahkan, beri label, dan laporkan untuk keputusan penanganan yang sah."
+            },
+            {
+              "zh": "未过期就直接上架使用。",
+              "id": "Langsung simpan sebagai bahan siap pakai karena belum kedaluwarsa."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "日期合格不能抵消包装完整性问题。",
+            "id": "Masa berlaku yang masih baik tidak menghapus masalah keutuhan kemasan."
+          }
+        },
+        {
+          "key": "training_05_q2",
+          "q": {
+            "zh": "原包装还在有效期内，开封期限未知时能用吗？",
+            "id": "Bolehkah bahan dipakai jika tanggal kemasan masih berlaku tetapi batas setelah dibuka tidak diketahui?"
+          },
+          "options": [
+            {
+              "zh": "可以，沿用原包装日期。",
+              "id": "Boleh, gunakan tanggal pada kemasan asal saja."
+            },
+            {
+              "zh": "不能，先隔离并取得批准依据。",
+              "id": "Tidak, pisahkan dahulu dan dapatkan dasar yang disetujui."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "开封改变储存条件，不能自行延长期限。",
+            "id": "Pembukaan mengubah kondisi penyimpanan; batas penggunaan tidak boleh diperpanjang sendiri."
+          }
+        },
+        {
+          "key": "training_05_q3",
+          "q": {
+            "zh": "停电后设备恢复，原料是否自动可用？",
+            "id": "Apakah bahan otomatis boleh dipakai setelah listrik dan alat kembali menyala?"
+          },
+          "options": [
+            {
+              "zh": "不是，需核实受影响情况并按有效依据处理。",
+              "id": "Tidak, kondisi terdampak harus diperiksa dan ditangani berdasarkan dasar yang sah."
+            },
+            {
+              "zh": "是，设备运转就代表原料安全。",
+              "id": "Ya, alat yang berjalan berarti bahan aman."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "设备状态不能替代原料暴露与安全记录。",
+            "id": "Status alat tidak menggantikan riwayat paparan dan catatan keamanan bahan."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：到货破损与开封标签缺失",
+          "id": "Praktik modul ini: Kiriman rusak dan label setelah dibuka tidak lengkap"
+        },
+        {
+          "zh": "应留证据：送货核对、批次标签、隔离和储存记录。",
+          "id": "Bukti yang diperlukan: Pemeriksaan kiriman, label lot, catatan karantina dan penyimpanan."
+        }
+      ],
+      "sources": [
+        {
+          "title": "BPOM: Cek KLIK — public source supplied in the review pack",
+          "url": "https://tanjungbalai.pom.go.id/berita/cek-klik-langkah-sederhana-menjadi-konsumen-cerdas"
+        },
+        {
+          "title": "WHO: Five keys to safer food — general principles, not shop recipe parameters",
+          "url": "https://www.who.int/docs/librariesprovider2/default-document-library/5keys_en.pdf"
+        }
+      ]
+    },
+    {
+      "key": "training-06",
+      "reviewed": true,
+      "title": {
+        "zh": "单位、称量、盘点与报损",
+        "id": "Satuan, penimbangan, penghitungan stok, dan kerugian"
+      },
+      "subtitle": {
+        "zh": "保留库存单位，如实测量和记录，不自设允许误差。",
+        "id": "Pertahankan satuan stok, ukur dan catat keadaan sebenarnya, tanpa membuat toleransi sendiri."
+      },
+      "minutes": 45,
+      "sections": [
+        {
+          "key": "training_06_1",
+          "title": {
+            "zh": "单位与换算",
+            "id": "Satuan dan konversi"
+          },
+          "points": [
+            {
+              "zh": "核对原料库存单位、配方单位和容器单位；1 kg = 1000 g，1 L = 1000 ml。换算后仍保留原记录单位及计算依据。",
+              "id": "Periksa satuan stok, resep, dan wadah. 1 kg = 1000 g dan 1 L = 1000 ml. Setelah konversi, pertahankan satuan catatan asal dan dasar perhitungannya."
+            },
+            {
+              "zh": "质量和体积不是同一单位；没有该原料经确认的密度或批准换算依据，不把克直接当毫升，也不把一瓶当固定净量。",
+              "id": "Massa dan volume berbeda. Tanpa densitas yang telah dipastikan atau dasar konversi yang disetujui untuk bahan tersebut, jangan menyamakan gram dengan mililiter atau menganggap satu botol selalu berisi jumlah bersih yang sama."
+            },
+            {
+              "zh": "单位或系统显示不一致时暂停录入，保留标签和实测值，请主管核实映射；不要为了让账平而改变库存基础单位。",
+              "id": "Jika satuan atau tampilan sistem tidak sesuai, hentikan pencatatan sementara, simpan label dan hasil ukur, lalu minta penyelia memeriksa pemetaan. Jangan mengubah satuan dasar stok hanya agar angka terlihat cocok."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "按一克等于一毫升处理所有原料；把包装件数直接当净重。",
+              "id": "Menganggap satu gram sama dengan satu mililiter untuk semua bahan atau menyamakan jumlah kemasan dengan berat bersih."
+            }
+          ],
+          "practice": {
+            "zh": "演算质量和体积各一例，再指出哪一种换算需要额外批准依据。",
+            "id": "Kerjakan contoh konversi massa dan volume, lalu tunjukkan konversi yang memerlukan dasar tambahan."
+          },
+          "checklist": [
+            {
+              "zh": "质量、体积和件数区分清楚。",
+              "id": "Massa, volume, dan jumlah kemasan dibedakan dengan jelas."
+            },
+            {
+              "zh": "库存原单位及换算依据保留。",
+              "id": "Satuan stok asal dan dasar konversi tetap tercatat."
+            }
+          ]
+        },
+        {
+          "key": "training_06_2",
+          "title": {
+            "zh": "称量与复核",
+            "id": "Menimbang dan memeriksa hasil"
+          },
+          "points": [
+            {
+              "zh": "检查秤和量具是否适用于所需单位、量程及批准精度，按设备说明检查状态；不自设允许百分比误差。",
+              "id": "Periksa apakah timbangan dan alat ukur sesuai satuan, rentang, dan ketelitian yang disetujui. Periksa kondisinya menurut petunjuk alat; jangan membuat persentase toleransi sendiri."
+            },
+            {
+              "zh": "使用清洁容器，按设备说明置零和去皮；按配方卡称量，等读数稳定后记录净量和单位，不凭目测凑数。",
+              "id": "Gunakan wadah bersih, atur nol dan tara sesuai petunjuk alat. Timbang menurut kartu resep, tunggu pembacaan stabil, lalu catat jumlah bersih dan satuan; jangan memperkirakan dengan mata."
+            },
+            {
+              "zh": "读数异常或偏离批准要求时停止该操作，复核量具、容器及单位并上报；不通过改记录掩盖差异。",
+              "id": "Jika pembacaan tidak wajar atau menyimpang dari persyaratan, hentikan pekerjaan tersebut. Periksa alat, wadah, dan satuan lalu laporkan; jangan mengubah catatan untuk menyembunyikan selisih."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "未去皮把容器重计入原料；为凑目标四舍五入到未经批准的精度。",
+              "id": "Menghitung berat wadah sebagai bahan karena tidak menara atau membulatkan dengan ketelitian yang tidak disetujui agar sesuai target."
+            }
+          ],
+          "practice": {
+            "zh": "用空容器演示去皮，再称一份模拟原料，复述单位和净量。",
+            "id": "Tunjukkan cara menara wadah kosong, timbang bahan simulasi, lalu sebutkan satuan dan jumlah bersihnya."
+          },
+          "checklist": [
+            {
+              "zh": "量具适用、去皮正确、读数稳定。",
+              "id": "Alat sesuai, tara benar, dan pembacaan stabil."
+            },
+            {
+              "zh": "记录实测值，不凭空设误差限。",
+              "id": "Hasil ukur dicatat tanpa membuat batas toleransi sendiri."
+            }
+          ]
+        },
+        {
+          "key": "training_06_3",
+          "title": {
+            "zh": "剩余盘点、报损与差异",
+            "id": "Menghitung sisa, mencatat kerugian, dan selisih"
+          },
+          "points": [
+            {
+              "zh": "按指定截止时点分开清点未开封、已开封、半成品、隔离品和待处理品；记录实际数量、单位、批次及当时未完成流转。",
+              "id": "Pada waktu batas yang ditentukan, hitung terpisah bahan tertutup, terbuka, hasil olahan, bahan karantina, dan bahan menunggu penanganan. Catat jumlah nyata, satuan, lot, serta perpindahan yang belum selesai."
+            },
+            {
+              "zh": "洒漏、过期、制作失败和其他报损如实登记原因、批次、数量、时间及经办人，按授权处理；不得靠虚假销售或虚假进货抵平。",
+              "id": "Catat tumpahan, bahan melewati batas penggunaan, kegagalan produksi, dan kerugian lain dengan alasan, lot, jumlah, waktu, serta petugas. Tangani sesuai kewenangan; jangan menyeimbangkan stok dengan penjualan atau penerimaan palsu."
+            },
+            {
+              "zh": "发现账实差异先复点，核对单位、收货、加工、销售、报损和交接记录；保留原记录，向主管提交差异，未获授权不改库存。",
+              "id": "Jika stok fisik berbeda dari catatan, hitung ulang dan periksa satuan, penerimaan, pengolahan, penjualan, kerugian, serta serah terima. Simpan catatan asal dan laporkan selisih; jangan mengubah stok tanpa kewenangan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把理论剩余数抄作实盘；把隔离品算进可售库存。",
+              "id": "Menyalin sisa teoretis sebagai hitungan fisik atau memasukkan bahan karantina ke stok siap jual."
+            }
+          ],
+          "practice": {
+            "zh": "模拟一批原料有剩余和洒漏，分别填写盘点、报损和差异说明。",
+            "id": "Simulasikan bahan dengan sisa dan tumpahan, lalu isi catatan hitungan, kerugian, dan penjelasan selisih secara terpisah."
+          },
+          "checklist": [
+            {
+              "zh": "实际剩余与损耗分开，批次单位一致。",
+              "id": "Sisa nyata dan kerugian dipisahkan dengan lot serta satuan yang konsisten."
+            },
+            {
+              "zh": "差异已复核并交授权人处理。",
+              "id": "Selisih telah diperiksa ulang dan diserahkan kepada pihak berwenang."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_06_q1",
+          "q": {
+            "zh": "没有密度资料，可以把糖浆克数直接记为毫升吗？",
+            "id": "Tanpa data densitas, bolehkah gram sirup langsung dicatat sebagai mililiter?"
+          },
+          "options": [
+            {
+              "zh": "不可以，需批准的换算依据。",
+              "id": "Tidak, diperlukan dasar konversi yang disetujui."
+            },
+            {
+              "zh": "可以，所有液体都一样。",
+              "id": "Boleh, semua cairan sama."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "不同原料的质量与体积关系不能猜测。",
+            "id": "Hubungan massa dan volume setiap bahan tidak boleh ditebak."
+          }
+        },
+        {
+          "key": "training_06_q2",
+          "q": {
+            "zh": "称量偏差没有批准容差时如何处理？",
+            "id": "Bagaimana menangani selisih timbang jika belum ada toleransi yang disetujui?"
+          },
+          "options": [
+            {
+              "zh": "自行允许一个固定百分比。",
+              "id": "Tetapkan sendiri persentase yang dianggap boleh."
+            },
+            {
+              "zh": "暂停并请主管取得适用标准。",
+              "id": "Tunda dan minta penyelia memperoleh standar yang sesuai."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "容差需要适用依据，不能由新人临时制定。",
+            "id": "Toleransi memerlukan dasar yang sesuai, bukan keputusan sementara karyawan baru."
+          }
+        },
+        {
+          "key": "training_06_q3",
+          "q": {
+            "zh": "实盘比系统少，最先做什么？",
+            "id": "Apa tindakan awal jika stok fisik lebih sedikit daripada sistem?"
+          },
+          "options": [
+            {
+              "zh": "复点并核对流转记录，再上报差异。",
+              "id": "Hitung ulang, periksa catatan pergerakan, lalu laporkan selisih."
+            },
+            {
+              "zh": "补一张虚假销售使系统数量下降。",
+              "id": "Buat penjualan palsu agar jumlah sistem turun."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "差异处理必须保留真实业务依据。",
+            "id": "Penanganan selisih harus mempertahankan dasar transaksi yang sebenarnya."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：实盘、理论数和单位不一致",
+          "id": "Praktik modul ini: Hitungan fisik, jumlah teoretis, dan satuan berbeda"
+        },
+        {
+          "zh": "应留证据：单位计算、去皮实测、实盘报损差异表。",
+          "id": "Bukti yang diperlukan: Perhitungan satuan, hasil timbang bertara, catatan stok fisik dan selisih kerugian."
+        }
+      ],
+      "sources": []
+    },
+    {
+      "key": "training-07",
+      "reviewed": true,
+      "title": {
+        "zh": "茶汤、珍珠、奶盖与半成品",
+        "id": "Teh, boba, lapisan susu, dan hasil olahan"
+      },
+      "subtitle": {
+        "zh": "按批准卡加工，记录实际产量与剩余；加工/销售分层扣料是目标流程，未确认自动化上线。",
+        "id": "Olah sesuai kartu yang disetujui dan catat hasil serta sisa nyata. Pemisahan pemakaian bahan saat produksi dan penjualan adalah alur sasaran, belum dinyatakan otomatis aktif."
+      },
+      "minutes": 60,
+      "sections": [
+        {
+          "key": "training_07_1",
+          "title": {
+            "zh": "加工前核对批准卡",
+            "id": "Memeriksa kartu sebelum pengolahan"
+          },
+          "points": [
+            {
+              "zh": "对茶汤、珍珠和奶盖分别找到当前批准卡，核对原料规格、批次、单位、批量、设备型号与操作顺序；教材不提供通用配方。",
+              "id": "Temukan kartu yang berlaku untuk teh, boba, dan lapisan susu secara terpisah. Periksa spesifikasi bahan, lot, satuan, ukuran produksi, model alat, dan urutan kerja; materi ini tidak memberikan resep universal."
+            },
+            {
+              "zh": "逐项确认卡上所需温度、时间、搅拌或其他处理方式、放行标准、容器、保存条件及使用截止信息；缺项就停止该项加工，请主管取得批准依据。",
+              "id": "Pastikan suhu, waktu, cara pengadukan atau penanganan lain, kriteria kelayakan, wadah, kondisi simpan, dan batas penggunaan yang dibutuhkan tercantum. Jika ada yang belum jelas, hentikan pengolahan tersebut dan minta penyelia memperoleh dasar yang disetujui."
+            },
+            {
+              "zh": "确认安全用水、器具清洁及过敏原控制条件，按批准卡领料称量；不得把网上教程、旧批次经验或练习数字当作生产参数。",
+              "id": "Pastikan air aman, alat bersih, dan pengendalian alergen tersedia, lalu ambil serta timbang bahan sesuai kartu. Jangan memakai tutorial internet, pengalaman lot lama, atau angka latihan sebagai parameter produksi."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "凭口感设定煮制时间；用同一参数制作所有原料。",
+              "id": "Menentukan waktu memasak berdasarkan rasa atau memakai satu parameter untuk semua bahan."
+            }
+          ],
+          "practice": {
+            "zh": "拿到一张缺使用截止信息的模拟卡，指出缺项并演示停做上报。",
+            "id": "Periksa kartu simulasi tanpa batas penggunaan, tunjukkan kekurangannya, lalu demonstrasikan penghentian dan pelaporan."
+          },
+          "checklist": [
+            {
+              "zh": "原料、工艺、设备与储存字段都有批准依据。",
+              "id": "Bahan, proses, alat, dan penyimpanan memiliki dasar persetujuan."
+            },
+            {
+              "zh": "不明安全条件已停止并上报。",
+              "id": "Pekerjaan dengan kondisi keamanan yang belum jelas dihentikan dan dilaporkan."
+            }
+          ]
+        },
+        {
+          "key": "training_07_2",
+          "title": {
+            "zh": "实际产量与批次标识",
+            "id": "Hasil nyata dan identitas lot produksi"
+          },
+          "points": [
+            {
+              "zh": "按批准卡完成加工，记录投入原料批次及实际数量、操作人和关键步骤结果；不新增未批准的浸泡、冷却或调味步骤。",
+              "id": "Lakukan pengolahan menurut kartu. Catat lot dan jumlah nyata bahan masuk, petugas, serta hasil langkah penting; jangan menambahkan perendaman, pendinginan, atau pemberian rasa yang belum disetujui."
+            },
+            {
+              "zh": "按批准测量方式量出合格半成品的实际净产量和单位，将不合格品、洒漏及其他损耗单列；不能直接把理论产量当实际产量。",
+              "id": "Ukur hasil bersih nyata yang memenuhi syarat dengan metode dan satuan yang disetujui. Catat terpisah hasil tidak layak, tumpahan, dan kerugian lain; jangan menganggap hasil teoretis sebagai hasil nyata."
+            },
+            {
+              "zh": "给每批或每容器关联批次号，标注名称、制作时间、实际产量、保存条件、使用截止信息及操作人；未满足放行条件的隔离，不混入上一批。",
+              "id": "Hubungkan setiap lot atau wadah dengan nomor produksi. Beri label nama, waktu dibuat, hasil nyata, kondisi simpan, batas penggunaan, dan petugas. Pisahkan hasil yang belum memenuhi syarat; jangan mencampurnya dengan lot sebelumnya."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把少产量补写成理论数量；新旧批混装并重置日期。",
+              "id": "Mengubah catatan hasil yang kurang menjadi jumlah teoretis atau mencampur lot lama dan baru lalu mengganti tanggal."
+            }
+          ],
+          "practice": {
+            "zh": "用模拟数据填写原料投入、合格实产、损耗与容器批次标签，带教逐项追溯。",
+            "id": "Dengan data simulasi, isi bahan masuk, hasil layak nyata, kerugian, dan label lot pada wadah; pendamping menelusuri setiap bagian."
+          },
+          "checklist": [
+            {
+              "zh": "投入、实产、损耗分别记录。",
+              "id": "Bahan masuk, hasil nyata, dan kerugian dicatat terpisah."
+            },
+            {
+              "zh": "容器标签可追溯，未混批改期。",
+              "id": "Label wadah dapat ditelusuri tanpa mencampur lot atau mengganti batas penggunaan."
+            }
+          ]
+        },
+        {
+          "key": "training_07_3",
+          "title": {
+            "zh": "领用销售与剩余闭环",
+            "id": "Pemakaian, penjualan, dan sisa hasil olahan"
+          },
+          "points": [
+            {
+              "zh": "目标流程：加工时扣原料并登记实际半成品产出；销售时只消耗对应半成品，不再次扣同一份原料。此分层自动化尚未确认上线。",
+              "id": "Alur sasaran: saat pengolahan, kurangi bahan baku dan catat hasil olahan nyata; saat penjualan, gunakan hasil olahan terkait tanpa mengurangi bahan baku yang sama lagi. Otomatisasi alur bertingkat ini belum dipastikan aktif."
+            },
+            {
+              "zh": "先由主管确认当前版本实际扣料方式和批准记录路径；未支持时采用批准纸面或现有登记流程，关联订单与批次，避免系统与手工重复扣料。",
+              "id": "Penyelia harus memastikan cara pemakaian stok pada versi yang digunakan dan jalur pencatatan yang disetujui. Jika belum didukung, gunakan formulir atau alur pencatatan yang disetujui, hubungkan pesanan dan lot, serta hindari pencatatan pengurangan ganda."
+            },
+            {
+              "zh": "交班按批次实盘剩余，区分可用、隔离及报损；以期初加实产、减实际消耗及损耗核对实盘。领用调拨分别对应出入，不与销售重复扣减；保留截止时点及未完成流转，差异交主管处理，不倒推伪造历史。",
+              "id": "Saat serah terima, hitung sisa per lot dan pisahkan yang dapat dipakai, dikarantina, atau menjadi kerugian. Cocokkan saldo awal ditambah hasil nyata, dikurangi konsumsi nyata serta kerugian dengan hitungan fisik. Perpindahan antarbagian dicatat sebagai keluar dan masuk yang berpasangan, bukan dikurangi lagi bersama penjualan. Catat waktu batas dan pergerakan tertunda; laporkan selisih tanpa merekayasa riwayat."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "加工扣过原料后销售再手工扣同份原料；以理论余额代替实盘。",
+              "id": "Mengurangi bahan baku yang sama lagi secara manual saat penjualan setelah sudah dikurangi saat produksi, atau memakai saldo teoretis sebagai hitungan fisik."
+            }
+          ],
+          "practice": {
+            "zh": "演练一批半成品从实产、领用到交班剩余，标明实际系统支持与纸面补充的边界。",
+            "id": "Latih satu lot hasil olahan dari hasil nyata, pemakaian, hingga sisa saat serah terima; jelaskan batas fungsi sistem dan catatan tambahan yang disetujui."
+          },
+          "checklist": [
+            {
+              "zh": "当前扣料路径已确认，无双扣。",
+              "id": "Jalur pengurangan stok yang berlaku sudah dipastikan tanpa pengurangan ganda."
+            },
+            {
+              "zh": "剩余实盘、损耗、差异和批次能闭环追溯。",
+              "id": "Sisa fisik, kerugian, selisih, dan lot dapat ditelusuri secara utuh."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_07_q1",
+          "q": {
+            "zh": "配方卡缺少必要加工参数，应怎样？",
+            "id": "Apa yang dilakukan jika kartu resep tidak memuat parameter pengolahan yang diperlukan?"
+          },
+          "options": [
+            {
+              "zh": "停止该项加工，请主管取得批准标准。",
+              "id": "Hentikan pengolahan tersebut dan minta penyelia memperoleh standar yang disetujui."
+            },
+            {
+              "zh": "采用网上最常见的一组参数。",
+              "id": "Gunakan parameter yang paling umum di internet."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "相同名称不代表原料与设备条件相同。",
+            "id": "Nama produk yang sama tidak berarti bahan dan alatnya memiliki kondisi yang sama."
+          }
+        },
+        {
+          "key": "training_07_q2",
+          "q": {
+            "zh": "实产少于理论产量，应该记录哪一个？",
+            "id": "Jika hasil nyata lebih sedikit daripada hasil teoretis, mana yang dicatat sebagai hasil produksi?"
+          },
+          "options": [
+            {
+              "zh": "记录理论产量，避免系统不平。",
+              "id": "Catat hasil teoretis agar sistem terlihat seimbang."
+            },
+            {
+              "zh": "记录实际合格产量并单列损耗与差异。",
+              "id": "Catat hasil nyata yang layak, lalu pisahkan kerugian dan selisih."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "实产是后续可用库存的依据，不能虚增。",
+            "id": "Hasil nyata menjadi dasar stok yang dapat dipakai dan tidak boleh dilebihkan."
+          }
+        },
+        {
+          "key": "training_07_q3",
+          "q": {
+            "zh": "当前版本未证实支持分层扣料，员工应怎样做？",
+            "id": "Apa yang dilakukan jika versi saat ini belum terbukti mendukung pengurangan stok bertingkat?"
+          },
+          "options": [
+            {
+              "zh": "确认现行流程，用批准记录衔接，避免重复扣料。",
+              "id": "Pastikan alur yang berlaku dan gunakan catatan yang disetujui tanpa pengurangan ganda."
+            },
+            {
+              "zh": "假定已自动实现，再额外手工扣原料。",
+              "id": "Anggap otomatisasi sudah aktif lalu kurangi bahan baku lagi secara manual."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "目标流程不等于已上线功能，必须核实实际记录路径。",
+            "id": "Alur sasaran bukan berarti fitur sudah aktif; jalur pencatatan nyata harus dipastikan."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：加工实产不足并需要交接剩余",
+          "id": "Praktik modul ini: Hasil produksi kurang dari perkiraan dan sisa perlu diserahterimakan"
+        },
+        {
+          "zh": "应留证据：批准加工卡、投入实产损耗、批次及剩余表。",
+          "id": "Bukti yang diperlukan: Kartu pengolahan, bahan masuk dan hasil nyata, kerugian, lot serta sisa."
+        }
+      ],
+      "sources": [
+        {
+          "title": "WHO: Five keys to safer food — general principles, not shop recipe parameters",
+          "url": "https://www.who.int/docs/librariesprovider2/default-document-library/5keys_en.pdf"
+        }
+      ]
+    },
+    {
+      "key": "training-08",
+      "reviewed": true,
+      "title": {
+        "zh": "按单制作、品质与重做",
+        "id": "Pembuatan sesuai pesanan, mutu, dan pembuatan ulang"
+      },
+      "subtitle": {
+        "zh": "杯型、糖冰、加料与标签一致，异常不私自掩盖。",
+        "id": "Selaraskan ukuran, gula, es, tambahan, dan label tanpa menyembunyikan penyimpangan."
+      },
+      "minutes": 60,
+      "sections": [
+        {
+          "key": "training_08_1",
+          "title": {
+            "zh": "配方与订单匹配",
+            "id": "Mencocokkan resep dan pesanan"
+          },
+          "points": [
+            {
+              "zh": "读取订单的产品、杯型、糖冰和加料，找到相应批准配方；订单不清或配方缺失先问主管，不擅自创造选项。",
+              "id": "Baca produk, ukuran, gula, es, dan tambahan pada pesanan, lalu cari resep yang disetujui. Jika pesanan tidak jelas atau resep tidak ada, tanyakan kepada penyelia tanpa membuat pilihan sendiri."
+            },
+            {
+              "zh": "核对每种原料或半成品批次标签及使用条件，选择配方指定量具，按批准数量和顺序制作。",
+              "id": "Periksa label lot serta kondisi penggunaan setiap bahan atau hasil olahan. Pilih alat ukur yang ditentukan dan buat sesuai jumlah serta urutan yang disetujui."
+            },
+            {
+              "zh": "缺料或顾客修改时回到收银确认订单，不把相似原料直接替换；过敏需求按模块04处理。",
+              "id": "Jika bahan habis atau pelanggan mengubah pesanan, konfirmasikan kembali dengan kasir. Jangan langsung mengganti dengan bahan serupa; ikuti modul04 untuk kebutuhan alergi."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "忙时凭记忆加料；用其他杯型套用原配方。",
+              "id": "Menambah bahan berdasarkan ingatan saat sibuk atau memakai resep yang sama untuk ukuran gelas berbeda."
+            }
+          ],
+          "practice": {
+            "zh": "按一张批准配方卡逐项对照模拟订单，在投料前找出一处不匹配。",
+            "id": "Cocokkan pesanan simulasi dengan kartu resep yang disetujui dan temukan satu ketidaksesuaian sebelum memasukkan bahan."
+          },
+          "checklist": [
+            {
+              "zh": "订单、杯型、配方版本对应。",
+              "id": "Pesanan, ukuran gelas, dan versi resep sesuai."
+            },
+            {
+              "zh": "原料批次合格，量具与用量正确。",
+              "id": "Lot bahan layak serta alat ukur dan jumlah sesuai."
+            }
+          ]
+        },
+        {
+          "key": "training_08_2",
+          "title": {
+            "zh": "出品检查与标签",
+            "id": "Pemeriksaan produk dan label"
+          },
+          "points": [
+            {
+              "zh": "出品前逐项核对产品、杯数、糖冰、加料与订单标识；检查容器和封口状态，避免泄漏或污染。",
+              "id": "Sebelum diserahkan, cocokkan produk, jumlah gelas, gula, es, tambahan, dan identitas pesanan. Periksa wadah serta penutup untuk mencegah kebocoran atau pencemaran."
+            },
+            {
+              "zh": "按批准品质检查表核对外观、份量及其他适用项目；涉及试味仅按卫生流程使用专用方式，不重复使用接触口部的器具。",
+              "id": "Periksa tampilan, porsi, dan unsur lain yang berlaku menurut daftar mutu yang disetujui. Jika ada pencicipan, gunakan cara higienis yang ditetapkan dan jangan memakai ulang alat yang sudah menyentuh mulut."
+            },
+            {
+              "zh": "标签只填写实际订单和必要追溯信息，按现有交付流程核对后出杯；标签不能替代食品安全记录。",
+              "id": "Isi label dengan pesanan sebenarnya dan informasi penelusuran yang diperlukan, lalu serahkan sesuai alur. Label pesanan tidak menggantikan catatan keamanan pangan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "只看杯子颜色就交付；把错误标签贴到正确饮品上。",
+              "id": "Menyerahkan hanya berdasarkan warna minuman atau menempelkan label yang salah pada minuman yang benar."
+            }
+          ],
+          "practice": {
+            "zh": "将两杯模拟成品与订单逐一核对，发现错误杯型或标签并拦截。",
+            "id": "Cocokkan dua produk simulasi dengan pesanan, lalu tahan produk dengan ukuran atau label yang salah."
+          },
+          "checklist": [
+            {
+              "zh": "成品与订单逐项一致。",
+              "id": "Produk sesuai seluruh rincian pesanan."
+            },
+            {
+              "zh": "容器、封口及追溯标识已检查。",
+              "id": "Wadah, penutup, dan identitas penelusuran sudah diperiksa."
+            }
+          ]
+        },
+        {
+          "key": "training_08_3",
+          "title": {
+            "zh": "异常品与重做记录",
+            "id": "Produk bermasalah dan catatan pembuatan ulang"
+          },
+          "points": [
+            {
+              "zh": "发现做错、异物、包装问题或疑似污染时停止交付，隔离受影响产品，记录原订单、问题和涉及批次。",
+              "id": "Jika ada kesalahan, benda asing, masalah kemasan, atau dugaan pencemaran, hentikan penyerahan, pisahkan produk, dan catat pesanan asal, masalah, serta lot terkait."
+            },
+            {
+              "zh": "按批准授权确定重做、报损或退款申请；不把已交顾客或安全情况不明的产品回收再加入原料容器。",
+              "id": "Tentukan pembuatan ulang, pencatatan kerugian, atau permohonan pengembalian dana melalui kewenangan yang disetujui. Jangan mengembalikan produk yang sudah diserahkan atau tidak jelas keamanannya ke wadah bahan."
+            },
+            {
+              "zh": "重做仍用对应批准配方，关联原订单并记录新增消耗及报损，避免把重做当作向顾客再次收费的新单。",
+              "id": "Gunakan resep yang sesuai untuk pembuatan ulang, hubungkan ke pesanan asal, serta catat pemakaian tambahan dan kerugian. Jangan menjadikannya pesanan baru untuk menagih pelanggan lagi."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "倒回大桶掩盖做错；重做不记消耗或擅自二次收费。",
+              "id": "Menuangkan kembali ke wadah besar untuk menyembunyikan kesalahan, tidak mencatat pemakaian ulang, atau menagih lagi tanpa dasar."
+            }
+          ],
+          "practice": {
+            "zh": "模拟做错糖量，完成拦截、授权询问、重做关联和报损记录。",
+            "id": "Simulasikan gula yang salah, lalu tahan produk, minta keputusan berwenang, dan catat hubungan pembuatan ulang serta kerugian."
+          },
+          "checklist": [
+            {
+              "zh": "问题产品已拦截，没有回流污染。",
+              "id": "Produk bermasalah ditahan tanpa dikembalikan hingga mencemari bahan lain."
+            },
+            {
+              "zh": "重做与原单关联，消耗和授权可查。",
+              "id": "Pembuatan ulang terhubung ke pesanan asal dengan pemakaian dan kewenangan yang dapat diperiksa."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_08_q1",
+          "q": {
+            "zh": "订单杯型改变后可以直接沿用原配比吗？",
+            "id": "Bolehkah jumlah bahan lama langsung dipakai setelah ukuran gelas berubah?"
+          },
+          "options": [
+            {
+              "zh": "先查对应杯型的批准配方并确认订单。",
+              "id": "Periksa resep yang disetujui untuk ukuran tersebut dan konfirmasikan pesanan."
+            },
+            {
+              "zh": "可以，按感觉补一点原料。",
+              "id": "Boleh, tambahkan bahan berdasarkan perkiraan."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "杯型与配方必须对应，不能凭感觉换算。",
+            "id": "Ukuran dan resep harus sesuai, bukan dikonversi dengan perkiraan."
+          }
+        },
+        {
+          "key": "training_08_q2",
+          "q": {
+            "zh": "成品外观正常但标签不符，能直接交付吗？",
+            "id": "Bolehkah produk yang tampak normal diserahkan jika labelnya tidak cocok?"
+          },
+          "options": [
+            {
+              "zh": "可以，顾客拿到后会自己看。",
+              "id": "Boleh, pelanggan akan memeriksanya sendiri."
+            },
+            {
+              "zh": "不能，先核对并纠正，防止交错订单。",
+              "id": "Tidak, periksa dan perbaiki dahulu agar tidak tertukar."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "交付前核对是岗位责任，不能转嫁给顾客。",
+            "id": "Pemeriksaan sebelum penyerahan adalah tanggung jawab petugas, bukan dibebankan kepada pelanggan."
+          }
+        },
+        {
+          "key": "training_08_q3",
+          "q": {
+            "zh": "做错的饮品能倒回半成品桶以减少浪费吗？",
+            "id": "Bolehkah minuman yang salah dituangkan kembali ke wadah hasil olahan untuk mengurangi pemborosan?"
+          },
+          "options": [
+            {
+              "zh": "不能，隔离并按批准报损或处置流程处理。",
+              "id": "Tidak, pisahkan dan tangani menurut prosedur kerugian atau penanganan yang disetujui."
+            },
+            {
+              "zh": "可以，只要顾客还没喝。",
+              "id": "Boleh selama belum diminum pelanggan."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "回流会混批并可能污染整桶。",
+            "id": "Mengembalikan produk dapat mencampur lot dan mencemari seluruh wadah."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：杯型或糖量做错、需授权处理",
+          "id": "Praktik modul ini: Ukuran atau gula salah dan perlu keputusan berwenang"
+        },
+        {
+          "zh": "应留证据：批准配方、成品核对、关联原单的重做记录。",
+          "id": "Bukti yang diperlukan: Resep yang disetujui, pemeriksaan produk, catatan pembuatan ulang terkait pesanan asal."
+        }
+      ],
+      "sources": []
+    },
+    {
+      "key": "training-09",
+      "reviewed": true,
+      "title": {
+        "zh": "清洁消毒、用水与化学品",
+        "id": "Pembersihan, disinfeksi, air, dan bahan kimia"
+      },
+      "subtitle": {
+        "zh": "按适用设备与产品标签操作，目测干净不能证明消毒完成。",
+        "id": "Ikuti petunjuk alat dan label produk; terlihat bersih tidak membuktikan disinfeksi selesai."
+      },
+      "minutes": 60,
+      "sections": [
+        {
+          "key": "training_09_1",
+          "title": {
+            "zh": "水、冰与清洁区",
+            "id": "Air, es, dan area bersih"
+          },
+          "points": [
+            {
+              "zh": "开工确认用水和食用冰来源符合门店批准要求，查看相关供水、滤芯或制冰设备检查记录；发现异常暂停相关制作。",
+              "id": "Sebelum bekerja, pastikan sumber air dan es konsumsi memenuhi persyaratan toko yang disetujui. Periksa catatan air, filter, atau mesin es yang berlaku; hentikan produksi terkait jika ada penyimpangan."
+            },
+            {
+              "zh": "使用指定清洁冰铲及存放位置，不用手或顾客杯直接取冰；避免冰铲柄、地面工具和污水接触食用冰或干净器具。",
+              "id": "Gunakan sekop es bersih yang ditetapkan dan simpan di tempatnya. Jangan mengambil es dengan tangan atau gelas pelanggan; jauhkan gagang sekop, alat lantai, dan air kotor dari es konsumsi serta alat bersih."
+            },
+            {
+              "zh": "清洁区与脏器具区分开，按任务清洁消毒接触面；不明水源、污染冰或清洁条件缺失时停用、隔离并报告主管。",
+              "id": "Pisahkan area bersih dan alat kotor, lalu bersihkan serta disinfeksi permukaan sesuai tugas. Jika sumber air tidak jelas, es tercemar, atau kondisi pembersihan tidak tersedia, hentikan penggunaan, pisahkan, dan laporkan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "用饮料杯取冰；把冰看作不可能污染的原料。",
+              "id": "Mengambil es dengan gelas minuman atau menganggap es tidak dapat tercemar."
+            }
+          ],
+          "practice": {
+            "zh": "指出门店水和冰的来源记录、冰铲存放点及异常时的停用范围。",
+            "id": "Tunjukkan catatan sumber air dan es, tempat sekop es, serta bagian pekerjaan yang harus dihentikan saat ada penyimpangan."
+          },
+          "checklist": [
+            {
+              "zh": "水冰来源及检查记录可查。",
+              "id": "Sumber air dan es serta catatan pemeriksaannya dapat diperiksa."
+            },
+            {
+              "zh": "取冰方式和干净器具存放正确。",
+              "id": "Cara mengambil es dan menyimpan alat bersih sudah benar."
+            }
+          ]
+        },
+        {
+          "key": "training_09_2",
+          "title": {
+            "zh": "设备清洁与消毒",
+            "id": "Pembersihan dan disinfeksi alat"
+          },
+          "points": [
+            {
+              "zh": "查对应设备的批准清洁卡和说明书，确认停机、断电或其他隔离要求；拆卸仅由获授权且受过指导的人员进行。",
+              "id": "Periksa kartu pembersihan dan petunjuk alat yang sesuai, termasuk penghentian, pemutusan listrik, atau isolasi lain. Pembongkaran hanya dilakukan petugas yang berwenang dan sudah mendapat arahan."
+            },
+            {
+              "zh": "按批准顺序完成去污、清洁和需要的消毒步骤；逐项核对化学品适用表面、浓度、接触时间、防护及是否需要冲洗，不在教材中设统一配比。",
+              "id": "Lakukan penghilangan kotoran, pembersihan, dan disinfeksi yang diperlukan menurut urutan yang disetujui. Periksa kesesuaian permukaan, konsentrasi, waktu kontak, perlindungan, serta kebutuhan pembilasan pada label; materi ini tidak menetapkan satu campuran universal."
+            },
+            {
+              "zh": "按要求干燥、复装和检查，记录设备、产品名称、执行时间、操作人与复核结果；步骤或标签不明先停用，由主管取得有效说明。",
+              "id": "Keringkan, pasang kembali, dan periksa sesuai petunjuk. Catat alat, nama produk pembersih, waktu pelaksanaan, petugas, dan hasil pemeriksaan. Jika langkah atau label tidak jelas, jangan gunakan sebelum penyelia memperoleh petunjuk yang sah."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "只用目测清洁作为消毒合格依据；用未经确认的热水或混合清洁剂代替程序。",
+              "id": "Menilai disinfeksi hanya dari tampilan bersih atau mengganti prosedur dengan air panas maupun campuran pembersih yang belum disetujui."
+            }
+          ],
+          "practice": {
+            "zh": "用真实批准标签查找浓度、接触、冲洗和防护字段；只在带教与安全条件具备时演示。",
+            "id": "Cari ketentuan konsentrasi, waktu kontak, pembilasan, dan perlindungan pada label yang disetujui. Lakukan demonstrasi hanya dengan pendamping dan kondisi aman."
+          },
+          "checklist": [
+            {
+              "zh": "设备卡、产品标签与实际步骤一致。",
+              "id": "Kartu alat, label produk, dan langkah nyata sesuai."
+            },
+            {
+              "zh": "记录完整，缺依据时未继续使用。",
+              "id": "Catatan lengkap dan alat tidak dipakai saat dasar petunjuk belum tersedia."
+            }
+          ]
+        },
+        {
+          "key": "training_09_3",
+          "title": {
+            "zh": "垃圾、虫害与化学品隔离",
+            "id": "Sampah, hama, dan pemisahan bahan kimia"
+          },
+          "points": [
+            {
+              "zh": "垃圾按指定容器与清运流程处理，保持操作区不受污染；处理垃圾后按洗手流程回岗。",
+              "id": "Kelola sampah menggunakan wadah dan alur pengangkutan yang ditetapkan agar tidak mencemari area kerja. Cuci tangan sebelum kembali setelah menangani sampah."
+            },
+            {
+              "zh": "发现虫害迹象记录地点、时间和受影响原料，隔离相关食品并报告；员工不得在食品附近自行喷药或设未经批准的处理措施。",
+              "id": "Jika ditemukan tanda hama, catat lokasi, waktu, dan bahan terdampak. Pisahkan pangan terkait dan laporkan; karyawan tidak boleh menyemprot pestisida atau menerapkan penanganan yang belum disetujui di dekat pangan."
+            },
+            {
+              "zh": "化学品保持原标签或批准分装标签，与食品分开，严禁装入饮料瓶、混合不同产品；泄漏时隔离区域并按标签和应急程序求助。",
+              "id": "Pertahankan label asli atau label pemindahan yang disetujui pada bahan kimia dan simpan terpisah dari pangan. Jangan gunakan botol minuman atau mencampur produk berbeda. Jika bocor, amankan area dan minta bantuan sesuai label serta prosedur darurat."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "拿饮料瓶装清洁剂；看到虫子就在原料旁喷药。",
+              "id": "Menyimpan pembersih dalam botol minuman atau menyemprot pestisida di samping bahan pangan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟发现化学品漏液或虫害，说明隔离范围、需保留的记录及上报路径。",
+            "id": "Simulasikan kebocoran bahan kimia atau tanda hama, lalu jelaskan area yang diamankan, catatan yang diperlukan, dan jalur pelaporannya."
+          },
+          "checklist": [
+            {
+              "zh": "食品与化学品分区，标签清楚。",
+              "id": "Pangan dan bahan kimia terpisah dengan label jelas."
+            },
+            {
+              "zh": "虫害及泄漏不擅自处理，有报告。",
+              "id": "Hama dan kebocoran dilaporkan, bukan ditangani sendiri tanpa kewenangan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_09_q1",
+          "q": {
+            "zh": "不明来源的冰应怎样处理？",
+            "id": "Bagaimana menangani es yang sumbernya tidak diketahui?"
+          },
+          "options": [
+            {
+              "zh": "停用并隔离，上报核实来源和安全条件。",
+              "id": "Hentikan penggunaan, pisahkan, dan laporkan untuk memastikan sumber serta keamanannya."
+            },
+            {
+              "zh": "先洗一下再混入冰箱。",
+              "id": "Bilas dahulu lalu campurkan ke tempat es."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "冲洗不能补足来源和安全证据。",
+            "id": "Membilas tidak menggantikan bukti asal dan keamanan."
+          }
+        },
+        {
+          "key": "training_09_q2",
+          "q": {
+            "zh": "消毒液标签缺失，能按经验稀释吗？",
+            "id": "Bolehkah disinfektan tanpa label diencerkan berdasarkan pengalaman?"
+          },
+          "options": [
+            {
+              "zh": "能，多加一些更保险。",
+              "id": "Boleh, menambah lebih banyak pasti lebih aman."
+            },
+            {
+              "zh": "不能，停止使用并取得有效说明。",
+              "id": "Tidak, hentikan penggunaan dan dapatkan petunjuk yang sah."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "错误浓度和接触条件可能带来残留或无效消毒。",
+            "id": "Konsentrasi dan kondisi kontak yang salah dapat menimbulkan residu atau disinfeksi yang tidak efektif."
+          }
+        },
+        {
+          "key": "training_09_q3",
+          "q": {
+            "zh": "可以把清洁剂分装进旧饮料瓶吗？",
+            "id": "Bolehkah pembersih dipindahkan ke botol minuman bekas?"
+          },
+          "options": [
+            {
+              "zh": "不可以，应使用批准容器与标签。",
+              "id": "Tidak, gunakan wadah dan label yang disetujui."
+            },
+            {
+              "zh": "可以，在瓶盖画一个记号即可。",
+              "id": "Boleh, cukup beri tanda pada tutupnya."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "饮料容器容易造成误饮和交叉污染。",
+            "id": "Wadah minuman dapat menyebabkan salah minum dan pencemaran silang."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：清洁产品说明缺失或发现污染冰",
+          "id": "Praktik modul ini: Petunjuk pembersih hilang atau es tercemar ditemukan"
+        },
+        {
+          "zh": "应留证据：清洁卡和标签字段核对、执行与隔离记录。",
+          "id": "Bukti yang diperlukan: Pemeriksaan kartu pembersihan dan label, catatan pelaksanaan serta karantina."
+        }
+      ],
+      "sources": [
+        {
+          "title": "WHO: Five keys to safer food — general principles, not shop recipe parameters",
+          "url": "https://www.who.int/docs/librariesprovider2/default-document-library/5keys_en.pdf"
+        }
+      ]
+    },
+    {
+      "key": "training-10",
+      "reviewed": true,
+      "title": {
+        "zh": "现金、QRIS与退款",
+        "id": "Tunai, QRIS, dan pengembalian dana"
+      },
+      "subtitle": {
+        "zh": "老板独享到账查询；员工私密取证待对账。逐项退款等改动未发布，不虚构系统按钮。",
+        "id": "Hanya pemilik memeriksa dana masuk; karyawan menyimpan bukti secara privat untuk rekonsiliasi. Perubahan pengembalian per item belum dirilis; jangan menganggap tombolnya tersedia."
+      },
+      "minutes": 60,
+      "sections": [
+        {
+          "key": "training_10_1",
+          "title": {
+            "zh": "现金与静态QRIS",
+            "id": "Pembayaran tunai dan QRIS statis"
+          },
+          "points": [
+            {
+              "zh": "现金收款先复述应付金额，清点实收和找零并请顾客确认，按已批准现金记录及保管流程处理，不混入私人资金。",
+              "id": "Untuk tunai, sebutkan jumlah yang harus dibayar, hitung uang diterima dan kembalian, lalu minta konfirmasi pelanggan. Ikuti pencatatan dan penyimpanan kas yang disetujui; jangan mencampur uang pribadi."
+            },
+            {
+              "zh": "静态QRIS由顾客输入金额，员工核对门店收款对象、订单金额及顾客端成功画面；异常、金额不符或状态不明及时上报，不将截图当作商户到账证明。",
+              "id": "Pada QRIS statis, pelanggan memasukkan jumlah. Karyawan memeriksa tujuan pembayaran toko, jumlah pesanan, dan tampilan berhasil pada ponsel pelanggan. Laporkan perbedaan atau status tidak jelas; foto bukan bukti dana sudah masuk ke rekening pedagang."
+            },
+            {
+              "zh": "本店已定规则：只有老板查询商户到账。员工经批准的私密方式拍摄必要的顾客成功画面，关联订单登记为待老板对账，不向公开群聊发送，不索取密码或验证码。",
+              "id": "Aturan toko yang telah ditetapkan: hanya pemilik memeriksa dana masuk pedagang. Melalui cara privat yang disetujui, karyawan memotret bagian yang diperlukan dari tampilan pembayaran berhasil dan menghubungkannya ke pesanan dengan status menunggu rekonsiliasi pemilik. Jangan kirim ke grup terbuka atau meminta kata sandi maupun kode verifikasi."
+            },
+            {
+              "zh": "正常订单按已批准人工确认流程继续，不逐单等待老板确认到账；收据与订单按实际软件能力保存，版本未支持时使用批准的替代记录，异常单单独升级。",
+              "id": "Pesanan normal dilanjutkan menurut alur konfirmasi manual yang disetujui tanpa menunggu pemilik memeriksa dana masuk untuk setiap pesanan. Simpan bukti dan pesanan sesuai kemampuan versi yang digunakan; gunakan catatan pengganti yang disetujui jika belum didukung, dan eskalasikan pesanan bermasalah secara terpisah."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "员工自行查看商户账户；把私密凭证发公开群；每个正常订单都停下来等老板。",
+              "id": "Karyawan membuka rekening pedagang sendiri, mengirim bukti privat ke grup terbuka, atau menahan setiap pesanan normal untuk menunggu pemilik."
+            }
+          ],
+          "practice": {
+            "zh": "用虚构订单和脱敏演示画面核对金额、私密关联凭证并标明待老板对账；不使用真实顾客账号。",
+            "id": "Gunakan pesanan fiktif dan tampilan demonstrasi tanpa data pribadi untuk mencocokkan jumlah, menghubungkan bukti privat, dan menandai menunggu rekonsiliasi pemilik. Jangan memakai akun pelanggan nyata."
+          },
+          "checklist": [
+            {
+              "zh": "核对对象金额，照片不被当作到账证明。",
+              "id": "Tujuan dan jumlah diperiksa; foto tidak dianggap bukti dana masuk."
+            },
+            {
+              "zh": "只由老板查到账，正常单无需逐单等老板。",
+              "id": "Hanya pemilik memeriksa dana masuk; pesanan normal tidak menunggu pemeriksaan pemilik satu per satu."
+            },
+            {
+              "zh": "凭证私密关联订单，异常单有升级记录。",
+              "id": "Bukti privat terhubung ke pesanan dan penyimpangan memiliki catatan eskalasi."
+            }
+          ]
+        },
+        {
+          "key": "training_10_2",
+          "title": {
+            "zh": "保存失败与防重复收费",
+            "id": "Gagal menyimpan dan mencegah tagihan ganda"
+          },
+          "points": [
+            {
+              "zh": "支付操作和订单保存分别核对：顾客支付画面成功不等于订单已保存；按当前系统的真实成功结果确认，不能凭打印动作推断保存成功。",
+              "id": "Periksa pembayaran dan penyimpanan pesanan secara terpisah: tampilan pembayaran berhasil tidak berarti pesanan tersimpan. Gunakan hasil keberhasilan nyata dari sistem; pencetakan bukan bukti penyimpanan berhasil."
+            },
+            {
+              "zh": "保存失败时停止把该单标作完成，保留原订单标识、已付情况、必要凭证和异常时间，通知主管并说明顾客不需要因保存失败再付一次。",
+              "id": "Jika penyimpanan gagal, jangan menandai pesanan selesai. Simpan identitas pesanan asli, keadaan pembayaran, bukti yang diperlukan, dan waktu masalah. Beri tahu penyelia serta jelaskan bahwa kegagalan menyimpan tidak mengharuskan pelanggan membayar lagi."
+            },
+            {
+              "zh": "不要反复点击收款或新建重复订单；由获授权人员核对原单与记录后按批准恢复流程处理。保存失败本身永远不是再次收费的依据，也不得伪造已完成记录。",
+              "id": "Jangan berulang kali menekan pembayaran atau membuat pesanan duplikat. Petugas berwenang memeriksa pesanan asli dan catatan sebelum mengikuti pemulihan yang disetujui. Kegagalan menyimpan sendiri tidak pernah menjadi dasar tagihan ulang dan tidak membenarkan catatan selesai palsu."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把顾客已付款等同订单完成；用再收一次款解决保存错误。",
+              "id": "Menganggap pelanggan sudah membayar berarti pesanan selesai atau menagih lagi untuk mengatasi kesalahan penyimpanan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟保存失败，记录异常并向顾客解释：款项不会因为保存失败而再次收取，我们正在核对原单。",
+            "id": "Simulasikan kegagalan menyimpan dan catat masalahnya. Jelaskan kepada pelanggan: Kami tidak akan menagih lagi karena penyimpanan gagal; kami sedang memeriksa pesanan asli."
+          },
+          "checklist": [
+            {
+              "zh": "失败单未作完成，原标识和支付证据保留。",
+              "id": "Pesanan gagal tidak ditandai selesai; identitas asli dan bukti pembayaran terjaga."
+            },
+            {
+              "zh": "无重复收费或重复建单，已交主管处理。",
+              "id": "Tidak ada tagihan atau pesanan ganda; masalah sudah diserahkan kepada penyelia."
+            }
+          ]
+        },
+        {
+          "key": "training_10_3",
+          "title": {
+            "zh": "退款申请与版本边界",
+            "id": "Permohonan pengembalian dana dan batas versi"
+          },
+          "points": [
+            {
+              "zh": "本店已确认：员工提交申请，由管理员核实审批；顾客不满意只针对所选产品和数量，累计退款数量不超过购买数量，累计金额不超过原实际付款。",
+              "id": "Ketentuan toko yang sudah dipastikan: karyawan mengajukan permohonan dan administrator memeriksa serta menyetujui. Keluhan ketidakpuasan hanya mencakup produk serta jumlah yang dipilih; jumlah kumulatif tidak boleh melebihi pembelian dan dana kumulatif tidak boleh melebihi pembayaran asli."
+            },
+            {
+              "zh": "金额依据原订单优惠后实际付款的分摊，不用现价、当前会员积分余额或员工手填任意金额；保留原订单、已退记录与本次选择，无法证明的历史数据不得倒推编造。",
+              "id": "Jumlah pengembalian didasarkan pada alokasi pembayaran asli setelah diskon, bukan harga sekarang, saldo poin sekarang, atau angka sekehendak karyawan. Simpan pesanan asli, riwayat pengembalian, dan pilihan saat ini; jangan mengarang data historis yang tidak terbukti."
+            },
+            {
+              "zh": "已制作产品退款不回库原料。只有管理员核实整单完全未制作，并具备原始库存扣减证据，才可按原记录恢复；证据缺失不按当前配方猜补，部分未制作的恢复不能自行推定。",
+              "id": "Pengembalian untuk produk yang sudah dibuat tidak mengembalikan bahan baku ke stok. Pemulihan hanya boleh dilakukan jika administrator memastikan seluruh pesanan belum dibuat dan bukti pengurangan stok asli tersedia. Gunakan catatan asli; jangan menebak dari resep sekarang saat bukti hilang atau menganggap pemulihan sebagian pesanan otomatis diperbolehkan."
+            },
+            {
+              "zh": "审批记录不代表资金已自动转回。实际退款按授权渠道执行并登记，核对已执行状态，避免重复退钱；不要改写原成交金额或直接改订单状态绕过审批。",
+              "id": "Catatan persetujuan tidak berarti uang otomatis dikirim kembali. Lakukan dan catat pengembalian melalui cara yang berwenang, periksa apakah sudah dilaksanakan, dan hindari pengembalian ganda. Jangan mengubah nilai transaksi asli atau langsung mengubah status pesanan untuk melewati persetujuan."
+            },
+            {
+              "zh": "上述是已定业务边界，不代表当前线上已支持逐项分摊、原扣料恢复或所有报表净额。部分退款整批改动尚未发布；先由主管确认版本，未支持时使用批准申请与核实记录，不虚构按钮或宣称自动完成。",
+              "id": "Ini adalah batas bisnis yang sudah ditetapkan, bukan pernyataan bahwa versi daring saat ini mendukung alokasi per item, pemulihan stok asal, atau seluruh laporan neto. Paket perubahan pengembalian sebagian belum dirilis. Minta penyelia memastikan versi; jika belum didukung, gunakan catatan permohonan dan pemeriksaan yang disetujui tanpa menganggap tombol atau penyelesaian otomatis tersedia."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "直接改状态退款；已制作退款回原料；把审批当转账成功或把未上线功能当已上线。",
+              "id": "Mengubah status langsung untuk mengembalikan dana, mengembalikan bahan produk jadi ke stok, menganggap persetujuan sebagai transfer berhasil, atau menganggap fitur yang belum dirilis sudah aktif."
+            }
+          ],
+          "practice": {
+            "zh": "用模拟原单指出不满意产品、数量、累计上限和制作状态；分别说明审批、资金执行、库存证据及当前版本限制。",
+            "id": "Dari pesanan simulasi, tunjukkan produk yang dikeluhkan, jumlah, batas kumulatif, dan status pembuatan. Jelaskan terpisah persetujuan, pelaksanaan pembayaran, bukti stok, dan batas versi saat ini."
+          },
+          "checklist": [
+            {
+              "zh": "选择及累计上限有依据，金额不按现价重算。",
+              "id": "Pilihan dan batas kumulatif memiliki dasar; jumlah tidak dihitung dari harga sekarang."
+            },
+            {
+              "zh": "已制作不回料；整单未制作恢复需管理员和原证据。",
+              "id": "Produk yang sudah dibuat tidak mengembalikan bahan; pemulihan pesanan yang seluruhnya belum dibuat memerlukan administrator dan bukti asli."
+            },
+            {
+              "zh": "审批与实际退款分开，未上线限制已说明。",
+              "id": "Persetujuan dibedakan dari pengembalian nyata dan batas fitur yang belum dirilis sudah dijelaskan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_10_q1",
+          "q": {
+            "zh": "正常QRIS订单的顾客端已成功，员工如何继续？",
+            "id": "Bagaimana melanjutkan pesanan QRIS normal saat tampilan pelanggan menunjukkan berhasil?"
+          },
+          "options": [
+            {
+              "zh": "按批准流程私密取证并登记待老板对账，正常单不逐单等老板。",
+              "id": "Simpan bukti privat dan catat untuk rekonsiliasi pemilik sesuai alur; pesanan normal tidak menunggu pemilik satu per satu."
+            },
+            {
+              "zh": "员工登录商户账户逐单核实到账。",
+              "id": "Karyawan masuk ke rekening pedagang untuk memeriksa setiap pembayaran."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "老板独享到账查询，员工凭证仅支持后续人工对账。",
+            "id": "Pemeriksaan dana masuk hanya untuk pemilik; bukti karyawan mendukung rekonsiliasi manual berikutnya."
+          }
+        },
+        {
+          "key": "training_10_q2",
+          "q": {
+            "zh": "顾客已付但保存失败，下一步是什么？",
+            "id": "Apa langkah berikutnya jika pelanggan sudah membayar tetapi pesanan gagal disimpan?"
+          },
+          "options": [
+            {
+              "zh": "让顾客再付一次并新建订单。",
+              "id": "Minta pelanggan membayar lagi dan buat pesanan baru."
+            },
+            {
+              "zh": "保留原单与支付证据，报告异常，不重复收费也不当作完成。",
+              "id": "Simpan pesanan dan bukti asli, laporkan, jangan menagih lagi atau menganggap selesai."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "支付与保存是不同结果，技术失败不构成第二次收费理由。",
+            "id": "Pembayaran dan penyimpanan adalah hasil berbeda; kegagalan teknis bukan alasan penagihan kedua."
+          }
+        },
+        {
+          "key": "training_10_q3",
+          "q": {
+            "zh": "已制作的一杯被批准退款，原料如何处理？",
+            "id": "Bagaimana menangani bahan dari satu gelas yang sudah dibuat dan disetujui pengembalian dananya?"
+          },
+          "options": [
+            {
+              "zh": "不回库原料；资金执行仍按授权记录核实。",
+              "id": "Bahan tidak dikembalikan ke stok; pelaksanaan pengembalian uang tetap diperiksa melalui catatan berwenang."
+            },
+            {
+              "zh": "按当前配方自动把原料加回库存。",
+              "id": "Tambahkan bahan otomatis ke stok menurut resep sekarang."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "已制作原料已经消耗，退款审批不会逆转实际制作。",
+            "id": "Bahan produk yang sudah dibuat telah terpakai; persetujuan dana tidak membalikkan produksi nyata."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：QRIS成功画面、保存失败及已制作退款",
+          "id": "Praktik modul ini: Tampilan QRIS berhasil, kegagalan menyimpan, dan pengembalian produk yang sudah dibuat"
+        },
+        {
+          "zh": "应留证据：脱敏凭证、待对账与保存失败记录、模拟退款审批依据。",
+          "id": "Bukti yang diperlukan: Bukti tanpa data pribadi, catatan rekonsiliasi tertunda dan gagal simpan, dasar persetujuan pengembalian simulasi."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bank Indonesia: QRIS — payment standard; shop roles are separately defined",
+          "url": "https://www.bi.go.id/id/fungsi-utama/sistem-pembayaran/ritel/kanal-layanan/qris/default.aspx"
+        }
+      ]
+    },
+    {
+      "key": "training-11",
+      "reviewed": true,
+      "title": {
+        "zh": "开店、闭店与交接",
+        "id": "Pembukaan, penutupan, dan serah terima"
+      },
+      "subtitle": {
+        "zh": "检查设备、批次和未结事项，保留冷藏及安全系统所需运行。",
+        "id": "Periksa alat, lot, dan masalah tertunda serta pertahankan operasi pendinginan dan sistem keselamatan yang diperlukan."
+      },
+      "minutes": 45,
+      "sections": [
+        {
+          "key": "training_11_1",
+          "title": {
+            "zh": "开店与服务前放行",
+            "id": "Pembukaan dan kesiapan layanan"
+          },
+          "points": [
+            {
+              "zh": "接班先读上一班异常、隔离批次、待对账支付和待处理退款；确认当班负责人及设备和场地可用条件。",
+              "id": "Baca dahulu penyimpangan shift sebelumnya, lot karantina, pembayaran menunggu rekonsiliasi, dan pengembalian dana tertunda. Pastikan penanggung jawab serta kesiapan alat dan tempat."
+            },
+            {
+              "zh": "按设备清单检查冷藏、制冰、制作及收银设备状态，核对批准储存条件、卫生记录和原料标签；不因赶开店跳过异常处理。",
+              "id": "Periksa pendinginan, pembuat es, alat produksi, dan kasir menurut daftar alat. Cocokkan kondisi simpan, catatan kebersihan, dan label bahan yang disetujui; jangan melewati penanganan masalah karena terburu-buru buka."
+            },
+            {
+              "zh": "按批准流程核对备用金和物料准备，测试仅用指定测试方式，不制造真实收费订单；不具备安全条件的岗位停止服务并上报。",
+              "id": "Cocokkan uang awal kas dan perlengkapan menurut prosedur. Gunakan cara uji yang ditetapkan tanpa membuat transaksi pembayaran nyata; hentikan layanan di bagian yang belum memenuhi kondisi aman dan laporkan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "只开电源就认定可营业；用真实顾客交易做测试。",
+              "id": "Menganggap siap beroperasi hanya karena listrik menyala atau memakai transaksi pelanggan nyata untuk pengujian."
+            }
+          ],
+          "practice": {
+            "zh": "执行模拟开店检查，指出一个必须停用的异常及不受影响可继续的岗位。",
+            "id": "Lakukan pemeriksaan pembukaan simulasi dan tunjukkan satu masalah yang mengharuskan penghentian serta bagian lain yang tetap aman beroperasi."
+          },
+          "checklist": [
+            {
+              "zh": "交接未结事项已读，设备及原料条件已核对。",
+              "id": "Masalah tertunda dibaca dan kondisi alat serta bahan diperiksa."
+            },
+            {
+              "zh": "测试无真实收费，风险岗位未放行。",
+              "id": "Pengujian tidak menagih uang nyata dan bagian berisiko belum diizinkan bekerja."
+            }
+          ]
+        },
+        {
+          "key": "training_11_2",
+          "title": {
+            "zh": "闭店与设备保留运行",
+            "id": "Penutupan dan alat yang tetap beroperasi"
+          },
+          "points": [
+            {
+              "zh": "按批次实盘剩余和报损，逐一核对标签、储存条件和截止信息；只按批准要求留存或处置，不一概延长或一概丢弃。",
+              "id": "Hitung sisa dan kerugian per lot, lalu periksa label, kondisi simpan, serta batas penggunaan. Simpan atau tangani sesuai persetujuan, bukan memperpanjang masa pakai atau membuang semuanya secara sembarangan."
+            },
+            {
+              "zh": "按清洁卡完成各区域作业并记录；依设备专属闭店清单决定停机或保留运行，冰箱、冷冻及安全系统按设备要求保持必要运行，不能全断电。",
+              "id": "Selesaikan dan catat pembersihan setiap area menurut kartunya. Gunakan daftar penutupan khusus tiap alat untuk menentukan yang dihentikan atau tetap beroperasi. Kulkas, freezer, dan sistem keselamatan harus tetap beroperasi sesuai kebutuhan petunjuknya; jangan memutus seluruh listrik."
+            },
+            {
+              "zh": "按批准流程核对现金与支付异常、保管钥匙及锁门；最后确认需持续运行设备的供电状态，将未解决事项写入交接。",
+              "id": "Cocokkan kas dan penyimpangan pembayaran, simpan kunci, dan kunci pintu sesuai prosedur. Terakhir, pastikan pasokan listrik alat yang harus tetap berjalan dan catat masalah belum selesai dalam serah terima."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "为省电拉掉总闸；未核对批准期限就给所有剩料换新日期。",
+              "id": "Mematikan sakelar utama untuk menghemat listrik atau mengganti tanggal semua sisa tanpa memeriksa batas yang disetujui."
+            }
+          ],
+          "practice": {
+            "zh": "按现有设备清单分出应停与应保留运行设备，解释每项依据并模拟交接。",
+            "id": "Dari daftar alat yang ada, pisahkan alat yang dihentikan dan yang tetap berjalan. Jelaskan dasar setiap keputusan lalu simulasikan serah terima."
+          },
+          "checklist": [
+            {
+              "zh": "剩余、报损及标签一致。",
+              "id": "Sisa, kerugian, dan label sesuai."
+            },
+            {
+              "zh": "冷藏冷冻及安全系统按要求保留运行，无一刀切断电。",
+              "id": "Pendinginan, pembekuan, dan sistem keselamatan tetap berjalan sesuai kebutuhan tanpa memutus seluruh listrik."
+            }
+          ]
+        },
+        {
+          "key": "training_11_3",
+          "title": {
+            "zh": "异常交接与升级",
+            "id": "Serah terima penyimpangan dan eskalasi"
+          },
+          "points": [
+            {
+              "zh": "按事实记录问题、发生与发现时间、订单或批次、已采取动作、待办及负责人；区分正常待老板对账与保存失败等异常。",
+              "id": "Catat masalah, waktu kejadian dan temuan, pesanan atau lot, tindakan, hal tertunda, serta penanggung jawab. Bedakan pembayaran normal yang menunggu rekonsiliasi pemilik dari masalah seperti gagal menyimpan."
+            },
+            {
+              "zh": "交班双方核对现金实点、付款凭证索引、库存实盘与隔离清单，不在公开交接材料暴露顾客敏感信息，不替对方签已核实。",
+              "id": "Kedua pihak mencocokkan hitungan kas, indeks bukti pembayaran, stok fisik, dan daftar karantina. Jangan membuka data sensitif pelanggan pada bahan serah terima umum atau menandatangani pemeriksaan untuk pihak lain."
+            },
+            {
+              "zh": "有即时安全风险按应急流程处理，无权解除隔离或关闭异常；后续人员读取原记录并追加结果，不删改历史。",
+              "id": "Tangani risiko keselamatan segera melalui prosedur darurat. Jangan mencabut karantina atau menutup masalah tanpa kewenangan. Petugas berikutnya membaca catatan asli dan menambahkan hasil, bukan menghapus riwayat."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "口头说一声却无记录；把待处理异常写成已完成。",
+              "id": "Hanya memberi tahu secara lisan tanpa catatan atau menandai masalah tertunda sebagai selesai."
+            }
+          ],
+          "practice": {
+            "zh": "模拟一笔待对账、一笔保存失败和一批隔离品，分类交接并说明后续负责人。",
+            "id": "Simulasikan pembayaran menunggu rekonsiliasi, pesanan gagal disimpan, dan lot karantina; serahkan secara terpisah dengan penanggung jawab tindak lanjut."
+          },
+          "checklist": [
+            {
+              "zh": "异常分类准确，证据索引和责任人明确。",
+              "id": "Masalah dikelompokkan dengan benar dan rujukan bukti serta penanggung jawab jelas."
+            },
+            {
+              "zh": "未结事项没有伪标完成，历史记录保留。",
+              "id": "Hal tertunda tidak diberi status selesai palsu dan catatan asal dipertahankan."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_11_q1",
+          "q": {
+            "zh": "开店发现冷藏记录缺失应如何处理？",
+            "id": "Apa yang dilakukan saat catatan pendinginan tidak tersedia ketika membuka toko?"
+          },
+          "options": [
+            {
+              "zh": "核实受影响批次并上报，未确认安全前不使用。",
+              "id": "Periksa lot terdampak dan laporkan; jangan gunakan sebelum keamanannya dipastikan."
+            },
+            {
+              "zh": "设备还冷就直接营业使用。",
+              "id": "Langsung gunakan karena alat masih terasa dingin."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "当前感觉不能补足历史温控证据。",
+            "id": "Kondisi yang terasa saat ini tidak menggantikan bukti pengendalian suhu sebelumnya."
+          }
+        },
+        {
+          "key": "training_11_q2",
+          "q": {
+            "zh": "闭店时是否应关闭所有设备和电源？",
+            "id": "Apakah semua alat dan listrik harus dimatikan saat tutup?"
+          },
+          "options": [
+            {
+              "zh": "应该，关总闸最省事。",
+              "id": "Ya, mematikan sakelar utama paling mudah."
+            },
+            {
+              "zh": "不能；按设备清单保留冷藏冷冻及安全系统所需运行。",
+              "id": "Tidak; pertahankan operasi pendinginan, pembekuan, dan sistem keselamatan sesuai daftar alat."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "断电可能损害储存安全和安全系统。",
+            "id": "Pemutusan listrik dapat merusak keamanan penyimpanan dan sistem keselamatan."
+          }
+        },
+        {
+          "key": "training_11_q3",
+          "q": {
+            "zh": "交班时保存失败订单能并入已完成订单吗？",
+            "id": "Bolehkah pesanan gagal disimpan digabung sebagai pesanan selesai saat serah terima?"
+          },
+          "options": [
+            {
+              "zh": "不能，应作为异常保留原证据交接。",
+              "id": "Tidak, serahkan sebagai penyimpangan dengan bukti asli."
+            },
+            {
+              "zh": "可以，顾客付过钱就算完成。",
+              "id": "Boleh, pembayaran pelanggan berarti selesai."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "交接必须准确区分支付、保存和处理状态。",
+            "id": "Serah terima harus membedakan status pembayaran, penyimpanan, dan penanganan dengan benar."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：闭店有待对账与必须持续运行设备",
+          "id": "Praktik modul ini: Ada rekonsiliasi tertunda dan alat yang harus tetap berjalan saat tutup"
+        },
+        {
+          "zh": "应留证据：开闭店设备清单、库存现金实点、未结异常交接。",
+          "id": "Bukti yang diperlukan: Daftar alat buka dan tutup, hitungan stok dan kas, serah terima masalah tertunda."
+        }
+      ],
+      "sources": []
+    },
+    {
+      "key": "training-12",
+      "reviewed": true,
+      "title": {
+        "zh": "带教与综合实操",
+        "id": "Pendampingan dan penilaian praktik terpadu"
+      },
+      "subtitle": {
+        "zh": "本店建议的能力导向训练，完成阅读或班次不等于获准独立上岗。",
+        "id": "Usulan pelatihan berbasis kemampuan untuk toko ini; membaca materi atau menyelesaikan shift tidak otomatis mengizinkan kerja mandiri."
+      },
+      "minutes": 60,
+      "sections": [
+        {
+          "key": "training_12_1",
+          "title": {
+            "zh": "可调整的带教安排",
+            "id": "Rencana pendampingan yang dapat disesuaikan"
+          },
+          "points": [
+            {
+              "zh": "本店建议按“演示、员工复述、受监督练习、反馈、再练习”循环安排，主管指定带教人与适用岗位，不冒称国际品牌内部培训计划。",
+              "id": "Usulan toko: gunakan siklus demonstrasi, penjelasan ulang oleh karyawan, latihan dengan pengawasan, umpan balik, dan latihan ulang. Penyelia menunjuk pendamping serta tugas yang sesuai; ini bukan rencana pelatihan internal merek internasional."
+            },
+            {
+              "zh": "七班次仅是可延长的建议：先岗位卫生，再服务过敏原、收货盘点、加工半成品、制作清洁、收银交班，最后综合演练；可按能力与门店情况调整，不以天数自动通过。",
+              "id": "Tujuh shift hanyalah usulan yang dapat diperpanjang: mulai dari tugas dan higiene, lalu layanan dan alergen, penerimaan dan stok, pengolahan, pembuatan dan pembersihan, kasir dan serah terima, kemudian latihan terpadu. Sesuaikan dengan kemampuan serta kondisi toko; jumlah hari bukan kelulusan otomatis."
+            },
+            {
+              "zh": "每次练习记录主题、所用批准卡版本、观察事实和需补练项目；学习分钟数只是估计，不是工时、法律要求或最低合格时长。",
+              "id": "Catat topik latihan, versi kartu yang dipakai, hasil pengamatan, dan hal yang perlu diulang. Perkiraan menit belajar bukan ketentuan jam kerja, hukum, atau durasi minimum kelulusan."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "上满七班就自动独立上岗；照教材分钟数认定资格。",
+              "id": "Mengizinkan kerja mandiri otomatis setelah tujuh shift atau menganggap perkiraan menit sebagai kualifikasi."
+            }
+          ],
+          "practice": {
+            "zh": "带教人与员工共同列一个可调整练习计划，标出尚不能独立的任务。",
+            "id": "Pendamping dan karyawan menyusun rencana latihan yang dapat disesuaikan serta menandai tugas yang belum boleh dilakukan sendiri."
+          },
+          "checklist": [
+            {
+              "zh": "带教与练习目标明确。",
+              "id": "Pendamping dan tujuan latihan jelas."
+            },
+            {
+              "zh": "排班或阅读完成未被当作能力通过。",
+              "id": "Kehadiran atau selesai membaca tidak dianggap bukti kemampuan."
+            }
+          ]
+        },
+        {
+          "key": "training_12_2",
+          "title": {
+            "zh": "题库与综合实操",
+            "id": "Latihan soal dan praktik terpadu"
+          },
+          "points": [
+            {
+              "zh": "使用本资料每模块三道练习题核对理解，答案仅用于讲解；页面不记录在线成绩、完成率或证书。",
+              "id": "Gunakan tiga soal latihan setiap modul untuk memeriksa pemahaman. Jawaban hanya untuk pembahasan; halaman ini tidak menyimpan nilai daring, persentase selesai, atau sertifikat."
+            },
+            {
+              "zh": "按综合实操表观察12个模块，记录员工、带教人、日期、培训版本、场景、实际动作与证据，由授权主管判断通过或补训，不凭自评通过。",
+              "id": "Amati dua belas modul dengan lembar praktik terpadu. Catat karyawan, pendamping, tanggal, versi materi, skenario, tindakan nyata, dan bukti. Penyelia berwenang memutuskan lulus atau perlu pelatihan ulang, bukan penilaian diri sendiri."
+            },
+            {
+              "zh": "食品安全或支付关键错误立即停止相关操作，保留问题记录，受监督补训后重新评估；不能用其他项目高分抵消，也不能伪造系统完成记录。",
+              "id": "Jika terjadi kesalahan kritis keamanan pangan atau pembayaran, segera hentikan pekerjaan terkait, simpan catatannya, lakukan pelatihan ulang dengan pengawasan, lalu nilai kembali. Nilai baik pada bagian lain tidak menutupi kesalahan kritis dan tidak membenarkan catatan selesai palsu."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "把能背答案当作实操合格；关键错误被平均分抵消。",
+              "id": "Menganggap hafal jawaban sebagai kemampuan praktik atau menutupi kesalahan kritis dengan nilai rata-rata."
+            }
+          ],
+          "practice": {
+            "zh": "按综合表演练一个正常场景与一个关键异常，分别记录通过依据和补训决定。",
+            "id": "Gunakan lembar terpadu untuk satu situasi normal dan satu penyimpangan kritis, lalu catat dasar kelulusan atau keputusan pelatihan ulang."
+          },
+          "checklist": [
+            {
+              "zh": "证据描述具体，由授权主管评定。",
+              "id": "Bukti dijelaskan secara spesifik dan dinilai penyelia berwenang."
+            },
+            {
+              "zh": "关键错误触发停止、补训与复评。",
+              "id": "Kesalahan kritis memicu penghentian, pelatihan ulang, dan penilaian kembali."
+            }
+          ]
+        },
+        {
+          "key": "training_12_3",
+          "title": {
+            "zh": "授权上岗与后续反馈",
+            "id": "Kewenangan kerja mandiri dan tindak lanjut"
+          },
+          "points": [
+            {
+              "zh": "授权主管依据实操证据确认可独立执行的岗位、限制和需继续监督的任务；记录决定，不用员工自行勾选代替授权。",
+              "id": "Penyelia berwenang menentukan tugas yang boleh dilakukan sendiri, batasan, dan tugas yang masih perlu pengawasan berdasarkan bukti praktik. Catat keputusan; pilihan mandiri karyawan tidak menggantikan kewenangan."
+            },
+            {
+              "zh": "岗位、配方、设备或软件版本变化时，先确认新批准资料和需要补训的范围，再执行变化部分；不把旧版本熟练等同新功能熟练。",
+              "id": "Jika tugas, resep, alat, atau versi perangkat lunak berubah, pastikan materi baru yang disetujui dan kebutuhan pelatihan tambahan sebelum menjalankan perubahan. Kemahiran versi lama tidak berarti menguasai fungsi baru."
+            },
+            {
+              "zh": "后续观察与复训按主管批准计划和实际表现安排，不在教材中自定抽查次数；员工持续报告不确定事项，主管记录反馈和复评结果。",
+              "id": "Pengamatan lanjutan dan pelatihan ulang mengikuti rencana yang disetujui penyelia serta kinerja nyata. Materi ini tidak menetapkan jumlah pemeriksaan acak. Karyawan terus melaporkan ketidakpastian, sementara penyelia mencatat umpan balik dan hasil penilaian ulang."
+            }
+          ],
+          "errors": [
+            {
+              "zh": "随意增加“每班必须抽查几次”；未培训就使用新退款或加工功能。",
+              "id": "Menetapkan sendiri jumlah pemeriksaan per shift atau memakai fitur pengembalian dan produksi baru tanpa pelatihan."
+            }
+          ],
+          "practice": {
+            "zh": "模拟一次软件升级，列出需确认功能、仍适用规则及需要主管授权的任务。",
+            "id": "Simulasikan pembaruan perangkat lunak dan sebutkan fungsi yang perlu dipastikan, aturan yang tetap berlaku, serta tugas yang memerlukan izin penyelia."
+          },
+          "checklist": [
+            {
+              "zh": "独立岗位和限制有主管决定。",
+              "id": "Tugas mandiri dan batasannya memiliki keputusan penyelia."
+            },
+            {
+              "zh": "变更有资料核对与必要复训，不设虚构抽查频次。",
+              "id": "Perubahan disertai pemeriksaan materi dan pelatihan yang diperlukan tanpa frekuensi pemeriksaan yang dibuat-buat."
+            }
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "key": "training_12_q1",
+          "q": {
+            "zh": "完成七班次是否自动通过培训？",
+            "id": "Apakah selesai tujuh shift otomatis berarti lulus?"
+          },
+          "options": [
+            {
+              "zh": "不是，须根据观察到的能力和授权确认。",
+              "id": "Tidak, diperlukan kemampuan yang diamati dan konfirmasi berwenang."
+            },
+            {
+              "zh": "是，班次数足够就行。",
+              "id": "Ya, jumlah shift saja sudah cukup."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "建议安排可延长，资格不能靠出勤代替。",
+            "id": "Rencana yang disarankan dapat diperpanjang; kehadiran tidak menggantikan kemampuan."
+          }
+        },
+        {
+          "key": "training_12_q2",
+          "q": {
+            "zh": "多数项目熟练但出现重复收费，能平均后通过吗？",
+            "id": "Bolehkah peserta lulus berdasarkan rata-rata jika mahir pada banyak tugas tetapi menagih dua kali?"
+          },
+          "options": [
+            {
+              "zh": "可以，只要其他项目得分够高。",
+              "id": "Boleh jika nilai bagian lain cukup tinggi."
+            },
+            {
+              "zh": "不能，停止相关操作，补训后重新评估。",
+              "id": "Tidak, hentikan pekerjaan terkait dan lakukan penilaian kembali setelah pelatihan ulang."
+            }
+          ],
+          "answer": 1,
+          "explanation": {
+            "zh": "支付关键错误不能被平均分抵消。",
+            "id": "Kesalahan kritis pembayaran tidak dapat ditutupi nilai rata-rata."
+          }
+        },
+        {
+          "key": "training_12_q3",
+          "q": {
+            "zh": "软件新增功能后，旧培训通过记录是否足够？",
+            "id": "Apakah catatan lulus pelatihan lama cukup ketika perangkat lunak memiliki fungsi baru?"
+          },
+          "options": [
+            {
+              "zh": "不一定，要核实变化并完成必要带教和授权。",
+              "id": "Belum tentu; periksa perubahan dan selesaikan pendampingan serta kewenangan yang diperlukan."
+            },
+            {
+              "zh": "足够，可以直接试用真实订单。",
+              "id": "Cukup, langsung coba pada pesanan nyata."
+            }
+          ],
+          "answer": 0,
+          "explanation": {
+            "zh": "版本变化需确认，不能用真实顾客交易试错。",
+            "id": "Perubahan versi perlu dipastikan, bukan dicoba-coba pada transaksi pelanggan nyata."
+          }
+        }
+      ],
+      "practical": [
+        {
+          "zh": "本模块实操：新人关键操作出错但已完成建议班次",
+          "id": "Praktik modul ini: Karyawan baru membuat kesalahan kritis meski sudah mengikuti shift yang disarankan"
+        },
+        {
+          "zh": "应留证据：带教记录、实操证据、授权范围及补训复评。",
+          "id": "Bukti yang diperlukan: Catatan pendampingan, bukti praktik, batas kewenangan, pelatihan ulang dan penilaian kembali."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Starbucks Careers: public hiring and learning information",
+          "url": "https://careers.starbucks.com/discover-opportunities/hiring-process/"
+        }
+      ]
+    }
+  ],
+  "assessment": {
+    "reviewed": true,
+    "title": {
+      "zh": "综合实操观察表",
+      "id": "Lembar pengamatan praktik terpadu"
+    },
+    "instructions": [
+      {
+        "zh": "本表为本店建议考核材料，不是官方认证或品牌评分；由授权主管依据证据作最终决定。",
+        "id": "Lembar ini adalah usulan penilaian toko, bukan sertifikasi resmi atau penilaian merek. Penyelia berwenang mengambil keputusan akhir berdasarkan bukti."
+      },
+      {
+        "zh": "在批准纸面记录填写：员工标识、带教人、日期、培训版本、逐项观察、通过或补训及复评结果。此页面不保存或生成成绩、通知与培训完成。",
+        "id": "Isi catatan yang disetujui dengan identitas karyawan, pendamping, tanggal, versi pelatihan, pengamatan setiap bagian, hasil lulus atau pelatihan ulang, dan penilaian kembali. Halaman ini tidak menyimpan atau membuat nilai, pemberitahuan, maupun penyelesaian pelatihan."
+      }
+    ],
+    "rows": [
+      {
+        "key": "training-01",
+        "station": {
+          "zh": "岗位责任与食品安全",
+          "id": "Peran kerja dan tanggung jawab keamanan pangan"
+        },
+        "scenario": {
+          "zh": "接班找不到当前操作卡",
+          "id": "Kartu kerja yang berlaku tidak ditemukan saat pergantian shift"
+        },
+        "action": {
+          "zh": "暂停不确定操作，核对岗位与卡片版本，向带教人索取批准卡后复述关键步骤。",
+          "id": "Hentikan pekerjaan yang belum jelas, periksa tugas dan versi kartu, minta kartu yang disetujui kepada pendamping lalu ulangi langkah penting."
+        },
+        "evidence": {
+          "zh": "卡片版本、上报对象及复述观察。",
+          "id": "Versi kartu, penerima laporan, dan pengamatan pengulangan langkah."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "找不到批准卡仍凭记忆操作，或未上报。",
+          "id": "Tetap bekerja dari ingatan tanpa kartu yang disetujui atau tidak melapor."
+        }
+      },
+      {
+        "key": "training-02",
+        "station": {
+          "zh": "仪容、洗手与健康报告",
+          "id": "Penampilan, cuci tangan, dan pelaporan kesehatan"
+        },
+        "scenario": {
+          "zh": "收钱后返回食品制作岗",
+          "id": "Kembali menyiapkan pangan setelah menerima uang"
+        },
+        "action": {
+          "zh": "离开收银后先洗手，按批准卫生卡完成清洗干燥；需要手套时换新手套，未完成前不接触食品或洁净器具。",
+          "id": "Setelah menangani uang, cuci dan keringkan tangan sesuai kartu higiene yang disetujui; ganti sarung tangan bila diperlukan sebelum menyentuh pangan atau alat bersih."
+        },
+        "evidence": {
+          "zh": "逐步观察洗手干燥及必要换手套，记录是否先接触食品。",
+          "id": "Pengamatan langkah cuci dan pengeringan tangan serta penggantian sarung tangan bila perlu; catat apakah pangan disentuh lebih dahulu."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "未洗手直接制作，或用原脏手套接触食品。",
+          "id": "Langsung menyiapkan pangan tanpa mencuci tangan atau memakai sarung tangan kotor."
+        }
+      },
+      {
+        "key": "training-03",
+        "station": {
+          "zh": "迎宾、点单与客诉",
+          "id": "Menyambut pelanggan, menerima pesanan, dan menangani keluhan"
+        },
+        "scenario": {
+          "zh": "相近订单并发且一位顾客投诉",
+          "id": "Pesanan mirip datang bersamaan dan ada keluhan pelanggan"
+        },
+        "action": {
+          "zh": "逐单复述杯型选项并标识订单，交付时核对顾客与杯标；听取投诉并区分口味问题与安全风险，按权限上报。",
+          "id": "Ulangi ukuran dan pilihan tiap pesanan, beri identitas, cocokkan pelanggan dan label saat menyerahkan; dengarkan keluhan, bedakan masalah rasa dan risiko keamanan lalu laporkan sesuai kewenangan."
+        },
+        "evidence": {
+          "zh": "两单杯标、交付核对观察及投诉处理记录。",
+          "id": "Label dua pesanan, pengamatan penyerahan, dan catatan penanganan keluhan."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "交错订单，或将安全投诉仅当口味问题处理。",
+          "id": "Pesanan tertukar atau keluhan keamanan diperlakukan hanya sebagai masalah rasa."
+        }
+      },
+      {
+        "key": "training-04",
+        "station": {
+          "zh": "过敏原与交叉接触",
+          "id": "Alergen dan kontak silang"
+        },
+        "scenario": {
+          "zh": "顾客乳过敏但替代原料标签不全",
+          "id": "Pelanggan alergi susu tetapi label bahan pengganti tidak lengkap"
+        },
+        "action": {
+          "zh": "暂停替代原料使用，对照标签配方并向主管确认；说明无法确认过敏原和交叉接触风险，不承诺无乳或安全。",
+          "id": "Tunda penggunaan pengganti, cocokkan label dan resep serta minta konfirmasi penyelia; jelaskan ketidakpastian alergen dan kontak silang tanpa menjanjikan bebas susu atau aman."
+        },
+        "evidence": {
+          "zh": "缺失标签记录、向主管求证和对顾客说明的观察。",
+          "id": "Catatan label tidak lengkap, permintaan konfirmasi, dan pengamatan penjelasan kepada pelanggan."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "标签不明仍使用，或保证不会过敏。",
+          "id": "Menggunakan bahan dengan label tidak jelas atau menjamin tidak akan terjadi alergi."
+        }
+      },
+      {
+        "key": "training-05",
+        "station": {
+          "zh": "收货、批次与储存",
+          "id": "Penerimaan, lot, dan penyimpanan"
+        },
+        "scenario": {
+          "zh": "到货破损与开封标签缺失",
+          "id": "Kiriman rusak dan label setelah dibuka tidak lengkap"
+        },
+        "action": {
+          "zh": "核对到货数量单位与KLIK，隔离破损品及标签不全的开封品，上报并等待批准处置，不补造开封日期。",
+          "id": "Periksa jumlah, satuan, dan KLIK; karantina barang rusak serta bahan terbuka tanpa label lengkap, laporkan dan tunggu keputusan tanpa mengarang tanggal buka."
+        },
+        "evidence": {
+          "zh": "到货及批次记录、隔离标识、上报和批准处置依据。",
+          "id": "Catatan penerimaan dan lot, penanda karantina, laporan, dan dasar keputusan berwenang."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "异常品混回可用库存，或伪造标签日期。",
+          "id": "Barang bermasalah dicampur kembali dengan stok layak pakai atau tanggal label dipalsukan."
+        }
+      },
+      {
+        "key": "training-06",
+        "station": {
+          "zh": "单位、称量、盘点与报损",
+          "id": "Satuan, penimbangan, penghitungan stok, dan kerugian"
+        },
+        "scenario": {
+          "zh": "实盘、理论数和单位不一致",
+          "id": "Hitungan fisik, jumlah teoretis, dan satuan berbeda"
+        },
+        "action": {
+          "zh": "核实计量单位并去皮复秤，分别记录实盘与理论数，复核差异来源后交授权人处理；无密度依据不互换质量体积。",
+          "id": "Pastikan satuan, timbang ulang dengan tara, catat stok fisik dan teoretis terpisah, periksa sumber selisih lalu serahkan kepada pihak berwenang; jangan mengubah massa menjadi volume tanpa dasar densitas."
+        },
+        "evidence": {
+          "zh": "原始称量、单位换算依据及差异复核记录。",
+          "id": "Hasil timbang asli, dasar konversi satuan, dan catatan pemeriksaan selisih."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "为对齐理论数改实盘，或无依据换算单位。",
+          "id": "Mengubah hitungan fisik agar cocok dengan teori atau mengonversi satuan tanpa dasar."
+        }
+      },
+      {
+        "key": "training-07",
+        "station": {
+          "zh": "茶汤、珍珠、奶盖与半成品",
+          "id": "Teh, boba, lapisan susu, dan hasil olahan"
+        },
+        "scenario": {
+          "zh": "加工实产不足并需要交接剩余",
+          "id": "Hasil produksi kurang dari perkiraan dan sisa perlu diserahterimakan"
+        },
+        "action": {
+          "zh": "核对批准加工卡，记录原料实际投入、实际产出与损耗；实盘剩余并标识批次，交接差异，不把理论产量填作实产。",
+          "id": "Periksa kartu pengolahan yang disetujui, catat bahan masuk, hasil nyata, dan kerugian; hitung sisa, tandai lot, dan serahkan catatan selisih tanpa mengganti hasil nyata dengan hasil teoretis."
+        },
+        "evidence": {
+          "zh": "投入称量、实产与剩余记录、批次标签及交接确认。",
+          "id": "Timbangan bahan masuk, catatan hasil dan sisa, label lot, serta konfirmasi serah terima."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "虚填实产或剩余，缺少批次追溯，或擅自补造工艺参数。",
+          "id": "Mengarang hasil atau sisa, kehilangan penelusuran lot, atau menetapkan parameter proses tanpa persetujuan."
+        }
+      },
+      {
+        "key": "training-08",
+        "station": {
+          "zh": "按单制作、品质与重做",
+          "id": "Pembuatan sesuai pesanan, mutu, dan pembuatan ulang"
+        },
+        "scenario": {
+          "zh": "杯型或糖量做错、需授权处理",
+          "id": "Ukuran atau gula salah dan perlu keputusan berwenang"
+        },
+        "action": {
+          "zh": "暂停交付错误杯，核对原单与批准配方，取得授权后重做，记录原单关联及原料消耗。",
+          "id": "Tahan gelas yang salah, cocokkan pesanan asal dan resep yang disetujui, buat ulang setelah mendapat kewenangan, catat kaitan pesanan dan bahan terpakai."
+        },
+        "evidence": {
+          "zh": "错误杯核对、授权及关联原单的重做消耗记录。",
+          "id": "Pemeriksaan gelas salah, persetujuan, dan catatan bahan pembuatan ulang terkait pesanan asal."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "明知错误仍交付，或重做未记录消耗及授权。",
+          "id": "Menyerahkan produk yang diketahui salah atau membuat ulang tanpa catatan bahan dan kewenangan."
+        }
+      },
+      {
+        "key": "training-09",
+        "station": {
+          "zh": "清洁消毒、用水与化学品",
+          "id": "Pembersihan, disinfeksi, air, dan bahan kimia"
+        },
+        "scenario": {
+          "zh": "清洁产品说明缺失或发现污染冰",
+          "id": "Petunjuk pembersih hilang atau es tercemar ditemukan"
+        },
+        "action": {
+          "zh": "清洁剂说明缺失时停用该产品并隔离标识，向主管索取批准说明；发现污染冰立即停止供应、隔离受影响冰和器具并上报，待批准处置和恢复确认，不自行猜配比。",
+          "id": "Hentikan dan tandai pembersih yang petunjuknya hilang, minta petunjuk yang disetujui; bila es tercemar, hentikan penyajian, karantina es dan alat terdampak serta laporkan, tunggu penanganan dan izin penggunaan kembali tanpa menebak takaran."
+        },
+        "evidence": {
+          "zh": "停用隔离标识、受影响范围、上报及恢复使用批准记录。",
+          "id": "Penanda penghentian dan karantina, cakupan terdampak, laporan, serta persetujuan penggunaan kembali."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "继续使用说明缺失清洁剂或污染冰，未隔离上报，或自行猜化学配比。",
+          "id": "Tetap memakai pembersih tanpa petunjuk atau es tercemar, tidak mengarantina dan melapor, atau menebak takaran bahan kimia."
+        }
+      },
+      {
+        "key": "training-10",
+        "station": {
+          "zh": "现金、QRIS与退款",
+          "id": "Tunai, QRIS, dan pengembalian dana"
+        },
+        "scenario": {
+          "zh": "QRIS成功画面、保存失败及已制作退款",
+          "id": "Tampilan QRIS berhasil, kegagalan menyimpan, dan pengembalian produk yang sudah dibuat"
+        },
+        "action": {
+          "zh": "核对QRIS对象金额并按流程留存凭证和待老板对账；保存失败先查原单并上报，不标完成、不重复收费；已制作退款由员工申请管理员审批，原料不回库，审批与实际退款分别核实。",
+          "id": "Cocokkan tujuan dan jumlah QRIS, simpan bukti sesuai prosedur untuk rekonsiliasi pemilik; saat gagal menyimpan, periksa pesanan asal dan laporkan tanpa menandai selesai atau menagih ulang; untuk produk yang sudah dibuat, staf mengajukan pengembalian kepada admin, bahan tidak dikembalikan ke stok, persetujuan dan pembayaran kembali diverifikasi terpisah."
+        },
+        "evidence": {
+          "zh": "脱敏凭证、原单查询和保存失败处置观察、模拟审批记录及已制作原料不回库核对。",
+          "id": "Bukti tersamarkan, pengamatan pencarian pesanan dan penanganan gagal simpan, catatan persetujuan simulasi, serta pemeriksaan bahwa bahan produk jadi tidak dikembalikan ke stok."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "把照片当到账证明、重复收费、保存失败标完成、越权退款，或已制作原料回库，任一项不通过。",
+          "id": "Tidak lulus bila foto dianggap bukti dana masuk, menagih ulang, menandai selesai saat gagal simpan, mengembalikan dana tanpa kewenangan, atau memasukkan kembali bahan produk yang sudah dibuat."
+        }
+      },
+      {
+        "key": "training-11",
+        "station": {
+          "zh": "开店、闭店与交接",
+          "id": "Pembukaan, penutupan, dan serah terima"
+        },
+        "scenario": {
+          "zh": "闭店有待对账与必须持续运行设备",
+          "id": "Ada rekonsiliasi tertunda dan alat yang harus tetap berjalan saat tutup"
+        },
+        "action": {
+          "zh": "清点现金库存并交接待对账事项；对照批准闭店清单现场检查冰箱、冷冻设备、安全系统及其他必要设备仍正常供电运行，只关闭获准断电设备。",
+          "id": "Hitung kas dan stok serta serahkan rekonsiliasi tertunda; cocokkan daftar tutup yang disetujui dan periksa langsung bahwa kulkas, pembeku, sistem keamanan, serta alat penting tetap mendapat daya dan bekerja; matikan hanya alat yang diizinkan."
+        },
+        "evidence": {
+          "zh": "现金库存实点、未结事项接收确认，以及各必要设备现场供电运行检查记录。",
+          "id": "Hitungan kas dan stok, konfirmasi penerimaan hal tertunda, serta catatan pemeriksaan langsung daya dan operasi tiap alat penting."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "一键断全店电、未核实冷藏冷冻安全系统供电，或把待对账伪标完成。",
+          "id": "Mematikan seluruh listrik, tidak memeriksa daya pendingin, pembeku dan sistem keamanan, atau menandai rekonsiliasi tertunda sebagai selesai."
+        }
+      },
+      {
+        "key": "training-12",
+        "station": {
+          "zh": "带教与综合实操",
+          "id": "Pendampingan dan penilaian praktik terpadu"
+        },
+        "scenario": {
+          "zh": "新人关键操作出错但已完成建议班次",
+          "id": "Karyawan baru membuat kesalahan kritis meski sudah mengikuti shift yang disarankan"
+        },
+        "action": {
+          "zh": "停止新人独立执行出错的关键操作，记录具体错误并安排针对性补训，由授权人员复评后确定可独立岗位；建议班次数不代替能力通过。",
+          "id": "Hentikan pekerjaan mandiri pada operasi kritis yang salah, catat kesalahan dan lakukan pelatihan ulang terarah; pihak berwenang menilai ulang sebelum menetapkan tugas mandiri, jumlah shift yang disarankan tidak menggantikan kelulusan kompetensi."
+        },
+        "evidence": {
+          "zh": "错误事实、补训内容、复评观察及授权岗位记录。",
+          "id": "Fakta kesalahan, materi pelatihan ulang, pengamatan penilaian kembali, dan catatan tugas yang diizinkan."
+        },
+        "result": {
+          "zh": "授权主管依据本行证据填写通过／补训；触发不通过条件不得通过，补训后复评。",
+          "id": "Penyelia berwenang mencatat lulus atau pelatihan ulang berdasarkan bukti baris ini; pelanggaran kriteria tidak lulus wajib diperbaiki dan dinilai ulang."
+        },
+        "critical": {
+          "zh": "只凭完成班次放行，或关键安全支付错误未纠正即通过。",
+          "id": "Meluluskan hanya karena shift sudah selesai atau membiarkan kesalahan kritis keamanan maupun pembayaran belum diperbaiki."
+        }
+      }
+    ]
+  },
+  "standardsToConfirm": [
+    {
+      "zh": "批准配方卡：原料与规格、单位、批量、顺序、适用设备、必要加工参数、放行标准及批准版本。缺安全字段先停做。",
+      "id": "Kartu resep yang disetujui: bahan dan spesifikasi, satuan, jumlah produksi, urutan, alat, parameter yang diperlukan, kriteria kelayakan, dan versi persetujuan. Hentikan pekerjaan jika informasi keamanan belum tersedia."
+    },
+    {
+      "zh": "标签与储存卡：供应商/批次追溯、未开封与开封及加工后分别适用的期限、保存条件和温控测量记录要求。未知时停用隔离。",
+      "id": "Label dan kartu penyimpanan: pemasok dan lot, batas sebelum dibuka, setelah dibuka, dan setelah diolah, kondisi simpan, serta pencatatan suhu. Hentikan penggunaan dan pisahkan bila belum jelas."
+    },
+    {
+      "zh": "过敏原资料：现用各原料准确标签、完整配方、替代原料核查及实际可执行的交叉接触控制与顾客告知内容。",
+      "id": "Informasi alergen: label akurat bahan yang digunakan, resep lengkap, pemeriksaan pengganti, pengendalian kontak silang yang dapat dijalankan, serta penjelasan kepada pelanggan."
+    },
+    {
+      "zh": "清洁消毒卡：适用产品和表面、标签浓度/接触/冲洗/防护、设备清洁与放行要求。不得猜配比。",
+      "id": "Kartu pembersihan dan disinfeksi: produk dan permukaan yang sesuai, konsentrasi, kontak, pembilasan, perlindungan, serta syarat pembersihan dan kelayakan alat. Jangan menebak campuran."
+    },
+    {
+      "zh": "设备及应急资料：开闭店保留运行清单、维护说明、安全水冰检查路径、应急联系人与所在地适用健康要求。",
+      "id": "Dokumen alat dan darurat: daftar alat yang tetap berjalan saat tutup, petunjuk perawatan, pemeriksaan air dan es aman, kontak darurat, serta persyaratan kesehatan setempat yang berlaku."
+    },
+    {
+      "zh": "实操记录路径：确认当前软件版本、半成品实际扣料方式、获准纸面表、异常恢复联系人、盘点报损审批及对账方式；不得假定未发布功能可用。",
+      "id": "Jalur pencatatan: pastikan versi perangkat lunak, cara pemakaian stok hasil olahan, formulir yang disetujui, penanggung jawab pemulihan, persetujuan hitungan dan kerugian, serta rekonsiliasi. Jangan menganggap fungsi yang belum dirilis sudah tersedia."
+    },
+    {
+      "zh": "私密凭证执行细则：指定拍摄设备/保存位置、最少信息、访问权限、保留和删除要求。老板独享到账查询、正常单不逐单等老板、保存失败不重复收费等已定规则不在待定范围。",
+      "id": "Rincian bukti privat: perangkat dan lokasi simpan yang ditetapkan, informasi minimum, akses, serta ketentuan retensi dan penghapusan. Aturan hanya pemilik memeriksa dana masuk, tanpa menunggu pemilik untuk setiap pesanan normal, dan tanpa tagihan ulang karena gagal menyimpan sudah ditetapkan, bukan keputusan yang masih tertunda."
+    },
+    {
+      "zh": "带教安排：授权带教和最终评定人员、适用岗位和观察记录；后续检查按批准计划，不新增固定频次或自动完成资格。",
+      "id": "Pendampingan: pendamping dan penilai akhir yang berwenang, tugas terkait, serta catatan pengamatan. Pemeriksaan lanjutan mengikuti rencana yang disetujui tanpa menambah frekuensi tetap atau kelulusan otomatis."
+    }
+  ]
+}

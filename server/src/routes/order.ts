@@ -1,3 +1,4 @@
+import prisma from '../config/database'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'

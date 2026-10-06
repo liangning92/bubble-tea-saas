@@ -1,9 +1,12 @@
+import { trainingLibraryRouter } from './trainingLibrary'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { prisma } from '../config/database'
 import { socketManager } from '../socket'
 
 const router = Router()
+
+router.use('/library', trainingLibraryRouter)
 
 // 默认培训类别
 const DEFAULT_TRAINING_TYPES = [
@@ -91,6 +94,8 @@ router.post('/push', authenticate, authorize('admin', 'manager'), async (req: Au
 
     //推送通知给指定员工或所有员工
     if (staffId) {
+      const target = await prisma.staff.findFirst({ where: { id: staffId, storeId, status: 'active' }, select: { id: true } })
+      if (!target) return res.status(404).json({ code: 404, message: 'Staff not found' })
       socketManager.emitToStaff(staffId, 'training:new', {
         id: training.id,
         title: training.title,
@@ -124,8 +129,9 @@ router.post('/push', authenticate, authorize('admin', 'manager'), async (req: Au
 // GET /api/training/my - Get current staff's training records
 router.get('/my', authenticate, async (req: AuthRequest, res) => {
   try {
+    if (!req.user!.staffId) return res.status(403).json({ code: 403, message: 'Staff identity required' })
     const trainings = await prisma.training.findMany({
-      where: { staffId: req.user!.staffId },
+      where: { staffId: req.user!.staffId, storeId: req.user!.storeId },
       orderBy: { startDate: 'desc' }
     })
     res.json({ code: 200, data: trainings, timestamp: new Date().toISOString() })
@@ -138,10 +144,12 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
 // GET /api/training/my/:id - Get training detail
 router.get('/my/:id', authenticate, async (req: AuthRequest, res) => {
   try {
+    if (!req.user!.staffId) return res.status(403).json({ code: 403, message: 'Staff identity required' })
     const training = await prisma.training.findFirst({
       where: {
         id: req.params.id,
-        staffId: req.user!.staffId
+        staffId: req.user!.staffId,
+        storeId: req.user!.storeId
       }
     })
     if (!training) {

@@ -204,7 +204,7 @@ router.delete('/:type/:filename', authenticate, (req: AuthRequest, res) => {
     const { type, filename } = req.params
     const allowedTypes = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen']
 
-    if (!allowedTypes.includes(type)) {
+    if (!allowedTypes.includes(type) || filename !== path.basename(filename) || filename.includes('\\') || filename.startsWith('.')) {
       return res.status(400).json({ code: 400, message: 'Invalid file type' })
     }
 

@@ -1,3 +1,5 @@
+import prisma from '../config/database'
+import { trainingStaffAccess, trainingRecordAccess } from '../middlewares/trainingAccess'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as StaffManagementService from '../services/StaffManagementService'
@@ -193,7 +195,7 @@ router.get('/sales-stats', authenticate, authorize('admin', 'manager'), async (r
 // ==================== TRAINING ====================
 
 // POST /api/staff-management/training
-router.post('/training', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/training', authenticate, authorize('admin', 'manager'), trainingStaffAccess, async (req: AuthRequest, res) => {
   try {
     const { staffId, trainingType, title, date, duration, provider, certificate, notes, attachments, status } = req.body
 
@@ -224,7 +226,7 @@ router.post('/training', authenticate, authorize('admin', 'manager'), async (req
 })
 
 // PUT /api/staff-management/training/:id
-router.put('/training/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/training/:id', authenticate, authorize('admin', 'manager'), trainingRecordAccess, (req: AuthRequest, res, next) => req.body.staffId !== undefined ? trainingStaffAccess(req, res, next) : next(), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { staffId, trainingType, title, date, duration, provider, certificate, notes, attachments, status } = req.body
@@ -254,24 +256,6 @@ router.put('/training/:id', authenticate, authorize('admin', 'manager'), async (
   }
 })
 
-// GET /api/staff-management/training/:staffId
-router.get('/training/:staffId', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { staffId } = req.params
-
-    const result = await StaffManagementService.getTrainingRecords(staffId)
-
-    res.json({
-      code: 200,
-      data: { list: result },
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get training records error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get training records' })
-  }
-})
-
 // GET /api/staff-management/training/all?storeId=xxx - 批量获取所有员工的培训记录
 router.get('/training/all', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
@@ -287,6 +271,7 @@ router.get('/training/all', authenticate, authorize('admin', 'manager'), async (
     // 批量获取培训记录
     const trainings = await prisma.training.findMany({
       where: {
+        storeId,
         staffId: { in: staffList.map(s => s.id) }
       },
       orderBy: { startDate: 'desc' }
@@ -295,6 +280,7 @@ router.get('/training/all', authenticate, authorize('admin', 'manager'), async (
     // 附员工名称
     const result = trainings.map(t => ({
       ...t,
+      date: t.startDate.toISOString(), // Existing Admin form compatibility.
       staffName: staffMap[t.staffId] || 'Unknown'
     }))
 
@@ -309,8 +295,26 @@ router.get('/training/all', authenticate, authorize('admin', 'manager'), async (
   }
 })
 
+// GET /api/staff-management/training/:staffId
+router.get('/training/:staffId', authenticate, trainingStaffAccess, async (req: AuthRequest, res) => {
+  try {
+    const { staffId } = req.params
+
+    const result = await StaffManagementService.getTrainingRecords(staffId, req.user!.storeId)
+
+    res.json({
+      code: 200,
+      data: { list: result },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get training records error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get training records' })
+  }
+})
+
 // DELETE /api/staff-management/training/:id
-router.delete('/training/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.delete('/training/:id', authenticate, authorize('admin', 'manager'), trainingRecordAccess, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 

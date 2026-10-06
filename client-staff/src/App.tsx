@@ -1,3 +1,4 @@
+import { TrainingLibraryPage } from './pages/TrainingLibraryPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { LoginPage } from './pages/LoginPage'
@@ -169,6 +170,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/training/library" element={<ProtectedRoute><LayoutWithNav><TrainingLibraryPage /></LayoutWithNav></ProtectedRoute>} />
       <Route
         path="/training"
         element={

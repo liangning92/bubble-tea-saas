@@ -270,9 +270,9 @@ export async function addTrainingRecord(data: {
   })
 }
 
-export async function getTrainingRecords(staffId: string) {
+export async function getTrainingRecords(staffId: string, storeId: string) {
   const records = await prisma.training.findMany({
-    where: { staffId },
+    where: { staffId, storeId },
     orderBy: { startDate: 'desc' }
   })
   return records

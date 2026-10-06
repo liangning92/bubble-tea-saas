@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      trainingMedia: {"nav": "Pelatihan", "courses": "Materi", "records": "Catatan pelatihan", "title": "Video pelatihan", "load": "Muat video", "error": "Video gagal dimuat. Coba lagi.", "loading": "Memuat…", "upload": "Unggah atau ganti video", "remove": "Hapus tautan video", "limits": "MP4 non-fragmentasi (AVC/H.264), maks 20 MiB. Putar dan geser setelah dimuat; draf hanya untuk admin. Penggantian/penghapusan mempertahankan berkas riwayat. Proxy mungkin membatasi ukuran lebih rendah.", "failed": "Unggah gagal. Periksa format, ukuran dan batas proxy.", "saved": "Video diunggah. Simpan draf dan tinjau sebelum diterbitkan."},
       "common": {
         "save": "Simpan",
         "cancel": "Batal",
@@ -3643,6 +3644,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      trainingMedia: {"nav": "Training", "courses": "Courses", "records": "Training records", "title": "Video lesson", "load": "Load video", "error": "Video could not be loaded. Retry.", "loading": "Loading…", "upload": "Upload or replace video", "remove": "Remove video association", "limits": "Non-fragmented MP4 (AVC/H.264), max 20 MiB. Playback and seeking after loading; drafts are admin-only. Replacing/removing retains historical files. A proxy may impose a lower upload limit.", "failed": "Video upload failed. Check format, size and proxy limit.", "saved": "Video uploaded. Save draft and review before publishing."},
       "common": {
         "save": "Save",
         "cancel": "Cancel",
@@ -7219,6 +7221,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      trainingMedia: {"nav": "培训", "courses": "课程", "records": "培训记录", "title": "视频教程", "load": "加载视频", "error": "视频加载失败，请重试", "loading": "加载中…", "upload": "上传或替换视频", "remove": "移除视频关联", "limits": "普通非分片 MP4（AVC/H.264），最多 20 MiB。加载完成后可播放和拖动；草稿仅管理员可见。替换/移除不删除历史文件。代理可能设置更低上传限制。", "failed": "视频上传失败，请检查格式、容量及代理限制", "saved": "视频已上传；请保存草稿并审核发布。"},
       "common": {
         "save": "保存",
         "cancel": "取消",

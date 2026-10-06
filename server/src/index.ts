@@ -167,7 +167,12 @@ app.use(express.urlencoded({ extended: true }))
 // In asar: app.asar.unpacked/server/uploads (via extraResources)
 // In dev: project root/server/uploads (fallback)
 const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, '../uploads')
-app.use('/uploads', express.static(uploadsPath))
+// Protect training-only private storage, including percent-encoded path components.
+app.use('/uploads', (req, res, next) => {
+  try { if (decodeURIComponent(req.path).replace(/\\/g, '/').toLowerCase().split('/').includes('.training-private')) return res.sendStatus(404) }
+  catch { return res.sendStatus(400) }
+  next()
+}, express.static(uploadsPath))
 
 // Health Check
 app.get('/health', (req, res) => {
