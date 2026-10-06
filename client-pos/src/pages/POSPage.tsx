@@ -1,3 +1,5 @@
+import { ScanPage } from './ScanPage'
+import { decodeScanIdentity, resolveScanProduct, validCatalogSpec, validCatalogPrice, ScanIdentity } from '../utils/barcodeIdentity'
 import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -155,13 +157,15 @@ interface DualScreenConfig {
   }
 }
 
-export function POSPage() {
+export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
 
   // 状态 - 使用Zustand stores
   const [cart, setCart] = useState<CartItem[]>([])
+  const [scanRequestVersion, setScanRequestVersion] = useState(0)
+  const scanIntentVersion = useRef(0)
   const { filter, setFilter, products, setProducts, searchQuery, setSearchQuery } = useProductStore()
   const [loading, setLoading] = useState(true)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -1592,44 +1596,54 @@ export function POSPage() {
     }
   }, [])
 
-  // 条码扫描 - 从扫码页面添加商品
+  const openScan = () => {
+    scanIntentVersion.current += 1
+    localStorage.removeItem('scan_to_cart')
+    setShowScanModal(true)
+  }
   useEffect(() => {
-    const scanData = localStorage.getItem('scan_to_cart')
-    if (scanData) {
+    if (scanRoute) openScan()
+  }, [scanRoute])
+
+  const closeScan = () => {
+    setShowScanModal(false)
+    if (scanRoute) navigate('/pos')
+  }
+  const chooseScannedIdentity = (identity: ScanIdentity) => {
+    localStorage.setItem('scan_to_cart', JSON.stringify(identity))
+    scanIntentVersion.current += 1
+    setScanRequestVersion(scanIntentVersion.current)
+    closeScan()
+  }
+
+  // Barcode handoff carries identity only; never use old/local prices or guess a spec.
+  useEffect(() => {
+    const raw = localStorage.getItem('scan_to_cart')
+    if (!raw || showScanModal) return
+    const storeId = user?.storeId || ''
+    const scan = decodeScanIdentity(raw, storeId)
+    const consume = () => { if (localStorage.getItem('scan_to_cart') === raw) localStorage.removeItem('scan_to_cart') }
+    if (!scan) { consume(); showToast(t('barcodeIdentity.invalid'), 'warning'); return }
+    if (!navigator.onLine) { consume(); showToast(t('barcodeIdentity.unavailable'), 'warning'); return }
+    let cancelled = false
+    const authToken = useAuthStore.getState().token
+    const intent = scanIntentVersion.current
+    const current = () => !cancelled && scanIntentVersion.current === intent && useAuthStore.getState().user?.storeId === storeId && useAuthStore.getState().token === authToken && localStorage.getItem('scan_to_cart') === raw
+    const load = async () => {
       try {
-        const item = JSON.parse(scanData)
-        setConfirmModal({
-          isOpen: true,
-          title: t('pos.scanConfirmTitle', 'Add Scanned Item'),
-          message: t('pos.addScanConfirm', { product: item.productName }),
-          type: 'info',
-          onConfirm: () => {
-            const newItem: CartItem = {
-              id: `SCAN-${Date.now()}`,
-              productId: item.productId || '',
-              productName: item.productName,
-              specId: item.specId || '',  // 保留规格ID以便重复检测
-              specName: item.specName || item.productName,
-              unitPrice: item.unitPrice || 0,
-              quantity: item.quantity || 1,
-              addons: item.addons || []
-            }
-            setCart(prev => {
-              const existIdx = prev.findIndex(i => i.productName === newItem.productName && i.specName === newItem.specName)
-              if (existIdx >= 0) {
-                return prev.map((it, i) => i === existIdx ? { ...it, quantity: it.quantity + newItem.quantity } : it)
-              }
-              return [...prev, newItem]
-            })
-            localStorage.removeItem('scan_to_cart')
-          }
-        })
-      } catch (e) {
-        console.error('Failed to parse scan data', e)
-        localStorage.removeItem('scan_to_cart')
+        const response = await posApi.getProducts(storeId)
+        if (!current()) return
+        const product = resolveScanProduct(scan, response.data?.data?.list, storeId)
+        consume()
+        if (!product) { showToast(t('barcodeIdentity.invalid'), 'warning'); return }
+        openProductOptions(product)
+      } catch {
+        if (current()) { consume(); showToast(t('barcodeIdentity.unavailable'), 'warning') }
       }
     }
-  }, [])
+    void load()
+    return () => { cancelled = true }
+  }, [user?.storeId, scanRequestVersion, showScanModal])
 
   // 同步状态
   useEffect(() => {
@@ -1944,6 +1958,10 @@ export function POSPage() {
   // 快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (showScanModal) {
+        if (e.key === 'Escape') { e.preventDefault(); closeScan() }
+        return
+      }
       // F1-F4: 渠道快捷切换（严格限定在可用渠道内）
       if (e.key === 'F1') { e.preventDefault(); if (availableChannels[0]) setSelectedChannel(availableChannels[0]) }
       if (e.key === 'F2') { e.preventDefault(); if (availableChannels[1]) setSelectedChannel(availableChannels[1]) }
@@ -1982,7 +2000,7 @@ export function POSPage() {
           const filtered = products.filter(p => filter === 'all' || p.category?.name === filter)
           if (filtered[num - 1]) {
             const p = filtered[num - 1]
-            if (p.specs?.[0]) handleSpecClick(p, p.specs[0])
+            openProductOptions(p)
           }
         }
       }
@@ -2166,6 +2184,10 @@ export function POSPage() {
   // 添加到购物车
   const handleAddToCartWithAddons = () => {
     if (!selectedProduct || !selectedSpec) return
+    if (!validCatalogSpec(selectedSpec) || !selectedProduct.specs.some(s => s.id === selectedSpec.id && s.price === selectedSpec.price) || selectedAddonIds.some(id => {
+      const addon = selectedProduct.addons.find(a => a.addonId === id)?.addon
+      return !addon || !validCatalogPrice(addon.price)
+    })) { showToast(t('barcodeIdentity.invalid'), 'warning'); return }
     const addons = selectedAddonIds.map(id => {
       const addon = selectedProduct.addons.find(a => a.addonId === id)?.addon
       return { id, name: addon?.name || '', price: addon?.price || 0, qty: 1 }
@@ -2191,9 +2213,9 @@ export function POSPage() {
 
     setCart(prev => {
       const existIdx = prev.findIndex(
-        i => i.productId === newItem.productId && i.specId === newItem.specId &&
+        i => i.productId === newItem.productId && i.specId === newItem.specId && i.unitPrice === newItem.unitPrice &&
         i.sugarLevel === newItem.sugarLevel && i.iceLevel === newItem.iceLevel &&
-        JSON.stringify(i.addons.map(a => a.id).sort()) === JSON.stringify(addons.map(a => a.id).sort())
+        JSON.stringify(i.addons.map(a => [a.id, a.price, a.qty]).sort()) === JSON.stringify(addons.map(a => [a.id, a.price, a.qty]).sort())
       )
       if (existIdx >= 0) {
         return prev.map((item, i) => i === existIdx ? { ...item, quantity: item.quantity + addonQty } : item)
@@ -2225,7 +2247,7 @@ export function POSPage() {
   }
 
   // 点击规格 - 打开选择弹窗
-  const handleSpecClick = (product: Product, spec: { id: string; name: string; price: number }) => {
+  const handleSpecClick = (product: Product, spec: { id: string; name: string; price: number } | null) => {
     setSelectedProduct(product)
     setSelectedSpec(spec)
     setSelectedAddonIds([])
@@ -2233,6 +2255,15 @@ export function POSPage() {
     setSelectedSugar('normal_sugar')
     setSelectedIce('normal_ice')
     setShowAddonModal(true)
+  }
+
+  const openProductOptions = (product: Product) => {
+    if (!Array.isArray(product.specs) || !product.specs.length || !product.specs.every(validCatalogSpec)) {
+      showToast(t('barcodeIdentity.invalid'), 'warning')
+      return
+    }
+    // One valid spec is unambiguous. Multiple specs always need an operator choice.
+    handleSpecClick(product, product.specs.length === 1 ? product.specs[0] : null)
   }
 
   const addItemDirectly = (newItem: CartItem) => {
@@ -3336,7 +3367,7 @@ export function POSPage() {
                   id: 'scan',
                   icon: <ScanLine size={18} />,
                   labelKey: posLayout.toolbarLabels?.scan || 'toolbar.scan',
-                  onClick: () => setShowScanModal(true)
+                  onClick: openScan
                 })
               }
               if (posLayout.showHistory !== false) {
@@ -3531,7 +3562,7 @@ export function POSPage() {
                 <button
                   key={product.id}
                   onClick={() => {
-                    if (product.specs?.length) handleSpecClick(product, product.specs[0])
+                    openProductOptions(product)
                   }}
                   className={`${cardHeightClass} bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary active:scale-95 transition-all overflow-hidden flex flex-col items-center justify-center ${!product.specs?.length ? 'opacity-50' : ''}`}
                   style={{ minHeight: '110px' }}
@@ -3797,19 +3828,27 @@ export function POSPage() {
       {/* ============ 弹窗 ============ */}
 
       {/* 加料弹窗 */}
-      {showAddonModal && selectedProduct && selectedSpec && (
+      {showAddonModal && selectedProduct && (
   <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddonModal(false)}>
     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
       <div className="bg-primary text-white px-4 py-3 flex justify-between items-center">
         <div>
           <h2 className="text-lg font-bold">{selectedProduct.name}</h2>
-          <p className="text-sm opacity-90">{selectedSpec.name} - {formatCurrency(selectedSpec.price)}</p>
+          <p className="text-sm opacity-90">{selectedSpec ? `${selectedSpec.name} - ${formatCurrency(selectedSpec.price)}` : t('barcodeIdentity.chooseSpec')}</p>
         </div>
         <button onClick={() => setShowAddonModal(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30">
           <X size={20} />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {selectedProduct.specs.length > 1 && <div>
+          <p className="text-lg font-bold mb-3">{t('barcodeIdentity.chooseSpec')}</p>
+          <div className="grid grid-cols-2 gap-2">
+            {selectedProduct.specs.map(spec => <button key={spec.id} type="button" onClick={() => handleSpecClick(selectedProduct, spec)} className={`p-3 rounded-xl border-2 text-left ${selectedSpec?.id === spec.id ? 'border-primary bg-primary-light' : 'border-gray-200'}`}>
+              <span className="font-bold">{spec.name}</span><span className="block text-primary">{formatCurrency(spec.price)}</span>
+            </button>)}
+          </div>
+        </div>}
         <div>
           <p className="text-lg font-bold mb-3">{t('pos.sugarLevel')}</p>
           <div className="grid grid-cols-5 gap-2">
@@ -3869,7 +3908,7 @@ export function POSPage() {
           <span className="w-10 text-center text-xl font-bold">{addonQty}</span>
           <button onClick={() => setAddonQty(addonQty + 1)} className="w-12 h-12 rounded-full bg-primary text-white font-bold text-xl flex items-center justify-center active:scale-95 touch-feedback">+</button>
         </div>
-        <button onClick={handleAddToCartWithAddons} className="w-full py-3 bg-primary text-white rounded-xl text-base font-bold active:scale-95 transition-transform touch-feedback">
+        <button onClick={handleAddToCartWithAddons} disabled={!selectedSpec} className="w-full py-3 bg-primary text-white rounded-xl text-base font-bold active:scale-95 transition-transform touch-feedback disabled:opacity-50">
           {t('pos.addToCartConfirm')} ({addonQty})
         </button>
       </div>
@@ -4965,19 +5004,11 @@ export function POSPage() {
         />
       )}
 
-      {/* 扫描弹窗 */}
+      {/* Keep the cash register mounted while scanning; only identity leaves this panel. */}
       {showScanModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowScanModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeScan}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 flex justify-between items-center border-b">
-              <h3 className="font-bold">{t('toolbar.scan')}</h3>
-              <button onClick={() => setShowScanModal(false)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-4">
-              <p className="text-gray-500 text-center py-8">{t('toolbar.scanPlaceholder')}</p>
-            </div>
+            <ScanPage onChooseIdentity={chooseScannedIdentity} onClose={closeScan} />
           </div>
         </div>
       )}

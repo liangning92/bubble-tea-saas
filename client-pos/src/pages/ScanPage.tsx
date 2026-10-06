@@ -4,13 +4,12 @@ import { useTranslation } from 'react-i18next'
 import { X, ScanLine, Keyboard } from 'lucide-react'
 import { posApi } from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { formatCurrency } from '../utils/helpers'
+import { ScanIdentity } from '../utils/barcodeIdentity'
 
 interface ScannedProduct {
   id: string
   name: string
-  price: number
-  barcode: string
+  storeId: string
 }
 
 interface ScannedMember {
@@ -20,7 +19,7 @@ interface ScannedMember {
   points: number
 }
 
-export function ScanPage() {
+export function ScanPage({ onChooseIdentity, onClose }: { onChooseIdentity?: (identity: ScanIdentity) => void; onClose?: () => void } = {}) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -31,6 +30,8 @@ export function ScanPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const scanSearchVersion = useRef(0)
+  useEffect(() => () => { scanSearchVersion.current += 1 }, [])
 
   // Auto-focus input
   useEffect(() => {
@@ -40,6 +41,10 @@ export function ScanPage() {
   // Keyboard mode scan (USB scanner is essentially keyboard input)
   const handleManualScan = async () => {
     if (!manualInput.trim()) return
+    const request = ++scanSearchVersion.current
+    const storeId = user?.storeId
+    const authToken = useAuthStore.getState().token
+    const current = () => request === scanSearchVersion.current && useAuthStore.getState().user?.storeId === storeId && useAuthStore.getState().token === authToken
     setLoading(true)
     setError('')
     setScannedProduct(null)
@@ -49,12 +54,14 @@ export function ScanPage() {
     try {
       // Try product first
       const productRes = await posApi.getProductByBarcode(manualInput.trim())
+      if (!current()) return
       if (productRes.data?.data) {
         setScannedProduct(productRes.data.data)
         found = true
       } else {
         // Try member
         const memberRes = await posApi.getMemberByBarcode(manualInput.trim())
+        if (!current()) return
         if (memberRes.data?.data) {
           setScannedMember(memberRes.data.data)
           found = true
@@ -63,8 +70,9 @@ export function ScanPage() {
         }
       }
     } catch (err) {
-      setError(t('scan.scanFailed'))
+      if (current()) setError(t('scan.scanFailed'))
     } finally {
+      if (!current()) return
       setLoading(false)
       // Only clear input on success, keep on error so user can see what they typed
       if (found) {
@@ -77,17 +85,16 @@ export function ScanPage() {
   // Add product to cart (via localStorage)
   const handleAddToCart = () => {
     if (!scannedProduct) return
-    const cartData = {
-      productId: scannedProduct.id,
-      productName: scannedProduct.name,
-      specName: scannedProduct.name,
-      unitPrice: scannedProduct.price,
-      quantity: 1,
-      addons: []
+    if (!user?.storeId || scannedProduct.storeId !== user.storeId) {
+      setError(t('barcodeIdentity.invalid'))
+      return
     }
-    // Save to localStorage, POSPage will detect and add
-    localStorage.setItem('scan_to_cart', JSON.stringify(cartData))
-    navigate('/')
+    const identity: ScanIdentity = { version: 1, storeId: user.storeId, productId: scannedProduct.id }
+    if (onChooseIdentity) onChooseIdentity(identity)
+    else {
+      localStorage.setItem('scan_to_cart', JSON.stringify(identity))
+      navigate('/')
+    }
   }
 
   return (
@@ -96,7 +103,7 @@ export function ScanPage() {
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
+            <button onClick={() => onClose ? onClose() : navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
               <X size={20} />
             </button>
             <h1 className="text-lg font-bold">{t('scan.title')}</h1>
@@ -141,7 +148,14 @@ export function ScanPage() {
                 ref={inputRef}
                 type="text"
                 value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
+                onChange={(e) => {
+                  scanSearchVersion.current += 1
+                  setLoading(false)
+                  setScannedProduct(null)
+                  setScannedMember(null)
+                  setError('')
+                  setManualInput(e.target.value)
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && handleManualScan()}
                 placeholder={t('scan.enterBarcode')}
                 className="w-full p-4 border-2 border-gray-200 rounded-xl text-lg text-center focus:border-pink-500 focus:outline-none"
@@ -165,12 +179,12 @@ export function ScanPage() {
               <div className="mt-4 p-4 bg-green-50 rounded-xl">
                 <p className="text-sm text-gray-500">{t('scan.product')}</p>
                 <p className="font-bold text-lg">{scannedProduct.name}</p>
-                <p className="text-pink-500 font-bold">{formatCurrency(scannedProduct.price)}</p>
+                <p className="text-sm text-gray-600">{t('barcodeIdentity.chooseInPOS')}</p>
                 <button
                   onClick={handleAddToCart}
                   className="w-full mt-3 py-3 bg-green-500 text-white rounded-xl font-bold"
                 >
-                  {t('scan.addToCart')}
+                  {t('barcodeIdentity.chooseOptions')}
                 </button>
               </div>
             )}

@@ -6,7 +6,6 @@ import { CashManagementPage } from './pages/CashManagementPage'
 import { DiagnosticsPage } from './pages/DiagnosticsPage'
 import { CustomerDisplayPage } from './pages/CustomerDisplayPage'
 import { RegisterMemberPage } from './pages/RegisterMemberPage'
-import { ScanPage } from './pages/ScanPage'
 import { HygieneTasksPage } from './pages/HygieneTasksPage'
 import { UpdateNotification } from './components/UpdateNotification'
 import { useAuthStore } from './stores/auth'
@@ -32,7 +31,7 @@ function App() {
       <Route path="/register-member" element={<RegisterMemberPage />} />
       <Route path="/scan" element={
         <ProtectedRoute>
-          <ScanPage />
+          <POSPage scanRoute />
         </ProtectedRoute>
       } />
       <Route path="/history" element={

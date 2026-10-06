@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      "barcodeIdentity": {"invalid": "Produk atau spesifikasi tidak dapat diverifikasi untuk toko ini. Pindai ulang; keranjang tetap tersimpan.", "unavailable": "Katalog produk saat ini tidak dapat dibaca. Sambungkan kembali dan pindai ulang; keranjang tetap tersimpan.", "chooseInPOS": "Spesifikasi, harga saat ini, dan tambahan akan dipilih di POS.", "chooseOptions": "Pilih opsi di POS", "chooseSpec": "Pilih spesifikasi"},
       "printerRouting": {"configure": "Konfigurasikan printer aktif untuk fungsi ini sebelum mencetak. Printer yang dinonaktifkan atau tidak cocok tidak akan digunakan.", "failed": "Cetak gagal atau belum terkonfirmasi. Status pesanan tetap; periksa hasil cetak sebelum mencoba ulang. Jangan ulangi pembayaran.", "configured": "Dikonfigurasi (belum diuji fisik)", "unavailable": "Tidak tersedia"},
       "shiftEvidence": {"title": "Catatan setelah buka shift", "provisional": "Sementara", "unknown": "Tidak dapat diverifikasi", "notice": "Waktu pencatatan belum membuktikan asal shift. Pesanan offline, catatan tanpa asal, atau pengembalian dana dapat membuat jumlah tidak lengkap.", "window": "Rentang catatan server", "openingFloat": "Modal buka tercatat", "cashSales": "Catatan penjualan tunai", "cashIn": "Catatan kas masuk", "cashOut": "Catatan kas keluar", "qrisReceipts": "Catatan penerimaan QRIS", "receipts": "Catatan penerimaan pesanan", "orders": "Pesanan selesai tercatat", "manualCloseNotice": "Masukkan kas yang dihitung secara manual. Penutupan tetap mengikuti aturan yang ada; ringkasan ini bukan bukti pelunasan dan perlu pemeriksaan manual. Laporan rekonsiliasi otomatis tidak dicetak.", "enterCount": "Masukkan kas hasil hitung", "pending": "Ada {{count}} pesanan lokal belum sinkron. Jumlah belum dapat diverifikasi.", "queueUnknown": "Antrean lokal belum dapat diperiksa. Jumlah belum dapat diverifikasi."},
 
@@ -761,6 +762,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      "barcodeIdentity": {"invalid": "The product or specification cannot be verified for this store. Rescan; your cart is preserved.", "unavailable": "The current product catalog could not be read. Reconnect and rescan; your cart is preserved.", "chooseInPOS": "Select the specification, current price and addons in POS.", "chooseOptions": "Choose options in POS", "chooseSpec": "Choose a specification"},
       "printerRouting": {"configure": "Configure an enabled printer for this purpose before printing. Disabled or mismatched printers will not be used.", "failed": "Printing failed or is unconfirmed. Order status is unchanged; check the paper before retrying. Do not repeat payment.", "configured": "Configured (physical output unverified)", "unavailable": "Unavailable"},
       "shiftEvidence": {"title": "Records since shift opening", "provisional": "Provisional", "unknown": "Unverifiable", "notice": "Record time does not prove the originating shift. Offline orders, unassigned records or refunds may make amounts incomplete.", "window": "Server record window", "openingFloat": "Recorded opening float", "cashSales": "Recorded cash sales", "cashIn": "Recorded cash in", "cashOut": "Recorded cash out", "qrisReceipts": "Recorded QRIS receipts", "receipts": "Recorded order receipts", "orders": "Recorded completed orders", "manualCloseNotice": "Enter counted cash manually. Existing closing rules still apply; this summary does not certify settlement and needs manual review. No automatic reconciliation report is printed.", "enterCount": "Enter counted cash", "pending": "{{count}} local orders remain unsynced. Amounts are unverifiable.", "queueUnknown": "The local queue could not be checked. Amounts are unverifiable."},
 
@@ -1508,6 +1510,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      "barcodeIdentity": {"invalid": "无法核验本店商品或规格，请重新扫码；购物车已保留。", "unavailable": "无法读取当前商品目录，请重连后重新扫码；购物车已保留。", "chooseInPOS": "请在收银页选择规格、当前价格和加料。", "chooseOptions": "在收银页选择选项", "chooseSpec": "请选择规格"},
       "printerRouting": {"configure": "请先配置此用途的已启用打印机。不会使用停用或用途不匹配的设备。", "failed": "打印失败或结果未确认。订单状态不变，请检查出纸后再重试，不要重复收款。", "configured": "已配置（出纸未验证）", "unavailable": "不可用"},
       "shiftEvidence": {"title": "开班后的记录", "provisional": "暂核", "unknown": "不可核", "notice": "记录时间不能证明原始班次归属，离线补传、无归属记录或退款可能使金额不完整。", "window": "服务器记录时段", "openingFloat": "已记录开班备用金", "cashSales": "现金销售记录", "cashIn": "现金入款记录", "cashOut": "现金出款记录", "qrisReceipts": "QRIS收款记录", "receipts": "订单收款记录", "orders": "已记录完成订单", "manualCloseNotice": "请手工输入实点现金。关班仍按原有规则处理，此摘要不代表财务结清，关班后仍需手工核对；不自动打印交班对账报告。", "enterCount": "请输入实点现金", "pending": "有{{count}}笔本机订单未同步，金额不可核。", "queueUnknown": "本机队列尚无法核对，金额不可核。"},
 
