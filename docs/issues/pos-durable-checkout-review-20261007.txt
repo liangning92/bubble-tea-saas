@@ -1,0 +1,27 @@
+Durable checkout review increment — local only
+Base local commit476366f41ff761a4551cdb1bb58e839ccc52a966; branch fix/pos-durable-checkout-intent.
+Independent review source thread01a11368: permanent barrier after actual retry201; sending/legacy dead end; stock rollback generic500; rejected/discarded pending count.
+
+Result:
+- Original same-UUID successful create201 atomically saves confirmation and removes only matching intent. Refresh retains proof; explicit acknowledgement starts EMPTY next basket, never reprints/recharges original.
+- Sent/legacy/unknown records can be explicitly isolated with actor/time audit containing full original records. Quarantine never means unpaid or paid, never remints/resends original, and stays visible/uncertain in shift evidence. Cross-tab baskets clear when confirmation/isolation appears. Inflight synchronization cannot be quarantined. Corrupt records fail closed for technical investigation.
+- Inventory shortage now throws typed business rejection inside original transaction. Only after rejection plus independent absence read does route return structured409 not_committed with original identity. Frontend requires matching identity/proof. Generic500, conflict and uncertain reads remain review. No financial algorithm or schema change.
+- Shift pending evidence excludes rejected/discarded resolutions, retains quarantined unknowns.
+
+Commands/evidence:
+node --test tests/stoploss/*.test.cjs — 65/65 PASS (/tmp/pos-review-recovery-unit.log).
+node tests/stoploss/checkout-intent-page-check.cjs — 25/25 native React/Chromium/IndexedDB cases PASS (/tmp/pos-review-recovery-all-pages.log), including actual201-shaped retry, refresh/unlock, sent/legacy/cross-tab quarantine and structured rollback refusal.
+node tests/stoploss/shift-page-check.cjs — 10/10 PASS (/tmp/pos-review-shift.log), including rejected/discarded excluded and quarantine retained uncertain.
+node tests/stoploss/checkout-intent-http-check.cjs — SQLite 7 groups PASS, /tmp/pos-intent-http-n7yXcV/evidence.json.
+INTENT_PROVIDER=postgresql node tests/stoploss/checkout-intent-http-check.cjs — PostgreSQL 7 groups PASS, /tmp/pos-intent-http-w6tFhx/evidence.json.
+HTTP acceptance runs current actual Express/JWT/Prisma services against fresh owned databases. Added real inventory409 rollback with unchanged ledgers and genuine HTTP201 through native IDB/SyncManager plus refreshed React empty-next-sale UI. Earlier commit/lost response/retry once-only tests retained. SQLite adapts current PostgreSQL model only in /tmp; stale packaged SQLite missing pickupNumber is not certified. Owned PG stops in finally. No production data/credentials.
+npm run typecheck:pos — PASS.
+npm run i18n:check — all3 PASS, existing hardcoded-language label warnings.
+npm run build:pos — PASS, existing bundle-size warning.
+Prisma generate (synthetic nonconnecting URL), npm run typecheck:server and npm run build:server — PASS. Local server declared dependencies installed offline; no manifest/lock changes.
+Related native page regressions: page-check.cjs 5/5, printer-page-check.cjs 10/10, barcode-page-check.cjs 17/17 PASS; with shift10, 42 related scenarios. Logs /tmp/pos-review-payment.log, /tmp/pos-review-printer.log, /tmp/pos-review-barcode.log.
+bash scripts/security-review.sh — 18 PASS / 0 FAIL / 1 existing store-access warning.
+git diff --check — PASS.
+Temporary localhost listeners and Prisma cache writes approved via normal sandbox escalation; no rejected approval.
+
+No schema, manifest/lock, workflow, pricing/tax/points/stock algorithm, production configuration, package, push or deployment change. Earlier original repos and WIP remain preserved. Full authenticated replay, cross-device/browsing-data loss recovery, corrupt-record resolution, packaged SQLite baseline discrepancy and physical device certification remain outside this batch. Fixed local increment awaits independent review.

@@ -1,3 +1,4 @@
+import { confirmRetriedCheckout } from '../utils/checkoutIntent'
 import Dexie, { Table } from 'dexie'
 import { orderSyncPayload } from '../utils/orderSyncPayload'
 import { connectionManager } from '../services/ConnectionManager'
@@ -23,8 +24,11 @@ export interface LocalOrder {
   shiftSessionId?: string
   memberId?: string
   channelId?: string  // 订单渠道：DINE_IN, GOFOOD, GRAB, SHOPEE, POS
+  recoveredConfirmation?: {serverId: string; orderNumber: string; receivedAt: Date}
+  recoveryAcknowledged?: {actorId: string; at: Date}
+  quarantineAudit?: {actorId: string; at: Date}
   checkoutRequest?: Record<string, any>
-  checkoutResolution?: 'accepted' | 'rejected' | 'discarded' | 'review'
+  checkoutResolution?: 'accepted' | 'rejected' | 'discarded' | 'review' | 'quarantined'
   items: any[]
   subtotal: number
   ppn: number
@@ -174,12 +178,12 @@ export class SyncManager {
       let syncedCount = 0
       for (const [index, order] of claimed.entries()) {
         const item = bulk ? body?.data?.results?.[index] : { success: response.ok, data: body?.data }
-        const accepted = response.ok && item?.success && typeof item.data?.id === 'string' && item.data?.orderNumber === order.orderNumber
-        await db.orders.update(order.id!, { status: accepted ? 'synced' : 'review', serverId: accepted ? item.data.id : undefined,
-          ...(accepted ? { syncedAt: new Date() } : {}), error: accepted ? undefined : String(item?.error || body?.message || `HTTP ${response.status}`) })
+        const accepted = (bulk ? response.status === 200 : response.status === 201) && item?.success && typeof item.data?.id === 'string' && item.data?.orderNumber === order.orderNumber
+        if (accepted) await confirmRetriedCheckout(order, item.data)
+        else await db.orders.update(order.id!, {status:'review',error:String(item?.error || body?.message || `HTTP ${response.status}`)})
         if (accepted) { syncedCount++; this.emit({ type: 'sync:success', orderId: order.localId, serverId: item.data.id }) }
       }
-      // A retry does not clear the active recovery barrier or print. Acknowledgement is not full server replay certification.
+      // Fresh 201 confirmation atomically removes its own barrier; never print from recovery upload.
       this.emit({ type: 'sync:complete', syncedCount, failedCount: claimed.length - syncedCount })
     } catch (error) {
       // No bulk-to-single fallback after response loss: the first write may have committed.

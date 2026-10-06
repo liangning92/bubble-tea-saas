@@ -17,7 +17,7 @@ async function evidence(scenario){
  const server=await createServer({configFile:false,root:path.resolve('client-pos'),cacheDir:'/tmp/pos-shift-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6198,strictPort:true,proxy:{}},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
  try{
   await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync(evidenceDir,{recursive:true});
-  for(const scenario of ['healthy','legacy','refund','queued','read-failure','manual','cash-page']){
+  for(const scenario of ['healthy','legacy','refund','queued','read-failure','manual','cash-page','rejected','discarded','quarantined']){
    const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});let closeCalls=[],failRead=false;const data=await evidence(scenario);const errors=[];
    await context.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url());if(url.origin!=='http://127.0.0.1:6198')return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();
@@ -39,6 +39,7 @@ async function evidence(scenario){
    const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6198/#/'+(scenario==='cash-page'?'cash':'pos'));
    if(scenario!=='cash-page'){
     await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();
+    if(['rejected','discarded','quarantined'].includes(scenario))await page.evaluate(async scenario=>{const {db}=await import('/src/db/offline.ts');await db.orders.add({storeId:'synthetic-store',localId:'synthetic-resolved',status:scenario==='quarantined'?'quarantined':'failed',checkoutResolution:scenario==='quarantined'?'review':scenario,syncAttempts:0,createdAt:new Date()});},scenario);
     if(scenario==='queued')await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');await db.orders.add({storeId:'synthetic-store',localId:'synthetic-queue',status:'failed',syncAttempts:999,createdAt:new Date()});});
     await page.getByRole('button',{name:'Shift',exact:true}).click();await page.getByRole('heading',{name:'Shift Change',exact:true}).waitFor();
    }
@@ -46,8 +47,8 @@ async function evidence(scenario){
    const value=label=>card.locator('dl > div').filter({has:page.locator('dt',{hasText:label})}).locator('dd');
    await expect(value('Expected Cash')).toHaveText('Unverifiable');
    if(scenario==='legacy')await expect(value('Recorded cash sales')).toHaveText('Unverifiable');
-   else if(scenario==='queued'){await expect(card).toContainText('1 local orders remain unsynced');await expect(value('Recorded cash sales')).toHaveText('Unverifiable');}
-   else {await expect(value('Recorded cash sales')).toContainText('200');await expect(value('Recorded cash in')).toContainText('30');}
+   else if(['queued','quarantined'].includes(scenario)){await expect(card).toContainText('1 local orders remain unsynced');await expect(value('Recorded cash sales')).toHaveText('Unverifiable');}
+   else {if(['rejected','discarded'].includes(scenario))await expect(card).not.toContainText('local orders remain unsynced');await expect(value('Recorded cash sales')).toContainText('200');await expect(value('Recorded cash in')).toContainText('30');}
    if(scenario==='refund')await expect(value('Recorded QRIS receipts')).toHaveText('Unverifiable');
    if(scenario==='read-failure'){
     await page.getByRole('heading',{name:'Shift Change',exact:true}).locator('..').getByRole('button').click();failRead=true;

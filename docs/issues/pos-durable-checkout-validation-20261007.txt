@@ -1,3 +1,4 @@
+Historical validation of initial local commit476366f; see pos-durable-checkout-review-20261007.txt for review increment.
 POS durable checkout intent validation — synthetic only
 Baseline 08f46fba70a64b68f179fdd88a9e72f851fb9ec0
 Branch fix/pos-durable-checkout-intent

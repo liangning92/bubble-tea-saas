@@ -1,3 +1,4 @@
+import { OrderBusinessRejection } from './OrderBusinessRejection'
 import prisma from '../config/database'
 import { config } from '../config/env'
 import { startOfTodayJakarta } from '../utils/dateUtils'
@@ -338,6 +339,7 @@ export async function deductInventory(storeId: string, orderId: string, items: a
           } else {
             errors.push(result.error || 'Unknown error')
           }
+          if (result.insufficientStock) throw new OrderBusinessRejection('INVENTORY_INSUFFICIENT', errors.join('; '))
           throw new Error(errors.join('; '))
         }
       }
@@ -834,6 +836,12 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     }
 
     return { ...newOrder, lowStockWarnings: inventoryResult.lowStockWarnings }
+  }).catch(async error => {
+    // Certify only after transaction rejection AND an independent read proves no order exists.
+    if (error instanceof OrderBusinessRejection && orderNumber) {
+      try { error.rolledBack = !(await prisma.order.findUnique({where:{orderNumber},select:{id:true}})) } catch { error.rolledBack = false }
+    }
+    throw error
   })
 
 

@@ -26,7 +26,7 @@ export async function prepareCheckout(request: Record<string, any>, cart: unknow
   const localId = `LOCAL-${crypto.randomUUID()}`
   const snapshot = JSON.parse(JSON.stringify({ ...request, orderNumber: `OFFLINE-${localId.slice(6)}` }))
   return db.transaction('rw', db.config, db.orders, async () => {
-    if ((await readCheckoutRecovery(snapshot.storeId)).blocked) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    if ((await readCheckoutRecovery(snapshot.storeId)).blocked || (await readCheckoutRecovery(snapshot.storeId)).confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     const createdAt = new Date()
     const orderId = await db.orders.add({
       localId, checkoutRequest: snapshot, storeId: snapshot.storeId, staffId: snapshot.staffId,
@@ -77,9 +77,11 @@ export async function discardPreparedCheckout(storeId: string): Promise<void> {
   })
 }
 
-export function definiteFirstRejection(error: any): boolean {
+export function definiteFirstRejection(error: any, orderNumber?: string): boolean {
   const status = error?.response?.status
   const message = String(error?.response?.data?.message || '')
+  if (status === 409 && orderNumber && error.response.data?.rejection?.code === 'INVENTORY_INSUFFICIENT' &&
+      error.response.data.rejection.outcome === 'not_committed' && error.response.data.rejection.orderNumber === orderNumber) return true
   return [400, 401, 403, 404, 422].includes(status) ||
     (status === 409 && ['OPEN_SHIFT_REQUIRED', 'SHIFT_DISABLED', 'PAYMENT_METHOD_DISABLED', 'PAYMENT_CONFIG_UNAVAILABLE'].includes(message))
 }
@@ -88,5 +90,45 @@ export async function readCheckoutRecovery(storeId: string) {
   const intent = await readCheckoutIntent(storeId)
   const rows = await db.orders.where('status').anyOf('pending', 'syncing', 'sending', 'review', 'failed')
     .and(row => row.storeId === storeId && !['rejected', 'discarded'].includes(row.checkoutResolution || '')).toArray()
-  return { intent, blocked: !!intent || rows.length > 0, rows }
+  const confirmed = await db.orders.where('status').equals('synced').and(row => row.storeId === storeId && !!row.recoveredConfirmation && !row.recoveryAcknowledged).toArray()
+  const quarantined = await db.orders.where('status').equals('quarantined').and(row => row.storeId === storeId).toArray()
+  return { intent, blocked: !!intent || rows.length > 0, rows, confirmed, quarantined }
+}
+
+/** A fresh successful response confirms this original UUID; it does not certify legacy replay. */
+export async function confirmRetriedCheckout(order: LocalOrder, server: {id: string; orderNumber: string}): Promise<void> {
+  await db.transaction('rw', db.config, db.orders, async () => {
+    const row = await db.orders.get(order.id!)
+    if (!row || row.status !== 'syncing' || server.orderNumber !== row.orderNumber || JSON.stringify(row.checkoutRequest) !== JSON.stringify(order.checkoutRequest)) throw new Error('CHECKOUT_RECOVERY_INVALID')
+    const active = await db.config.get(key(row.storeId))
+    if (active?.value.localId === row.localId) {
+      if (JSON.stringify(active.value.request) !== JSON.stringify(row.checkoutRequest)) throw new Error('CHECKOUT_RECOVERY_INVALID')
+      await db.config.delete(key(row.storeId))
+    }
+    await db.orders.update(row.id!, {status:'synced', checkoutResolution:'accepted', serverId:server.id, syncedAt:new Date(), recoveredConfirmation:{serverId:server.id,orderNumber:server.orderNumber,receivedAt:new Date()}, error:undefined})
+  })
+}
+
+/** An acknowledgement of a verified 201 starts an EMPTY next basket, not another charge for the saved one. */
+export async function acknowledgeRecoveredCheckout(storeId: string, actorId: string): Promise<void> {
+  if (!actorId) throw new Error('CHECKOUT_ACTOR_REQUIRED')
+  await db.transaction('rw', db.config, db.orders, async () => {
+    const recovery = await readCheckoutRecovery(storeId)
+    if (recovery.blocked || !recovery.confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    for (const row of recovery.confirmed) await db.orders.update(row.id!, {recoveryAcknowledged:{actorId,at:new Date()}})
+  })
+}
+
+/** Quarantine is NOT a paid/unpaid decision. Keep all evidence and forbid automatic resubmission. */
+export async function quarantineCheckoutRecovery(storeId: string, actorId: string, expected: string): Promise<void> {
+  if (!actorId) throw new Error('CHECKOUT_ACTOR_REQUIRED')
+  await db.transaction('rw', db.config, db.orders, async () => {
+    const recovery = await readCheckoutRecovery(storeId)
+    if (recovery.confirmed.length || !recovery.blocked || recovery.rows.some(row => row.status === 'syncing')) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    if (JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}) !== expected) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    const audit = {actorId,at:new Date(),decision:'isolate_unknown_not_paid_or_unpaid',intent:recovery.intent,rows:recovery.rows}
+    await db.config.add({key:`checkout.quarantine:${encodeURIComponent(storeId)}:${crypto.randomUUID()}`,value:audit,updatedAt:new Date()})
+    for (const row of recovery.rows) await db.orders.update(row.id!, {status:'quarantined',quarantineAudit:{actorId,at:audit.at}})
+    await db.config.delete(key(storeId))
+  })
 }

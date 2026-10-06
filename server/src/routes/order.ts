@@ -1,3 +1,4 @@
+import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import prisma from '../config/database'
 import { Router } from 'express'
@@ -154,6 +155,9 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
+    if (error instanceof OrderBusinessRejection && error.rolledBack) {
+      return res.status(409).json({ code: 409, message: error.code, details: error.message, rejection: { code: error.code, outcome: 'not_committed', orderNumber: req.body.orderNumber } })
+    }
     console.error('Create order error:', error)
     // Pass through the actual error message (e.g., "库存不足: 生珍珠 (可用: 500, 需要: 750)")
     const message = error?.message || 'Failed to create order'
