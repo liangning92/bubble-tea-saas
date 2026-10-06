@@ -1888,7 +1888,7 @@ export function POSPage() {
   const fetchShiftData = async () => {
     await Promise.all([
       shiftApi.list().then(res => {
-        const available = Array.isArray(res.data?.data) ? res.data.data : []
+        const available = Array.isArray(res.data?.data) ? res.data.data.filter((s: { key: string }) => s.key !== 'off') : []
         setActiveShifts(available)
         setSelectedShiftType(current => available.some((s: { key: string }) => s.key === current) ? current : available[0]?.key || '')
       }).catch(() => {

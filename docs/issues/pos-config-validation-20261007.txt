@@ -1,0 +1,107 @@
+Local isolated validation evidence, 2026-10-07. No remote CI, production DB or physical printers used.
+
+Synthetic tests
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1277.269121
+
+Actual POS pages
+PASS actual POS success: real IndexedDB committed one pending order; receipt/kitchen/cup/display once; cart cleared and modal closed; page errors zero. External requests blocked: 0
+PASS actual POS: controlled native IndexedDB order-add refusal retains cart, payment modal and amount; visible caution; zero print/completion; double click one POST.
+PASS actual POS refused: real IndexedDB committed one pending order; receipt/kitchen/cup/display once; cart cleared and modal closed; page errors zero. External requests blocked: 0
+PASS actual POS: HTTP 409 retains payment/cart; zero local queue, print and completion.
+PASS actual POS configuration: disabled default, real 10s polling while paying, all-off, config read 503, reconnect; cart retained and zero print/queue.
+PASS actual POS shifts: [off,morning] defaults morning; all-off blocks; custom submitted; historical off still displayed.
+
+Visible rejection toast
+PASS actual POS: HTTP 409 retains payment/cart; zero local queue, print and completion.
+
+Typechecks
+
+> bubble-tea-saas@2026.10.02.1748 typecheck
+> npm run typecheck:server && npm run typecheck:admin && npm run typecheck:pos && npm run typecheck:staff
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:server
+> cd server && tsc --noEmit
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:admin
+> cd client-admin && npx tsc --noEmit
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:pos
+> cd client-pos && npx tsc --noEmit
+
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:staff
+> cd client-staff && npx tsc --noEmit
+
+
+API build
+
+> bubble-tea-server@1.0.0 build
+> tsc --outDir /tmp/pos-config-build/server
+
+
+POS build
+[plugin:vite:reporter] [plugin vite:reporter] 
+(!) /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/stores/auth.ts is dynamically imported by /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/services/api.ts but also statically imported by /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/App.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/components/AnnouncementBanner.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/hooks/useHardwareManager.ts, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/CashManagementPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/HygieneTasksPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/LoginPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/OrderHistoryPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/POSPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/RegisterMemberPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/ScanPage.tsx, dynamic import will not move module into another chunk.
+
+rendering chunks...
+computing gzip size...
+../../../../../../../../tmp/pos-config-build/pos/index.html                   0.43 kB │ gzip:   0.29 kB
+../../../../../../../../tmp/pos-config-build/pos/assets/index-WRruDWsx.css   52.94 kB │ gzip:   9.11 kB
+../../../../../../../../tmp/pos-config-build/pos/assets/index-BgMxe7Pz.js   850.23 kB │ gzip: 295.12 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 6.27s
+
+Admin build
+
+transforming...
+✓ 2812 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../../../../tmp/pos-config-build/admin/index.html                     0.66 kB │ gzip:   0.43 kB
+../../../../../../../../tmp/pos-config-build/admin/assets/index-cXK7Ha_J.css     59.29 kB │ gzip:   9.76 kB
+../../../../../../../../tmp/pos-config-build/admin/assets/index-BQSBdzmH.js   2,790.11 kB │ gzip: 737.02 kB
+
+(!) Some chunks are larger than 1000 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 10.45s
+
+Staff build
+Use --emptyOutDir to override.
+
+transforming...
+✓ 1521 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../../../../tmp/pos-config-build/staff/index.html                   0.62 kB │ gzip:   0.35 kB
+../../../../../../../../tmp/pos-config-build/staff/assets/index-B3QeksyF.css   29.76 kB │ gzip:   5.86 kB
+../../../../../../../../tmp/pos-config-build/staff/assets/index-Co4tdpOZ.js   495.84 kB │ gzip: 140.13 kB
+✓ built in 4.39s
+
+Same CI translation command: npm run i18n:check
+🔍 i18n Lint: client-pos
+📚 Found 713 Indonesian translation keys
+✅ No i18n issues found
+🔍 i18n Lint: client-admin
+📚 Found 3539 Indonesian translation keys
+✅ No i18n issues found
+🔍 i18n Lint: client-staff
+📚 Found 428 Indonesian translation keys
+✅ No i18n issues found

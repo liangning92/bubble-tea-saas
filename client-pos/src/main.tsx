@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
+import { ToastProvider } from './components/ui/Toast'
 import './index.css'
 import './i18n'
 import { connectionManager } from './services/ConnectionManager'
@@ -26,7 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <HashRouter>
-          <App />
+          <ToastProvider><App /></ToastProvider>
         </HashRouter>
       </QueryClientProvider>
     </ErrorBoundary>

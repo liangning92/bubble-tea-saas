@@ -348,6 +348,7 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
     if (!storeId || typeof shift !== 'string' || !Number.isFinite(openFloat) || openFloat <= 0) {
       return res.status(400).json({ code: 400, message: 'INVALID_SHIFT_INPUT' })
     }
+    if (shift === 'off') return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
     const configuredShift = await prisma.shift.findFirst({ where: { storeId, key: shift, isActive: true } })
     if (!configuredShift) {
       return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })

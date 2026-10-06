@@ -139,6 +139,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     if (!openShift) {
       return res.status(409).json({ code: 409, message: 'OPEN_SHIFT_REQUIRED' })
     }
+    if (openShift.shift === 'off') return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
     const paymentError = await checkPaymentMethod(storeId, req.body.paymentMethod)
     if (paymentError) return res.status(409).json({ code: 409, message: paymentError })
     // Existing sessions are historical records, but a disabled shift cannot accept new sales.

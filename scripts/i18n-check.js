@@ -12,10 +12,11 @@
 const fs = require('fs')
 const path = require('path')
 const glob = require('glob')
+const ts = require('typescript')
 
-const clientPath = process.argv[2]
+const clientPath = process.argv[2] || ''
 
-if (!clientPath) {
+if (require.main === module && !clientPath) {
   console.error('Usage: node scripts/i18n-check.js <client-path>')
   console.error('Example: node scripts/i18n-check.js client-pos')
   process.exit(1)
@@ -24,87 +25,40 @@ if (!clientPath) {
 const i18nPath = path.join(clientPath, 'src/i18n/index.ts')
 const srcPath = path.join(clientPath, 'src')
 
-// 解析 i18n 文件，提取所有 key
-// 结构: resources = { id: { translation: { ... } }, en: { translation: { ... } }, zh: { translation: { ... } } }
-// 只解析 en 段即可，因为所有语言的 key 是相同的
+// Read literal resource objects without executing application code. AST traversal
+// handles inline namespaces, interpolation braces and escaped strings correctly.
 function extractI18nKeys(content, language = 'en') {
+  const source = ts.createSourceFile('i18n.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  let resources
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'resources') resources = node.initializer
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  const unwrap = node => {
+    while (node && (ts.isAsExpression(node) || ts.isParenthesizedExpression(node) || ts.isSatisfiesExpression(node))) node = node.expression
+    return node
+  }
+  const properties = node => {
+    node = unwrap(node)
+    if (!node || !ts.isObjectLiteralExpression(node)) return new Map()
+    const result = new Map()
+    for (const prop of node.properties) {
+      if (ts.isPropertyAssignment(prop) && (ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) || ts.isNumericLiteral(prop.name))) result.set(prop.name.text, prop.initializer)
+    }
+    return result // last duplicate property wins, matching JavaScript resources
+  }
+  const translation = properties(properties(resources).get(language)).get('translation')
+  if (!translation) throw new Error(`Missing literal resources.${language}.translation`)
   const keys = new Set()
-  const lines = content.split('\n')
-
-  // Find the requested locale block.
-  let enStartLine = -1, enEndLine = -1
-  for (let i = 0; i < lines.length; i++) {
-    if (new RegExp(`^\\s*["']?${language}["']?:\\s*\\{`).test(lines[i])) { enStartLine = i; break }
-  }
-  if (enStartLine === -1) return keys
-
-  // 找 en 块的结束行
-  let depth = 0
-  for (let i = enStartLine; i < lines.length; i++) {
-    for (const ch of lines[i]) {
-      if (ch === '{') depth++
-      if (ch === '}') depth--
-    }
-    if (depth === 0 && i > enStartLine) { enEndLine = i; break }
-  }
-
-  // 提取 en 块中 translation 块的起止
-  let transStartLine = -1, transEndLine = -1
-  depth = 0
-  for (let i = enStartLine; i < enEndLine; i++) {
-    if (/["']?translation["']?:\s*\{/.test(lines[i])) { transStartLine = i; break }
-  }
-  if (transStartLine === -1) return keys
-
-  for (let i = transStartLine; i < enEndLine; i++) {
-    for (const ch of lines[i]) {
-      if (ch === '{') depth++
-      if (ch === '}') depth--
-    }
-    if (depth === 0 && i > transStartLine) { transEndLine = i; break }
-  }
-
-  // 逐字符解析，跳过字符串内的 {}
-  const nsStack = []
-  for (let i = transStartLine; i <= transEndLine; i++) {
-    const line = lines[i]
-
-    // 命名空间声明（行首的 "xxx: {" 模式）
-    const nsMatch = line.match(/^(\s*)["']?([a-zA-Z0-9_]+)["']?:\s*\{/)
-    if (nsMatch) {
-      nsStack.push(nsMatch[2])
-      continue
-    }
-
-    // 逐字符处理，追踪是否在字符串内
-    let inString = false
-    let stringChar = ''
-    let i2 = 0
-    while (i2 < line.length) {
-      const ch = line[i2]
-
-      if (!inString && (ch === "'" || ch === '"')) {
-        inString = true
-        stringChar = ch
-      } else if (inString && ch === stringChar && (ch !== '"' || line[i2 - 1] !== '\\')) {
-        inString = false
-        stringChar = ''
-      } else if (!inString && ch === '}') {
-        if (nsStack.length > 0) nsStack.pop()
-      }
-
-      i2++
-    }
-
-    // 提取 key: 'value' 或 key: "value"
-    const kvMatch = line.match(/^\s*["']?([a-zA-Z0-9_]+)["']?:\s*(['"])(.*?)\2\s*,?\s*$/)
-    if (kvMatch) {
-      const stackWithoutTranslation = nsStack.filter(n => n !== 'translation')
-      const fullKey = [...stackWithoutTranslation, kvMatch[1]].join('.')
-      keys.add(fullKey)
+  function collect(node, prefix) {
+    for (const [name, raw] of properties(node)) {
+      const value = unwrap(raw), key = prefix ? `${prefix}.${name}` : name
+      if (ts.isObjectLiteralExpression(value)) collect(value, key)
+      else if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) keys.add(key)
     }
   }
-
+  collect(translation, '')
   return keys
 }
 
@@ -196,4 +150,5 @@ function main() {
   }
 }
 
-main()
+if (require.main === module) main()
+module.exports = { extractI18nKeys, extractTCalls }

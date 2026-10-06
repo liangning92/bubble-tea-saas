@@ -99,10 +99,25 @@ test('stale config response cannot undo a newer all-off configuration',async()=>
 test('actual main POS shift loader accepts two/custom shifts and keeps historical session on list failure',async()=>{
  const source=fs.readFileSync('client-pos/src/pages/POSPage.tsx','utf8');const ast=ts.createSourceFile('page.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let callback;
  function visit(n){if(ts.isVariableDeclaration(n)&&n.name.getText(ast)==='fetchShiftData')callback=n.initializer.getText(ast);ts.forEachChild(n,visit);}visit(ast);
- const state={activeShifts:[],selected:'',shiftData:null,console:{error:()=>{}},shiftApi:{list:async()=>({data:{data:[{key:'morning'},{key:'evening'}]}})},posApi:{getCurrentShift:async()=>({data:{data:{shift:{shift:'old-disabled'},hasOpenShift:true}}})}};
+ const state={activeShifts:[],selected:'',shiftData:null,console:{error:()=>{}},shiftApi:{list:async()=>({data:{data:[{key:'off'},{key:'morning'},{key:'evening'}]}})},posApi:{getCurrentShift:async()=>({data:{data:{shift:{shift:'old-disabled'},hasOpenShift:true}}})}};
  state.setActiveShifts=v=>state.activeShifts=v;state.setSelectedShiftType=v=>state.selected=typeof v==='function'?v(state.selected):v;state.setShiftData=v=>state.shiftData=v;
  vm.runInNewContext(ts.transpileModule('globalThis.load='+callback,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,state);
  await state.load();assert.deepEqual(Array.from(state.activeShifts,s=>s.key),['morning','evening']);assert.equal(state.selected,'morning');
+ state.shiftApi.list=async()=>({data:{data:[{key:'off'}]}});await state.load();assert.equal(state.selected,'');assert.equal(state.activeShifts.length,0);
  state.shiftApi.list=async()=>({data:{data:[{key:'custom'}]}});await state.load();assert.equal(state.selected,'custom');
  state.shiftApi.list=async()=>{throw Error('offline');};await state.load();assert.equal(state.activeShifts.length,0);assert.equal(state.selected,'');assert.equal(state.shiftData.shift.shift,'old-disabled');assert.equal(state.shiftData.hasOpenShift,true);
+});
+test('off cannot open or create a new sale even when active',async()=>{
+ let writes=0;
+ const db={shift:{findFirst:async()=>({key:'off',isActive:true})},shiftSession:{findFirst:async()=>({id:'historic-off',shift:'off'}),create:async()=>{writes++;return {};}},cashEvent:{create:async()=>{writes++;return {};}}};
+ const open=routes('server/src/routes/posCash.ts',db);assert.equal((await open('post/shifts/open',{user,body:{shift:'off',openFloat:100}})).data.message,'SHIFT_DISABLED');
+ const order=routes('server/src/routes/order.ts',db,{'zod':require('zod'),'../utils/storeHelper':{},'../utils/validation':{validateBody:()=>auth.authenticate},'../services/POSConfigPolicy':{checkPaymentMethod:async()=>null},'../services/OrderService':{createOrder:async()=>{writes++;return {};}}});
+ assert.equal((await order('post/',{user,body:{storeId:'store-a',paymentMethod:'cash'}})).data.message,'SHIFT_DISABLED');assert.equal(writes,0);
+});
+test('historical off session is readable and closable without active configuration',async()=>{
+ let updated,events=[];const historic={id:'historic-off',shift:'off',openFloat:100,status:'open',openedAt:new Date()};
+ const db={config:{findFirst:async()=>null},shiftSession:{findFirst:async()=>historic,update:async q=>{updated=q;return {...historic,...q.data};}},cashEvent:{findMany:async()=>[],create:async q=>{events.push(q);return {};}},order:{count:async()=>0,aggregate:async()=>({_sum:{}}),groupBy:async()=>[],findMany:async()=>[]},channel:{findMany:async()=>[]}};
+ const run=routes('server/src/routes/posCash.ts',db,{'../utils/dateUtils':{startOfTodayJakarta:()=>new Date('2026-10-06T17:00:00Z')}});
+ const read=await run('get/shifts/current',{user});assert.equal(read.code,200);assert.equal(read.data.data.shift.shift,'off');assert.equal(read.data.data.hasOpenShift,true);
+ const closed=await run('post/shifts/close',{user,body:{actualCash:100}});assert.equal(closed.code,200);assert.equal(updated.where.id,'historic-off');assert.equal(updated.data.status,'closed');assert.equal(events[0].data.shift,'off');
 });
