@@ -48,8 +48,8 @@ test('actual POS canceled/auth-changed/replaced handoff late responses cannot op
 });
 const options=extract('client-pos/src/pages/POSPage.tsx',(n,a)=>ts.isVariableDeclaration(n)&&n.name.getText(a)==='openProductOptions');
 test('actual shared options: single explicit zero accepted, multiple specs never auto-select even isDefault',()=>{
- const calls=[],warnings=[],context={validCatalogSpec,showToast:x=>warnings.push(x),t:k=>k,handleSpecClick:(p,s)=>calls.push([p,s])};vm.runInNewContext(code(options.node.initializer.getText(options.ast)),context);
- const p=product();p.specs[0].price=0;context.run(p);assert.equal(calls[0][1].price,0);p.specs.push({id:'s2',name:'Large',price:15000,isDefault:true});context.run(p);assert.equal(calls[1][1],null);p.specs[0].price=undefined;context.run(p);assert.equal(calls.length,2);assert.equal(warnings.length,1);
+ const calls=[],warnings=[],removed=[],context={scanIntentVersion:{current:0},localStorage:{removeItem:k=>removed.push(k)},validCatalogSpec,showToast:x=>warnings.push(x),t:k=>k,handleSpecClick:(p,s)=>calls.push([p,s])};vm.runInNewContext(code(options.node.initializer.getText(options.ast)),context);
+ const p=product();p.specs[0].price=0;context.run(p);assert.equal(calls[0][1].price,0);p.specs.push({id:'s2',name:'Large',price:15000,isDefault:true});context.run(p);assert.equal(calls[1][1],null);p.specs[0].price=undefined;context.run(p);assert.equal(calls.length,2);assert.equal(warnings.length,1);assert.equal(context.scanIntentVersion.current,3);assert.deepEqual(removed,['scan_to_cart','scan_to_cart','scan_to_cart']);
 });
 
 const search=extract('client-pos/src/pages/ScanPage.tsx',(n,a)=>ts.isVariableDeclaration(n)&&n.name.getText(a)==='handleManualScan');

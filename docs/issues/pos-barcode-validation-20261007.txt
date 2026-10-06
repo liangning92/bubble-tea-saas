@@ -16,9 +16,9 @@ Actual code exercised by AST/transpilation/VM with boundary stand-ins:
 - Actual scanner out-of-order response/finally cannot overwrite a newer completed lookup.
 
 node tests/stoploss/barcode-page-check.cjs
-15/15 actual React/Chromium/IndexedDB scenarios PASS:
+17/17 actual React/Chromium/IndexedDB scenarios PASS:
 single, multi, zero, same-name, repeat, repriced-repeat, addons, parity-normal, parity-scan,
-updated-price, missing-price, read-failure, cross-store, route-preserve, cancel.
+updated-price, missing-price, read-failure, cross-store, route-preserve, cancel, delayed-click, delayed-keyboard.
 Scanned API top-level fake price 999999 ignored. Captured real checkout POST includes correct product/spec identity and current spec price. Same-name/different IDs remain separate; repeated identical scan merges quantity; changed spec/addon quotes remain separate rows; addon variants remain separate; ordinary/scanned payload items match, including quantity and addon names/prices. Multi-spec Add is disabled until selection. Zero price accepted. After missing price/read failure/cross-store refusal/cancel, pre-existing cart is the only checkout item. /pos→/scan→/pos retains pre-existing item and adds the scanned one. All directory requests use current store and synthetic authentication. Real keyboard events do not invoke product shortcuts. Zero page errors and zero order/print before explicit checkout.
 
 BARCODE_SCENARIOS=multi node tests/stoploss/barcode-page-check.cjs
@@ -45,3 +45,10 @@ PASS
 Scope: frontend barcode flow, shared normal product options and /scan entry, translations, synthetic tests/docs only. Server source/schema/real DB/config/credentials/manifests/locks/workflows unchanged. No push, packaging, deployment, merge or restart. Previous printer branch stays clean at 73b9abe. No physical USB scanner or Windows printer tested.
 
 Independent server risks are explicitly documented in pos-barcode-identity-004.md, not repaired: direct order request can send client price/identities without active product/spec/store/canonical-price checks; general product reads have store-boundary weaknesses. Barcode fix is not a universal server pricing/authorization fix. No fresh catalog => refuse scanner add and preserve cart, not offline price recovery.
+
+Review P2 incremental validation after b974e099:
+60/60 unit tests PASS (shared options assert synchronous intent/handoff invalidation).
+17/17 full barcode browser scenarios PASS, including held scan A response superseded by ordinary B click and numeric shortcut. B Large spec, boba quote and quantity two remain unchanged through actual checkout.
+npm run typecheck:pos PASS.
+npm run build --workspace client-pos -- --outDir /tmp/pos-barcode-p2-build PASS (existing bundle warning).
+Prior 22 payment/shift/printer scenarios and all-client i18n evidence above belong to the initial commit; this increment adds no translation or payment/shift/printer changes.

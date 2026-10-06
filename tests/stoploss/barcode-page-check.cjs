@@ -5,19 +5,21 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
  const tw=(await import(pathToFileURL(path.resolve('client-pos/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-pos/src/**/*.{js,ts,jsx,tsx}')];
  const server=await createServer({configFile:false,root:path.resolve('client-pos'),cacheDir:'/tmp/pos-barcode-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6200,strictPort:true,proxy:{}},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;let normalItems;
  try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync('/tmp/pos-barcode-page-evidence',{recursive:true});
- for(const scenario of (process.env.BARCODE_SCENARIOS || 'single,multi,zero,same-name,repeat,repriced-repeat,addons,parity-normal,parity-scan,updated-price,missing-price,read-failure,cross-store,route-preserve,cancel').split(',')){
-  const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),errors=[],orders=[],queries=[];let failure=false,currentPrice=10000;
+ for(const scenario of (process.env.BARCODE_SCENARIOS || 'single,multi,zero,same-name,repeat,repriced-repeat,addons,parity-normal,parity-scan,updated-price,missing-price,read-failure,cross-store,route-preserve,cancel,delayed-click,delayed-keyboard').split(',')){
+  const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),errors=[],orders=[],queries=[];let failure=false,currentPrice=10000,holdDirectory=false,releaseDirectory,directoryStarted;const started=new Promise(r=>directoryStarted=r);const gate=new Promise(r=>releaseDirectory=r);const delayed=scenario.startsWith('delayed-');
   const spec=(id,name,price)=>({id,name,price,isDefault:true});
   const base={id:'base',storeId:'synthetic-store',name:'Existing Tea',status:'active',deletedAt:null,category:{id:'tea',name:'Tea'},specs:[spec('base-spec','Regular',5000)],addons:[]};
   const p={id:'p1',storeId:'synthetic-store',name:scenario==='same-name'?'Same Tea':'Scanned Tea',status:'active',deletedAt:null,category:{id:'tea',name:'Tea'},specs:[spec('s1','Regular',10000)],addons:[{addonId:'boba',addon:{id:'boba',name:'Synthetic Boba',price:2000}}]};
+  if(delayed){base.specs.push(spec('base-large','Large',8000));base.addons=p.addons;}
   const p2={...p,id:'p2',specs:[spec('s2','Regular',12000)]};
   if(['multi','parity-normal','parity-scan'].includes(scenario))p.specs.push(spec('large','Large',15000));
   if(scenario==='zero'){p.specs[0].price=0;currentPrice=0;}
   const directory=()=>{const fresh=structuredClone(p);fresh.specs[0].price=currentPrice;if(scenario==='missing-price'&&failure)delete fresh.specs[0].price;return [base,fresh,...(scenario==='same-name'?[p2]:[])];};
   await context.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url());if(url.origin!=='http://127.0.0.1:6200')return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();let data={},status=200;
-   if(url.pathname==='/api/products'){queries.push({storeId:url.searchParams.get('storeId'),token:req.headers().authorization});data={list:directory()};if(scenario==='read-failure'&&failure)status=503;}
+   if(url.pathname==='/api/products'){queries.push({storeId:url.searchParams.get('storeId'),token:req.headers().authorization});data={list:directory()};if(holdDirectory){directoryStarted();await gate;}if(scenario==='read-failure'&&failure)status=503;}
    if(url.pathname.startsWith('/api/products/barcode/')){
+    if(delayed)holdDirectory=true;
     const id=decodeURIComponent(url.pathname.split('/').pop());data={...(id==='p2'?p2:p),price:999999};
     if(scenario==='cross-store')data.storeId='other-store';
     if(scenario==='updated-price')currentPrice=15500;
@@ -48,6 +50,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
     await page.getByRole('heading',{name:'Barcode Scan',exact:true}).locator('..').getByRole('button').click();return;
    }
    await page.getByRole('button',{name:'Choose options in POS',exact:true}).click();
+   if(delayed){await started;return;}
    if(['missing-price','read-failure'].includes(scenario)){await page.getByText(/your cart is preserved/).first().waitFor();return;}
    await page.getByRole('heading',{name:scenario==='same-name'?'Same Tea':'Scanned Tea',exact:true}).waitFor();
   };
@@ -57,6 +60,16 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
    await page.getByRole('button',{name:'Scan',exact:true}).click();const input=page.getByPlaceholder('Scan or enter barcode...');await input.pressSequentially('123');await page.keyboard.press('Escape');
    assert.equal(await page.getByRole('button',{name:/Add to Cart/}).count(),0);
   }else await scan('p1',scenario==='route-preserve');
+  if(delayed){
+   if(scenario==='delayed-keyboard')await page.keyboard.press('1');else await normal();
+   await page.getByRole('heading',{name:'Existing Tea',exact:true}).waitFor();
+   await page.getByRole('button',{name:/^Large/}).click();await page.getByRole('button',{name:/Synthetic Boba/}).click();await page.getByRole('button',{name:'+',exact:true}).last().click();
+   const before=await page.getByRole('button',{name:/Add to Cart/}).innerText();
+   const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/products');releaseDirectory();await response;
+   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+   await expect(page.getByRole('heading',{name:'Existing Tea',exact:true})).toBeVisible();assert.equal(await page.getByRole('button',{name:/Add to Cart/}).innerText(),before);
+   assert.equal(await page.evaluate(()=>localStorage.getItem('scan_to_cart')),null);
+  }
   if(['multi','parity-normal','parity-scan'].includes(scenario)){
    const button=page.getByRole('button',{name:/Add to Cart/});await expect(button).toBeDisabled();if(scenario==='multi')await page.screenshot({path:'/tmp/pos-barcode-page-evidence/multi-choice.png'});await page.getByRole('button',{name:/^Large/}).click();await expect(button).toBeEnabled();
    if(scenario.startsWith('parity-')){await page.getByRole('button',{name:/Synthetic Boba/}).click();await page.getByRole('button',{name:'+',exact:true}).last().click();}
@@ -68,6 +81,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   await page.screenshot({path:'/tmp/pos-barcode-page-evidence/'+scenario+'.png'});
   await page.getByRole('button',{name:/Checkout/}).click();await page.getByRole('button',{name:/Exact/}).click();await page.getByRole('button',{name:/Confirm Payment/}).click();await expect.poll(()=>orders.length).toBe(1);
   const items=orders[0].items;
+  if(delayed){assert.equal(items.length,1);assert.equal(items[0].productId,'base');assert.equal(items[0].specId,'base-large');assert.equal(items[0].unitPrice,8000);assert.equal(items[0].quantity,2);assert.equal(items[0].addons[0].name,'Synthetic Boba');assert.equal(items[0].addons[0].price,2000);}
   if(scenario==='single')assert.equal(JSON.stringify(items.map(i=>[i.productId,i.specId,i.unitPrice])),JSON.stringify([['p1','s1',10000]]));
   if(scenario==='multi')assert.equal(items[0].specId,'large');
   if(scenario==='zero')assert.equal(items[0].unitPrice,0);

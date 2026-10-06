@@ -2258,6 +2258,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }
 
   const openProductOptions = (product: Product) => {
+    // A newer product selection supersedes any pending scanner handoff synchronously.
+    scanIntentVersion.current += 1
+    localStorage.removeItem('scan_to_cart')
     if (!Array.isArray(product.specs) || !product.specs.length || !product.specs.every(validCatalogSpec)) {
       showToast(t('barcodeIdentity.invalid'), 'warning')
       return
