@@ -20,7 +20,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
    if(url.pathname==='/api/shifts')data=[{key:'morning',name:'Morning'}];
    if(url.pathname==='/api/channels'||url.pathname.includes('discount-rules'))data=[];
    if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:false};
-   if(url.pathname==='/api/orders'&&req.method()==='POST'){posts++;if(scenario==='offline-order')return route.abort('internetdisconnected');data={id:'synthetic-order',orderNumber:'PAID-SYNTHETIC',pickupNumber:'A001',grandTotal:10000};}
+   if(url.pathname==='/api/orders'&&req.method()==='POST'){posts++;if(scenario==='offline-order')return route.abort('internetdisconnected');data={id:'synthetic-order',orderNumber:req.postDataJSON().orderNumber,pickupNumber:'A001',grandTotal:10000};}
    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({success:true,data})});
   });
   await context.addInitScript(({hw,scenario})=>{
@@ -32,10 +32,11 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);await page.goto('http://127.0.0.1:6199/#/pos');await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();
   if(scenario!=='legacy-cache')await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('hardware_settings')).printers.map(p=>p.printerName).join(','))).toBe(hw.printers.map(p=>p.printerName).join(','));
   await page.getByRole('button',{name:/Synthetic Tea/}).click();await page.getByRole('button',{name:/Add to Cart/}).click();await page.getByRole('button',{name:/Checkout/}).click();await page.getByRole('button',{name:/Exact/}).click();const pay=page.getByRole('button',{name:/Confirm Payment/});await pay.evaluate(b=>{b.click();b.click();});
+  if(scenario==='offline-order'){await expect(page.getByTestId('checkout-recovery')).toContainText('needs verification');await expect.poll(async()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return (await db.orders.toArray())[0]?.status;})).toBe('review');assert.equal(posts,1);assert.deepEqual(await page.evaluate(()=>window.printCalls),[]);assert.deepEqual(await page.evaluate(()=>window.completions),[]);assert.deepEqual(errors,[]);console.log('PASS actual POS printer offline-order: durable review, zero uncertain output');await context.close();continue;}
   await expect.poll(()=>page.evaluate(()=>window.completions.length),{timeout:10000}).toBe(1);await pay.waitFor({state:'hidden'});await page.getByText('Cart is empty',{exact:true}).waitFor();assert.equal(posts,1);
   const calls=await page.evaluate(()=>window.printCalls);const blocked=['disabled','empty','unconfigured'].includes(scenario);assert.equal(calls.length,blocked?0:1);
   if(!blocked){if(scenario==='network'){assert.equal(calls[0].printerName,undefined);assert.equal(calls[0].printerHost,'127.0.0.1');}else assert.equal(calls[0].printerName,scenario==='legacy-cache'?'Exact Legacy Receipt':'Synthetic Receipt');}
-  const rows=await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return db.orders.toArray();});assert.equal(rows.length,scenario==='offline-order'?1:0);if(rows.length)assert.equal(rows[0].status,'pending');
+  const rows=await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return db.orders.toArray();});assert.equal(rows.length,1);assert.equal(rows[0].status,'synced');
   if(blocked)await page.getByText(/Configure an enabled printer for this purpose/).first().waitFor();
   if(['offline-device','rejected-device','timeout','network'].includes(scenario))await page.getByText(/Printing failed or is unconfirmed/).first().waitFor();
   if(scenario==='enabled'){

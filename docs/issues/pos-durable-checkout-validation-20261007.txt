@@ -1,0 +1,40 @@
+POS durable checkout intent validation — synthetic only
+Baseline 08f46fba70a64b68f179fdd88a9e72f851fb9ec0
+Branch fix/pos-durable-checkout-intent
+
+node --test tests/stoploss/*.test.cjs
+64/64 PASS. Actual checkout AST and actual payload/classification helpers; first storage/claim failure zero HTTP, response uncertainty zero output, acknowledgement failure, same-render double click, unchanged snapshot, no legacy reconstruction, confirmed output failure never recharges.
+
+node tests/stoploss/checkout-intent-page-check.cjs
+20 native Chromium/React/Dexie/IndexedDB cases:
+transport-refresh, order-save-failure, config-save-failure, dual-save-failure,
+claim-failure, ack-failure, double-settlement-failure, sent-before-http-refresh,
+rejected, multi-tab, single-snapshot, bulk-snapshot, legacy, foreign-queue,
+concurrent-retry, suspend-success, suspend-loss, suspend-blocked,
+corrupt-recovery, multi-tab-prepare.
+API/device boundaries synthetic; all external origins blocked. Native IDB writes controlled at object-store boundary, not mocked Dexie. Current cart/payment preserved on uncertainty; same UUID/body after refresh; no hidden auto upload or different identity. First write refusal prevents POST. Partial writes roll back. Explicit unsent discard is safe; sent discard absent. Two tags including direct bypass of UI race actual shared IDB transactions. Legacy/cross-store queues never invented/uploaded. Screenshots /tmp/pos-intent-page-evidence.
+
+node tests/stoploss/checkout-intent-http-setup.cjs
+Test runtime setup: writes only /tmp/pos-intent-http-runtime; generates two provider clients + empty-database DDL from current schema.prisma. Requires installed matching Prisma/runtime dependencies via INTENT_DEPS (default existing /tmp/bubble-audit-sqlite-6_ckv58q/node_modules on this host). No automatic package install or production migration. SQLite model is provider adaptation; stale repository SQLite schema is not certified.
+node tests/stoploss/checkout-intent-http-check.cjs
+INTENT_PROVIDER=postgresql node tests/stoploss/checkout-intent-http-check.cjs
+5 acceptance groups/provider PASS plus missing-auth/cross-store assertions. Real current order route/JWT/Prisma services; only database module redirects to the fresh owned test client. Real database ledgers inspected after dropped committed response and unique-conflict single/bulk/concurrent retry. Once-only stock/points/cash; one order per stable identity. Closed shift cannot certify prior success and remains review, no new writes. Full actual POS + native IDB + real order HTTP proxy commit/lost response/refresh/retry also PASS; order responses are never fulfilled by Playwright. Metadata and devices remain synthetic. Expected P2002 logs are conflict evidence, not passing replay.
+SQLite evidence /tmp/pos-intent-http-affA8y/evidence.json
+PostgreSQL evidence /tmp/pos-intent-http-9AAT27/evidence.json
+Both fixtures create two distinct intent identities across service and real-page groups; each identity has exactly one order. Independent PG cluster uses only /tmp and local55461, stops in finally; SQLite files retained. No persistent working password or production credential is used/output.
+Initial unmodified SQLite schema failure (missing pickupNumber) recorded as baseline limitation; no source/schema repair performed.
+
+Related page regressions:
+node tests/stoploss/barcode-page-check.cjs — 17/17 PASS
+node tests/stoploss/page-check.cjs — 5/5 scenarios PASS
+node tests/stoploss/shift-page-check.cjs — 7/7 PASS
+node tests/stoploss/printer-page-check.cjs — 10/10 PASS
+39 scenarios total. Existing transport-success expectations intentionally changed to durable review/zero output per this task; successful response fixtures echo the client UUID as the real server does. Confirmed receipt/device routing unchanged; normal/scanned item payload parity retained.
+
+npm run typecheck:pos — PASS
+npm run i18n:check — PASS all 3 clients; pre-existing hardcoded text warnings unchanged
+npm run build --workspace client-pos -- --outDir /tmp/pos-intent-build — PASS; existing bundle warning only
+bash scripts/security-review.sh — 18 PASS / 0 FAIL / 1 existing store-access warning
+git diff --check — PASS
+
+Scope: frontend durable checkout/recovery/synchronization, related uncertainty display and tests/docs. No server business source, Prisma schema, production DB/config/credentials, package/lock/workflow change. No push/deploy/merge/package/restart. Await independent review before standard delivery. Full server replay + tax fingerprint migrations, legacy unresolved intents, pricing authenticity, and packaged SQLite discrepancy remain separate.

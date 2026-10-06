@@ -1,0 +1,8 @@
+// Generate test-only provider clients and empty-database DDL. Never migrate an existing database.
+const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
+const root=process.env.INTENT_RUNTIME||'/tmp/pos-intent-http-runtime',deps=process.env.INTENT_DEPS||'/tmp/bubble-audit-sqlite-6_ckv58q/node_modules';
+if(!/^\/tmp\/pos-intent-http-runtime(?:-[\w-]+)?$/.test(root))throw Error('Synthetic /tmp runtime required');
+fs.mkdirSync(root,{recursive:true});fs.writeFileSync(root+'/package.json','{"name":"pos-intent-synthetic-runtime","private":true}');if(!fs.existsSync(root+'/node_modules'))fs.symlinkSync(deps,root+'/node_modules','dir');
+const original=fs.readFileSync('server/prisma/schema.prisma','utf8');
+for(const provider of ['sqlite','postgresql']){fs.mkdirSync(root+'/'+provider,{recursive:true});const schema=original.replace('provider   = "prisma-client-js"',`provider   = "prisma-client-js"\n  output = "${root}/${provider}/client"`).replace('binaryTargets = ["native", "windows"]','binaryTargets = ["native"]').replace('provider = "postgresql"',`provider = "${provider}"`);const file=root+'/'+provider+'/schema.prisma';fs.writeFileSync(file,schema);execFileSync(path.join(deps,'.bin/prisma'),['generate','--schema',file],{env:{...process.env,PRISMA_GENERATE_SKIP_AUTOINSTALL:'true'},stdio:'ignore'});const sql=execFileSync(path.join(deps,'.bin/prisma'),['migrate','diff','--from-empty','--to-schema-datamodel',file,'--script'],{encoding:'utf8'});fs.writeFileSync(root+'/'+provider+'/schema.sql',sql);}
+console.log('Generated isolated clients/DDL only in '+root+'; SQLite adapts current PostgreSQL model, not the stale repository SQLite schema.');

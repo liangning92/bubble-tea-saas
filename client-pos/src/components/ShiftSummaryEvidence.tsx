@@ -20,7 +20,7 @@ export function ShiftSummaryEvidence({ evidence, openFloat, storeId, showValues 
   const { t } = useTranslation()
   const pending = useLiveQuery(async () => {
     if (!storeId) return null
-    try { return await db.orders.where('status').anyOf('pending', 'syncing', 'failed').and(o => o.storeId === storeId).count() }
+    try { return await db.orders.where('status').anyOf('pending', 'syncing', 'failed', 'prepared', 'sending', 'review').and(o => o.storeId === storeId).count() }
     catch { return null }
   }, [storeId])
   const locallyUncertain = pending === undefined || pending === null || pending > 0

@@ -1,107 +1,17 @@
-// Exercise the actual POSPage checkout function, extracted with TypeScript's AST.
-// No copied implementation, real API, real IndexedDB, printer or device access.
-const {test} = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const ts = require(process.env.TYPESCRIPT_PATH || 'typescript');
-const source = fs.readFileSync('client-pos/src/pages/POSPage.tsx','utf8');
-const ast = ts.createSourceFile('POSPage.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
-let checkout;
-function visit(node) {
- if (ts.isVariableDeclaration(node) && node.name.getText(ast)==='handleCheckout') checkout=node.initializer.getText(ast);
- ts.forEachChild(node,visit);
-}
-visit(ast);assert.ok(checkout);
-const code = ts.transpileModule('globalThis.checkout = '+checkout,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
-const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
-function fixture(save) {
- const events=[];const state={busy:false,failed:false,modal:true};
- const cart=[{productId:'synthetic',productName:'Tea',quantity:1,unitPrice:10000,addons:[]}];
- const context={
-  cart,isCheckingOut:false,useOrderStore:{getState:()=>({isCheckingOut:state.busy})},
-  paymentConfigReady:true,paymentMethods:[{id:'cash'}],paymentMethod:'cash',paidAmount:'20000',paymentSettings:{maxCashAmount:0},qrisData:{status:'idle'},
-  selectedChannel:{id:'dine_in',code:'DINE_IN',nameKey:'pos.dineIn'},posChannels:[],dineInCount:1,
-  customerCount:1,tableNumber:'7',platformOrderId:'',user:{storeId:'synthetic-store',staff:{id:'synthetic-staff'}},
-  total:10000,subtotal:10000,tax:0,discountAmount:0,member:{id:'synthetic-member'},pointsToRedeem:0,
-  taxSettings:{enabled:false},paymentModalOrderNum:'T001',appliedPromotion:null,isManualDiscount:false,orderNote:'test',
-  hardwareSettings:{autoOpenCashDrawer:false},posReceipt:{autoPrint:true},soundSettings:{error:true},
-  t:key=>key,formatCurrency:String,logPOSAction:()=>{},playSoundWithSettings:()=>{},
-  showToast:(message,kind)=>events.push(['toast',message,kind]),
-  setIsCheckingOut:value=>{state.busy=value;},setOfflineSaveFailed:value=>{state.failed=value;},
-  posApi:{createOrder:async()=>{events.push(['api']);throw Object.assign(new Error('synthetic transport failure'),{code:'ERR_NETWORK'});}},
-  db:{orders:{add:async row=>{events.push(['add',row]);return save(row);}}},
-  printReceipt:()=>events.push(['receipt']),printKitchenOrder:()=>events.push(['kitchen']),printCupStickers:()=>events.push(['cups']),
-  electronAPI:{sendOrderComplete:()=>events.push(['display'])},
-  clearCart:()=>{events.push(['clear']);context.cart=[];},
-  setShowPaymentModal:value=>{state.modal=value;events.push(['modal',value]);},
-  console:{error:()=>{}},
- };
- vm.runInNewContext(code,context);
- return {context,state,events,run:()=>context.checkout()};
-}
-const completions=events=>events.filter(x=>['receipt','kitchen','cups','display','clear','modal'].includes(x[0]));
-const count=(f,name)=>f.events.filter(x=>x[0]===name).length;
-test('transport failure waits for local commit before saved toast, printing, completion and clearing',async()=>{
- const pending=deferred();const f=fixture(()=>pending.promise);const run=f.run();
- await new Promise(setImmediate);
- assert.equal(f.state.busy,true);assert.equal(count(f,'add'),1);
- assert.equal(completions(f.events).length,0);assert.equal(count(f,'toast'),0);
- pending.resolve(1);await run;
- assert.equal(f.state.busy,false);assert.equal(f.state.failed,false);assert.equal(f.state.modal,false);
- assert.equal(f.events.find(x=>x[0]==='toast')[1].includes('pos.orderSavedOffline'),true);
- for(const name of ['receipt','kitchen','cups','display','clear']) assert.equal(count(f,name),1);
- assert.equal(f.events.find(x=>x[0]==='add')[1].status,'pending');
-});
-test('both saves fail: no completion, keep all payment/cart context, release busy and show failure',async()=>{
- const f=fixture(()=>Promise.reject(new Error('synthetic quota failure')));
- const snapshot=JSON.stringify({cart:f.context.cart,paid:f.context.paidAmount,member:f.context.member,table:f.context.tableNumber});
- await f.run();
- assert.equal(f.state.busy,false);assert.equal(f.state.failed,true);assert.equal(f.state.modal,true);
- assert.equal(completions(f.events).length,0);
- assert.equal(JSON.stringify({cart:f.context.cart,paid:f.context.paidAmount,member:f.context.member,table:f.context.tableNumber}),snapshot);
- assert.deepEqual(f.events.filter(x=>x[0]==='toast'),[['toast','pos.offlineSaveFailed','error']]);
-});
-test('same-render repeated clicks and clicks during local save issue one request/save',async()=>{
- const pending=deferred();const f=fixture(()=>pending.promise);
- const first=f.run();const second=f.run();await new Promise(setImmediate);await f.run();
- assert.equal(count(f,'api'),1);assert.equal(count(f,'add'),1);
- pending.resolve(1);await Promise.all([first,second]);
- assert.equal(count(f,'receipt'),1);assert.equal(count(f,'clear'),1);
- await f.run();assert.equal(count(f,'api'),1); // empty cart after completion
-});
-test('restored storage does not retry automatically; explicit retry can save and clears failure',async()=>{
- let restored=false;const f=fixture(()=>restored?Promise.resolve(1):Promise.reject(new Error('synthetic unavailable')));
- await f.run();assert.equal(f.state.failed,true);
- restored=true;await new Promise(setImmediate);
- assert.equal(count(f,'api'),1);assert.equal(count(f,'add'),1);assert.equal(f.state.modal,true);
- // Manual handler invocation only; this does NOT certify server idempotency/replay safety.
- await f.run();assert.equal(count(f,'api'),2);assert.equal(count(f,'add'),2);
- assert.equal(f.state.failed,false);assert.equal(f.state.busy,false);assert.equal(f.state.modal,false);
- assert.equal(count(f,'receipt'),1);assert.equal(count(f,'clear'),1);
-});
-test('all three languages include explicit payment caution; persistent alert is wired',()=>{
- const translations=fs.readFileSync('client-pos/src/i18n/index.ts','utf8');
- assert.equal((translations.match(/"offlineSaveFailed":/g)||[]).length,3);
- for(const caution of ['jangan menagih pelanggan lagi','do not charge the customer again','勿向顾客重复收款'])assert.ok(translations.includes(caution));
- assert.match(source,/offlineSaveFailed && \([\s\S]*?role="alert"[\s\S]*?t\('pos.offlineSaveFailed'\)/);
-});
+// Actual checkout AST; transactional IndexedDB behavior is covered by the real browser suite.
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const source=fs.readFileSync('client-pos/src/pages/POSPage.tsx','utf8'),ast=ts.createSourceFile('POSPage.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let checkout;
+(function visit(n){if(ts.isVariableDeclaration(n)&&n.name.getText(ast)==='handleCheckout')checkout=n.initializer.getText(ast);ts.forEachChild(n,visit);})(ast);
+const code=ts.transpileModule('globalThis.checkout='+checkout,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
+function fixture(){const events=[],state={busy:false,failed:false,modal:true};const c={recovery:{blocked:false},cart:[{productId:'p',specId:'s',productName:'Tea',specName:'Regular',quantity:1,unitPrice:10000,addons:[]}],isCheckingOut:false,useOrderStore:{getState:()=>({isCheckingOut:state.busy})},paymentConfigReady:true,paymentMethods:[{id:'cash'}],paymentMethod:'cash',paidAmount:'20000',paymentSettings:{maxCashAmount:0},qrisData:{status:'idle'},selectedChannel:{id:'dine_in',code:'DINE_IN',nameKey:'pos.dineIn'},posChannels:[],dineInCount:1,customerCount:1,tableNumber:'7',platformOrderId:'',user:{storeId:'store',staff:{id:'staff'}},total:10000,subtotal:10000,tax:0,discountAmount:0,member:null,pointsToRedeem:0,taxSettings:{enabled:false},paymentModalOrderNum:'T001',appliedPromotion:null,isManualDiscount:false,orderNote:'original',hardwareSettings:{autoOpenCashDrawer:false},posReceipt:{autoPrint:false},soundSettings:{error:true},t:x=>x,formatCurrency:String,logPOSAction:()=>{},playSoundWithSettings:()=>{},showToast:(...args)=>events.push(['toast',...args]),setIsCheckingOut:v=>state.busy=v,setOfflineSaveFailed:v=>state.failed=v,prepareCheckout:async request=>{events.push(['prepare']);return {request:{...request,orderNumber:'OFFLINE-stable'}};},claimCheckout:async()=>events.push(['claim']),finishCheckout:async(_,outcome)=>{events.push(['finish',outcome]);c.recovery.blocked=outcome==='review';},definiteFirstRejection:e=>[400,401,403,409].includes(e.response?.status),posApi:{createOrder:async request=>{events.push(['api',request]);throw {code:'ERR_NETWORK'};}},printReceipt:()=>events.push(['print']),printKitchenOrder:()=>events.push(['print']),printCupStickers:()=>events.push(['print']),electronAPI:{sendOrderComplete:()=>events.push(['display'])},clearCart:()=>{events.push(['clear']);c.cart=[];},setShowPaymentModal:v=>{state.modal=v;events.push(['modal',v]);}};vm.runInNewContext(code,c);return {c,events,state,run:()=>c.checkout()};}
+const output=f=>f.events.filter(e=>['print','display','clear','modal'].includes(e[0]));
+test('immutable identity persisted and claimed before POST; transport uncertainty never clears or prints',async()=>{const f=fixture();await f.run();assert.deepEqual(f.events.slice(0,3).map(e=>e[0]),['prepare','claim','api']);assert.equal(f.events[2][1].orderNumber,'OFFLINE-stable');assert.deepEqual(f.events.find(e=>e[0]==='finish'),['finish','review']);assert.equal(output(f).length,0);assert.equal(f.c.cart.length,1);assert.equal(f.state.busy,false);});
+test('first local save failure blocks all HTTP and preserves payment/cart',async()=>{const f=fixture();f.c.prepareCheckout=async()=>{throw Error('quota');};await f.run();assert.equal(f.events.filter(e=>e[0]==='api').length,0);assert.equal(f.state.failed,true);assert.equal(output(f).length,0);assert.equal(f.c.cart.length,1);});
+test('sent-state claim failure never sends prepared request',async()=>{const f=fixture();f.c.claimCheckout=async()=>{throw Error('claim quota');};await f.run();assert.equal(f.events.filter(e=>e[0]==='api').length,0);assert.equal(f.state.failed,true);assert.equal(output(f).length,0);});
+test('same-render repeated clicks during prepare cause one request',async()=>{const f=fixture();let release;f.c.prepareCheckout=request=>new Promise(r=>release=()=>r({request:{...request,orderNumber:'OFFLINE-stable'}}));const first=f.run();await f.run();release();await first;assert.equal(f.events.filter(e=>e[0]==='api').length,1);});
+test('known HTTP refusal releases intent but preserves cart; 5xx/unique/local uncertainty retains it',async()=>{for(const status of [400,401,403,409,500,503,undefined]){const f=fixture();f.c.posApi.createOrder=async()=>{throw {response:status?{status}:undefined};};await f.run();assert.equal(f.events.find(e=>e[0]==='finish')[1],status&&status<500?'rejected':'review');assert.equal(output(f).length,0);assert.equal(f.c.cart.length,1);}});
+test('durable acknowledgement failure after HTTP success is uncertainty with zero outputs',async()=>{const f=fixture();f.c.posApi.createOrder=async request=>({data:{data:{id:'order',orderNumber:request.orderNumber}}});f.c.finishCheckout=async(_,result)=>{f.events.push(['finish',result]);if(result==='accepted')throw Error('quota');};await f.run();assert.equal(output(f).length,0);assert.deepEqual(f.events.filter(e=>e[0]==='finish').map(e=>e[1]),['accepted','review']);assert.equal(f.c.cart.length,1);});
+test('recovery barrier prevents later mutable cart from minting another identity',async()=>{const f=fixture();await f.run();f.c.cart.push({...f.c.cart[0],productId:'new'});await f.run();assert.equal(f.events.filter(e=>e[0]==='prepare').length,1);assert.equal(f.events.filter(e=>e[0]==='api').length,1);assert.equal(f.c.cart.length,2);});
+test('configuration failure/all-off/disabled choice preserves cart before any journal or API',async()=>{for(const setup of [c=>c.paymentConfigReady=false,c=>c.paymentMethods=[],c=>c.paymentMethods=[{id:'qris'}]]){const f=fixture();setup(f.c);await f.run();assert.equal(f.events.some(e=>['prepare','api'].includes(e[0])),false);assert.equal(f.c.cart.length,1);}});
 
-test('HTTP rejections never queue, print or clear the order',async()=>{
- for (const status of [400,401,403,409,500,503]) {
-  const f=fixture(()=>Promise.resolve(1));
-  f.context.posApi.createOrder=async()=>{throw {code:'ERR_BAD_RESPONSE',response:{status,data:{message:'PAYMENT_METHOD_DISABLED'}}};};
-  await f.run();assert.equal(count(f,'add'),0);assert.equal(completions(f.events).length,0);
-  assert.equal(f.context.cart.length,1);assert.equal(f.state.modal,true);assert.equal(f.state.busy,false);
- }
-});
-test('unknown local errors never become offline sales',async()=>{
- const f=fixture(()=>Promise.resolve(1));f.context.posApi.createOrder=async()=>{throw new Error('local bug');};
- await f.run();assert.equal(count(f,'add'),0);assert.equal(completions(f.events).length,0);
-});
-test('configuration failure, all-off and disabled choice block payment but preserve context',async()=>{
- for(const setup of [c=>{c.paymentConfigReady=false;},c=>{c.paymentMethods=[];},c=>{c.paymentMethods=[{id:'qris'}];}]) {
-  const f=fixture(()=>Promise.resolve(1));setup(f.context);await f.run();
-  assert.equal(count(f,'api'),0);assert.equal(count(f,'add'),0);assert.equal(completions(f.events).length,0);assert.equal(f.context.cart.length,1);
- }
-});
+test('confirmed order followed by local output error clears original sale and never allows another send',async()=>{const f=fixture();f.c.posApi.createOrder=async request=>{f.events.push(['api',request]);return {data:{data:{id:'order',orderNumber:request.orderNumber}}};};await f.run();assert.equal(f.events.find(e=>e[0]==='finish')[1],'accepted');assert.equal(f.c.cart.length,0);assert.equal(f.state.modal,false);await f.run();assert.equal(f.events.filter(e=>e[0]==='api').length,1);});

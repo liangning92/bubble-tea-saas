@@ -29,7 +29,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
    if(url.pathname==='/api/shifts')data=[{key:'morning',name:'Morning'}];
    if(url.pathname==='/api/channels'||url.pathname.includes('discount-rules'))data=[];
    if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:false};
-   if(url.pathname==='/api/orders'&&req.method()==='POST'){const body=req.postDataJSON();orders.push(body);data={id:'synthetic-order',orderNumber:'PAID-SYNTHETIC',pickupNumber:'A001',grandTotal:body.items.reduce((sum,item)=>sum+(item.unitPrice+item.addons.reduce((s,a)=>s+a.price,0))*item.quantity,0)};}
+   if(url.pathname==='/api/orders'&&req.method()==='POST'){const body=req.postDataJSON();orders.push(body);data={id:'synthetic-order',orderNumber:body.orderNumber,pickupNumber:'A001',grandTotal:body.items.reduce((sum,item)=>sum+(item.unitPrice+item.addons.reduce((s,a)=>s+a.price,0))*item.quantity,0)};}
    await route.fulfill({status,contentType:'application/json',body:JSON.stringify({success:status===200,data})});
   });
   await context.addInitScript(()=>{

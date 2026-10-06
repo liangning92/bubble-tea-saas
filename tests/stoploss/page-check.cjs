@@ -97,9 +97,9 @@ const assert=require('node:assert/strict');
   if(scenario==='rejected') {
    const rejection=page.getByText('This payment method is disabled. Choose an active method; your order is preserved.',{exact:true});
    await rejection.waitFor();await expect(rejection.locator('..')).toHaveCSS('opacity','1');
-   assert.equal(posts,1);assert.equal(await page.evaluate(()=>window.orderWriteAttempts),0);
+   assert.equal(posts,1);assert.equal(await page.evaluate(()=>window.orderWriteAttempts),1);
    assert.deepEqual(await page.evaluate(()=>window.fixtureCalls),[]);assert.equal(await pay.isVisible(),true);
-   assert.deepEqual(errors,[]);console.log('PASS actual POS: HTTP 409 retains payment/cart; zero local queue, print and completion.');
+   assert.deepEqual(errors,[]);console.log('PASS actual POS: HTTP 409 retains payment/cart; rejected journal, zero print and completion.');
    await page.screenshot({path:path.join(evidenceDir,'http-rejected.png')});
    await context.close();continue;
   }
@@ -118,23 +118,17 @@ const assert=require('node:assert/strict');
    assert.equal((await readOrders()).length,0);
    assert.deepEqual(await page.evaluate(()=>window.fixtureCalls),[]);
    const after=await page.evaluate(async()=>{const {useOrderStore}=await import('/src/stores/orderStore.ts');return {paid:useOrderStore.getState().paidAmount,method:useOrderStore.getState().paymentMethod,busy:useOrderStore.getState().isCheckingOut};});
-   assert.equal(after.paid,before.paid);assert.equal(after.method,before.method);assert.equal(after.busy,false);assert.equal(posts,1);
+   assert.equal(after.paid,before.paid);assert.equal(after.method,before.method);assert.equal(after.busy,false);assert.equal(posts,0);
    await page.screenshot({path:path.join(evidenceDir,'page-refused.png')});
-   console.log('PASS actual POS: controlled native IndexedDB order-add refusal retains cart, payment modal and amount; visible caution; zero print/completion; double click one POST.');
+   console.log('PASS actual POS: IndexedDB refusal prevents HTTP; context retained, no output.');
    await page.evaluate(()=>{window.rejectOrderWrite=false;});
-   await new Promise(r=>setTimeout(r,200));assert.equal(posts,1);assert.equal((await readOrders()).length,0);
    await pay.click();await page.waitForFunction(()=>window.orderWriteAttempts===2);
   }
-  await page.waitForFunction(()=>window.fixtureCalls.includes('complete'));
-  await pay.waitFor({state:'hidden'});
-  await page.getByText('Cart is empty',{exact:true}).waitFor({state:'visible'});
-  const rows=await readOrders();assert.equal(rows.length,1);assert.equal(rows[0].status,'pending');assert.equal(rows[0].items[0].productName,'Synthetic Tea');
-  assert.deepEqual((await page.evaluate(()=>window.fixtureCalls)).sort(),['complete','cups','kitchen','receipt']);
-  assert.equal(posts,scenario==='success'?1:2);
-  assert.equal(await page.locator('[role="alert"]').filter({hasText:'The order could not be saved'}).count(),0);
-  assert.deepEqual(errors,[]);
-  await page.screenshot({path:path.join(evidenceDir,'page-'+scenario+'-saved.png')});
-  console.log('PASS actual POS '+scenario+': real IndexedDB committed one pending order; receipt/kitchen/cup/display once; cart cleared and modal closed; page errors zero. External requests blocked: '+blocked.length);
+  await expect(page.getByTestId('checkout-recovery')).toContainText('needs verification');
+  await expect.poll(async()=> (await readOrders())[0]?.status).toBe('review');
+  const rows=await readOrders();assert.equal(rows.length,1);assert.equal(rows[0].checkoutRequest.orderNumber,rows[0].orderNumber);
+  assert.deepEqual(await page.evaluate(()=>window.fixtureCalls),[]);assert.equal(posts,1);assert.deepEqual(errors,[]);
+  console.log('PASS actual POS '+scenario+': durable original request retained, checkout paused and zero uncertain output.');
   await context.close();
   }
  }finally{if(browser)await browser.close();await server.close();}

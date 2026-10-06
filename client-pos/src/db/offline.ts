@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie'
+import { orderSyncPayload } from '../utils/orderSyncPayload'
 import { connectionManager } from '../services/ConnectionManager'
 
 export interface LocalProduct {
@@ -22,6 +23,8 @@ export interface LocalOrder {
   shiftSessionId?: string
   memberId?: string
   channelId?: string  // 订单渠道：DINE_IN, GOFOOD, GRAB, SHOPEE, POS
+  checkoutRequest?: Record<string, any>
+  checkoutResolution?: 'accepted' | 'rejected' | 'discarded' | 'review'
   items: any[]
   subtotal: number
   ppn: number
@@ -34,7 +37,7 @@ export interface LocalOrder {
   orderNumber: string
   pickupNumber?: string
   customerCount: number
-  status: 'pending' | 'syncing' | 'synced' | 'failed'
+  status: 'pending' | 'syncing' | 'synced' | 'failed' | 'prepared' | 'sending' | 'review'
   syncAttempts: number
   createdAt: Date
   syncedAt?: Date
@@ -137,183 +140,65 @@ export class SyncManager {
     return ''
   }
 
-  // Sync all pending orders
-  async syncPendingOrders() {
+  // A claimed row is never uploaded by another tab. Review requires an explicit retry.
+  async syncPendingOrders(review = false) {
     if (!this.isOnline || this.isSyncing) return
-
+    let auth: any
+    try { auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state } catch { return }
+    if (!auth?.token || !auth.user?.storeId || !['admin', 'manager', 'cashier'].includes(auth.user.role)) return
     this.isSyncing = true
     this.emit({ type: 'sync:start' })
-
+    const claimed: LocalOrder[] = []
     try {
-      const pendingOrders = await db.orders
-        .where('status')
-        .equals('pending')
-        .toArray()
-
-      if (pendingOrders.length === 0) {
-        this.isSyncing = false
-        return
-      }
-
-      const apiUrl = connectionManager.getCurrentUrl()
-      const token = this.getToken()
-
-      if (pendingOrders.length > 1) {
-        try {
-          const bulkPayload = pendingOrders.map(order => ({
-            storeId: order.storeId,
-            staffId: order.staffId,
-            shiftSessionId: order.shiftSessionId,
-            channelId: order.channelId || 'POS',
-            memberId: order.memberId,
-            items: order.items,
-            subtotal: order.subtotal,
-            ppn: order.ppn,
-            totalAmount: order.totalAmount,
-            finalAmount: order.finalAmount,
-            discountAmount: order.discountAmount,
-            paymentMethod: order.paymentMethod,
-            taxEnabled: order.taxEnabled,
-            pointsRedeemed: order.pointsRedeemed,
-            orderNumber: order.orderNumber,
-            pickupNumber: order.pickupNumber,
-            customerCount: order.customerCount || 1
-          }))
-
-          const response = await fetch(`${apiUrl}/orders/bulk-sync`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ orders: bulkPayload })
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            const results = data.data?.results || []
-
-            let syncedCount = 0
-            let failedCount = 0
-
-            for (let i = 0; i < pendingOrders.length; i++) {
-              const order = pendingOrders[i]
-              const resItem = results[i]
-
-              if (resItem && resItem.success) {
-                await db.orders.update(order.id!, {
-                  status: 'synced',
-                  serverId: resItem.data?.id,
-                  syncedAt: new Date()
-                })
-                syncedCount++
-                this.emit({
-                  type: 'sync:success',
-                  orderId: order.localId,
-                  serverId: resItem.data?.id
-                })
-              } else {
-                await db.orders.update(order.id!, {
-                  status: 'failed',
-                  error: resItem?.error || 'Bulk sync item error'
-                })
-                failedCount++
-              }
-            }
-
-            this.emit({
-              type: 'sync:complete',
-              syncedCount,
-              failedCount
-            })
-            return
+      await db.transaction('rw', db.orders, async () => {
+        const rows = await db.orders.where('status').equals(review ? 'review' : 'pending').and(o => o.storeId === auth.user.storeId).toArray()
+        for (const order of rows) {
+          try { orderSyncPayload(order) } catch {
+            await db.orders.update(order.id!, { status: 'review', error: 'CHECKOUT_SNAPSHOT_REQUIRED' })
+            continue
           }
-        } catch (bulkErr) {
-          console.warn('[SyncManager] Bulk sync failed, falling back to single order sync:', bulkErr)
-        }
-      }
-
-      let syncedCount = 0
-      let failedCount = 0
-
-      for (const order of pendingOrders) {
-        try {
-          // Update status to syncing
           await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1 })
-
-          const response = await fetch(`${apiUrl}/orders`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              storeId: order.storeId,
-              staffId: order.staffId,
-              shiftSessionId: order.shiftSessionId,
-              channelId: order.channelId || 'POS',
-              memberId: order.memberId,
-              items: order.items,
-              subtotal: order.subtotal,
-              ppn: order.ppn,
-              totalAmount: order.totalAmount,
-              finalAmount: order.finalAmount,
-              discountAmount: order.discountAmount,
-              paymentMethod: order.paymentMethod,
-              taxEnabled: order.taxEnabled,
-              pointsRedeemed: order.pointsRedeemed,
-              orderNumber: order.orderNumber,
-              pickupNumber: order.pickupNumber,
-              customerCount: order.customerCount || 1
-            })
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            await db.orders.update(order.id!, {
-              status: 'synced',
-              serverId: data.data?.id,
-              syncedAt: new Date()
-            })
-            syncedCount++
-            this.emit({
-              type: 'sync:success',
-              orderId: order.localId,
-              serverId: data.data?.id
-            })
-          } else {
-            const errorText = await response.text()
-            await db.orders.update(order.id!, {
-              status: 'failed',
-              error: `HTTP ${response.status}: ${errorText}`
-            })
-            failedCount++
-          }
-        } catch (error: any) {
-          // Network error - keep as pending for retry
-          await db.orders.update(order.id!, {
-            status: 'pending',
-            error: error.message
-          })
-          failedCount++
+          claimed.push(order)
         }
-      }
-
-      this.emit({
-        type: 'sync:complete',
-        syncedCount,
-        failedCount
       })
+      if (!claimed.length) return
+      const bulk = claimed.length > 1
+      const apiUrl = connectionManager.getCurrentUrl()
+      const currentAuth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
+      if (currentAuth?.token !== auth.token || currentAuth?.user?.storeId !== auth.user.storeId) throw new Error('CHECKOUT_AUTH_CHANGED')
+      const response = await fetch(`${apiUrl}/orders${bulk ? '/bulk-sync' : ''}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+        body: JSON.stringify(bulk ? { orders: claimed.map(orderSyncPayload) } : orderSyncPayload(claimed[0]))
+      })
+      const body = await response.json().catch(() => null)
+      let syncedCount = 0
+      for (const [index, order] of claimed.entries()) {
+        const item = bulk ? body?.data?.results?.[index] : { success: response.ok, data: body?.data }
+        const accepted = response.ok && item?.success && typeof item.data?.id === 'string' && item.data?.orderNumber === order.orderNumber
+        await db.orders.update(order.id!, { status: accepted ? 'synced' : 'review', serverId: accepted ? item.data.id : undefined,
+          ...(accepted ? { syncedAt: new Date() } : {}), error: accepted ? undefined : String(item?.error || body?.message || `HTTP ${response.status}`) })
+        if (accepted) { syncedCount++; this.emit({ type: 'sync:success', orderId: order.localId, serverId: item.data.id }) }
+      }
+      // A retry does not clear the active recovery barrier or print. Acknowledgement is not full server replay certification.
+      this.emit({ type: 'sync:complete', syncedCount, failedCount: claimed.length - syncedCount })
     } catch (error) {
+      // No bulk-to-single fallback after response loss: the first write may have committed.
+      for (const order of claimed) {
+        try { await db.orders.update(order.id!, { status: 'review', error: String(error) }) } catch { /* durable syncing row remains a recovery barrier */ }
+      }
       this.emit({ type: 'sync:error', error: String(error) })
-    } finally {
-      this.isSyncing = false
-    }
+    } finally { this.isSyncing = false }
   }
 
   // Start periodic order upload. Full catalog sync requires a fresh credential
   // exchange and is performed during online setup/login only.
   startSync(intervalMs = 30000) {
+    // The singleton survives POS route unmounts; restore listeners without duplicates.
+    window.removeEventListener('online', this.boundOnlineHandler)
+    window.removeEventListener('offline', this.boundOfflineHandler)
+    window.addEventListener('online', this.boundOnlineHandler)
+    window.addEventListener('offline', this.boundOfflineHandler)
+    this.isOnline = navigator.onLine
     if (this.syncInterval) clearInterval(this.syncInterval)
     this.syncInterval = window.setInterval(() => {
       if (this.isOnline) this.syncPendingOrders()
