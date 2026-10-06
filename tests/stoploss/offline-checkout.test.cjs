@@ -20,7 +20,7 @@ function fixture(save) {
  const cart=[{productId:'synthetic',productName:'Tea',quantity:1,unitPrice:10000,addons:[]}];
  const context={
   cart,isCheckingOut:false,useOrderStore:{getState:()=>({isCheckingOut:state.busy})},
-  paymentMethod:'cash',paidAmount:'20000',paymentSettings:{maxCashAmount:0},qrisData:{status:'idle'},
+  paymentConfigReady:true,paymentMethods:[{id:'cash'}],paymentMethod:'cash',paidAmount:'20000',paymentSettings:{maxCashAmount:0},qrisData:{status:'idle'},
   selectedChannel:{id:'dine_in',code:'DINE_IN',nameKey:'pos.dineIn'},posChannels:[],dineInCount:1,
   customerCount:1,tableNumber:'7',platformOrderId:'',user:{storeId:'synthetic-store',staff:{id:'synthetic-staff'}},
   total:10000,subtotal:10000,tax:0,discountAmount:0,member:{id:'synthetic-member'},pointsToRedeem:0,
@@ -29,7 +29,7 @@ function fixture(save) {
   t:key=>key,formatCurrency:String,logPOSAction:()=>{},playSoundWithSettings:()=>{},
   showToast:(message,kind)=>events.push(['toast',message,kind]),
   setIsCheckingOut:value=>{state.busy=value;},setOfflineSaveFailed:value=>{state.failed=value;},
-  posApi:{createOrder:async()=>{events.push(['api']);throw new Error('synthetic server failure');}},
+  posApi:{createOrder:async()=>{events.push(['api']);throw Object.assign(new Error('synthetic transport failure'),{code:'ERR_NETWORK'});}},
   db:{orders:{add:async row=>{events.push(['add',row]);return save(row);}}},
   printReceipt:()=>events.push(['receipt']),printKitchenOrder:()=>events.push(['kitchen']),printCupStickers:()=>events.push(['cups']),
   electronAPI:{sendOrderComplete:()=>events.push(['display'])},
@@ -42,7 +42,7 @@ function fixture(save) {
 }
 const completions=events=>events.filter(x=>['receipt','kitchen','cups','display','clear','modal'].includes(x[0]));
 const count=(f,name)=>f.events.filter(x=>x[0]===name).length;
-test('server failure waits for local commit before saved toast, printing, completion and clearing',async()=>{
+test('transport failure waits for local commit before saved toast, printing, completion and clearing',async()=>{
  const pending=deferred();const f=fixture(()=>pending.promise);const run=f.run();
  await new Promise(setImmediate);
  assert.equal(f.state.busy,true);assert.equal(count(f,'add'),1);
@@ -85,4 +85,23 @@ test('all three languages include explicit payment caution; persistent alert is 
  assert.equal((translations.match(/"offlineSaveFailed":/g)||[]).length,3);
  for(const caution of ['jangan menagih pelanggan lagi','do not charge the customer again','勿向顾客重复收款'])assert.ok(translations.includes(caution));
  assert.match(source,/offlineSaveFailed && \([\s\S]*?role="alert"[\s\S]*?t\('pos.offlineSaveFailed'\)/);
+});
+
+test('HTTP rejections never queue, print or clear the order',async()=>{
+ for (const status of [400,401,403,409,500,503]) {
+  const f=fixture(()=>Promise.resolve(1));
+  f.context.posApi.createOrder=async()=>{throw {code:'ERR_BAD_RESPONSE',response:{status,data:{message:'PAYMENT_METHOD_DISABLED'}}};};
+  await f.run();assert.equal(count(f,'add'),0);assert.equal(completions(f.events).length,0);
+  assert.equal(f.context.cart.length,1);assert.equal(f.state.modal,true);assert.equal(f.state.busy,false);
+ }
+});
+test('unknown local errors never become offline sales',async()=>{
+ const f=fixture(()=>Promise.resolve(1));f.context.posApi.createOrder=async()=>{throw new Error('local bug');};
+ await f.run();assert.equal(count(f,'add'),0);assert.equal(completions(f.events).length,0);
+});
+test('configuration failure, all-off and disabled choice block payment but preserve context',async()=>{
+ for(const setup of [c=>{c.paymentConfigReady=false;},c=>{c.paymentMethods=[];},c=>{c.paymentMethods=[{id:'qris'}];}]) {
+  const f=fixture(()=>Promise.resolve(1));setup(f.context);await f.run();
+  assert.equal(count(f,'api'),0);assert.equal(count(f,'add'),0);assert.equal(completions(f.events).length,0);assert.equal(f.context.cart.length,1);
+ }
 });

@@ -19,6 +19,9 @@ const configSchema = z.object({
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId, category } = req.query
+    if (req.user!.role !== 'admin' && storeId && storeId !== req.user!.storeId) {
+      return res.status(403).json({ code: 403, message: 'Store access denied' })
+    }
 
     const where: any = { ...ordinaryConfigWhere }
     if (storeId) {
@@ -99,6 +102,7 @@ router.put('/staff/features', authenticate, authorize('admin', 'manager'), async
 router.get('/:storeId/:key', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId, key } = req.params
+    if (key === 'paymentMethods' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
 
     let config = await prisma.config.findUnique({
@@ -157,6 +161,7 @@ router.put('/hardware-settings', authenticate, async (req: AuthRequest, res) => 
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(configSchema), async (req: AuthRequest, res) => {
   try {
     const { storeId, key, value, category } = req.body
+    if (key === 'paymentMethods' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
 
     const valueStr = typeof value === 'string' ? value : JSON.stringify(value)
@@ -185,6 +190,7 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
     const { storeId, configs } = req.body // configs: [{key, value, category}]
 
     if (!Array.isArray(configs)) return res.status(400).json({code:400,message:'Invalid configs'})
+    if (configs.some((c: { key?: string }) => c?.key === 'paymentMethods') && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (configs.some((c: any) => isTrainingLibraryKey(c?.key))) return res.status(403).json({code:403,message:'Protected training content'})
     await prisma.$transaction(
       configs.map((c: any) =>

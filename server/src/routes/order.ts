@@ -1,3 +1,4 @@
+import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import prisma from '../config/database'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -124,7 +125,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /api/orders
-router.post('/', authenticate, validateBody(createOrderSchema), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validateBody(createOrderSchema), async (req: AuthRequest, res) => {
   try {
     // Enforce the cash session at the API boundary so a client cannot bypass it.
     const storeId = req.user!.storeId
@@ -133,11 +134,16 @@ router.post('/', authenticate, validateBody(createOrderSchema), async (req: Auth
     }
     const openShift = await prisma.shiftSession.findFirst({
       where: { storeId, status: 'open' },
-      select: { id: true }
+      select: { id: true, shift: true }
     })
     if (!openShift) {
       return res.status(409).json({ code: 409, message: 'OPEN_SHIFT_REQUIRED' })
     }
+    const paymentError = await checkPaymentMethod(storeId, req.body.paymentMethod)
+    if (paymentError) return res.status(409).json({ code: 409, message: paymentError })
+    // Existing sessions are historical records, but a disabled shift cannot accept new sales.
+    const activeShift = await prisma.shift.findFirst({ where: { storeId, key: openShift.shift, isActive: true } })
+    if (!activeShift) return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
     const order = await OrderService.createOrder(req.body)
 
     res.status(201).json({

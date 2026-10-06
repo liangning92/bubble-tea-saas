@@ -10,7 +10,7 @@ const assert=require('node:assert/strict');
  let browser;
  try {
   await server.listen(); browser=await chromium.launch({headless:true});
-  for (const scenario of ['success','refused']) {
+  for (const scenario of ['success','refused','rejected']) {
   const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
   let posts=0; const blocked=[];
   await context.route('**/*',async route=>{
@@ -19,10 +19,12 @@ const assert=require('node:assert/strict');
    if(!url.pathname.startsWith('/api/'))return route.continue();
    let data={};let status=200;
    if(url.pathname==='/api/products')data={list:[{id:'synthetic-tea',name:'Synthetic Tea',category:{id:'tea',name:'Tea'},specs:[{id:'regular',name:'Regular',price:10000}],addons:[]}]};
+   if(url.pathname==='/api/config')data={paymentMethods:{cash:true,qris:true,defaultMethod:'cash'}};
+   if(url.pathname==='/api/shifts')data=[{key:'morning',name:'Morning'},{key:'evening',name:'Evening'}];
    if(url.pathname==='/api/channels')data=[];
    if(url.pathname.includes('discount-rules'))data=[];
-   if(url.pathname==='/api/orders' && req.method()==='POST'){posts++; status=500;await new Promise(r=>setTimeout(r,200));}
-   await route.fulfill({status,contentType:'application/json',body:JSON.stringify({success:status===200,data,message:status===500?'Synthetic failure':undefined})});
+   if(url.pathname==='/api/orders' && req.method()==='POST'){posts++;await new Promise(r=>setTimeout(r,200));if(scenario==='rejected')status=409;else return route.abort('internetdisconnected');}
+   await route.fulfill({status,contentType:'application/json',body:JSON.stringify({success:status===200,data,message:status===409?'PAYMENT_METHOD_DISABLED':undefined})});
   });
   await context.addInitScript(({refused})=>{
    window.rejectOrderWrite=refused;window.orderWriteAttempts=0;
@@ -52,6 +54,13 @@ const assert=require('node:assert/strict');
   });
   assert.ok(Number(before.paid)>0);
   await pay.evaluate(button=>{button.click();button.click();});
+  if(scenario==='rejected') {
+   await page.getByText('This payment method is disabled. Choose an active method; your order is preserved.',{exact:true}).waitFor();
+   assert.equal(posts,1);assert.equal(await page.evaluate(()=>window.orderWriteAttempts),0);
+   assert.deepEqual(await page.evaluate(()=>window.fixtureCalls),[]);assert.equal(await pay.isVisible(),true);
+   assert.deepEqual(errors,[]);console.log('PASS actual POS: HTTP 409 retains payment/cart; zero local queue, print and completion.');
+   await context.close();continue;
+  }
   await page.waitForFunction(()=>window.orderWriteAttempts===1);
   const readOrders=()=>page.evaluate(()=>new Promise((resolve,reject)=>{
    const r=indexedDB.open('POSOffline');r.onerror=()=>reject(r.error);r.onsuccess=()=>{

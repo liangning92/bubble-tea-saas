@@ -592,6 +592,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     ovo: false,
     dana: false,
     card: false,
+    shopeepay: false,
     // 升级字段
     defaultMethod: 'cash',           // 默认支付方式
     minAmount: 0,                    // 最低消费
@@ -1940,6 +1941,8 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                         ...paymentMethods,
                         [method.key]: !paymentMethods[method.key as keyof typeof paymentMethods]
                       }
+                      newMethods.defaultMethod = ['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card'].includes(newMethods.defaultMethod) && newMethods[newMethods.defaultMethod as keyof typeof newMethods] === true
+                        ? newMethods.defaultMethod : ['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card'].find(key => newMethods[key as keyof typeof newMethods] === true) || ''
                       setPaymentMethods(newMethods)
                       handleSave('paymentMethods', newMethods)
                     }}
@@ -1956,18 +1959,17 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.defaultMethod')}</label>
                 <select
-                  value={paymentMethods.defaultMethod || 'cash'}
+                  value={paymentMethods[paymentMethods.defaultMethod as keyof typeof paymentMethods] === true ? paymentMethods.defaultMethod : ''}
                   onChange={(e) => {
                     setPaymentMethods({ ...paymentMethods, defaultMethod: e.target.value })
                     handleSave('paymentMethods', { ...paymentMethods, defaultMethod: e.target.value })
                   }}
                   className="input"
                 >
-                  <option value="cash">{t('posSettings.paymentCash')}</option>
-                  <option value="qris">{t('posSettings.paymentQris')}</option>
-                  <option value="gopay">{t('posSettings.paymentGoPay')}</option>
-                  <option value="ovo">{t('posSettings.paymentOvo')}</option>
-                  <option value="dana">{t('posSettings.paymentDana')}</option>
+                  <option value="" disabled>{t('posSettings.defaultMethod')}</option>
+                  {['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card']
+                    .filter(key => paymentMethods[key as keyof typeof paymentMethods] === true)
+                    .map(key => <option key={key} value={key}>{t(`posSettings.payment${key === 'gopay' ? 'GoPay' : key === 'shopeepay' ? 'ShopeePay' : key.charAt(0).toUpperCase() + key.slice(1)}`)}</option>)}
                 </select>
               </div>
               <div>

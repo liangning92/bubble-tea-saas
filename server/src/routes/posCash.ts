@@ -345,6 +345,14 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
     const { openFloat, shift } = req.body
 
 
+    if (!storeId || typeof shift !== 'string' || !Number.isFinite(openFloat) || openFloat <= 0) {
+      return res.status(400).json({ code: 400, message: 'INVALID_SHIFT_INPUT' })
+    }
+    const configuredShift = await prisma.shift.findFirst({ where: { storeId, key: shift, isActive: true } })
+    if (!configuredShift) {
+      return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
+    }
+
     // 检查是否有未关闭的班次
     const openShift = await prisma.shiftSession.findFirst({
       where: { storeId, status: 'open' }
@@ -358,7 +366,7 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
       data: {
         storeId,
         staffId,
-        shift: shift || 'morning',
+        shift,
         openFloat: Math.round(openFloat),
         status: 'open'
       }
@@ -371,7 +379,7 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
         staffId,
         type: 'float',
         amount: Math.round(openFloat),
-        shift: shift || 'morning',
+        shift,
         note: '开班零钱'
       }
     })

@@ -87,6 +87,10 @@ const resources = {
         "status": "Status"
       },
       "pos": {
+        "paymentConfigUnavailable": "Konfigurasi pembayaran tidak tersedia. Hubungkan kembali dan coba lagi; pesanan tetap tersimpan.",
+        "paymentMethodDisabled": "Metode pembayaran ini dinonaktifkan. Pilih metode aktif; pesanan tetap tersimpan.",
+        "shiftUnavailable": "Tidak ada shift aktif yang dipilih. Muat ulang konfigurasi shift.",
+
         "title": "Kasir",
         "cart": "Keranjang",
         "total": "Total",
@@ -837,6 +841,10 @@ const resources = {
         "status": "Status"
       },
       "pos": {
+        "paymentConfigUnavailable": "Payment configuration is unavailable. Reconnect and retry; your order is preserved.",
+        "paymentMethodDisabled": "This payment method is disabled. Choose an active method; your order is preserved.",
+        "shiftUnavailable": "No active shift is selected. Reload shift configuration.",
+
         "title": "POS",
         "cart": "Cart",
         "total": "Total",
@@ -1544,6 +1552,10 @@ const resources = {
         "startUsing": "开始使用 POS"
       },
       "pos": {
+        "paymentConfigUnavailable": "支付配置不可用，请重连后重试，当前订单已保留。",
+        "paymentMethodDisabled": "此支付方式已停用，请选择启用方式，当前订单已保留。",
+        "shiftUnavailable": "未选择启用班次，请重新加载班次配置。",
+
         "title": "收银",
         "detectPrinter": "检测打印机",
         "cart": "购物车",

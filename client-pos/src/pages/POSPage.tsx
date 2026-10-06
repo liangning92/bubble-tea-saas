@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { posApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
+import { posApi, shiftApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
 import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
 import { db, syncManager, productCache, LocalProduct, getLockScreenPin, saveLockScreenPin } from '../db/offline'
@@ -225,7 +225,7 @@ export function POSPage() {
   // 交接班数据
   const [shiftData, setShiftData] = useState<any>(null)
   const [shiftStatusLoaded, setShiftStatusLoaded] = useState(false)
-  const [selectedShiftType, setSelectedShiftType] = useState<string>('morning')
+  const [selectedShiftType, setSelectedShiftType] = useState<string>('')
   const [shiftActualCash, setShiftActualCash] = useState('')
   const [shiftSupervisorPin, setShiftSupervisorPin] = useState('')
   const [shiftInputTarget, setShiftInputTarget] = useState<'actualCash' | 'supervisorPin' | null>(null)
@@ -279,15 +279,14 @@ export function POSPage() {
     selectedIce, setSelectedIce
   } = useUiStore()
 
-  // 支付方式配置 - 默认现金优先
-  const [paymentMethods, setPaymentMethods] = useState([
-    { id: 'cash', labelKey: 'pos.paymentCash', icon: '💵' },
-    { id: 'qris', labelKey: 'pos.paymentQris', icon: '📱' },
-    { id: 'gopay', labelKey: 'pos.paymentGoPay', icon: '🟢' },
-    { id: 'ovo', labelKey: 'pos.paymentOvo', icon: '🟣' },
-    { id: 'dana', labelKey: 'pos.paymentDana', icon: '🔵' },
-    { id: 'shopeepay', labelKey: 'pos.paymentShopeePay', icon: '🟠' }
-  ])
+  // No payment method is available until an authoritative configuration is read.
+  const [paymentMethods, setPaymentMethods] = useState<Array<{ id: string; labelKey: string; icon: string }>>([])
+
+  const configLoadVersion = useRef(0)
+  const paymentInitialized = useRef(false)
+  const [paymentConfigReady, setPaymentConfigReady] = useState(false)
+  const [configuredDefaultMethod, setConfiguredDefaultMethod] = useState('')
+  const [activeShifts, setActiveShifts] = useState<Array<{ key: string; name: string; nameZh?: string; nameId?: string }>>([])
 
   // 挂单 - 使用orderStore
   const { suspendedOrders, setSuspendedOrders } = useOrderStore()
@@ -1025,10 +1024,12 @@ export function POSPage() {
     // Guard: only load when storeId is available (not during initial loading with 'default')
     const storeId = user?.storeId || localStorage.getItem('storeId') || (user as any)?.staff?.storeId
     if (!storeId) return
+    const version = ++configLoadVersion.current
     console.log('[POS] Loading config for storeId:', storeId)
     // Use configured API URL for cloud sync
     posApi.getConfigs(storeId)
       .then(res => {
+        if (version !== configLoadVersion.current) return
         const configs = res.data?.data || {}
         console.log('[POS] Loaded configs:', Object.keys(configs))
 
@@ -1240,7 +1241,7 @@ export function POSPage() {
         }
 
         // 支付方式配置 - 使用Admin配置，覆盖默认值
-        if (configs.paymentMethods) {
+        if (configs.paymentMethods && typeof configs.paymentMethods === 'object' && !Array.isArray(configs.paymentMethods)) {
           const methods = configs.paymentMethods
           // 已知支付方式key列表（只处理这些，忽略配置中的其他字段如defaultMethod, rates等）
           const paymentMethodKeys = ['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card']
@@ -1265,13 +1266,15 @@ export function POSPage() {
               if (b.id === 'cash') return 1
               return 0
             })
-          // 如果有配置且有启用的方式，完全替换默认值
-          if (enabledMethods.length > 0) {
-            setPaymentMethods(enabledMethods)
-            setPaymentMethod(enabledMethods[0].id)
-          }
+          setPaymentMethods(enabledMethods)
+          setConfiguredDefaultMethod(enabledMethods.some(m => m.id === methods.defaultMethod)
+            ? methods.defaultMethod : enabledMethods[0]?.id || '')
+          setPaymentConfigReady(true)
+        } else {
+          setPaymentMethods([])
+          setConfiguredDefaultMethod('')
+          setPaymentConfigReady(false)
         }
-        // 如果没有配置，使用默认值（空对象表示使用服务端/客户端默认）
 
         // 快捷金额设置 - 合并默认值
         if (configs.quickAmounts) {
@@ -1279,7 +1282,7 @@ export function POSPage() {
         }
 
         // 支付设置 (限额/默认方式) - Admin存到paymentMethods key下
-        if (configs.paymentMethods) {
+        if (configs.paymentMethods && typeof configs.paymentMethods === 'object' && !Array.isArray(configs.paymentMethods)) {
           setPaymentSettings(prev => ({
             ...prev,
             defaultMethod: configs.paymentMethods.defaultMethod || prev.defaultMethod,
@@ -1287,9 +1290,6 @@ export function POSPage() {
             maxCashAmount: configs.paymentMethods.maxCashAmount ?? prev.maxCashAmount,
             changeEnabled: configs.paymentMethods.changeEnabled ?? prev.changeEnabled,
           }))
-          if (configs.paymentMethods.defaultMethod) {
-            setPaymentMethod(configs.paymentMethods.defaultMethod)
-          }
         }
 
         // 交接班设置 - 合并默认值，防止缺失字段
@@ -1373,8 +1373,28 @@ export function POSPage() {
           .catch(e => console.warn('[POS] Failed to fetch discount rules:', e))
       })
       .catch(() => {
-        showToast(t('common.error') + ' - Config', 'error')
+        if (version !== configLoadVersion.current) return
+        setPaymentConfigReady(false)
+        showToast(t('pos.paymentConfigUnavailable'), 'error')
       })
+  }, [user?.storeId])
+
+  // Configuration refresh must preserve the cashier's choice while paying.
+  useEffect(() => {
+    if (!showPaymentModal && paymentConfigReady && (!paymentInitialized.current || !paymentMethods.some(m => m.id === paymentMethod))) {
+      setPaymentMethod(configuredDefaultMethod)
+      paymentInitialized.current = true
+    }
+  }, [showPaymentModal, paymentConfigReady, paymentMethods, paymentMethod, configuredDefaultMethod, setPaymentMethod])
+
+  // Never reuse another store's configuration during a store switch.
+  useEffect(() => {
+    ++configLoadVersion.current
+    paymentInitialized.current = false
+    setPaymentConfigReady(false)
+    setPaymentMethods([])
+    setActiveShifts([])
+    setSelectedShiftType('')
   }, [user?.storeId])
 
   // 页面可见性或获得焦点时重新加载配置（Admin修改设置后自动秒级同步）
@@ -1866,12 +1886,19 @@ export function POSPage() {
 
   // 加载交接班数据
   const fetchShiftData = async () => {
-    try {
-      const res = await posApi.getCurrentShift()
-      setShiftData(res.data?.data)
-    } catch (e) {
-      console.error('Failed to fetch shift data:', e)
-    }
+    await Promise.all([
+      shiftApi.list().then(res => {
+        const available = Array.isArray(res.data?.data) ? res.data.data : []
+        setActiveShifts(available)
+        setSelectedShiftType(current => available.some((s: { key: string }) => s.key === current) ? current : available[0]?.key || '')
+      }).catch(() => {
+        setActiveShifts([])
+        setSelectedShiftType('')
+      }),
+      // An unavailable active-list must not hide the existing session or block closing it.
+      posApi.getCurrentShift().then(res => setShiftData(res.data?.data))
+        .catch(e => console.error('Failed to fetch shift data:', e))
+    ])
   }
 
   // 加载今日费用数据
@@ -2763,6 +2790,11 @@ export function POSPage() {
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut) return
 
+    if (!paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod)) {
+      showToast(t(paymentConfigReady ? 'pos.paymentMethodDisabled' : 'pos.paymentConfigUnavailable'), 'error')
+      return
+    }
+
     // QRIS: Generate QR code first
     if (paymentMethod === 'qris' && qrisData.status === 'idle') {
       // Check if online - QRIS requires internet connection
@@ -3013,6 +3045,14 @@ export function POSPage() {
         displayMsg = t('pos.inventoryInsufficient', { item: itemName, available, needed })
       } else {
         displayMsg = rawMsg || t('pos.paymentError')
+      }
+      // HTTP/business rejection must never become a successful offline sale.
+      if (error?.response || !['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'].includes(error?.code)) {
+        const key = rawMsg === 'PAYMENT_METHOD_DISABLED' ? 'pos.paymentMethodDisabled'
+          : rawMsg === 'PAYMENT_CONFIG_UNAVAILABLE' ? 'pos.paymentConfigUnavailable'
+          : rawMsg === 'SHIFT_DISABLED' ? 'pos.shiftUnavailable' : ''
+        showToast(key ? t(key) : displayMsg, 'error')
+        return
       }
       try {
         await db.orders.add({
@@ -4104,6 +4144,9 @@ export function POSPage() {
               </div>
             </div>
 
+            {(!paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod)) && (
+              <p className="text-red-600 p-3">{t(paymentConfigReady ? 'pos.paymentMethodDisabled' : 'pos.paymentConfigUnavailable')}</p>
+            )}
             {offlineSaveFailed && (
               <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
                 {t('pos.offlineSaveFailed')}
@@ -4134,6 +4177,7 @@ export function POSPage() {
                   onClick={handleCheckout}
                   disabled={
                     isCheckingOut ||
+                    !paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod) ||
                     (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
                     (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
                     (paymentMethod === 'qris' && qrisData.status === 'waiting')
@@ -4681,21 +4725,23 @@ export function POSPage() {
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.selectShift')}</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {['morning', 'afternoon', 'evening'].map((shift) => (
+                      {activeShifts.map((shift) => (
                         <button
-                          key={shift}
-                          onClick={() => setSelectedShiftType(shift)}
+                          key={shift.key}
+                          onClick={() => setSelectedShiftType(shift.key)}
                           className={`py-3 rounded-xl font-medium touch-feedback ${
-                            selectedShiftType === shift
+                            selectedShiftType === shift.key
                               ? 'bg-primary text-white'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                           }`}
                         >
-                          {shift === 'morning' ? t('pos.morningShift') : shift === 'afternoon' ? t('pos.afternoonShift') : t('pos.eveningShift')}
+                          {(lang === 'zh' ? shift.nameZh : lang === 'id' ? shift.nameId : shift.name) || shift.name || shift.key}
                         </button>
                       ))}
                     </div>
                   </div>
+
+                  {activeShifts.length === 0 && <p className="text-red-600 mb-4">{t('pos.shiftUnavailable')}</p>}
 
                   {/* 开班金额输入 */}
                   <div className="mb-4">
@@ -4712,6 +4758,10 @@ export function POSPage() {
                   {/* 开班按钮 */}
                   <button
                     onClick={async () => {
+                      if (!activeShifts.some(s => s.key === selectedShiftType)) {
+                        showToast(t('pos.shiftUnavailable'), 'error')
+                        return
+                      }
                       const floatInput = document.getElementById('openFloatInput') as HTMLInputElement
                       const floatAmount = parseInt(floatInput?.value) || 0
                       if (floatAmount <= 0) {
@@ -4721,7 +4771,7 @@ export function POSPage() {
                       try {
                         await posApi.openShift({
                           openFloat: floatAmount,
-                          shift: selectedShiftType || 'morning'
+                          shift: selectedShiftType
                         })
                         showToast(t('pos.shiftOpened'), 'success')
                         fetchShiftData()
@@ -4729,6 +4779,7 @@ export function POSPage() {
                         showToast(t('pos.shiftOpenFailed'), 'error')
                       }
                     }}
+                    disabled={!activeShifts.some(s => s.key === selectedShiftType)}
                     className="w-full py-4 bg-green-500 text-white rounded-xl font-bold touch-feedback text-lg"
                   >
                     {t('pos.confirmOpenShift')}
@@ -4745,7 +4796,7 @@ export function POSPage() {
                       </div>
                       {shiftData?.shift && (
                         <div className="text-right">
-                          <p className="text-sm text-gray-500">{shiftData.shift.shift === 'morning' ? t('pos.morningShift') : shiftData.shift.shift === 'afternoon' ? t('pos.afternoonShift') : t('pos.eveningShift')}</p>
+                          <p className="text-sm text-gray-500">{activeShifts.find(s => s.key === shiftData.shift.shift)?.name || shiftData.shift.shift}</p>
                           <p className="font-bold text-primary">{new Date(shiftData.shift.openedAt).toLocaleTimeString()}</p>
                         </div>
                       )}

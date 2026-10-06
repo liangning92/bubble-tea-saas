@@ -16,21 +16,10 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
 
-    let shifts = await prisma.shift.findMany({
+    const shifts = await prisma.shift.findMany({
       where: { storeId, isActive: true },
       orderBy: { sortOrder: 'asc' }
     })
-
-    // 如果没有班次，创建默认班次
-    if (shifts.length === 0) {
-      shifts = await Promise.all(
-        DEFAULT_SHIFTS.map(s =>
-          prisma.shift.create({
-            data: { ...s, storeId }
-          })
-        )
-      )
-    }
 
     res.json({
       code: 200,
