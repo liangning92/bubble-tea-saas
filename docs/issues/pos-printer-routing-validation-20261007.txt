@@ -35,4 +35,20 @@ No production data, genuine customer/staff/order identities, physical device acc
 Synthetic screenshots /tmp/pos-printer-page-evidence; hardware status page visually inspected. They are not included in Git.
 
 Limits:
-Physical Windows USB/network/COM/UNC behavior and printer paper delivery not tested. Successful spool submission does not certify paper output. Timeout can be an already accepted job, so warning requires checking paper before retry; same-target legacy protocol attempts remain possible. Printer inventory errors now refuse without implicit routing. Renderer and Electron bridge must ship together; blank names in older clients are refused. No historical reprint UI exists in this baseline; IPC retry of an existing order number does not create orders. Full settlement, replay idempotence and other prior boundaries are unchanged.
+Physical Windows USB/network/COM/UNC behavior and printer paper delivery not tested. Successful spool submission does not certify paper output. Timeout can be an already accepted job, so warning requires checking paper before retry. After the P2 correction below, legacy automatic protocol attempts are removed. Printer inventory errors now refuse without implicit routing. Renderer and Electron bridge must ship together; blank names in older clients are refused. No historical reprint UI exists in this baseline; IPC retry of an existing order number does not create orders. Full settlement, replay idempotence and other prior boundaries are unchanged.
+
+
+Focused P2 review correction (increment from 7b3a7a2; this section supersedes earlier counts):
+node --test tests/stoploss/*.test.cjs
+48/48 PASS, zero skips/failures.
+New full actual state initializer -> selector test uses {printerName:"Exact Legacy Receipt", printerConnectionType:"usb"} and no receipt_printer_name mirror; exact target retained. Explicit [], disabled and invalid lists still refused. Legacy named network transport fields retained, unnamed missing list refused.
+Five actual IPC accepted-then-error tests cover receipt (openCashDrawer true), standalone drawer, kitchen, shift report and labels. The primary RAW stand-in records a submitted job then throws; secondary protocol stand-ins would succeed. Result is success:false/deliveryStatus:unconfirmed, exactly one RAW submission, zero secondary transport/pulse. Deliberate subsequent IPC call retains the order number and makes one new submission only; no automatic retry.
+node tests/stoploss/printer-page-check.cjs
+10/10 PASS, including new legacy-cache scenario with no server hardware configuration or mirrored name. Prior 9 cases retain one order request, paid/pending state, correct/zero targets and zero page errors.
+npm run typecheck:pos
+PASS
+npx tsc -p client-pos/tsconfig.electron.json --noEmit
+PASS
+npm run build --workspace client-pos -- --outDir /tmp/pos-printer-p2-build
+PASS, existing bundle-size warning only.
+No schema/server business/configuration/deployment edits. Renderer order creation/completion logic unchanged in this increment. Physical Windows output remains unverified; no automatic alternative protocol is attempted without proof of no submission.

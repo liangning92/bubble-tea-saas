@@ -680,7 +680,17 @@ export function POSPage() {
         const cached = localStorage.getItem('hardware_settings')
         if (cached) {
           const parsed = JSON.parse(cached)
-          return { ...defaultSettings, ...parsed, printers: parsed.printers !== undefined ? Array.isArray(parsed.printers) && parsed.printers.every((p: { type?: string } | null) => p && typeof p.type === 'string') ? parsed.printers : [] : defaultSettings.printers }
+          const legacyName = typeof parsed.printerName === 'string' ? parsed.printerName.trim() : ''
+          const printers = parsed.printers !== undefined
+            ? Array.isArray(parsed.printers) && parsed.printers.every((p: { type?: string } | null) => p && typeof p.type === 'string') ? parsed.printers : []
+            : legacyName ? [{
+              ...defaultSettings.printers[0],
+              printerName: legacyName,
+              connectionType: parsed.printerConnectionType === 'network' ? 'network' : 'usb',
+              printerIp: parsed.printerIp || '',
+              printerPort: parsed.printerPort ?? 9100,
+            }] : []
+          return { ...defaultSettings, ...parsed, printers }
         }
       }
     } catch (e) {

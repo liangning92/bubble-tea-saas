@@ -1542,43 +1542,17 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       }
     }
 
-    // 2. Windows 原生 winspool.drv RAW 方式（最高优先级，直接写入打印后台）
+    // A transport exception does not prove that the spooler rejected the job.
+    // Submit once; no automatic protocol retry or additional drawer pulse.
     try {
       await sendRawBytesToWindowsPrinter(printerName, rawBytes)
       writeCrash('[PRINT] sendRawBytesToWindowsPrinter success')
       return { success: true }
     } catch (winRawErr: any) {
-      writeCrash(`[PRINT] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
+      writeCrash(`[PRINT] Delivery unconfirmed: ${winRawErr.message}`)
+      return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message }
     }
 
-    // 3. 回退尝试 PosPrinter.sendRawCommand
-    if (PosPrinter?.sendRawCommand) {
-      try {
-        await PosPrinter.sendRawCommand(printerName, rawBytes)
-        writeCrash('[PRINT] PosPrinter.sendRawCommand success')
-        return { success: true }
-      } catch (rawErr: any) {
-        writeCrash(`[PRINT] PosPrinter.sendRawCommand failed: ${rawErr.message}, trying printViaWindowsRaw...`)
-      }
-    }
-
-    // 4. 回退尝试 printViaWindowsRaw
-    try {
-      await printViaWindowsRaw({ ...data, printerName })
-      writeCrash('[PRINT] printViaWindowsRaw fallback success')
-      // printViaWindowsRaw 为纯文本通道，无法发送钱箱脉冲；若开启开钱箱，额外发送一次钱箱脉冲保底
-      if (shouldOpenDrawer && drawerCmd.length > 0) {
-        try { await sendRawBytesToWindowsPrinter(printerName, drawerCmd) } catch {}
-      }
-      return { success: true }
-    } catch (winErr: any) {
-      writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winErr.message}`)
-      // 若打印彻底失败但需开钱箱，独立发送钱箱脉冲保底
-      if (shouldOpenDrawer && drawerCmd.length > 0) {
-        try { await sendRawBytesToWindowsPrinter(printerName, drawerCmd) } catch {}
-      }
-      return { success: false, error: winErr.message }
-    }
   } catch (error: any) {
     writeCrash(`[PRINT] print-receipt error: ${error.message}`)
     return { success: false, error: error.message }
@@ -1766,38 +1740,14 @@ ipcMain.handle('open-cash-drawer', async (_event, data) => {
       }
     }
 
-    // 2. Windows 原生 winspool.drv RAW 方式（最高优先级，直接写入打印机 Spooler 队列）
+    // A failed send may already have pulsed the drawer. Never pulse automatically again.
     try {
       await sendRawBytesToWindowsPrinter(printerName, drawerCmd)
-      writeCrash('[CASH DRAWER] sendRawBytesToWindowsPrinter success')
       return { success: true }
-    } catch (winRawErr: any) {
-      writeCrash(`[CASH DRAWER] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
+    } catch (error: any) {
+      return { success: false, deliveryStatus: 'unconfirmed', error: 'Drawer delivery unconfirmed: ' + error.message }
     }
 
-    // 3. 回退尝试 PosPrinter.sendRawCommand
-    if (PosPrinter?.sendRawCommand) {
-      try {
-        await PosPrinter.sendRawCommand(printerName, drawerCmd)
-        writeCrash('[CASH DRAWER] PosPrinter.sendRawCommand success')
-        return { success: true }
-      } catch (drawerErr: any) {
-        writeCrash(`[CASH DRAWER] PosPrinter.sendRawCommand failed: ${drawerErr.message}, trying PosPrinter.openCashDrawer...`)
-      }
-    }
-
-    // 4. 回退尝试 PosPrinter.openCashDrawer
-    if (PosPrinter?.openCashDrawer) {
-      try {
-        await PosPrinter.openCashDrawer(printerName, { onTime: pulseMs, offTime: pulseMs })
-        writeCrash('[CASH DRAWER] PosPrinter.openCashDrawer success')
-        return { success: true }
-      } catch (posDrawerErr: any) {
-        writeCrash(`[CASH DRAWER] PosPrinter.openCashDrawer failed: ${posDrawerErr.message}`)
-      }
-    }
-
-    return { success: false, error: 'All cash drawer opening methods failed for: ' + printerName }
   } catch (error: any) {
     writeCrash(`[CASH DRAWER] error: ${error.message}`)
     return { success: false, error: error.message }
@@ -1863,16 +1813,8 @@ ipcMain.handle('send-kitchen-order', async (_event, data) => {
           writeCrash('[KITCHEN] sendRawBytesToWindowsPrinter success')
           return { success: true }
         } catch (winRawErr: any) {
-          writeCrash(`[KITCHEN] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
-        }
-
-        try {
-          await PosPrinter.sendRawCommand(printerName, rawBytes)
-          writeCrash('[KITCHEN] sendRawCommand success')
-          return { success: true }
-        } catch (rawErr: any) {
-          writeCrash(`[KITCHEN] sendRawCommand failed: ${rawErr.message}`)
-          return { success: false, error: rawErr.message }
+          writeCrash(`[KITCHEN] Delivery unconfirmed: ${winRawErr.message}`)
+          return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message }
         }
       }
     }
@@ -1929,16 +1871,8 @@ ipcMain.handle('print-shift-report', async (_event, data) => {
           writeCrash('[SHIFT-REPORT] sendRawBytesToWindowsPrinter success')
           return { success: true }
         } catch (winRawErr: any) {
-          writeCrash(`[SHIFT-REPORT] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
-        }
-
-        try {
-          await PosPrinter.sendRawCommand(resolvedName, rawBytes)
-          writeCrash('[SHIFT-REPORT] sendRawCommand success')
-          return { success: true }
-        } catch (rawErr: any) {
-          writeCrash(`[SHIFT-REPORT] sendRawCommand failed: ${rawErr.message}`)
-          return { success: false, error: rawErr.message }
+          writeCrash(`[SHIFT-REPORT] Delivery unconfirmed: ${winRawErr.message}`)
+          return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message }
         }
       }
     }
@@ -2005,17 +1939,8 @@ ipcMain.handle('print-cup-stickers', async (_event, data) => {
           writeCrash('[STICKER] sendRawBytesToWindowsPrinter success')
           return { success: true }
         } catch (winRawErr: any) {
-          writeCrash(`[STICKER] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`)
-        }
-
-        // 2. 回退尝试 PosPrinter.sendRawCommand
-        try {
-          await PosPrinter.sendRawCommand(resolvedName, rawBytes)
-          writeCrash('[STICKER] sendRawCommand success')
-          return { success: true }
-        } catch (rawErr: any) {
-          writeCrash(`[STICKER] sendRawCommand failed: ${rawErr.message}`)
-          return { success: false, error: rawErr.message }
+          writeCrash(`[STICKER] Delivery unconfirmed: ${winRawErr.message}`)
+          return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message }
         }
       }
     }
