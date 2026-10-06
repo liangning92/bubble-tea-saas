@@ -15,3 +15,11 @@ Server, Admin and Staff production builds passed against this filtered combinati
 A fresh synthetic video/editor integration harness targeted this candidate source but stopped before acceptance when the sandbox refused its listening socket (listen EPERM). That restriction was not retried or bypassed. These video/editor groups have not passed for this combination. Content validation and five POS offline stoploss unit tests passed. Historical source-branch tests do not certify this combination.
 
 This branch is an incomplete integration handoff, not release acceptance. Do not merge, deploy, restart services or run production database changes from this handoff. Audit source and unresolved refund financial P2 remain separate and undelivered.
+
+## Additional completed audit source delivery
+
+The inert handoff/audit-completed/completed-source.patch and manifest deliver 130 source/config/schema/test paths from original base a915626e79ff80fc1d2243cc776485dd2c974eda through e7aec76afb57bd23c93b2bfcd743bb7c6d2a539c. This is a complete filtered patch for that implemented increment, not 12 disconnected components and not an applied runnable branch. It applies to its original base; shared-file conflicts against this training/desktop branch are recorded. No business conflicts were resolved.
+
+Later item-refund/net-income increments f96254c..1ada662 are not delivered as complete; original local history/WIP is preserved. Partial-refund/global financial P2 remains pending. All production/operational logs, screenshots and temporary operational records/scripts are excluded. Historical tests do not certify a new integrated combination.
+
+Previous training push CI run37507803265 ended in failure at Check translations; TypeScript passed and build was skipped. No code fix or CI rerun is included in this source-delivery commit.

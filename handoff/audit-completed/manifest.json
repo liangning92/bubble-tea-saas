@@ -1,0 +1,1536 @@
+{
+  "repository": "liangning92/bubble-tea-saas",
+  "original_base": "a915626e79ff80fc1d2243cc776485dd2c974eda",
+  "completed_source_target": "e7aec76afb57bd23c93b2bfcd743bb7c6d2a539c",
+  "latest_local_audit": "1ada66254dffa75767ecbba3ce4b95760be38d64",
+  "completed_selection": "all filtered source/config/schema and necessary server tests through e7aec76; excludes subsequent item-refund/net-income increments",
+  "excluded_commits": [
+    "1ada66254dffa75767ecbba3ce4b95760be38d64 docs: consolidate reviewed refund release blockers",
+    "75ed4b7a3ca2850fecdf03366b056467d97371bc fix: guard cash-flow receipt evidence and document remaining consumers",
+    "b1ebf4d53c07c1c863c3274bb72a814a07f1ac72 fix: limit unverified income guard to included report orders",
+    "eac776cd20f98754352b4b8a642184e620a309b8 fix: block unverified receipt replica income reports",
+    "f96254c03231e846e040a3180517eef56b54ceef fix: allocate item refunds and enforce transactional approval limits"
+  ],
+  "paths": [
+    {
+      "path": ".github/workflows/build-windows.yml",
+      "source_blob": "0f56d4d1de4408dd0ac0b416b9a9b0fe2ac6e68d",
+      "sha256": "c5af94341aa9c6d5465885ee43c4258981ae03fe141ff52b9bd2a8f77b8e610c"
+    },
+    {
+      "path": "client-admin/src/App.tsx",
+      "source_blob": "e39061164d387139b0f02e071362ba70aa728255",
+      "sha256": "041169ccaa3b62e9ff4685e79130d178869aa26db916e339e02032f5a0e1dbe6"
+    },
+    {
+      "path": "client-admin/src/components/PaymentEvidencePanel.tsx",
+      "source_blob": "3927c396e25552b5a514aecd9d3171dcdb5ad1a0",
+      "sha256": "7acd4104203c785870bcf1904e518eb4f64a47934c8fb3c96470afa295d78518"
+    },
+    {
+      "path": "client-admin/src/components/RefundPolicyReview.tsx",
+      "source_blob": "1a14de955b78a39a5e2a1f9a45fee319cd16103a",
+      "sha256": "ff0c25e70bee35cb9a1997ebdd9f243a68f9232a2cac2de85fa60e5680eff71d"
+    },
+    {
+      "path": "client-admin/src/i18n/index.ts",
+      "source_blob": "a5587782803a8cc92276dd2c066271b6b0b785b4",
+      "sha256": "2a928120cf38f095ada6470f0e70a0f16eb569dbb088ab7cdbdc19843cf42710"
+    },
+    {
+      "path": "client-admin/src/pages/SettingsPage.tsx",
+      "source_blob": "3a91a5e723daae5777e4ed866bd9fdcd5e74a08d",
+      "sha256": "16415a8847a97d287e7d8b89fa73cdb5736423cced8f1d89dc8643f997ccb250"
+    },
+    {
+      "path": "client-admin/src/pages/bom/RecipeEditPage.tsx",
+      "source_blob": "72e3e4fe2a31dbf20375bbbba10b2d0e96c2c59e",
+      "sha256": "3821c77b030c5a17985b7823969cd04986086ace58d7d158d765c80f8fb65ade"
+    },
+    {
+      "path": "client-admin/src/pages/inventory/ConsumptionAnalysisPage.tsx",
+      "source_blob": "167daa6bb900cfe65e8ee4036a9ce202b344a874",
+      "sha256": "c2b506505a112b1cc0b0df67efedcd8df08252869a30ba8762b0628af9403446"
+    },
+    {
+      "path": "client-admin/src/pages/inventory/InventoryCountPage.tsx",
+      "source_blob": "b24ced546692b2fa1af5b938a03e416721488fee",
+      "sha256": "c22e7ea50158435f573c6a33d87ff9eb6da8823acf268d14bba24f148c21c6c7"
+    },
+    {
+      "path": "client-admin/src/pages/inventory/InventoryIndexPage.tsx",
+      "source_blob": "d6e07f38c9d808a46bc6fda5efa0b62769f752cc",
+      "sha256": "a4481a53c97772b803e9a772ddae33f1026b1a215f12b1d8626f2b005f0393df"
+    },
+    {
+      "path": "client-admin/src/pages/inventory/InventoryPage.tsx",
+      "source_blob": "d852dd97efa4e0fd6e25eead887d3b2fb8e75b23",
+      "sha256": "88a975b1762e28eefba9a9b197708cd749cadae2725c4696ff4554e650e7bd69"
+    },
+    {
+      "path": "client-admin/src/pages/inventory/StockAlertConfigPage.tsx",
+      "source_blob": "b33674e88a3df96d46486c306cb252f30db05dce",
+      "sha256": "f0e68a25d47c758857a2d7e6926849ff77668e072757b4a8e196cd00e201ead4"
+    },
+    {
+      "path": "client-admin/src/pages/inventory/StockAlertsPage.tsx",
+      "source_blob": "3a36ebfc7395573f786c7e533794bd6ec092c01f",
+      "sha256": "30cf80a6ab686808f6fb69a5a8776395c89639228276504c3102ff959d36443f"
+    },
+    {
+      "path": "client-admin/src/pages/orders/OrderDetailPage.tsx",
+      "source_blob": "e25396b6657cfe6b23546f63cbb10a02b8b4e774",
+      "sha256": "4105b1fd81f096312153a4b1af5890ad7e6ff18102fc364aa08b0ef0b77c8ae4"
+    },
+    {
+      "path": "client-admin/src/pages/orders/OrderListPage.tsx",
+      "source_blob": "ad09e6e973759164dd6e2dcbdce70312aa59f118",
+      "sha256": "007d9fc0ffac206b85587277c5190ba3b81c3add01043d822956d22670c9d48c"
+    },
+    {
+      "path": "client-admin/src/pages/orders/RefundRequestListPage.tsx",
+      "source_blob": "b1dce5e46e358138f8fb8cc9d2d4b4b4ee85d532",
+      "sha256": "7d0be64c23d86112716cf56f4b10805efd47356f796ad3bc91ee2fef058103c2"
+    },
+    {
+      "path": "client-admin/src/pages/settings/AiPermissionsPage.tsx",
+      "source_blob": "d425dff42f97f4a9e7b95258e330698e7eb65635",
+      "sha256": "16c7e91138963c336d4b46c3f01f232ea61e36a59d35f457358e2bd959ab0090"
+    },
+    {
+      "path": "client-admin/src/services/api.ts",
+      "source_blob": "c412e38febd8ecf86fdaa4585e6a8faea659abc9",
+      "sha256": "4dac193206926b3ab55e51701da14dbfffd073a7d67d7119b882c6dfb3a024c2"
+    },
+    {
+      "path": "client-pos/electron/main.ts",
+      "source_blob": "d89f70fba8fc56961108575c79dd9e70cfeb7594",
+      "sha256": "463ca774e4967f0225a8034d1048171e27bdf4d7e04b9c722d8c45823f9add7f"
+    },
+    {
+      "path": "client-pos/src/App.tsx",
+      "source_blob": "f7fe0d23088d8ac7950b9f8bc2d33d1c37ef9b94",
+      "sha256": "566270a4dee8e0b724918884062e52e60e6eda24f3a35f34ca50c9d61215bd78"
+    },
+    {
+      "path": "client-pos/src/components/ManualQrEvidence.tsx",
+      "source_blob": "3952be60f622a53399b9a3eaff2f9da2fbd88570",
+      "sha256": "a5e754ae5efb86fc9c6360cc10b5432abcc7357319dea68c0cae92916e78aebf"
+    },
+    {
+      "path": "client-pos/src/db/offline.ts",
+      "source_blob": "1a00cdd249a5c0a581e90b3c63c00f1eaaf28cb7",
+      "sha256": "d3575803be1787a532d3cb252e4f87fcbac1741fbbdf85cdc39335efd2cb6988"
+    },
+    {
+      "path": "client-pos/src/i18n/index.ts",
+      "source_blob": "9d1081fa2f40c5014aff591075edffc5900ad40d",
+      "sha256": "3d8f32476c2fc18b97d5802f0fa5117d266cee179dff89a24453eda83961997e"
+    },
+    {
+      "path": "client-pos/src/pages/OrderHistoryPage.tsx",
+      "source_blob": "cf993e74941690b7dda13ea4447043427de2bdba",
+      "sha256": "eded34431b8b70f2dbb55ed6f149b343fc74f0b4ffcce69a5da182e484a5183c"
+    },
+    {
+      "path": "client-pos/src/pages/POSPage.tsx",
+      "source_blob": "af0b23a3cb4a532f9ffb19870da76726553f0106",
+      "sha256": "5d39ef465499116b8948d2ac8ef9afcfa614720773fdb0871a759d2a1661b825"
+    },
+    {
+      "path": "client-pos/src/pages/ReceiptSyncPage.tsx",
+      "source_blob": "e95659671e3e1eeb8744c27055e0e859a88a9e4d",
+      "sha256": "43cc31bd79e73172971c2db1debc2c645c7c2260e938e8801fe91a92b93d7c91"
+    },
+    {
+      "path": "client-pos/src/services/api.ts",
+      "source_blob": "11ae625d4d4fd9e7399e46c10c4bd32cd376f1f5",
+      "sha256": "c3410bfe55a748162ba224a57b4fe75167ade5742330f8068cdab7f440fd6ba8"
+    },
+    {
+      "path": "client-pos/src/services/syncApi.ts",
+      "source_blob": "d46589c47b3d4791ff2cfbd10dc6c8aebc574603",
+      "sha256": "711516ba03659c3441db189b6cf35209b25a0be652ee622da484d7fd3c8d49a6"
+    },
+    {
+      "path": "client-pos/src/utils/checkoutFailure.ts",
+      "source_blob": "6a194a401ef487d634458dc07432d91d16dc7b55",
+      "sha256": "b930577a04532944c61ccf7dbb3084c8842eeb2fe1ec3478a658fffe945453cf"
+    },
+    {
+      "path": "client-pos/src/utils/orderSyncPayload.ts",
+      "source_blob": "cef1d83bb92f7a46508f0c063dd00a2caa87d11c",
+      "sha256": "7572b692b131726fc6c6855544e00042a567dd68e353e0798584da046568b85a"
+    },
+    {
+      "path": "client-staff/src/App.tsx",
+      "source_blob": "81c3c68f9b8844c7cbb4fa66fbf949d7fb16e51c",
+      "sha256": "c0e01f3490ebe7d8a45ef0d425bdb7309b86c617f272ff07526cf430c21110bf"
+    },
+    {
+      "path": "client-staff/src/i18n/index.ts",
+      "source_blob": "d987bb234c1d79efccceb4efa7a9346a53da8b6b",
+      "sha256": "85dfd26a7714206bc8fa8e046227e16007d7aa2989e281bc8cc4fce538d1e262"
+    },
+    {
+      "path": "client-staff/src/pages/InventoryCountPage.tsx",
+      "source_blob": "6131632b82ff97548e1cc911599446bf87d76a54",
+      "sha256": "827d19014e3d1e4417dd13b3e82491b4c25045a79fa70e667ff14ba88c70f770"
+    },
+    {
+      "path": "client-staff/src/pages/InventoryPage.tsx",
+      "source_blob": "035b4e68f0c6c4956b1ff4968e76e5e765eb5a1b",
+      "sha256": "86a9502e6e5c0cdd759d883a590c34d2b0d278b00a67f53ded152edc2ddadd3b"
+    },
+    {
+      "path": "client-staff/src/services/api.ts",
+      "source_blob": "c8f770f0e76756c89d25995ce942d63a5ecdf5f6",
+      "sha256": "ca31f0076d8db307fce707b33a50dfe3ab647eb03890374a49f061502071adb4"
+    },
+    {
+      "path": "package.json",
+      "source_blob": "ec315d97e4592ea1b8a47ecd0f577e6ef04399c3",
+      "sha256": "858017d28b0b4896983e39b4cf70e5a929fb7de3e031104e768d876eea8d0b7f"
+    },
+    {
+      "path": "server/audit-contracts/count-boundary.ts",
+      "source_blob": "b1d53ffafead280a96de8836194b1b7bf699a21d",
+      "sha256": "b920c036c8b177f68d7e49122f4e52ceafe7a8afb31a2368c3c8a103cebf34d2"
+    },
+    {
+      "path": "server/audit-contracts/inventory-cost-review.ts",
+      "source_blob": "1f6f07de51cc8c199dd497c7430f9c56e25c021f",
+      "sha256": "7a9bd4622e2d1d3254aacdb9c1a8315acc8ec030606b8c5620027abe29b53ff5"
+    },
+    {
+      "path": "server/audit-contracts/inventory-count.ts",
+      "source_blob": "802b0a8f1d2f35dba424ba63d9ac34734ad9c4e7",
+      "sha256": "7248c19b03ed636c22a658bb20b0dd5004bafffadbfd39b9d73c8fd67bd68371"
+    },
+    {
+      "path": "server/audit-contracts/inventory-units.ts",
+      "source_blob": "170f2e2960718d932207b4d5e649af12186550dc",
+      "sha256": "81263296aacfb13fb3885ebea658f71e970a59947d7688466a371ceebcc33406"
+    },
+    {
+      "path": "server/audit-contracts/ledger-watermark.ts",
+      "source_blob": "5fd80227a0c8e35a76075b13fb1ba7f68ed50666",
+      "sha256": "fec91e4e91ea850d1f9ed9c8a1a9620d5bd435a9b8baf0e61d861687b0ef34d1"
+    },
+    {
+      "path": "server/audit-contracts/order-number.ts",
+      "source_blob": "d829c6d18249ee32da277928f8567535d81f7e84",
+      "sha256": "41b60839c9d0f1ad96e557e9614da4df7d06f75c96da5a53ab31b87a1030eecd"
+    },
+    {
+      "path": "server/audit-db-tests/inventory-cost-review.test.ts",
+      "source_blob": "3102340da7967551e2132a6113984b7766954401",
+      "sha256": "0ce6d5ceb74313d0f72c9f2d3460732b9c5139ed7c0e4817e132df9a2dcdf3d9"
+    },
+    {
+      "path": "server/audit-db-tests/inventory-count.test.ts",
+      "source_blob": "ec8a8279b68319cc2251cfb7abc070a239b396e4",
+      "sha256": "8362848179cc523f7794fb56ca45da33e26a1ce0c88bbfe3790401dde7fe9e7a"
+    },
+    {
+      "path": "server/audit-db-tests/inventory-units.test.ts",
+      "source_blob": "413f254530991bf2b3980b2b6a4d3b311bd25245",
+      "sha256": "e51f6fe27d6749ded0c0864aa038f1e8503cdc7cca2309bc03e225e5c7593efb"
+    },
+    {
+      "path": "server/audit-db-tests/order-number.test.ts",
+      "source_blob": "1a833e26eafa1d0eadd5c769adbe4e1b21514f8c",
+      "sha256": "d69a9b9c7a987cb0e7837412692be9ef2e7b8063492ae7c3758be0932e43c5ad"
+    },
+    {
+      "path": "server/audit-db-tests/receipts.test.ts",
+      "source_blob": "f321bc7082c74cf5b262757b2f01c1bf97f60f39",
+      "sha256": "6f767b7af278321f6fb71c88ea7c0117ea34bf257de02b898e5198fa97c48283"
+    },
+    {
+      "path": "server/audit-db-tests/reports.test.ts",
+      "source_blob": "bb7eaa9c4ba26b29fa24267c94605b3be22b0cf3",
+      "sha256": "69281726e0fd1bbf0ff470359460bf9fcde960aa95b5737c3f59a62b852ce516"
+    },
+    {
+      "path": "server/audit-db-tests/safety.cjs",
+      "source_blob": "38474a59ed241d43421941c92431bd58fc5cb70f",
+      "sha256": "c44ffa9b25be2b85c44831a6fc480d81c2b7591c505462d2d24d08d19e4cbc32"
+    },
+    {
+      "path": "server/audit-db-tests/search.test.ts",
+      "source_blob": "9cf06ddadadf57593bccf3040a042a9d6dafd3a9",
+      "sha256": "b7b82fb063bfe55099cb3f9e349f2fa24533c089a1fa140560fa23743c30dd92"
+    },
+    {
+      "path": "server/audit-db-tests/transactions.test.ts",
+      "source_blob": "2ee30edb3ff4c0fc4f7f5137094db0d9a47e28ff",
+      "sha256": "b4e2ade8e8b6f2b057d71d2b7b1411943945fe5045910f97d4d3b106e550efeb"
+    },
+    {
+      "path": "server/audit-sqlite-tests/runtime.test.ts",
+      "source_blob": "81f3b65212e6dd33dbbd32e1c33a3c7cc9af510d",
+      "sha256": "2f5cfeb386a3e6584b5a55da7f376ec6811ab0ac58461aa296ebb067e09dd6b0"
+    },
+    {
+      "path": "server/audit-sqlite-tests/safety.cjs",
+      "source_blob": "e9fc098fa0e212270232ced6b8fdcfa210ddf68d",
+      "sha256": "a7a59f9ec08fc3e8d4c19bf384e64ba2b51478bed93e2b7dc8ad6de3e5604ee6"
+    },
+    {
+      "path": "server/audit-sqlite-tests/upgrade-durability.test.ts",
+      "source_blob": "3430e9ba7afb33a8bd27706791d60d30de3de91a",
+      "sha256": "5476aa7787aa943ff80c1865a5d14d840686ca195a1bb3d79b538c1813371692"
+    },
+    {
+      "path": "server/audit-support/searchCases.ts",
+      "source_blob": "07b211e1cb59a222e4ab9d917a79cc23119ebad1",
+      "sha256": "b5ad617a9cc0131a5f7e220dce146004bf134927e3757683289f51f4cd2527ee"
+    },
+    {
+      "path": "server/audit-tests/ai-config-boundary.test.ts",
+      "source_blob": "3a5e59e7f509edfa87106c6ff015b85ade4bf8f3",
+      "sha256": "f1164904e8859eec7e394ce045e4411c3976ab660e6fb9393b97870dff500e69"
+    },
+    {
+      "path": "server/audit-tests/ai-permissions.test.ts",
+      "source_blob": "0b949611fbbd88f2bc254bf586bdfe08c27bd100",
+      "sha256": "958941bbba5390964b9bb9daf7a2ca4656bfb827e7c905d5f2a5a7efa0294163"
+    },
+    {
+      "path": "server/audit-tests/channel-bootstrap.test.ts",
+      "source_blob": "7abea9cdb06937abe617c77013bddb41a80137eb",
+      "sha256": "5de61a66af83595d42307da5e69729c1c2390d670d387ead946368c0c156e35d"
+    },
+    {
+      "path": "server/audit-tests/checkout-failure.test.ts",
+      "source_blob": "b68a3f996cda29e4276152039d4c6fe98974cde1",
+      "sha256": "ac3160728b59edd00c116e3e29b1c48794c9d13630bc2f189cd8c3937f28581d"
+    },
+    {
+      "path": "server/audit-tests/cloud-order-sync.test.ts",
+      "source_blob": "a2c32aaa9cce53a6735290dc46b214ade2e36a1c",
+      "sha256": "6dca62fb7a14600e58cc41c0ad3acf3a365d8263030e89fdf01fdd9c8ef56c08"
+    },
+    {
+      "path": "server/audit-tests/count-boundary-limit.test.ts",
+      "source_blob": "98e74278f26c54bd412e0cb3b1aefe2731195e9b",
+      "sha256": "23533edee756b0c0c5f3c2f779f8940b162028f86d585b60f3c071c0768cad1e"
+    },
+    {
+      "path": "server/audit-tests/desktop-sqlite-config.test.ts",
+      "source_blob": "e37bc825f2be7a9db4d411e28101425784a83d3b",
+      "sha256": "c6d00445f884bd124e1db45882c60bcc9210d8c615cae9a291f75e6ae0bd580c"
+    },
+    {
+      "path": "server/audit-tests/inventory-count-boundary.test.ts",
+      "source_blob": "f1761b32480db6004d24334f4232e5041d49d32f",
+      "sha256": "8deb5a1e21900cae32f0e399db4f9763dad1cb27c6d3b2d72fe4ff2a78df5dcc"
+    },
+    {
+      "path": "server/audit-tests/inventory-units.test.ts",
+      "source_blob": "95a112daef790fbededa5908f13dcdf90d14e7ec",
+      "sha256": "5228d6c5573033f05ab3312d3bd4a5c14ef2a44d03681c50c48c718291d0ecde"
+    },
+    {
+      "path": "server/audit-tests/operations-advisor.test.ts",
+      "source_blob": "e28d7f2707b4dad5ddf10259644747de23962f13",
+      "sha256": "f3e24cae785d662bc07f3e5082f64ab8f682b1781ebee463684537d9715338da"
+    },
+    {
+      "path": "server/audit-tests/order-boundary.test.ts",
+      "source_blob": "f6d2824366e2944754faced51bba64e733cfcdcc",
+      "sha256": "2f0b2b6d715ea8df38d73eae01efad3bc366bb13f3ae64d258082993887e730c"
+    },
+    {
+      "path": "server/audit-tests/order-finance.test.ts",
+      "source_blob": "21af0f48e65d1ed42d3c9001403cee77f9a2bc4d",
+      "sha256": "0db3d3848e8c4548cd57d6ae1f6f00b8df494d581878f1b5fd3e6036ba0f689e"
+    },
+    {
+      "path": "server/audit-tests/order-request-replay.test.ts",
+      "source_blob": "155740e885ece9741178199931a178d6edfb16a2",
+      "sha256": "0cfff1b6e0bccae200a1e4cbdf8a1200c4420daf4203158be7ff14e76e081566"
+    },
+    {
+      "path": "server/audit-tests/payment-evidence.test.ts",
+      "source_blob": "eb7d4b5c625d9538b470f77a9a14e558f9087a95",
+      "sha256": "cf282c9d413b3bf43ac41d4b34c0f26cb7df98e1a8a6129c2265edda9a066373"
+    },
+    {
+      "path": "server/audit-tests/payment-webhook.test.ts",
+      "source_blob": "c4c37b3d49d2120975fd38357ad5ea423393d094",
+      "sha256": "ba481c628dc68611c5b34283cfb8d5a95f9e51561ecdb63d813ca9cb8ed4d99d"
+    },
+    {
+      "path": "server/audit-tests/refund-atomicity.test.ts",
+      "source_blob": "3c024994aca58ec44308383b51f4a88147af0ef7",
+      "sha256": "807eec79716d49472aa949d0580f9f669958fea907885f39b0ab557670f0141a"
+    },
+    {
+      "path": "server/audit-tests/refund-policy.test.ts",
+      "source_blob": "b83134fb77e7bfeec83cf996693bd479396d7525",
+      "sha256": "2d291fc6b01d5bd16eb473c0a534670920cefc3f25088fad3e64fa51b8419560"
+    },
+    {
+      "path": "server/audit-tests/resource-boundaries.test.ts",
+      "source_blob": "e7ba29125fd8be10b9c44b4e6ea23468c4819b16",
+      "sha256": "1105ebb32abfe8fc6b187a4f23adb57348cfec2c26bd8c566b9d49ef074a54e0"
+    },
+    {
+      "path": "server/audit-tests/resource-middleware.test.ts",
+      "source_blob": "28e7b1592bad641bbbd4477fd8ddf5a201dfd105",
+      "sha256": "b73f0320f359e63acdeeaf377499a8b2d9518d31bb6bd39ba5bf6180ae0672a7"
+    },
+    {
+      "path": "server/audit-tests/route-reachability.test.ts",
+      "source_blob": "42a00f11e2229160b0a5a8c0df95e937f9af5b2a",
+      "sha256": "e8a688357f53a07c0427f16753b64a42a3cb9d4a994042dc0cf6b10186ae8ae4"
+    },
+    {
+      "path": "server/audit-tests/safety.cjs",
+      "source_blob": "83360168b3d1ca056ab06f6ab8ec61b8374642b5",
+      "sha256": "a5897a38b948649f77f8a65f2529615a70186b27f64cd6cc1ef1579a485527a5"
+    },
+    {
+      "path": "server/audit-tests/staff-routing.test.ts",
+      "source_blob": "83acdf20d9f3374c9f44f7daa08042f88db43f56",
+      "sha256": "0ea9b22f37ef9fb61a745151317c8091b8beba4c40098839bb7c228c7b3b0656"
+    },
+    {
+      "path": "server/audit-tests/text-search.test.ts",
+      "source_blob": "2801c29d2ddb5ba2e1d63e4b0db0b9efe844fb01",
+      "sha256": "43003c9e02b7e1b099e70ce70a4323fc3d9f6c49877cf0c592309caf14f9ac1f"
+    },
+    {
+      "path": "server/audit-tests/timezone.test.ts",
+      "source_blob": "0445cd3aab029a31e9d268f5146ef45beeccffe8",
+      "sha256": "6dc680a5c94361e4f46f69d31008ee0e21a89d5c1e6ef5d996603c3283f9d601"
+    },
+    {
+      "path": "server/jest.audit-db.config.cjs",
+      "source_blob": "c47c51de0297145b6a46f2f845f8a90ecddccc2c",
+      "sha256": "7357f5b82ef02ecefc9244661315c2261ff7807ece11cdf5b06fe5e59cb5430f"
+    },
+    {
+      "path": "server/jest.audit-sqlite.config.cjs",
+      "source_blob": "dc91bbd73cd1474eb283a97754669d6e0d3320a0",
+      "sha256": "c0feeb8584b37d19d9e66da19573c79d62a3cbaff5e7ca9667ca777d4cc15b18"
+    },
+    {
+      "path": "server/jest.audit.config.cjs",
+      "source_blob": "e312a39848a4aa280965b51cb0c6d504fde2cedc",
+      "sha256": "0ac786690b1eda4e0498521077467c734c05e4ad299dffdcd1c7a7a74ecf3525"
+    },
+    {
+      "path": "server/prisma/schema.prisma",
+      "source_blob": "a75c6cba9ac76a629e55076c30415663b4aa748a",
+      "sha256": "840fd418b6dd5c0cca4465a04ce78624b06d85d82f6ee50847904c2648f3b18d"
+    },
+    {
+      "path": "server/prisma/schema.sqlite.prisma",
+      "source_blob": "48ad8df7747d864dc25ae761cfa8a5a409998c29",
+      "sha256": "c45ff8317271cfb9ce7c3cb2e7c1c244ceb272af1cd2318f7074940bfbac6076"
+    },
+    {
+      "path": "server/src/contracts/StoreOperationsAdvisor.ts",
+      "source_blob": "62531e2ac5c3f3dd177b48b2e7a14d398317cfcc",
+      "sha256": "e096595e019c4dbd9bd9ecffd1a140c45aa9698e796a1e27fb3c2b892f5c4258"
+    },
+    {
+      "path": "server/src/index.ts",
+      "source_blob": "9360d071b08380f43674b734fc7297f4c464e8e1",
+      "sha256": "c8c3d2551d6a46697eea43ccbc43ff6fd3a20722eafc5aea20351ff5288865e6"
+    },
+    {
+      "path": "server/src/middlewares/resourceStore.ts",
+      "source_blob": "83e8969bfa092c994dfcb42ae6d5c50aaa89724c",
+      "sha256": "6809d9325e4670f6323e6a49f956ae09a2df846eaa7b415b9a1b4cad82bf8c6b"
+    },
+    {
+      "path": "server/src/routes/aiPermissions.ts",
+      "source_blob": "7ae6acfd954aaf074a070b3c65a315c5dec05945",
+      "sha256": "131d93545765e1932d7d5eb15390c921c28e45db53567f5b77df83b217f2b07f"
+    },
+    {
+      "path": "server/src/routes/bom.ts",
+      "source_blob": "7b23de2b8cd5121b6ee184515b6e8da34df3efcc",
+      "sha256": "e7892ee95e116a12efbc412ee3d8fd86e95171e8dc01e3247c7eb09a38f25431"
+    },
+    {
+      "path": "server/src/routes/channel.ts",
+      "source_blob": "97811d22bdb443c75d7d94ecadabdbfa58bcc1ce",
+      "sha256": "5fa4abbf4e00668750252b0b033f21e54b867d69d8f099785963748216e3a94d"
+    },
+    {
+      "path": "server/src/routes/config.ts",
+      "source_blob": "e38cfea68d7b1b22dad7f6640cc47ca006d102ef",
+      "sha256": "f75838d135b7ad4b567c482403f3ee083a96f6af60fedc6600c6ad1a279f2fd7"
+    },
+    {
+      "path": "server/src/routes/inventory.ts",
+      "source_blob": "5e3f2fcc568c3e750a27ae82af69c25666b760a0",
+      "sha256": "713e0bfde00e53d915b89cf9fa2397fe942731cab86249aa4f0e1f07b21c56e1"
+    },
+    {
+      "path": "server/src/routes/inventoryCount.ts",
+      "source_blob": "90ebf269061c2c3d823f38e2371f3ae73dccd8b3",
+      "sha256": "95761af25b8657d7e04731c0c635a24ea723700618d4ecdc769a0f5e873ecd9d"
+    },
+    {
+      "path": "server/src/routes/member.ts",
+      "source_blob": "8874e6c7cbefe810b68a45840b3ed4b4c7289332",
+      "sha256": "4ab38e274f1483cdbc02081bb8d4b63eaa9110a3fd8d81911ccaf0d97cfb6da8"
+    },
+    {
+      "path": "server/src/routes/order.ts",
+      "source_blob": "251df51da1151dadb9eb8809a04bfd8da327c75c",
+      "sha256": "2949425bf92d4b54938a3b7943f4f42f7d02e8963102e1ba3b7cde0084ce415b"
+    },
+    {
+      "path": "server/src/routes/payment.ts",
+      "source_blob": "6ae4b3a0be7f7cf18382c55d355cc7e5dea16233",
+      "sha256": "e054ffd215cc917c6145da612aa3fb0c337e7c9c5cb1a69ea299d2ebcc12e675"
+    },
+    {
+      "path": "server/src/routes/product.ts",
+      "source_blob": "c97318b424d52b97a1357a769fb1ca30c9d60cc3",
+      "sha256": "6ed2efc357c2b22da708b8df0adfe3dfdec01154699e55c7b6b6cbf26b3f76cd"
+    },
+    {
+      "path": "server/src/routes/receiptSync.ts",
+      "source_blob": "e3a9c2d1ae8fccc20ab729a5e7c09bbf9a4e0216",
+      "sha256": "7e9c83b391c1a8e9c426adf11ecd2ae1ce2417e7e0e28d589a58c4f78f830308"
+    },
+    {
+      "path": "server/src/routes/staffManagement.ts",
+      "source_blob": "cf767194e0696e8d96e70ede6e92b7a509b07c03",
+      "sha256": "9efaeaaae7954c99142e8f60a119cf5a67aaf2231ec047d789403166169ff515"
+    },
+    {
+      "path": "server/src/routes/sync.ts",
+      "source_blob": "16ebe8ff18e9d061b0aa298f9d2a3adf042a8385",
+      "sha256": "d23b257c7f093f7df7f39d1bdf9635efb4988d8e129d3cb2328a14b07578606f"
+    },
+    {
+      "path": "server/src/services/AiPermissionService.ts",
+      "source_blob": "f1c7ef3b2484af16c548e3f57cf30efa36b14a53",
+      "sha256": "155e53e14fb748c82906a72d8906d748a26ba9171c2ef050b86c0d994d310ea4"
+    },
+    {
+      "path": "server/src/services/BomService.ts",
+      "source_blob": "2731312ddfeb4ca76fdfe973dc3c7e8d7e987bce",
+      "sha256": "4541ccceddc66d3293c308d29fb0ce3e59078707a0af5033893fce7fdae9f170"
+    },
+    {
+      "path": "server/src/services/InventoryAlertConfigService.ts",
+      "source_blob": "22ed3719b8d7991ebf8716f74185937b9fa93d0a",
+      "sha256": "e5611f53040cab76fda79cbb77a3093702a7e78cc69519d3ff516d7583cee2b2"
+    },
+    {
+      "path": "server/src/services/InventoryCountService.ts",
+      "source_blob": "965c17ad9a061083355779de2504d45b353aa9e2",
+      "sha256": "1e0607d48d0c4e51a5fb6fa34ca6089e20d96720ea851fe81876589f2e464292"
+    },
+    {
+      "path": "server/src/services/InventoryQuantityService.ts",
+      "source_blob": "db98d15a9df2955ab05089297d49c3b91e9b5c35",
+      "sha256": "0dd7b499f76b0057802a2175b3760dbe4cb09912d0ce871ec8f974e76ec31414"
+    },
+    {
+      "path": "server/src/services/InventoryService.ts",
+      "source_blob": "40345dba8fa4575ce98921814877d1b2cf49ca49",
+      "sha256": "070ba215940c94f608ac6ab20fd8697fb12615844ccd9fb93442e2926c9619e0"
+    },
+    {
+      "path": "server/src/services/InventoryVarianceService.ts",
+      "source_blob": "e6b14af79a4c80c42c387f4cafb287b0c884d6cf",
+      "sha256": "13864f69fa70f08e591ae2ad8de4505ac21a5440c3455f388a910ad470f1d9b6"
+    },
+    {
+      "path": "server/src/services/MaterialService.ts",
+      "source_blob": "c0134c26a59381907f180464330353c26899c912",
+      "sha256": "611321ec2cfe72a6141b87bb796f48ef447a4490150e16ac25031dae334567f5"
+    },
+    {
+      "path": "server/src/services/MemberService.ts",
+      "source_blob": "6eb9b83dc665a97bf839091172f91264a3a2dd34",
+      "sha256": "8a33d135ae9e11b2f7383dea6c3f037df42ff84c6eff25dc5205e8c8aeb72fc1"
+    },
+    {
+      "path": "server/src/services/OrderService.ts",
+      "source_blob": "d79153a96843891359fb7bba36d6eb3d1b52c991",
+      "sha256": "2cb95f9955baa6ce40ceadc41e30497b5d37f9e309d0869f06a5f93d136bdb3d"
+    },
+    {
+      "path": "server/src/services/PaymentEvidenceService.ts",
+      "source_blob": "1784b8e39092c85b8c39181865b0ffaffc66f2c0",
+      "sha256": "e8533478716a73fffbe0eecb75da84d5ea9b1210780144192ef827d3d835da6a"
+    },
+    {
+      "path": "server/src/services/PaymentService.ts",
+      "source_blob": "2b80d1d3b24c293027aee946bf35c97de7f59b10",
+      "sha256": "e1278f4c5e5ddc48f8094d139583a1af19dacb93fce1fa9f8de16b8c518bffc4"
+    },
+    {
+      "path": "server/src/services/ProcessRecipeService.ts",
+      "source_blob": "d2e83c6e19713d9aa62593a424db4cc61d98d9c9",
+      "sha256": "3e5baf3f90ada8339c09583b1bf6e1b501bf26aaba21bd866660358c7b9cbce0"
+    },
+    {
+      "path": "server/src/services/ProductService.ts",
+      "source_blob": "a5b58832ef409ecec6d51c33fc86129193db3482",
+      "sha256": "495de5e86e85c317bf80610aa39fa93007723039641852e9dae9a0b2d7b6b6fa"
+    },
+    {
+      "path": "server/src/services/ReceiptSyncService.ts",
+      "source_blob": "e9444863519dc8dcb7d0a9b545922e3bbadd9b06",
+      "sha256": "75911dc6fd0c21bf4c3d3a8e87da8dad5693d2769774d9b5d13f60d26a952e9f"
+    },
+    {
+      "path": "server/src/services/ReportService.ts",
+      "source_blob": "3661b2d98a1218576c55828eb2bae3121c296de2",
+      "sha256": "316110cc4f2bf86d95f9520aacf43800b36120cb619e99644c97eb7810be6959"
+    },
+    {
+      "path": "server/src/services/StaffService.ts",
+      "source_blob": "d6915df3a219c95b24b1379af1f7370b1b42f5aa",
+      "sha256": "f36e80f412f99d0e476ec713a3399491829288ce7744289f8033eadb5571a6e3"
+    },
+    {
+      "path": "server/src/services/SupplierService.ts",
+      "source_blob": "b8c9e53873a6ab6f102f4d7c9006c827e2ce3b5d",
+      "sha256": "c42724352a4ce48420cd90866e9db6b8963c6dd36b3d6aa08cfa2d98e987cf12"
+    },
+    {
+      "path": "server/src/utils/countObservation.ts",
+      "source_blob": "3a5497f1682c990ec5a08e8c1d7deee51bb5e09b",
+      "sha256": "e081c584addff645b8eb58f0510d261fb27d508a6856d417261ed0a981b042fe"
+    },
+    {
+      "path": "server/src/utils/dateUtils.ts",
+      "source_blob": "dc10d7c4b387e70b620ad36d803a00898bf9d4de",
+      "sha256": "d4ee6e893a8432f044411daf9c68c34df519714f90728f3d47a6bb8f652cfdee"
+    },
+    {
+      "path": "server/src/utils/inventoryLedger.ts",
+      "source_blob": "75aca27520427bbb8c9cc089e6886292a3e03249",
+      "sha256": "1699a8261e0cffabb7b1f2240926a800d390448c615e0af2bd8888ac287853c0"
+    },
+    {
+      "path": "server/src/utils/inventoryUnits.ts",
+      "source_blob": "ddbae65c48cabc4021223f91b188e153df9cff14",
+      "sha256": "9c84a37b824d5927aa192d22a8647c86030f88908dad1873ba2bb99cf1eb7cc2"
+    },
+    {
+      "path": "server/src/utils/inventoryVariance.ts",
+      "source_blob": "4039ceaf14169fe530cc5c1982033f4dbba75679",
+      "sha256": "0f5241c6f39efa6cded6e0dbaad154879c27863a1847b3a28b4fbc1706abf67e"
+    },
+    {
+      "path": "server/src/utils/orderNumber.ts",
+      "source_blob": "81142dacba9c2b9d8e3e51a9f6cc6506b932e6d1",
+      "sha256": "64484cfaec2c469f7c0f2f4a54914ceccd9808c223049e0de74fbfb431575ef1"
+    },
+    {
+      "path": "server/src/utils/orderRequestFingerprint.ts",
+      "source_blob": "f6e320deae098bb13cbd28698230f6d27f4da3a6",
+      "sha256": "ddaa9a9df658fe5dd64ef47fab0dabdc28f2ed9ebf05e2225b138383abcb16eb"
+    },
+    {
+      "path": "server/src/utils/orderSnapshot.ts",
+      "source_blob": "8e90143ad4450e9d1768e066732d32de76ea81ce",
+      "sha256": "cf55b2c2e3e129d943d6bcf1e41413a9c5a504da5c70c2888a530823750325e5"
+    },
+    {
+      "path": "server/src/utils/orderStatusPolicy.ts",
+      "source_blob": "8fd5c899c288f30946d7631d765ee629ce9888b2",
+      "sha256": "971d52dc531cdf3c0498e94226bae43a2e218481f9e552b4e611823d3c4b733f"
+    },
+    {
+      "path": "server/src/utils/refundPolicy.ts",
+      "source_blob": "d2c46b0b3e0becab894925bde4cec88c11fae847",
+      "sha256": "5b72f76b4a7e7aec4744b51d7f02ae53f83c1be439ee6e3ee6d07804dc29b6b5"
+    },
+    {
+      "path": "server/src/utils/sqliteUpgrade.ts",
+      "source_blob": "f622777c9424038a51707c880f19eadc60b1ed37",
+      "sha256": "d84a99be8cf79dfb5a79d9642dcb79d6740f6915331ddd250f30df28088f6095"
+    },
+    {
+      "path": "server/src/utils/textSearch.ts",
+      "source_blob": "db03dfa29d1f08610925e41d8b3f9af642f49cb8",
+      "sha256": "88d655e48ba297268714270f7648601621d8dcdb9617705f0ce45c41557512f2"
+    }
+  ],
+  "source_path_count": 130,
+  "patch_sha256": "f3850c502267e7dcaac4bc2fd259f8f8362abace9ee6651e4557c9a5b338482d",
+  "excluded_paths": [
+    {
+      "path": "docs/audit/AI-OPERATIONS-CONTRACT.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/ENDPOINT-INVENTORY.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/FUNCTIONAL-ACCEPTANCE.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/REVIEW-HANDOFF.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/REVIEW-ROUND2-CLOSEOUT.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/SQLITE-AND-SYNC-ACCEPTANCE.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/all-jakarta-batch8.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch1-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch1-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch11-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch11-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch11-pos-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch11-server-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch12-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch12-server-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch13-schema.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch13-types-initial.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-admin-types-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-admin-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-last-targeted.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-manual-ui-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-manual-ui.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-pos-build-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-pos-build-retry.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-pos-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-pos-types-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-pos-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-schema-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-schema.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-server-build-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-server-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-sqlite-validation.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-synthetic-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch15-ui.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch2-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch2-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch3-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch3-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch3-harness-initial.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch4-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch4-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch5-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch5-all.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch5-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch6-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch6-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch7-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch7-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch8-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/batch8-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-client-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-client-admin-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-client-pos-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-client-pos-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-client-staff-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-db-stop.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-db.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-schema.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-server-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/closeout-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/cost-review-postgres.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/cost-review-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-admin-ui.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-http-acceptance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/count-pg.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-http.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-pg-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-pg.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-server.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-sqlite-full.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-review-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-staff-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-staff-ui.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/count-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/final-utc.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-app-acceptance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/full-shell-client-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-client-pos-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-fourth.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-second.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-targeted-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/full-shell-third.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/inventory-ledger-postgresql.sql",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/manual-evidence-harness.html",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/order-number-postgres.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/order-number-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/order-number-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/order-number-targeted-postgres.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/order-number-targeted-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/payment-refund-postgresql.sql",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/payment-refund-sqlite.sql",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/pg-http-runtime.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/pg-pages-cleanup.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/pg-pages-runtime.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/pg-receiver-acceptance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/pos-typecheck-batch8.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch10.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch11.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch12-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch12-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch13.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch15-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-batch15.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/postgres-schema.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/real-page-acceptance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/receipt-http-acceptance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/receipt-http-worker.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/receipt-refund-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-http.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-pos-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-postgres.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-refund-ui.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/receipt-ui-harness.html",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/recovery-runtime.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/refund-boundaries-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/reports-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/reports-harness-initial.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/restore-acceptance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/review-flush-runtime.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/review-round2-before.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/review-round2-postgresql.sql",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/review-round2-sqlite.sql",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/run-sqlite-acceptance.py",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/search-all-before-excerpt.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-all-postgresql-stop.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-all-postgresql.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-all-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-all-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-all-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-postgresql-stop.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-postgresql.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-server-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-sqlite-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-sqlite-before-excerpt.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/search-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/sqlite-pickup-compat.sql",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/sqlite-runtime-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/sqlite-runtime-before-excerpt.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/sqlite-server-types.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/sqlite-synthetic-after.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/temporary-postgres-stop-batch15.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/temporary-postgres-stop.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/typecheck-batch8.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/typecheck-final-batch4.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/typecheck.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/ui-ai-permissions.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/ui-count-variance.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/ui-manual-evidence.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/ui-receipt-sync.cjs",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/audit/unit-admin-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/unit-postgres.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/unit-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/unit-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/upgrade-build.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/upgrade-runtime.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/upgrade-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-count-http.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-pg-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-pg-migration.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-pg.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-server.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-sqlite-final.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-sqlite.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/audit/watermark-synthetic.log",
+      "category": "logs_or_screenshots"
+    },
+    {
+      "path": "docs/issues/production-audit-001.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-002.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-003.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-004.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-005.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-006.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-007.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-008.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-009.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-010.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-011.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-012.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-013.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-014.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-015.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-016.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-017.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-018.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-019.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-020.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-021.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-022.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-023.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-full-shell-20261006.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-pg-http-20261006.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    },
+    {
+      "path": "docs/issues/production-audit-recovery-20261006.md",
+      "category": "operational_docs_scripts_records_or_environment_bound_tests"
+    }
+  ],
+  "excluded_counts": {
+    "operational_docs_scripts_records_or_environment_bound_tests": 52,
+    "logs_or_screenshots": 154
+  },
+  "apply_check_original_base": "pass",
+  "apply_check_training_handoff": "fails; no application attempted",
+  "integration_conflict_paths": [
+    ".github/workflows/build-windows.yml",
+    "client-admin/src/App.tsx",
+    "client-admin/src/i18n/index.ts",
+    "client-pos/src/pages/POSPage.tsx",
+    "client-staff/src/App.tsx",
+    "client-staff/src/i18n/index.ts",
+    "server/src/routes/config.ts",
+    "server/src/routes/order.ts",
+    "server/src/routes/staffManagement.ts",
+    "server/src/routes/sync.ts"
+  ],
+  "apply_check_errors": [
+    "error: patch failed: .github/workflows/build-windows.yml:83",
+    "error: .github/workflows/build-windows.yml: patch does not apply",
+    "error: patch failed: client-admin/src/App.tsx:1",
+    "error: client-admin/src/App.tsx: patch does not apply",
+    "error: patch failed: client-admin/src/i18n/index.ts:4",
+    "error: client-admin/src/i18n/index.ts: patch does not apply",
+    "error: patch failed: client-pos/src/pages/POSPage.tsx:2760",
+    "error: client-pos/src/pages/POSPage.tsx: patch does not apply",
+    "error: patch failed: client-staff/src/App.tsx:1",
+    "error: client-staff/src/App.tsx: patch does not apply",
+    "error: patch failed: client-staff/src/i18n/index.ts:4",
+    "error: client-staff/src/i18n/index.ts: patch does not apply",
+    "error: patch failed: server/src/routes/config.ts:1",
+    "error: server/src/routes/config.ts: patch does not apply",
+    "error: patch failed: server/src/routes/order.ts:1",
+    "error: server/src/routes/order.ts: patch does not apply",
+    "error: patch failed: server/src/routes/staffManagement.ts:1",
+    "error: server/src/routes/staffManagement.ts: patch does not apply",
+    "error: patch failed: server/src/routes/sync.ts:1",
+    "error: server/src/routes/sync.ts: patch does not apply"
+  ],
+  "runtime_validation": "not rerun; inert patch handoff only; historical tests are not new combination acceptance",
+  "deployment": "none; schema/pipeline diffs are inert patch text, not live changes"
+}
