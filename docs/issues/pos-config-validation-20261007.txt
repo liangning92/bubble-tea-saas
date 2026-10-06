@@ -52,7 +52,7 @@ API build
 
 
 POS build
-[plugin:vite:reporter] [plugin vite:reporter] 
+[plugin:vite:reporter] [plugin vite:reporter]
 (!) /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/stores/auth.ts is dynamically imported by /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/services/api.ts but also statically imported by /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/App.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/components/AnnouncementBanner.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/hooks/useHardwareManager.ts, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/CashManagementPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/HygieneTasksPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/LoginPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/OrderHistoryPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/POSPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/RegisterMemberPage.tsx, /Users/liangning/Documents/Codex/2026-10-07/task-3/pos-config/client-pos/src/pages/ScanPage.tsx, dynamic import will not move module into another chunk.
 
 rendering chunks...
