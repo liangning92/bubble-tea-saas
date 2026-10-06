@@ -1,3 +1,4 @@
+import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -28,40 +29,7 @@ import { evaluateBestPromotion, AppliedPromotion, getPromotionUpsellHint, getAct
 // Electron API
 const electronAPI = (window as any).electronAPI
 
-// Helper to get available printer name from settings
-function getPrinterName(printerSettings: { printerName?: string; printers?: Array<{ type: string; enabled: boolean; printerName?: string }> }, type: 'receipt' | 'kitchen' | 'label' = 'receipt'): string {
-  // 1. First try: use configured printer for this type
-  if (printerSettings?.printers && printerSettings.printers.length > 0) {
-    const configured = printerSettings.printers.find(p => p.type === type && p.enabled && p.printerName)
-    if (configured?.printerName) {
-      return configured.printerName
-    }
-    const fallbackConfigured = printerSettings.printers.find(p => p.type === type && p.printerName)
-    if (fallbackConfigured?.printerName) {
-      return fallbackConfigured.printerName
-    }
-  }
-  // 2. Fallback: use legacy printerName field (receipt only)
-  if (type === 'receipt' && printerSettings?.printerName) {
-    return printerSettings.printerName
-  }
-  // 3. Fallback: check localStorage for saved printer
-  if (typeof window !== 'undefined') {
-    if (type === 'receipt') {
-      const localName = localStorage.getItem('receipt_printer_name')
-      if (localName) {
-        return localName
-      }
-    } else if (type === 'label') {
-      const localName = localStorage.getItem('label_printer_name')
-      if (localName) {
-        return localName
-      }
-    }
-  }
-  // 4. Last resort: empty string (system default)
-  return ''
-}
+
 
 // 语言选项
 const LANGS = [
@@ -712,7 +680,7 @@ export function POSPage() {
         const cached = localStorage.getItem('hardware_settings')
         if (cached) {
           const parsed = JSON.parse(cached)
-          return { ...defaultSettings, ...parsed }
+          return { ...defaultSettings, ...parsed, printers: parsed.printers !== undefined ? Array.isArray(parsed.printers) && parsed.printers.every((p: { type?: string } | null) => p && typeof p.type === 'string') ? parsed.printers : [] : defaultSettings.printers }
         }
       }
     } catch (e) {
@@ -1183,28 +1151,13 @@ export function POSPage() {
           } : hardwareSettings.dualScreen
 
           setHardwareSettings((prev: any) => {
-            let mergedPrinters = hw.printers && Array.isArray(hw.printers) ? [...hw.printers] : [...prev.printers]
-            // 服务端配置为绝对第一优先级 (Single Source of Truth)
-            const serverReceiptPrinter = mergedPrinters.find((p: any) => p.type === 'receipt' && p.printerName)?.printerName
-            const activePrinterName = serverReceiptPrinter || hw.printerName || prev.printerName || (typeof window !== 'undefined' ? localStorage.getItem('receipt_printer_name') : '') || ''
-
-            if (activePrinterName) {
-              const idx = mergedPrinters.findIndex((p: any) => p.type === 'receipt')
-              if (idx >= 0) {
-                mergedPrinters[idx] = { ...mergedPrinters[idx], enabled: true, printerName: activePrinterName }
-              } else {
-                mergedPrinters.push({
-                  id: 'receipt-1',
-                  type: 'receipt',
-                  name: 'Receipt Printer',
-                  enabled: true,
-                  connectionType: hw.printerConnectionType || 'usb',
-                  printerName: activePrinterName,
-                  printerIp: hw.printerIp || '',
-                  printerPort: hw.printerPort || 9100
-                })
-              }
-            }
+            // A server list is authoritative, including [] and disabled devices.
+            const activePrinterName = typeof hw.printerName === 'string' ? hw.printerName.trim() : ''
+            const mergedPrinters = Array.isArray(hw.printers) ? hw.printers.every((p: { type?: string } | null) => p && typeof p.type === 'string') ? [...hw.printers] : [] : hw.printers !== undefined ? [] : activePrinterName ? [{
+              id: 'receipt-1', type: 'receipt', enabled: true,
+              connectionType: hw.printerConnectionType || 'usb',
+              printerName: activePrinterName, printerIp: hw.printerIp || '', printerPort: hw.printerPort ?? 9100
+            }] : []
 
             // 更新离线缓存供无网断网时使用
             try {
@@ -1471,25 +1424,25 @@ export function POSPage() {
 
         // 检测测试打印机标志
         if (hs.testPrint && hs.testPrint !== hardwareSettings.testPrint) {
-          const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-          electronAPI?.sendPrintReceipt?.({
+          const target = printerTarget('receipt', hs)
+          if (target) electronAPI?.sendPrintReceipt?.({
             orderNum: 'TEST-' + Date.now(),
             header: posReceipt.header || 'YOUME',
             footer: posReceipt.footer || 'Test Print',
             paperSize: receiptTemplate?.paperSize || posReceipt.paperSize || '80mm',
-            printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt'),
+            ...target,
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
             subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test',
             ...(receiptTemplate?.blocks ? { blocks: receiptTemplate.blocks } : {})
-          })
+          }).then((result: { success?: boolean }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testPrint: null }, 'pos')
         }
 
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
-          const receiptPrinter = (hs.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-          electronAPI?.openCashDrawer?.({ printerName: receiptPrinter?.printerName || getPrinterName(hs, 'receipt'), cashDrawerPulse: hs.cashDrawerPulse || 100 })
+          const target = printerTarget('receipt', hs)
+          if (target) electronAPI?.openCashDrawer?.({ ...target, cashDrawerPulse: hs.cashDrawerPulse || 100 }).then((result: { success?: boolean }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -2393,6 +2346,7 @@ export function POSPage() {
     setPrinterDetectLoading(true)
     setPrinterDetectError(null)
     setDetectedPrinters([])
+    setSelectedPrinterForSetup(null)
     try {
       let printerList: string[] = []
       if (electronAPI?.listPrinters) {
@@ -2553,13 +2507,22 @@ export function POSPage() {
     }
   }
 
+  const printerTarget = (purpose: PrinterPurpose, settings: PrinterSettings = hardwareSettings, explicitName?: string | null) => {
+    const selection = selectPrinter(settings, purpose, explicitName)
+    if (!selection.ok) {
+      showToast(t('printerRouting.configure'), 'warning')
+      return null
+    }
+    return selection.target
+  }
+
   // 手动/快捷键打开钱箱
   const handleOpenCashDrawer = async () => {
-    const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-    const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
+    const target = printerTarget('receipt')
+    if (!target) return
     try {
       const res = await electronAPI?.openCashDrawer?.({
-        printerName: targetPrinterName,
+        ...target,
         cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
       })
       if (res?.success) {
@@ -2574,7 +2537,9 @@ export function POSPage() {
 
   // 测试打印小票
   const handleTestPrint = async () => {
-    const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'receipt')
+    const target = printerTarget('receipt', hardwareSettings, selectedPrinterForSetup)
+    if (!target) return
+    const targetName = target.printerName || target.printerHost
     try {
       const res = await electronAPI?.sendPrintReceipt?.({
         orderNum: 'TEST-' + Date.now().toString().slice(-4),
@@ -2584,7 +2549,7 @@ export function POSPage() {
         footer: posReceipt.footer || 'TEST PRINT',
         paperSize: receiptTemplate?.paperSize || posReceipt.paperSize || '80mm',
         printCopies: posReceipt.printCopies || 1,
-        printerName: targetName,
+        ...target,
         items: [{ productName: 'Signature Boba Milk Tea', specName: 'Regular', quantity: 1, unitPrice: 15000, addons: [] }],
         subtotal: 15000,
         tax: 0,
@@ -2617,10 +2582,12 @@ export function POSPage() {
   // 测试打印标签杯贴
   const handleTestLabelPrint = async () => {
     const labelPrinter = hardwareSettings?.printers?.find((p: any) => p.type === 'label' && p.enabled)
-    const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'label')
+    const target = printerTarget('label', hardwareSettings, selectedPrinterForSetup)
+    if (!target) return
+    const targetName = target.printerName || target.printerHost
     try {
       const res = await electronAPI?.sendCupStickers?.({
-        printerName: targetName,
+        ...target,
         stickers: [{
           orderNum: 'A001',
           cupIndex: 1,
@@ -2650,10 +2617,12 @@ export function POSPage() {
 
   // 测试弹开钱箱
   const handleTestCashDrawer = async () => {
-    const targetName = (selectedPrinterForSetup || '').trim() || getPrinterName(hardwareSettings, 'receipt')
+    const target = printerTarget('receipt', hardwareSettings, selectedPrinterForSetup)
+    if (!target) return
+    const targetName = target.printerName || target.printerHost
     try {
       const res = await electronAPI?.openCashDrawer?.({
-        printerName: targetName,
+        ...target,
         cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
       })
       if (res?.success) {
@@ -2979,18 +2948,17 @@ export function POSPage() {
       // 仅当未开启自动打印小票时，才单独下发独立的 openCashDrawer 指令。
       const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
       if (shouldOpenDrawer && posReceipt.autoPrint === false) {
-        const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-        const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
+        const target = printerTarget('receipt')
         try {
-          const drawerResult = await electronAPI?.openCashDrawer?.({
-            printerName: targetPrinterName,
+          const drawerResult = target && await electronAPI?.openCashDrawer?.({
+            ...target,
             cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
           })
           if (drawerResult && !drawerResult.success) {
-            console.warn('[POS] Cash drawer auto-open failed:', drawerResult.error)
+            showToast(t('printerRouting.failed'), 'warning')
           }
         } catch (e) {
-          console.warn('[POS] Cash drawer invocation error:', e)
+          showToast(t('printerRouting.failed'), 'warning')
         }
       }
 
@@ -3002,16 +2970,8 @@ export function POSPage() {
           openCashDrawer: shouldOpenDrawer
         })
         if (!printResult) {
-          showToast(t('pos.printFailed', 'Failed to print receipt'), 'error')
-          // 兜底：若打印失败且为现金结账，独立发送钱箱脉冲，确保钱箱 100% 弹开
-          if (shouldOpenDrawer) {
-            const receiptPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'receipt' && p.enabled)
-            const targetPrinterName = receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt')
-            electronAPI?.openCashDrawer?.({
-              printerName: targetPrinterName,
-              cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
-            }).catch((e: any) => console.warn('[POS] Drawer fallback error:', e))
-          }
+          showToast(t('printerRouting.failed'), 'warning')
+
         }
       }
       // 打印厨房单
@@ -3079,7 +3039,8 @@ export function POSPage() {
       showToast(displayMsg + ' - ' + t('pos.orderSavedOffline'), 'warning')
       // 离线模式同样下发打印和副屏通知
       if (posReceipt.autoPrint !== false) {
-        printReceipt(fallbackOrderNum, { ...orderData, pickupNumber: finalPickupNum, openCashDrawer: shouldOpenDrawer })
+        const printed = await printReceipt(fallbackOrderNum, { ...orderData, pickupNumber: finalPickupNum, openCashDrawer: shouldOpenDrawer })
+        if (!printed) showToast(t('printerRouting.failed'), 'warning')
       }
       printKitchenOrder(fallbackOrderNum, cart, finalPickupNum)
       printCupStickers(fallbackOrderNum, cart, finalPickupNum)
@@ -3103,15 +3064,8 @@ export function POSPage() {
       console.log('[POS PAGE] electronAPI.sendPrintReceipt not available')
       return false
     }
-    // Find enabled receipt printer or fallback to default
-    const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
-    console.log('[POS PAGE] receiptPrinter:', receiptPrinter)
-    const isNetworkPrinter = receiptPrinter?.connectionType === 'network'
-    const printerName = isNetworkPrinter
-      ? undefined
-      : receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt') || ''
-    const printerHost = isNetworkPrinter ? receiptPrinter?.printerIp : undefined
-    const printerPort = isNetworkPrinter ? (receiptPrinter?.printerPort || 9100) : undefined
+    const target = printerTarget('receipt')
+    if (!target) return false
     try {
       const printPromise = electronAPI?.sendPrintReceipt({
         orderNum,
@@ -3144,9 +3098,7 @@ export function POSPage() {
         showBarcode: posReceipt.showBarcode !== false,
         showQR: posReceipt.showQR === true,
         qrCodeUrl: posReceipt.qrCodeUrl || '',
-        printerName,
-        printerHost,
-        printerPort,
+        ...target,
         openCashDrawer: orderData?.openCashDrawer ?? false,
         cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100,
         itemDetailFormat: posReceipt.itemDetailFormat || receiptTemplate?.blocks?.find((b: any) => b.type === 'items')?.config?.itemFormat || 'standard',
@@ -3177,10 +3129,11 @@ export function POSPage() {
         memberName: member?.name,
         pointsRedeemed: pointsToRedeem
       })
-      const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) =>
-        setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 4000)
-      )
-      const result = await Promise.race([printPromise, timeoutPromise])
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) => {
+        timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 4000)
+      })
+      const result = await Promise.race([printPromise, timeoutPromise]).finally(() => { if (timer) clearTimeout(timer) })
       return result?.success ?? false
     } catch (err) {
       console.warn('Print error:', err)
@@ -3188,40 +3141,26 @@ export function POSPage() {
     }
   }
 
-  const printKitchenOrder = (orderNum: string, items: any[], pickupNumber?: string) => {
-    const kitchenPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'kitchen' && p.enabled)
-    if (!kitchenPrinter) {
-      return
-    }
-    if (!electronAPI?.sendKitchenOrder) {
-      return
-    }
-    const isNetworkKitchenPrinter = kitchenPrinter.connectionType === 'network'
-    const printerName = isNetworkKitchenPrinter
-      ? undefined
-      : kitchenPrinter.printerName || undefined
-    const printerHost = isNetworkKitchenPrinter ? kitchenPrinter.printerIp : undefined
-    const printerPort = isNetworkKitchenPrinter ? (kitchenPrinter.printerPort || 9100) : undefined
+  const printKitchenOrder = async (orderNum: string, items: any[], pickupNumber?: string) => {
+    // Optional outputs explicitly disabled are skipped; an enabled but invalid target is visible.
+    const selection = selectPrinter(hardwareSettings, 'kitchen')
+    if (!selection.ok && ['disabled', 'unconfigured'].includes(selection.reason)) return
+    const target = printerTarget('kitchen')
+    if (!target) return
     try {
-      electronAPI?.sendKitchenOrder?.({ orderNum, pickupNumber, printerName, printerHost, printerPort, items })
-    } catch (err) {
-      console.warn('Kitchen print error:', err)
-    }
+      const result = await electronAPI?.sendKitchenOrder?.({ orderNum, pickupNumber, ...target, items })
+      if (!result?.success) showToast(t('printerRouting.failed'), 'warning')
+    } catch { showToast(t('printerRouting.failed'), 'warning') }
   }
 
   // 打印茶饮单杯杯贴/不干胶标签 (TSPL)
-  const printCupStickers = (orderNum: string, items: any[], pickupNumber?: string) => {
-    const labelPrinter = (hardwareSettings.printers || []).find((p: any) => p.type === 'label' && p.enabled)
-    const isNetworkLabelPrinter = labelPrinter?.connectionType === 'network'
-    const printerName = isNetworkLabelPrinter
-      ? undefined
-      : labelPrinter?.printerName || getPrinterName(hardwareSettings, 'label') || undefined
-    const printerHost = isNetworkLabelPrinter ? labelPrinter?.printerIp : undefined
-    const printerPort = isNetworkLabelPrinter ? (labelPrinter?.printerPort || 9100) : undefined
-
-    if ((!printerName && !printerHost) || !electronAPI?.sendCupStickers) {
-      return
-    }
+  const printCupStickers = async (orderNum: string, items: any[], pickupNumber?: string) => {
+    const selection = selectPrinter(hardwareSettings, 'label')
+    if (!selection.ok && ['disabled', 'unconfigured'].includes(selection.reason)) return
+    const target = printerTarget('label')
+    if (!target || !selection.ok) return
+    const labelPrinter = selection.printer
+    if (!electronAPI?.sendCupStickers) { showToast(t('printerRouting.failed'), 'warning'); return }
 
     const stickerList: any[] = []
     let totalCups = 0
@@ -3268,16 +3207,13 @@ export function POSPage() {
     })
 
     try {
-      electronAPI?.sendCupStickers?.({
-        printerName,
-        printerHost,
-        printerPort,
+      const result = await electronAPI?.sendCupStickers?.({
+        ...target,
         stickers: stickerList,
         isTspl: true
       })
-    } catch (err) {
-      console.warn('Cup stickers print error:', err)
-    }
+      if (!result?.success) showToast(t('printerRouting.failed'), 'warning')
+    } catch { showToast(t('printerRouting.failed'), 'warning') }
   }
 
   if (loading) {
@@ -4866,16 +4802,11 @@ export function POSPage() {
                           // Provisional/unavailable evidence must never print a financial Z-report.
                           if (shiftData?.summaryEvidence?.verified === true) {
                             try {
-                              const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt' && p.enabled)
-                              const isNetwork = receiptPrinter?.connectionType === 'network'
-                              const printerName = isNetwork ? undefined : (receiptPrinter?.printerName || getPrinterName(hardwareSettings, 'receipt'))
-                              const printerHost = isNetwork ? receiptPrinter?.printerIp : undefined
-                              const printerPort = isNetwork ? (receiptPrinter?.printerPort || 9100) : undefined
+                              const target = printerTarget('receipt')
+                              if (!target) throw new Error('Printer target unavailable')
 
                               await electronAPI?.sendPrintShiftReport?.({
-                                printerName,
-                                printerHost,
-                                printerPort,
+                                ...target,
                                 paperSize: posReceipt.paperSize || '80mm',
                                 language: lang || 'id',
                                 storeName: storeInfo.storeName || 'YOUME',
@@ -5272,9 +5203,8 @@ export function POSPage() {
               <div className="space-y-2">
                 {/* 小票打印机 */}
                 {(() => {
-                  const receiptPrinter = hardwareSettings.printers?.find((p: any) => p.type === 'receipt')
-                  const pName = receiptPrinter?.printerName || hardwareSettings.printerName || t('pos.defaultPrinter', '系统默认打印机')
-                  const isNetwork = receiptPrinter?.connectionType === 'network'
+                  const selected = selectPrinter(hardwareSettings, 'receipt')
+                  const pName = selected.ok ? selected.target.printerName || `${selected.target.printerHost}:${selected.target.printerPort}` : t('printerRouting.unavailable')
                   return (
                     <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
@@ -5284,12 +5214,12 @@ export function POSPage() {
                         <div>
                           <div className="text-xs font-bold text-gray-800">{t('posSettings.receiptPrinter', '小票打印机')}</div>
                           <div className="text-xs text-gray-500 font-mono truncate max-w-[200px]">
-                            {isNetwork ? `${receiptPrinter?.printerIp}:${receiptPrinter?.printerPort || 9100}` : pName}
+                            {pName}
                           </div>
                         </div>
                       </div>
-                      <span className="text-[11px] px-2 py-0.5 bg-green-100 text-green-700 font-semibold rounded-md">
-                        {t('common.ready', '已就绪')}
+                      <span className={`text-[11px] px-2 py-0.5 font-semibold rounded-md ${selected.ok ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                        {t(selected.ok ? 'printerRouting.configured' : 'printerRouting.unavailable')}
                       </span>
                     </div>
                   )

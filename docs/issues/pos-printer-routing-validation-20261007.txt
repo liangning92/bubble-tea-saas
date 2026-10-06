@@ -1,0 +1,38 @@
+POS printer routing validation — synthetic only
+Baseline 7aa6cfb3e27178c2c3f946888f6d191622c7d387
+Branch fix/pos-printer-routing
+
+Commands/results:
+node --test tests/stoploss/*.test.cjs
+42 tests passed, 0 failed/skipped. Includes prior payment/shift tests and 11 new printer tests.
+New cases: purpose-specific enabled default; explicit alternate; disabled/mismatched/unknown explicit refusal; empty/all-off/invalid/malformed list and names; legacy named receipt only with absent authoritative list; invalid first target no backup; validated network port; exact local names, no fuzzy/default; exact COM/UNC; actual 5 IPC handlers reject missing target; network failure zero local dispatch; same-device failure/retry; actual resolver inventory absent/error/timeout.
+
+node tests/stoploss/printer-page-check.cjs
+9 actual React/Chromium/IndexedDB scenarios passed with HTTP and Electron boundary stand-ins:
+enabled, disabled, empty, unconfigured, offline-device, rejected-device, timeout, network, offline-order.
+Each issues exactly one order POST despite double click; no duplicate local order on paid success; offline-only commit remains one pending row. Correct target or zero dispatch, one completion, empty cart, payment modal closed, zero page errors. Existing stale local binding does not override server empty/all-disabled list.
+Enabled scenario additionally tests manual receipt action sends only the configured receipt target without another order POST/completion; detected wrong-purpose device subsequently refused with zero extra print calls. This is the existing test-print UI, not an invented history reprint UI.
+
+node tests/stoploss/page-check.cjs
+5 prior payment/configuration/shift scenarios passed.
+node tests/stoploss/shift-page-check.cjs
+7 prior session-evidence scenarios passed, zero uncertified Z-reports.
+
+npm run typecheck:pos
+PASS
+npx tsc -p client-pos/tsconfig.electron.json --noEmit
+PASS
+npm run i18n:check
+PASS all three clients (existing hardcoded-text warnings unchanged).
+npm run build --workspace client-pos -- --outDir /tmp/pos-printer-build
+PASS (existing bundle-size warning only; artifact in /tmp, not production).
+bash scripts/security-review.sh
+18 PASS, 0 FAIL, 1 existing store-access warning.
+git diff --check
+PASS
+
+No production data, genuine customer/staff/order identities, physical device access, backend process, schema, migration, credentials, manifests/locks or workflow changes. No push, packaging, merge, deployment or production restart.
+Synthetic screenshots /tmp/pos-printer-page-evidence; hardware status page visually inspected. They are not included in Git.
+
+Limits:
+Physical Windows USB/network/COM/UNC behavior and printer paper delivery not tested. Successful spool submission does not certify paper output. Timeout can be an already accepted job, so warning requires checking paper before retry; same-target legacy protocol attempts remain possible. Printer inventory errors now refuse without implicit routing. Renderer and Electron bridge must ship together; blank names in older clients are refused. No historical reprint UI exists in this baseline; IPC retry of an existing order number does not create orders. Full settlement, replay idempotence and other prior boundaries are unchanged.
