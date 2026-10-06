@@ -1,4 +1,5 @@
 import { confirmRetriedCheckout } from '../utils/checkoutIntent'
+import { withCheckoutSyncLock, checkoutSyncLeaseMs } from '../utils/checkoutSyncClaim'
 import Dexie, { Table } from 'dexie'
 import { orderSyncPayload } from '../utils/orderSyncPayload'
 import { connectionManager } from '../services/ConnectionManager'
@@ -24,6 +25,7 @@ export interface LocalOrder {
   shiftSessionId?: string
   memberId?: string
   channelId?: string  // 订单渠道：DINE_IN, GOFOOD, GRAB, SHOPEE, POS
+  syncClaim?: {id: string; expiresAt: number}
   recoveredConfirmation?: {serverId: string; orderNumber: string; receivedAt: Date}
   recoveryAcknowledged?: {actorId: string; at: Date}
   quarantineAudit?: {actorId: string; at: Date}
@@ -41,7 +43,7 @@ export interface LocalOrder {
   orderNumber: string
   pickupNumber?: string
   customerCount: number
-  status: 'pending' | 'syncing' | 'synced' | 'failed' | 'prepared' | 'sending' | 'review'
+  status: 'pending' | 'syncing' | 'synced' | 'failed' | 'prepared' | 'sending' | 'review' | 'quarantined'
   syncAttempts: number
   createdAt: Date
   syncedAt?: Date
@@ -151,6 +153,12 @@ export class SyncManager {
     try { auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state } catch { return }
     if (!auth?.token || !auth.user?.storeId || !['admin', 'manager', 'cashier'].includes(auth.user.role)) return
     this.isSyncing = true
+    try { await withCheckoutSyncLock(auth.user.storeId, () => this.uploadClaimedOrders(auth, review)) }
+    catch (error) { this.emit({type:'sync:error',error:String(error)}) }
+    finally { this.isSyncing = false }
+  }
+
+  private async uploadClaimedOrders(auth: any, review: boolean) {
     this.emit({ type: 'sync:start' })
     const claimed: LocalOrder[] = []
     try {
@@ -161,8 +169,9 @@ export class SyncManager {
             await db.orders.update(order.id!, { status: 'review', error: 'CHECKOUT_SNAPSHOT_REQUIRED' })
             continue
           }
-          await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1 })
-          claimed.push(order)
+          const syncClaim = {id:crypto.randomUUID(),expiresAt:Date.now()+checkoutSyncLeaseMs}
+          await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1, syncClaim })
+          claimed.push({...order,syncClaim})
         }
       })
       if (!claimed.length) return
@@ -180,7 +189,7 @@ export class SyncManager {
         const item = bulk ? body?.data?.results?.[index] : { success: response.ok, data: body?.data }
         const accepted = (bulk ? response.status === 200 : response.status === 201) && item?.success && typeof item.data?.id === 'string' && item.data?.orderNumber === order.orderNumber
         if (accepted) await confirmRetriedCheckout(order, item.data)
-        else await db.orders.update(order.id!, {status:'review',error:String(item?.error || body?.message || `HTTP ${response.status}`)})
+        else await this.releaseClaim(order,String(item?.error || body?.message || `HTTP ${response.status}`))
         if (accepted) { syncedCount++; this.emit({ type: 'sync:success', orderId: order.localId, serverId: item.data.id }) }
       }
       // Fresh 201 confirmation atomically removes its own barrier; never print from recovery upload.
@@ -188,10 +197,19 @@ export class SyncManager {
     } catch (error) {
       // No bulk-to-single fallback after response loss: the first write may have committed.
       for (const order of claimed) {
-        try { await db.orders.update(order.id!, { status: 'review', error: String(error) }) } catch { /* durable syncing row remains a recovery barrier */ }
+        try { await this.releaseClaim(order,String(error)) } catch { /* durable syncing row remains a recovery barrier */ }
       }
       this.emit({ type: 'sync:error', error: String(error) })
-    } finally { this.isSyncing = false }
+    }
+  }
+
+  private async releaseClaim(order: LocalOrder, error: string) {
+    await db.transaction('rw', db.orders, async () => {
+      const current = await db.orders.get(order.id!)
+      if (current?.status === 'syncing' && order.syncClaim && current.syncClaim?.id === order.syncClaim.id) {
+        await db.orders.update(order.id!,{status:'review',error})
+      }
+    })
   }
 
   // Start periodic order upload. Full catalog sync requires a fresh credential

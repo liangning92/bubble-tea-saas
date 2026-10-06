@@ -1,4 +1,5 @@
 import { db, type LocalOrder } from '../db/offline'
+import { withCheckoutSyncLock } from './checkoutSyncClaim'
 
 export interface CheckoutIntent {
   version: 1
@@ -10,6 +11,16 @@ export interface CheckoutIntent {
   createdAt: Date
 }
 const key = (storeId: string) => `checkout.intent:${encodeURIComponent(storeId)}`
+const generationKey = (storeId: string) => `checkout.generation:${encodeURIComponent(storeId)}`
+export async function readCheckoutGeneration(storeId: string): Promise<string> {
+  const entry = await db.config.get(generationKey(storeId))
+  if (!entry) return '0'
+  if (typeof entry.value !== 'string' || !entry.value) throw new Error('CHECKOUT_RECOVERY_INVALID')
+  return entry.value
+}
+async function advanceCheckoutGeneration(storeId: string): Promise<void> {
+  await db.config.put({key:generationKey(storeId),value:crypto.randomUUID(),updatedAt:new Date()})
+}
 export async function readCheckoutIntent(storeId: string): Promise<CheckoutIntent | null> {
   const entry = await db.config.get(key(storeId))
   if (!entry) return null
@@ -21,12 +32,14 @@ export async function readCheckoutIntent(storeId: string): Promise<CheckoutInten
   return value
 }
 
-export async function prepareCheckout(request: Record<string, any>, cart: unknown[], totals: Pick<LocalOrder, 'subtotal' | 'ppn' | 'finalAmount'>): Promise<CheckoutIntent> {
+export async function prepareCheckout(request: Record<string, any>, cart: unknown[], totals: Pick<LocalOrder, 'subtotal' | 'ppn' | 'finalAmount'>, basketGeneration = '0'): Promise<CheckoutIntent> {
   if (!request.storeId || !request.staffId || !request.items?.length) throw new Error('CHECKOUT_REQUEST_INVALID')
   const localId = `LOCAL-${crypto.randomUUID()}`
   const snapshot = JSON.parse(JSON.stringify({ ...request, orderNumber: `OFFLINE-${localId.slice(6)}` }))
   return db.transaction('rw', db.config, db.orders, async () => {
-    if ((await readCheckoutRecovery(snapshot.storeId)).blocked || (await readCheckoutRecovery(snapshot.storeId)).confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    const recovery = await readCheckoutRecovery(snapshot.storeId)
+    if (recovery.generation !== basketGeneration) throw new Error('CHECKOUT_BASKET_STALE')
+    if (recovery.blocked || recovery.confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     const createdAt = new Date()
     const orderId = await db.orders.add({
       localId, checkoutRequest: snapshot, storeId: snapshot.storeId, staffId: snapshot.staffId,
@@ -63,7 +76,10 @@ export async function finishCheckout(intent: CheckoutIntent, result: 'accepted' 
     const status = result === 'accepted' ? 'synced' : result === 'rejected' ? 'failed' : 'review'
     await db.orders.update(intent.orderId, { status, serverId, checkoutResolution: result, ...(result === 'accepted' ? { syncedAt: new Date() } : {}) })
     if (result === 'review') await db.config.put({ key: key(intent.request.storeId), value: { ...current, phase: 'review' }, updatedAt: new Date() })
-    else await db.config.delete(key(intent.request.storeId))
+    else {
+      await db.config.delete(key(intent.request.storeId))
+      if (result === 'accepted') await advanceCheckoutGeneration(intent.request.storeId)
+    }
   })
 }
 
@@ -92,19 +108,20 @@ export async function readCheckoutRecovery(storeId: string) {
     .and(row => row.storeId === storeId && !['rejected', 'discarded'].includes(row.checkoutResolution || '')).toArray()
   const confirmed = await db.orders.where('status').equals('synced').and(row => row.storeId === storeId && !!row.recoveredConfirmation && !row.recoveryAcknowledged).toArray()
   const quarantined = await db.orders.where('status').equals('quarantined').and(row => row.storeId === storeId).toArray()
-  return { intent, blocked: !!intent || rows.length > 0, rows, confirmed, quarantined }
+  return { intent, blocked: !!intent || rows.length > 0, rows, confirmed, quarantined, generation:await readCheckoutGeneration(storeId) }
 }
 
 /** A fresh successful response confirms this original UUID; it does not certify legacy replay. */
 export async function confirmRetriedCheckout(order: LocalOrder, server: {id: string; orderNumber: string}): Promise<void> {
   await db.transaction('rw', db.config, db.orders, async () => {
     const row = await db.orders.get(order.id!)
-    if (!row || row.status !== 'syncing' || server.orderNumber !== row.orderNumber || JSON.stringify(row.checkoutRequest) !== JSON.stringify(order.checkoutRequest)) throw new Error('CHECKOUT_RECOVERY_INVALID')
+    if (!row || row.status !== 'syncing' || !order.syncClaim || row.syncClaim?.id !== order.syncClaim.id || server.orderNumber !== row.orderNumber || JSON.stringify(row.checkoutRequest) !== JSON.stringify(order.checkoutRequest)) throw new Error('CHECKOUT_RECOVERY_INVALID')
     const active = await db.config.get(key(row.storeId))
     if (active?.value.localId === row.localId) {
       if (JSON.stringify(active.value.request) !== JSON.stringify(row.checkoutRequest)) throw new Error('CHECKOUT_RECOVERY_INVALID')
       await db.config.delete(key(row.storeId))
     }
+    await advanceCheckoutGeneration(row.storeId)
     await db.orders.update(row.id!, {status:'synced', checkoutResolution:'accepted', serverId:server.id, syncedAt:new Date(), recoveredConfirmation:{serverId:server.id,orderNumber:server.orderNumber,receivedAt:new Date()}, error:undefined})
   })
 }
@@ -122,13 +139,14 @@ export async function acknowledgeRecoveredCheckout(storeId: string, actorId: str
 /** Quarantine is NOT a paid/unpaid decision. Keep all evidence and forbid automatic resubmission. */
 export async function quarantineCheckoutRecovery(storeId: string, actorId: string, expected: string): Promise<void> {
   if (!actorId) throw new Error('CHECKOUT_ACTOR_REQUIRED')
-  await db.transaction('rw', db.config, db.orders, async () => {
+  await withCheckoutSyncLock(storeId, () => db.transaction('rw', db.config, db.orders, async () => {
     const recovery = await readCheckoutRecovery(storeId)
-    if (recovery.confirmed.length || !recovery.blocked || recovery.rows.some(row => row.status === 'syncing')) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    if (recovery.confirmed.length || !recovery.blocked || (!navigator.locks && recovery.rows.some(row => row.status === 'syncing' && row.syncClaim && row.syncClaim.expiresAt > Date.now()))) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     if (JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}) !== expected) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     const audit = {actorId,at:new Date(),decision:'isolate_unknown_not_paid_or_unpaid',intent:recovery.intent,rows:recovery.rows}
     await db.config.add({key:`checkout.quarantine:${encodeURIComponent(storeId)}:${crypto.randomUUID()}`,value:audit,updatedAt:new Date()})
     for (const row of recovery.rows) await db.orders.update(row.id!, {status:'quarantined',quarantineAudit:{actorId,at:audit.at}})
+    await advanceCheckoutGeneration(storeId)
     await db.config.delete(key(storeId))
-  })
+  }))
 }

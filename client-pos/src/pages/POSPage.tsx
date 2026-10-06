@@ -166,13 +166,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 状态 - 使用Zustand stores
   const [cart, setCart] = useState<CartItem[]>([])
+  const [basketGeneration, setBasketGeneration] = useState('0')
   const [scanRequestVersion, setScanRequestVersion] = useState(0)
   const scanIntentVersion = useRef(0)
   const [quarantineAcknowledged, setQuarantineAcknowledged] = useState(false)
   const recovery = useLiveQuery(async () => {
-    if (!user?.storeId) return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [] }
+    if (!user?.storeId) return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null }
     try { return await readCheckoutRecovery(user.storeId) }
-    catch { return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [] } }
+    catch { return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null } }
   }, [user?.storeId])
   const { filter, setFilter, products, setProducts, searchQuery, setSearchQuery } = useProductStore()
   const [loading, setLoading] = useState(true)
@@ -2372,7 +2373,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (selectedChannel?.code === 'GOFOOD' || selectedChannel?.code === 'GRAB' || selectedChannel?.code === 'SHOPEE') {
         orderData.platformOrderId = platformOrderId
       }
-      intent = await prepareCheckout(orderData, cart, { subtotal, ppn: tax, finalAmount: total })
+      intent = await prepareCheckout(orderData, cart, { subtotal, ppn: tax, finalAmount: total }, basketGeneration)
       await claimCheckout(intent)
       sent = true
       const res = await posApi.createOrder(intent.request)
@@ -2401,6 +2402,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       showToast(`${t('pos.orderSuspended')} (${updated.length})`, 'success')
     } catch (err: any) {
       if (accepted) { clearCart(); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
+      if (!sent && err?.message === 'CHECKOUT_BASKET_STALE') { clearCart();setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent) { showToast(t(err?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : 'checkoutIntent.saveFailed'), 'error'); return }
       const definite = definiteFirstRejection(err, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') } catch { /* durable journal remains */ }
@@ -2971,7 +2973,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     try {
       // Both recovery writes must commit before an HTTP request can leave this browser.
-      intent = await prepareCheckout(orderData, cart, { subtotal, ppn: tax, finalAmount: total })
+      intent = await prepareCheckout(orderData, cart, { subtotal, ppn: tax, finalAmount: total }, basketGeneration)
       await claimCheckout(intent)
       sent = true
       const res = await posApi.createOrder(intent.request)
@@ -3073,6 +3075,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setShowChannelModal(true)
     } catch (error: any) {
       if (accepted) { clearCart(); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
+      if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart();setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent) {
         setOfflineSaveFailed(true)
         showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : 'checkoutIntent.saveFailed'), 'error')
@@ -3261,10 +3264,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     } catch { showToast(t('printerRouting.failed'), 'warning') }
   }
 
-  // Recovery transitions empty every tab's old basket, never manufacture a replacement identity.
+  // The generation survives acknowledgement, so even a delayed tab observes the invalidation.
+  // Submit also compares this basket's generation inside the shared IDB transaction.
   useEffect(() => {
-    if (recovery?.quarantined.length || recovery?.confirmed.length) { clearCart(); setShowPaymentModal(false) }
-  }, [user?.storeId, recovery?.quarantined.map(row => row.id).join(','), recovery?.confirmed.map(row => row.id).join(',')])
+    if (recovery?.generation && basketGeneration !== recovery.generation) {
+      clearCart();setShowPaymentModal(false);setBasketGeneration(recovery.generation)
+    }
+  }, [user?.storeId, recovery?.generation, basketGeneration])
 
   if (loading) {
     return (
