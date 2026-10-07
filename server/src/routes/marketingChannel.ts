@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -36,8 +37,8 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
   try {
     const storeId = req.user!.storeId
     const dateRange = req.query.startDate && req.query.endDate ? {
-      startDate: new Date(req.query.startDate as string),
-      endDate: new Date(req.query.endDate as string)
+      startDate: parseDateBoundary(req.query.startDate as string),
+      endDate: parseDateBoundary(req.query.endDate as string, true)
     } : undefined
 
     // Get channels with statistics
@@ -58,8 +59,8 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const dateRange = req.query.startDate && req.query.endDate ? {
-      startDate: new Date(req.query.startDate as string),
-      endDate: new Date(req.query.endDate as string)
+      startDate: parseDateBoundary(req.query.startDate as string),
+      endDate: parseDateBoundary(req.query.endDate as string, true)
     } : undefined
 
     const channel = await getMarketingChannelWithStats(req.params.id, dateRange)
@@ -105,8 +106,8 @@ router.get('/stats/attribution', authenticate, authorize('admin', 'manager'), as
   try {
     const storeId = req.user!.storeId
     const dateRange = req.query.startDate && req.query.endDate ? {
-      startDate: new Date(req.query.startDate as string),
-      endDate: new Date(req.query.endDate as string)
+      startDate: parseDateBoundary(req.query.startDate as string),
+      endDate: parseDateBoundary(req.query.endDate as string, true)
     } : undefined
 
     const report = await getChannelAttributionReport(storeId, dateRange)

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { rewardApi } from '../../services/api'
+import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useAuthStore } from '../../stores/auth'
 import { Loader2, Plus, Edit2, Trash2, X, Gift } from 'lucide-react'
 
@@ -32,8 +33,8 @@ const DEFAULT_FORM = {
   pointsCost: 500,
   value: 0,
   stock: null as number | null,
-  validFrom: new Date().toISOString().split('T')[0],
-  validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  validFrom: expenseCalendarDate(),
+  validUntil: expenseCalendarDate(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)),
   isActive: true
 }
 
@@ -94,8 +95,8 @@ export function RewardCatalogPage() {
       pointsCost: reward.pointsCost,
       value: reward.value,
       stock: reward.stock ?? null,
-      validFrom: reward.validFrom ? reward.validFrom.split('T')[0] : '',
-      validUntil: reward.validUntil ? reward.validUntil.split('T')[0] : '',
+      validFrom: reward.validFrom ? expenseCalendarDate(reward.validFrom) : '',
+      validUntil: reward.validUntil ? expenseCalendarDate(reward.validUntil) : '',
       isActive: reward.isActive
     })
     setShowModal(true)

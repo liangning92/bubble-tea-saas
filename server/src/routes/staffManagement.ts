@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import prisma from '../config/database'
 import { trainingStaffAccess, trainingRecordAccess } from '../middlewares/trainingAccess'
 import { requireResourceStore } from '../middlewares/resourceStore'
@@ -19,8 +20,8 @@ router.get('/performance', authenticate, authorize('admin', 'manager'), async (r
 
     const result = await StaffManagementService.getStaffPerformance(
       storeId,
-      startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-      endDate ? new Date(endDate as string) : new Date()
+      startDate ? parseDateBoundary(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      endDate ? parseDateBoundary(endDate as string, true) : new Date()
     )
 
     res.json({

@@ -1,4 +1,5 @@
 import prisma from '../config/database'
+import { parseBusinessDate } from '../utils/businessDate'
 
 export async function getFixedAssets(storeId: string, options?: {
   status?: string
@@ -20,7 +21,7 @@ export async function createFixedAsset(data: {
   storeId: string
   name: string
   description?: string
-  purchaseDate: Date
+  purchaseDate: Date | string
   originalValue: number
   usefulLife: number
   salvageValue: number
@@ -31,7 +32,7 @@ export async function createFixedAsset(data: {
       storeId: data.storeId,
       name: data.name,
       description: data.description,
-      purchaseDate: data.purchaseDate,
+      purchaseDate: parseBusinessDate(data.purchaseDate),
       originalValue: data.originalValue,
       usefulLife: data.usefulLife,
       salvageValue: data.salvageValue,
@@ -43,7 +44,7 @@ export async function createFixedAsset(data: {
 export async function updateFixedAsset(id: string, data: {
   name?: string
   description?: string
-  purchaseDate?: Date
+  purchaseDate?: Date | string
   originalValue?: number
   usefulLife?: number
   salvageValue?: number
@@ -54,7 +55,7 @@ export async function updateFixedAsset(id: string, data: {
     data: {
       ...(data.name && { name: data.name }),
       ...(data.description !== undefined && { description: data.description }),
-      ...(data.purchaseDate && { purchaseDate: data.purchaseDate }),
+      ...(data.purchaseDate !== undefined && { purchaseDate: parseBusinessDate(data.purchaseDate) }),
       ...(data.originalValue !== undefined && { originalValue: data.originalValue }),
       ...(data.usefulLife !== undefined && { usefulLife: data.usefulLife }),
       ...(data.salvageValue !== undefined && { salvageValue: data.salvageValue }),

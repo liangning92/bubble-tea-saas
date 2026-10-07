@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -29,8 +30,8 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       storeId: storeId as string || req.user!.storeId,
       supplierId: supplierId as string,
       status: status as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({

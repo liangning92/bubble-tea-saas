@@ -1,3 +1,4 @@
+import { BusinessInputError, parseDateBoundary } from '../utils/businessDate'
 import { Router, Response } from 'express'
 import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import prisma from '../config/database'
@@ -64,6 +65,7 @@ router.get('/balance/:staffId', authenticate, async (req: AuthRequest, res) => {
     const result = await getStaffPointBalance(staffId)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get balance error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get balance' })
   }
@@ -79,6 +81,7 @@ router.get('/store/:storeId', authenticate, async (req: AuthRequest, res) => {
     const result = await getStaffPointBalancesByStore(storeId)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get store points error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get store points' })
   }
@@ -93,6 +96,7 @@ router.get('/history/:staffId', authenticate, async (req: AuthRequest, res) => {
     const result = await getStaffPointHistory(staffId, limit)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get history error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get history' })
   }
@@ -121,6 +125,7 @@ router.post('/earn', authenticate, authorize('admin', 'manager'), async (req: Au
 
     res.status(201).json({ code: 201, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Award points error:', error)
     res.status(500).json({ code: 500, message: 'Failed to award points' })
   }
@@ -176,6 +181,7 @@ router.post('/adjust', authenticate, authorize('admin', 'manager'), async (req: 
 
     res.status(201).json({ code: 201, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Adjust points error:', error)
     res.status(500).json({ code: 500, message: 'Failed to adjust points' })
   }
@@ -187,6 +193,7 @@ router.post('/process-expiry', authenticate, authorize('admin', 'manager'), asyn
     const result = await processExpiredPoints(req.user!.storeId)
     res.json({ code: 200, data: { processed: result.length }, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Process expiry error:', error)
     res.status(500).json({ code: 500, message: 'Failed to process expiry' })
   }
@@ -195,9 +202,10 @@ router.post('/process-expiry', authenticate, authorize('admin', 'manager'), asyn
 // GET /api/staff-points/rewards
 router.get('/rewards', authenticate, async (req: AuthRequest, res) => {
   try {
-    const result = await getRewards(req.user!.storeId)
+    const result = await getRewards(req.user!.storeId, ['admin', 'manager'].includes(req.user!.role))
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get rewards error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get rewards' })
   }
@@ -206,7 +214,7 @@ router.get('/rewards', authenticate, async (req: AuthRequest, res) => {
 // POST /api/staff-points/rewards
 router.post('/rewards', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const { name, type, pointsCost, value, stock } = req.body
+    const { name, type, pointsCost, value, stock, isActive } = req.body
 
     if (!name || !type || !pointsCost) {
       return res.status(400).json({ code: 400, message: 'Missing required fields' })
@@ -218,11 +226,13 @@ router.post('/rewards', authenticate, authorize('admin', 'manager'), async (req:
       type,
       pointsCost,
       value,
-      stock
+      stock,
+      isActive
     })
 
     res.status(201).json({ code: 201, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Create reward error:', error)
     res.status(500).json({ code: 500, message: 'Failed to create reward' })
   }
@@ -236,6 +246,7 @@ router.put('/rewards/:id', authenticate, authorize('admin', 'manager'), async (r
     const result = await updateReward(id, req.body)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Update reward error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update reward' })
   }
@@ -249,6 +260,7 @@ router.delete('/rewards/:id', authenticate, authorize('admin', 'manager'), async
     await deleteReward(id)
     res.json({ code: 200, message: 'Reward deleted', timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Delete reward error:', error)
     res.status(500).json({ code: 500, message: 'Failed to delete reward' })
   }
@@ -288,6 +300,7 @@ router.get('/redemption/pending', authenticate, authorize('admin', 'manager'), a
     const result = await getPendingRedemptions(req.user!.storeId)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get pending redemptions error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get redemptions' })
   }
@@ -301,6 +314,7 @@ router.post('/redemption/:id/fulfill', authenticate, authorize('admin', 'manager
     const result = await fulfillRedemption(id, req.user!.id)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Fulfill redemption error:', error)
     res.status(500).json({ code: 500, message: 'Failed to fulfill redemption' })
   }
@@ -314,6 +328,7 @@ router.post('/redemption/:id/cancel', authenticate, authorize('admin', 'manager'
     const result = await cancelRedemption(id)
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Cancel redemption error:', error)
     res.status(500).json({ code: 500, message: 'Failed to cancel redemption' })
   }
@@ -342,6 +357,7 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get my points error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get points' })
   }
@@ -364,8 +380,8 @@ router.get('/logs/my', authenticate, async (req: AuthRequest, res) => {
     if (type) where.type = type as string
     if (startDate || endDate) {
       where.createdAt = {}
-      if (startDate) where.createdAt.gte = new Date(startDate as string)
-      if (endDate) where.createdAt.lte = new Date(endDate as string)
+      if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.createdAt.lte = parseDateBoundary(endDate as string, true)
     }
 
     const logs = await prisma.staffPointLog.findMany({
@@ -390,6 +406,7 @@ router.get('/logs/my', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get my point logs error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get point history' })
   }
@@ -405,6 +422,7 @@ router.get('/rewards/available', authenticate, async (req: AuthRequest, res) => 
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get available rewards error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get rewards' })
   }
@@ -415,11 +433,11 @@ router.get('/rewards/available', authenticate, async (req: AuthRequest, res) => 
 import { z } from 'zod'
 
 const pointsRuleSchema = z.object({
-  perfectAttendancePoints: z.number().optional(),
-  goodPerformancePoints: z.number().optional(),
-  completedTrainingPoints: z.number().optional(),
-  holidayWorkPoints: z.number().optional(),
-  overtimePerHourPoints: z.number().optional(),
+  perfectAttendancePoints: z.number().int().nonnegative().optional(),
+  goodPerformancePoints: z.number().int().nonnegative().optional(),
+  completedTrainingPoints: z.number().int().nonnegative().optional(),
+  holidayWorkPoints: z.number().int().nonnegative().optional(),
+  overtimePerHourPoints: z.number().int().nonnegative().optional(),
   isActive: z.boolean().optional()
 })
 
@@ -446,6 +464,7 @@ router.get('/rules', authenticate, async (req: AuthRequest, res) => {
 
     res.json({ code: 200, data: rule, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get points rule error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get points rule' })
   }
@@ -472,6 +491,8 @@ router.put('/rules', authenticate, authorize('admin', 'manager'), async (req: Au
 
     res.json({ code: 200, message: 'Points rule updated', data: rule, timestamp: new Date().toISOString() })
   } catch (error) {
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
+    if (error instanceof z.ZodError) return res.status(400).json({ code: 400, message: 'Points must be non-negative integers' })
     console.error('Update points rule error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update points rule' })
   }

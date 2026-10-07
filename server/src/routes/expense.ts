@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import {validExpenseDate} from '../services/RecurringExpenseService'
 import prisma from '../config/database'
 import {z} from 'zod'
@@ -18,6 +19,34 @@ router.put('/recurring',authenticate,authorize('admin','manager'),async(req:Auth
  res.json({code:200,data})
 }catch(e){if((e as Error).message==='RECURRING_REVISION_CONFLICT')return res.status(409).json({code:409,message:'RECURRING_REVISION_CONFLICT'});next(e)}})
 
+// ==================== EXPENSE CATEGORIES (Customizable) ====================
+
+// GET /api/expenses/categories
+router.get('/categories', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const categories = await ExpenseService.getExpenseCategories(storeId)
+    res.json({ code: 200, data: { list: categories } })
+  } catch (error: any) {
+    console.error('Get expense categories error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to get expense categories' })
+  }
+})
+
+// PUT /api/expenses/categories
+router.put('/categories', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const { categories } = req.body
+    await ExpenseService.saveExpenseCategories(storeId, categories)
+    res.json({ code: 200, message: 'Expense categories updated' })
+  } catch (error: any) {
+    console.error('Save expense categories error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to save expense categories' })
+  }
+})
+
+
 // GET /api/expenses
 router.get('/', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
@@ -27,8 +56,8 @@ router.get('/', authenticate, authorize('admin', 'manager', 'cashier'), async (r
     const expenses = await ExpenseService.getExpenses(storeId, {
       type: type as string,
       category: category as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({ code: 200, data: { list: expenses } })
@@ -141,8 +170,8 @@ router.get('/export', authenticate, authorize('admin', 'manager'), async (req: A
     const { startDate, endDate, category } = req.query
 
     const options: any = {}
-    if (startDate) options.startDate = new Date(startDate as string)
-    if (endDate) options.endDate = new Date(endDate as string)
+    if (startDate) options.startDate = parseDateBoundary(startDate as string)
+    if (endDate) options.endDate = parseDateBoundary(endDate as string, true)
     if (category) options.category = category as string
 
     const expenses = await ExpenseService.getExpenses(storeId, options)
@@ -191,33 +220,6 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
   } catch (error: any) {
     console.error('Delete expense error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to delete expense' })
-  }
-})
-
-// ==================== EXPENSE CATEGORIES (Customizable) ====================
-
-// GET /api/expenses/categories
-router.get('/categories', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
-  try {
-    const storeId = req.user!.storeId
-    const categories = await ExpenseService.getExpenseCategories(storeId)
-    res.json({ code: 200, data: { list: categories } })
-  } catch (error: any) {
-    console.error('Get expense categories error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to get expense categories' })
-  }
-})
-
-// PUT /api/expenses/categories
-router.put('/categories', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
-  try {
-    const storeId = req.user!.storeId
-    const { categories } = req.body
-    await ExpenseService.saveExpenseCategories(storeId, categories)
-    res.json({ code: 200, message: 'Expense categories updated' })
-  } catch (error: any) {
-    console.error('Save expense categories error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to save expense categories' })
   }
 })
 

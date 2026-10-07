@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { publicOrder } from '../services/OrderReplayService'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -376,8 +377,8 @@ router.get('/:id/orders', authenticate, async (req: AuthRequest, res) => {
     if (status) where.status = status as string
     if (startDate || endDate) {
       where.createdAt = {}
-      if (startDate) where.createdAt.gte = new Date(startDate as string)
-      if (endDate) where.createdAt.lte = new Date(endDate as string)
+      if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.createdAt.lte = parseDateBoundary(endDate as string, true)
     }
 
     const pageNum = parseInt(page as string) || 1

@@ -357,6 +357,9 @@ router.delete('/:id', authenticate, resourceAccess, authorize('admin'), async (r
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if ((error as { code?: string }).code === 'P2003') {
+      return res.status(409).json({ code: 409, message: 'Member has transaction or points history and cannot be deleted' })
+    }
     console.error('Delete member error:', error)
     res.status(500).json({ code: 500, message: 'Failed to delete member' })
   }

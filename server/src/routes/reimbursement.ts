@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 // @ts-ignore - multer types not available
@@ -105,8 +106,8 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
     const { status, startDate, endDate } = req.query
     const reimbursements = await ReimbursementService.getStaffReimbursements(staff.id, {
       status: status as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({
@@ -186,8 +187,8 @@ router.get('/list', authenticate, authorize('admin', 'manager'), async (req: Aut
     const reimbursements = await ReimbursementService.getStoreReimbursements(targetStoreId, {
       status: status as string,
       staffId: staffId as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({

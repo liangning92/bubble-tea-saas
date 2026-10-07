@@ -1,8 +1,48 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as FinanceAccountService from '../services/FinanceAccountService'
 
 const router = Router()
+
+// ==================== ACCOUNT TYPES (Customizable) ====================
+
+// Default account types
+const DEFAULT_ACCOUNT_TYPES = [
+  { key: 'cash', label: 'Tunai', labelZh: '现金', labelEn: 'Cash', icon: 'Wallet', color: 'text-green-600', bgColor: 'bg-green-100' },
+  { key: 'bank', label: 'Bank', labelZh: '银行', labelEn: 'Bank', icon: 'Building2', color: 'text-blue-600', bgColor: 'bg-blue-100' },
+  { key: 'receivable', label: 'Piutang', labelZh: '应收账款', labelEn: 'Receivable', icon: 'CreditCard', color: 'text-purple-600', bgColor: 'bg-purple-100' },
+  { key: 'payable', label: 'Hutang', labelZh: '应付账款', labelEn: 'Payable', icon: 'FileText', color: 'text-orange-600', bgColor: 'bg-orange-100' },
+  { key: 'revenue', label: 'Pendapatan', labelZh: '收入', labelEn: 'Revenue', icon: 'TrendingUp', color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+  { key: 'cogs', label: 'HPP', labelZh: '销售成本', labelEn: 'COGS', icon: 'Package', color: 'text-red-600', bgColor: 'bg-red-100' },
+  { key: 'expense', label: 'Beban', labelZh: '费用', labelEn: 'Expense', icon: 'TrendingDown', color: 'text-pink-600', bgColor: 'bg-pink-100' }
+]
+
+// GET /api/finance/accounts/types - Get account types (customizable)
+router.get('/types', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const accountTypes = await FinanceAccountService.getAccountTypes(storeId)
+    res.json({ code: 200, data: { list: accountTypes } })
+  } catch (error: any) {
+    console.error('Get account types error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to get account types' })
+  }
+})
+
+// PUT /api/finance/accounts/types - Update account types (customizable)
+router.put('/types', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+  try {
+    const storeId = req.user!.storeId
+    const { types } = req.body
+    await FinanceAccountService.saveAccountTypes(storeId, types)
+    res.json({ code: 200, message: 'Account types updated' })
+  } catch (error: any) {
+    console.error('Save account types error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to save account types' })
+  }
+})
+
 
 // GET /api/finance/accounts
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
@@ -108,51 +148,13 @@ router.get('/transfers/list', authenticate, authorize('admin', 'manager'), async
     const transfers = await FinanceAccountService.getTransfers(storeId, {
       fromAccountId: fromAccountId as string,
       toAccountId: toAccountId as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
     res.json({ code: 200, data: { list: transfers } })
   } catch (error: any) {
     console.error('Get transfers error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to get transfers' })
-  }
-})
-
-// ==================== ACCOUNT TYPES (Customizable) ====================
-
-// Default account types
-const DEFAULT_ACCOUNT_TYPES = [
-  { key: 'cash', label: 'Tunai', labelZh: '现金', labelEn: 'Cash', icon: 'Wallet', color: 'text-green-600', bgColor: 'bg-green-100' },
-  { key: 'bank', label: 'Bank', labelZh: '银行', labelEn: 'Bank', icon: 'Building2', color: 'text-blue-600', bgColor: 'bg-blue-100' },
-  { key: 'receivable', label: 'Piutang', labelZh: '应收账款', labelEn: 'Receivable', icon: 'CreditCard', color: 'text-purple-600', bgColor: 'bg-purple-100' },
-  { key: 'payable', label: 'Hutang', labelZh: '应付账款', labelEn: 'Payable', icon: 'FileText', color: 'text-orange-600', bgColor: 'bg-orange-100' },
-  { key: 'revenue', label: 'Pendapatan', labelZh: '收入', labelEn: 'Revenue', icon: 'TrendingUp', color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
-  { key: 'cogs', label: 'HPP', labelZh: '销售成本', labelEn: 'COGS', icon: 'Package', color: 'text-red-600', bgColor: 'bg-red-100' },
-  { key: 'expense', label: 'Beban', labelZh: '费用', labelEn: 'Expense', icon: 'TrendingDown', color: 'text-pink-600', bgColor: 'bg-pink-100' }
-]
-
-// GET /api/finance/accounts/types - Get account types (customizable)
-router.get('/types', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
-  try {
-    const storeId = req.user!.storeId
-    const accountTypes = await FinanceAccountService.getAccountTypes(storeId)
-    res.json({ code: 200, data: { list: accountTypes } })
-  } catch (error: any) {
-    console.error('Get account types error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to get account types' })
-  }
-})
-
-// PUT /api/finance/accounts/types - Update account types (customizable)
-router.put('/types', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
-  try {
-    const storeId = req.user!.storeId
-    const { types } = req.body
-    await FinanceAccountService.saveAccountTypes(storeId, types)
-    res.json({ code: 200, message: 'Account types updated' })
-  } catch (error: any) {
-    console.error('Save account types error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to save account types' })
   }
 })
 

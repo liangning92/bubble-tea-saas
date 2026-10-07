@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as BankService from '../services/BankService'
@@ -73,8 +74,8 @@ router.get('/transactions', authenticate, authorize('admin', 'manager'), async (
     const transactions = await BankService.getBankTransactions(storeId, {
       bankAccountId: bankAccountId as string,
       type: type as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({ code: 200, data: { list: transactions } })

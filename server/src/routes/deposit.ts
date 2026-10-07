@@ -63,17 +63,6 @@ router.delete('/rules/:id', authenticate, authorize('admin', 'manager'), async (
   }
 })
 
-// GET /api/deposit/staff/:staffId - Get staff deposit record
-router.get('/staff/:staffId', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const deposit = await getStaffDeposit(req.params.staffId)
-    res.json({ code: 200, data: deposit, timestamp: new Date().toISOString() })
-  } catch (error) {
-    console.error('Get staff deposit error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get staff deposit' })
-  }
-})
-
 // GET /api/deposit/staff/my - Get current staff's deposit record
 router.get('/staff/my', authenticate, async (req: AuthRequest, res) => {
   try {
@@ -82,6 +71,17 @@ router.get('/staff/my', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Get my deposit error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get deposit' })
+  }
+})
+
+// GET /api/deposit/staff/:staffId - Get staff deposit record
+router.get('/staff/:staffId', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const deposit = await getStaffDeposit(req.params.staffId)
+    res.json({ code: 200, data: deposit, timestamp: new Date().toISOString() })
+  } catch (error) {
+    console.error('Get staff deposit error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get staff deposit' })
   }
 })
 

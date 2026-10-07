@@ -1,4 +1,5 @@
 import prisma from '../config/database'
+import { formatDate } from '../utils/dateUtils'
 import { socketManager } from '../socket'
 
 // ============================================
@@ -700,7 +701,7 @@ export async function getTasksByStaff(staffId: string, date: string) {
  * 获取待处理任务
  */
 export async function getPendingTasks(storeId: string, options?: { staffId?: string }) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatDate(new Date())
   const where: any = { storeId, date: today, status: 'pending' }
   if (options?.staffId) where.staffId = options.staffId
 
@@ -1006,7 +1007,7 @@ export async function approveTask(taskId: string, approverId: string, approverNa
     })
 
     // 创建新的重做任务
-    const redoDate = new Date().toISOString().split('T')[0]
+    const redoDate = formatDate(new Date())
     const redoTime = new Date().toTimeString().slice(0, 5)
     // 计算截止时间：当前时间 + 预计完成时间
     const dueTime = new Date()
@@ -1512,7 +1513,7 @@ export async function processDueTemplates() {
   const createdTasks = []
 
   for (const template of dueTemplates) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = formatDate(new Date())
 
     // 检查是否应该在这天生成
     if (!shouldGenerateOnDate(template, today)) {

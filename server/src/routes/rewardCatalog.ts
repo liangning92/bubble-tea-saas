@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { BusinessInputError } from '../utils/businessDate'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import {
   getRewards,
@@ -52,7 +53,8 @@ router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res)
     res.status(201).json({ code: 201, message: 'Reward created', data: reward, timestamp: new Date().toISOString() })
   } catch (error) {
     console.error('Create reward error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to create reward' })
+    const status = error instanceof BusinessInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error instanceof BusinessInputError ? error.message : 'Failed to create reward' })
   }
 })
 
@@ -63,7 +65,8 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
     res.json({ code: 200, message: 'Reward updated', data: reward, timestamp: new Date().toISOString() })
   } catch (error) {
     console.error('Update reward error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to update reward' })
+    const status = error instanceof BusinessInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error instanceof BusinessInputError ? error.message : 'Failed to update reward' })
   }
 })
 

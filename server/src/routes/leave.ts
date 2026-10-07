@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -88,8 +89,8 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
     const { status, startDate, endDate } = req.query
     const leaves = await LeaveService.getStaffLeaves(staff.id, {
       status: status as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({
@@ -190,8 +191,8 @@ router.get('/list', authenticate, authorize('admin', 'manager'), async (req: Aut
     const leaves = await LeaveService.getStoreLeaves(targetStoreId, {
       status: status as string,
       staffId: staffId as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined
     })
 
     res.json({

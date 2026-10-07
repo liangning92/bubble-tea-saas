@@ -106,6 +106,7 @@ export function ExpenseListPage() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [showRecurringModal, setShowRecurringModal] = useState(false)
   const [showTypeModal, setShowTypeModal] = useState(false)
+  const [isTypeSaving, setIsTypeSaving] = useState(false)
   const [importProgress, setImportProgress] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -297,12 +298,17 @@ export function ExpenseListPage() {
   }
 
   const saveCustomTypes = async (types: ExpenseCategory[]) => {
+    setIsTypeSaving(true)
     try {
       await expenseApi.saveCategories(types)
       setExpenseTypes(types)
+      return true
     } catch (error) {
       console.error('Failed to save expense categories:', error)
-      alert(t('common.error'))
+      alert(t('common.saveFailed'))
+      return false
+    } finally {
+      setIsTypeSaving(false)
     }
   }
 
@@ -498,20 +504,21 @@ export function ExpenseListPage() {
     saveRecurringExpenses(updated)
   }
 
-  const handleAddType = () => {
-    if (!newTypeName.trim()) return
+  const handleAddType = async () => {
+    if (isTypeSaving || !newTypeName.trim()) return
     const key = newTypeName.trim().toLowerCase().replace(/\s+/g, '_')
     if (expenseTypes.find(t => t.key === key)) return // duplicate
-    saveCustomTypes([...expenseTypes, {
+    const saved = await saveCustomTypes([...expenseTypes, {
       key,
       label: newTypeName.trim(),
       color: DEFAULT_COLORS[expenseTypes.length % DEFAULT_COLORS.length],
       isDefault: false
     }])
-    setNewTypeName('')
+    if (saved) setNewTypeName('')
   }
 
   const handleRemoveType = (key: string) => {
+    if (isTypeSaving) return
     if (!confirm(t('expense.confirmDelete'))) return
     const updated = expenseTypes.filter(t => t.key !== key)
     saveCustomTypes(updated)
@@ -1291,6 +1298,8 @@ export function ExpenseListPage() {
               />
               <button
                 onClick={handleAddType}
+                disabled={isTypeSaving || !newTypeName.trim()}
+                aria-label={t('common.add')}
                 className="px-4 py-3 bg-primary text-white rounded-xl"
               >
                 <Plus size={20} />
@@ -1305,6 +1314,7 @@ export function ExpenseListPage() {
                   {!type.isDefault && (
                     <button
                       onClick={() => handleRemoveType(type.key)}
+                      disabled={isTypeSaving}
                       className="text-red-500 hover:bg-red-50 p-1 rounded"
                     >
                       <X size={16} />

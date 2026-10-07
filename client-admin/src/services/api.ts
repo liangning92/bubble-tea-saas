@@ -725,6 +725,10 @@ export const rewardApi = {
 
 // Staff Points
 export const staffPointsApi = {
+  getRewards: () => api.get('/staff-points/rewards'),
+  createReward: (data: any) => api.post('/staff-points/rewards', data),
+  updateReward: (id: string, data: any) => api.put('/staff-points/rewards/' + id, data),
+  deleteReward: (id: string) => api.delete('/staff-points/rewards/' + id),
   getStorePoints: (storeId: string) => api.get('/staff-points/store/' + storeId),
   getBalance: (staffId: string) => api.get('/staff-points/balance/' + staffId),
   getHistory: (staffId: string, limit?: number) => api.get('/staff-points/history/' + staffId, { params: limit ? { limit } : undefined }),
