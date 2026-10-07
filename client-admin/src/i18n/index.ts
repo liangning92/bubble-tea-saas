@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      "receiptPrinting": { "logoFileMissing": "File logo tidak ditemukan. Unggah kembali logo." },
       staffPointSettings: { overtimePerHour: "Poin per jam lembur" },
       revenueLayout: {"title": "Ringkasan pendapatan", "netRevenue": "Pendapatan bersih", "vsPrevious": "dibanding periode sebelumnya", "channelRevenue": "Pendapatan per kanal", "channelDetails": "Rincian kanal"},
       pageHelp: {"title": "Bantuan", "aiDisabled": "Eksekusi AI belum aktif"},
@@ -3667,6 +3668,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      "receiptPrinting": { "logoFileMissing": "Logo file is missing. Upload it again." },
       staffPointSettings: { overtimePerHour: "Points per overtime hour" },
       revenueLayout: {"title": "Revenue overview", "netRevenue": "Net revenue", "vsPrevious": "vs previous period", "channelRevenue": "Revenue by channel", "channelDetails": "Channel details"},
       pageHelp: {"title": "Help", "aiDisabled": "AI execution is inactive"},
@@ -7267,6 +7269,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      "receiptPrinting": { "logoFileMissing": "Logo 图片文件缺失，请重新上传。" },
       staffPointSettings: { overtimePerHour: "每小时加班积分" },
       revenueLayout: {"title": "营收概览", "netRevenue": "净营收", "vsPrevious": "较上一周期", "channelRevenue": "渠道营收", "channelDetails": "渠道明细"},
       pageHelp: {"title": "帮助", "aiDisabled": "AI执行尚未启用"},

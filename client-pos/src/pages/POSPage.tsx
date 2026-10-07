@@ -437,7 +437,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 预缓存 Logo 为 Base64 Data URL，彻底消除结账打印时的远端 HTTP 下载与挂起死锁
   const cachedLogoBase64Ref = useRef<string>('')
   useEffect(() => {
-    const rawLogo = posReceipt.storeLogo || storeInfo.storeLogo || ''
+    cachedLogoBase64Ref.current = ''
+    let cancelled = false
+    const rawLogo = posReceipt.storeLogo
     if (!rawLogo) {
       cachedLogoBase64Ref.current = ''
       return
@@ -459,16 +461,17 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.drawImage(img, 0, 0)
-          cachedLogoBase64Ref.current = canvas.toDataURL('image/png')
+          if (!cancelled) cachedLogoBase64Ref.current = canvas.toDataURL('image/png')
         }
       } catch {}
     }
     img.src = fullUrl
+    return () => { cancelled = true; img.onload = null; img.onerror = null }
   }, [posReceipt.storeLogo, storeInfo.storeLogo])
 
   const getPrintLogo = useCallback(() => {
     if (cachedLogoBase64Ref.current) return cachedLogoBase64Ref.current
-    const rawLogo = posReceipt.storeLogo || storeInfo.storeLogo || ''
+    const rawLogo = posReceipt.storeLogo
     if (!rawLogo) return ''
     if (rawLogo.startsWith('data:image/') || rawLogo.startsWith('http')) return rawLogo
     return `${getApiUrl().replace(/\/api$/, '')}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`
@@ -952,7 +955,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         // 店铺信息 - Admin保存为storeInfo对象
         const storeInfoData = configs.storeInfo || {}
         const receiptConfig = configs.posReceipt || configs.receiptSettings || {}
-        const resolvedStoreLogo = storeInfoData.storeLogo || storeInfoData.logo || receiptConfig.storeLogo || ''
+        const resolvedStoreLogo = typeof receiptConfig.storeLogo === 'string' ? receiptConfig.storeLogo : storeInfoData.storeLogo || storeInfoData.logo || ''
 
         if (storeInfoData.storeName || storeInfoData.address || storeInfoData.phone || resolvedStoreLogo) {
           setStoreInfo({
@@ -1026,7 +1029,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             footer: receiptConfig.footer || receiptConfig.footerMessage || prev.footer,
             taxRate: receiptConfig.taxRate ?? prev.taxRate,
             showLogo: receiptConfig.showLogo ?? prev.showLogo,
-            storeLogo: resolvedStoreLogo || receiptConfig.storeLogo || prev.storeLogo,
+            storeLogo: resolvedStoreLogo,
             paperSize: receiptConfig.paperSize || prev.paperSize,
             printCopies: receiptConfig.printCopies ?? prev.printCopies,
             showQR: receiptConfig.showQR ?? prev.showQR,
@@ -1060,6 +1063,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 res = { data: { data: list[0] } }
               }
             }
+            if (version !== configLoadVersion.current) return
             if (res?.data?.data?.content) {
               const template = JSON.parse(res.data.data.content)
               setReceiptTemplate(template)
@@ -1380,8 +1384,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             ...target,
             items: [{ productName: 'Test Item', specName: '', quantity: 1, unitPrice: 1000, addons: [] }],
             subtotal: 1000, tax: 0, total: 1000, paymentMethod: 'Test',
+            storeLogo: getPrintLogo(), showLogo: posReceipt.showLogo !== false,
+            showBarcode: posReceipt.showBarcode !== false, showQR: posReceipt.showQR === true, qrCodeUrl: posReceipt.qrCodeUrl,
             ...(receiptTemplate?.blocks ? { blocks: receiptTemplate.blocks } : {})
-          }).then((result: { success?: boolean }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
+          }).then((result: { success?: boolean; warnings?: string[] }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning'); else if (result.warnings?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testPrint: null }, 'pos')
         }
@@ -1389,7 +1395,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
           const target = printerTarget('receipt', hs)
-          if (target) electronAPI?.openCashDrawer?.({ ...target, cashDrawerPulse: hs.cashDrawerPulse || 100 }).then((result: { success?: boolean }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
+          if (target) electronAPI?.openCashDrawer?.({ ...target, cashDrawerPulse: hs.cashDrawerPulse || 100 }).then((result: { success?: boolean; warnings?: string[] }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning'); else if (result.warnings?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -2552,7 +2558,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         storeLogo: getPrintLogo(),
       })
       if (res?.success) {
-        showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
+        if (res.warnings?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
+        else showToast((t('pos.testPrintSuccess', 'Test print sent successfully')) + (targetName ? ` (${targetName})` : ''), 'success')
       } else {
         showToast((t('pos.printFailed', 'Failed to print receipt')) + (res?.error ? `: ${res.error}` : ''), 'error')
       }
@@ -3056,9 +3063,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       })
       let timer: ReturnType<typeof setTimeout> | undefined
       const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) => {
-        timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 4000)
+        timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 10000)
       })
       const result = await Promise.race([printPromise, timeoutPromise]).finally(() => { if (timer) clearTimeout(timer) })
+      if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
       return result?.success ?? false
     } catch (err) {
       console.warn('Print error:', err)

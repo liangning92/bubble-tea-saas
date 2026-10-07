@@ -9,7 +9,8 @@ import { authenticate, AuthRequest } from '../middlewares/auth'
 const router = Router()
 
 // Ensure upload directories exist
-const dirs = ['uploads/products', 'uploads/receipts', 'uploads/attachments', 'uploads/avatars', 'uploads/dualScreen']
+const uploadRoot = process.env.UPLOADS_PATH || path.resolve(__dirname, '../../uploads')
+const dirs = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen'].map(dir => path.join(uploadRoot, dir))
 dirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
@@ -19,7 +20,7 @@ dirs.forEach(dir => {
 // Configure multer for different file types
 const createStorage = (subDir: string) => multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, `uploads/${subDir}/`)
+    cb(null, path.join(uploadRoot, subDir))
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase()

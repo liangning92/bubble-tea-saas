@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { configApi, uploadApi, receiptTemplateApi } from '../../services/api'
+import { configApi, uploadApi, receiptTemplateApi, receiptMediaUrl } from '../../services/api'
 import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
@@ -614,6 +614,8 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   // 小票设置视图模式 (基础设置 / 模板设计器)
   const [receiptSubMode, setReceiptSubMode] = useState<'basic' | 'template'>('basic')
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false)
 
   // 小票设置
   const [_posReceipt, setPosReceipt] = useState({
@@ -656,9 +658,16 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   // ========== SAVE MUTATION ==========
   const saveConfigMutation = useMutation({
-    mutationFn: (data: { key: string; value: any }) => {
-      const currentStoreId = user?.storeId || ''
-      return configApi.set(currentStoreId, data.key, data.value, 'pos')
+    mutationFn: async (data: { key: string; value: any }) => {
+      if (data.key === 'posReceipt' && data.value?.storeLogo !== undefined) {
+        const storeInfo = posConfig?.data?.data?.storeInfo || {}
+        await configApi.setBatch(effectiveStoreId, [
+          { key: data.key, value: data.value, category: 'pos' },
+          { key: 'storeInfo', value: { ...storeInfo, storeLogo: data.value.storeLogo }, category: 'pos' }
+        ])
+        return
+      }
+      await configApi.set(effectiveStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
       // 使用函数式 queryKey，运行时获取最新的 storeId，避免闭包捕获 stale 值
@@ -675,12 +684,6 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   const handleSave = useCallback((key: string, value: any) => {
     console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
     saveConfigMutation.mutate({ key, value })
-    if (key === 'posReceipt' && value && value.storeLogo !== undefined) {
-      const currentStoreInfo = (posConfig as any)?.storeInfo || {}
-      if (currentStoreInfo.storeLogo !== value.storeLogo) {
-        configApi.set(user?.storeId || '', 'storeInfo', { ...currentStoreInfo, storeLogo: value.storeLogo }, 'pos').catch(() => {})
-      }
-    }
   }, [user?.storeId, posConfig])
 
 
@@ -2157,6 +2160,38 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                         ℹ️ {t('posSettings.usingDefaultTemplate', '沿用默认模板')}
                       </span>
                     )}
+                </div>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                <h4 className="font-medium text-gray-800 text-sm">{t('posSettings.receiptLogo')}</h4>
+                {_posReceipt.storeLogo && <img src={receiptMediaUrl(_posReceipt.storeLogo)} alt="Receipt Logo" className="max-h-24 max-w-48 bg-white object-contain" onLoad={() => setLogoLoadFailed(false)} onError={() => setLogoLoadFailed(true)} />}
+                {logoLoadFailed && <p className="text-sm text-red-600">{t('receiptPrinting.logoFileMissing')}</p>}
+                <div className="flex items-center gap-3">
+                  <label className="btn-primary text-sm cursor-pointer">
+                    {isUploadingLogo ? t('common.loading') : t('posSettings.uploadLogoBtn')}
+                    <input aria-label={t('posSettings.uploadLogoBtn')} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={isUploadingLogo || saveConfigMutation.isPending} onChange={async event => {
+                      const input = event.currentTarget, file = input.files?.[0]
+                      if (!file) return
+                      setIsUploadingLogo(true)
+                      try {
+                        const uploaded = await uploadApi.uploadReceipt([file])
+                        const raw = uploaded.data?.data?.urls?.[0]
+                        if (!raw) throw new Error(t('common.error'))
+                        const apiOrigin = new URL(uploaded.config.baseURL || '/api', window.location.href).origin
+                        const storeLogo = new URL(raw, apiOrigin).href
+                        const updated = { ..._posReceipt, storeLogo, showLogo: true }
+                        await saveConfigMutation.mutateAsync({ key: 'posReceipt', value: updated })
+                        setPosReceipt(updated)
+                        setLogoLoadFailed(false)
+                      } catch (error: any) { alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.error'))) }
+                      finally { setIsUploadingLogo(false); input.value = '' }
+                    }} />
+                  </label>
+                  {_posReceipt.storeLogo && <button type="button" className="text-sm text-red-600" disabled={isUploadingLogo || saveConfigMutation.isPending} onClick={async () => {
+                    const updated = { ..._posReceipt, storeLogo: '' }
+                    try { await saveConfigMutation.mutateAsync({ key: 'posReceipt', value: updated }); setPosReceipt(updated); setLogoLoadFailed(false) } catch { alert(t('pos.saveFailed')) }
+                  }}>{t('posSettings.removeLogo')}</button>}
                 </div>
               </div>
 
