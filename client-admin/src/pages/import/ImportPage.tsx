@@ -74,20 +74,25 @@ export function ImportPage() {
   const handleFile = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return
     const file = files[0]
+    setAllRows([]);setPreview([]);setResult(null)
+    if(file.size>5*1024*1024){setFile(null);alert(t('common.error'));return}
     setFile(file)
 
     // 解析CSV
     const reader = new FileReader()
     reader.onload = (e) => {
+      try {
       const text = e.target?.result as string
       const workbook=XLSX.read(text,{type:'string',raw:true})
       const rows=XLSX.utils.sheet_to_json<Record<string,string>>(workbook.Sheets[workbook.SheetNames[0]],{raw:false,defval:''})
       setAllRows(rows)
       setRequestId(crypto.randomUUID())
       setPreview(rows.slice(0, 5))
+      } catch {setAllRows([]);setPreview([]);alert(t('common.error'))}
     }
+    reader.onerror=()=>{setAllRows([]);setPreview([]);alert(t('common.error'))}
     reader.readAsText(file)
-  }, [])
+  }, [t])
 
   // 拖放处理
   const handleDrop = useCallback((e: React.DragEvent) => {

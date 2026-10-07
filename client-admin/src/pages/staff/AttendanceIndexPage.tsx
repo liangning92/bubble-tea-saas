@@ -8,6 +8,7 @@ export function AttendanceIndexPage() {
 
   const tabs = [
     { key: 'dashboard', label: t('staff.attendanceDashboard'), path: '/staff/attendance/dashboard', icon: Calendar },
+    { key: 'leave/balance', label: t('staff.leaveBalance'), path: '/staff/attendance/leave/balance', icon: Calendar },
     { key: 'leave', label: t('nav.leave'), path: '/staff/attendance/leave', icon: FileText },
     { key: 'shift-swap', label: t('staff.shiftSwap'), path: '/staff/attendance/shift-swap', icon: ArrowLeftRight },
     { key: 'overtime', label: t('staff.overtimeRequest'), path: '/staff/attendance/overtime', icon: Timer },

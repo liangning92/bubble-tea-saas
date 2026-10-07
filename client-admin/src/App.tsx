@@ -25,6 +25,7 @@ import { StaffIndexPage } from './pages/staff/StaffIndexPage'
 import { StaffListPage } from './pages/staff/StaffListPage'
 import { StaffFormPage } from './pages/staff/StaffFormPage'
 import { StaffDetailPage } from './pages/staff/StaffDetailPage'
+import { LeaveBalancePage } from './pages/staff/LeaveBalancePage'
 import { LeaveListPage } from './pages/staff/LeaveListPage'
 import { LeaveTypeConfigPage } from './pages/staff/LeaveTypeConfigPage'
 import { LeaveKanbanPage } from './pages/staff/LeaveKanbanPage'
@@ -206,6 +207,7 @@ function App() {
             <Route index element={<AttendanceDashboardPage />} />
             <Route path="dashboard" element={<AttendanceDashboardPage />} />
             <Route path="leave" element={<LeaveListPage />} />
+            <Route path="leave/balance" element={<LeaveBalancePage />} />
             <Route path="leave/types" element={<LeaveTypeConfigPage />} />
             <Route path="leave/kanban" element={<LeaveKanbanPage />} />
             <Route path="correction" element={<AttendanceCorrectionListPage />} />
