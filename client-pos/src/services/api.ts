@@ -1,6 +1,12 @@
+import { readSnapshot, saveSnapshot, snapshotPath } from '../utils/offlineSale'
+import { assertBackendAuth, assertCheckoutBackend, backendIdentity, backendAuthHeaders, readBackendAuth } from '../utils/backendIdentity'
 import axios from 'axios'
 import { getApiUrl, setApiUrl, normalizeApiUrl } from '../config'
 import { connectionManager, type ConnectionEvent } from './ConnectionManager'
+
+declare module 'axios' {
+  interface AxiosRequestConfig { posBackend?: string; posStoreId?: string; posActorId?: string; posCachedSnapshot?: boolean; posSnapshotComplete?: boolean }
+}
 
 const api = axios.create({
   baseURL: getApiUrl(),
@@ -10,6 +16,7 @@ const api = axios.create({
 // Update baseURL dynamically (for API URL configuration)
 export function updateApiUrl(url: string) {
   const normalized = normalizeApiUrl(url)
+  setApiUrl(normalized)
   api.defaults.baseURL = normalized
 }
 
@@ -18,8 +25,7 @@ connectionManager.addListener((event: ConnectionEvent) => {
   if (event.type === 'connected' || event.type === 'url-changed') {
     if (event.url) {
       const normalized = normalizeApiUrl(event.url)
-      api.defaults.baseURL = normalized
-      setApiUrl(normalized)
+      api.defaults.baseURL = connectionManager.getCurrentUrl()
     }
   }
 })
@@ -37,9 +43,7 @@ export async function fetchApiUrlFromServer(): Promise<string | null> {
     // baseUrl already ends with /api, so use /config not /api/config
     const baseUrl = getApiUrl().replace(/\/$/, '')  // Remove trailing slash
     const response = await fetch(`${baseUrl}/config/${storeId}/pos_api_url`, {
-      headers: {
-        Authorization: `Bearer ${state.token}`
-      }
+      headers: backendAuthHeaders(baseUrl, storeId)
     })
 
     if (response.ok) {
@@ -54,12 +58,30 @@ export async function fetchApiUrlFromServer(): Promise<string | null> {
   return null
 }
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
+  config.baseURL = config.posBackend ? assertCheckoutBackend(config.posBackend, config.posStoreId || '') : connectionManager.getCurrentUrl()
+  if (!config.url?.includes('/auth/login') && !(!readBackendAuth().token && config.method === 'get' && snapshotPath(config.url || ''))) assertBackendAuth(backendIdentity(config.baseURL))
+  const requestIdentity = readBackendAuth()
+  if (config.method === 'get' && snapshotPath(config.url || '')) {
+    const queryStore = config.params?.storeId || new URL(config.url!,window.location.href).searchParams.get('storeId')
+    if (queryStore && queryStore !== requestIdentity.user?.storeId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
+    config.posStoreId = requestIdentity.user?.storeId
+    config.posActorId = requestIdentity.user?.id
+    config.posSnapshotComplete = snapshotPath(config.url || '') !== '/config' || !(config.params?.category || new URL(config.url!,window.location.href).searchParams.get('category'))
+  }
+  const cachedPath = config.method === 'get' && snapshotPath(config.url || '')
+  if (cachedPath && !readBackendAuth().token) {
+    const storeId = readBackendAuth().user?.storeId
+    if (!storeId) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+    const data = await readSnapshot(cachedPath,storeId)
+    config.posCachedSnapshot = true
+    config.adapter = async () => ({data,status:200,statusText:'Local cached snapshot',headers:{},config})
+  }
   const token = sessionStorage.getItem('pos-auth')
   if (token) {
     try {
       const { state } = JSON.parse(token)
-      if (state?.token) {
+      if (state?.token && !config.url?.includes('/auth/login')) {
         config.headers.Authorization = `Bearer ${state.token}`
       }
     } catch {}
@@ -68,12 +90,23 @@ api.interceptors.request.use((config) => {
 })
 
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  async (response) => {
+    const path = response.config.method === 'get' && snapshotPath(response.config.url || '')
+    const auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
+    if (path && !response.config.posCachedSnapshot && auth?.user?.storeId === response.config.posStoreId && auth?.user?.id === response.config.posActorId) await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId,response.config.posSnapshotComplete === true)
+    return response
+  },
+  async (error) => {
+    const path = error.config?.method === 'get' && snapshotPath(error.config.url || '')
+    const auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
+    if (path && !error.response && auth?.user?.storeId === error.config.posStoreId && auth?.user?.id === error.config.posActorId) {
+      try { return {data:await readSnapshot(path,auth.user.storeId),status:200,config:error.config,headers:{},statusText:'Local cached snapshot'} } catch {}
+    }
     // Auto-logout on 401 Unauthorized (except for login requests)
     if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
       import('../stores/auth').then(({ useAuthStore }) => {
-        useAuthStore.getState().logout()
+        const current = readBackendAuth()
+        if (current.apiUrl && backendIdentity(current.apiUrl) === backendIdentity(error.config.baseURL) && error.config.headers?.Authorization === `Bearer ${current.token}`) useAuthStore.getState().expireCloudSession()
       })
     }
     return Promise.reject(error)
@@ -93,7 +126,10 @@ export const posApi = {
   getChannels: (storeId: string) => api.get('/channels', { params: { storeId } }),
 
   // Orders
-  createOrder: (data: any) => api.post('/orders', data),
+  createOrder: (data: any, backendUrl: string | undefined) => {
+    if (!backendUrl) return Promise.reject(new Error('CHECKOUT_BACKEND_EVIDENCE_REQUIRED'))
+    return api.post('/orders', data, { posBackend: backendUrl, posStoreId: data.storeId })
+  },
   deleteOrder: (id: string) => api.delete(`/orders/${id}`),
   getOrders: (params?: any) => api.get('/orders', { params }),
   requestRefund: (data: { orderId: string; reason: string; staffId?: string }) =>

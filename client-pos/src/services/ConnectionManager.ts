@@ -1,3 +1,4 @@
+import { backendAuthHeaders } from '../utils/backendIdentity'
 /**
  * ConnectionManager - Smart API connection manager
  *
@@ -71,7 +72,7 @@ class ConnectionManagerClass {
       const savedWorkingUrl = localStorage.getItem(WORKING_URL_KEY)
       if (savedWorkingUrl) {
         this.workingUrl = savedWorkingUrl
-        this.currentUrl = savedWorkingUrl
+        this.currentUrl = getApiUrl()
       } else {
         this.currentUrl = getApiUrl()
       }
@@ -121,7 +122,7 @@ class ConnectionManagerClass {
   // Get current API URL
   getCurrentUrl(): string {
     // Fallback to getApiUrl() if currentUrl is empty (initial state)
-    return normalizeApiUrl(this.currentUrl || getApiUrl())
+    return normalizeApiUrl(getApiUrl())
   }
 
   // Get connection state
@@ -163,7 +164,7 @@ class ConnectionManagerClass {
    */
   async healthCheck(): Promise<{ success: boolean; latency: number; url: string }> {
     const startTime = Date.now()
-    const url = this.currentUrl
+    const url = this.getCurrentUrl()
 
     try {
       const controller = new AbortController()
@@ -207,8 +208,8 @@ class ConnectionManagerClass {
       // Use absolute URL to avoid /api/api/... double-prefix issue
       // When file:// protocol, window.location.origin is "null"/"file://", so use getApiUrl() instead
       let baseUrl: string
-      if (this.currentUrl.startsWith('http')) {
-        baseUrl = this.currentUrl
+      if (this.getCurrentUrl().startsWith('http')) {
+        baseUrl = this.getCurrentUrl().replace(/\/api$/, '')
       } else if (window.location.origin && window.location.origin.startsWith('http')) {
         baseUrl = window.location.origin
       } else {
@@ -216,9 +217,7 @@ class ConnectionManagerClass {
         baseUrl = getApiUrl().replace(/\/api$/, '')
       }
       const response = await fetch(`${baseUrl}/api/config/${storeId}/pos_api_url`, {
-        headers: {
-          Authorization: `Bearer ${state.token}`
-        },
+        headers: backendAuthHeaders(this.getCurrentUrl(), storeId),
         cache: 'no-cache'
       })
 
@@ -238,8 +237,9 @@ class ConnectionManagerClass {
    */
   async checkForUrlUpdate(): Promise<boolean> {
     const newUrl = await this.checkServerConfigApiUrl()
-    if (newUrl && newUrl !== this.currentUrl) {
-      this.currentUrl = newUrl
+    if (newUrl && normalizeApiUrl(newUrl) !== this.getCurrentUrl()) {
+      this.currentUrl = normalizeApiUrl(newUrl)
+      setApiUrl(this.currentUrl)
       this.workingUrl = newUrl
       this.emit({ type: 'url-changed', url: newUrl })
       this.persistState()
@@ -249,7 +249,7 @@ class ConnectionManagerClass {
   }
 
   /**
-   * Connect to API with automatic failover
+   * Connect to the selected business API without changing its identity
    * Returns the working URL
    */
   async connect(): Promise<string> {
@@ -258,6 +258,7 @@ class ConnectionManagerClass {
     // First try the current URL
     const health = await this.healthCheck()
 
+    if (normalizeApiUrl(health.url) !== this.getCurrentUrl()) return this.getCurrentUrl()
     if (health.success) {
       this.workingUrl = health.url
       this.currentUrl = health.url
@@ -268,32 +269,13 @@ class ConnectionManagerClass {
       return health.url
     }
 
-    // Try fallback URLs
-    for (const url of this.fallbackUrls) {
-      if (url === this.currentUrl) continue
-
-      try {
-        const response = await fetch(`${url}/health`, {
-          method: 'GET',
-          cache: 'no-cache'
-        })
-
-        if (response.ok) {
-          this.workingUrl = url
-          this.currentUrl = url
-          this.retryCount = 0
-          this.setState('connected', url)
-          this.emit({ type: 'connected', url })
-          this.persistState()
-          return url
-        }
-      } catch {}
-    }
+    // A reachable alternate endpoint is not proof of the configured business identity.
+    // Keep the selected target and its authenticated cache when it is unreachable.
 
     // No URL worked - go to offline/degraded mode
     this.setState('offline')
     this.emit({ type: 'offline', error: 'No API endpoints reachable' })
-    return this.currentUrl
+    return this.getCurrentUrl()
   }
 
   /**
@@ -302,7 +284,7 @@ class ConnectionManagerClass {
   async retryWithBackoff(): Promise<string> {
     if (this.retryCount >= this.maxRetries) {
       this.emit({ type: 'offline', error: 'Max retries exceeded' })
-      return this.currentUrl
+      return this.getCurrentUrl()
     }
 
     // Calculate delay with exponential backoff
@@ -341,6 +323,8 @@ class ConnectionManagerClass {
       }
 
       const health = await this.healthCheck()
+
+      if (normalizeApiUrl(health.url) !== this.getCurrentUrl()) return
 
       if (health.success) {
         if (this.state !== 'connected') {
@@ -392,7 +376,7 @@ class ConnectionManagerClass {
    * Get all known URLs (current + fallbacks)
    */
   getAllUrls(): string[] {
-    return [this.currentUrl, ...this.fallbackUrls.filter(u => u !== this.currentUrl)]
+    return [this.getCurrentUrl(), ...this.fallbackUrls.filter(u => normalizeApiUrl(u) !== this.getCurrentUrl())]
   }
 
   /**

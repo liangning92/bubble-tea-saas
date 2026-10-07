@@ -1,3 +1,4 @@
+import { backendIdentity, currentBackendIdentity } from '../utils/backendIdentity'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import bcrypt from 'bcryptjs'
@@ -15,9 +16,11 @@ interface User {
 
 interface AuthState {
   token: string | null
+  apiUrl: string | null
   user: User | null
   isAuthenticated: boolean
-  login: (token: string, user: User, password: string) => Promise<void>
+  login: (token: string, user: User, password: string, apiUrl: string) => Promise<void>
+  expireCloudSession: () => void
   logout: () => void
   loginOffline: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>
   hasCachedCredentials: () => Promise<boolean>
@@ -27,24 +30,30 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       token: null,
+      apiUrl: null,
       user: null,
       isAuthenticated: false,
 
-      login: async (token: string, user: User, password: string) => {
-        set({ token, user, isAuthenticated: true })
+      login: async (token: string, user: User, password: string, apiUrl: string) => {
+        const target = backendIdentity(apiUrl)
+        if (target !== currentBackendIdentity()) throw new Error('CHECKOUT_BACKEND_CHANGED')
+        set({ token, apiUrl: target, user, isAuthenticated: true })
 
         // Cache credentials for offline login
         const passwordHash = await bcrypt.hash(password, 12)
         await saveOfflineCredentials({
           phone: user.phone,
+          apiUrl: target,
           passwordHash,
           user,
           cachedAt: new Date()
         })
       },
 
+      expireCloudSession: () => { set({token:null}) },
+
       logout: () => {
-        set({ token: null, user: null, isAuthenticated: false })
+        set({ token: null, apiUrl: null, user: null, isAuthenticated: false })
         clearOfflineCredentials()
         clearApiUrl()
         connectionManager.reset()
@@ -57,6 +66,9 @@ export const useAuthStore = create<AuthState>()(
           if (!cached) {
             return { success: false, error: 'offlineCredentialsNotFound' }
           }
+
+          if (!cached.apiUrl) return { success: false, error: 'offlineSale.initialize' }
+          if (backendIdentity(cached.apiUrl) !== currentBackendIdentity()) return { success: false, error: 'offlineSale.target' }
 
           if (cached.phone !== phone) {
             return { success: false, error: 'offlineCredentialsNotFound' }
@@ -71,6 +83,7 @@ export const useAuthStore = create<AuthState>()(
           // Set auth state with cached user
           set({
             token: null,
+            apiUrl: cached.apiUrl,
             user: cached.user,
             isAuthenticated: true
           })
