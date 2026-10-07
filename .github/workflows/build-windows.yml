@@ -144,8 +144,10 @@ jobs:
           $appPath = (Resolve-Path 'release/win-unpacked/BTPS.exe').Path
           $resources = (Resolve-Path 'release/win-unpacked/resources/app.asar.unpacked').Path
           $env:ELECTRON_RUN_AS_NODE = '1'
-          & $appPath scripts/validate-desktop-template.cjs --resources $resources --report 'desktop-compatibility-report.json'
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged database/client validation failed' }
+          $validatorScript = (Resolve-Path 'scripts/validate-desktop-template.cjs').Path
+          $report = Join-Path $env:GITHUB_WORKSPACE 'desktop-compatibility-report.json'
+          $validator = Start-Process $appPath -ArgumentList "`"$validatorScript`" --resources `"$resources`" --report `"$report`"" -Wait -PassThru -NoNewWindow
+          if ($validator.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Packaged database/client validation failed' }
           Remove-Item Env:ELECTRON_RUN_AS_NODE
 
       - name: Smoke test packaged local API
