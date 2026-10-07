@@ -157,6 +157,11 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
 // POST /api/orders
 router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validateBody(createOrderSchema), async (req: AuthRequest, res) => {
+  const rejectAdmission = (message: string) => {
+    // Capture the business reason even when an older POS cannot report checkout_failed.
+    console.warn('[Checkout rejected]', JSON.stringify({ code: message, storeId: req.user!.storeId, orderNumber: req.body.orderNumber || null, paymentMethod: req.body.paymentMethod }))
+    return res.status(409).json({ code: 409, message })
+  }
   try {
     // Enforce the cash session at the API boundary so a client cannot bypass it.
     const storeId = req.user!.storeId
@@ -170,14 +175,14 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
       select: { id: true, shift: true }
     })
     if (!openShift) {
-      return res.status(409).json({ code: 409, message: 'OPEN_SHIFT_REQUIRED' })
+      return rejectAdmission('OPEN_SHIFT_REQUIRED')
     }
-    if (openShift.shift === 'off') return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
+    if (openShift.shift === 'off') return rejectAdmission('SHIFT_DISABLED')
     const paymentError = await checkPaymentMethod(storeId, req.body.paymentMethod)
-    if (paymentError) return res.status(409).json({ code: 409, message: paymentError })
+    if (paymentError) return rejectAdmission(paymentError)
     // Existing sessions are historical records, but a disabled shift cannot accept new sales.
     const activeShift = await prisma.shift.findFirst({ where: { storeId, key: openShift.shift, isActive: true } })
-    if (!activeShift) return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
+    if (!activeShift) return rejectAdmission('SHIFT_DISABLED')
     const order = await OrderService.createOrder(req.body, { actorId: req.user!.id, storeId, allowCreate: true })
 
     res.status(201).json({

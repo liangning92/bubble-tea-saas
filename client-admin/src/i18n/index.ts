@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      revenueLayout: {"title": "Ringkasan pendapatan", "netRevenue": "Pendapatan bersih", "vsPrevious": "dibanding periode sebelumnya", "channelRevenue": "Pendapatan per kanal", "channelDetails": "Rincian kanal"},
       pageHelp: {"title": "Bantuan", "aiDisabled": "Eksekusi AI belum aktif"},
       itemRefund: {manual: "Persetujuan mencatat pengembalian; QR statis tidak mentransfer uang otomatis."},
       deliveryIntegration: {"description": "Kelola pesanan GrabFood, GoFood, dan ShopeeFood setelah integrasi tersedia.", "notConnected": "Belum terhubung", "accessPending": "Menunggu akses resmi dari platform.", "orders": "Penerimaan pesanan: belum tersedia", "statusUpdates": "Konfirmasi dan status pesanan: belum tersedia", "menuSync": "Sinkronisasi menu: belum tersedia", "waitingTitle": "Menunggu integrasi platform", "waitingHint": "Belum ada platform yang terhubung. Pesanan nyata akan tersedia setelah akses platform disetujui dan integrasi selesai.", "storeRequired": "Pilih toko sebelum melihat status platform.", "loadFailed": "Status platform gagal dimuat. Silakan coba lagi."},
@@ -2782,6 +2783,7 @@ const resources = {
         "actionCartClear": "Hapus Keranjang",
         "actionCheckoutStart": "Mulai Checkout",
         "actionCheckoutComplete": "Checkout Selesai",
+        "actionCheckoutFailed": "Checkout Gagal",
         "actionOrderCreated": "Buat Pesanan",
         "actionSuspend": "Gantung",
         "actionResume": "Ambil",
@@ -3655,6 +3657,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      revenueLayout: {"title": "Revenue overview", "netRevenue": "Net revenue", "vsPrevious": "vs previous period", "channelRevenue": "Revenue by channel", "channelDetails": "Channel details"},
       pageHelp: {"title": "Help", "aiDisabled": "AI execution is inactive"},
       itemRefund: {manual: "Approval records the refund; static QR does not automatically transfer money."},
       deliveryIntegration: {"description": "Manage GrabFood, GoFood and ShopeeFood orders when integrations become available.", "notConnected": "Not connected", "accessPending": "Waiting for official platform access.", "orders": "Order reception: unavailable", "statusUpdates": "Order confirmation and status: unavailable", "menuSync": "Menu synchronization: unavailable", "waitingTitle": "Waiting for platform integration", "waitingHint": "No platforms are connected yet. Real orders will become available after platform access is approved and integration is completed.", "storeRequired": "Select a store to view platform status.", "loadFailed": "Unable to load platform status. Please try again."},
@@ -5946,6 +5949,7 @@ const resources = {
         "actionCartClear": "Clear Cart",
         "actionCheckoutStart": "Start Checkout",
         "actionCheckoutComplete": "Checkout Complete",
+        "actionCheckoutFailed": "Checkout Failed",
         "actionOrderCreated": "Create Order",
         "actionSuspend": "Suspend",
         "actionResume": "Resume",
@@ -7243,6 +7247,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      revenueLayout: {"title": "营收概览", "netRevenue": "净营收", "vsPrevious": "较上一周期", "channelRevenue": "渠道营收", "channelDetails": "渠道明细"},
       pageHelp: {"title": "帮助", "aiDisabled": "AI执行尚未启用"},
       itemRefund: {manual: "审批记录退款，不代表静态二维码自动打款。"},
       deliveryIntegration: {"description": "预留 GrabFood、GoFood 和 ShopeeFood 的外卖订单管理入口。", "notConnected": "尚未接入", "accessPending": "等待获得平台官方接入权限。", "orders": "接收订单：暂未开放", "statusUpdates": "接单及状态回传：暂未开放", "menuSync": "菜单同步：暂未开放", "waitingTitle": "等待平台接入", "waitingHint": "目前尚未连接外卖平台。取得平台权限并完成接入后，这里将显示真实订单。", "storeRequired": "请先选择门店，再查看平台状态。", "loadFailed": "平台状态加载失败，请重试。"},
@@ -10584,6 +10589,7 @@ const resources = {
         "actionCartClear": "清空购物车",
         "actionCheckoutStart": "开始结账",
         "actionCheckoutComplete": "结账完成",
+        "actionCheckoutFailed": "结账失败",
         "actionOrderCreated": "创建订单",
         "actionSuspend": "挂单",
         "actionResume": "取单",

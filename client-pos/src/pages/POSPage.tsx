@@ -236,7 +236,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // POS 操作会话 ID（用于审计日志）
   const [posSessionId] = useState(() => Date.now().toString(36) + Math.random().toString(36).slice(2, 8))
   // 追踪是否有未完成的 checkout（用于检测飞单）
-  const hasCheckoutCompleteRef = useRef(false)
+  const settledCartRef = useRef<CartItem[] | null>(null)
 
   // 硬件管理 - 打印机检测和钱箱控制
   useHardwareManager()
@@ -779,7 +779,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     // 登出清理
     return () => {
-      if (cartRef.current.length > 0 && !hasCheckoutCompleteRef.current) {
+      if (cartRef.current.length > 0 && cartRef.current !== settledCartRef.current) {
         logPOSAction({
           action: 'cart_clear',
           description: `页面关闭，${cartRef.current.length}件商品未结账`,
@@ -2211,9 +2211,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setCart(prev => prev.filter((_, i) => i !== idx))
   }
 
-  const clearCart = () => {
+  const clearCart = (reason: 'unpaid' | 'settled' | 'recovered' = 'unpaid') => {
     // 检测是否有未结账商品被清空（飞单嫌疑）
-    if (cart.length > 0 && !hasCheckoutCompleteRef.current) {
+    if (cart.length > 0 && reason === 'unpaid' && cart !== settledCartRef.current) {
       logPOSAction({
         action: 'cart_clear',
         description: `清空购物车（${cart.length}件商品未结账）`,
@@ -2221,6 +2221,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         severity: 'warning',
       })
     }
+    cartRef.current = []
+    settledCartRef.current = null
     setCart([])
     setDiscountAmount(0)
     setIsManualDiscount(false)
@@ -2287,6 +2289,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (!serverOrder?.id || serverOrder.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
       await finishCheckout(intent, 'accepted', serverOrder.id)
       accepted = true
+      settledCartRef.current = cart
       // 本地也存储一份，用于快速恢复
       const order = {
         id: serverOrder?.id || `SUSP-${Date.now()}`,
@@ -2304,11 +2307,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         metadata: { itemCount: cart.length, totalAmount: subtotal + tax, orderId: serverOrder?.id },
         severity: 'info',
       })
-      clearCart()
+      clearCart('settled')
       showToast(`${t('pos.orderSuspended')} (${updated.length})`, 'success')
     } catch (err: any) {
-      if (accepted) { clearCart(); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
-      if (!sent && err?.message === 'CHECKOUT_BASKET_STALE') { clearCart();setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
+      if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
+      if (!sent && err?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent) { showToast(t(err?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : 'checkoutIntent.saveFailed'), 'error'); return }
       const definite = definiteFirstRejection(err, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') } catch { /* durable journal remains */ }
@@ -2836,6 +2839,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if ((paymentMethod === 'cash' || qrisData.status === 'manual') && !member && !pointsToRedeem && !discountAmount && !selectedCoupon) {
         const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,qrisData.status === 'manual')
         accepted = true
+        settledCartRef.current = cart
         Object.assign(orderData,local.checkoutRequest)
         res = {data:{data:{id:local.localId,orderNumber:local.orderNumber,pickupNumber:local.pickupNumber,grandTotal:local.finalAmount}}}
       } else {
@@ -2847,6 +2851,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         if (!verified?.id || verified.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
         await finishCheckout(intent,'accepted',verified.id)
         accepted = true
+        settledCartRef.current = cart
         Object.assign(orderData,intent.request)
       }
       const response = res.data?.data
@@ -2859,7 +2864,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       playSoundWithSettings('orderComplete', soundSettings.orderComplete)
 
       // 审计日志
-      hasCheckoutCompleteRef.current = true
       logPOSAction({
         action: 'checkout_complete',
         entityId: orderNum,
@@ -2928,7 +2932,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
       // 结账成功：立即清空购物车和关闭弹窗
-      clearCart()
+      clearCart('settled')
       setShowPaymentModal(false)
       showToast(`${t(paymentMethod === 'cash' || qrisData.status === 'manual' ? 'offlineSale.saved' : 'pos.orderSuccess')} #${finalPickupNum}`, 'success')
       setQrisData({status:'idle'})
@@ -2944,13 +2948,21 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setPaidAmount('')
       setShowChannelModal(true)
     } catch (error: any) {
-      if (accepted) { clearCart(); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
-      if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart();setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
+      if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
+      if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent) {
         setOfflineSaveFailed(true)
         showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
         return
       }
+      const failureCode = String(error?.response?.data?.message || error?.code || error?.message || 'CHECKOUT_FAILED').slice(0, 160)
+      logPOSAction({
+        action: 'checkout_failed',
+        entityId: intent?.request.orderNumber,
+        description: `结账提交未完成: ${failureCode}`,
+        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, outcome: definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
+        severity: 'warning',
+      })
       const definite = definiteFirstRejection(error, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') }
       catch { /* The pre-send recovery intent remains durable; do not manufacture another sale. */ }
@@ -3138,7 +3150,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // Submit also compares this basket's generation inside the shared IDB transaction.
   useEffect(() => {
     if (recovery?.generation && basketGeneration !== recovery.generation) {
-      clearCart();setShowPaymentModal(false);setBasketGeneration(recovery.generation)
+      clearCart('recovered');setShowPaymentModal(false);setBasketGeneration(recovery.generation)
     }
   }, [user?.storeId, recovery?.generation, basketGeneration])
 
