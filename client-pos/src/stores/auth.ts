@@ -67,7 +67,8 @@ export const useAuthStore = create<AuthState>()(
             return { success: false, error: 'offlineCredentialsNotFound' }
           }
 
-          if (!cached.apiUrl || backendIdentity(cached.apiUrl) !== currentBackendIdentity()) return { success: false, error: 'checkoutIntent.backendLoginRequired' }
+          if (!cached.apiUrl) return { success: false, error: 'offlineSale.initialize' }
+          if (backendIdentity(cached.apiUrl) !== currentBackendIdentity()) return { success: false, error: 'offlineSale.target' }
 
           if (cached.phone !== phone) {
             return { success: false, error: 'offlineCredentialsNotFound' }
