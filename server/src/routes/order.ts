@@ -1,4 +1,4 @@
-import { findOrderReplay, OrderReplayConflict } from '../services/OrderReplayService'
+import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import prisma from '../config/database'
@@ -99,7 +99,7 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
       orderBy: { createdAt: 'desc' }
     })
 
-    const filtered = requests.filter(r => r.order?.storeId === storeId)
+    const filtered = requests.filter(r => r.order?.storeId === storeId).map(r => ({ ...r, order: publicOrder(r.order) }))
 
     res.json({
       code: 200,
@@ -124,7 +124,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -161,7 +161,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     res.status(201).json({
       code: 201,
       message: 'Order created',
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -251,7 +251,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
     res.json({
       code: 200,
       message: 'Order status updated',
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -298,7 +298,7 @@ router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (r
     res.json({
       code: 200,
       message: 'Order refunded',
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -415,7 +415,7 @@ router.get('/kds/list', authenticate, authorize('admin', 'manager', 'staff'), as
 
     res.json({
       code: 200,
-      data: { list: orders },
+      data: { list: orders.map(publicOrder) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
