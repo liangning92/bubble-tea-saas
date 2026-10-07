@@ -21,6 +21,9 @@ export interface LocalOrder {
   id?: number
   localId: string
   backendUrl?: string
+  paymentReportedAt?: Date
+  cashTender?: {receivedCash:number;changeGiven:number}
+  cloudJournalId?: string
   locallyAcceptedAt?: Date
   occurredAt?: Date
   cloudReceipt?: Record<string, unknown>
@@ -196,6 +199,12 @@ export class SyncManager {
         const target = assertCheckoutBackend(order.backendUrl,order.storeId)
         const currentAuth = readBackendAuth()
         if (currentAuth.token!==auth.token || currentAuth.apiUrl!==auth.apiUrl || currentAuth.user?.storeId!==auth.user.storeId) throw new Error('CHECKOUT_AUTH_CHANGED')
+        if ((order.locallyAcceptedAt || order.paymentReportedAt) && !order.cloudJournalId) {
+          const journal = await fetch(`${target}/orders/received-receipts`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify({orderNumber:order.orderNumber,occurredAt:new Date(order.occurredAt || order.paymentReportedAt || order.locallyAcceptedAt!).toISOString(),grandTotal:order.finalAmount,cashTender:order.cashTender,request:orderSyncPayload(order)})})
+          const receipt = await journal.json().catch(()=>null)
+          if (journal.status!==201 || !receipt?.data?.id || receipt.data.orderNumber!==order.orderNumber) throw new Error(receipt?.message || 'RECEIVED_RECEIPT_SAVE_FAILED')
+          await db.orders.update(order.id!,{cloudJournalId:receipt.data.id})
+        }
         const response = await fetch(`${target}/orders${order.locallyAcceptedAt ? '/bulk-sync' : ''}`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify(order.locallyAcceptedAt ? {orders:[orderSyncPayload(order)]} : orderSyncPayload(order))})
         const body = await response.json().catch(()=>null)
         const result = order.locallyAcceptedAt ? body?.data?.results?.[0] : {success:response.status===201,data:body?.data}

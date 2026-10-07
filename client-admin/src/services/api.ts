@@ -97,6 +97,7 @@ export const categoryApi = {
 
 // Orders
 export const orderApi = {
+  receivedReceipts: () => api.get('/orders/received-receipts'),
   list: (params?: any) => api.get('/orders', { params }),
   get: (id: string) => api.get('/orders/' + id),
   create: (data: any) => api.post('/orders', data),

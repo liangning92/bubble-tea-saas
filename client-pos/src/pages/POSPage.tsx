@@ -1,3 +1,5 @@
+import { reportReceivedPayment } from '../utils/receivedReceipt'
+import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
 import { backendAuthHeaders } from '../utils/backendIdentity'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -332,6 +334,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     externalId?: string
     status: 'idle' | 'waiting' | 'paid' | 'manual' | 'expired' | 'failed'
   }>({ status: 'idle' })
+  const [externalPaymentConfirmed,setExternalPaymentConfirmed] = useState(false)
   const [manualProof, setManualProof] = useState<ManualQrProof | null>(null)
 
   // Refs for keyboard handler to avoid stale closure (initialized to undefined, synced via useEffect)
@@ -2005,9 +2008,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 积分抵扣：每100积分抵扣1印尼盾，强制取整避免产生小数零头
   const pointsDiscount = Math.floor((pointsToRedeem || 0) / 100)
   const total = Math.max(0, Math.round(subtotal + tax - discountAmount - pointsDiscount))
-  useEffect(() => { setQrisData({status:'idle'}) }, [showPaymentModal,paymentMethod,total])
+  useEffect(() => { setQrisData({status:'idle'});setExternalPaymentConfirmed(false) }, [showPaymentModal,paymentMethod,total])
 
   const change = paidAmount ? Math.max(0, (parseInt(paidAmount) || 0) - total) : 0
+  const paymentIssue = paymentProblem({ready:paymentConfigReady,enabled:paymentMethods.some(m=>m.id===paymentMethod),method:paymentMethod,total,paid:paidAmount,minAmount:paymentSettings.minAmount,maxCashAmount:paymentSettings.maxCashAmount,changeEnabled:paymentSettings.changeEnabled,externalConfirmed:externalPaymentConfirmed})
 
   // Sync totalRef after total is calculated
   useEffect(() => { totalRef.current = total }, [total])
@@ -2743,10 +2747,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
 
-    if (!paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod)) {
-      showToast(t(paymentConfigReady ? 'pos.paymentMethodDisabled' : 'pos.paymentConfigUnavailable'), 'error')
-      return
-    }
+    if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
 
     if (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total)) {
       showToast(t('manualPayment.required'), 'warning')
@@ -2761,13 +2762,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
     if (['GOFOOD', 'GRAB', 'SHOPEE'].includes(orderChannel.code || orderChannel.id) && !platformOrderId) {
       showToast(t('pos.platformOrderIdRequired'), 'error')
-      return
-    }
-
-    // 现金限额检查
-    if (paymentMethod === 'cash' && paymentSettings.maxCashAmount > 0 && parseInt(paidAmount) > paymentSettings.maxCashAmount) {
-      showToast(`${t('pos.cashOverLimit')} ${formatCurrency(paymentSettings.maxCashAmount)}`, 'error')
-      setIsCheckingOut(false)
       return
     }
 
@@ -2837,7 +2831,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || discountAmount || selectedCoupon)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
       if ((paymentMethod === 'cash' || qrisData.status === 'manual') && !member && !pointsToRedeem && !discountAmount && !selectedCoupon) {
-        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,qrisData.status === 'manual')
+        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,qrisData.status === 'manual',paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
         accepted = true
         settledCartRef.current = cart
         Object.assign(orderData,local.checkoutRequest)
@@ -2845,6 +2839,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       } else {
         intent = await prepareCheckout(orderData,cart,{subtotal,ppn:tax,finalAmount:total},basketGeneration)
         await claimCheckout(intent)
+        await reportReceivedPayment(intent,total,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
         sent = true
         res = await posApi.createOrder(intent.request,intent.backendUrl)
         const verified = res.data?.data
@@ -4014,6 +4009,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           ? t('offlineSale.qrisPending')
                           : t('pos.externalPayHelp', '请引导顾客在外接刷卡机 (EDC) 或扫码机上完成刷卡/交易，完成后点击下方确认结账')}
                       </p>
+                      {paymentMethod !== 'qris' && <label className="mt-3 text-sm text-left"><input type="checkbox" checked={externalPaymentConfirmed} onChange={e=>setExternalPaymentConfirmed(e.target.checked)} /> {t('paymentValidation.externalConfirm')}</label>}
                       <div className="mt-3 px-3 py-1 bg-white rounded-lg border text-xs font-mono font-bold text-gray-700">
                         {t('pos.amountDue', '支付金额')}: {formatCurrency(total)}
                       </div>
@@ -4024,9 +4020,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               </div>
             </div>
 
-            {(!paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod)) && (
-              <p className="text-red-600 p-3">{t(paymentConfigReady ? 'pos.paymentMethodDisabled' : 'pos.paymentConfigUnavailable')}</p>
-            )}
+            {paymentIssue && <p role="alert" className="text-red-600 px-4 py-2 text-sm">{t(`paymentValidation.${paymentIssue}`)}</p>}
             {offlineSaveFailed && (
               <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
                 {t('pos.offlineSaveFailed')}
@@ -4057,9 +4051,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   onClick={handleCheckout}
                   disabled={
                     isCheckingOut || !recovery || recovery.blocked || recovery.confirmed.length > 0 ||
-                    !paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod) ||
-                    (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
-                    (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
+                    Boolean(paymentIssue) ||
                     (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total))
                   }
                   className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"

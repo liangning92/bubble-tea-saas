@@ -1,3 +1,4 @@
+import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure } from '../services/ReceivedReceiptService'
 import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
@@ -137,6 +138,25 @@ router.get('/:id/refund-quote',authenticate,async(req:AuthRequest,res)=>{
 })
 
 // GET /api/orders/:id
+// Receipt evidence is accepted independently of mutable payment, shift and inventory policy.
+router.post('/received-receipts', authenticate, authorize('admin', 'manager', 'cashier'), async (req:AuthRequest,res)=>{
+  const parsed = z.object({orderNumber:z.string().regex(/^OFFLINE-[0-9a-f-]{36}$/i),occurredAt:z.string().datetime(),grandTotal:z.number().int().nonnegative().safe(),cashTender:z.object({receivedCash:z.number().int().nonnegative().safe(),changeGiven:z.number().int().nonnegative().safe()}).optional(),request:createOrderSchema}).safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({code:400,message:'RECEIVED_RECEIPT_INVALID'})
+  const receipt = parsed.data
+  if (!req.user!.storeId || receipt.request.storeId!==req.user!.storeId || receipt.orderNumber!==receipt.request.orderNumber) return res.status(403).json({code:403,message:'Store or staff access denied'})
+  if (receipt.cashTender && (receipt.request.paymentMethod!=='cash' || receipt.cashTender.receivedCash-receipt.cashTender.changeGiven!==receipt.grandTotal)) return res.status(400).json({code:400,message:'RECEIVED_RECEIPT_TENDER_INVALID'})
+  try {
+    const staff = await prisma.staff.findFirst({where:{id:receipt.request.staffId,storeId:req.user!.storeId},select:{id:true,name:true}})
+    if (!staff) return res.status(403).json({code:403,message:'Staff access denied'})
+    return res.status(201).json({code:201,data:await retainReceivedReceipt(req.user!.storeId,req.user!.staffId || req.user!.id,receipt,staff.name)})
+  }
+  catch(error:any){return res.status(error.message==='RECEIVED_RECEIPT_CONFLICT'?409:500).json({code:error.message==='RECEIVED_RECEIPT_CONFLICT'?409:500,message:error.message==='RECEIVED_RECEIPT_CONFLICT'?error.message:'RECEIVED_RECEIPT_SAVE_FAILED'})}
+})
+router.get('/received-receipts',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+  try {return res.json({code:200,data:await listUnpostedReceipts(req.user!.storeId)})}
+  catch {return res.status(500).json({code:500,message:'RECEIVED_RECEIPT_READ_FAILED'})}
+})
+
 router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
@@ -157,9 +177,10 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
 // POST /api/orders
 router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validateBody(createOrderSchema), async (req: AuthRequest, res) => {
-  const rejectAdmission = (message: string) => {
+  const rejectAdmission = async (message: string) => {
     // Capture the business reason even when an older POS cannot report checkout_failed.
     console.warn('[Checkout rejected]', JSON.stringify({ code: message, storeId: req.user!.storeId, orderNumber: req.body.orderNumber || null, paymentMethod: req.body.paymentMethod }))
+    await markReceivedReceiptFailure(req.user!.storeId,req.body.orderNumber,message)
     return res.status(409).json({ code: 409, message })
   }
   try {
@@ -175,14 +196,14 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
       select: { id: true, shift: true }
     })
     if (!openShift) {
-      return rejectAdmission('OPEN_SHIFT_REQUIRED')
+      return await rejectAdmission('OPEN_SHIFT_REQUIRED')
     }
-    if (openShift.shift === 'off') return rejectAdmission('SHIFT_DISABLED')
+    if (openShift.shift === 'off') return await rejectAdmission('SHIFT_DISABLED')
     const paymentError = await checkPaymentMethod(storeId, req.body.paymentMethod)
-    if (paymentError) return rejectAdmission(paymentError)
+    if (paymentError) return await rejectAdmission(paymentError)
     // Existing sessions are historical records, but a disabled shift cannot accept new sales.
     const activeShift = await prisma.shift.findFirst({ where: { storeId, key: openShift.shift, isActive: true } })
-    if (!activeShift) return rejectAdmission('SHIFT_DISABLED')
+    if (!activeShift) return await rejectAdmission('SHIFT_DISABLED')
     const order = await OrderService.createOrder(req.body, { actorId: req.user!.id, storeId, allowCreate: true })
 
     res.status(201).json({
@@ -192,6 +213,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
+    try { await markReceivedReceiptFailure(req.user!.storeId,req.body.orderNumber,error.code || error.message || 'ORDER_POST_FAILED') } catch { /* Existing receipt remains pending if the database is temporarily unavailable. */ }
     if (error instanceof OrderReplayConflict) return res.status(error.code === 'ORDER_STORE_MISMATCH' ? 403 : 409).json({ code: error.code === 'ORDER_STORE_MISMATCH' ? 403 : 409, message: error.code })
     if (error instanceof OrderBusinessRejection && error.rolledBack) {
       return res.status(409).json({ code: 409, message: error.code, details: error.message, rejection: { code: error.code, outcome: 'not_committed', orderNumber: req.body.orderNumber } })
@@ -231,6 +253,7 @@ router.post('/bulk-sync', authenticate, authorize('admin', 'manager', 'cashier')
         if (paymentError) throw new Error(paymentError)
         results.push({ index, localId: order.orderNumber, success: true, data: await OrderService.createOrder(order) })
       } catch (error: any) {
+        await markReceivedReceiptFailure(storeId,order.orderNumber,error.message || 'ORDER_POST_FAILED')
         results.push({ index, localId: order.orderNumber, success: false, error: error.message || 'Failed to create order' })
       }
     }

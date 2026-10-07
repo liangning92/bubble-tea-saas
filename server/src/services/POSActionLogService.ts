@@ -10,6 +10,7 @@ export type POSAction =
   | 'checkout_start'
   | 'checkout_complete'
   | 'checkout_failed'
+  | 'received_receipt'
   | 'order_created'
   | 'suspend'
   | 'resume'

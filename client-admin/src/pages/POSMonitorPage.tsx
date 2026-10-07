@@ -4,7 +4,7 @@ import { DashboardReadFailure, DashboardContextNotice } from '../components/Dash
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { posActionLogApi } from '../services/api'
+import { posActionLogApi, orderApi } from '../services/api'
 import {
   AlertTriangle,
   ShieldAlert,
@@ -20,6 +20,8 @@ import {
   Filter,
 } from 'lucide-react'
 
+const RECEIPT_REASON_KEYS:Record<string,string> = {PAYMENT_CONFIG_UNAVAILABLE:'receiptPaymentConfig',PAYMENT_METHOD_DISABLED:'receiptPaymentDisabled',OPEN_SHIFT_REQUIRED:'receiptShift',SHIFT_DISABLED:'receiptShift',INVENTORY_INSUFFICIENT:'receiptInventory'}
+
 const ACTION_KEY_MAP: Record<string, string> = {
   login: 'actionLogin',
   logout: 'actionLogout',
@@ -29,6 +31,7 @@ const ACTION_KEY_MAP: Record<string, string> = {
   checkout_start: 'actionCheckoutStart',
   checkout_complete: 'actionCheckoutComplete',
   checkout_failed: 'actionCheckoutFailed',
+  received_receipt: 'actionReceivedReceipt',
   order_created: 'actionOrderCreated',
   suspend: 'actionSuspend',
   resume: 'actionResume',
@@ -118,6 +121,12 @@ export function POSMonitorPage() {
 
   const { startDate, endDate } = useMemo(()=>filter.dateRange==='dashboard'?{startDate:context.startDate,endDate:context.endDate}:getDateRange(),[filter.dateRange,context.startDate,context.endDate,rangeClock])
 
+  const {data:unpostedData,isError:receiptError,isPending:receiptPending,refetch:refetchReceipts} = useQuery({
+    queryKey:['received-receipts',context.storeId],enabled:context.valid,
+    queryFn:async()=>{const response=await orderApi.receivedReceipts();return requireRead(response,Array.isArray(response.data?.data))},
+    refetchInterval:autoRefresh?15000:false,
+  })
+  const unposted = unpostedData?.data?.data || []
   // Fetch logs
   const { data, isLoading, isError:logsError, refetch } = useQuery({
     queryKey: ['pos-action-logs',context.storeId,startDate,endDate,filter],
@@ -151,6 +160,7 @@ export function POSMonitorPage() {
   })
 
   const refreshAll = () => {
+    void refetchReceipts()
     // Changing the anchor triggers fresh queries for relative ranges; fixed URL
     // ranges retain their keys and are explicitly refetched with current sessions.
     setRangeClock(Date.now())
@@ -172,8 +182,8 @@ export function POSMonitorPage() {
   }
 
   if (!context.valid) return <DashboardReadFailure scope />
-  if (logsError || statsError || sessionsError) return <DashboardReadFailure retry={refreshAll} />
-  if (isLoading || statsPending || sessionsPending) return <p>{t('common.loading')}</p>
+  if (logsError || statsError || sessionsError || receiptError) return <DashboardReadFailure retry={refreshAll} />
+  if (isLoading || statsPending || sessionsPending || receiptPending) return <p>{t('common.loading')}</p>
   return (
     <div className="p-6">
       <DashboardContextNotice range={{startDate,endDate}} />
@@ -200,6 +210,10 @@ export function POSMonitorPage() {
         </div>
       </div>
 
+      {!!unposted.length && <section role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 p-4">
+        <h2 className="font-bold text-red-800">{t('posMonitor.unpostedReceipts')} · {unposted.length} · Rp {unposted.reduce((sum:number,row:any)=>sum+row.grandTotal,0).toLocaleString('id-ID')}</h2>
+        <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id}>{row.orderNumber} · Rp {row.grandTotal.toLocaleString('id-ID')} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID')} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID')}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
+      </section>}
       {/* Stats Row */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="card flex items-center gap-3">
