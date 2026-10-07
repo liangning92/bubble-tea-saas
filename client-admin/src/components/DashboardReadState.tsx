@@ -10,13 +10,14 @@ export function DashboardReadFailure({retry,scope = false}: {retry?:()=>unknown;
 }
 
 export function DashboardContextNotice({current = false,range}: {current?:boolean;range?:{startDate?:string;endDate?:string}}) {
-  const {t} = useTranslation()
+  const {t, i18n} = useTranslation()
   const context = useDashboardContext()
   const startDate=range?.startDate ?? context.startDate
   const endDate=range?.endDate ?? context.endDate
+  if (!startDate && !context.asOf) return null
+  const date = (value: string) => new Date(value).toLocaleDateString(i18n.language, {timeZone: 'Asia/Jakarta'})
   return <p data-testid="dashboard-context" className="text-sm text-gray-500 mb-4">
-    {t('dashboardNavigation.store')}: {context.storeId} · {current ? t('dashboardNavigation.currentOnly') : startDate ? `${startDate} — ${endDate}` : t('dashboardNavigation.allDates')}
-    {context.asOf && <> · {t('dashboardNavigation.asOf')}: {context.asOf}</>}
+    {current ? t('dashboardNavigation.currentOnly') : startDate ? `${date(startDate)} — ${endDate ? date(endDate) : '—'} (WIB)` : null}
   </p>
 }
 

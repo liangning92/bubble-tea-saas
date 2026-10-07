@@ -69,6 +69,7 @@ interface ElectronAPI {
   checkForUpdates: () => Promise<{ updateAvailable: boolean }>
   downloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
+  showUpdateInstaller: () => Promise<{success: boolean}>
   getAppVersion: () => Promise<string>
 
   // Event listeners for updates

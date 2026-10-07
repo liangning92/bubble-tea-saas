@@ -59,6 +59,8 @@ jobs:
           const manual=JSON.parse(fs.readFileSync('evidence/desktop-manual-upgrade-report.json','utf8'));
           assert.equal(manual.sourceSha,process.env.RELEASE_SHA);
           assert.equal(manual.allCriticalCasesPassed,true);
+          assert.equal(manual.installedVersion,manual.expectedVersion,'Installed runtime version must match the advertised build');
+          assert.match(manual.installedVersion,/^\d+\.\d+\.\d+$/);
           assert.equal(manual.syntheticOnly,true);
           assert.equal(manual.cases.length,6);
           assert.deepEqual(manual.changes,JSON.parse(fs.readFileSync('docs/desktop-upgrade-changes.json','utf8')));

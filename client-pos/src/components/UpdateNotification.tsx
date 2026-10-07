@@ -1,209 +1,73 @@
-import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Download, RefreshCw, Check, AlertCircle, X } from 'lucide-react'
+import {useState, useEffect, useRef} from 'react'
+import {useTranslation} from 'react-i18next'
+import {Download, RefreshCw, Check, AlertCircle, X, FolderOpen} from 'lucide-react'
+import {isNewerUpdate} from '../utils/updateVersion'
 
-interface UpdateNotificationProps {
-  className?: string
-}
-
-export function UpdateNotification({ className = '' }: UpdateNotificationProps) {
-  // Only render in Electron environment (not in browser/web)
-  if (typeof window !== 'undefined' && !(window as any).electronAPI) {
-    return null
-  }
-
-  const { t } = useTranslation()
-  const [status, setStatus] = useState<string>('idle')
-  const [updateInfo, setUpdateInfo] = useState<any>(null)
-  const [progress, setProgress] = useState<number>(0)
-  const [error, setError] = useState<string | null>(null)
-  const [isVisible, setIsVisible] = useState(false)
-
+const DISMISSED = 'pos.update.dismissed'
+export function UpdateNotification({className = ''}: {className?: string}) {
+  const {t} = useTranslation()
+  const [status, setStatus] = useState('idle')
+  const [info, setInfo] = useState<any>(null)
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string|null>(null)
+  const [visible, setVisible] = useState(false)
+  const [currentVersion, setCurrentVersion] = useState('')
+  const manual = useRef(false)
+  const current = useRef('')
   useEffect(() => {
-    const electronAPI = (window as any).electronAPI
-    if (!electronAPI) return
-
-    // Listen for update status changes
-    const offStatus = electronAPI.onUpdateStatus((newStatus: string, info?: any) => {
-      if (newStatus === 'checking') return
-      setStatus(newStatus)
-      setUpdateInfo(info)
-      setError(null)
-
-      // Show notification for important statuses
-      if (newStatus === 'available' || newStatus === 'downloaded' || newStatus === 'error') {
-        setIsVisible(true)
-      }
-      if (newStatus === 'up-to-date') {
-        // Auto-hide after 3 seconds when no update available
-        setTimeout(() => setIsVisible(false), 3000)
-      }
+    const api = window.electronAPI
+    if (!api) return
+    let disposed = false
+    void api.getAppVersion().then(version => {if (!disposed) {current.current = version; setCurrentVersion(version)}}).catch(() => {})
+    const offStatus = api.onUpdateStatus((next: string, value?: any) => {
+      if (next === 'checking') return
+      const installed = value?.currentVersion || current.current
+      if (next === 'available' || next === 'downloaded') {
+        if (!isNewerUpdate(value?.version, installed)) return
+        try {
+          const dismissed = JSON.parse(localStorage.getItem(DISMISSED) || '{}')
+          if (next === 'available' && dismissed.version === value.version && dismissed.until > Date.now() && !manual.current) return
+        } catch {}
+        setInfo(value); setStatus(next); setError(null); setVisible(true)
+      } else if (next === 'up-to-date') {setStatus(next); setVisible(false); setInfo(null)}
+      else setStatus(next)
+      if (next === 'available' || next === 'downloaded' || next === 'up-to-date') manual.current = false
     })
-
-    // Listen for download progress
-    const offProgress = electronAPI.onUpdateProgress((prog: any) => {
-      setProgress(prog.percent || 0)
+    const offProgress = api.onUpdateProgress((value: any) => setProgress(value.percent || 0))
+    const offError = api.onUpdateError((message: string) => {
+      setStatus('error'); setError(message)
+      if (manual.current) setVisible(true)
+      manual.current = false
     })
-
-    // Listen for errors
-    const offError = electronAPI.onUpdateError((err: string) => {
-      setStatus('error')
-      setError(err)
-      setIsVisible(true)
-    })
-
-    return () => {
-      offStatus?.()
-      offProgress?.()
-      offError?.()
-    }
+    return () => {disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
-
-  const handleCheckUpdate = async () => {
-    const electronAPI = (window as any).electronAPI
-    if (!electronAPI) return
-
-    setStatus('checking')
-    setError(null)
-
-    // 添加超时处理 - 如果 30 秒后还没返回，认为检查失败
-    const timeout = setTimeout(() => {
-      setError('Check timeout - please try again')
-      setStatus('error')
-    }, 30000)
-
+  const run = async (action: 'check'|'download'|'show') => {
+    const api = window.electronAPI
+    if (!api) return
+    manual.current = true; setError(null)
     try {
-      await electronAPI.checkForUpdates()
-      // Status will be updated via onUpdateStatus event listener
-    } catch (err: any) {
-      setError(err.message || 'Check failed')
-      setStatus('error')
-    } finally {
-      clearTimeout(timeout)
+      if (action === 'check') {setStatus('checking'); await api.checkForUpdates()}
+      if (action === 'download') {setStatus('downloading'); const result = await api.downloadUpdate(); if ((result as any) === false) throw Error(t('pos.updateError'))}
+      if (action === 'show') {
+        if (!(await api.showUpdateInstaller()).success) throw Error(t('updateFlow.fileMissing'))
+        manual.current = false
+      }
+    } catch (err: any) {manual.current = false; setError(err.message); setStatus('error'); setVisible(true)}
+  }
+  const close = () => {
+    if (info?.version && status === 'available') {
+      try {localStorage.setItem(DISMISSED, JSON.stringify({version: info.version, until: Date.now() + 86400000}))} catch {}
     }
+    setVisible(false)
   }
-
-  const handleDownload = async () => {
-    const electronAPI = (window as any).electronAPI
-    if (!electronAPI) return
-
-    setStatus('downloading')
-    setError(null)
-    try {
-      await electronAPI.downloadUpdate()
-      // Status will be updated via onUpdateStatus event listener
-    } catch (err: any) {
-      setError(err.message || 'Download failed')
-      setStatus('error')
-    }
-  }
-
-  const handleInstall = () => {
-    const electronAPI = (window as any).electronAPI
-    if (!electronAPI) return
-
-    electronAPI.installUpdate()
-  }
-
-  const handleClose = () => {
-    setIsVisible(false)
-  }
-
-  // Don't render anything in document flow if notification is not visible
-  if (!isVisible) {
-    return null
-  }
-
-  return (
-    <div className={`fixed top-4 right-4 z-50 max-w-sm ${className}`}>
-      <div className="bg-white rounded-xl shadow-2xl border p-4">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-900">
-            {t('pos.updateAvailable')}
-          </h3>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Status content */}
-        {status === 'checking' && (
-          <div className="flex items-center gap-2 text-gray-600">
-            <RefreshCw size={18} className="animate-spin" />
-            <span>{t('pos.checkingUpdate')}</span>
-          </div>
-        )}
-
-        {status === 'available' && updateInfo && (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-600">
-              {t('pos.newVersionReady', { version: updateInfo.version })}
-            </p>
-            <button
-              onClick={handleDownload}
-              className="w-full py-2 bg-primary text-white rounded-lg font-medium flex items-center justify-center gap-2"
-            >
-              <Download size={16} />
-              {t('pos.downloadUpdate')}
-            </button>
-          </div>
-        )}
-
-        {status === 'downloading' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-gray-600">
-              <Download size={18} className="animate-pulse" />
-              <span>{t('pos.downloading')}</span>
-              <span className="ml-auto font-medium">{progress.toFixed(0)}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-primary h-2 rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {status === 'downloaded' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-green-600">
-              <Check size={18} />
-              <span>{t('pos.updateReady')}</span>
-            </div>
-            <button
-              onClick={handleInstall}
-              className="w-full py-2 bg-green-600 text-white rounded-lg font-medium flex items-center justify-center gap-2"
-            >
-              <Check size={16} />
-              {t('pos.installUpdate')}
-            </button>
-          </div>
-        )}
-
-        {status === 'up-to-date' && (
-          <div className="flex items-center gap-2 text-green-600">
-            <Check size={18} />
-            <span>{t('pos.upToDate')}</span>
-          </div>
-        )}
-
-        {status === 'error' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-red-600">
-              <AlertCircle size={18} />
-              <span>{error || t('pos.updateError')}</span>
-            </div>
-            <button
-              onClick={handleCheckUpdate}
-              className="w-full py-2 border border-gray-300 rounded-lg font-medium"
-            >
-              {t('pos.retry')}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  if (!window.electronAPI || !visible) return null
+  return <div className={`fixed top-4 right-4 z-50 max-w-sm ${className}`}><div className="bg-white rounded-xl shadow-2xl border p-4">
+    <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-gray-900">{t(status === 'error' ? 'pos.updateError' : status === 'checking' ? 'pos.checkingUpdate' : status === 'downloaded' ? 'updateFlow.downloadedTitle' : 'pos.updateAvailable')}</h3><button onClick={close} aria-label={t('updateFlow.close')} className="text-gray-400 hover:text-gray-600"><X size={18}/></button></div>
+    {currentVersion && <p className="text-xs text-gray-500 mb-2">{t('updateFlow.current', {version: currentVersion})}</p>}
+    {status === 'available' && info && <div className="space-y-3"><p className="text-sm text-gray-600">{t('pos.newVersionReady', {version: info.version})}</p><button onClick={() => void run('download')} className="w-full py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2"><Download size={16}/>{t('pos.downloadUpdate')}</button></div>}
+    {status === 'checking' && <p className="flex items-center gap-2"><RefreshCw size={18} className="animate-spin"/>{t('pos.checkingUpdate')}</p>}
+    {status === 'downloading' && <div className="space-y-3"><p>{t('pos.downloading')} {progress.toFixed(0)}%</p><div className="bg-gray-200 rounded h-2"><div className="bg-primary h-2 rounded" style={{width: `${Math.min(100, Math.max(0, progress))}%`}}/></div></div>}
+    {status === 'downloaded' && <div className="space-y-3"><p className="flex items-center gap-2 text-green-700"><Check size={18}/>{t('pos.updateReady')}</p><p className="text-sm">{t('updateFlow.manualInstall')}</p><button onClick={() => void run('show')} className="w-full py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2"><FolderOpen size={16}/>{t('updateFlow.openFolder')}</button></div>}
+    {status === 'error' && <div className="space-y-3"><p className="flex items-center gap-2 text-red-600"><AlertCircle size={18}/>{t('updateFlow.failed')}</p>{error && <details className="text-xs text-gray-500"><summary>{t('updateFlow.details')}</summary><p className="break-words">{error}</p></details>}<button onClick={() => void run('check')} className="w-full py-2 border rounded-lg">{t('pos.retry')}</button></div>}
+  </div></div>
 }

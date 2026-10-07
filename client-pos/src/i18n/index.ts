@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      updateFlow: {"current": "Versi saat ini: {{version}}", "downloadedTitle": "Installer sudah diunduh", "manualInstall": "Selesaikan transaksi, tutup POS, lalu jalankan installer di folder ini dan konfirmasi pencadangan. Unduhan belum berarti terpasang.", "openFolder": "Buka folder installer", "fileMissing": "Installer tidak ditemukan. Unduh kembali.", "failed": "Pembaruan gagal. POS tetap berjalan.", "details": "Detail kesalahan", "close": "Tutup"},
       "itemRefund": {"title": "Pengembalian produk terpilih", "hint": "Pilih jumlah. Diskon dan pajak dibagi dari pembayaran asli; bahan produk jadi tidak dikembalikan.", "remaining": "Tersisa", "evidence": "Bukti pembagian pembayaran tidak lengkap. Pengembalian sebagian perlu peninjauan manual.", "failed": "Permintaan gagal; ulangi permintaan yang sama", "unprepared": "Seluruh pesanan belum dibuat: admin harus memeriksa sebelum membalikkan catatan bahan asli.", "manual": "Persetujuan mencatat pengembalian; QR statis tidak mentransfer uang otomatis.", "submit": "Ajukan pengembalian"},
       "offlineSale": {"awaitUpload": "Menunggu unggahan", "review": "Memerlukan pemeriksaan; pembayaran lokal tetap tersimpan", "reconnectLogin": "Masuk online untuk melanjutkan unggahan. Kasir offline tetap tersedia.", "initialize": "Sambungkan sekali untuk menginisialisasi identitas, katalog, pembayaran dan shift toko ini.", "policy": "Penjualan dengan anggota, poin atau diskon membutuhkan pemeriksaan online. Keranjang tetap tersimpan.", "target": "Alamat backend atau akun berubah. Masuk ke backend yang benar; pesanan lama tetap tersimpan.", "saved": "Pembayaran dicatat di perangkat; unggahan menunggu konfirmasi server", "queue": "Penjualan lokal menunggu unggahan atau pemeriksaan. Jangan menagih ulang.", "qrisManual": "Saya melihat bukti sukses pelanggan dan menyimpan fotonya; catat pembayaran QRIS statis secara manual.", "qrisPending": "Konfirmasi manual; menunggu pemeriksaan rekening oleh pemilik. Bukan konfirmasi bank."},
       "checkoutIntent": {"staleBasket": "Keranjang lama dibersihkan karena penjualan sebelumnya telah dipulihkan di tab lain. Mulai penjualan baru.", "confirmed": "Pesanan asli dikonfirmasi oleh server. Jangan menagih ulang.", "nextEmpty": "Mulai penjualan baru dengan keranjang kosong", "quarantineNotice": "Saya akan memisahkan catatan yang belum pasti, bukan menyatakannya belum dibayar. Jangan menagih atau membuat ulang penjualan ini.", "quarantine": "Pisahkan catatan; mulai keranjang kosong", "quarantined": "Penjualan belum pasti dipisahkan untuk pemeriksaan. Jangan menagih ulang.", "verifyRecords": "Verifikasi catatan pemulihan sebelum pembayaran berikutnya. Jangan membuat ulang penjualan ini.", "snapshot": "Permintaan asli tersimpan (bukan bukti pembayaran)", "review": "Hasil pembayaran perlu diverifikasi. Pembayaran baru dijeda.", "prepared": "Permintaan tersimpan dan belum dikirim.", "preserve": "Identitas dan permintaan asli tetap tersimpan. Jangan membuat ulang penjualan ini; keranjang belanja tidak mengubah permintaan tersimpan.", "discard": "Buang draf yang belum dikirim", "retry": "Coba ulang permintaan asli", "saveFailed": "Pemulihan lokal tidak dapat disimpan. Permintaan tidak dikirim; keranjang tetap tersimpan.", "outputFailed": "Pesanan sudah dikonfirmasi, tetapi keluaran gagal. Jangan bayar ulang."},
@@ -262,7 +263,7 @@ const resources = {
         "selectChannelHint": "Pilih saluran sebelum memesan",
         "confirmChannel": "Mulai Pesanan",
         "updateAvailable": "Update Tersedia",
-        "newVersionReady": "Versi {version} tersedia",
+        "newVersionReady": "Versi {{version}} tersedia",
         "downloadUpdate": "Unduh Update",
         "downloading": "Mengunduh...",
         "updateReady": "Update siap diinstal",
@@ -768,6 +769,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      updateFlow: {"current": "Current version: {{version}}", "downloadedTitle": "Installer downloaded", "manualInstall": "Finish transactions, close POS, then run the installer in this folder and confirm the backup. Downloaded does not mean installed.", "openFolder": "Open installer folder", "fileMissing": "Installer not found. Download again.", "failed": "Update failed. POS is still running.", "details": "Error details", "close": "Close"},
       "itemRefund": {"title": "Refund selected products", "hint": "Choose quantities. Original discounts and tax are allocated from the recorded payment; prepared ingredients stay consumed.", "remaining": "Remaining", "evidence": "Original payment allocation evidence is incomplete. Partial refund requires manual review.", "failed": "Request failed; retry the same request", "unprepared": "Whole order unprepared: an admin must verify before original stock deductions are reversed.", "manual": "Approval records the refund; static QR does not automatically transfer money.", "submit": "Request refund"},
       "offlineSale": {"awaitUpload": "Awaiting upload", "review": "Needs review; local payment is preserved", "reconnectLogin": "Sign in online to resume uploads. Offline checkout remains available.", "initialize": "Connect once to initialize this store’s identity, catalog, payments and shift.", "policy": "Sales with members, points or discounts require online verification. The basket is preserved.", "target": "The backend address or account changed. Sign in to the correct backend; old orders are preserved.", "saved": "Payment recorded on this device; upload awaits server confirmation", "queue": "Local sales await upload or review. Do not charge again.", "qrisManual": "I saw the customer’s success screen and saved its photo; record static QRIS payment manually.", "qrisPending": "Manual confirmation; awaiting owner’s account reconciliation. Not bank confirmation."},
       "checkoutIntent": {"staleBasket": "The old basket was cleared because a prior sale was recovered in another tab. Start a new sale.", "confirmed": "Original order confirmed by server. Do not charge it again.", "nextEmpty": "Start a new empty sale", "quarantineNotice": "I will isolate unresolved records, not declare them unpaid. Do not charge or recreate these sales.", "quarantine": "Isolate records; start an empty basket", "quarantined": "Unresolved sales isolated for verification. Do not charge them again.", "verifyRecords": "Verify recovery records before another checkout. Do not recreate this sale.", "snapshot": "Saved original request (not payment evidence)", "review": "Checkout result needs verification. New checkout is paused.", "prepared": "Saved request has not been sent.", "preserve": "The original identity and request are preserved. Do not recreate this sale; shopping cart edits do not change the saved request.", "discard": "Discard unsent draft", "retry": "Retry original request", "saveFailed": "Local recovery could not be saved. The request was not sent; your cart is preserved.", "outputFailed": "The order is confirmed, but output failed. Do not pay again."},
@@ -1025,7 +1027,7 @@ const resources = {
         "refundSubmitted": "Refund submitted, please wait for approval",
         "refundFailed": "Failed to submit, please retry",
         "updateAvailable": "Update Available",
-        "newVersionReady": "Version {version} is available",
+        "newVersionReady": "Version {{version}} is available",
         "downloadUpdate": "Download Update",
         "downloading": "Downloading...",
         "updateReady": "Update ready to install",
@@ -1522,6 +1524,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      updateFlow: {"current": "当前版本：{{version}}", "downloadedTitle": "安装包已下载", "manualInstall": "完成交易并关闭POS后，运行文件夹中的安装程序，确认备份后升级。下载完成不代表已安装。", "openFolder": "打开安装文件夹", "fileMissing": "找不到安装文件，请重新下载。", "failed": "更新未完成，收银程序仍在运行。", "details": "错误详情", "close": "关闭"},
       "itemRefund": {"title": "退选中的产品", "hint": "选择数量。优惠和税额按原实付款分摊；已制作产品不退回原料。", "remaining": "可退数量", "evidence": "原成交分摊证据不完整，部分退款需人工核查。", "failed": "申请失败，请重试原申请", "unprepared": "整单未制作：管理员核实后才撤销原销售扣料流水。", "manual": "审批记录退款，不代表静态二维码自动打款。", "submit": "申请退款"},
       "offlineSale": {"awaitUpload": "等待上传", "review": "需要核对，本机收款事实已保留", "reconnectLogin": "联网登录以恢复上传；仍可继续离线收银。", "initialize": "请先联网初始化当前门店的身份、商品、支付方式和班次缓存。", "policy": "涉及会员、积分或折扣的交易需要联网核验，购物车已保留。", "target": "后端地址或账号已变化。请登录正确后端，旧订单会保留。", "saved": "收款已记录在本机，上传等待服务端确认", "queue": "本机成交等待上传或核对，请勿再次收款。", "qrisManual": "我已查看顾客支付成功页面并保存照片，人工记录静态 QRIS 收款。", "qrisPending": "人工确认，等待老板核对到账；不是银行到账确认。"},
       "checkoutIntent": {"staleBasket": "其他标签已处理之前的销售，旧购物车已清空，请开始新交易。", "confirmed": "服务器已确认原订单，请勿重复收费。", "nextEmpty": "开始新的空购物车交易", "quarantineNotice": "我将隔离未知记录，不代表它未付款；不得重复收费或重建这些销售。", "quarantine": "隔离记录并开始空购物车", "quarantined": "未知销售已隔离待核验，请勿重复收费。", "verifyRecords": "请先核验恢复记录，勿重新建立这笔销售。", "snapshot": "保存的原请求（非付款证明）", "review": "结账结果待核验，已暂停新结账。", "prepared": "请求已保存，尚未发送。", "preserve": "原身份和请求已保留，请勿重建这笔销售；购物车修改不会改变已保存请求。", "discard": "丢弃未发送草稿", "retry": "重试原请求", "saveFailed": "无法保存本地恢复记录，未发送请求；购物车已保留。", "outputFailed": "订单已确认，但输出失败，请勿再次付款。"},
@@ -1747,7 +1750,7 @@ const resources = {
         "refundSubmitted": "退款申请已提交，请等待审批",
         "refundFailed": "提交失败，请重试",
         "updateAvailable": "有可用更新",
-        "newVersionReady": "版本 {version} 已发布",
+        "newVersionReady": "版本 {{version}} 已发布",
         "downloadUpdate": "下载更新",
         "downloading": "下载中...",
         "updateReady": "更新已就绪",

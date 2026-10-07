@@ -44,7 +44,7 @@ Var BTPSInstallStarted
       SetErrorLevel 73
       Quit
     ${EndIf}
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish all payments and close POS normally before continuing. This manual upgrade backs up local data and the old program, then adds only pickup number and two duplicate-payment protection fields, plus the pickup index. Continue?$\r$\n完成付款并正常关闭收银后再继续。将备份本地数据和旧程序，仅增加取餐号及两项防重复付款字段和取餐号索引。是否继续？$\r$\nSelesaikan pembayaran dan tutup POS dahulu. Data lokal dan program lama dicadangkan; hanya kolom nomor pengambilan, dua kolom pencegah pembayaran ganda, dan indeks pengambilan ditambahkan. Lanjutkan?" IDYES btps_upgrade_confirmed
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish all payments and close POS normally before continuing. This manual upgrade backs up local data and the old program, retains your business history, and updates the database. Continue?$\r$\n完成付款并正常关闭收银后再继续。将备份本地数据和旧程序，保留已有经营数据并更新数据库。是否继续？$\r$\nSelesaikan pembayaran dan tutup POS dahulu. Data lokal dan program lama dicadangkan; riwayat bisnis dipertahankan dan basis data diperbarui. Lanjutkan?" IDYES btps_upgrade_confirmed
     SetErrorLevel 73
     Quit
     btps_upgrade_confirmed:

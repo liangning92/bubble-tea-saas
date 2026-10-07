@@ -1,4 +1,6 @@
-import { BrowserWindow, ipcMain, app } from 'electron'
+import { BrowserWindow, ipcMain, app, shell } from 'electron'
+import {existsSync} from 'fs'
+import {isNewerUpdate} from '../src/utils/updateVersion'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { autoUpdater } = require('electron-updater')
@@ -7,6 +9,7 @@ let mainWindow: BrowserWindow | null = null
 let checkInFlight = false
 let downloadInProgress = false
 let updateDownloaded = false
+let downloadedInfo: {version: string; currentVersion: string} | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
 
 async function checkForUpdates() {
@@ -56,9 +59,14 @@ export function setupUpdater(window: BrowserWindow) {
   })
 
   autoUpdater.on('update-available', (info: any) => {
+    if (!isNewerUpdate(info.version, app.getVersion())) {
+      sendToRenderer('update-status', 'up-to-date', {version: app.getVersion()})
+      return
+    }
     log('info', 'Update available:', info.version)
     sendToRenderer('update-status', 'available', {
       version: info.version,
+      currentVersion: app.getVersion(),
       releaseNotes: info.releaseNotes
     })
   })
@@ -81,8 +89,9 @@ export function setupUpdater(window: BrowserWindow) {
   autoUpdater.on('update-downloaded', (info: any) => {
     downloadInProgress = false
     updateDownloaded = true
+    downloadedInfo = {version: info.version, currentVersion: app.getVersion()}
     log('info', 'Update downloaded:', info.version)
-    sendToRenderer('update-status', 'downloaded', { version: info.version })
+    sendToRenderer('update-status', 'downloaded', { version: info.version, currentVersion: app.getVersion() })
   })
 
   autoUpdater.on('error', (err: any) => {
@@ -107,9 +116,23 @@ function sendToRenderer(channel: string, ...args: any[]) {
  * Set up IPC handlers for update operations
  */
 function setupIpcHandlers() {
+  ipcMain.handle('show-update-installer', () => {
+    const installer = autoUpdater.installerPath
+    if (!updateDownloaded || !installer || !existsSync(installer)) {
+      updateDownloaded = false
+      downloadedInfo = null
+      return {success: false}
+    }
+    shell.showItemInFolder(installer)
+    return {success: true}
+  })
   // Check for updates via API
   ipcMain.handle('check-for-updates', async () => {
     try {
+      if (updateDownloaded && downloadedInfo) {
+        sendToRenderer('update-status', 'downloaded', downloadedInfo)
+        return {current: app.getVersion(), latest: downloadedInfo.version}
+      }
       sendToRenderer('update-status', 'checking')
 
       const currentVersion = app.getVersion()

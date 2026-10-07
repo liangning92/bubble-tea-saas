@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import api from '../services/api'
 import { formatCurrency, formatDateTime } from '../utils/helpers'
+import {PageHelp} from './PageHelp'
 export function PaymentEvidencePanel({ orderId }: { orderId: string }) {
   const { t } = useTranslation()
   const { data } = useQuery({ queryKey: ['payment-evidence', orderId], queryFn: async () => {
@@ -16,10 +17,11 @@ export function PaymentEvidencePanel({ orderId }: { orderId: string }) {
     } catch { alert(t('common.error')) }
   }
   return <div className="mt-4 p-3 border rounded-lg text-sm space-y-1">
-    <p>{t('manualPayment.evidenceOnly')}</p>
+    <p className="font-medium">{t('manualPayment.title')}</p>
     <p>{t('manualPayment.amount')}: {formatCurrency(data.amount)}</p>
     <p>{t('manualPayment.actor')}: {data.confirmedBy}</p>
     <p>{t('manualPayment.time')}: {data.confirmedAt ? formatDateTime(data.confirmedAt) : '—'}</p>
     <button type="button" className="text-primary underline" onClick={download}>{t('manualPayment.view')}</button>
+    <PageHelp>{t('manualPayment.evidenceOnly')}</PageHelp>
   </div>
 }

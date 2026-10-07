@@ -1,3 +1,4 @@
+import {PageHelp} from '../../components/PageHelp'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -271,7 +272,7 @@ export function InventoryCountPage() {
 
     return (
       <div className="space-y-6">
-        <p className="text-sm text-amber-700">{t('countFlow.hint')}</p>
+        <PageHelp>{t('countFlow.hint')}</PageHelp>
         <button onClick={()=>queryClient.invalidateQueries({queryKey:['inventory-counts']})}>{t('countFlow.refresh')}</button>
         {/* Header */}
         <div className="flex items-center justify-between">

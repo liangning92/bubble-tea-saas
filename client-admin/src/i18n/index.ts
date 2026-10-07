@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      pageHelp: {"title": "Bantuan", "aiDisabled": "Eksekusi AI belum aktif"},
       itemRefund: {manual: "Persetujuan mencatat pengembalian; QR statis tidak mentransfer uang otomatis."},
       deliveryIntegration: {"description": "Kelola pesanan GrabFood, GoFood, dan ShopeeFood setelah integrasi tersedia.", "notConnected": "Belum terhubung", "accessPending": "Menunggu akses resmi dari platform.", "orders": "Penerimaan pesanan: belum tersedia", "statusUpdates": "Konfirmasi dan status pesanan: belum tersedia", "menuSync": "Sinkronisasi menu: belum tersedia", "waitingTitle": "Menunggu integrasi platform", "waitingHint": "Belum ada platform yang terhubung. Pesanan nyata akan tersedia setelah akses platform disetujui dan integrasi selesai.", "storeRequired": "Pilih toko sebelum melihat status platform.", "loadFailed": "Status platform gagal dimuat. Silakan coba lagi."},
       revenueRange: {"comparisonAdjusted": "Tanggal akhir bulan berimpit; perbandingan memakai durasi yang sama hingga waktu akhir bulan sebelumnya.", "comparisonRange": "Rentang pembanding", "permissionDenied": "Anda tidak memiliki izin untuk melihat pendapatan.", "fixedOverview": "Ringkasan periode tetap — tidak mengikuti rentang pilihan", "selectedRange": "Rentang pilihan", "selectedRevenue": "Pendapatan pada rentang pilihan", "businessTime": "Waktu Jakarta (WIB)", "startDate": "Tanggal mulai", "endDate": "Tanggal akhir", "invalidRange": "Pilih dua tanggal yang valid; tanggal mulai tidak boleh setelah tanggal akhir.", "preferenceFailed": "Pilihan periode digunakan, tetapi preferensi gagal disimpan."},
@@ -3654,6 +3655,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      pageHelp: {"title": "Help", "aiDisabled": "AI execution is inactive"},
       itemRefund: {manual: "Approval records the refund; static QR does not automatically transfer money."},
       deliveryIntegration: {"description": "Manage GrabFood, GoFood and ShopeeFood orders when integrations become available.", "notConnected": "Not connected", "accessPending": "Waiting for official platform access.", "orders": "Order reception: unavailable", "statusUpdates": "Order confirmation and status: unavailable", "menuSync": "Menu synchronization: unavailable", "waitingTitle": "Waiting for platform integration", "waitingHint": "No platforms are connected yet. Real orders will become available after platform access is approved and integration is completed.", "storeRequired": "Select a store to view platform status.", "loadFailed": "Unable to load platform status. Please try again."},
       revenueRange: {"comparisonAdjusted": "Month-end dates collide; comparison uses the same duration ending at the prior-month end time.", "comparisonRange": "Comparison range", "permissionDenied": "You do not have permission to view revenue.", "fixedOverview": "Fixed-period overview — independent of the selected range", "selectedRange": "Selected range", "selectedRevenue": "Revenue in selected range", "businessTime": "Jakarta time (WIB)", "startDate": "Start date", "endDate": "End date", "invalidRange": "Choose two valid dates; the start date must not be after the end date.", "preferenceFailed": "The selected period is active, but its preference could not be saved."},
@@ -7241,6 +7243,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      pageHelp: {"title": "帮助", "aiDisabled": "AI执行尚未启用"},
       itemRefund: {manual: "审批记录退款，不代表静态二维码自动打款。"},
       deliveryIntegration: {"description": "预留 GrabFood、GoFood 和 ShopeeFood 的外卖订单管理入口。", "notConnected": "尚未接入", "accessPending": "等待获得平台官方接入权限。", "orders": "接收订单：暂未开放", "statusUpdates": "接单及状态回传：暂未开放", "menuSync": "菜单同步：暂未开放", "waitingTitle": "等待平台接入", "waitingHint": "目前尚未连接外卖平台。取得平台权限并完成接入后，这里将显示真实订单。", "storeRequired": "请先选择门店，再查看平台状态。", "loadFailed": "平台状态加载失败，请重试。"},
       revenueRange: {"comparisonAdjusted": "月末日期重合，比较采用截至上月对应结束时刻的等长区间。", "comparisonRange": "上一比较范围", "permissionDenied": "您没有查看营业额的权限。", "fixedOverview": "固定周期概览（不随选定范围变化）", "selectedRange": "选定范围", "selectedRevenue": "选定范围营业额", "businessTime": "雅加达时间（WIB）", "startDate": "开始日期", "endDate": "结束日期", "invalidRange": "请选择两个有效日期，开始日期不能晚于结束日期。", "preferenceFailed": "已使用选定周期，但偏好保存失败。"},

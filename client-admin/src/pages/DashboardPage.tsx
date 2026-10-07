@@ -1,3 +1,4 @@
+import {PageHelp} from '../components/PageHelp'
 import { DashboardReadFailure } from '../components/DashboardReadState'
 import { useDashboardContext, dashboardLink, businessDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
 import { useQuery } from '@tanstack/react-query'
@@ -314,7 +315,7 @@ export function DashboardPage() {
               {t('dashboardNavigation.forecastAlerts')} →
             </button>
           </div>
-          <p className="text-sm text-gray-500 mb-3">{t('dashboardNavigation.safetyStockNotice')}</p>
+          <PageHelp>{t('dashboardNavigation.safetyStockNotice')}</PageHelp>
           {dashboard?.inventory?.lowStockItems?.length > 0 ? (
             <div className="space-y-2">
               {dashboard.inventory.lowStockItems.map((item: any) => (
@@ -351,7 +352,7 @@ export function DashboardPage() {
       </div>
 
       {/* ========== 消耗异常预警 ========== */}
-      {!Array.isArray(dashboard.inventory.consumptionAnomalies) && <div className="card mb-6"><h2>{t('dashboard.consumptionAnomaly')}</h2><p>{t('dashboardNavigation.unavailable')}</p><p>{t('dashboardNavigation.featureUnavailable')}</p></div>}
+      {!Array.isArray(dashboard.inventory.consumptionAnomalies) && <div className="card mb-6"><h2>{t('dashboard.consumptionAnomaly')}</h2><p>{t('dashboardNavigation.unavailable')}</p></div>}
       {dashboard?.inventory?.consumptionAnomalies?.length > 0 && (
         <div className="card border-orange-200 bg-orange-50/50">
           <div className="flex items-center justify-between mb-4">
