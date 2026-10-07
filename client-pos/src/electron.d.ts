@@ -17,6 +17,7 @@ declare global {
       checkForUpdates: () => Promise<{ updateAvailable: boolean }>
       downloadUpdate: () => Promise<void>
       installUpdate: () => Promise<void>
+      showUpdateInstaller: () => Promise<{success: boolean}>
 
       // Event listeners
       onUpdateStatus: (callback: (status: string, info?: any) => void) => () => void

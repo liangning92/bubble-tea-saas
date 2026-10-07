@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Truck, RefreshCw, Loader2, Unplug, AlertCircle } from 'lucide-react'
 import { deliveryApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
+import {PageHelp} from '../../components/PageHelp'
 
 const PLATFORM_STYLES = {
   grabfood: 'border-green-200 bg-green-50 text-green-700',
@@ -32,7 +33,6 @@ export function DeliveryHubPage() {
         </button>
       </div>
 
-      <p className="text-gray-600">{t('deliveryIntegration.description')}</p>
 
       {!storeId || isError ? (
         <div role="alert" className="card flex items-start gap-3 border-amber-200 bg-amber-50">
@@ -53,12 +53,11 @@ export function DeliveryHubPage() {
                   {t('deliveryIntegration.notConnected')}
                 </span>
               </div>
-              <p className="text-sm text-gray-600">{t('deliveryIntegration.accessPending')}</p>
-              <ul className="space-y-2 text-sm text-gray-500">
+              <PageHelp><ul className="space-y-2 text-sm text-gray-500">
                 <li>{t('deliveryIntegration.orders')}</li>
                 <li>{t('deliveryIntegration.statusUpdates')}</li>
                 <li>{t('deliveryIntegration.menuSync')}</li>
-              </ul>
+              </ul></PageHelp>
             </div>
           ))}
         </div>
@@ -67,7 +66,6 @@ export function DeliveryHubPage() {
       <div className="card flex flex-col items-center gap-3 py-10 text-center">
         <Unplug size={40} className="text-gray-400" aria-hidden="true" />
         <h2 className="text-lg font-semibold">{t('deliveryIntegration.waitingTitle')}</h2>
-        <p className="max-w-xl text-gray-600">{t('deliveryIntegration.waitingHint')}</p>
       </div>
     </div>
   )

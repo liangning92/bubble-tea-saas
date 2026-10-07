@@ -6,7 +6,9 @@ import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
 import { finiteNumber, requireRead, validInstant } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure } from '../../components/DashboardReadState'
-import { TrendingUp, TrendingDown, ShoppingBag, Bike, Store, Utensils, CreditCard, Calendar } from 'lucide-react'
+import {TrendingUp, TrendingDown, ShoppingBag, Bike, Store, Utensils, CreditCard, Calendar, DollarSign} from 'lucide-react'
+import {BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Cell} from 'recharts'
+import {PageHelp} from '../../components/PageHelp'
 
 interface ChannelData { channel:string; revenue:number; orders:number; avgOrderValue:number }
 interface RevenueTotals { revenue:number; orders:number; avgOrderValue:number }
@@ -29,7 +31,7 @@ function readSummary(value: unknown): Summary {
 }
 
 export function RevenuePage() {
-  const {t}=useTranslation()
+  const {t, i18n}=useTranslation()
   const user=useAuthStore(state=>state.user)
   const storeId=user?.storeId
   const canRead=user?.role==='admin'||user?.role==='manager'
@@ -46,8 +48,8 @@ export function RevenuePage() {
     configApi.get(storeId).then(response=>{
       const data=response.data?.data
       const configs=Array.isArray(data)?data:Array.isArray(data?.data)?data.data:[]
-      const pref=configs.find((row:{key:string;value:string})=>row.key==='revenue.defaultPeriod')
-      if (active && version===manualSelection.current && pref && periods.includes(pref.value)) setPeriod(pref.value)
+      const preference=configs.find((row:{key:string;value:string})=>row.key==='revenue.defaultPeriod')?.value || data?.['revenue.defaultPeriod']
+      if (active && version===manualSelection.current && ['today','week','month'].includes(preference)) setPeriod(preference)
     }).catch(()=>{})
     return ()=>{active=false}
   },[storeId,canRead])
@@ -57,7 +59,7 @@ export function RevenuePage() {
     const version=manualSelection.current
     setPeriod(value)
     setPreferenceError(false)
-    if (!storeId) return
+    if (!storeId || value==='custom') return
     try {await configApi.set(storeId,'revenue.defaultPeriod',value,'finance')}
     catch {if (version===manualSelection.current && useAuthStore.getState().user?.storeId===storeId) setPreferenceError(true)}
   }
@@ -73,14 +75,6 @@ export function RevenuePage() {
       return {channels:readChannels(channels.data?.data),summary:readSummary(summary.data?.data)}
     },
   })
-  const overview=useQuery({
-    queryKey:['revenue-fixed-overview',storeId,user?.role],
-    enabled:!!storeId && canRead,
-    queryFn:async()=>Promise.all((['today','week','month'] as const).map(async fixed=>{
-      const response=await revenueApi.byChannel({storeId,period:fixed})
-      return {period:fixed,revenue:readChannels(response.data?.data).reduce((sum,row)=>sum+row.revenue,0)}
-    })),
-  })
   const label=period==='custom'?`${customDateRange.start} — ${customDateRange.end}`:t(`finance.${period==='today'?'today':period==='week'?'thisWeek':'thisMonth'}`)
   const summary=selected.data?.summary
   const channels=selected.data?.channels||[]
@@ -88,40 +82,49 @@ export function RevenuePage() {
 
   if (!storeId) return <DashboardReadFailure scope />
   if (!canRead) return <p role="alert" data-testid="revenue-role-denied">{t('revenueRange.permissionDenied')}</p>
-  return <div className="min-h-screen bg-gray-50">
-    <div className="bg-white border-b border-gray-200 px-4 py-3 flex flex-wrap gap-2 items-center">
-      {periods.map(value=><button key={value} onClick={()=>handlePeriodChange(value)} className={`px-4 py-2 rounded-lg text-sm ${period===value?'bg-primary text-white':'bg-gray-100 text-gray-700'}`}>
-        {value==='custom'&&<Calendar size={14} className="inline mr-1"/>}{t(value==='custom'?'common.custom':`finance.${value==='today'?'today':value==='week'?'thisWeek':'thisMonth'}`)}
-      </button>)}
-      {period==='custom'&&<div className="flex items-center gap-2">
-        <input aria-label={t('revenueRange.startDate')} type="date" value={customDateRange.start} onChange={e=>setCustomDateRange(prev=>({...prev,start:e.target.value}))} className="input"/>
-        <span>—</span>
-        <input aria-label={t('revenueRange.endDate')} type="date" value={customDateRange.end} onChange={e=>setCustomDateRange(prev=>({...prev,end:e.target.value}))} className="input"/>
-      </div>}
-      {preferenceError&&<p role="status" className="text-red-600">{t('revenueRange.preferenceFailed')}</p>}
-    </div>
-    <section className="p-4" data-testid="revenue-fixed-overview">
-      <h2 className="font-semibold mb-2">{t('revenueRange.fixedOverview')}</h2>
-      {overview.isError?<DashboardReadFailure retry={()=>overview.refetch()} />:overview.isPending?<p>{t('common.loading')}</p>:<div className="grid grid-cols-3 gap-4">
-        {overview.data?.map(row=><div key={row.period} className="card"><p>{t(`finance.${row.period==='today'?'todayRevenue':row.period==='week'?'weekRevenue':'monthRevenue'}`)}</p><p className="font-bold">{formatCurrency(row.revenue)}</p></div>)}
-      </div>}
-    </section>
-    <section className="p-4" data-testid="revenue-selected-range">
-      <h2 className="font-semibold mb-2">{t('revenueRange.selectedRange')} · {label} · {t('revenueRange.businessTime')}</h2>
-      {!validSelection?<p role="alert" data-testid="revenue-range-invalid">{t('revenueRange.invalidRange')}</p>:selected.isError?<DashboardReadFailure retry={()=>selected.refetch()} />:selected.isPending?<p>{t('common.loading')}</p>:summary&&<>
-        {summary.comparisonRange?.adjusted&&<p role="status" data-testid="revenue-comparison-adjusted" className="text-sm mb-3">
-          {t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {new Date(Date.parse(summary.comparisonRange.startDate)+7*3600000).toISOString().replace('T',' ').replace('Z','')} — {new Date(Date.parse(summary.comparisonRange.endDate)+7*3600000).toISOString().replace('T',' ').replace('Z','')} · {t('revenueRange.businessTime')}
-        </p>}
-        <div className="grid grid-cols-3 gap-4 mb-4" data-testid="revenue-selected-summary">
-          <div className="card"><p>{t('revenueRange.selectedRevenue')}</p><p className="font-bold">{formatCurrency(summary.current.revenue)}</p><p>{t('finance.change')}: {change(summary.revenueChange)}</p></div>
-          <div className="card"><p>{t('common.orders')}</p><p>{summary.current.orders}</p></div>
-          <div className="card"><p>{t('finance.avgOrderValue')}</p><p>{formatCurrency(summary.current.avgOrderValue)}</p></div>
+  const chartRows=channels.map(row=>({...row,name:CHANNEL_LABELS[row.channel]||row.channel}))
+  const compact=(value:number)=>new Intl.NumberFormat(i18n.language,{notation:'compact',maximumFractionDigits:1}).format(value)
+  const time=(value:string)=>new Date(value).toLocaleString(i18n.language,{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})
+  return <div className="space-y-6">
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <h1 className="text-2xl font-bold text-gray-900">{t('revenueLayout.title')}</h1>
+      <div className="inline-flex gap-1 rounded-xl bg-gray-100 p-1" aria-label={t('revenueRange.selectedRange')}>
+        {periods.map(value=><button key={value} type="button" aria-pressed={period===value} onClick={()=>void handlePeriodChange(value)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${period===value?'bg-primary text-white shadow-sm':'text-gray-600 hover:bg-white'}`}>
+          {value==='custom'&&<Calendar size={14} className="inline mr-1"/>}{t(value==='custom'?'common.custom':`finance.${value==='today'?'today':value==='week'?'thisWeek':'thisMonth'}`)}
+        </button>)}
+      </div>
+    </header>
+    {period==='custom'&&<div className="flex flex-wrap items-center gap-3 rounded-xl bg-white border border-gray-200 p-4">
+      <label className="text-sm text-gray-600">{t('revenueRange.startDate')}<input aria-label={t('revenueRange.startDate')} type="date" value={customDateRange.start} onChange={e=>setCustomDateRange(prev=>({...prev,start:e.target.value}))} className="input ml-2"/></label>
+      <span className="text-gray-400">—</span>
+      <label className="text-sm text-gray-600">{t('revenueRange.endDate')}<input aria-label={t('revenueRange.endDate')} type="date" value={customDateRange.end} onChange={e=>setCustomDateRange(prev=>({...prev,end:e.target.value}))} className="input ml-2"/></label>
+    </div>}
+    {preferenceError&&<PageHelp><p role="status">{t('revenueRange.preferenceFailed')}</p></PageHelp>}
+    <section className="space-y-6" data-testid="revenue-selected-range">
+      {!validSelection?<p role="alert" data-testid="revenue-range-invalid" className="card text-amber-700">{t('revenueRange.invalidRange')}</p>:selected.isError?<DashboardReadFailure retry={()=>selected.refetch()} />:selected.isPending?<p role="status">{t('common.loading')}</p>:summary&&<>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4" data-testid="revenue-selected-summary">
+          <div className="rounded-2xl bg-white border border-emerald-100 p-6 shadow-sm lg:col-span-2">
+            <div className="flex items-center justify-between gap-4"><p className="text-sm font-medium text-gray-500">{label} · {t('revenueLayout.netRevenue')}</p><div className="rounded-xl bg-emerald-50 p-2.5"><DollarSign size={22} className="text-emerald-600"/></div></div>
+            <p data-testid="revenue-primary-value" className={`mt-3 text-3xl sm:text-4xl xl:text-5xl font-bold tracking-tight tabular-nums break-words ${summary.current.revenue<0?'text-red-600':'text-gray-900'}`}>{formatCurrency(summary.current.revenue)}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs"><span className="font-semibold">{change(summary.revenueChange)}</span><span className="text-gray-500">{t('revenueLayout.vsPrevious')}</span><span className="ml-auto text-gray-400">WIB</span></div>
+          </div>
+          <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('common.orders')}</p><p data-testid="revenue-order-value" className="mt-5 text-3xl font-bold tabular-nums text-gray-900">{summary.current.orders.toLocaleString(i18n.language)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
+          <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('finance.avgOrderValue')}</p><p data-testid="revenue-average-value" className="mt-5 text-xl xl:text-2xl font-bold tabular-nums break-words text-gray-900">{formatCurrency(summary.current.avgOrderValue)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
         </div>
-        {channels.length===0?<p>{t('common.noData')}</p>:<div className="bg-white rounded-xl overflow-x-auto"><table className="w-full" data-testid="revenue-selected-table">
-          <thead className="bg-gray-50"><tr><th className="p-3 text-left">{t('finance.channel')}</th><th>{t('revenueRange.selectedRevenue')}</th><th>{t('common.orders')}</th><th>{t('finance.avgOrderValue')}</th></tr></thead>
-          <tbody>{channels.map(row=>{const Icon=CHANNEL_ICONS[row.channel as keyof typeof CHANNEL_ICONS]||Store;return <tr key={row.channel} className="border-t"><td className="p-3"><Icon size={18} className="inline mr-2"/>{CHANNEL_LABELS[row.channel]||row.channel}</td><td className="text-center">{formatCurrency(row.revenue)}</td><td className="text-center">{row.orders}</td><td className="text-center">{formatCurrency(row.avgOrderValue)}</td></tr>})}</tbody>
-          <tfoot className="bg-gray-50"><tr><td className="p-3 font-bold">{t('common.total')}</td><td className="text-center">{formatCurrency(summary.current.revenue)}</td><td className="text-center">{summary.current.orders}</td><td className="text-center">{formatCurrency(summary.current.avgOrderValue)}</td></tr></tfoot>
-        </table></div>}
+        {summary.comparisonRange?.adjusted&&<PageHelp><p data-testid="revenue-comparison-adjusted">{t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {time(summary.comparisonRange.startDate)} — {time(summary.comparisonRange.endDate)} (WIB)</p></PageHelp>}
+        {channels.length===0?<p className="card text-gray-500">{t('common.noData')}</p>:<>
+          <section className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm" data-testid="revenue-channel-chart">
+            <div className="flex items-center justify-between mb-6"><h2 className="text-lg font-semibold text-gray-900">{t('revenueLayout.channelRevenue')}</h2><span className="text-xs text-gray-400">{label}</span></div>
+            <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartRows} layout="vertical" margin={{top:4,right:24,bottom:4,left:0}}>
+              <CartesianGrid horizontal={false} stroke="#f1f5f9"/><XAxis type="number" tickFormatter={compact} tick={{fontSize:12,fill:'#94a3b8'}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={95} tick={{fontSize:12,fill:'#64748b'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value:number)=>[formatCurrency(value),t('revenueLayout.netRevenue')]} cursor={{fill:'#f8fafc'}}/><ReferenceLine x={0} stroke="#cbd5e1"/><Bar dataKey="revenue" radius={[0,4,4,0]} maxBarSize={30}>{chartRows.map(row=><Cell key={row.channel} fill={row.revenue<0?'#dc2626':'#10b981'}/>)}</Bar>
+            </BarChart></ResponsiveContainer></div>
+          </section>
+          <section className="rounded-2xl bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between"><h2 className="text-lg font-semibold">{t('revenueLayout.channelDetails')}</h2><span className="text-xs text-gray-400">{label}</span></div><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="revenue-selected-table">
+            <thead className="bg-gray-50 text-gray-500"><tr><th className="px-6 py-3 text-left font-medium">{t('finance.channel')}</th><th className="px-6 py-3 text-right font-medium">{t('revenueLayout.netRevenue')}</th><th className="px-6 py-3 text-right font-medium">{t('common.orders')}</th><th className="px-6 py-3 text-right font-medium">{t('finance.avgOrderValue')}</th></tr></thead>
+            <tbody>{channels.map(row=>{const Icon=CHANNEL_ICONS[row.channel as keyof typeof CHANNEL_ICONS]||Store;return <tr key={row.channel} className="border-t border-gray-100 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-700"><Icon size={17} className="inline mr-2 text-gray-400"/>{CHANNEL_LABELS[row.channel]||row.channel}</td><td className="px-6 py-4 text-right font-semibold tabular-nums">{formatCurrency(row.revenue)}</td><td className="px-6 py-4 text-right tabular-nums">{row.orders}</td><td className="px-6 py-4 text-right tabular-nums">{formatCurrency(row.avgOrderValue)}</td></tr>})}</tbody>
+            <tfoot className="bg-gray-50 border-t border-gray-200 font-semibold"><tr><td className="px-6 py-4">{t('common.total')}</td><td className="px-6 py-4 text-right tabular-nums">{formatCurrency(summary.current.revenue)}</td><td className="px-6 py-4 text-right tabular-nums">{summary.current.orders}</td><td className="px-6 py-4 text-right tabular-nums">{formatCurrency(summary.current.avgOrderValue)}</td></tr></tfoot>
+          </table></div></section>
+        </>}
       </>}
     </section>
   </div>

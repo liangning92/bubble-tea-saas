@@ -126,6 +126,10 @@ export const posApi = {
   getChannels: (storeId: string) => api.get('/channels', { params: { storeId } }),
 
   // Orders
+  retainReceivedReceipt: (data:any,backendUrl:string|undefined) => {
+    if (!backendUrl) return Promise.reject(new Error('CHECKOUT_BACKEND_EVIDENCE_REQUIRED'))
+    return api.post('/orders/received-receipts',data,{posBackend:backendUrl,posStoreId:data.request.storeId})
+  },
   createOrder: (data: any, backendUrl: string | undefined) => {
     if (!backendUrl) return Promise.reject(new Error('CHECKOUT_BACKEND_EVIDENCE_REQUIRED'))
     return api.post('/orders', data, { posBackend: backendUrl, posStoreId: data.storeId })

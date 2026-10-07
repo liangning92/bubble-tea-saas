@@ -1,3 +1,4 @@
+import { paymentProblem } from './paymentValidation'
 import { db, type LocalOrder } from '../db/offline'
 import { backendIdentity, currentBackendIdentity, readBackendAuth } from './backendIdentity'
 import { readCheckoutGeneration, readCheckoutRecovery } from './checkoutIntent'
@@ -52,7 +53,7 @@ export async function readSnapshot(path: string, storeId: string): Promise<unkno
 }
 
 /** Financial acceptance is local; cloud delivery status never erases a collected payment. */
-export async function recordLocalSale(request: Record<string, any>, totals: Pick<LocalOrder,'subtotal'|'ppn'|'finalAmount'>, generation: string, manualQris = false): Promise<LocalOrder> {
+export async function recordLocalSale(request: Record<string, any>, totals: Pick<LocalOrder,'subtotal'|'ppn'|'finalAmount'>, generation: string, manualQris = false, cashTender?: {receivedCash:number;changeGiven:number}): Promise<LocalOrder> {
   const backendUrl = localIdentity(request.storeId)
   const auth = readBackendAuth() as ReturnType<typeof readBackendAuth> & {user?:{id?:string;staff?:{id?:string}}}
   if (!auth.user?.id || auth.user.staff?.id !== request.staffId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
@@ -70,12 +71,16 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
     const current = await readSnapshot('/pos-cash/shifts/current',request.storeId) as {data?:{hasOpenShift?:boolean;shift?:{id?:string;shift?:string}}}
     if (!products.data?.list?.length || !configs.data?.paymentMethods || !Array.isArray(shifts.data) || !current.data?.hasOpenShift || !current.data.shift?.id || !shifts.data.some(s=>s.key===current.data!.shift!.shift && s.key!=='off')) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
     if (configs.data.paymentMethods[request.paymentMethod] !== true) throw new Error('PAYMENT_METHOD_DISABLED')
+    if (cashTender) {
+      const policy = configs.data.paymentMethods as Record<string,any>
+      if (cashTender.receivedCash-cashTender.changeGiven!==totals.finalAmount || paymentProblem({ready:true,enabled:true,method:request.paymentMethod,total:totals.finalAmount,paid:String(cashTender.receivedCash),minAmount:policy.minAmount || 0,maxCashAmount:policy.maxCashAmount || 0,changeEnabled:policy.changeEnabled !== false})) throw new Error('PAYMENT_TENDER_INVALID')
+    }
     if (!original.items?.length || original.items.some((i:{productId:string;specId:string;quantity:number})=>!products.data!.list!.some(p=>p.id===i.productId&&p.specs?.some(s=>s.id===i.specId)) || !Number.isSafeInteger(i.quantity)||i.quantity<1)) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
     const catalog = await db.config.get(cacheKey(backendUrl,request.storeId,'/products'))
     if (!catalog?.value.version) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
     original.shiftSessionId = current.data.shift.id
     const occurredAt = new Date()
-    const row: LocalOrder = {localId,backendUrl,cacheEvidence:{backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
+    const row: LocalOrder = {localId,backendUrl,cashTender,cacheEvidence:{backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
       ...(manualQris?{manualPayment:{kind:'qris_manual' as const,actorId:auth.user!.id!,at:occurredAt,evidence:'customer_success_photo' as const,bankConfirmed:false as const}}:{})}
     row.id = await db.orders.add(row) as number
     await db.config.put({key:`checkout.generation:${encodeURIComponent(row.storeId)}`,value:crypto.randomUUID(),updatedAt:occurredAt})

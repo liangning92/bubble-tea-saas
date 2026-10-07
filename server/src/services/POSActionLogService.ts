@@ -9,6 +9,8 @@ export type POSAction =
   | 'cart_clear'
   | 'checkout_start'
   | 'checkout_complete'
+  | 'checkout_failed'
+  | 'received_receipt'
   | 'order_created'
   | 'suspend'
   | 'resume'

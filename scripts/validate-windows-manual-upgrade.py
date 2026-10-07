@@ -195,9 +195,13 @@ try:
         assert c.execute('SELECT pickupNumber,requestFingerprint,requestReceipt FROM "Order"').fetchone() == (None,None,None)
     assert (APP / 'BTPS.exe').read_bytes()[:2] == b'MZ'
     assert (APP / 'resources/app.asar').is_file()
+    # Confirm the installed payload carries the advertised runtime version.
+    expected_version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8-sig'))['version']
+    installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
+    assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
     report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
-              'allCriticalCasesPassed': True, 'cases': CASES,
+              'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES']}
     (ROOT / 'desktop-manual-upgrade-report.json').write_text(json.dumps(report, indent=2))
     manifest_path = ROOT / 'desktop-template-manifest.json'

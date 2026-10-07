@@ -78,6 +78,8 @@ export async function finishCheckout(intent: CheckoutIntent, result: 'accepted' 
     if (!current || current.localId !== intent.localId) throw new Error('CHECKOUT_RECOVERY_INVALID')
     const row = await db.orders.get(intent.orderId)
     if (!row || row.localId !== intent.localId || JSON.stringify(row.checkoutRequest) !== JSON.stringify(intent.request)) throw new Error('CHECKOUT_RECOVERY_INVALID')
+    // Reported funds cannot be discarded merely because order admission was refused.
+    if (result === 'rejected' && row.paymentReportedAt) result = 'review'
     const status = result === 'accepted' ? 'synced' : result === 'rejected' ? 'failed' : 'review'
     await db.orders.update(intent.orderId, { status, serverId, checkoutResolution: result, ...(result === 'accepted' ? { syncedAt: new Date() } : {}) })
     if (result === 'review') await db.config.put({ key: key(intent.request.storeId), value: { ...current, phase: 'review' }, updatedAt: new Date() })

@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: () => {
     return ipcRenderer.invoke('install-update')
   },
+  showUpdateInstaller: () => ipcRenderer.invoke('show-update-installer'),
 
   // 获取应用版本
   getAppVersion: () => {
