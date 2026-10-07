@@ -6,3 +6,22 @@ test('cross-month date bounds, leap calendar validation and explicit offsets ret
 test('reject incomplete, malformed, impossible, timezone-less, array and reverse dates',()=>{for(const query of [{period:'custom'},{period:'custom',startDate:'2026-10-07'},{period:'custom',endDate:'2026-10-07'},{period:'custom',startDate:['2026-10-07'],endDate:'2026-10-09'},{period:'custom',startDate:'2026-10-08',endDate:'2026-10-07'},{period:'wrong'},{period:['today']},...['','bad','2026-02-30','2026-10-07T10:00:00','2026-02-30T10:00:00Z','2026-10-07T25:00:00Z'].map(startDate=>({period:'custom',startDate,endDate:'2026-10-10'}))])assert.throws(()=>api.revenuePeriodRange(query),api.RevenueDateError);});
 test('legacy endpoint defaults and one-sided daily dates remain explicit',()=>{const now=new Date('2026-10-07T01:00Z');assert.deepEqual(iso(api.revenuePeriodRange({},now)),['2026-10-06T17:00:00.000Z','2026-10-07T16:59:59.999Z']);assert.equal(api.revenuePeriodRange({},now,'month').start.toISOString(),'2026-09-30T17:00:00.000Z');assert.deepEqual(iso(api.revenueDailyRange({endDate:'2026-10-03'},now)),['2026-09-30T17:00:00.000Z','2026-10-03T16:59:59.999Z']);assert.equal(api.revenueDailyRange({startDate:'2026-10-02'},now).end.toISOString(),'2026-10-07T16:59:59.999Z');});
 test('comparison month clamps calendar days, and daily grouping uses WIB at midnight',()=>{const current=api.revenuePeriodRange({period:'custom',startDate:'2026-03-31',endDate:'2026-03-31'});assert.deepEqual(iso(api.revenueComparisonRange('custom',current)),['2026-02-27T17:00:00.000Z','2026-02-28T16:59:59.999Z']);assert.equal(api.businessCalendarDate(new Date('2026-10-06T16:59:59.999Z')),'2026-10-06');assert.equal(api.businessCalendarDate(new Date('2026-10-06T17:00:00.000Z')),'2026-10-07');});
+
+test('all supplied dates validated and explicit/fixed or omitted-period conflicts rejected',()=>{
+ for(const period of [undefined,'today','week','month'])for(const dates of [{startDate:'bad',endDate:'2026-10-07'},{startDate:'2026-02-30'},{startDate:['bad','worse']},{startDate:'2026-10-09',endDate:'2026-10-07'},{startDate:'2026-10-07',endDate:'2026-10-07'},{endDate:'2026-10-07'},{startDate:'2026-10-07T10:00:00.123+07:00',endDate:'2026-10-07T11:00:00.456+07:00'}])assert.throws(()=>api.revenuePeriodRange({period,...dates}),api.RevenueDateError);
+});
+for(const [name,startDate,endDate,previousStart,previousEnd] of [
+ ['common February inversion','2026-03-30T20:00:00.001+07:00','2026-03-31T10:00:00.999+07:00','2026-02-27T13:00:00.001Z','2026-02-28T03:00:00.999Z'],
+ ['leap February inversion','2024-03-30T20:00:00.001+07:00','2024-03-31T10:00:00.999+07:00','2024-02-28T13:00:00.001Z','2024-02-29T03:00:00.999Z'],
+ ['equal-clock collision across days','2026-03-30T10:00:00.123+07:00','2026-03-31T10:00:00.123+07:00','2026-02-27T03:00:00.123Z','2026-02-28T03:00:00.123Z'],
+ ['short crossing midnight','2026-03-30T23:59:59.999+07:00','2026-03-31T00:00:00.001+07:00','2026-02-27T16:59:59.999Z','2026-02-27T17:00:00.001Z'],
+])test('comparison end anchor preserves duration/precision on '+name,()=>{
+ const current=api.revenuePeriodRange({period:'custom',startDate,endDate}),previous=api.revenueComparisonRange('custom',current);
+ assert.deepEqual(iso(previous),[previousStart,previousEnd]);assert.equal(previous.adjusted,true);assert.equal(previous.end-previous.start,current.end-current.start);assert.ok(previous.start<=previous.end);assert.equal(current.start.toISOString(),new Date(startDate).toISOString());assert.equal(current.end.toISOString(),new Date(endDate).toISOString());
+});
+test('reasonable month-clamped and exact single-instant comparisons unchanged',()=>{
+ for(const [startDate,endDate,expected] of [['2026-03-31','2026-03-31',['2026-02-27T17:00:00.000Z','2026-02-28T16:59:59.999Z']],['2026-03-30T10:00:00.123+07:00','2026-03-31T20:00:00.456+07:00',['2026-02-28T03:00:00.123Z','2026-02-28T13:00:00.456Z']],['2026-03-31T10:00:00.123+07:00','2026-03-31T10:00:00.123+07:00',['2026-02-28T03:00:00.123Z','2026-02-28T03:00:00.123Z']]]){
+ const previous=api.revenueComparisonRange('custom',api.revenuePeriodRange({period:'custom',startDate,endDate}));assert.deepEqual(iso(previous),expected);assert.equal(previous.adjusted,false);
+ }
+ assert.throws(()=>api.revenueComparisonRange('custom',{start:new Date('2026-10-08'),end:new Date('2026-10-07')}),api.RevenueDateError);
+});

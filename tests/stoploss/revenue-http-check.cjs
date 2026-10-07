@@ -22,6 +22,38 @@ const root=fs.mkdtempSync('/tmp/revenue-http-'),runtime='/tmp/pos-intent-http-ru
  await verifyRange('cross-month','2026-09-30','2026-10-01','2026-09-29T17:00:00.000Z','2026-10-01T16:59:59.999Z');assert.deepEqual(evidence.checks[1].daily.body.data.map(row=>row.date),['2026-09-30','2026-10-01']);
  // Separate exact historical instants so previous fixtures cannot enter this tiny interval.
  await verifyRange('explicit-offset','2026-08-07T10:12:13.001+07:00','2026-08-07T10:12:13.999+07:00','2026-08-07T03:12:13.001Z','2026-08-07T03:12:13.999Z');
+ // Review regression: explicit comparison bounds, including month-end clamp collisions.
+ const comparisonCases=[
+  ['common-February','2026-03-30T20:00:00.001+07:00','2026-03-31T10:00:00.999+07:00','2026-02-27T13:00:00.001Z','2026-02-28T03:00:00.999Z',true],
+  ['leap-February','2024-03-30T20:00:00.001+07:00','2024-03-31T10:00:00.999+07:00','2024-02-28T13:00:00.001Z','2024-02-29T03:00:00.999Z',true],
+  ['two-milliseconds','2025-03-30T23:59:59.999+07:00','2025-03-31T00:00:00.001+07:00','2025-02-27T16:59:59.999Z','2025-02-27T17:00:00.001Z',true],
+  ['equal-clock','2023-03-30T10:00:00.123+07:00','2023-03-31T10:00:00.123+07:00','2023-02-27T03:00:00.123Z','2023-02-28T03:00:00.123Z',true],
+  ['normal-clamp','2022-03-31','2022-03-31','2022-02-27T17:00:00.000Z','2022-02-28T16:59:59.999Z',false],
+ ];
+ for(const [name,startDate,endDate,start,end,adjusted] of comparisonCases){
+  await seedEdges('previous-'+name,start,end);
+  const currentAt=/T/.test(startDate)?new Date(startDate):new Date('2022-03-30T17:00:00.000Z');await seed('current-'+name,currentAt,250);
+  const response=await get('summary',{period:'custom',startDate,endDate});assert.equal(response.status,200);assert.deepEqual(response.body.data.current,{revenue:250,orders:1,avgOrderValue:250});assert.deepEqual(response.body.data.previous,{revenue:500,orders:2,avgOrderValue:250});assert.equal(response.body.data.revenueChange,-50);assert.deepEqual(response.body.data.comparisonRange,{startDate:start,endDate:end,adjusted});
+  if(adjusted)assert.equal(Date.parse(end)-Date.parse(start),Date.parse(endDate)-Date.parse(startDate));
+  evidence.checks.push({name,response});console.log('PASS actual HTTP '+process.env.TZ+' comparison '+name+': explicit ordered bounds, same precision/duration on collision, previous edge±1ms and scope');
+ }
+ // Reproduce the exact reviewer fixture in its own authenticated synthetic store.
+ await prisma.store.create({data:{id:'review-only',tenantId:'synthetic',name:'Review only'}});
+ const reviewUser=await prisma.user.create({data:{id:'review-manager',role:'manager',storeId:'review-only',phone:'synthetic-review',password:'disabled-synthetic'}});
+ tokens['review-manager']=jwt.sign({id:reviewUser.id,phone:reviewUser.phone,role:'manager',storeId:'review-only',staffId:'',issuedAtMs:Date.now()+1000},process.env.JWT_SECRET,{expiresIn:'1h'});
+ await seed('review-current','2026-03-30T21:00:00+07:00',100,'review-only');await seed('review-outside-previous','2026-02-28T15:00:00+07:00',200,'review-only');
+ const reviewParams={period:'custom',startDate:'2026-03-30T20:00:00+07:00',endDate:'2026-03-31T10:00:00+07:00',storeId:'review-only'};
+ const reviewer=await get('summary',reviewParams,'review-manager');assert.equal(reviewer.status,200);assert.equal(reviewer.body.data.current.revenue,100);assert.equal(reviewer.body.data.previous.revenue,0);assert.deepEqual(reviewer.body.data.comparisonRange,{startDate:'2026-02-27T13:00:00.000Z',endDate:'2026-02-28T03:00:00.000Z',adjusted:true});
+ // 15:00 lies after this precise 10:00 end, so zero is now legitimate and auditable.
+ // An actual order inside that ordered interval produces the original -50% formula.
+ await seed('review-inside-previous','2026-02-28T05:00:00+07:00',200,'review-only');const withInside=await get('summary',reviewParams,'review-manager');assert.equal(withInside.status,200);assert.equal(withInside.body.data.current.revenue,100);assert.equal(withInside.body.data.previous.revenue,200);assert.equal(withInside.body.data.revenueChange,-50);
+ evidence.checks.push({name:'exact-reviewer-fixture-auditable-range',withoutInside:reviewer,withInside});console.log('PASS actual HTTP '+process.env.TZ+' exact reviewer fixture: zero only for auditable outside-range order; inside-range200 gives -50%');
+ for(const endpoint of ['by-channel','summary']){
+  for(const period of [undefined,'today','week','month'])for(const dates of [{startDate:'bad',endDate:'2026-10-07'},{startDate:'2026-02-30',endDate:'2026-10-07'},{startDate:['bad','worse'],endDate:'2026-10-07'},{startDate:'2026-10-09',endDate:'2026-10-07'},{startDate:'2026-10-07',endDate:'2026-10-07'},{endDate:'2026-10-07'}]){
+   const params={...dates};if(period!==undefined)params.period=period;const response=await get(endpoint,params);assert.equal(response.status,400,'Validate every supplied date and reject conflicting fixed/default selection');
+  }
+ }
+ console.log('PASS actual HTTP '+process.env.TZ+' all supplied dates: invalid, repeated, reverse and valid fixed/default conflicts reject400');
  for(const endpoint of ['by-channel','summary','daily']){
   for(const invalid of [{startDate:'bad',endDate:'2026-10-07'},{startDate:'2026-02-30',endDate:'2026-10-07'},{startDate:'2026-10-08',endDate:'2026-10-07'},{startDate:'2026-10-07T10:00:00',endDate:'2026-10-07'}])assert.equal((await get(endpoint,{period:'custom',...invalid})).status,400,endpoint+' rejects invalid dates');
   assert.equal((await get(endpoint,{period:'custom',startDate:'2026-10-07',endDate:'2026-10-07',storeId:'foreign'})).status,403);

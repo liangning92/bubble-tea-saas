@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next'
 import { revenueApi, configApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
-import { finiteNumber, requireRead } from '../../utils/dashboardNavigation'
+import { finiteNumber, requireRead, validInstant } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure } from '../../components/DashboardReadState'
 import { TrendingUp, TrendingDown, ShoppingBag, Bike, Store, Utensils, CreditCard, Calendar } from 'lucide-react'
 
 interface ChannelData { channel:string; revenue:number; orders:number; avgOrderValue:number }
 interface RevenueTotals { revenue:number; orders:number; avgOrderValue:number }
-interface Summary { current:RevenueTotals; previous:RevenueTotals; revenueChange:number; ordersChange:number }
+interface Summary { current:RevenueTotals; previous:RevenueTotals; revenueChange:number; ordersChange:number; comparisonRange?:{startDate:string;endDate:string;adjusted:boolean} }
 type Period = 'today' | 'week' | 'month' | 'custom'
 const periods: Period[] = ['today','week','month','custom']
 const CHANNEL_ICONS = {pos:ShoppingBag,gofood:Bike,grabfood:Bike,shopee:ShoppingBag,tokopedia:Store,dine_in:Utensils,takeaway:Store,cash:CreditCard}
@@ -23,7 +23,9 @@ function readChannels(value: unknown): ChannelData[] {
 }
 function readSummary(value: unknown): Summary {
   const summary=value as Summary
-  return requireRead(summary,!!summary && validTotals(summary.current) && validTotals(summary.previous) && finiteNumber(summary.revenueChange) && finiteNumber(summary.ordersChange))
+  const range=summary?.comparisonRange
+  const validRange=!range || (validInstant(range.startDate) && validInstant(range.endDate) && Date.parse(range.startDate)<=Date.parse(range.endDate) && typeof range.adjusted==='boolean')
+  return requireRead(summary,validRange && !!summary && validTotals(summary.current) && validTotals(summary.previous) && finiteNumber(summary.revenueChange) && finiteNumber(summary.ordersChange))
 }
 
 export function RevenuePage() {
@@ -107,6 +109,9 @@ export function RevenuePage() {
     <section className="p-4" data-testid="revenue-selected-range">
       <h2 className="font-semibold mb-2">{t('revenueRange.selectedRange')} · {label} · {t('revenueRange.businessTime')}</h2>
       {!validSelection?<p role="alert" data-testid="revenue-range-invalid">{t('revenueRange.invalidRange')}</p>:selected.isError?<DashboardReadFailure retry={()=>selected.refetch()} />:selected.isPending?<p>{t('common.loading')}</p>:summary&&<>
+        {summary.comparisonRange?.adjusted&&<p role="status" data-testid="revenue-comparison-adjusted" className="text-sm mb-3">
+          {t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {new Date(Date.parse(summary.comparisonRange.startDate)+7*3600000).toISOString().replace('T',' ').replace('Z','')} — {new Date(Date.parse(summary.comparisonRange.endDate)+7*3600000).toISOString().replace('T',' ').replace('Z','')} · {t('revenueRange.businessTime')}
+        </p>}
         <div className="grid grid-cols-3 gap-4 mb-4" data-testid="revenue-selected-summary">
           <div className="card"><p>{t('revenueRange.selectedRevenue')}</p><p className="font-bold">{formatCurrency(summary.current.revenue)}</p><p>{t('finance.change')}: {change(summary.revenueChange)}</p></div>
           <div className="card"><p>{t('common.orders')}</p><p>{summary.current.orders}</p></div>

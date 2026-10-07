@@ -22,7 +22,7 @@ router.get('/summary', authenticate, authorize('admin', 'manager'), async (req: 
     const range = revenuePeriodRange(req.query,new Date(),'month')
     const previous = revenueComparisonRange(req.query.period,range)
     const comparison = await RevenueService.compareRevenue(req.user!.storeId,range.start,range.end,previous.start,previous.end)
-    res.json({code:200,data:comparison})
+    res.json({code:200,data:{...comparison,comparisonRange:{startDate:previous.start.toISOString(),endDate:previous.end.toISOString(),adjusted:previous.adjusted}}})
   } catch (error: unknown) {
     if (error instanceof RevenueDateError) {res.status(400).json({code:400,message:error.message});return}
     console.error('Get revenue summary error:',error)

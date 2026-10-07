@@ -21,12 +21,20 @@ export function parseRevenueDate(value: unknown, end = false): Date {
   return date
 }
 function checked(start: Date, end: Date) {
-  if (start.getTime()>end.getTime()) return invalid()
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start.getTime()>end.getTime()) return invalid()
   return {start,end}
 }
 export function revenuePeriodRange(query: {period?:unknown;startDate?:unknown;endDate?:unknown}, now = new Date(), defaultPeriod = 'today') {
+  // Supplied dates are never silently discarded by a fixed/default period.
+  const suppliedStart = query.startDate === undefined ? undefined : parseRevenueDate(query.startDate)
+  const suppliedEnd = query.endDate === undefined ? undefined : parseRevenueDate(query.endDate,true)
+  if (suppliedStart && suppliedEnd) checked(suppliedStart,suppliedEnd)
   const period = query.period === undefined ? defaultPeriod : query.period
-  if (period === 'custom') return checked(parseRevenueDate(query.startDate),parseRevenueDate(query.endDate,true))
+  if (period === 'custom') {
+    if (!suppliedStart || !suppliedEnd) return invalid()
+    return checked(suppliedStart,suppliedEnd)
+  }
+  if (suppliedStart || suppliedEnd) throw new RevenueDateError('Explicit dates require period=custom')
   if (!['today','week','month'].includes(String(period)) || typeof period !== 'string') return invalid()
   const today = parseRevenueDate(businessCalendarDate(now))
   if (period === 'today') return {start:today,end:new Date(today.getTime()+DAY-1)}
@@ -54,9 +62,17 @@ function previousMonth(date: Date) {
   return new Date(local.getTime()-WIB)
 }
 export function revenueComparisonRange(period: unknown,range: {start:Date;end:Date}) {
+  checked(range.start,range.end)
   if (period==='today'||period==='week') {
     const offset = (period==='today'?1:7)*DAY
-    return {start:new Date(range.start.getTime()-offset),end:new Date(range.end.getTime()-offset)}
+    return {start:new Date(range.start.getTime()-offset),end:new Date(range.end.getTime()-offset),adjusted:false}
   }
-  return {start:previousMonth(range.start),end:previousMonth(range.end)}
+  const start = previousMonth(range.start)
+  const end = previousMonth(range.end)
+  const duration = range.end.getTime()-range.start.getTime()
+  const adjusted = end.getTime()<start.getTime() || (duration>0 && end.getTime()===start.getTime())
+  // Independent month-end clamping may invert or collapse a valid interval.
+  // Keep the prior-month end anchor and retain exact elapsed duration in that case.
+  const previous = checked(adjusted?new Date(end.getTime()-duration):start,end)
+  return {...previous,adjusted}
 }
