@@ -1,6 +1,6 @@
 import { db, type LocalOrder } from '../db/offline'
 import { backendIdentity, currentBackendIdentity, readBackendAuth } from './backendIdentity'
-import { readCheckoutGeneration } from './checkoutIntent'
+import { readCheckoutGeneration, readCheckoutRecovery } from './checkoutIntent'
 
 const cacheKey = (backend: string, storeId: string, path: string) => `offline.snapshot:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${path}`
 const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current']
@@ -14,9 +14,24 @@ export function localIdentity(storeId: string): string {
   if (!storeId || !auth.apiUrl || backendIdentity(auth.apiUrl) !== backend || auth.user?.storeId !== storeId || !['cashier','manager','admin'].includes(auth.user.role || '')) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
   return backend
 }
-export async function saveSnapshot(path: string, data: unknown, backend: string, storeId: string): Promise<void> {
+function primitiveFields(value: unknown, keys: string[]): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const input = value as Record<string, unknown>
+  return Object.fromEntries(keys.filter(key=>input[key] !== undefined && (input[key] === null || ['string','number','boolean'].includes(typeof input[key]))).map(key=>[key,input[key]]))
+}
+function cashierProduct(value: Record<string, unknown>): Record<string, unknown> {
+  const specs = Array.isArray(value.specs) ? value.specs : []
+  const addons = Array.isArray(value.addons) ? value.addons : []
+  return {...primitiveFields(value,['id','storeId','code','name','description','image','categoryId','status','tags','sortOrder']),
+    category:primitiveFields(value.category,['id','name']),
+    specs:specs.map(spec=>primitiveFields(spec,['id','name','price','priceAdjustment','isDefault'])),
+    addons:addons.map(link=>({...primitiveFields(link,['id','addonId']),addon:primitiveFields(link.addon,['id','name','price'])}))}
+}
+export async function saveSnapshot(path: string, data: unknown, backend: string, storeId: string, complete: boolean): Promise<void> {
   if (localIdentity(storeId) !== backend) throw new Error('CHECKOUT_BACKEND_CHANGED')
-  const snapshot = JSON.parse(JSON.stringify(data))
+  if (!complete) return
+  let snapshot = JSON.parse(JSON.stringify(data))
+  if (path === '/products') snapshot = {...primitiveFields(snapshot,['code','timestamp']),data:{list:(snapshot.data?.list || []).map(cashierProduct)}}
   if (path === '/config') {
     if (!snapshot?.data?.paymentMethods) return
     const keys = ['channelSettings','displaySettings','hardwareSettings','paymentMethods','posLayout','posReceipt','quickAmounts','receiptSettings','shiftSettings','soundSettings','storeInfo','taxSettings','toolbarSettings']
@@ -27,12 +42,12 @@ export async function saveSnapshot(path: string, data: unknown, backend: string,
   const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(snapshot)))
   const version = Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')
   if (localIdentity(storeId) !== backend) throw new Error('CHECKOUT_BACKEND_CHANGED')
-  await db.config.put({key:cacheKey(backend,storeId,path),value:{data:snapshot,backend,storeId,version},updatedAt:new Date()})
+  await db.config.put({key:cacheKey(backend,storeId,path),value:{data:snapshot,backend,storeId,version,complete:true},updatedAt:new Date()})
 }
 export async function readSnapshot(path: string, storeId: string): Promise<unknown> {
   const backend = localIdentity(storeId)
   const row = await db.config.get(cacheKey(backend,storeId,path))
-  if (!row || row.value.backend !== backend || row.value.storeId !== storeId) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+  if (!row || row.value.complete !== true || row.value.backend !== backend || row.value.storeId !== storeId) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
   return row.value.data
 }
 
@@ -47,6 +62,8 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
   return db.transaction('rw',db.config,db.orders,async()=> {
     if (localIdentity(request.storeId) !== backendUrl) throw new Error('CHECKOUT_BACKEND_CHANGED')
     if (await readCheckoutGeneration(request.storeId) !== generation) throw new Error('CHECKOUT_BASKET_STALE')
+    const recovery = await readCheckoutRecovery(request.storeId)
+    if (recovery.blocked || recovery.confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     const products = await readSnapshot('/products',request.storeId) as {data?:{list?:Array<{id:string;specs?:Array<{id:string}>}>}}
     const configs = await readSnapshot('/config',request.storeId) as {data?:{paymentMethods?:Record<string,unknown>}}
     const shifts = await readSnapshot('/shifts',request.storeId) as {data?:Array<{key:string}>}

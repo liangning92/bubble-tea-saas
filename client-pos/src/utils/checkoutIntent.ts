@@ -113,7 +113,7 @@ export async function readCheckoutRecovery(storeId: string) {
     .and(row => row.storeId === storeId && !['rejected', 'discarded'].includes(row.checkoutResolution || '')).toArray()
   const confirmed = await db.orders.where('status').equals('synced').and(row => row.storeId === storeId && !!row.recoveredConfirmation && !row.recoveryAcknowledged).toArray()
   const quarantined = await db.orders.where('status').equals('quarantined').and(row => row.storeId === storeId).toArray()
-  return { intent, blocked: !!intent || rows.length > 0, rows, confirmed, quarantined, generation:await readCheckoutGeneration(storeId) }
+  return { intent, blocked: !!intent || rows.some(row => !row.locallyAcceptedAt), rows, confirmed, quarantined, generation:await readCheckoutGeneration(storeId) }
 }
 
 /** A fresh successful response confirms this original UUID; it does not certify legacy replay. */
@@ -148,11 +148,11 @@ export async function quarantineCheckoutRecovery(storeId: string, actorId: strin
   if (!actorId) throw new Error('CHECKOUT_ACTOR_REQUIRED')
   await withCheckoutSyncLock(storeId, () => db.transaction('rw', db.config, db.orders, async () => {
     const recovery = await readCheckoutRecovery(storeId)
-    if (recovery.confirmed.length || !recovery.blocked || (!navigator.locks && recovery.rows.some(row => row.status === 'syncing' && row.syncClaim && row.syncClaim.expiresAt > Date.now()))) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    if (recovery.confirmed.length || !recovery.blocked || (!navigator.locks && recovery.rows.some(row => !row.locallyAcceptedAt && row.status === 'syncing' && row.syncClaim && row.syncClaim.expiresAt > Date.now()))) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     if (JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}) !== expected) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     const audit = {actorId,at:new Date(),decision:'isolate_unknown_not_paid_or_unpaid',intent:recovery.intent,rows:recovery.rows}
     await db.config.add({key:`checkout.quarantine:${encodeURIComponent(storeId)}:${crypto.randomUUID()}`,value:audit,updatedAt:new Date()})
-    for (const row of recovery.rows) await db.orders.update(row.id!, {status:'quarantined',quarantineAudit:{actorId,at:audit.at}})
+    for (const row of recovery.rows.filter(row => !row.locallyAcceptedAt)) await db.orders.update(row.id!, {status:'quarantined',quarantineAudit:{actorId,at:audit.at}})
     await advanceCheckoutGeneration(storeId)
     await db.config.delete(key(storeId))
   }))

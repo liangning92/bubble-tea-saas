@@ -2748,7 +2748,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut) return
 
-    if (!recovery || ((paymentMethod !== 'cash' && qrisData.status !== 'manual') && (recovery.blocked || recovery.confirmed.length > 0))) { showToast(t('checkoutIntent.review'), 'warning'); return }
+    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
 
     if (!paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod)) {
       showToast(t(paymentConfigReady ? 'pos.paymentMethodDisabled' : 'pos.paymentConfigUnavailable'), 'error')
@@ -3006,7 +3006,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart();setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent) {
         setOfflineSaveFailed(true)
-        showToast(t(error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
+        showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
         return
       }
       const definite = definiteFirstRejection(error, intent?.request.orderNumber)
@@ -4130,7 +4130,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <button
                   onClick={handleCheckout}
                   disabled={
-                    isCheckingOut || !recovery ||
+                    isCheckingOut || !recovery || recovery.blocked || recovery.confirmed.length > 0 ||
                     !paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod) ||
                     (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
                     (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||

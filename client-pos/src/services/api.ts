@@ -5,7 +5,7 @@ import { getApiUrl, setApiUrl, normalizeApiUrl } from '../config'
 import { connectionManager, type ConnectionEvent } from './ConnectionManager'
 
 declare module 'axios' {
-  interface AxiosRequestConfig { posBackend?: string; posStoreId?: string; posActorId?: string; posCachedSnapshot?: boolean }
+  interface AxiosRequestConfig { posBackend?: string; posStoreId?: string; posActorId?: string; posCachedSnapshot?: boolean; posSnapshotComplete?: boolean }
 }
 
 const api = axios.create({
@@ -25,8 +25,7 @@ connectionManager.addListener((event: ConnectionEvent) => {
   if (event.type === 'connected' || event.type === 'url-changed') {
     if (event.url) {
       const normalized = normalizeApiUrl(event.url)
-      api.defaults.baseURL = normalized
-      setApiUrl(normalized)
+      api.defaults.baseURL = connectionManager.getCurrentUrl()
     }
   }
 })
@@ -68,6 +67,7 @@ api.interceptors.request.use(async (config) => {
     if (queryStore && queryStore !== requestIdentity.user?.storeId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
     config.posStoreId = requestIdentity.user?.storeId
     config.posActorId = requestIdentity.user?.id
+    config.posSnapshotComplete = snapshotPath(config.url || '') !== '/config' || !(config.params?.category || new URL(config.url!,window.location.href).searchParams.get('category'))
   }
   const cachedPath = config.method === 'get' && snapshotPath(config.url || '')
   if (cachedPath && !readBackendAuth().token) {
@@ -93,7 +93,7 @@ api.interceptors.response.use(
   async (response) => {
     const path = response.config.method === 'get' && snapshotPath(response.config.url || '')
     const auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
-    if (path && !response.config.posCachedSnapshot && auth?.user?.storeId === response.config.posStoreId && auth?.user?.id === response.config.posActorId) await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId)
+    if (path && !response.config.posCachedSnapshot && auth?.user?.storeId === response.config.posStoreId && auth?.user?.id === response.config.posActorId) await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId,response.config.posSnapshotComplete === true)
     return response
   },
   async (error) => {

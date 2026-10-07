@@ -115,7 +115,6 @@ class ConnectionManagerClass {
     this.state = newState
     if (url) {
       this.currentUrl = normalizeApiUrl(url)
-      setApiUrl(this.currentUrl)
     }
     this.emit({ type: newState, url: this.currentUrl })
   }
@@ -250,7 +249,7 @@ class ConnectionManagerClass {
   }
 
   /**
-   * Connect to API with automatic failover
+   * Connect to the selected business API without changing its identity
    * Returns the working URL
    */
   async connect(): Promise<string> {
@@ -259,6 +258,7 @@ class ConnectionManagerClass {
     // First try the current URL
     const health = await this.healthCheck()
 
+    if (normalizeApiUrl(health.url) !== this.getCurrentUrl()) return this.getCurrentUrl()
     if (health.success) {
       this.workingUrl = health.url
       this.currentUrl = health.url
@@ -269,27 +269,8 @@ class ConnectionManagerClass {
       return health.url
     }
 
-    // Try fallback URLs
-    for (const url of this.fallbackUrls) {
-      if (normalizeApiUrl(url) === this.getCurrentUrl()) continue
-
-      try {
-        const response = await fetch(`${url}/health`, {
-          method: 'GET',
-          cache: 'no-cache'
-        })
-
-        if (response.ok) {
-          this.workingUrl = url
-          this.currentUrl = url
-          this.retryCount = 0
-          this.setState('connected', url)
-          this.emit({ type: 'connected', url })
-          this.persistState()
-          return url
-        }
-      } catch {}
-    }
+    // A reachable alternate endpoint is not proof of the configured business identity.
+    // Keep the selected target and its authenticated cache when it is unreachable.
 
     // No URL worked - go to offline/degraded mode
     this.setState('offline')
@@ -342,6 +323,8 @@ class ConnectionManagerClass {
       }
 
       const health = await this.healthCheck()
+
+      if (normalizeApiUrl(health.url) !== this.getCurrentUrl()) return
 
       if (health.success) {
         if (this.state !== 'connected') {
