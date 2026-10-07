@@ -43,3 +43,8 @@ npm-debug.log*
 client-pos/dist-electron/
 *.exe
 *.zip
+
+__pycache__/
+*.pyc
+!docs/COMPREHENSIVE-REMEDIATION-MIGRATION.sql
+!docs/INVENTORY-LEDGER-MIGRATION.sql
