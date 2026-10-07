@@ -1,3 +1,4 @@
+from contextlib import closing
 import importlib.util
 import pathlib
 import sqlite3
@@ -21,10 +22,10 @@ class UpgradeTests(unittest.TestCase):
         (self.app / 'BTPS.exe').write_bytes(b'owned-old-program')
         (self.app / 'history-file').write_bytes(b'preserve-me')
         template = self.root / 'empty.db'
-        with sqlite3.connect(template) as c:
+        with closing(sqlite3.connect(template)) as c, c:
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB, pickupNumber TEXT, requestFingerprint TEXT, requestReceipt TEXT)')
         self.catalog = U.catalog_from_empty(template, 'a' * 40)
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB)')
             c.execute('INSERT INTO "Order" VALUES (?, ?, ?)', ('historical', 123.45, b'\x00\xff'))
         self.before = U.digest(self.db)
@@ -40,34 +41,34 @@ class UpgradeTests(unittest.TestCase):
         self.assertTrue(receipt['indexAdded'])
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
 
     def test_repeat_is_idempotent_and_preserves_existing_pickup_values(self):
         self.prepare()
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('UPDATE "Order" SET pickupNumber=?', ('P-001',))
         receipt = self.prepare()
         self.assertFalse(receipt['columnAdded'])
         self.assertEqual(receipt['columnsAdded'], [])
         self.assertFalse(receipt['indexAdded'])
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT pickupNumber FROM "Order"').fetchone()[0], 'P-001')
 
     def test_partial_old_schema_preserves_existing_receipt_values(self):
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('ALTER TABLE "Order" ADD COLUMN requestFingerprint TEXT')
             c.execute('UPDATE "Order" SET requestFingerprint=?', ('old-fingerprint',))
         receipt = self.prepare()
         self.assertEqual(receipt['columnsAdded'], ['pickupNumber', 'requestReceipt'])
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT requestFingerprint,requestReceipt,pickupNumber FROM "Order"').fetchone(), ('old-fingerprint', None, None))
 
     def test_current_database_needs_no_ddl_and_keeps_receipts(self):
         self.prepare()
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('UPDATE "Order" SET requestFingerprint=?,requestReceipt=?', ('fingerprint', 'original-receipt'))
         before = U.digest(self.db)
         receipt = self.prepare()
@@ -90,7 +91,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
 
     def test_real_ddl_failure_rolls_back_column_and_bytes(self):
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE VIEW Order_pickupNumber_idx AS SELECT 1')
         before = U.digest(self.db)
         with self.assertRaises(sqlite3.OperationalError):
@@ -112,7 +113,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertTrue(pathlib.Path(receipt['databaseBackup']).is_file())
 
     def test_schema_drift_refuses_before_backup(self):
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('ALTER TABLE "Order" RENAME COLUMN total TO amount')
         before = U.digest(self.db)
         with self.assertRaises(RuntimeError):
@@ -122,7 +123,7 @@ class UpgradeTests(unittest.TestCase):
 
     def test_changed_backup_or_new_sale_refuses_restore(self):
         receipt = self.prepare()
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('INSERT INTO "Order" (id,total,evidence,pickupNumber) VALUES (?, ?, ?, ?)', ('new-sale', 10, b'', None))
         before = U.digest(self.db)
         with self.assertRaisesRegex(RuntimeError, 'DATABASE_CHANGED_DURING_INSTALLATION'):

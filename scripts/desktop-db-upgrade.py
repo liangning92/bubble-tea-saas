@@ -1,6 +1,7 @@
 """Installer-only narrow upgrade. Production CLI runs only on Windows/current profile.
 No server startup migration, arbitrary SQL, database restore, or test fault flags.
 """
+from contextlib import closing
 import argparse
 import ctypes
 import hashlib
@@ -81,7 +82,7 @@ def integrity(c):
 
 
 def catalog_from_empty(db, source_sha):
-    with connection(db) as c:
+    with closing(connection(db)) as c:
         integrity(c)
         result = {'version': 1, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}}
         for table in tables(c):
@@ -243,7 +244,7 @@ def prepare(db, old_app, catalog, processes, registry=None):
         c.execute('VACUUM INTO ?', (str(before_db),))
         with open(before_db, 'r+b') as stream:
             os.fsync(stream.fileno())
-        with connection(before_db) as snapshot:
+        with closing(connection(before_db)) as snapshot:
             integrity(snapshot)
             if fingerprints(snapshot, columns) != history:
                 fail('SNAPSHOT_HISTORY_MISMATCH')
@@ -306,11 +307,11 @@ def verify_receipt(receipt, catalog, processes):
     regular(expected_app_backup)
     if digest(expected_db_backup) != receipt['databaseBackupSha256'] or tree_manifest(expected_app_backup) != receipt['appFiles']:
         fail('BACKUP_BYTES_CHANGED')
-    with connection(expected_db_backup) as backup:
+    with closing(connection(expected_db_backup)) as backup:
         integrity(backup)
         if fingerprints(backup, receipt['columnsBefore']) != receipt['historyBefore']:
             fail('BACKUP_HISTORY_CHANGED')
-    with connection(db) as current:
+    with closing(connection(db)) as current:
         supported_schema(current, catalog, allow_missing=False)
         integrity(current)
         if fingerprints(current, receipt['columnsBefore']) != receipt['historyBefore']:

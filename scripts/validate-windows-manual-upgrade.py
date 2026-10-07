@@ -1,4 +1,5 @@
 """Windows-only, owned fixtures: exercise the shipped helper and NSIS UI, never store data."""
+from contextlib import closing
 import ctypes
 from ctypes import wintypes
 import hashlib
@@ -44,7 +45,7 @@ def fixture(collision=False):
     if DB.exists():
         DB.unlink()
     shutil.copy2(SEED, DB)
-    with sqlite3.connect(DB) as c:
+    with closing(sqlite3.connect(DB)) as c, c:
         c.execute('DROP INDEX Order_pickupNumber_idx')
         for name in ('pickupNumber', 'requestFingerprint', 'requestReceipt'):
             c.execute('ALTER TABLE "Order" DROP COLUMN ' + name)
@@ -53,7 +54,8 @@ def fixture(collision=False):
         c.execute('INSERT INTO "Order" (id,storeId,staffId,orderNumber,totalAmount,finalAmount,paymentMethod,updatedAt) VALUES (?,?,?,?,?,?,?,?)', ('historical','store','staff','OLD-001',125000,125000,'cash',0))
         if collision:
             c.execute('CREATE VIEW Order_pickupNumber_idx AS SELECT 1')
-    assert not sqlite3.connect(DB).execute('PRAGMA foreign_key_check').fetchall()
+    with closing(sqlite3.connect(DB)) as c:
+        assert not c.execute('PRAGMA foreign_key_check').fetchall()
 
 
 def invoke(command, expect=0, receipt=None):
@@ -68,7 +70,7 @@ def invoke(command, expect=0, receipt=None):
 
 
 def historic():
-    with sqlite3.connect(DB) as c:
+    with closing(sqlite3.connect(DB)) as c, c:
         return c.execute('SELECT id,totalAmount,finalAmount,paymentMethod FROM "Order"').fetchall()
 
 
@@ -164,7 +166,7 @@ try:
     installer = next(ROOT.glob('release/BTPS-*-Windows-x64.exe'))
     drive_installer(installer)
     assert historic() == history
-    with sqlite3.connect(DB) as c:
+    with closing(sqlite3.connect(DB)) as c, c:
         assert c.execute('SELECT pickupNumber,requestFingerprint,requestReceipt FROM "Order"').fetchone() == (None,None,None)
     assert (APP / 'BTPS.exe').read_bytes()[:2] == b'MZ'
     assert (APP / 'resources/app.asar').is_file()
