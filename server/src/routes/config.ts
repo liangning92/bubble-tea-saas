@@ -169,7 +169,7 @@ router.put('/hardware-settings', authenticate, async (req: AuthRequest, res) => 
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(configSchema), async (req: AuthRequest, res) => {
   try {
     const { storeId, key, value, category } = req.body
-    if (storeId !== '' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (isInternalConfig(key) || (isSecretConfig(key) && req.user!.role !== 'admin')) return res.status(403).json({code:403,message:'Protected configuration'})
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
     if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
@@ -198,7 +198,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
 router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, configs } = req.body // configs: [{key, value, category}]
-    if (storeId !== '' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({code:403,message:'Store access denied'})
+    if (storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({code:403,message:'Store access denied'})
     if (Array.isArray(configs) && configs.some(c=>isInternalConfig(c?.key)||(isSecretConfig(c?.key)&&req.user!.role!=='admin'))) return res.status(403).json({code:403,message:'Protected configuration'})
     if (!Array.isArray(configs) || configs.some(c => c?.key === AI_POLICY_KEY || (typeof c?.key === 'string' && (c.key.startsWith(RECEIPT_SYNC_PREFIX)||c.key.startsWith(COUNT_OBSERVATION_PREFIX))))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 

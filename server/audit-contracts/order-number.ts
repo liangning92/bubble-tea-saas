@@ -21,9 +21,9 @@ export function orderNumberContract(db:any){
   const always=jest.spyOn(numbers,'orderNumberCandidate').mockReturnValue(first.orderNumber)
   try{await expect(createOrder(input)).rejects.toThrow('ORDER_NUMBER_ALLOCATION_RETRY_EXHAUSTED');expect(always).toHaveBeenCalledTimes(5);expect(await db.cashEvent.count({where:{storeId:input.storeId}})).toBe(2)}finally{always.mockRestore()}
  })
- test('generator persists separate day counters across UTC midnight without changing old numbers',async()=>{
+ test('generator persists separate day counters across WIB midnight without changing old numbers',async()=>{
   const input=await fixture()
-  const a=await generateOrderNumber(input.storeId,'ORD',new Date('2026-01-01T23:59:59Z')),b=await generateOrderNumber(input.storeId,'ORD',new Date('2026-01-02T00:00:00Z'))
+  const a=await generateOrderNumber(input.storeId,'ORD',new Date('2026-01-01T16:59:59Z')),b=await generateOrderNumber(input.storeId,'ORD',new Date('2026-01-01T17:00:00Z'))
   expect(a).toMatch(/^ORD20260101-/);expect(b).toMatch(/^ORD20260102-/)
   const counters=await db.orderCounter.findMany({where:{storeId:input.storeId},orderBy:{date:'asc'}})
   expect(counters.map((c:any)=>[c.date,c.counter])).toEqual([['20260101',1],['20260102',1]])
