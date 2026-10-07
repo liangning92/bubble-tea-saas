@@ -5,6 +5,17 @@ import { RevenueDateError, revenuePeriodRange, revenueDailyRange, revenueCompari
 
 const router = Router()
 
+router.get('/purchase-hours', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const { start, end } = revenuePeriodRange(req.query)
+    res.json({ code: 200, data: await RevenueService.getPurchaseHours(req.user!.storeId, start, end) })
+  } catch (error) {
+    if (error instanceof RevenueDateError) return res.status(400).json({ code: 400, message: error.message })
+    console.error('Get purchase hours error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get purchase analysis' })
+  }
+})
+
 router.get('/by-channel', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const {start,end} = revenuePeriodRange(req.query)
