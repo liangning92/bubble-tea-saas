@@ -1958,6 +1958,24 @@ ipcMain.handle('print-cup-stickers', async (_event, data) => {
  * 生成交接班对账单文本
  */
 function generateShiftReportText(data: any): string {
+  if (data.reportKind === 'handover') {
+    const zh = data.language === 'zh', en = data.language === 'en'
+    const label = (a: string, b: string, c: string) => zh ? a : en ? b : c
+    const purchases = data.purchaseExpenses
+    const lines = [data.storeName || 'YOUME', label('交接班记录', 'SHIFT HANDOVER', 'SERAH TERIMA SHIFT'), label('收银员', 'Cashier', 'Kasir') + ': ' + (data.cashierName || ''), label('班次', 'Shift', 'Shift') + ': ' + (data.shiftType || ''), label('开班', 'Opened', 'Mulai') + ': ' + (data.openedAt ? new Date(data.openedAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-'), label('交班', 'Closed', 'Selesai') + ': ' + (data.closedAt ? new Date(data.closedAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-'), label('实点现金', 'Counted cash', 'Kas dihitung') + ': ' + formatRp(data.actualCash || 0), '--------------------------------', label('本班采购报销', 'Shift purchase expenses', 'Belanja shift')]
+    if (purchases && Number.isFinite(purchases.total) && Array.isArray(purchases.items)) {
+      for (const item of purchases.items) {
+        lines.push(String(item.category) + ' x' + (item.quantity ?? '-') + '  ' + formatRp(item.amount))
+        if (item.description) lines.push(String(item.description))
+      }
+      lines.push(label('合计', 'Total', 'Total') + ': ' + formatRp(purchases.total))
+    } else lines.push(label('费用未读取，待核对', 'Expenses unavailable; review required', 'Biaya belum terbaca; perlu diperiksa'))
+    lines.push('--------------------------------', label('采购记账，不等于钱箱已付款', 'Expense recorded; cash payout separate', 'Biaya dicatat; pembayaran kas terpisah'), label('销售与上传记录仍需核对', 'Sales and uploads require reconciliation', 'Penjualan dan unggahan perlu rekonsiliasi'))
+    const limit = data.paperSize === '80mm' ? 48 : 32
+    const wrapped = lines.flatMap(line => { const parts: string[] = []; let part = '', width = 0; for (const ch of line) { const size = ch.codePointAt(0)! > 255 ? 2 : 1; if (width + size > limit) { parts.push(part); part = ''; width = 0 } part += ch; width += size } parts.push(part); return parts })
+    return wrapped.join('\n') + '\n\n\n'
+  }
+
   const lines: string[] = []
   const is80mm = data.paperSize === '80mm'
   const width = is80mm ? 48 : 32

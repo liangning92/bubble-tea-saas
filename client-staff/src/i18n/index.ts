@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   id: {
     translation: {
+      trainingDocument: {"title": "Panduan bergambar (PDF)", "open": "Buka panduan", "download": "Unduh panduan", "loading": "Memuat…", "retry": "Gagal memuat, coba lagi", "load": "Muat panduan"},
       trainingMedia: {"nav": "Pelatihan", "courses": "Materi", "records": "Catatan pelatihan", "title": "Video pelatihan", "load": "Muat video", "error": "Video gagal dimuat. Coba lagi.", "loading": "Memuat…", "upload": "Unggah atau ganti video", "remove": "Hapus tautan video", "limits": "MP4 non-fragmentasi (AVC/H.264), maks 20 MiB. Putar dan geser setelah dimuat; draf hanya untuk admin. Penggantian/penghapusan mempertahankan berkas riwayat. Proxy mungkin membatasi ukuran lebih rendah.", "failed": "Unggah gagal. Periksa format, ukuran dan batas proxy.", "saved": "Video diunggah. Simpan draf dan tinjau sebelum diterbitkan."},
       countFlow: {"title": "Penghitungan fisik", "hint": "Jika stok bergerak, muat ulang dan hitung kembali. Persetujuan hanya menerapkan selisih, tanpa menghapus penjualan berikutnya. Selisih bukan hukuman staf.", "refresh": "Muat ulang dan periksa kembali", "theory": "Saldo sistem saat pengamatan", "actual": "Jumlah fisik", "movement": "Pergerakan setelah pengamatan", "amount": "Perkiraan nilai selisih (biaya rata-rata saat ini)", "reason": "Alasan selisih, bukan kesalahan staf otomatis", "save": "Simpan pengamatan", "empty": "Belum ada penghitungan aktif. Minta manajer membuatnya."},
       common: {
@@ -474,6 +475,7 @@ const resources = {
   },
   en: {
     translation: {
+      trainingDocument: {"title": "Illustrated manual (PDF)", "open": "Open manual", "download": "Download manual", "loading": "Loading…", "retry": "Could not load, retry", "load": "Load manual"},
       trainingMedia: {"nav": "Training", "courses": "Courses", "records": "Training records", "title": "Video lesson", "load": "Load video", "error": "Video could not be loaded. Retry.", "loading": "Loading…", "upload": "Upload or replace video", "remove": "Remove video association", "limits": "Non-fragmented MP4 (AVC/H.264), max 20 MiB. Playback and seeking after loading; drafts are admin-only. Replacing/removing retains historical files. A proxy may impose a lower upload limit.", "failed": "Video upload failed. Check format, size and proxy limit.", "saved": "Video uploaded. Save draft and review before publishing."},
       countFlow: {"title": "Physical inventory count", "hint": "If stock moves, refresh and recount. Approval applies only the difference and preserves later sales. Differences are not staff penalties.", "refresh": "Refresh and recheck", "theory": "System balance at observation", "actual": "Physical quantity", "movement": "Movement since observation", "amount": "Estimated variance value (current average cost)", "reason": "Variance reason, no automatic staff blame", "save": "Save observation", "empty": "No active count. Ask your manager to create one."},
       common: {
@@ -944,6 +946,7 @@ const resources = {
   },
   zh: {
     translation: {
+      trainingDocument: {"title": "图示操作手册（PDF）", "open": "打开阅读", "download": "下载手册", "loading": "正在读取…", "retry": "读取失败，点击重试", "load": "读取手册"},
       trainingMedia: {"nav": "培训", "courses": "课程", "records": "培训记录", "title": "视频教程", "load": "加载视频", "error": "视频加载失败，请重试", "loading": "加载中…", "upload": "上传或替换视频", "remove": "移除视频关联", "limits": "普通非分片 MP4（AVC/H.264），最多 20 MiB。加载完成后可播放和拖动；草稿仅管理员可见。替换/移除不删除历史文件。代理可能设置更低上传限制。", "failed": "视频上传失败，请检查格式、容量及代理限制", "saved": "视频已上传；请保存草稿并审核发布。"},
       countFlow: {"title": "实物盘点", "hint": "库存发生变动时刷新并重新核对。后台批准只调整差额，保留之后的销售。差异不等于员工责任或处罚。", "refresh": "刷新并重新核对", "theory": "观察时理论库存", "actual": "实盘数量", "movement": "观察后的库存变动", "amount": "差额估值（当前平均成本）", "reason": "差异原因，不自动归责员工", "save": "保存实盘观察", "empty": "暂无进行中的盘点，请管理员创建。"},
       common: {

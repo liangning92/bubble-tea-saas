@@ -207,6 +207,7 @@ export const posApi = {
   createCashEvent: (data: any) => api.post('/pos-cash/events', data),
   getTodayCash: () => api.get('/pos-cash/today'),
   getShifts: (params?: any) => api.get('/pos-cash/shifts', { params }),
+  getShiftHandover: (id: string) => api.get('/pos-cash/shifts/' + id + '/handover'),
   getCurrentShift: () => api.get('/pos-cash/shifts/current'),
   openShift: (data: { openFloat: number; shift: string }) => api.post('/pos-cash/shifts/open', data),
   closeShift: (data: { actualCash: number; closeNote?: string; nextStaffId?: string }) =>
@@ -242,6 +243,9 @@ export const posApi = {
   requestTestDrawer: (printerName: string, storeId: string) =>
     api.post('/hardware/test-drawer', { printerName, storeId }),
 
+  getMyPosExpenses: () => api.get('/expenses/pos'),
+  createPosExpense: (data: { requestId: string; category: string; amount: number; quantity: number; description: string }) => api.post('/expenses/pos', data),
+  getExpenseCategories: () => api.get('/expenses/categories'),
   // Expenses - POS can record daily expenses
   getExpenses: (params?: { startDate?: string; endDate?: string; type?: string }) =>
     api.get('/expenses', { params }),

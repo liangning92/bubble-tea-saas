@@ -13,6 +13,7 @@ interface Expense {
   type: string
   category: string
   amount: number
+  quantity?: number
   description?: string
   date: string
   referenceId?: string
@@ -938,6 +939,7 @@ export function ExpenseListPage() {
                           </span>
                           <span className="text-xs text-gray-400">{formatDate(expense.date)}</span>
                         </div>
+                        {expense.quantity !== undefined && <p className="text-sm text-gray-600">{t('expense.purchaseQuantity')}: {expense.quantity}</p>}
                         {expense.description && (
                           <p className="text-sm text-gray-600 mt-1">{expense.description}</p>
                         )}

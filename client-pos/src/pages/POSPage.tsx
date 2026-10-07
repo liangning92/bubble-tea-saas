@@ -231,8 +231,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 费用记录状态
   const [todayExpenses, setTodayExpenses] = useState<any[]>([])
+  const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string }[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseQuantity, setExpenseQuantity] = useState('1')
+  const [expenseSaving, setExpenseSaving] = useState(false)
+  const [expenseRequestId, setExpenseRequestId] = useState(() => crypto.randomUUID())
   const [expenseDescription, setExpenseDescription] = useState('')
 
   // POS 操作会话 ID（用于审计日志）
@@ -1783,7 +1787,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setTasksLoading(true)
     try {
       const res = await posApi.getMyTasks()
-      setTasks(res.data?.data?.list || [])
+      setTasks(Array.isArray(res.data?.data) ? res.data.data : res.data?.data?.list || [])
     } catch (e) {
       console.error('Failed to fetch tasks:', e)
     } finally {
@@ -1825,17 +1829,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const fetchTodayExpenses = async () => {
     if (!user?.storeId) return
     try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const todayStr = today.toISOString().split('T')[0]
-      const res = await posApi.getExpenses({ startDate: todayStr })
-      // Filter expenses for today based on date field
-      const allExpenses = res.data?.data?.list || []
-      const todayExp = allExpenses.filter((e: any) => {
-        const expDate = new Date(e.date).toISOString().split('T')[0]
-        return expDate === todayStr
-      })
-      setTodayExpenses(todayExp)
+      const categories = await posApi.getExpenseCategories()
+      setExpenseCategories(categories.data?.data?.list || [])
+      const res = await posApi.getMyPosExpenses()
+      setTodayExpenses(res.data?.data?.list || [])
     } catch (e) {
       console.error('Failed to fetch expenses:', e)
     }
@@ -1843,28 +1840,26 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 创建费用记录
   const createExpense = async () => {
-    if (!expenseCategory || !expenseAmount || !user?.storeId) {
+    if (expenseSaving) return
+    const amount = Number(expenseAmount)
+    const quantity = Number(expenseQuantity)
+    if (!expenseCategory || !Number.isSafeInteger(amount) || amount <= 0 || amount > 21474836 || !Number.isSafeInteger(quantity) || quantity <= 0 || quantity > 1000000 || !expenseDescription.trim() || !user?.storeId) {
       showToast(t('pos.expenseRequired'), 'warning')
       return
     }
+    setExpenseSaving(true)
     try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      await posApi.createExpense({
-        type: 'operational',
-        category: expenseCategory,
-        amount: parseInt(expenseAmount),
-        description: expenseDescription,
-        date: today.toISOString()
-      })
+      await posApi.createPosExpense({ requestId: expenseRequestId, category: expenseCategory, amount, quantity, description: expenseDescription.trim() })
       showToast(t('pos.expenseCreated'), 'success')
       setExpenseCategory('')
       setExpenseAmount('')
+      setExpenseQuantity('1')
       setExpenseDescription('')
+      setExpenseRequestId(crypto.randomUUID())
       fetchTodayExpenses()
     } catch (e: any) {
       showToast(e?.response?.data?.message || t('pos.expenseFailed'), 'error')
-    }
+    } finally { setExpenseSaving(false) }
   }
 
   // 打开费用弹窗时加载数据
@@ -3303,7 +3298,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   id: 'cash',
                   icon: <Wallet size={18} />,
                   labelKey: posLayout.toolbarLabels?.cash || 'toolbar.cash',
-                  onClick: () => setShowCashModal(true)
+                  onClick: () => navigate('/cash')
                 })
               }
               // 费用按钮 - 记录每日临时支出
@@ -3321,7 +3316,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   id: 'tasks',
                   icon: <ClipboardList size={18} />,
                   labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
-                  onClick: () => navigate('/hygiene')
+                  onClick: () => navigate('/tasks')
                 })
               }
               // 硬件设备状态自检（仅在后台明确开启 showHardware 时开放，默认收银员无此项）
@@ -4735,10 +4730,17 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         }
                         const actualCash = parseInt(shiftActualCash) || 0
                         try {
-                          await posApi.closeShift({
+                          const closeResult = await posApi.closeShift({
                             actualCash,
                             closeNote: ''
                           })
+                          try {
+                            const target = printerTarget('receipt')
+                            if (target && electronAPI?.sendPrintShiftReport) {
+                              const result = await electronAPI.sendPrintShiftReport({ ...target, reportKind: 'handover', paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: user?.staff?.name || user?.phone || '', shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
+                              if (result?.success === false) throw Error(result.error || 'Print failed')
+                            }
+                          } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
                           // Provisional/unavailable evidence must never print a financial Z-report.
                           if (shiftData?.summaryEvidence?.verified === true) {
                             try {
@@ -4777,8 +4779,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                             }
                           }
                           clearCart()
-                          setSuspendedOrders([])
-                          localStorage.removeItem('suspended_orders')
                           setShowShiftModal(false)
                           setShiftActualCash('')
                           setShiftSupervisorPin('')
@@ -5026,7 +5026,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
-              <h3 className="font-bold">{t('pos.expense')}</h3>
+              <h3 className="font-bold">{t('pos.purchaseReimbursement')}</h3>
               <button onClick={() => setShowExpenseModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
                 <X size={20} />
               </button>
@@ -5034,7 +5034,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             <div className="p-4 space-y-4">
               {/* 今日费用汇总 */}
               <div className="bg-red-50 rounded-xl p-3">
-                <p className="text-sm text-gray-500">{t('pos.todayExpenses')}</p>
+                <p className="text-sm text-gray-500">{t('pos.myPurchaseRecords')}</p>
                 <p className="font-bold text-red-600 text-xl">
                   {formatCurrency(todayExpenses.reduce((sum: number, e: any) => sum + e.amount, 0))}
                 </p>
@@ -5047,8 +5047,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   {todayExpenses.map((expense: any) => (
                     <div key={expense.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
                       <div>
-                        <p className="font-medium">{expense.category}</p>
-                        <p className="text-gray-500 text-xs">{expense.description || '-'}</p>
+                        <p className="font-medium">{expenseCategories.find(c => c.key === expense.category)?.label || expense.category}</p>
+                        <p className="text-gray-500 text-xs">{t('pos.purchaseQuantity')}: {expense.quantity ?? '-'} · {expense.description || '-'}</p>
                       </div>
                       <p className="font-medium text-red-500">-{formatCurrency(expense.amount)}</p>
                     </div>
@@ -5069,20 +5069,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     className="w-full px-3 py-2 border rounded-xl"
                   >
                     <option value="">{t('pos.selectCategory')}</option>
-                    <option value="supplies">{t('pos.expenseSupplies')}</option>
-                    <option value="utilities">{t('pos.expenseUtilities')}</option>
-                    <option value="rent">{t('pos.expenseRent')}</option>
-                    <option value="transport">{t('pos.expenseTransport')}</option>
-                    <option value="packaging">{t('pos.expensePackaging')}</option>
-                    <option value="cleaning">{t('pos.expenseCleaning')}</option>
-                    <option value="maintenance">{t('pos.expenseMaintenance')}</option>
-                    <option value="other">{t('pos.expenseOther')}</option>
+                    {expenseCategories.map(category => <option key={category.key} value={category.key}>{category.label}</option>)}
                   </select>
                 </div>
 
+                <div className="mb-3"><label className="block text-sm text-gray-500 mb-1">{t('pos.purchaseQuantity')}</label><input type="number" min="1" step="1" aria-label={t('pos.purchaseQuantity')} value={expenseQuantity} onChange={e => setExpenseQuantity(e.target.value)} className="w-full px-3 py-2 border rounded-xl" /></div>
+
                 {/* 金额 */}
                 <div className="mb-3">
-                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseAmount')}</label>
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.purchaseTotal')}</label>
                   <input
                     type="number"
                     value={expenseAmount}
@@ -5107,9 +5102,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 {/* 提交按钮 */}
                 <button
                   onClick={createExpense}
+                  disabled={expenseSaving}
                   className="w-full py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
                 >
-                  {t('pos.saveExpense')}
+                  {t('pos.submitReimbursement')}
                 </button>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { validateDocumentReferences } from './TrainingDocumentStore'
 import { validateVideoReferences } from './TrainingVideoStore'
 import { createHash } from 'crypto'
 import { z } from 'zod'
@@ -111,6 +112,7 @@ export async function writeTrainingLibrary(actor: Actor, kind: 'save' | 'restore
       }
       value = snapshotContent(validateLibrary(value), kind === 'publish')
       try { await validateVideoReferences(actor, value) } catch { fail(400, 'TRAINING_VIDEO_REFERENCE_INVALID') }
+      try { await validateDocumentReferences(actor, value) } catch { fail(400, 'TRAINING_DOCUMENT_REFERENCE_INVALID') }
       const next: Head = { generation: data.requestId, draft: data.requestId, published: kind === 'publish' ? data.requestId : current.value?.published || null }
       if (current.row) {
         const changed = await tx.config.updateMany({ where: { id: current.row.id, storeId: actor.storeId, value: current.row.value }, data: { value: JSON.stringify(next) } })

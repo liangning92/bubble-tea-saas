@@ -103,6 +103,13 @@ const resources = {
         "status": "Status"
       },
       "pos": {
+        "handoverReceipt": "Struk serah terima", "reprint": "Cetak ulang",
+        "handoverPrintFailed": "Shift tersimpan; cetak gagal. Hubungi supervisor untuk cetak ulang.",
+        "purchaseQuantity": "Jumlah",
+        "purchaseTotal": "Total (Rp)",
+        "purchaseReimbursement": "Penggantian belanja harian",
+        "myPurchaseRecords": "Pengajuan saya (100 terbaru)",
+        "submitReimbursement": "Catat penggantian biaya",
         "paymentConfigUnavailable": "Konfigurasi pembayaran tidak tersedia. Hubungkan kembali dan coba lagi; pesanan tetap tersimpan.",
         "paymentMethodDisabled": "Metode pembayaran ini dinonaktifkan. Pilih metode aktif; pesanan tetap tersimpan.",
         "shiftUnavailable": "Tidak ada shift aktif yang dipilih. Muat ulang konfigurasi shift.",
@@ -873,6 +880,13 @@ const resources = {
         "status": "Status"
       },
       "pos": {
+        "handoverReceipt": "Handover receipt", "reprint": "Reprint",
+        "handoverPrintFailed": "Shift saved; receipt printing failed. Contact the manager to reprint.",
+        "purchaseQuantity": "Quantity",
+        "purchaseTotal": "Total (Rp)",
+        "purchaseReimbursement": "Daily purchase reimbursement",
+        "myPurchaseRecords": "My submissions (latest 100)",
+        "submitReimbursement": "Record reimbursement",
         "paymentConfigUnavailable": "Payment configuration is unavailable. Reconnect and retry; your order is preserved.",
         "paymentMethodDisabled": "This payment method is disabled. Choose an active method; your order is preserved.",
         "shiftUnavailable": "No active shift is selected. Reload shift configuration.",
@@ -1600,6 +1614,13 @@ const resources = {
         "startUsing": "开始使用 POS"
       },
       "pos": {
+        "handoverReceipt": "交班小票", "reprint": "补打",
+        "handoverPrintFailed": "交班已保存，小票打印失败，请联系店长补打。",
+        "purchaseQuantity": "数量",
+        "purchaseTotal": "总金额 (Rp)",
+        "purchaseReimbursement": "采购报销",
+        "myPurchaseRecords": "我的记录",
+        "submitReimbursement": "记账",
         "paymentConfigUnavailable": "支付配置不可用，请重连后重试，当前订单已保留。",
         "paymentMethodDisabled": "此支付方式已停用，请选择启用方式，当前订单已保留。",
         "shiftUnavailable": "未选择启用班次，请重新加载班次配置。",

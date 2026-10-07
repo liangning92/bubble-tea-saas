@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      trainingDocument: {"title": "Panduan bergambar (PDF)", "open": "Buka panduan", "download": "Unduh panduan", "loading": "Memuat…", "retry": "Gagal memuat, coba lagi", "load": "Muat panduan"},
       expenseCategoryFeedback: {"nameRequired": "Masukkan nama kategori sebelum menambah.", "exists": "Kategori “{{name}}” sudah ada. Pilih kategori tersebut.", "added": "Kategori “{{name}}” ditambahkan.", "saving": "Menyimpan…", "saveFailed": "Kategori gagal disimpan. Nama tetap disimpan di kolom; periksa koneksi lalu coba lagi.", "loginRequired": "Sesi masuk telah berakhir. Masuk kembali sebelum menambah kategori.", "adminOnly": "Hanya administrator yang dapat menambah atau menghapus kategori pengeluaran.", "loading": "Memuat kategori…", "loadFailed": "Kategori gagal dimuat. Muat ulang sebelum melakukan perubahan.", "reload": "Muat ulang kategori"},
       "receiptPrinting": { "logoFileMissing": "File logo tidak ditemukan. Unggah kembali logo." },
       staffPointSettings: { overtimePerHour: "Poin per jam lembur" },
@@ -3204,6 +3205,7 @@ const resources = {
         "sat": "Sab"
       },
       "expense": {
+        "purchaseQuantity": "Jumlah",
         "desc": "Kelola pengeluaran dan import export",
         "addExpense": "Tambah Pengeluaran",
         "editExpense": "Edit Pengeluaran",
@@ -3680,6 +3682,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      trainingDocument: {"title": "Illustrated manual (PDF)", "open": "Open manual", "download": "Download manual", "loading": "Loading…", "retry": "Could not load, retry", "load": "Load manual"},
       expenseCategoryFeedback: {"nameRequired": "Enter a category name before adding.", "exists": "Category “{{name}}” already exists. Select the existing category.", "added": "Category “{{name}}” added.", "saving": "Saving…", "saveFailed": "Category could not be saved. Your name is retained; check the connection and try again.", "loginRequired": "Your session has expired. Sign in again before adding a category.", "adminOnly": "Only administrators can add or delete expense categories.", "loading": "Loading categories…", "loadFailed": "Categories could not be loaded. Reload before making changes.", "reload": "Reload categories"},
       "receiptPrinting": { "logoFileMissing": "Logo file is missing. Upload it again." },
       staffPointSettings: { overtimePerHour: "Points per overtime hour" },
@@ -6966,6 +6969,7 @@ const resources = {
         "attendanceDeduction": "Attendance Deduction"
       },
       "expense": {
+        "purchaseQuantity": "Quantity",
         "title": "Expense Management",
         "desc": "Manage expenses and import export",
         "addExpense": "Add Expense",
@@ -7293,6 +7297,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      trainingDocument: {"title": "图示操作手册（PDF）", "open": "打开阅读", "download": "下载手册", "loading": "正在读取…", "retry": "读取失败，点击重试", "load": "读取手册"},
       expenseCategoryFeedback: {"nameRequired": "请先输入类别名称，再点击添加。", "exists": "“{{name}}”类别已存在，请直接选择已有类别。", "added": "已添加“{{name}}”类别。", "saving": "正在添加…", "saveFailed": "类别添加失败，名称已保留。请检查连接后重试。", "loginRequired": "登录已过期，请重新登录后添加类别。", "adminOnly": "只有管理员可以添加或删除支出类别。", "loading": "正在读取类别…", "loadFailed": "类别读取失败，请重新读取后再修改。", "reload": "重新读取类别"},
       "receiptPrinting": { "logoFileMissing": "Logo 图片文件缺失，请重新上传。" },
       staffPointSettings: { overtimePerHour: "每小时加班积分" },
@@ -9547,6 +9552,7 @@ const resources = {
         "confirmDelete": "确认删除"
       },
       "expense": {
+        "purchaseQuantity": "数量",
         "title": "支出管理",
         "desc": "管理支出和导入导出",
         "addExpense": "添加支出",

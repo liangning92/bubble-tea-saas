@@ -1,3 +1,4 @@
+import { DOCUMENT_LIMIT, saveDocument, ownedDocument, referencedDocuments } from '../services/TrainingDocumentStore'
 // @ts-ignore - multer types not available
 import multer from 'multer'
 import { VIDEO_LIMIT, saveVideo, ownedVideo, referencedVideos, videoRoot } from '../services/TrainingVideoStore'
@@ -52,4 +53,26 @@ trainingLibraryRouter.get('/videos/:id', async (req: AuthRequest, res) => {
       if (error && !res.headersSent) { const status = 'status' in error && error.status === 416 ? 416 : 404; res.status(status).json({ code: status, message: status === 416 ? 'TRAINING_VIDEO_RANGE_INVALID' : 'TRAINING_VIDEO_NOT_FOUND' }) }
     })
   } catch { if (!res.headersSent) res.status(500).json({ code: 500, message: 'TRAINING_VIDEO_UNAVAILABLE' }) }
+})
+
+const documentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: DOCUMENT_LIMIT, files: 1, fields: 0 } }).single('document')
+trainingLibraryRouter.post('/documents', authorize('admin'), (req: AuthRequest, res, next) => {
+  documentUpload(req, res, (error: { code?: string } | null) => {
+    if (error) return res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ code: error.code === 'LIMIT_FILE_SIZE' ? 413 : 400, message: 'TRAINING_DOCUMENT_UPLOAD_INVALID', maxBytes: DOCUMENT_LIMIT })
+    next()
+  })
+}, async (req: AuthRequest, res) => {
+  if (!req.file) return res.status(400).json({ code: 400, message: 'TRAINING_DOCUMENT_REQUIRED' })
+  try { res.json({ code: 200, data: await saveDocument(req.user!, req.file.buffer, req.file.originalname, req.file.mimetype) }) }
+  catch (error) { const invalid = error instanceof Error && error.message.startsWith('TRAINING_DOCUMENT_'); res.status(invalid ? 400 : 500).json({ code: invalid ? 400 : 500, message: invalid ? (error as Error).message : 'TRAINING_DOCUMENT_UNAVAILABLE' }) }
+})
+trainingLibraryRouter.get('/documents/:id', async (req: AuthRequest, res) => {
+  try {
+    const doc = await ownedDocument(req.user!, req.params.id)
+    if (!doc || (req.user!.role !== 'admin' && !referencedDocuments(await library.readTrainingLibrary(req.user!)).includes(doc.id))) return res.status(404).json({ code: 404, message: 'TRAINING_DOCUMENT_NOT_FOUND' })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Content-Disposition', `inline; filename="training-manual.pdf"; filename*=UTF-8''${encodeURIComponent(doc.name)}`)
+    res.sendFile(doc.id + '.pdf', { root: videoRoot(), dotfiles: 'allow', cacheControl: false }, error => { if (error && !res.headersSent) res.status(404).json({ code: 404, message: 'TRAINING_DOCUMENT_NOT_FOUND' }) })
+  } catch { if (!res.headersSent) res.status(500).json({ code: 500, message: 'TRAINING_DOCUMENT_UNAVAILABLE' }) }
 })

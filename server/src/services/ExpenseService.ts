@@ -25,10 +25,7 @@ export async function getExpenses(storeId: string, options?: {
     if (options.endDate) where.date.lte = options.endDate
   }
 
-  return prisma.expense.findMany({
-    where,
-    orderBy: { date: 'desc' }
-  })
+  return withPurchaseQuantities(await prisma.expense.findMany({ where, orderBy: { date: 'desc' } }))
 }
 
 // Get expense summary by category
@@ -174,4 +171,13 @@ export async function saveExpenseCategories(storeId: string, categories: any[]) 
     }
   })
   return categories
+}
+
+// POS purchase quantity is persisted atomically in the creation audit, without changing legacy money/DB schemas.
+export async function withPurchaseQuantities<T extends { id: string; storeId: string; referenceType: string | null }>(expenses: T[], db: Pick<typeof prisma, 'financeAuditLog'> = prisma): Promise<(T & { quantity?: number })[]> {
+  const purchases = expenses.filter(e => e.referenceType === 'pos_reimbursement')
+  if (!purchases.length) return expenses
+  const logs = await db.financeAuditLog.findMany({ where: { storeId: { in: [...new Set(purchases.map(e => e.storeId))] }, entityType: 'expense', action: 'create', entityId: { in: purchases.map(e => e.id) } }, select: { entityId: true, newValue: true } })
+  const quantities = new Map(logs.map(log => { try { return [log.entityId, JSON.parse(log.newValue || '{}').quantity] as const } catch { return [log.entityId, undefined] as const } }))
+  return expenses.map(e => ({ ...e, ...(quantities.has(e.id) ? { quantity: quantities.get(e.id) } : {}) }))
 }
