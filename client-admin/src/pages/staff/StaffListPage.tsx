@@ -198,6 +198,7 @@ export function StaffListPage() {
                   <th className="pb-3 font-medium">{t('staff.phone')}</th>
                   <th className="pb-3 font-medium">{t('staff.position')}</th>
                   <th className="pb-3 font-medium">{t('staff.employmentType')}</th>
+                  <th className="pb-3 font-medium">{t('salary.baseSalary')}</th>
                   <th className="pb-3 font-medium">{t('staff.status')}</th>
                   <th className="pb-3 font-medium">{t('common.actions')}</th>
                 </tr>
@@ -210,6 +211,7 @@ export function StaffListPage() {
                     <td className="py-3 text-gray-600">{s.phone}</td>
                     <td className="py-3">{getPositionLabel(s.position)}</td>
                     <td className="py-3 text-sm text-gray-600">{getEmploymentTypeLabel(s.employmentType || 'full_time')}</td>
+                    <td className="py-3 font-medium">{s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
                     <td className="py-3">
                       <span className={`badge ${getStatusBadge(s.status)} capitalize`}>
                         {s.status === 'active' ? t('common.active') : s.status === 'inactive' ? t('common.inactive') : s.status}

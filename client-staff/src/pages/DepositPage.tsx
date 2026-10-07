@@ -1,9 +1,10 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { Wallet, RefreshCw, Loader2, ArrowDownRight, ArrowUpRight } from 'lucide-react'
-import { formatDate, formatCurrency } from '../utils/helpers'
+import { formatDate, formatMinorCurrency as formatCurrency } from '../utils/helpers'
 
 interface DeductionLog {
   id: string
@@ -44,14 +45,17 @@ export function DepositPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const [deposit, setDeposit] = useState<Deposit | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   const loadData = async () => {
+    setLoadError(false)
     setIsLoading(true)
     try {
       const response = await staffApi.getMyDeposit()
-      setDeposit(response.data?.data || null)
+      setDeposit(response.data || null)
     } catch (error) {
+      setLoadError(true)
       console.error('Failed to load deposit:', error)
     } finally {
       setIsLoading(false)
@@ -64,7 +68,7 @@ export function DepositPage() {
 
   const getRemainingAmount = () => {
     if (!deposit) return 0
-    return deposit.totalAmount - deposit.deductedAmount - deposit.refundedAmount
+    return Math.max(0, deposit.totalAmount - deposit.deductedAmount)
   }
 
   const getStatusLabel = () => {
@@ -86,6 +90,8 @@ export function DepositPage() {
       default: return 'bg-gray-100 text-gray-700'
     }
   }
+
+  if (loadError) return <LoadFailure retry={loadData} />
 
   if (isLoading) {
     return (

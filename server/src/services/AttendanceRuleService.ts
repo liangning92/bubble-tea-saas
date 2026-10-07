@@ -3,7 +3,7 @@ import { prisma } from '../config/database'
 // Get attendance rules for a store
 export async function getAttendanceRules(storeId: string) {
   return prisma.attendanceRule.findMany({
-    where: { storeId },
+    where: { storeId, isActive: true },
     orderBy: { createdAt: 'desc' }
   })
 }
@@ -11,7 +11,8 @@ export async function getAttendanceRules(storeId: string) {
 // Get default attendance rule for a store
 export async function getDefaultAttendanceRule(storeId: string) {
   return prisma.attendanceRule.findFirst({
-    where: { storeId, isDefault: true, isActive: true }
+    where: { storeId, isActive: true },
+    orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }]
   })
 }
 
@@ -38,16 +39,9 @@ export async function createAttendanceRule(data: {
   sickLeaveDeductionDailyRate?: number
   isDefault?: boolean
 }) {
-  // If setting as default, unset other defaults
-  if (data.isDefault) {
-    await prisma.attendanceRule.updateMany({
-      where: { storeId: data.storeId },
-      data: { isDefault: false }
-    })
-  }
-
-  return prisma.attendanceRule.create({
-    data: data as any
+  return prisma.$transaction(async tx => {
+    if (data.isDefault) await tx.attendanceRule.updateMany({ where: { storeId: data.storeId }, data: { isDefault: false } })
+    return tx.attendanceRule.create({ data: { ...data, lateDeductionType: data.lateDeductionType || 'none', absenceDeductionType: data.absenceDeductionType || 'none', earlyLeaveDeductionType: data.earlyLeaveDeductionType || 'none', sickLeaveDeductionType: data.sickLeaveDeductionType || 'none' } })
   })
 }
 
@@ -74,20 +68,12 @@ export async function updateAttendanceRule(id: string, data: Partial<{
   isActive: boolean
   isDefault: boolean
 }>) {
-  // If setting as default, unset other defaults
-  if (data.isDefault) {
-    const rule = await prisma.attendanceRule.findUnique({ where: { id } })
-    if (rule) {
-      await prisma.attendanceRule.updateMany({
-        where: { storeId: rule.storeId, id: { not: id } },
-        data: { isDefault: false }
-      })
+  return prisma.$transaction(async tx => {
+    if (data.isDefault) {
+      const rule = await tx.attendanceRule.findUniqueOrThrow({ where: { id } })
+      await tx.attendanceRule.updateMany({ where: { storeId: rule.storeId, id: { not: id } }, data: { isDefault: false } })
     }
-  }
-
-  return prisma.attendanceRule.update({
-    where: { id },
-    data
+    return tx.attendanceRule.update({ where: { id }, data })
   })
 }
 
@@ -109,7 +95,7 @@ export async function calculateLateDeduction(
   const workStart = new Date(checkInTime)
   workStart.setHours(hours, minutes, 0, 0)
 
-  const graceEnd = new Date(workStart.getTime() + (rule.gracePeriod || 15) * 60 * 1000)
+  const graceEnd = new Date(workStart.getTime() + (rule.gracePeriod ?? 15) * 60 * 1000)
 
   if (checkInTime <= graceEnd) {
     return { shouldDeduct: false, amount: 0, type: 'none' }

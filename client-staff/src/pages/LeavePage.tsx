@@ -325,6 +325,13 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
     fetchLeaveTypes()
   }, [])
 
+  useEffect(() => {
+    if (startDate && endDate) {
+      const days = (new Date(endDate + 'T00:00:00+07:00').getTime() - new Date(startDate + 'T00:00:00+07:00').getTime()) / 86400000 + 1
+      if (Number.isInteger(days) && days > 0) setTotalDays(halfDay && days === 1 ? 0.5 : days)
+    }
+  }, [startDate, endDate, halfDay])
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -354,7 +361,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
         leaveType,
         startDate,
         endDate,
-        totalDays,
+        totalDays: halfDay ? 0.5 : totalDays,
         reason,
         halfDay,
         attachmentUrl: attachmentUrl || undefined
@@ -423,7 +430,9 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('leave.numberOfDays')}</label>
             <input
               type="number"
-              min="1"
+              min="0.5"
+              step="0.5"
+              readOnly
               value={totalDays}
               onChange={(e) => setTotalDays(parseInt(e.target.value) || 1)}
               className="w-full p-3 border border-gray-200 rounded-xl"

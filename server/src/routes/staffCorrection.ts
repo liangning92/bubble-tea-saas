@@ -1,14 +1,35 @@
+import { parseBusinessDate, BusinessInputError } from '../utils/businessDate'
+import { formatDate, startOfDay } from '../utils/dateUtils'
+import { requireResourceStore } from '../middlewares/resourceStore'
+import { validateBody } from '../utils/validation'
+import { z } from 'zod'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { isFeatureEnabled } from '../services/StaffConfigService'
 import { prisma } from '../config/database'
 
 const router = Router()
+const shiftSwapRouter = Router()
+const overtimeRouter = Router()
+class WorkflowConflict extends Error {}
+const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+const date = z.string().transform(value => parseBusinessDate(value))
+const correctionSchema = z.object({ date, originalCheckIn: z.string().optional(), originalCheckOut: z.string().optional(), correctCheckIn: z.union([time, z.literal('')]).optional(), correctCheckOut: z.union([time, z.literal('')]).optional(), reason: z.string().trim().min(1) }).refine(value => !!value.correctCheckIn || !!value.correctCheckOut, 'Corrected check-in or check-out is required')
+const overtimeSchema = z.object({ date, startTime: time, endTime: time, reason: z.string().trim().min(1) }).refine(value => value.startTime !== value.endTime, 'Start and end times must differ')
+const swapSchema = z.object({ originalDate: date, originalShift: z.string().min(1), targetDate: date, targetShift: z.string().min(1), targetStaffId: z.string().min(1).optional(), reason: z.string().optional() })
+const scope = (model: 'attendanceCorrection' | 'shiftSwap' | 'overtimeRequest') => requireResourceStore(req => (prisma[model] as any).findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
+async function decide(model: 'attendanceCorrection' | 'shiftSwap' | 'overtimeRequest', id: string, status: string, processedBy: string, adminNote?: string) {
+  return prisma.$transaction(async tx => {
+    const changed = await (tx[model] as any).updateMany({ where: { id, status: 'pending' }, data: { status, adminNote, processedBy, processedAt: new Date() } })
+    if (changed.count !== 1) throw new WorkflowConflict('Request is no longer pending')
+    return (tx[model] as any).findUniqueOrThrow({ where: { id } })
+  })
+}
 
 // ========== 考勤纠错 ==========
 
 // POST /api/staff-correction -员工提交考勤纠错申请
-router.post('/', authenticate, async (req: AuthRequest, res) => {
+router.post('/', authenticate, validateBody(correctionSchema), async (req: AuthRequest, res) => {
   try {
     const { date, originalCheckIn, originalCheckOut, correctCheckIn, correctCheckOut, reason } = req.body
     const staffId = req.user!.staffId
@@ -18,7 +39,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       data: {
         staffId,
         storeId,
-        date: new Date(date),
+        date,
         originalCheckIn,
         originalCheckOut,
         correctCheckIn,
@@ -34,6 +55,8 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Submit correction error:', error)
     res.status(500).json({ code: 500, message: 'Failed to submit correction' })
   }
@@ -55,6 +78,8 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get corrections error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get corrections' })
   }
@@ -81,13 +106,15 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get corrections error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get corrections' })
   }
 })
 
 // PUT /api/staff-correction/:id/approve - 批准纠错申请
-router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id/approve', authenticate, authorize('admin', 'manager'), scope('attendanceCorrection'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { adminNote } = req.body
@@ -98,37 +125,24 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       return res.status(404).json({ code: 404, message: 'Correction not found' })
     }
 
-    // 更新纠错申请状态
-    const updated = await prisma.attendanceCorrection.update({
-      where: { id },
-      data: {
-        status: 'approved',
-        adminNote,
-        processedBy,
-        processedAt: new Date()
-      }
+    const updated = await prisma.$transaction(async tx => {
+      const changed = await tx.attendanceCorrection.updateMany({ where: { id, status: 'pending' }, data: { status: 'approved', adminNote, processedBy, processedAt: new Date() } })
+      if (changed.count !== 1) throw new WorkflowConflict('Request is no longer pending')
+      const day = startOfDay(correction.date)
+      const dayText = formatDate(day)
+      const existing = await tx.attendance.findFirst({ where: { staffId: correction.staffId, checkInTime: { gte: day, lt: new Date(day.getTime() + 86400000) } } })
+      const checkInTime = correction.correctCheckIn ? new Date(`${dayText}T${correction.correctCheckIn}:00+07:00`) : existing?.checkInTime
+      if (!checkInTime) throw new WorkflowConflict('A corrected check-in is required for a missing attendance record')
+      let checkOutTime = correction.correctCheckOut ? new Date(`${dayText}T${correction.correctCheckOut}:00+07:00`) : existing?.checkOutTime
+      if (checkOutTime && checkOutTime < checkInTime) checkOutTime = new Date(checkOutTime.getTime() + 86400000)
+      const rule = await tx.attendanceRule.findFirst({ where: { storeId: correction.storeId, isActive: true }, orderBy: { isDefault: 'desc' } })
+      const scheduledStart = new Date(`${dayText}T${rule?.workStartTime || '09:00'}:00+07:00`)
+      const status = checkInTime.getTime() > scheduledStart.getTime() + (rule?.gracePeriod ?? 15) * 60000 ? 'late' : 'normal'
+      const attendanceData = { checkInTime, checkOutTime, status }
+      if (existing) await tx.attendance.update({ where: { id: existing.id }, data: attendanceData })
+      else await tx.attendance.create({ data: { staffId: correction.staffId, ...attendanceData } })
+      return tx.attendanceCorrection.findUniqueOrThrow({ where: { id } })
     })
-
-    // 如果有正确的时间，更新考勤记录
-    if (correction.correctCheckIn || correction.correctCheckOut) {
-      const dateStr = correction.date.toISOString().slice(0, 10)
-      const existing = await prisma.attendance.findFirst({
-        where: {
-          staffId: correction.staffId,
-          checkInTime: { gte: new Date(dateStr + 'T00:00:00'), lt: new Date(dateStr + 'T23:59:59') }
-        }
-      })
-
-      if (existing) {
-        await prisma.attendance.update({
-          where: { id: existing.id },
-          data: {
-            checkInTime: correction.correctCheckIn ? new Date(dateStr + 'T' + correction.correctCheckIn + ':00') : existing.checkInTime,
-            checkOutTime: correction.correctCheckOut ? new Date(dateStr + 'T' + correction.correctCheckOut + ':00') : existing.checkOutTime
-          }
-        })
-      }
-    }
 
     res.json({
       code: 200,
@@ -137,27 +151,21 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Approve correction error:', error)
     res.status(500).json({ code: 500, message: 'Failed to approve correction' })
   }
 })
 
 // PUT /api/staff-correction/:id/reject - 拒绝纠错申请
-router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id/reject', authenticate, authorize('admin', 'manager'), scope('attendanceCorrection'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { adminNote } = req.body
     const processedBy = req.user!.id
 
-    const updated = await prisma.attendanceCorrection.update({
-      where: { id },
-      data: {
-        status: 'rejected',
-        adminNote,
-        processedBy,
-        processedAt: new Date()
-      }
-    })
+    const updated = await decide('attendanceCorrection', id, 'rejected', processedBy, adminNote)
 
     res.json({
       code: 200,
@@ -166,6 +174,8 @@ router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (re
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Reject correction error:', error)
     res.status(500).json({ code: 500, message: 'Failed to reject correction' })
   }
@@ -174,20 +184,25 @@ router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (re
 // ========== 调班申请 ==========
 
 // POST /api/shift-swap - 员工提交调班申请
-router.post('/', authenticate, async (req: AuthRequest, res) => {
+shiftSwapRouter.post('/', authenticate, validateBody(swapSchema), async (req: AuthRequest, res) => {
   try {
-    const { originalDate, originalShift, targetDate, targetShift, reason } = req.body
+    const { originalDate, originalShift, targetDate, targetShift, targetStaffId, reason } = req.body
     const staffId = req.user!.staffId
     const storeId = req.user!.storeId
 
+    if (targetStaffId) {
+      const target = await prisma.staff.findUnique({ where: { id: targetStaffId } })
+      if (!target || target.storeId !== storeId || target.id === staffId) return res.status(400).json({ code: 400, message: 'Target must be another employee in this store' })
+    }
     const swap = await prisma.shiftSwap.create({
       data: {
         staffId,
         storeId,
-        originalDate: new Date(originalDate),
+        originalDate,
         originalShift,
-        targetDate: new Date(targetDate),
+        targetDate,
         targetShift,
+        targetStaffId,
         reason
       }
     })
@@ -199,13 +214,15 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Submit shift swap error:', error)
     res.status(500).json({ code: 500, message: 'Failed to submit shift swap' })
   }
 })
 
 // GET /api/shift-swap/my - 获取当前员工的调班申请
-router.get('/my', authenticate, async (req: AuthRequest, res) => {
+shiftSwapRouter.get('/my', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
 
@@ -220,13 +237,15 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get shift swaps error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get shift swaps' })
   }
 })
 
 // GET /api/shift-swap - 管理端获取所有调班申请
-router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+shiftSwapRouter.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
     const { status } = req.query
@@ -246,13 +265,15 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get shift swaps error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get shift swaps' })
   }
 })
 
 // PUT /api/shift-swap/:id/approve - 批准调班申请
-router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+shiftSwapRouter.put('/:id/approve', authenticate, authorize('admin', 'manager'), scope('shiftSwap'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { adminNote } = req.body
@@ -268,7 +289,7 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
     const confirmationRequired = await isFeatureEnabled(storeId, 'shiftSwapConfirmation')
 
     // If confirmation required and target hasn't confirmed, don't allow approval yet
-    if (confirmationRequired && !swap.targetConfirmed) {
+    if (confirmationRequired && swap.targetStaffId && !swap.targetConfirmed) {
       return res.status(400).json({
         code: 400,
         message: 'Target staff has not confirmed this shift swap yet',
@@ -276,42 +297,19 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       })
     }
 
-    // 更新调班申请状态
-    const updated = await prisma.shiftSwap.update({
-      where: { id },
-      data: {
-        status: 'approved',
-        adminNote,
-        processedBy,
-        processedAt: new Date()
+    const updated = await prisma.$transaction(async tx => {
+      const changed = await tx.shiftSwap.updateMany({ where: { id, status: 'pending', ...(confirmationRequired && swap.targetStaffId ? { targetConfirmed: true } : {}) }, data: { status: 'approved', adminNote, processedBy, processedAt: new Date() } })
+      if (changed.count !== 1) throw new WorkflowConflict('Request is no longer pending')
+      const originalStart = startOfDay(swap.originalDate)
+      const targetStart = startOfDay(swap.targetDate)
+      const original = await tx.schedule.updateMany({ where: { staffId: swap.staffId, shift: swap.originalShift, date: { gte: originalStart, lt: new Date(originalStart.getTime() + 86400000) } }, data: { date: targetStart, shift: swap.targetShift } })
+      if (original.count !== 1) throw new WorkflowConflict('Original schedule is missing or ambiguous')
+      if (swap.targetStaffId) {
+        const target = await tx.schedule.updateMany({ where: { staffId: swap.targetStaffId, shift: swap.targetShift, date: { gte: targetStart, lt: new Date(targetStart.getTime() + 86400000) } }, data: { date: originalStart, shift: swap.originalShift } })
+        if (target.count !== 1) throw new WorkflowConflict('Target schedule is missing or ambiguous')
       }
+      return tx.shiftSwap.findUniqueOrThrow({ where: { id } })
     })
-
-    // 更新排班记录 - 原申请人的原日期排班改为目标日期和目标班次
-    await prisma.schedule.updateMany({
-      where: {
-        staffId: swap.staffId,
-        date: swap.originalDate
-      },
-      data: {
-        date: swap.targetDate,
-        shift: swap.targetShift
-      }
-    })
-
-    // 如果有目标员工，也需要更新目标员工的排班
-    if (swap.targetStaffId) {
-      await prisma.schedule.updateMany({
-        where: {
-          staffId: swap.targetStaffId,
-          date: swap.targetDate
-        },
-        data: {
-          date: swap.originalDate,
-          shift: swap.originalShift
-        }
-      })
-    }
 
     res.json({
       code: 200,
@@ -320,13 +318,15 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Approve shift swap error:', error)
     res.status(500).json({ code: 500, message: 'Failed to approve shift swap' })
   }
 })
 
 // PUT /api/shift-swap/:id/confirm - 目标员工确认调班申请
-router.put('/:id/confirm', authenticate, async (req: AuthRequest, res) => {
+shiftSwapRouter.put('/:id/confirm', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const staffId = req.user!.staffId
@@ -359,13 +359,15 @@ router.put('/:id/confirm', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Confirm shift swap error:', error)
     res.status(500).json({ code: 500, message: 'Failed to confirm shift swap' })
   }
 })
 
 // GET /api/shift-swap/pending-confirm - 获取需要当前员工确认的调班申请
-router.get('/pending-confirm', authenticate, async (req: AuthRequest, res) => {
+shiftSwapRouter.get('/pending-confirm', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
 
@@ -387,27 +389,21 @@ router.get('/pending-confirm', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get pending confirm error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get pending confirms' })
   }
 })
 
 // PUT /api/shift-swap/:id/reject - 拒绝调班申请
-router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+shiftSwapRouter.put('/:id/reject', authenticate, authorize('admin', 'manager'), scope('shiftSwap'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { adminNote } = req.body
     const processedBy = req.user!.id
 
-    const updated = await prisma.shiftSwap.update({
-      where: { id },
-      data: {
-        status: 'rejected',
-        adminNote,
-        processedBy,
-        processedAt: new Date()
-      }
-    })
+    const updated = await decide('shiftSwap', id, 'rejected', processedBy, adminNote)
 
     res.json({
       code: 200,
@@ -416,6 +412,8 @@ router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (re
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Reject shift swap error:', error)
     res.status(500).json({ code: 500, message: 'Failed to reject shift swap' })
   }
@@ -424,7 +422,7 @@ router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (re
 // ========== 加班申请 ==========
 
 // POST /api/overtime - 员工提交加班申请
-router.post('/', authenticate, async (req: AuthRequest, res) => {
+overtimeRouter.post('/', authenticate, validateBody(overtimeSchema), async (req: AuthRequest, res) => {
   try {
     const { date, startTime, endTime, reason } = req.body
     const staffId = req.user!.staffId
@@ -433,13 +431,14 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     // 计算加班小时数
     const [startHour, startMin] = startTime.split(':').map(Number)
     const [endHour, endMin] = endTime.split(':').map(Number)
-    const hours = (endHour - startHour) + (endMin - startMin) / 60
+    const elapsed = (endHour - startHour) + (endMin - startMin) / 60
+    const hours = elapsed > 0 ? elapsed : elapsed + 24
 
     const overtime = await prisma.overtimeRequest.create({
       data: {
         staffId,
         storeId,
-        date: new Date(date),
+        date,
         startTime,
         endTime,
         reason,
@@ -454,13 +453,15 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Submit overtime error:', error)
     res.status(500).json({ code: 500, message: 'Failed to submit overtime' })
   }
 })
 
 // GET /api/overtime/my - 获取当前员工的加班申请
-router.get('/my', authenticate, async (req: AuthRequest, res) => {
+overtimeRouter.get('/my', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
 
@@ -475,13 +476,15 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get overtime requests error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get overtime requests' })
   }
 })
 
 // GET /api/overtime - 管理端获取所有加班申请
-router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+overtimeRouter.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
     const { status } = req.query
@@ -501,27 +504,21 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Get overtime requests error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get overtime requests' })
   }
 })
 
 // PUT /api/overtime/:id/approve - 批准加班申请
-router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+overtimeRouter.put('/:id/approve', authenticate, authorize('admin', 'manager'), scope('overtimeRequest'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { adminNote } = req.body
     const processedBy = req.user!.id
 
-    const updated = await prisma.overtimeRequest.update({
-      where: { id },
-      data: {
-        status: 'approved',
-        adminNote,
-        processedBy,
-        processedAt: new Date()
-      }
-    })
+    const updated = await decide('overtimeRequest', id, 'approved', processedBy, adminNote)
 
     res.json({
       code: 200,
@@ -530,27 +527,21 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), async (r
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Approve overtime error:', error)
     res.status(500).json({ code: 500, message: 'Failed to approve overtime' })
   }
 })
 
 // PUT /api/overtime/:id/reject - 拒绝加班申请
-router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+overtimeRouter.put('/:id/reject', authenticate, authorize('admin', 'manager'), scope('overtimeRequest'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { adminNote } = req.body
     const processedBy = req.user!.id
 
-    const updated = await prisma.overtimeRequest.update({
-      where: { id },
-      data: {
-        status: 'rejected',
-        adminNote,
-        processedBy,
-        processedAt: new Date()
-      }
-    })
+    const updated = await decide('overtimeRequest', id, 'rejected', processedBy, adminNote)
 
     res.json({
       code: 200,
@@ -559,9 +550,11 @@ router.put('/:id/reject', authenticate, authorize('admin', 'manager'), async (re
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof WorkflowConflict) return res.status(409).json({ code: 409, message: error.message })
+    if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })
     console.error('Reject overtime error:', error)
     res.status(500).json({ code: 500, message: 'Failed to reject overtime' })
   }
 })
 
-export { router as staffCorrectionRouter }
+export { router as staffCorrectionRouter, shiftSwapRouter, overtimeRouter }

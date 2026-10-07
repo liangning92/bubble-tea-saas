@@ -14,7 +14,7 @@ export function StockAlertsPage() {
 
   useEffect(()=>{setForecastDays([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)},[context.forecastDays])
 
-  const {data:settings}=useQuery({queryKey:['inventory-alert-config'],queryFn:()=>inventoryApi.getAlertConfig()})
+  const {data:settings}=useQuery({queryKey:['inventory-alert-config',context.storeId],enabled:context.valid,queryFn:()=>inventoryApi.getAlertConfig()})
   const config=settings?.data?.data
   const fmt=(v:number|null)=>v===null?'—':Number(v.toFixed(3))
   // 低库存预警

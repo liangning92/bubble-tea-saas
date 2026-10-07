@@ -33,14 +33,9 @@ export async function approveReimbursement(reimbursementId: string, approverId: 
   if (!reimbursement) throw new Error('Reimbursement not found')
   if (reimbursement.status !== 'pending') throw new Error('Reimbursement is not pending')
 
-  return prisma.reimbursement.update({
-    where: { id: reimbursementId },
-    data: {
-      status: 'approved',
-      approvedBy: approverId,
-      approvedAt: new Date()
-    }
-  })
+  const changed = await prisma.reimbursement.updateMany({ where: { id: reimbursementId, status: 'pending' }, data: { status: 'approved', approvedBy: approverId, approvedAt: new Date() } })
+  if (changed.count !== 1) throw new Error('Reimbursement is no longer pending')
+  return prisma.reimbursement.findUniqueOrThrow({ where: { id: reimbursementId } })
 }
 
 // Reject reimbursement
@@ -49,15 +44,9 @@ export async function rejectReimbursement(reimbursementId: string, approverId: s
   if (!reimbursement) throw new Error('Reimbursement not found')
   if (reimbursement.status !== 'pending') throw new Error('Reimbursement is not pending')
 
-  return prisma.reimbursement.update({
-    where: { id: reimbursementId },
-    data: {
-      status: 'rejected',
-      approvedBy: approverId,
-      approvedAt: new Date(),
-      rejectionReason: reason
-    }
-  })
+  const changed = await prisma.reimbursement.updateMany({ where: { id: reimbursementId, status: 'pending' }, data: { status: 'rejected', approvedBy: approverId, approvedAt: new Date(), rejectionReason: reason } })
+  if (changed.count !== 1) throw new Error('Reimbursement is no longer pending')
+  return prisma.reimbursement.findUniqueOrThrow({ where: { id: reimbursementId } })
 }
 
 // Mark as paid
@@ -73,8 +62,8 @@ export async function markAsPaid(reimbursementId: string, paidBy: string) {
 
   return prisma.$transaction(async (tx) => {
     // Update reimbursement status
-    const updated = await tx.reimbursement.update({
-      where: { id: reimbursementId },
+    const changed = await tx.reimbursement.updateMany({
+      where: { id: reimbursementId, status: 'approved' },
       data: {
         status: 'paid',
         paidAt: new Date(),
@@ -82,6 +71,7 @@ export async function markAsPaid(reimbursementId: string, paidBy: string) {
       }
     })
 
+    if (changed.count !== 1) throw new Error('Reimbursement is no longer approved')
     // Auto-create expense record
     await tx.expense.create({
       data: {
@@ -95,7 +85,7 @@ export async function markAsPaid(reimbursementId: string, paidBy: string) {
       }
     })
 
-    return updated
+    return tx.reimbursement.findUniqueOrThrow({ where: { id: reimbursementId } })
   })
 }
 

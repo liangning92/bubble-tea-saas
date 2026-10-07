@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -6,6 +7,7 @@ import { Clock, Loader2 } from 'lucide-react'
 
 interface AttendanceRule {
   id: string
+  isDefault: boolean
   name: string
   workStartTime: string
   workEndTime: string
@@ -23,6 +25,7 @@ export function AttendanceRulesPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const [rule, setRule] = useState<AttendanceRule | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,17 +33,20 @@ export function AttendanceRulesPage() {
   }, [user])
 
   const loadRules = async () => {
+    setLoadError(false)
+    setLoading(true)
     try {
       const res = await staffApi.getAttendanceRules()
-      if (res.data?.data?.[0]) {
-        setRule(res.data.data[0])
-      }
+      setRule(res.data?.find((item: AttendanceRule) => item.isDefault) || res.data?.[0] || null)
     } catch (error) {
+      setLoadError(true)
       console.error('Failed to load rules:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  if (loadError) return <LoadFailure retry={loadRules} />
 
   if (loading) {
     return (
@@ -97,7 +103,7 @@ export function AttendanceRulesPage() {
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">{t('attendanceRules.fixedDeduction')}</span>
                     <span className="font-medium text-red-600">
-                      Rp {rule.lateDeductionFixed?.toLocaleString() || 0}
+                      Rp {((rule.lateDeductionFixed || 0) / 100).toLocaleString('id-ID')}
                     </span>
                   </div>
                 ) : rule.lateDeductionType === 'daily_rate' ? (
@@ -119,7 +125,7 @@ export function AttendanceRulesPage() {
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">{t('attendanceRules.fixedDeduction')}</span>
                     <span className="font-medium text-red-600">
-                      Rp {rule.absenceDeductionFixed?.toLocaleString() || 0}
+                      Rp {((rule.absenceDeductionFixed || 0) / 100).toLocaleString('id-ID')}
                     </span>
                   </div>
                 ) : rule.absenceDeductionType === 'daily_rate' ? (

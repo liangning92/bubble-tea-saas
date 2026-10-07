@@ -1,3 +1,4 @@
+import { formatDate } from '../utils/dateUtils'
 import prisma from '../config/database'
 
 export interface LeaveApplication {
@@ -26,11 +27,13 @@ export interface LeaveBalanceUpdate {
 export async function applyLeave(data: LeaveApplication, autoInitBalance: boolean = true) {
   const { staffId, leaveType, totalDays, startDate, endDate } = data
 
+  const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: data.storeId, code: leaveType } } })
+  const deductBalance = configuredType?.deductBalance ?? ['annual', 'sick'].includes(leaveType)
   // Get current year
-  const year = new Date().getFullYear()
+  const year = Number(formatDate(startDate).slice(0, 4))
 
   // Check leave balance for paid leave types
-  if (leaveType === 'annual' || leaveType === 'sick') {
+  if (deductBalance) {
     let balance = await getLeaveBalance(staffId, year)
 
     // If no balance and auto-init is enabled, create one automatically
@@ -45,7 +48,7 @@ export async function applyLeave(data: LeaveApplication, autoInitBalance: boolea
       throw new Error('Leave balance not initialized. Please contact HR.')
     }
 
-    if (leaveType === 'annual') {
+    if (leaveType !== 'sick') {
       const available = balance.annualLeave + balance.broughtForward - balance.usedLeave
       if (totalDays > available) {
         throw new Error(`Insufficient annual leave. Available: ${available} days`)
@@ -58,8 +61,15 @@ export async function applyLeave(data: LeaveApplication, autoInitBalance: boolea
     }
   }
 
+  if (Number(formatDate(endDate).slice(0, 4)) !== year) throw new Error('Submit a separate leave application for each calendar year')
+  return prisma.$transaction(async tx => {
+    const key = `leave.period.${staffId}.${year}`
+    await tx.config.upsert({ where: { storeId_key: { storeId: data.storeId, key } }, create: { storeId: data.storeId, key, category: 'staff', value: new Date().toISOString() }, update: { value: new Date().toISOString() } })
+    const active = await tx.leave.findMany({ where: { staffId, status: { in: ['pending', 'approved'] }, startDate: { lt: new Date(`${year + 1}-01-01T00:00:00+07:00`) }, endDate: { gte: new Date(`${year}-01-01T00:00:00+07:00`) } } })
+    if (active.some(leave => leave.startDate <= endDate && leave.endDate >= startDate)) throw new Error('Selected dates overlap an existing leave application')
+    if (configuredType?.maxDaysPerYear != null && active.filter(leave => leave.leaveType === leaveType).reduce((sum, leave) => sum + leave.totalDays, 0) + totalDays > configuredType.maxDaysPerYear) throw new Error('Leave exceeds the configured yearly limit')
   // Create leave application
-  return prisma.leave.create({
+  return tx.leave.create({
     data: {
       staffId,
       storeId: data.storeId,
@@ -77,6 +87,7 @@ export async function applyLeave(data: LeaveApplication, autoInitBalance: boolea
       staff: { select: { id: true, name: true, employeeNumber: true } }
     }
   })
+  })
 }
 
 // Approve leave
@@ -85,13 +96,15 @@ export async function approveLeave(leaveId: string, approverId: string) {
   if (!leave) throw new Error('Leave not found')
   if (leave.status !== 'pending') throw new Error('Leave is not pending')
 
-  const year = leave.startDate.getFullYear()
+  const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: leave.storeId, code: leave.leaveType } } })
+  const deductBalance = configuredType?.deductBalance ?? ['annual', 'sick'].includes(leave.leaveType)
+  const year = Number(formatDate(leave.startDate).slice(0, 4))
 
   // Use transaction to ensure atomicity: update status and deduct balance together
   return prisma.$transaction(async (tx) => {
     // Update leave status
-    const updated = await tx.leave.update({
-      where: { id: leaveId },
+    const changed = await tx.leave.updateMany({
+      where: { id: leaveId, status: 'pending' },
       data: {
         status: 'approved',
         approvedBy: approverId,
@@ -99,28 +112,30 @@ export async function approveLeave(leaveId: string, approverId: string) {
       }
     })
 
+    if (changed.count !== 1) throw new Error('Leave is no longer pending')
     // Deduct leave balance within transaction
     const balance = await tx.leaveBalance.findUnique({
       where: { staffId_year: { staffId: leave.staffId, year } }
     })
 
+    if (!balance && deductBalance) throw new Error('Leave balance is not initialized')
     if (balance) {
       const updateData: any = {}
-      if (leave.leaveType === 'annual') {
+      if (deductBalance && leave.leaveType !== 'sick') {
+        if (balance.usedLeave + leave.totalDays > balance.annualLeave + balance.broughtForward) throw new Error('Insufficient annual leave balance')
         updateData.usedLeave = balance.usedLeave + leave.totalDays
-      } else if (leave.leaveType === 'sick') {
+      } else if (deductBalance && leave.leaveType === 'sick') {
+        if (balance.usedSick + leave.totalDays > balance.sickLeave) throw new Error('Insufficient sick leave balance')
         updateData.usedSick = balance.usedSick + leave.totalDays
       }
 
       if (Object.keys(updateData).length > 0) {
-        await tx.leaveBalance.update({
-          where: { id: balance.id },
-          data: updateData
-        })
+        const used = await tx.leaveBalance.updateMany({ where: { id: balance.id, usedLeave: balance.usedLeave, usedSick: balance.usedSick }, data: updateData })
+        if (used.count !== 1) throw new Error('Leave balance changed; reload before retrying')
       }
     }
 
-    return updated
+    return tx.leave.findUniqueOrThrow({ where: { id: leaveId } })
   })
 }
 
@@ -130,15 +145,9 @@ export async function rejectLeave(leaveId: string, approverId: string, reason: s
   if (!leave) throw new Error('Leave not found')
   if (leave.status !== 'pending') throw new Error('Leave is not pending')
 
-  return prisma.leave.update({
-    where: { id: leaveId },
-    data: {
-      status: 'rejected',
-      approvedBy: approverId,
-      approvedAt: new Date(),
-      rejectionReason: reason
-    }
-  })
+  const changed = await prisma.leave.updateMany({ where: { id: leaveId, status: 'pending' }, data: { status: 'rejected', approvedBy: approverId, approvedAt: new Date(), rejectionReason: reason } })
+  if (changed.count !== 1) throw new Error('Leave is no longer pending')
+  return prisma.leave.findUniqueOrThrow({ where: { id: leaveId } })
 }
 
 // Cancel leave (by staff)
@@ -148,10 +157,9 @@ export async function cancelLeave(leaveId: string, staffId: string) {
   if (leave.staffId !== staffId) throw new Error('Not authorized')
   if (leave.status !== 'pending') throw new Error('Only pending leaves can be cancelled')
 
-  return prisma.leave.update({
-    where: { id: leaveId },
-    data: { status: 'cancelled' }
-  })
+  const changed = await prisma.leave.updateMany({ where: { id: leaveId, staffId, status: 'pending' }, data: { status: 'cancelled' } })
+  if (changed.count !== 1) throw new Error('Leave is no longer pending')
+  return prisma.leave.findUniqueOrThrow({ where: { id: leaveId } })
 }
 
 // Get leave balance

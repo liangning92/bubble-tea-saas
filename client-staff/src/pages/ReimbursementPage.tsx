@@ -43,6 +43,7 @@ export function ReimbursementPage() {
     other: t('reimbursement.typeOther')
   }
 
+  const [configuredTypes, setConfiguredTypes] = useState<Array<{code: string; name: string}>>([])
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showApplyModal, setShowApplyModal] = useState(false)
@@ -56,7 +57,8 @@ export function ReimbursementPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const response = await staffApi.getMyReimbursements()
+      const [response, types] = await Promise.all([staffApi.getMyReimbursements(), staffApi.getReimbursementTypes()])
+      setConfiguredTypes(types.data || [])
       setReimbursements(response.data || [])
     } catch (error) {
       console.error('Failed to load reimbursements:', error)
@@ -124,7 +126,7 @@ export function ReimbursementPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <span className="inline-block px-2 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary">
-                        {TYPE_LABELS[item.type] || item.type}
+                        {configuredTypes.find(type => type.code === item.type)?.name || TYPE_LABELS[item.type] || item.type}
                       </span>
                     </div>
                     <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[item.status]}`}>
@@ -168,6 +170,7 @@ export function ReimbursementPage() {
       {/* Apply Modal */}
       {showApplyModal && (
         <ApplyReimbursementModal
+          types={configuredTypes}
           onClose={() => setShowApplyModal(false)}
           onSuccess={() => {
             setShowApplyModal(false)
@@ -180,13 +183,14 @@ export function ReimbursementPage() {
 }
 
 interface ApplyReimbursementModalProps {
+  types: Array<{code: string; name: string}>
   onClose: () => void
   onSuccess: () => void
 }
 
-function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModalProps) {
+function ApplyReimbursementModal({ onClose, onSuccess, types }: ApplyReimbursementModalProps) {
   const { t } = useTranslation()
-  const [reimbType, setReimbType] = useState('transportation')
+  const [reimbType, setReimbType] = useState(types[0]?.code || 'transportation')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -259,11 +263,13 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
               onChange={(e) => setReimbType(e.target.value)}
               className="w-full p-3 border border-gray-200 rounded-xl"
             >
+              {types.length ? types.map(type => <option key={type.code} value={type.code}>{type.name}</option>) : <>
               <option value="transportation">{t('reimbursement.typeTransportation')}</option>
               <option value="meals">{t('reimbursement.typeMeals')}</option>
               <option value="communication">{t('reimbursement.typeCommunication')}</option>
               <option value="medical">{t('reimbursement.typeMedical')}</option>
               <option value="other">{t('reimbursement.typeOther')}</option>
+              </>}
             </select>
           </div>
 

@@ -15,7 +15,7 @@ export function HygienePage() {
     setLoading(true)
     try {
       const data = await staffApi.getMyTasks(selectedDate)
-      setTasks(data?.data?.data?.list || [])
+      setTasks(data?.data?.list || [])
     } catch (err) {
       console.error('Failed to load tasks:', err)
     } finally {

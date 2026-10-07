@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -8,18 +9,19 @@ interface DepositRule {
   id: string
   name: string
   depositAmount: number
-  monthlyDeduction: number
+  monthlyAmount: number | null
   maxDeductions: number
   deductionType: string
   refundType: string
   prorataPercent: number | null
-  status: string
+  isActive: boolean
 }
 
 export function DepositRulesPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const [rules, setRules] = useState<DepositRule[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -27,17 +29,20 @@ export function DepositRulesPage() {
   }, [user])
 
   const loadRules = async () => {
+    setLoadError(false)
+    setLoading(true)
     try {
       const res = await staffApi.getDepositRules()
-      if (res.data?.data) {
-        setRules(res.data.data)
-      }
+      setRules(res.data || [])
     } catch (error) {
+      setLoadError(true)
       console.error('Failed to load deposit rules:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  if (loadError) return <LoadFailure retry={loadRules} />
 
   if (loading) {
     return (
@@ -67,8 +72,8 @@ export function DepositRulesPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">{rule.name}</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${rule.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {rule.status === 'active' ? t('common.active') : t('common.inactive')}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${rule.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {rule.isActive ? t('common.active') : t('common.inactive')}
                   </span>
                 </div>
               </div>
@@ -78,7 +83,7 @@ export function DepositRulesPage() {
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-gray-600">{t('deposit.totalAmount')}</span>
                   <span className="font-semibold text-orange-600">
-                    Rp {rule.depositAmount.toLocaleString()}
+                    Rp {(rule.depositAmount / 100).toLocaleString('id-ID')}
                   </span>
                 </div>
 
@@ -86,7 +91,7 @@ export function DepositRulesPage() {
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-gray-600">{t('deposit.monthlyDeduction')}</span>
                   <span className="font-medium">
-                    Rp {rule.monthlyDeduction.toLocaleString()}
+                    Rp {((rule.monthlyAmount || 0) / 100).toLocaleString('id-ID')}
                   </span>
                 </div>
 
@@ -102,7 +107,7 @@ export function DepositRulesPage() {
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-gray-600">{t('deposit.deductionType')}</span>
                   <span className="font-medium">
-                    {rule.deductionType === 'monthly' ? t('deposit.monthly') : t('deposit.oneTime')}
+                    {rule.deductionType === 'limited' ? t('deposit.limited') : rule.deductionType === 'monthly' ? t('deposit.monthly') : t('deposit.oneTime')}
                   </span>
                 </div>
 
@@ -112,17 +117,17 @@ export function DepositRulesPage() {
                   <span className="font-medium">
                     {rule.refundType === 'full' ? t('deposit.fullRefund') :
                      rule.refundType === 'prorata' ? t('deposit.prorata') :
-                     rule.refundType === 'no_refund' ? t('deposit.noRefund') :
+                     ['no_refund', 'none', 'forfeited'].includes(rule.refundType) ? t('deposit.noRefund') :
                      rule.refundType}
                   </span>
                 </div>
 
                 {/* Prorata Percent */}
-                {rule.refundType === 'prorata' && rule.prorataPercent && (
+                {rule.refundType === 'prorata' && rule.prorataPercent != null && (
                   <div className="flex justify-between py-2 bg-blue-50 px-3 rounded-lg">
                     <span className="text-blue-600">{t('deposit.prorataPercent')}</span>
                     <span className="font-medium text-blue-600">
-                      {(rule.prorataPercent * 100).toFixed(0)}%
+                      {(rule.prorataPercent > 1 ? rule.prorataPercent : rule.prorataPercent * 100).toFixed(0)}%
                     </span>
                   </div>
                 )}

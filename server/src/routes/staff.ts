@@ -1,7 +1,9 @@
+import { formatDate } from '../utils/dateUtils'
 import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import { isFeatureEnabled, getStaffConfig } from '../services/StaffConfigService'
@@ -33,6 +35,7 @@ const createStaffSchema = z.object({
   password: z.string().min(6).refine(value => Buffer.byteLength(value, 'utf8') <= 72),
   position: z.string().optional().default('店员'),
   role: z.enum(['manager', 'staff', 'cashier']).default('staff'),
+  status: z.enum(['active', 'inactive', 'resigned', 'suspended']).optional(),
   employmentType: z.enum(['full_time', 'part_time', 'contract', 'intern']).optional(),
   baseSalary: z.number().int().min(0).optional(),
   hourlyRate: z.number().int().min(0).optional(),
@@ -79,7 +82,7 @@ const scheduleSchema = z.object({
 // GET /api/staff
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { storeId, status, position } = req.query
+    const { storeId, status, position, search } = req.query
     const page = parseInt(req.query.page as string) || 1
     const pageSize = parseInt(req.query.pageSize as string) || 20
 
@@ -91,6 +94,12 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     else if (storeId) where.storeId = storeId as string
     if (status) where.status = status as string
     if (position) where.position = position as string
+    if (typeof search === 'string' && search.trim()) {
+      where.OR = [
+        ...['name', 'employeeNumber'].map(field => ({ [field]: { contains: search.trim() } })),
+        { user: { phone: { contains: search.trim() } } }
+      ]
+    }
 
     const [staff, total] = await Promise.all([
       prisma.staff.findMany({
@@ -109,12 +118,12 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     res.json({
       code: 200,
       data: {
-        list: staff.map(s => ({
+        list: staff.map(s => ['admin', 'manager'].includes(req.user!.role) ? ({
           ...s,
           phone: s.user.phone,
           role: s.user.role,
           _count: undefined
-        })),
+        }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status })),
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
       },
       timestamp: new Date().toISOString()
@@ -198,7 +207,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
           userId: user.id,
           storeId,
           name,
-          employeeNumber: `EMP${Date.now()}`,
+          employeeNumber: `EMP${Date.now()}${crypto.randomUUID().slice(0, 8)}`,
           position: position || '店员',
           employmentType: employmentType || 'full_time',
           baseSalary: req.body.baseSalary ?? null,
@@ -211,7 +220,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
           bankName: bankName || null,
           email: email || null,
           address: address || null,
-          status: 'active'
+          status: req.body.status || 'active'
         },
         include: {
           user: { select: { id: true, phone: true, role: true } }
@@ -243,7 +252,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 })
 
 // PUT /api/staff/:id
-router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(updateStaffSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true } })
@@ -252,7 +261,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
       return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     }
     const {
-      name, position, status, employmentType, hourlyRate, weeklyHours,
+      name, position, status, employmentType, baseSalary, hourlyRate, weeklyHours,
       hireDate, terminationDate, emergencyContact, emergencyPhone,
       bankAccount, bankName, email, address
     } = req.body
@@ -262,6 +271,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     if (position !== undefined) updateData.position = position
     if (status !== undefined) updateData.status = status
     if (employmentType !== undefined) updateData.employmentType = employmentType
+    if (baseSalary !== undefined) updateData.baseSalary = baseSalary
     if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate
     if (weeklyHours !== undefined) updateData.weeklyHours = weeklyHours
     if (hireDate !== undefined) updateData.hireDate = new Date(hireDate)
@@ -863,7 +873,10 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
     }
 
     const now = new Date()
-    const targetMonth = month ? `${year}-${String(month).padStart(2, '0')}` : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    if ((month !== undefined || year !== undefined) && (!Number.isInteger(Number(month)) || Number(month) < 1 || Number(month) > 12 || !Number.isInteger(Number(year)) || Number(year) < 2000 || Number(year) > 2100)) {
+      return res.status(400).json({ code: 400, message: 'Valid month and year are required' })
+    }
+    const targetMonth = month ? `${year}-${String(month).padStart(2, '0')}` : formatDate(now).slice(0, 7)
 
     const salaryRecord = await prisma.salary.findFirst({
       where: {
@@ -883,8 +896,8 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
 
     // 查询该月份真实出勤与迟到记录
     const [yearNum, monthNum] = targetMonth.split('-').map(Number)
-    const monthStart = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0)
-    const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999)
+    const monthStart = new Date(Date.UTC(yearNum, monthNum - 1, 1) - 7 * 3600000)
+    const monthEnd = new Date(Date.UTC(yearNum, monthNum, 1) - 7 * 3600000 - 1)
 
     const monthAttendances = await prisma.attendance.findMany({
       where: {
@@ -893,9 +906,10 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
       }
     })
 
-    const workDays = monthAttendances.length
-    const lateDays = monthAttendances.filter(a => a.status === 'late').length
+    const workDays = new Set(monthAttendances.map(a => formatDate(a.checkInTime))).size
+    const lateDays = new Set(monthAttendances.filter(a => a.status === 'late').map(a => formatDate(a.checkInTime))).size
 
+    const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId: staff.id, status: 'approved', date: { gte: monthStart, lte: monthEnd } } })
     // Transform to match frontend expected format
     const salaryData = {
       staffName: staff.name,
@@ -903,12 +917,13 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
       baseSalary: salaryRecord.baseSalary,
       workDays,
       lateDays,
-      overtimeHours: Math.round((salaryRecord.overtime / (salaryRecord.baseSalary / 176)) * 100) / 100 || 0,
+      overtimeHours: approvedOvertime.reduce((sum, entry) => sum + entry.hours, 0),
       overtimePay: salaryRecord.overtime,
       bonuses: salaryRecord.bonus,
       commissions: salaryRecord.commission,
       deductions: salaryRecord.deduction,
-      totalSalary: salaryRecord.finalAmount
+      totalSalary: salaryRecord.finalAmount,
+      status: salaryRecord.status
     }
 
     res.json({

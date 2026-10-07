@@ -1,4 +1,21 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../config/database'
+
+export class DepositInputError extends Error {}
+const requireAmount = (amount: number) => {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new DepositInputError('Amount must be a positive integer')
+}
+
+async function depositReceipt(tx: Prisma.TransactionClient, deposit: { storeId: string }, operation: 'deduct' | 'refund', data: any) {
+  if (!data.requestId) return null
+  const key = `deposit.intent.${operation}.${data.requestId}`
+  const fingerprint = JSON.stringify([data.staffDepositId, data.amount, data.salaryId || null, data.reason || null, data.note || null, data.processedBy || null])
+  const receipt = await tx.config.upsert({ where: { storeId_key: { storeId: deposit.storeId, key } },
+    create: { storeId: deposit.storeId, key, category: 'staff', value: '{}' }, update: { category: 'staff' } })
+  const saved = JSON.parse(receipt.value)
+  if (saved.logId && saved.fingerprint !== fingerprint) throw new DepositInputError('Request identity was used for different deposit data')
+  return { key, fingerprint, logId: saved.logId as string | undefined }
+}
 
 // Get deposit rules for a store
 export async function getDepositRules(storeId: string) {
@@ -35,6 +52,11 @@ export async function updateDepositRule(id: string, data: Partial<{
   prorataPercent: number
   isActive: boolean
 }>) {
+  const existing = await prisma.depositRule.findUnique({ where: { id } })
+  if (!existing) throw new DepositInputError('Deposit rule not found')
+  const merged = { ...existing, ...data }
+  if (merged.deductionType !== 'one_time') requireAmount(merged.monthlyAmount || 0)
+  if (merged.deductionType === 'limited' && (!Number.isInteger(merged.maxDeductions) || (merged.maxDeductions || 0) < 1)) throw new DepositInputError('Maximum deductions is required')
   return prisma.depositRule.update({
     where: { id },
     data
@@ -53,6 +75,7 @@ export async function deleteDepositRule(id: string) {
 export async function getStaffDeposit(staffId: string) {
   return prisma.staffDeposit.findFirst({
     where: { staffId },
+    orderBy: { createdAt: 'desc' },
     include: {
       depositRule: true,
       deductionLogs: { orderBy: { createdAt: 'desc' } },
@@ -82,6 +105,14 @@ export async function createStaffDeposit(data: {
   depositRuleId: string
   totalAmount: number
 }) {
+  requireAmount(data.totalAmount)
+  const [staff, rule] = await Promise.all([
+    prisma.staff.findUnique({ where: { id: data.staffId } }),
+    prisma.depositRule.findUnique({ where: { id: data.depositRuleId } })
+  ])
+  if (!staff || staff.storeId !== data.storeId || !rule || rule.storeId !== data.storeId || !rule.isActive) {
+    throw new DepositInputError('Staff and active rule must belong to this store')
+  }
   return prisma.staffDeposit.create({
     data: {
       ...data,
@@ -102,13 +133,13 @@ export async function calculateMonthlyDeduction(staffDeposit: any) {
     case 'one_time':
       // One-time deduction: all in first month
       if (staffDeposit.deductionCount === 0) {
-        return { shouldDeduct: true, amount: rule.depositAmount }
+        return { shouldDeduct: staffDeposit.totalAmount > staffDeposit.deductedAmount, amount: Math.max(0, staffDeposit.totalAmount - staffDeposit.deductedAmount) }
       }
       return { shouldDeduct: false, amount: 0 }
 
     case 'monthly':
       // Monthly deduction until fully paid
-      const remaining = rule.depositAmount - staffDeposit.deductedAmount
+      const remaining = staffDeposit.totalAmount - staffDeposit.deductedAmount
       if (remaining <= 0) {
         return { shouldDeduct: false, amount: 0 }
       }
@@ -123,7 +154,7 @@ export async function calculateMonthlyDeduction(staffDeposit: any) {
       if (staffDeposit.deductionCount >= (rule.maxDeductions || 0)) {
         return { shouldDeduct: false, amount: 0 }
       }
-      const limitedRemaining = rule.depositAmount - staffDeposit.deductedAmount
+      const limitedRemaining = staffDeposit.totalAmount - staffDeposit.deductedAmount
       if (limitedRemaining <= 0) {
         return { shouldDeduct: false, amount: 0 }
       }
@@ -141,58 +172,52 @@ export async function calculateMonthlyDeduction(staffDeposit: any) {
 export async function recordDepositDeduction(data: {
   staffDepositId: string
   salaryId?: string
+  requestId?: string
   amount: number
   note?: string
-}) {
-  const staffDeposit = await prisma.staffDeposit.findUnique({
-    where: { id: data.staffDepositId },
-    include: { depositRule: true }
-  })
-
-  if (!staffDeposit) throw new Error('Staff deposit not found')
-
-  const newDeductedAmount = staffDeposit.deductedAmount + data.amount
-  const newDeductionCount = staffDeposit.deductionCount + 1
-  const isCompleted = newDeductedAmount >= staffDeposit.depositRule.depositAmount
-
-  // Create deduction log
-  const log = await prisma.staffDepositDeduction.create({
-    data: {
-      staffDepositId: data.staffDepositId,
-      salaryId: data.salaryId,
-      amount: data.amount,
-      note: data.note
+}, transaction?: Prisma.TransactionClient) {
+  requireAmount(data.amount)
+  const apply = async (tx: Prisma.TransactionClient) => {
+    const deposit = await tx.staffDeposit.findUnique({ where: { id: data.staffDepositId } })
+    if (!deposit) throw new DepositInputError('Staff deposit not found')
+    const receipt = await depositReceipt(tx, deposit, 'deduct', data)
+    if (receipt?.logId) return tx.staffDepositDeduction.findUniqueOrThrow({ where: { id: receipt.logId } })
+    if (deposit.status !== 'active' || data.amount > deposit.totalAmount - deposit.deductedAmount) {
+      throw new DepositInputError('Deduction exceeds unpaid deposit or deposit is closed')
     }
-  })
-
-  // Update staff deposit
-  await prisma.staffDeposit.update({
-    where: { id: data.staffDepositId },
-    data: {
-      deductedAmount: newDeductedAmount,
-      deductionCount: newDeductionCount,
-      status: isCompleted ? 'completed' : 'active'
+    if (data.salaryId) {
+      const salary = await tx.salary.findUnique({ where: { id: data.salaryId } })
+      if (!salary || salary.staffId !== deposit.staffId) throw new DepositInputError('Salary does not belong to this staff')
     }
-  })
-
-  return log
+    const changed = await tx.staffDeposit.updateMany({
+      where: { id: deposit.id, status: 'active', deductedAmount: deposit.deductedAmount, refundedAmount: deposit.refundedAmount },
+      data: { deductedAmount: { increment: data.amount }, deductionCount: { increment: 1 },
+        status: deposit.deductedAmount + data.amount === deposit.totalAmount ? 'completed' : 'active' }
+    })
+    if (changed.count !== 1) throw new DepositInputError('Deposit changed; reload before retrying')
+    const log = await tx.staffDepositDeduction.create({ data: { staffDepositId: deposit.id, salaryId: data.salaryId, amount: data.amount, note: data.note } })
+    if (receipt) await tx.config.update({ where: { storeId_key: { storeId: deposit.storeId, key: receipt.key } }, data: { value: JSON.stringify({ fingerprint: receipt.fingerprint, logId: log.id }) } })
+    return log
+  }
+  return transaction ? apply(transaction) : prisma.$transaction(apply)
 }
 
 // Calculate refund amount when staff leaves
 export async function calculateRefundAmount(staffDeposit: any, terminationDate: Date) {
   const rule = staffDeposit.depositRule
-  const workMonths = getMonthsBetween(staffDeposit.startDate, terminationDate)
+
 
   switch (rule.refundType) {
     case 'full':
       // Full refund of remaining deposit
-      return rule.depositAmount - staffDeposit.deductedAmount - staffDeposit.refundedAmount
+      return Math.max(0, staffDeposit.deductedAmount - staffDeposit.refundedAmount)
 
     case 'prorata': {
       // Pro-rata refund based on months worked
-      const prorataPercent = rule.prorataPercent || 0
-      const totalPaid = staffDeposit.deductedAmount + staffDeposit.refundedAmount
-      const refundableAmount = Math.floor(totalPaid * prorataPercent)
+      const value = rule.prorataPercent || 0
+      const prorataPercent = Math.min(1, Math.max(0, value > 1 ? value / 100 : value))
+      const totalPaid = staffDeposit.deductedAmount
+      const refundableAmount = Math.min(totalPaid, Math.floor(totalPaid * prorataPercent))
       return Math.max(0, refundableAmount - staffDeposit.refundedAmount)
     }
 
@@ -215,46 +240,25 @@ export async function processRefund(data: {
   reason: string
   note?: string
   processedBy: string
+  requestId?: string
 }) {
-  const staffDeposit = await prisma.staffDeposit.findUnique({
-    where: { id: data.staffDepositId }
+  requireAmount(data.amount)
+  return prisma.$transaction(async tx => {
+    const deposit = await tx.staffDeposit.findUnique({ where: { id: data.staffDepositId }, include: { depositRule: true } })
+    if (!deposit) throw new DepositInputError('Staff deposit not found')
+    const receipt = await depositReceipt(tx, deposit, 'refund', data)
+    if (receipt?.logId) return tx.staffDepositRefund.findUniqueOrThrow({ where: { id: receipt.logId } })
+    const refundable = await calculateRefundAmount(deposit, new Date())
+    if (deposit.status === 'refunded' || data.amount > refundable) throw new DepositInputError('Refund exceeds eligible collected deposit')
+    const fullyRefunded = data.amount === refundable
+    const changed = await tx.staffDeposit.updateMany({
+      where: { id: deposit.id, deductedAmount: deposit.deductedAmount, refundedAmount: deposit.refundedAmount, status: deposit.status },
+      data: { refundedAmount: { increment: data.amount }, status: fullyRefunded ? 'refunded' : deposit.status,
+        endDate: fullyRefunded ? new Date() : deposit.endDate }
+    })
+    if (changed.count !== 1) throw new DepositInputError('Deposit changed; reload before retrying')
+    const log = await tx.staffDepositRefund.create({ data: { staffDepositId: deposit.id, amount: data.amount, reason: data.reason, note: data.note, processedBy: data.processedBy } })
+    if (receipt) await tx.config.update({ where: { storeId_key: { storeId: deposit.storeId, key: receipt.key } }, data: { value: JSON.stringify({ fingerprint: receipt.fingerprint, logId: log.id }) } })
+    return log
   })
-
-  if (!staffDeposit) throw new Error('Staff deposit not found')
-
-  // Create refund log
-  const log = await prisma.staffDepositRefund.create({
-    data: {
-      staffDepositId: data.staffDepositId,
-      amount: data.amount,
-      reason: data.reason,
-      note: data.note,
-      processedBy: data.processedBy
-    }
-  })
-
-  // Update staff deposit
-  const newRefundedAmount = staffDeposit.refundedAmount + data.amount
-  const totalProcessed = staffDeposit.deductedAmount + newRefundedAmount
-  // 只有当总处理金额（已扣 + 已退）>= 总押金时才完全退款
-  const newStatus = totalProcessed >= staffDeposit.totalAmount ? 'refunded' : 'active'
-
-  await prisma.staffDeposit.update({
-    where: { id: data.staffDepositId },
-    data: {
-      refundedAmount: newRefundedAmount,
-      status: newStatus,
-      endDate: newStatus === 'refunded' ? new Date() : staffDeposit.endDate
-    }
-  })
-
-  return log
-}
-
-// Helper function to calculate months between dates
-function getMonthsBetween(startDate: Date, endDate: Date): number {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
-  return Math.max(0, months)
 }

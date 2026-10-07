@@ -44,7 +44,7 @@ import { depositRouter } from './routes/deposit'
 import { attendanceRuleRouter } from './routes/attendanceRule'
 import { attendanceQRRouter } from './routes/attendanceQR'
 import { trainingRouter } from './routes/training'
-import { staffCorrectionRouter } from './routes/staffCorrection'
+import { staffCorrectionRouter, shiftSwapRouter, overtimeRouter } from './routes/staffCorrection'
 import { shiftRouter } from './routes/shift'
 import { productAnalysisRouter } from './routes/productAnalysis'
 import { leaveRouter } from './routes/leave'
@@ -243,8 +243,8 @@ app.use('/api/attendance-rules', attendanceRuleRouter)
 app.use('/api/attendance-qr', attendanceQRRouter)
 app.use('/api/training', trainingRouter)
 app.use('/api/staff-correction', staffCorrectionRouter)
-app.use('/api/shift-swap', staffCorrectionRouter)
-app.use('/api/overtime', staffCorrectionRouter)
+app.use('/api/shift-swap', shiftSwapRouter)
+app.use('/api/overtime', overtimeRouter)
 app.use('/api/shifts', shiftRouter)
 app.use('/api/product-analysis', productAnalysisRouter)
 app.use('/api/leave', leaveRouter)

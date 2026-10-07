@@ -28,7 +28,8 @@ export function OvertimeRequestPage() {
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
     date: '',
-    hours: 4,
+    startTime: '18:00',
+    endTime: '22:00',
     reason: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -53,14 +54,14 @@ export function OvertimeRequestPage() {
   }, [user])
 
   const handleSubmit = async () => {
-    if (!formData.date || !formData.hours || !formData.reason) return
+    if (!formData.date || (!formData.startTime || !formData.endTime) || !formData.reason) return
 
     setIsSubmitting(true)
     try {
       const response = await staffApi.createOvertimeRequest(formData)
       if (response.code === 201 || response.code === 200) {
         setSubmitSuccess(true)
-        setFormData({ date: '', hours: 4, reason: '' })
+        setFormData({ date: '', startTime: '18:00', endTime: '22:00', reason: '' })
         setShowForm(false)
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
@@ -135,18 +136,13 @@ export function OvertimeRequestPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('overtime.hours')}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-sm font-medium text-gray-700">{t('overtime.startTime')}
+                  <input type="time" value={formData.startTime} onChange={e => setFormData({ ...formData, startTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
                 </label>
-                <input
-                  type="number"
-                  value={formData.hours}
-                  onChange={(e) => setFormData({ ...formData, hours: parseInt(e.target.value) || 0 })}
-                  className="w-full p-3 border border-gray-200 rounded-xl"
-                  min="1"
-                  max="12"
-                />
+                <label className="block text-sm font-medium text-gray-700">{t('overtime.endTime')}
+                  <input type="time" value={formData.endTime} onChange={e => setFormData({ ...formData, endTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
+                </label>
               </div>
 
               <div>
