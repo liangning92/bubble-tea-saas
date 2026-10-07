@@ -21,6 +21,7 @@ interface Expense {
 }
 
 interface ExpenseSummary {
+  [category: string]: number
   rent: number
   utilities: number
   supplies: number
@@ -123,6 +124,11 @@ export function ExpenseListPage() {
   // Custom expense types
   const [expenseTypes, setExpenseTypes] = useState<ExpenseCategory[]>(DEFAULT_CATEGORY_DEFS)
   const [newTypeName, setNewTypeName] = useState('')
+  const categoryNameRef = useRef<HTMLInputElement>(null)
+  const categorySaveLock = useRef(false)
+  const [categoryLoadState, setCategoryLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [categoryFeedback, setCategoryFeedback] = useState<{ kind: 'error' | 'success'; message: string } | null>(null)
+  const canManageCategories = user?.role === 'admin'
 
   // Recurring expenses
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([])
@@ -180,9 +186,7 @@ export function ExpenseListPage() {
         if (data.byCategory) {
           const newSummary: ExpenseSummary = { rent: 0, utilities: 0, supplies: 0, salary: 0, reimbursement: 0, other: 0 }
           data.byCategory.forEach((item: { category: string; amount: number }) => {
-            if (item.category in newSummary) {
-              newSummary[item.category as keyof ExpenseSummary] = item.amount
-            }
+            newSummary[item.category] = item.amount
           })
           setSummary(newSummary)
         } else {
@@ -268,6 +272,7 @@ export function ExpenseListPage() {
   }
 
   const loadCustomTypes = async () => {
+    setCategoryLoadState('loading')
     try {
       const res = await expenseApi.getCategories()
       const list = res.data?.data?.list
@@ -290,24 +295,29 @@ export function ExpenseListPage() {
       } else {
         setExpenseTypes(DEFAULT_CATEGORY_DEFS)
       }
+      setCategoryLoadState('ready')
     } catch (error) {
       console.error('Failed to load expense categories:', error)
-      // Fallback to defaults
-      setExpenseTypes(DEFAULT_CATEGORY_DEFS)
+      setCategoryLoadState('error')
     }
   }
 
   const saveCustomTypes = async (types: ExpenseCategory[]) => {
+    if (categorySaveLock.current) return false
+    categorySaveLock.current = true
     setIsTypeSaving(true)
+    setCategoryFeedback(null)
     try {
       await expenseApi.saveCategories(types)
       setExpenseTypes(types)
       return true
     } catch (error) {
       console.error('Failed to save expense categories:', error)
-      alert(t('common.saveFailed'))
+      const status = (error as any)?.response?.status
+      setCategoryFeedback({ kind: 'error', message: t(status === 403 ? 'expenseCategoryFeedback.adminOnly' : status === 401 ? 'expenseCategoryFeedback.loginRequired' : 'expenseCategoryFeedback.saveFailed') })
       return false
     } finally {
+      categorySaveLock.current = false
       setIsTypeSaving(false)
     }
   }
@@ -505,16 +515,22 @@ export function ExpenseListPage() {
   }
 
   const handleAddType = async () => {
-    if (isTypeSaving || !newTypeName.trim()) return
-    const key = newTypeName.trim().toLowerCase().replace(/\s+/g, '_')
-    if (expenseTypes.find(t => t.key === key)) return // duplicate
+    if (categorySaveLock.current) return
+    const name = (categoryNameRef.current?.value ?? newTypeName).trim()
+    if (!canManageCategories) { setCategoryFeedback({ kind: 'error', message: t('expenseCategoryFeedback.adminOnly') }); return }
+    if (categoryLoadState !== 'ready') { setCategoryFeedback({ kind: 'error', message: t('expenseCategoryFeedback.loadFailed') }); return }
+    if (!name) { setCategoryFeedback({ kind: 'error', message: t('expenseCategoryFeedback.nameRequired') }); categoryNameRef.current?.focus(); return }
+    const key = name.toLowerCase().replace(/\s+/g, '_')
+    if (expenseTypes.some(item => item.key === key || getCategoryLabel(item.key).trim().toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      setCategoryFeedback({ kind: 'error', message: t('expenseCategoryFeedback.exists', { name }) })
+      return
+    }
     const saved = await saveCustomTypes([...expenseTypes, {
-      key,
-      label: newTypeName.trim(),
+      key, label: name,
       color: DEFAULT_COLORS[expenseTypes.length % DEFAULT_COLORS.length],
       isDefault: false
     }])
-    if (saved) setNewTypeName('')
+    if (saved) { setNewTypeName(''); setCategoryFeedback({ kind: 'success', message: t('expenseCategoryFeedback.added', { name }) }) }
   }
 
   const handleRemoveType = (key: string) => {
@@ -1287,24 +1303,33 @@ export function ExpenseListPage() {
               </button>
             </div>
 
-            {/* Add New Type */}
-            <div className="flex gap-2 mb-4">
+            {!canManageCategories && <p role="status" className="mb-3 text-sm text-amber-700">{t('expenseCategoryFeedback.adminOnly')}</p>}
+            {categoryLoadState === 'loading' && <p role="status" className="mb-3 text-sm text-gray-600">{t('expenseCategoryFeedback.loading')}</p>}
+            {categoryLoadState === 'error' && <div role="alert" className="mb-3 text-sm text-red-600"><p>{t('expenseCategoryFeedback.loadFailed')}</p><button type="button" className="mt-2 underline" onClick={() => void loadCustomTypes()}>{t('expenseCategoryFeedback.reload')}</button></div>}
+            {categoryFeedback && <p role={categoryFeedback.kind === 'error' ? 'alert' : 'status'} className={`mb-3 text-sm ${categoryFeedback.kind === 'error' ? 'text-red-600' : 'text-green-700'}`}>{categoryFeedback.message}</p>}
+            <form className="flex gap-2 mb-4" noValidate onSubmit={event => { event.preventDefault(); void handleAddType() }}>
               <input
+                ref={categoryNameRef}
                 type="text"
                 value={newTypeName}
-                onChange={(e) => setNewTypeName(e.target.value)}
-                className="flex-1 p-3 border border-gray-200 rounded-xl"
+                onChange={event => { setNewTypeName(event.target.value); setCategoryFeedback(null) }}
+                onInput={event => setNewTypeName(event.currentTarget.value)}
+                aria-label={t('expense.newTypePlaceholder')}
+                disabled={isTypeSaving || !canManageCategories || categoryLoadState !== 'ready'}
+                className="flex-1 min-w-0 p-3 border border-gray-200 rounded-xl disabled:opacity-50"
                 placeholder={t('expense.newTypePlaceholder')}
               />
               <button
-                onClick={handleAddType}
-                disabled={isTypeSaving || !newTypeName.trim()}
+                type="submit"
+                disabled={isTypeSaving || !canManageCategories || categoryLoadState !== 'ready'}
                 aria-label={t('common.add')}
-                className="px-4 py-3 bg-primary text-white rounded-xl"
+                aria-busy={isTypeSaving}
+                className="px-4 py-3 bg-primary text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 shrink-0"
               >
                 <Plus size={20} />
+                <span>{isTypeSaving ? t('expenseCategoryFeedback.saving') : t('common.add')}</span>
               </button>
-            </div>
+            </form>
 
             {/* Type List */}
             <div className="space-y-2">
@@ -1314,7 +1339,7 @@ export function ExpenseListPage() {
                   {!type.isDefault && (
                     <button
                       onClick={() => handleRemoveType(type.key)}
-                      disabled={isTypeSaving}
+                      disabled={isTypeSaving || !canManageCategories || categoryLoadState !== 'ready'}
                       className="text-red-500 hover:bg-red-50 p-1 rounded"
                     >
                       <X size={16} />
