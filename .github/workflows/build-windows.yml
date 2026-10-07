@@ -103,7 +103,8 @@ jobs:
           New-Item -ItemType Directory -Force 'build/upgrade-helper' | Out-Null
           python scripts/desktop-db-upgrade.py build-catalog --template server/prisma/seed.db --output build/upgrade-helper/schema-catalog.json --source-sha "${{ github.sha }}"
           if ($LASTEXITCODE -ne 0) { throw 'Bound schema catalog failed' }
-          python -m PyInstaller --clean --noconfirm --onefile --name btps-db-upgrade --distpath build/upgrade-helper --workpath "$env:RUNNER_TEMP/upgrade-pyinstaller" --specpath "$env:RUNNER_TEMP" --add-data 'build/upgrade-helper/schema-catalog.json:runtime' scripts/desktop-db-upgrade.py
+          $catalogPath = (Resolve-Path 'build/upgrade-helper/schema-catalog.json').Path
+          python -m PyInstaller --clean --noconfirm --onefile --name btps-db-upgrade --distpath build/upgrade-helper --workpath "$env:RUNNER_TEMP/upgrade-pyinstaller" --specpath "$env:RUNNER_TEMP" --add-data "${catalogPath}:runtime" scripts/desktop-db-upgrade.py
           if ($LASTEXITCODE -ne 0) { throw 'Native helper build failed' }
           python tests/stoploss/desktop-db-upgrade.test.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows snapshot and rollback tests failed' }
