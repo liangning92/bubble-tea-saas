@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { receiptTemplateApi as ReceiptTemplateApi } from '../services/api'
+import { receiptTemplateApi as ReceiptTemplateApi, receiptMediaUrl } from '../services/api'
 import {
   GripVertical,
   Trash2,
@@ -319,7 +319,7 @@ const LivePreview: React.FC<{
                 <div className="border rounded p-1 inline-block">
                   {effectiveLogo ? (
                     <img
-                      src={effectiveLogo}
+                      src={receiptMediaUrl(effectiveLogo)}
                       alt="Logo"
                       style={{ width: block.config.width ? `${block.config.width}px` : '100px' }}
                       className="max-h-20 object-contain inline-block"
@@ -353,14 +353,14 @@ const LivePreview: React.FC<{
             const showPickup = block.config.showPickupNumber !== false
             const showOrder = block.config.showOrderNo !== false
             return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} border-b pb-2 mb-2`}>
+              <div key={block.id} className={`${alignClass} ${boldClass} ${sizeClass} border-b pb-2 mb-2`}>
                 {showPickup && (
-                  <div className="text-center font-bold text-sm my-1 tracking-wider py-1 border border-dashed border-gray-300 rounded bg-gray-50/60">
+                  <div className={`${alignClass} ${boldClass} ${sizeClass} my-1 py-1`}>
                     *** {t('posSettings.receiptQueueNumber', '取餐号')}: A01 ***
                   </div>
                 )}
                 {showOrder && (
-                  <div className="font-mono text-[11px] text-gray-700">
+                  <div className="font-mono">
                     {t('posSettings.orderNumber', 'Order number')}: ORD{new Date().toISOString().slice(0, 10).replace(/-/g, '')}-829102
                   </div>
                 )}
@@ -412,7 +412,7 @@ const LivePreview: React.FC<{
                     <span>-10,000</span>
                   </div>
                 )}
-                <div className={`flex justify-between font-bold ${sizeClass}`}>
+                <div className={`flex justify-between ${boldClass} ${sizeClass}`}>
                   <span>{block.config.totalLabel || t('posSettings.receiptTotal')}</span>
                   <span>38,850</span>
                 </div>
@@ -718,7 +718,7 @@ const BlockPropertiesPanel: React.FC<{
                 <div className="flex items-center gap-2.5 p-2 bg-white rounded border border-blue-200">
                   <div className="w-12 h-10 bg-gray-50 rounded border flex items-center justify-center p-1 overflow-hidden shrink-0">
                     <img
-                      src={block.config.url || defaultLogo}
+                      src={receiptMediaUrl(block.config.url || defaultLogo)}
                       alt="Current Logo"
                       className="max-w-full max-h-full object-contain"
                       onError={(e) => { (e.target as any).style.display = 'none' }}

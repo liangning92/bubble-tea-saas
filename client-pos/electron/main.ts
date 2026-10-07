@@ -1,3 +1,4 @@
+import { fetchReceiptLogo } from './receiptLogo'
 import { exactPrinterName } from './printerTarget'
 import { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog, Menu, nativeImage, safeStorage } from 'electron'
 import { randomBytes } from 'crypto'
@@ -1479,6 +1480,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     ]) : Buffer.alloc(0)
 
     // 生成 ESC/POS 原始打印指令 (支持多联打印 printCopies)
+    data.printWarnings = []
     const printCopies = Math.max(1, Math.min(5, data.printCopies || 1))
     const rawChunks: Buffer[] = []
     const initCmd = Buffer.from([0x1B, 0x40])  // ESC @ 初始化
@@ -1516,7 +1518,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       try {
         await printViaNetworkRaw(rawBytes, printerHost, printerPort)
         writeCrash(`[PRINT] printViaNetworkRaw success to ${printerHost}:${printerPort}`)
-        return { success: true }
+        return { success: true, warnings: [...new Set(data.printWarnings)] }
       } catch (netErr: any) {
         writeCrash(`[PRINT] printViaNetworkRaw failed: ${netErr.message}`)
         return { success: false, error: netErr.message }
@@ -1534,7 +1536,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       try {
         await printViaComPort(printerName, rawBytes)
         writeCrash('[PRINT] printViaComPort success')
-        return { success: true }
+        return { success: true, warnings: [...new Set(data.printWarnings)] }
       } catch (comErr: any) {
         writeCrash(`[PRINT] printViaComPort failed: ${comErr.message}`)
         return { success: false, error: comErr.message }
@@ -1546,7 +1548,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     try {
       await sendRawBytesToWindowsPrinter(printerName, rawBytes)
       writeCrash('[PRINT] sendRawBytesToWindowsPrinter success')
-      return { success: true }
+      return { success: true, warnings: [...new Set(data.printWarnings)] }
     } catch (winRawErr: any) {
       writeCrash(`[PRINT] Delivery unconfirmed: ${winRawErr.message}`)
       return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message }
@@ -2312,7 +2314,7 @@ function encodeEscPosText(text: string): Buffer {
  */
 const logoMemoryCache = new Map<string, Buffer>()
 
-function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384): Buffer | null {
+function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384, align = 'center'): Buffer | null {
   try {
     if (!imageBuf || imageBuf.length < 8) return null
     // 基础图片魔数校验（PNG: 89 50 4E 47, JPEG: FF D8, BMP: 42 4D, GIF: 47 49 46），严禁将 HTML 404 文本喂给 nativeImage
@@ -2370,7 +2372,7 @@ function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384): Buf
 
     // ESC a 1 (居中) + GS v 0 0 xL xH yL yH + rasterData + \n + ESC a 0 (重置居左)
     return Buffer.concat([
-      Buffer.from([0x1B, 0x61, 0x01]),
+      Buffer.from([0x1B, 0x61, align === 'left' ? 0 : align === 'right' ? 2 : 1]),
       Buffer.from([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]),
       rasterData,
       Buffer.from([0x0A, 0x1B, 0x61, 0x00])
@@ -2383,11 +2385,11 @@ function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384): Buf
 
 /**
  * 加载 Logo 图片字节
- * 铁律：打印热敏小票绝不可同步阻塞网络请求！
+ * 远端图片异步下载，使用总时限避免打印无限等待。
  * 1. Base64 Data URL 优先（0ms 内存转换）
  * 2. 内存缓存优先（0ms）
  * 3. 本地文件系统直接读取（< 1ms）
- * 4. 远端 URL 若未就绪，后台异步预拉取，当前打印瞬间返回 null，0ms 零阻塞！
+ * 4. 首次打印等待有总时限和大小上限的远端下载，成功后缓存图片。
  */
 async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
   if (!logoUrlOrPath) return null
@@ -2427,62 +2429,11 @@ async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
       }
     }
 
-    // 5. 远端 HTTP/HTTPS 图片：后台异步预加载供下次打印，当前打印坚决不阻塞！
-    if (logoUrlOrPath.startsWith('http://') || logoUrlOrPath.startsWith('https://')) {
-      setImmediate(() => {
-        try {
-          const isHttps = logoUrlOrPath.startsWith('https://')
-          const httpModule = isHttps ? require('https') : require('http')
-          const req = httpModule.get(logoUrlOrPath, {
-            timeout: 2500,
-            headers: { 'User-Agent': 'Mozilla/5.0 YOUME-POS' }
-          }, (res: any) => {
-            if (res.statusCode !== 200) return
-            const chunks: Buffer[] = []
-            res.on('data', (d: Buffer) => chunks.push(d))
-            res.on('end', () => {
-              const fullBuf = Buffer.concat(chunks)
-              if (fullBuf.length > 0) {
-                logoMemoryCache.set(logoUrlOrPath, fullBuf)
-              }
-            })
-            res.on('error', () => {})
-          })
-          req.on('error', () => {})
-          req.on('timeout', () => { req.destroy() })
-        } catch {}
-      })
-    }
-
-    // 6. 针对类似 /uploads/... 相对路径：后台异步预加载，当前打印 0ms 零阻塞
-    if (logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//')) {
-      const fullRemote = `https://api.aicube.online${logoUrlOrPath}`
-      if (logoMemoryCache.has(fullRemote)) {
-        return logoMemoryCache.get(fullRemote) || null
-      }
-      setImmediate(() => {
-        try {
-          const https = require('https')
-          const req = https.get(fullRemote, {
-            timeout: 2500,
-            headers: { 'User-Agent': 'Mozilla/5.0 YOUME-POS' }
-          }, (res: any) => {
-            if (res.statusCode !== 200) return
-            const chunks: Buffer[] = []
-            res.on('data', (d: Buffer) => chunks.push(d))
-            res.on('end', () => {
-              const fullBuf = Buffer.concat(chunks)
-              if (fullBuf.length > 0) {
-                logoMemoryCache.set(logoUrlOrPath, fullBuf)
-                logoMemoryCache.set(fullRemote, fullBuf)
-              }
-            })
-            res.on('error', () => {})
-          })
-          req.on('error', () => {})
-          req.on('timeout', () => { req.destroy() })
-        } catch {}
-      })
+    const remote = /^https?:\/\//.test(logoUrlOrPath) ? logoUrlOrPath
+      : logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//') ? `https://api.aicube.online${logoUrlOrPath}` : ''
+    if (remote) {
+      const buffer = await fetchReceiptLogo(remote)
+      if (buffer) { logoMemoryCache.set(logoUrlOrPath, buffer); return buffer }
     }
   } catch (e: any) {
     writeCrash(`[LOGO LOAD] Failed to load logo from '${logoUrlOrPath}': ${e?.message}`)
@@ -2504,24 +2455,24 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
   try {
     const is80mm = data.paperSize === '80mm'
   const width = is80mm ? 48 : 32
-  const targetDots = is80mm ? 384 : 288
+  const targetDots = is80mm ? 576 : 384
 
   const lang = (data.language || 'id').toLowerCase()
   const i18nMap: Record<string, Record<string, string>> = {
     zh: {
-      orderNo: '订单号', queueNo: '取餐号', date: '日期', channel: '渠道', table: '桌号', cashier: '收银员',
+      orderNo: '订单号', queueNo: '取餐号', date: '日期', time: '时间', channel: '渠道', table: '桌号', cashier: '收银员',
       customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
       tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
       member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
     },
     en: {
-      orderNo: 'Order No', queueNo: 'QUEUE NO', date: 'Date', channel: 'Channel', table: 'Table', cashier: 'Cashier',
+      orderNo: 'Order No', queueNo: 'QUEUE NO', date: 'Date', time: 'Time', channel: 'Channel', table: 'Table', cashier: 'Cashier',
       customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
       tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
       member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
     },
     id: {
-      orderNo: 'No. Pesanan', queueNo: 'NO. ANTREAN', date: 'Tgl', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
+      orderNo: 'No. Pesanan', queueNo: 'NO. ANTREAN', date: 'Tgl', time: 'Jam', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
       customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
       tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
       member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
@@ -2582,7 +2533,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
   let hasBarcodeRendered = false
   let hasQrRendered = false
 
-  if (rawBlocks && rawBlocks.length > 0) {
+  if (Array.isArray(rawBlocks)) {
     const enabledBlocks = [...rawBlocks]
       .filter((b: any) => b && b.enabled !== false)
       .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
@@ -2594,27 +2545,20 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
       switch (block.type) {
         case 'logo': {
           let logoBuf: Buffer | null = null
-          const logoSource = (data.storeLogo && data.storeLogo.startsWith('data:image/'))
-            ? data.storeLogo
-            : (cfg.url || data.storeLogo || '')
+          const logoSource = cfg.url || data.storeLogo || ''
           if (logoSource && data.showLogo !== false) {
             const rawImg = await loadLogoBuffer(logoSource)
             if (rawImg) {
               const customWidth = cfg.width ? Math.min(targetDots, cfg.width * 2) : targetDots
-              logoBuf = imageBufferToEscPosRaster(rawImg, customWidth)
+              logoBuf = imageBufferToEscPosRaster(rawImg, customWidth, st.align || 'center')
             }
           }
           if (logoBuf) {
             chunks.push(logoBuf)
-          } else if (data.showLogo !== false && !enabledBlocks.some((b: any) => b.type === 'header')) {
-            // 仅在整个模板完全没有 header 块时才作为文本备选输出，绝不多次重复输出店名
-            const title = data.storeName || data.header || 'YOUME'
-            chunks.push(formatStyledLine(title, {
-              align: st.align || 'center',
-              bold: st.bold !== false,
-              fontSize: st.fontSize || 'normal'
-            }))
+          } else if (logoSource && data.showLogo !== false) {
+            data.printWarnings?.push('LOGO_UNAVAILABLE')
           }
+
           break
         }
 
@@ -2659,15 +2603,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
         case 'orderInfo': {
           if (cfg.showPickupNumber !== false && data.pickupNumber) {
-            const safeW = Math.max(20, width - 2)
-            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
-            if (!is80mm) {
-              chunks.push(formatStyledLine(`*** ${L.queueNo} ***`, { align: 'center', bold: true, fontSize: 'normal' }))
-              chunks.push(formatStyledLine(String(data.pickupNumber), { align: 'center', bold: true, fontSize: 'large' }))
-            } else {
-              chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { align: 'center', bold: true, fontSize: 'large' }))
-            }
-            chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
+            chunks.push(formatStyledLine(`*** ${L.queueNo}: ${data.pickupNumber} ***`, { ...st, align: st.align || 'center' }))
           }
           const infoLines: string[] = []
           // 仅在未显式禁用单号时才输出单号
@@ -2676,10 +2612,8 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           }
           const showDate = cfg.showDate !== false
           const showTime = cfg.showTime !== false
-          if (showDate || showTime) {
-            const dt = formatDateTime(data.orderDate || data.createdAt, showDate, showTime)
-            infoLines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${dt}`)
-          }
+          if (showDate) infoLines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, false)}`)
+          if (showTime) infoLines.push(`${padEndVisual(L.time, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, false, true)}`)
           if (cfg.showChannel && data.channelName) {
             const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : ''
             infoLines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`)
@@ -2699,7 +2633,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'items': {
-          const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact'
+          const isCompact = (cfg.itemFormat || data.itemDetailFormat) === 'compact'
           const isSimple = cfg.itemFormat === 'simple' || (!is80mm && !cfg.showQtyPriceHeader)
 
           // 仅在明确开启三列表头时才打印表头，且强制使用标准正常小字，绝不使用突兀大字
@@ -2727,10 +2661,10 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
                 if (getVisualWidth(fullName) <= maxNameW) {
                   const namePadded = padEndVisual(fullName, width - priceW)
                   const pricePadded = padStartVisual(priceStr, priceW)
-                  chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, { bold: st.bold, fontSize: st.fontSize }))
+                  chunks.push(formatStyledLine(`${namePadded}${pricePadded}`, st))
                 } else {
                   // 长商品名：首行完整输出商品名称，次行右对齐金额
-                  chunks.push(formatStyledLine(fullName, { bold: st.bold, fontSize: st.fontSize }))
+                  chunks.push(formatStyledLine(fullName, st))
                   chunks.push(formatStyledLine(padStartVisual(priceStr, width - 2), { bold: st.bold, fontSize: st.fontSize, align: 'right' }))
                 }
               } else {
@@ -2738,7 +2672,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
                 const name = padEndVisual(truncate(`${item.productName}${spec}`, nameWidth), nameWidth)
                 const qty = padStartVisual(String(item.quantity), qtyWidth)
                 const price = padStartVisual(formatRp(item.unitPrice * item.quantity), priceWidth)
-                chunks.push(formatStyledLine(`${name}${qty}${price}`, { bold: st.bold, fontSize: st.fontSize }))
+                chunks.push(formatStyledLine(`${name}${qty}${price}`, st))
               }
 
               if (isCompact) {
@@ -2819,20 +2753,14 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           if (!is80mm && st.fontSize === 'large') {
             const combinedLen = rawTotalLabel.length + rawTotalVal.length + 1
             if (combinedLen > 16) {
-              // 超限时自适应：采用加粗标准字号排版，确保 100% 同行对齐永不换行截断
-              const totalLabel = padEndVisual(rawTotalLabel, labelWidth)
-              const totalVal = padStartVisual(rawTotalVal, valWidth)
-              chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
-                bold: true,
-                fontSize: 'normal',
-                align: st.align
-              }))
+              chunks.push(formatStyledLine(rawTotalLabel, { ...st, align: st.align || 'left' }))
+              chunks.push(formatStyledLine(rawTotalVal, { ...st, align: 'right' }))
             } else {
               // 安全在 16 字符内，精准定宽输出大字
               const spaces = Math.max(1, 16 - (rawTotalLabel.length + rawTotalVal.length))
               const safeLine = `${rawTotalLabel}${' '.repeat(spaces)}${rawTotalVal}`
               chunks.push(formatStyledLine(safeLine, {
-                bold: true,
+                bold: st.bold,
                 fontSize: 'large',
                 align: st.align
               }))
@@ -2917,10 +2845,9 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
     // 默认结构（当完全没有配置任何 blocks 时）
     if (data.storeLogo && data.showLogo !== false) {
       const rawImg = await loadLogoBuffer(data.storeLogo)
-      if (rawImg) {
-        const logoBuf = imageBufferToEscPosRaster(rawImg, targetDots)
-        if (logoBuf) chunks.push(logoBuf)
-      }
+      const logoBuf = rawImg ? imageBufferToEscPosRaster(rawImg, targetDots) : null
+      if (logoBuf) chunks.push(logoBuf)
+      else data.printWarnings?.push('LOGO_UNAVAILABLE')
     }
     const storeTitle = data.storeName || data.header || 'YOUME'
     chunks.push(formatStyledLine(storeTitle, { align: 'center', bold: true, fontSize: 'large' }))
@@ -3082,7 +3009,7 @@ function generateReceiptText(data: any): string {
 
   // Check if blocks template is supplied
   const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null)
-  if (rawBlocks && rawBlocks.length > 0) {
+  if (Array.isArray(rawBlocks)) {
     const lines: string[] = []
     const enabledBlocks = [...rawBlocks]
       .filter((b: any) => b && b.enabled !== false)
@@ -3091,15 +3018,7 @@ function generateReceiptText(data: any): string {
     for (const block of enabledBlocks) {
       const cfg = block.config || {}
       switch (block.type) {
-        case 'logo': {
-          // 仅在整个模板中压根没有配置 header 块且用户开启了 showLogo 时，才作为店名回退输出
-          const existsHeaderInTemplate = rawBlocks.some((b: any) => b && b.type === 'header')
-          if (!existsHeaderInTemplate && data.showLogo !== false) {
-            const storeTitle = data.storeName || data.header || 'YOUME'
-            lines.push(centerText(storeTitle, width))
-          }
-          break
-        }
+        case 'logo': break
         case 'header': {
           const headerText = cfg.text || data.header || data.storeName || 'YOUME'
           if (headerText) {
@@ -3128,12 +3047,9 @@ function generateReceiptText(data: any): string {
         }
         case 'orderInfo': {
           if (cfg.showPickupNumber !== false && data.pickupNumber) {
-            const safeW = Math.max(20, width - 2)
-            lines.push(repeatChar('-', safeW))
             lines.push(centerText(`*** ${L.queueNo}: ${data.pickupNumber} ***`, width))
-            lines.push(repeatChar('-', safeW))
           }
-          lines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`)
+          if (cfg.showOrderNo !== false && data.orderNum) lines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum}`)
           const showDate = cfg.showDate !== false
           const showTime = cfg.showTime !== false
           if (showDate || showTime) {
@@ -3157,7 +3073,7 @@ function generateReceiptText(data: any): string {
         case 'items': {
           lines.push(`${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`)
           lines.push(repeatChar('-', Math.max(20, width - 2)))
-          const isCompact = data.itemDetailFormat === 'compact' || cfg.itemFormat === 'compact'
+          const isCompact = (cfg.itemFormat || data.itemDetailFormat) === 'compact'
           if (data.items && data.items.length > 0) {
             data.items.forEach((item: any) => {
               const spec = item.specName ? ` ${item.specName}` : ''

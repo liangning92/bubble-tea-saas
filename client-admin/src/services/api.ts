@@ -61,6 +61,13 @@ export function updateApiUrl(url: string) {
   api.defaults.baseURL = url
 }
 
+export function receiptMediaUrl(value?: string | null): string {
+  if (!value) return ''
+  if (/^(data:|https?:)/i.test(value)) return value
+  const origin = new URL(api.defaults.baseURL || API_BASE, window.location.href).origin
+  return new URL(value, origin).href
+}
+
 // Auth
 export const authApi = {
   login: (phone: string, password: string) => api.post('/auth/login', { phone, password }),
