@@ -1,5 +1,5 @@
 import { DashboardReadFailure } from '../components/DashboardReadState'
-import { useDashboardContext, dashboardLink, utcDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
+import { useDashboardContext, dashboardLink, businessDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -63,7 +63,7 @@ function StatCard({
 
 // ========== POS 操作预警组件 ==========
 function POSAlertsWidget({storeId,asOf}: {storeId:string;asOf:string}) {
-  const range = utcDay(asOf)
+  const range = businessDay(asOf)
   const { t } = useTranslation()
   const navigate = useNavigate()
 
@@ -464,7 +464,7 @@ export function DashboardPage() {
               {dashboard?.recentOrders?.map((order: any) => (
                 <tr
                   key={order.id}
-                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId,asOf,...utcDay(order.createdAt)}))}
+                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId,asOf,...businessDay(order.createdAt)}))}
                   className="border-b last:border-0 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
                   <td className="py-3 font-mono text-sm">{order.orderNumber}</td>

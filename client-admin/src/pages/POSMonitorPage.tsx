@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from 'react'
-import { useDashboardContext, requireRead, finiteNumber } from '../utils/dashboardNavigation'
+import { useDashboardContext, requireRead, finiteNumber, businessDay } from '../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../components/DashboardReadState'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -86,15 +86,23 @@ export function POSMonitorPage() {
   useEffect(()=>{setFilter(prev=>({...prev,dateRange:context.startDate?'dashboard':'today',page:1}))},[context.startDate,context.endDate])
   const [autoRefresh, setAutoRefresh] = useState(true)
 
+  const [rangeClock, setRangeClock] = useState(()=>Date.now())
+  useEffect(()=>{
+    if (!autoRefresh) return
+    setRangeClock(Date.now())
+    const timer = window.setInterval(()=>setRangeClock(Date.now()),15000)
+    return ()=>window.clearInterval(timer)
+  },[autoRefresh])
+
   // Build date range
   const getDateRange = () => {
-    const now = new Date()
+    const now = new Date(rangeClock)
     let startDate: string | undefined
     let endDate: string | undefined
 
     switch (filter.dateRange) {
       case 'today':
-        startDate = new Date(now.setHours(0, 0, 0, 0)).toISOString()
+        startDate = businessDay(now.toISOString()).startDate
         break
       case 'week':
         startDate = new Date(now.setDate(now.getDate() - 7)).toISOString()
@@ -106,7 +114,7 @@ export function POSMonitorPage() {
     return { startDate, endDate }
   }
 
-  const { startDate, endDate } = useMemo(()=>filter.dateRange==='dashboard'?{startDate:context.startDate,endDate:context.endDate}:getDateRange(),[filter.dateRange,context.startDate,context.endDate])
+  const { startDate, endDate } = useMemo(()=>filter.dateRange==='dashboard'?{startDate:context.startDate,endDate:context.endDate}:getDateRange(),[filter.dateRange,context.startDate,context.endDate,rangeClock])
 
   // Fetch logs
   const { data, isLoading, isError:logsError, refetch } = useQuery({
@@ -140,6 +148,13 @@ export function POSMonitorPage() {
     refetchInterval: autoRefresh ? 10000 : false,
   })
 
+  const refreshAll = () => {
+    // Changing the anchor triggers fresh queries for relative ranges; fixed URL
+    // ranges retain their keys and are explicitly refetched with current sessions.
+    setRangeClock(Date.now())
+    return Promise.all([refetch(),refetchStats(),refetchSessions()])
+  }
+
   const logs = data?.data?.data?.logs || []
   const stats = statsData?.data?.data
   const activeSessions = sessionsData?.data?.data || []
@@ -155,7 +170,7 @@ export function POSMonitorPage() {
   }
 
   if (!context.valid) return <DashboardReadFailure scope />
-  if (logsError || statsError || sessionsError) return <DashboardReadFailure retry={()=>Promise.all([refetch(),refetchStats(),refetchSessions()])} />
+  if (logsError || statsError || sessionsError) return <DashboardReadFailure retry={refreshAll} />
   if (isLoading || statsPending || sessionsPending) return <p>{t('common.loading')}</p>
   return (
     <div className="p-6">
@@ -176,7 +191,7 @@ export function POSMonitorPage() {
             />
             {t('posMonitor.autoRefresh')}
           </label>
-          <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
+          <button onClick={refreshAll} className="btn-secondary flex items-center gap-2">
             <RefreshCw size={16} />
             {t('common.refresh')}
           </button>

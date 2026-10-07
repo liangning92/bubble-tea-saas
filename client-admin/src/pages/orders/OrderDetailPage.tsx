@@ -16,7 +16,7 @@ export function OrderDetailPage() {
   const [refundReason, setRefundReason] = useState('')
   const [showRefund, setShowRefund] = useState(false)
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['order',context.storeId,id],
     queryFn: () => orderApi.get(id!),
     enabled: !!id && context.valid
@@ -38,7 +38,7 @@ export function OrderDetailPage() {
   const order = data?.data?.data
   if (!context.valid || order?.storeId && order.storeId !== context.storeId) return <DashboardReadFailure scope />
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
-  if (isError) return <div className="card text-center py-8 text-red-600">{String((error as any)?.response?.data?.message || (error as any)?.message || t('common.error'))}</div>
+  if (isError) return <DashboardReadFailure retry={()=>refetch()} />
   if (!order) return <div className="text-center py-8">{t('common.noData')}</div>
 
   const statusConfig: Record<string, { label: string; color: string; icon: any }> = {

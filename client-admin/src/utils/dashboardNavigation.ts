@@ -2,10 +2,13 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth'
 
 export const validInstant = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
-export function utcDay(instant: string) {
+// Indonesia store business day, independent of the browser's local timezone.
+export function businessDay(instant: string) {
   if (!validInstant(instant)) throw new Error('DASHBOARD_CONTEXT_INVALID')
-  const day = new Date(instant).toISOString().slice(0,10)
-  return {startDate:`${day}T00:00:00.000Z`,endDate:`${day}T23:59:59.999Z`}
+  const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(instant))
+  const part = (type: string) => parts.find(p=>p.type===type)!.value
+  const start = Date.parse(`${part('year')}-${part('month')}-${part('day')}T00:00:00+07:00`)
+  return {startDate:new Date(start).toISOString(),endDate:new Date(start+86400000-1).toISOString()}
 }
 export function dashboardLink(path: string, context: Record<string, string | undefined>) {
   const params = new URLSearchParams()
