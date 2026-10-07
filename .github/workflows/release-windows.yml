@@ -48,12 +48,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.source.outputs.run_id }}
       - name: Refuse before publication without legacy compatibility clearance
+        env:
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           node - <<'JS'
           const fs=require('fs'),assert=require('assert/strict');
           const manifest=JSON.parse(fs.readFileSync('evidence/desktop-template-manifest.json','utf8'));
           const compatibility=JSON.parse(fs.readFileSync('evidence/desktop-compatibility-report.json','utf8'));
           const guard=JSON.parse(fs.readFileSync('evidence/desktop-upgrade-gate-report.json','utf8'));
+          const manual=JSON.parse(fs.readFileSync('evidence/desktop-manual-upgrade-report.json','utf8'));
+          assert.equal(manual.sourceSha,process.env.RELEASE_SHA);
+          assert.equal(manual.allCriticalCasesPassed,true);
+          assert.equal(manual.syntheticOnly,true);
+          assert.equal(manual.cases.length,6);
+          assert.deepEqual(manual.changes,['Order.pickupNumber nullable TEXT','Order.requestFingerprint nullable TEXT','Order.requestReceipt nullable TEXT','Order_pickupNumber_idx nonunique index']);
           assert.equal(manifest.existingDatabaseCompatible,true,'Legacy compatibility has not been cleared; no Release may be created');
           assert.equal(compatibility.newTemplateCompatible,true);
           assert.equal(guard.databaseBytesPreserved,true);
@@ -70,6 +78,10 @@ jobs:
       contents: write
       actions: read
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/download-artifact@v4
         with:
           name: BTPS-build-dist
@@ -94,11 +106,18 @@ jobs:
           $hash = [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.IO.File]::ReadAllBytes((Resolve-Path $exePath))))
           if (!$manifest.Contains($hash)) { throw 'Installer SHA512 mismatch' }
           $tag = "v$version"
+          $env:RELEASE_TAG = $tag
+          node .github/scripts/windows-release-tag.cjs ensure
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag SHA binding failed' }
           gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) { throw 'Release already exists; do not overwrite another release' }
+          node .github/scripts/windows-release-tag.cjs verify
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag moved before draft creation' }
           gh release create $tag --draft --target $env:RELEASE_SHA --title "BTPS $version" --notes "Verified installer from $($env:RELEASE_SHA)." --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw 'Draft creation failed' }
           gh release upload $tag $exePath $blockmapPath 'release/latest.yml' --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw 'Verified upload failed; draft remains unpublished' }
+          node .github/scripts/windows-release-tag.cjs verify
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag moved; draft remains unpublished' }
           gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw 'Publication failed' }

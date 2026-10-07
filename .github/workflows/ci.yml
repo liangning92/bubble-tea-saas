@@ -47,6 +47,7 @@ jobs:
         run: |
           node --test tests/stoploss/*.test.cjs
           PYTHONDONTWRITEBYTECODE=1 python3 tests/stoploss/desktop-upgrade-preflight.test.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/stoploss/desktop-db-upgrade.test.py
 
       - name: Verify real HTTP order receipt replay on isolated SQLite and PostgreSQL
         run: |

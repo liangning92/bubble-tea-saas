@@ -93,7 +93,20 @@ jobs:
           Copy-Item (Join-Path $target 'seed.db') 'server/prisma/seed.db' -Force
           Copy-Item (Join-Path $target 'manifest.json') 'desktop-template-manifest.json' -Force
           'EXISTING_DB_COMPATIBLE=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-          Write-Host 'Fresh installs only: old databases remain unchanged and lack Order.pickupNumber'
+          Write-Host 'Fresh template prepared; manual legacy upgrade requires verified helper and employee confirmation'
+
+      - name: Build bounded manual database upgrade helper
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install pyinstaller==6.11.1
+          if ($LASTEXITCODE -ne 0) { throw 'Helper dependencies failed' }
+          New-Item -ItemType Directory -Force 'build/upgrade-helper' | Out-Null
+          python scripts/desktop-db-upgrade.py build-catalog --template server/prisma/seed.db --output build/upgrade-helper/schema-catalog.json --source-sha "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { throw 'Bound schema catalog failed' }
+          python -m PyInstaller --clean --noconfirm --onefile --name btps-db-upgrade --distpath build/upgrade-helper --workpath "$env:RUNNER_TEMP/upgrade-pyinstaller" --specpath "$env:RUNNER_TEMP" --add-data 'build/upgrade-helper/schema-catalog.json:runtime' scripts/desktop-db-upgrade.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native helper build failed' }
+          python tests/stoploss/desktop-db-upgrade.test.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows snapshot and rollback tests failed' }
 
       - name: Generate Prisma client
         run: |
@@ -147,6 +160,11 @@ jobs:
 
       - name: Verify installer refuses before replacing the usable old POS
         run: ./scripts/validate-windows-upgrade-gate.ps1
+
+      - name: Verify compiled manual helper and interactive installer on owned synthetic historical database
+        run: |
+          python scripts/validate-windows-manual-upgrade.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native manual upgrade validation failed' }
 
       - name: Smoke test packaged local API
         run: |
@@ -208,3 +226,4 @@ jobs:
             desktop-template-manifest.json
             desktop-compatibility-report.json
             desktop-upgrade-gate-report.json
+            desktop-manual-upgrade-report.json
