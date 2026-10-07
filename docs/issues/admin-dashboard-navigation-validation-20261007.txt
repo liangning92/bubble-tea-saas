@@ -1,0 +1,23 @@
+Admin dashboard navigation — final local review increment
+Baseline e1c0457592f59bcdd6b55e848e4f507e4f7ed1a9, branch fix/admin-dashboard-navigation.
+
+Final outcome:
+- Register existing POSMonitorPage at /pos-monitor, map both POS widget links with authenticated store/asOf/exact report UTC-day context. Destination validates scope and forwards dates to logs/stats; active sessions and todayTotal are current state, not historical log totals.
+- Map stock-alerts link to existing /inventory/alerts, explicitly label forecast/current and distinguish it from dashboard safety-stock counts. Seven-day horizon received by target; same-route URL horizon changes update query.
+- Map /orders to /finance/orders with storeId + range=all, since source recentOrders crosses dates. Row click goes to /finance/orders/:id with the row's own UTC-date context, not an ignored id query. Target list actually sends store/range filters; detail rejects returned foreign-store data and preserves context/back link. Existing refund/status mutation logic unchanged; scoped detail cache invalidation preserved.
+- Consumption API is genuinely blocked by earlier /inventory/:id matching. Dashboard states unavailable instead of offering a broken action. Direct /inventory/consumption-analysis resolves to context-preserving unavailable page, zero analysis HTTP. Existing unrouted ConsumptionAnalysisPage source restored unchanged; experimental draft retained only /tmp/admin-dashboard-consumption-draft-unshipped.tsx. Backend route reorder is separate work.
+- Main report HTTP errors, missing/malformed required response fields and independent POS stats/sessions errors have visible retry/failure. Successful zero and empty arrays remain distinct. Stock/monitor/list failures cannot render healthy empty state. Optional summary absent from actual report contract is explicitly unavailable; absent forecast urgency counts show an unavailable marker.
+- URL store must match authenticated store; no store fails closed. Dates validated/normalized, source report timestamp controls daily UTC context, not browser date. Query keys include effective store/date context, preventing same-store/different-date reuse. Parent layouts can still read own authenticated-store settings; this is not a backend permission rewrite.
+
+Final validation:
+node tests/stoploss/admin-dashboard-page-check.cjs — final28/28 PASS, /tmp/admin-dashboard-final-pages.log.
+Actual complete App + native React Router/React Query/Chromium; only GET API boundaries synthetic, external origins blocked. Registered component navigation, exact request filters, UTC day Oct6 while browser Asia/Jakarta is Oct7, cross-date recent-order detail, root503->retry, malformed200, successful zero/empty, independent stats/sessions failures, destination read failures/empty, forged foreign store at every destination, invalid date, refresh preservation, store cache change, same-page forecast change, Indonesian/English/Chinese failures, blocked analysis no HTTP. No page errors or HTTP mutations. Final screenshots /tmp/admin-dashboard-evidence/<final-case>.png. Folder also retains earlier draft evidence; final log names identify shipped cases.
+node --test tests/stoploss/*.test.cjs —68/68 PASS, /tmp/admin-dashboard-unit.log. Existing66 POS units unchanged/pass; two new actual Express matching + actual inventory terminal-handler tests prove named analysis paths select /:id and404. Those routing tests stub auth/data, make no real DB requests and do not certify permissions.
+npm run typecheck:admin —PASS, /tmp/admin-dashboard-types.log.
+npm run i18n:check —all3 PASS, /tmp/admin-dashboard-i18n.log; existing hardcoded-language label warnings retained.
+npm run build --workspace client-admin -- --outDir /tmp/admin-dashboard-build —PASS, /tmp/admin-dashboard-build.log; existing bundle-size warning. Repository build outputs unchanged.
+bash scripts/security-review.sh —18 PASS/0 FAIL/1 existing store-access warning, /tmp/admin-dashboard-security.log.
+git diff --check —PASS.
+Local listener approved via normal escalation; no rejected approval or alternate bypass.
+
+Limits: read API boundaries synthetic, not production data acceptance. Real server source routing inspected and shadow reproduced using Express matching; no production HTTP/deploy/update. This batch does NOT make consumption analysis available, fix backend authorization/date/calculation gaps, reconcile all source trees, or certify Windows packaging/SQLite seed pickupNumber. Prior five POS batches/CI/source branch retained. No server source/schema, DB/config/credentials, manifests/lock/workflows, POS/source/updater/install package changes. No push/merge/deploy/restart. Fixed local increment awaits independent review.

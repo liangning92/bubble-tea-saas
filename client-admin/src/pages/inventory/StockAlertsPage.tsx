@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useDashboardContext, requireRead } from '../../utils/dashboardNavigation'
+import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { bomApi } from '../../services/api'
@@ -7,20 +9,28 @@ import { Loader2, AlertTriangle, Package } from 'lucide-react'
 
 export function StockAlertsPage() {
   const { t, i18n } = useTranslation()
-  const [forecastDays, setForecastDays] = useState(30)
+  const context=useDashboardContext()
+  const [forecastDays, setForecastDays] = useState([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)
+
+  useEffect(()=>{setForecastDays([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)},[context.forecastDays])
 
   // 低库存预警
-  const { data: alertsData, isLoading } = useQuery({
-    queryKey: ['bom-alerts', forecastDays],
-    queryFn: () => bomApi.getLowStockAlerts(forecastDays),
+  const { data: alertsData, isLoading, isError, refetch } = useQuery({
+    queryKey: ['bom-alerts',context.storeId,forecastDays],
+    enabled:context.valid,
+    queryFn: async () => {const response=await bomApi.getLowStockAlerts(forecastDays);return requireRead(response,Array.isArray(response.data?.data))},
     refetchInterval: 30000 // Auto-refresh every 30 seconds
   })
 
   // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
   const alertsList = alertsData?.data?.data || []
 
+  if (!context.valid) return <DashboardReadFailure scope />
+  if (isError) return <DashboardReadFailure retry={()=>refetch()} />
+  if (isLoading) return <p>{t('common.loading')}</p>
   return (
     <div className="space-y-6">
+      <DashboardContextNotice current />
       <div className="flex items-center justify-between">
         <div />
         <select

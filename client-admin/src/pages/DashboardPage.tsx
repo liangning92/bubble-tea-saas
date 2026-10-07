@@ -1,3 +1,5 @@
+import { DashboardReadFailure } from '../components/DashboardReadState'
+import { useDashboardContext, dashboardLink, utcDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -60,22 +62,25 @@ function StatCard({
 }
 
 // ========== POS 操作预警组件 ==========
-function POSAlertsWidget() {
+function POSAlertsWidget({storeId,asOf}: {storeId:string;asOf:string}) {
+  const range = utcDay(asOf)
   const { t } = useTranslation()
   const navigate = useNavigate()
 
-  const { data: statsData } = useQuery({
-    queryKey: ['pos-alert-stats'],
-    queryFn: () => posActionLogApi.getStats(),
+  const { data: statsData, isPending:statsPending, isError:statsError, refetch:refetchStats } = useQuery({
+    queryKey: ['pos-alert-stats',storeId,range.startDate,range.endDate],
+    queryFn: async () => {const response=await posActionLogApi.getStats(range);return requireRead(response,['warningCount','criticalCount','todayTotal'].every(k=>finiteNumber(response.data?.data?.[k])))},
     refetchInterval: 30000, // Refresh every 30s
   })
 
-  const { data: sessionsData } = useQuery({
-    queryKey: ['pos-active-sessions'],
-    queryFn: () => posActionLogApi.getSessions(),
+  const { data: sessionsData, isPending:sessionsPending, isError:sessionsError, refetch:refetchSessions } = useQuery({
+    queryKey: ['pos-active-sessions',storeId],
+    queryFn: async () => {const response=await posActionLogApi.getSessions();return requireRead(response,Array.isArray(response.data?.data))},
     refetchInterval: 10000, // Refresh every 10s
   })
 
+  if (statsError || sessionsError) return <DashboardReadFailure retry={()=>Promise.all([refetchStats(),refetchSessions()])} />
+  if (statsPending || sessionsPending) return <p>{t('common.loading')}</p>
   const stats = statsData?.data?.data
   const activeSessions = sessionsData?.data?.data || []
   const unhandledCount = (stats?.warningCount || 0) + (stats?.criticalCount || 0)
@@ -97,7 +102,7 @@ function POSAlertsWidget() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/pos-monitor')}
+          onClick={() => navigate(dashboardLink('/pos-monitor',{storeId,asOf,...range}))}
           className="ml-auto text-sm text-primary hover:text-primary-hover font-medium"
         >
           {t('dashboard.viewAll')} →
@@ -130,7 +135,7 @@ function POSAlertsWidget() {
           )}
         </div>
         <button
-          onClick={() => navigate('/pos-monitor')}
+          onClick={() => navigate(dashboardLink('/pos-monitor',{storeId,asOf,...range}))}
           className="ml-auto text-sm text-primary hover:text-primary-hover font-medium"
         >
           {t('dashboard.viewDetails')} →
@@ -141,16 +146,20 @@ function POSAlertsWidget() {
 }
 
 export function DashboardPage() {
+  const context = useDashboardContext()
   const { t } = useTranslation()
   const navigate = useNavigate()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => reportApi.dashboard()
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['dashboard',context.storeId],
+    queryFn: async () => {const response=await reportApi.dashboard({storeId:context.storeId!});return requireRead(response,validDashboard(response.data?.data))},
+    enabled:context.valid
   })
 
   const dashboard = data?.data?.data
 
+  if (!context.valid) return <DashboardReadFailure scope />
+  if (isError) return <DashboardReadFailure retry={()=>refetch()} />
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -158,6 +167,11 @@ export function DashboardPage() {
       </div>
     )
   }
+
+  if (!dashboard) return <DashboardReadFailure retry={()=>refetch()} />
+  const storeId=context.storeId!
+  const asOf=dashboard.timestamp
+  const currentContext={storeId,asOf,range:'current'}
 
   return (
     <div>
@@ -294,12 +308,13 @@ export function DashboardPage() {
               {t('dashboard.lowStockAlert')}
             </h2>
             <button
-              onClick={() => navigate('/inventory/stock-alerts')}
+              onClick={() => navigate(dashboardLink('/inventory/alerts',{...currentContext,forecastDays:'7'}))}
               className="text-sm text-primary hover:text-primary-hover font-medium"
             >
-              {t('dashboard.viewAll')} →
+              {t('dashboardNavigation.forecastAlerts')} →
             </button>
           </div>
+          <p className="text-sm text-gray-500 mb-3">{t('dashboardNavigation.safetyStockNotice')}</p>
           {dashboard?.inventory?.lowStockItems?.length > 0 ? (
             <div className="space-y-2">
               {dashboard.inventory.lowStockItems.map((item: any) => (
@@ -320,7 +335,7 @@ export function DashboardPage() {
                       item.urgency === 'critical' ? 'text-red-600' :
                       item.urgency === 'warning' ? 'text-orange-600' : 'text-gray-600'
                     }`}>
-                      {item.daysLeft} {t('bom.days')}
+                      {item.currentStock} / {item.safetyStock ?? '—'}
                     </span>
                     <span className="text-xs text-gray-400 ml-1">
                       ({item.currentStock} {item.unit})
@@ -336,6 +351,7 @@ export function DashboardPage() {
       </div>
 
       {/* ========== 消耗异常预警 ========== */}
+      {!Array.isArray(dashboard.inventory.consumptionAnomalies) && <div className="card mb-6"><h2>{t('dashboard.consumptionAnomaly')}</h2><p>{t('dashboardNavigation.unavailable')}</p><p>{t('dashboardNavigation.featureUnavailable')}</p></div>}
       {dashboard?.inventory?.consumptionAnomalies?.length > 0 && (
         <div className="card border-orange-200 bg-orange-50/50">
           <div className="flex items-center justify-between mb-4">
@@ -344,7 +360,7 @@ export function DashboardPage() {
               {t('dashboard.consumptionAnomaly')}
             </h2>
             <button
-              onClick={() => navigate('/inventory/consumption-analysis')}
+              disabled aria-disabled="true" title={t('dashboardNavigation.featureUnavailable')}
               className="text-sm text-orange-600 hover:text-orange-700 font-medium"
             >
               {t('dashboard.viewAll')} →
@@ -412,22 +428,22 @@ export function DashboardPage() {
           <div>
             <p className="text-sm text-gray-500">{t('dashboard.lowStock')}</p>
             <p className="text-2xl font-bold text-red-600">
-              {dashboard?.inventory?.criticalCount || 0}
-              <span className="text-sm text-gray-400 font-normal"> / {dashboard?.inventory?.warningCount || 0} {t('dashboard.warning')}</span>
+              {dashboard?.inventory?.criticalCount ?? '—'}
+              <span className="text-sm text-gray-400 font-normal"> / {dashboard?.inventory?.warningCount ?? '—'} {t('dashboard.warning')}</span>
             </p>
           </div>
         </div>
       </div>
 
       {/* ========== POS 操作预警 ========== */}
-      <POSAlertsWidget />
+      <POSAlertsWidget storeId={storeId} asOf={asOf} />
 
       {/* ========== 最近订单 ========== */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{t('dashboard.recentOrders')}</h2>
           <button
-            onClick={() => navigate('/orders')}
+            onClick={() => navigate(dashboardLink('/finance/orders',{storeId,asOf,range:'all'}))}
             className="text-sm text-primary hover:text-primary-hover font-medium"
           >
             {t('dashboard.viewAll')} →
@@ -448,7 +464,7 @@ export function DashboardPage() {
               {dashboard?.recentOrders?.map((order: any) => (
                 <tr
                   key={order.id}
-                  onClick={() => navigate(`/orders?id=${order.id}`)}
+                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId,asOf,...utcDay(order.createdAt)}))}
                   className="border-b last:border-0 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
                   <td className="py-3 font-mono text-sm">{order.orderNumber}</td>

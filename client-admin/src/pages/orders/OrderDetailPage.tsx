@@ -1,3 +1,5 @@
+import { useDashboardContext, dashboardLink } from '../../utils/dashboardNavigation'
+import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -9,30 +11,32 @@ import { ArrowLeft, Printer, RotateCcw, CheckCircle, Clock, XCircle, Loader2 } f
 export function OrderDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams()
+  const context=useDashboardContext()
   const queryClient = useQueryClient()
   const [refundReason, setRefundReason] = useState('')
   const [showRefund, setShowRefund] = useState(false)
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['order', id],
+    queryKey: ['order',context.storeId,id],
     queryFn: () => orderApi.get(id!),
-    enabled: !!id
+    enabled: !!id && context.valid
   })
 
   const updateStatusMutation = useMutation({
     mutationFn: (status: string) => orderApi.updateStatus(id!, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['order', id] })
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['order',context.storeId,id] })
   })
 
   const refundMutation = useMutation({
     mutationFn: (reason: string) => orderApi.refund(id!, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['order', id] })
+      queryClient.invalidateQueries({ queryKey: ['order',context.storeId,id] })
       setShowRefund(false)
     }
   })
 
   const order = data?.data?.data
+  if (!context.valid || order?.storeId && order.storeId !== context.storeId) return <DashboardReadFailure scope />
   if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
   if (isError) return <div className="card text-center py-8 text-red-600">{String((error as any)?.response?.data?.message || (error as any)?.message || t('common.error'))}</div>
   if (!order) return <div className="text-center py-8">{t('common.noData')}</div>
@@ -51,8 +55,9 @@ export function OrderDetailPage() {
 
   return (
     <div>
+      <DashboardContextNotice />
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/finance/orders" className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft size={20} /></Link>
+        <Link to={dashboardLink('/finance/orders',{storeId:context.storeId,asOf:context.asOf,startDate:context.startDate,endDate:context.endDate})} className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft size={20} /></Link>
         <h1 className="text-2xl font-bold text-gray-900">{t('orders.orderDetail')}</h1>
       </div>
 

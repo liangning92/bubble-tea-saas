@@ -1,3 +1,6 @@
+import { useMemo, useEffect } from 'react'
+import { useDashboardContext, requireRead, finiteNumber } from '../utils/dashboardNavigation'
+import { DashboardReadFailure, DashboardContextNotice } from '../components/DashboardReadState'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -71,14 +74,16 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 export function POSMonitorPage() {
+  const context=useDashboardContext()
   const { t } = useTranslation()
   const [filter, setFilter] = useState({
     severity: '',
     action: '',
     staffId: '',
-    dateRange: 'today',
+    dateRange: context.startDate ? 'dashboard' : 'today',
     page: 1,
   })
+  useEffect(()=>{setFilter(prev=>({...prev,dateRange:context.startDate?'dashboard':'today',page:1}))},[context.startDate,context.endDate])
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   // Build date range
@@ -101,12 +106,13 @@ export function POSMonitorPage() {
     return { startDate, endDate }
   }
 
-  const { startDate, endDate } = getDateRange()
+  const { startDate, endDate } = useMemo(()=>filter.dateRange==='dashboard'?{startDate:context.startDate,endDate:context.endDate}:getDateRange(),[filter.dateRange,context.startDate,context.endDate])
 
   // Fetch logs
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['pos-action-logs', filter],
-    queryFn: () => posActionLogApi.list({
+  const { data, isLoading, isError:logsError, refetch } = useQuery({
+    queryKey: ['pos-action-logs',context.storeId,startDate,endDate,filter],
+    enabled:context.valid,
+    queryFn: async () => {const response=await posActionLogApi.list({
       page: filter.page,
       limit: 50,
       severity: filter.severity || undefined,
@@ -114,21 +120,23 @@ export function POSMonitorPage() {
       staffId: filter.staffId || undefined,
       startDate,
       endDate,
-    }),
+    });return requireRead(response,Array.isArray(response.data?.data?.logs))},
     refetchInterval: autoRefresh ? 15000 : false,
   })
 
   // Fetch stats
-  const { data: statsData } = useQuery({
-    queryKey: ['pos-alert-stats'],
-    queryFn: () => posActionLogApi.getStats({ startDate, endDate }),
+  const { data: statsData, isError:statsError, isPending:statsPending, refetch:refetchStats } = useQuery({
+    queryKey: ['pos-alert-stats',context.storeId,startDate,endDate],
+    enabled:context.valid,
+    queryFn: async () => {const response=await posActionLogApi.getStats({startDate,endDate});return requireRead(response,['warningCount','criticalCount','todayTotal'].every(k=>finiteNumber(response.data?.data?.[k])))},
     refetchInterval: autoRefresh ? 30000 : false,
   })
 
   // Fetch active sessions
-  const { data: sessionsData } = useQuery({
-    queryKey: ['pos-active-sessions'],
-    queryFn: () => posActionLogApi.getSessions(),
+  const { data: sessionsData, isError:sessionsError, isPending:sessionsPending, refetch:refetchSessions } = useQuery({
+    queryKey: ['pos-active-sessions',context.storeId],
+    enabled:context.valid,
+    queryFn: async () => {const response=await posActionLogApi.getSessions();return requireRead(response,Array.isArray(response.data?.data))},
     refetchInterval: autoRefresh ? 10000 : false,
   })
 
@@ -146,8 +154,13 @@ export function POSMonitorPage() {
     return d.toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })
   }
 
+  if (!context.valid) return <DashboardReadFailure scope />
+  if (logsError || statsError || sessionsError) return <DashboardReadFailure retry={()=>Promise.all([refetch(),refetchStats(),refetchSessions()])} />
+  if (isLoading || statsPending || sessionsPending) return <p>{t('common.loading')}</p>
   return (
     <div className="p-6">
+      <DashboardContextNotice range={{startDate,endDate}} />
+      <p className="text-sm text-gray-500 mb-2">{t('dashboardNavigation.sessionsCurrent')}</p>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('posMonitor.pageTitle')}</h1>
@@ -254,6 +267,7 @@ export function POSMonitorPage() {
             onChange={(e) => setFilter({ ...filter, dateRange: e.target.value, page: 1 })}
             className="input w-32"
           >
+            {context.startDate && <option value="dashboard">{t('dashboardNavigation.dashboardRange')}</option>}
             <option value="today">{t('posMonitor.today')}</option>
             <option value="week">{t('posMonitor.week')}</option>
             <option value="month">{t('posMonitor.month')}</option>

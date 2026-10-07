@@ -1,3 +1,5 @@
+import { useDashboardContext, requireRead, dashboardLink } from '../../utils/dashboardNavigation'
+import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +30,7 @@ export function OrderListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user: _user } = useAuthStore()
+  const context=useDashboardContext()
   const [subTab, setSubTab] = useState<OrderSubTab>('orders')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
@@ -41,25 +44,29 @@ export function OrderListPage() {
 
   // Get channels for filter dropdown
   const { data: channelsData } = useQuery({
-    queryKey: ['channels'],
+    queryKey: ['channels',context.storeId],
+    enabled:context.valid,
     queryFn: () => channelApi.list()
   })
   const channels = channelsData?.data?.data?.list || []
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['orders', statusFilter, channelFilter, search],
-    queryFn: () => orderApi.list({
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['orders',context.storeId,context.startDate,context.endDate,statusFilter, channelFilter, search],
+    enabled:context.valid,
+    queryFn: async () => {const response=await orderApi.list({
+      storeId:context.storeId,startDate:context.startDate,endDate:context.endDate,
       pageSize: 100,
       status: statusFilter || undefined,
       channelId: channelFilter || undefined,
       search: search.trim() || undefined
-    })
+    });return requireRead(response,Array.isArray(response.data?.data?.list))}
   })
 
   const orders = data?.data?.data?.list || []
 
   // Load pending refund requests
   const loadRefundRequests = async () => {
+    if (!context.valid) return
     try {
       const res = await adminApi.getRefundRequests('pending')
       setRefundRequests(res.data?.data?.list || [])
@@ -103,6 +110,8 @@ export function OrderListPage() {
     }
   }
 
+  if (!context.valid) return <DashboardReadFailure scope />
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed': return 'badge-success'
@@ -116,6 +125,7 @@ export function OrderListPage() {
 
   return (
     <div>
+      <DashboardContextNotice />
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('orders.title')}</h1>
 
       {/* Sub-tabs: Orders / Refunds */}
@@ -178,10 +188,7 @@ export function OrderListPage() {
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : isError ? (
-          <div className="text-center py-8">
-            <p className="text-red-500 mb-2">{t('common.error')}</p>
-            <p className="text-sm text-gray-500">{String(error?.message || 'Failed to load orders')}</p>
-          </div>
+<DashboardReadFailure retry={()=>refetch()} />
         ) : orders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">{t('common.noData')}</div>
         ) : (
@@ -200,7 +207,7 @@ export function OrderListPage() {
               </thead>
               <tbody>
                 {orders.map((order: any) => (
-                  <tr key={order.id} className="border-b last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/finance/orders/${order.id}`)}>
+                  <tr key={order.id} className="border-b last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId:context.storeId,asOf:context.asOf,startDate:context.startDate,endDate:context.endDate}))}>
                     <td className="py-3">
                       <div className="flex items-center gap-2">
                         {order.pickupNumber && (

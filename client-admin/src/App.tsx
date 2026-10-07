@@ -4,6 +4,8 @@ import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { POSMonitorPage } from './pages/POSMonitorPage'
+import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProductsIndexPage } from './pages/products/ProductsIndexPage'
 import { ProductListPage } from './pages/products/ProductListPage'
@@ -143,6 +145,7 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="pos-monitor" element={<POSMonitorPage />} />
 
         {/* 1. 产品管理 */}
         <Route path="products" element={<ProductsIndexPage />}>
@@ -173,6 +176,7 @@ function App() {
           <Route path="process/new" element={<ProcessingFormPage />} />
           <Route path="process/:id/edit" element={<ProcessingFormPage />} />
           <Route path="alerts" element={<StockAlertsPage />} />
+          <Route path="consumption-analysis" element={<DashboardFeatureUnavailable />} />
           <Route path="alert-config" element={<StockAlertConfigPage />} />
           <Route path="count" element={<InventoryCountPage />} />
           <Route path="restock" element={<RestockSuggestionPage />} />
