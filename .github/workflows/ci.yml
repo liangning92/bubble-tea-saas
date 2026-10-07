@@ -94,6 +94,11 @@ jobs:
           JS
           WORKFLOW_BROWSER=1 WORKFLOW_EVIDENCE_DIR=workflow-evidence INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_DEPS="$GITHUB_WORKSPACE/server/node_modules:$GITHUB_WORKSPACE/node_modules" INTENT_PROVIDER=postgresql node tests/stoploss/workflow-http-check.cjs
 
+      - name: Verify customer display, camera decoding and local database diagnostics
+        run: |
+          if ! command -v ffmpeg >/dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg; fi
+          DEVICE_EVIDENCE_DIR=workflow-evidence/pos-devices node tests/stoploss/pos-device-diagnostics-page-check.cjs
+
       - name: Save workflow browser evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { purchaseOrderApi, supplierApi, inventoryApi } from '../../services/api'
@@ -57,6 +57,9 @@ export function PurchaseOrderListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
+  const actionLock = useRef(new Set<string>())
+  const [busyOrders, setBusyOrders] = useState(new Set<string>())
+  const [actionError, setActionError] = useState('')
 
   const [formData, setFormData] = useState({
     supplierId: '',
@@ -90,27 +93,28 @@ export function PurchaseOrderListPage() {
   }
 
   const handleSave = async () => {
+    if (actionLock.current.has('new')) return
+    setActionError('')
+    const validItems = formData.items.filter(item => item.inventoryId && item.quantity > 0 && item.unitCost > 0)
+    if (!formData.supplierId || validItems.length !== formData.items.length) {
+      setActionError(t('purchases.pleaseFillSupplier'))
+      return
+    }
+    actionLock.current.add('new')
+    setBusyOrders(new Set(actionLock.current))
     try {
-      const validItems = formData.items.filter(item => item.inventoryId && item.quantity > 0 && item.unitCost > 0)
-      if (!formData.supplierId || validItems.length === 0) {
-        alert(t('purchases.pleaseFillSupplier'))
-        return
-      }
-
       await purchaseOrderApi.create({
-        storeId: user?.storeId,
-        supplierId: formData.supplierId,
-        expectedDate: formData.expectedDate || undefined,
-        note: formData.note,
-        items: validItems
+        storeId: user?.storeId, supplierId: formData.supplierId,
+        expectedDate: formData.expectedDate || undefined, note: formData.note, items: validItems
       })
-
       setShowModal(false)
       resetForm()
-      loadData()
-    } catch (error) {
-      console.error('Failed to create purchase order:', error)
-      alert(t('purchases.failedCreate'))
+      await loadData()
+    } catch (error: any) {
+      setActionError(error.response?.data?.message || t('purchases.failedCreate'))
+    } finally {
+      actionLock.current.delete('new')
+      setBusyOrders(new Set(actionLock.current))
     }
   }
 
@@ -123,28 +127,29 @@ export function PurchaseOrderListPage() {
     })
   }
 
-  const handleStatusChange = async (id: string, status: string) => {
+  const runOrderAction = async (id: string, action: () => Promise<unknown>) => {
+    if (actionLock.current.has(id)) return
+    actionLock.current.add(id)
+    setBusyOrders(new Set(actionLock.current))
+    setActionError('')
     try {
-      if (status === 'received') {
-        await purchaseOrderApi.receive(id)
-      } else {
-        await purchaseOrderApi.updateStatus(id, status)
-      }
-      loadData()
-    } catch (error) {
-      console.error('Failed to update status:', error)
-      alert(t('purchases.failedUpdate'))
+      await action()
+      await loadData()
+    } catch (error: any) {
+      setActionError(error.response?.data?.message || t('purchases.failedUpdate'))
+      await loadData()
+    } finally {
+      actionLock.current.delete(id)
+      setBusyOrders(new Set(actionLock.current))
     }
   }
 
-  const handleCancel = async (id: string) => {
+  const handleStatusChange = (id: string, status: string) => runOrderAction(id, () =>
+    status === 'received' ? purchaseOrderApi.receive(id) : purchaseOrderApi.updateStatus(id, status))
+
+  const handleCancel = (id: string) => {
     if (!confirm(t('purchases.confirmCancel'))) return
-    try {
-      await purchaseOrderApi.cancel(id, 'Dibatalkan oleh admin')
-      loadData()
-    } catch (error) {
-      console.error('Failed to cancel:', error)
-    }
+    return runOrderAction(id, () => purchaseOrderApi.cancel(id, 'Dibatalkan oleh admin'))
   }
 
   const addItem = () => {
@@ -195,7 +200,7 @@ export function PurchaseOrderListPage() {
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-center justify-end">
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => { setActionError(''); setShowModal(true) }}
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium flex items-center gap-1"
           >
             <Plus size={18} />
@@ -220,6 +225,8 @@ export function PurchaseOrderListPage() {
           </select>
         </div>
       </div>
+
+      {!showModal && actionError && <div role="alert" className="mx-4 mt-4 p-3 bg-red-50 text-red-700 rounded-lg">{actionError}</div>}
 
       {/* Content */}
       <div className="p-4 space-y-4">
@@ -284,6 +291,7 @@ export function PurchaseOrderListPage() {
                                    {order.status === 'pending' && (
                     <>
                       <button
+                        disabled={busyOrders.has(order.id)}
                         onClick={() => handleStatusChange(order.id, 'approved')}
                         className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                       >
@@ -291,6 +299,7 @@ export function PurchaseOrderListPage() {
                         {t('purchases.approve')}
                       </button>
                       <button
+                        disabled={busyOrders.has(order.id)}
                         onClick={() => handleCancel(order.id)}
                         className="flex-1 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 flex items-center justify-center gap-1"
                       >
@@ -301,7 +310,8 @@ export function PurchaseOrderListPage() {
                   )}
                   {order.status === 'approved' && (
                     <button
-                      onClick={() => handleStatusChange(order.id, 'received')}
+                      disabled={busyOrders.has(order.id)}
+                        onClick={() => handleStatusChange(order.id, 'received')}
                       className="flex-1 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-1"
                     >
                       <Truck size={16} />
@@ -326,6 +336,7 @@ export function PurchaseOrderListPage() {
               </button>
             </div>
 
+            {actionError && <div role="alert" className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg">{actionError}</div>}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('purchases.suppliers')}</label>
@@ -432,7 +443,7 @@ export function PurchaseOrderListPage() {
                 <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 py-3 border border-gray-200 rounded-xl">
                   {t('common.cancel')}
                 </button>
-                <button onClick={handleSave} className="flex-1 py-3 bg-primary text-white rounded-xl font-medium">
+                <button disabled={busyOrders.has('new')} onClick={handleSave} className="flex-1 py-3 bg-primary text-white rounded-xl font-medium">
                   {t('purchases.createPO')}
                 </button>
               </div>

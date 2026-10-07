@@ -4,6 +4,9 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      "diagnosticChecks": {"serverDb": "Database server", "scope": "Database lokal diuji dengan simpan, baca, dan hapus. Status server berasal dari pemeriksaan server; ini tidak membuktikan setiap pesanan sudah diunggah."},
+      "cameraScan": {"preview": "Pratinjau kamera", "denied": "Akses kamera ditolak. Izinkan kamera atau gunakan pemindai USB/input manual.", "missing": "Kamera tidak ditemukan. Gunakan pemindai USB/input manual.", "unsupported": "Kamera tidak tersedia pada halaman ini. Buka melalui HTTPS atau gunakan pemindai USB/input manual.", "failed": "Kamera gagal dibuka. Periksa apakah dipakai aplikasi lain, lalu coba lagi.", "retry": "Coba kamera lagi", "scanning": "Arahkan barcode ke kamera. Hasil ditemukan akan ditampilkan untuk konfirmasi."},
+
       "receiptPrinting": { "logoUnavailable": "Logo tidak dapat dimuat; struk tercetak tanpa logo." },
       updateFlow: {"current": "Versi saat ini: {{version}}", "downloadedTitle": "Installer sudah diunduh", "manualInstall": "Selesaikan transaksi, tutup POS, lalu jalankan installer di folder ini dan konfirmasi pencadangan. Unduhan belum berarti terpasang.", "openFolder": "Buka folder installer", "fileMissing": "Installer tidak ditemukan. Unduh kembali.", "failed": "Pembaruan gagal. POS tetap berjalan.", "details": "Detail kesalahan", "close": "Tutup"},
       "itemRefund": {"title": "Pengembalian produk terpilih", "hint": "Pilih jumlah. Diskon dan pajak dibagi dari pembayaran asli; bahan produk jadi tidak dikembalikan.", "remaining": "Tersisa", "evidence": "Bukti pembagian pembayaran tidak lengkap. Pengembalian sebagian perlu peninjauan manual.", "failed": "Permintaan gagal; ulangi permintaan yang sama", "unprepared": "Seluruh pesanan belum dibuat: admin harus memeriksa sebelum membalikkan catatan bahan asli.", "manual": "Persetujuan mencatat pengembalian; QR statis tidak mentransfer uang otomatis.", "submit": "Ajukan pengembalian"},
@@ -771,6 +774,9 @@ const resources = {
   },
   "en": {
     "translation": {
+      "diagnosticChecks": {"serverDb": "Server Database", "scope": "Local storage is tested by writing, reading and deleting a probe. Server status comes from the server health check; neither proves every order has uploaded."},
+      "cameraScan": {"preview": "Camera preview", "denied": "Camera permission denied. Allow access or use a USB scanner/manual input.", "missing": "No camera found. Use a USB scanner/manual input.", "unsupported": "Camera is unavailable on this page. Open over HTTPS or use a USB scanner/manual input.", "failed": "Could not open the camera. Check whether another app is using it, then retry.", "retry": "Retry camera", "scanning": "Point the barcode at the camera. A match will be shown for confirmation."},
+
       "receiptPrinting": { "logoUnavailable": "Logo could not be loaded; receipt printed without logo." },
       updateFlow: {"current": "Current version: {{version}}", "downloadedTitle": "Installer downloaded", "manualInstall": "Finish transactions, close POS, then run the installer in this folder and confirm the backup. Downloaded does not mean installed.", "openFolder": "Open installer folder", "fileMissing": "Installer not found. Download again.", "failed": "Update failed. POS is still running.", "details": "Error details", "close": "Close"},
       "itemRefund": {"title": "Refund selected products", "hint": "Choose quantities. Original discounts and tax are allocated from the recorded payment; prepared ingredients stay consumed.", "remaining": "Remaining", "evidence": "Original payment allocation evidence is incomplete. Partial refund requires manual review.", "failed": "Request failed; retry the same request", "unprepared": "Whole order unprepared: an admin must verify before original stock deductions are reversed.", "manual": "Approval records the refund; static QR does not automatically transfer money.", "submit": "Request refund"},
@@ -1528,6 +1534,9 @@ const resources = {
   },
   "zh": {
     "translation": {
+      "diagnosticChecks": {"serverDb": "服务器数据库", "scope": "本地存储会实际执行写入、读取和删除测试。服务器状态来自服务端健康检查；这些状态不能证明每笔订单均已上传。"},
+      "cameraScan": {"preview": "摄像头预览", "denied": "摄像头权限被拒绝，请允许访问，或使用扫码枪／手动输入。", "missing": "未找到摄像头，请使用扫码枪／手动输入。", "unsupported": "当前页面无法使用摄像头，请通过 HTTPS 打开，或使用扫码枪／手动输入。", "failed": "摄像头无法打开，请检查是否被其他应用占用，然后重试。", "retry": "重试摄像头", "scanning": "请将条码对准摄像头，识别后将显示结果供确认。"},
+
       "receiptPrinting": { "logoUnavailable": "Logo 无法加载，小票已打印但未包含 Logo。" },
       updateFlow: {"current": "当前版本：{{version}}", "downloadedTitle": "安装包已下载", "manualInstall": "完成交易并关闭POS后，运行文件夹中的安装程序，确认备份后升级。下载完成不代表已安装。", "openFolder": "打开安装文件夹", "fileMissing": "找不到安装文件，请重新下载。", "failed": "更新未完成，收银程序仍在运行。", "details": "错误详情", "close": "关闭"},
       "itemRefund": {"title": "退选中的产品", "hint": "选择数量。优惠和税额按原实付款分摊；已制作产品不退回原料。", "remaining": "可退数量", "evidence": "原成交分摊证据不完整，部分退款需人工核查。", "failed": "申请失败，请重试原申请", "unprepared": "整单未制作：管理员核实后才撤销原销售扣料流水。", "manual": "审批记录退款，不代表静态二维码自动打款。", "submit": "申请退款"},

@@ -13,6 +13,7 @@ export function InventoryIndexPage() {
     { key: 'process', label: t('inventory.process'), path: '/inventory/process' },
     { key: 'alerts', label: t('inventory.alerts'), path: '/inventory/alerts' },
     { key: 'restock', label: t('inventory.restock'), path: '/inventory/restock' },
+    { key: 'purchase-orders', label: t('purchases.purchaseOrders'), path: '/inventory/purchase-orders' },
     { key: 'suppliers', label: t('inventory.suppliers'), path: '/inventory/suppliers' },
   ]
 
