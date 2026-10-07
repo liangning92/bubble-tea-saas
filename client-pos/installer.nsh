@@ -65,6 +65,7 @@ Var BTPSInstallStarted
   ${EndIf}
 !macroend
 
+!ifndef BUILD_UNINSTALLER
 !macro customCheckAppRunning
   ${If} $BTPSUpgradeReceipt != ""
     ${If} $INSTDIR != $BTPSOldApp
@@ -85,6 +86,7 @@ Var BTPSInstallStarted
   ${EndIf}
   StrCpy $BTPSInstallStarted "1"
 !macroend
+!endif
 
 # Disable CRC check for installer and uninstaller
 CRCCheck off
