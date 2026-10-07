@@ -150,6 +150,9 @@ jobs:
           if ($validator.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Packaged database/client validation failed' }
           Remove-Item Env:ELECTRON_RUN_AS_NODE
 
+      - name: Verify installer refuses before replacing the usable old POS
+        run: ./scripts/validate-windows-upgrade-gate.ps1
+
       - name: Smoke test packaged local API
         run: |
           $ErrorActionPreference = 'Stop'
@@ -209,6 +212,7 @@ jobs:
           path: |
             desktop-template-manifest.json
             desktop-compatibility-report.json
+            desktop-upgrade-gate-report.json
 
   publish:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && inputs.publish == true && needs.build.outputs.existing_db_compatible == 'true'

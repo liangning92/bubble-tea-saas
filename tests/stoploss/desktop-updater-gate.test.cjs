@@ -1,0 +1,20 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+test('downloaded updates never quit or install before legacy clearance', async () => {
+  const handlers = {}, events = {}, sent = [];
+  let quitCalls = 0;
+  const autoUpdater = { setFeedURL() {}, on: (name, cb) => events[name] = cb, quitAndInstall() { quitCalls++; }, async downloadUpdate() {} };
+  const api = {};
+  const source = ts.transpileModule(fs.readFileSync('client-pos/electron/updater.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  vm.runInNewContext(source, { exports: api, require: name => name === 'electron-updater' ? { autoUpdater } : { ipcMain: { handle: (name, cb) => handlers[name] = cb }, app: { isPackaged: true, getVersion: () => 'synthetic' } }, process, console: { log() {}, warn() {}, error() {} }, setInterval, setTimeout, clearInterval, clearTimeout });
+  api.setupUpdater({ isDestroyed: () => false, webContents: { send: (...args) => sent.push(args) } });
+  assert.equal(autoUpdater.autoInstallOnAppQuit, false);
+  assert.equal(await handlers['download-update'](), true);
+  events['update-downloaded']({ version: 'synthetic-next' });
+  assert.equal(await handlers['install-update'](), false);
+  assert.equal(quitCalls, 0);
+  assert.ok(sent.some(([event]) => event === 'update-error'));
+});
