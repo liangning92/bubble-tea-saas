@@ -1270,6 +1270,7 @@ model Order {
   memberId         String?
   member           Member?         @relation(fields: [memberId], references: [id])
   orderNumber      String          @unique // 订单号(格式: YYYYMMDD-XXXXXX)
+  pickupNumber     String?         // 取餐号/叫号凭据 (如 A01 ~ A99 循环)
   totalAmount      Int // 总金额(分)
   discountAmount   Int             @default(0)
   finalAmount      Int // 实收金额(分)

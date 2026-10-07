@@ -9,12 +9,17 @@ on:
         description: 'Version (空=自动生成，例: 2026.10.293)'
         required: false
         default: ''
+      publish:
+        description: 'Publish updater release (manual master only, compatibility clearance required)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -28,6 +33,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
+      existing_db_compatible: ${{ steps.database.outputs.EXISTING_DB_COMPATIBLE }}
 
     steps:
       - name: Checkout code
@@ -35,8 +41,8 @@ jobs:
 
       - name: Fix git URLs
         run: |
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -68,28 +74,31 @@ jobs:
           (Get-Content package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content package.json
           (Get-Content client-pos/package.json) -replace '"version": "[^"]*"', "`"version`": `"$version`"" | Set-Content client-pos/package.json
 
-      - name: Install dependencies
+      - name: Install dependencies from reviewed lockfiles
         run: |
-          Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
-          Get-ChildItem -Include package-lock.json -Recurse -Force | Remove-Item -Force -ErrorAction SilentlyContinue
-          npm install --force --prefer-offline=false
+          npm ci
+          npm ci --prefix server
 
       - name: Rebuild native modules for Electron
         run: npx electron-rebuild
 
-      - name: Install server dependencies
-        run: |
-          cd server
-          npm install --prefer-offline=false
-          Set-Location ..
+      - name: Setup Python for fresh template generation
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Configure desktop SQLite database
+      - name: Configure fresh desktop SQLite template (no existing database migration)
+        id: database
         run: |
-          $schemaPath = 'server/prisma/schema.prisma'
-          $schema = Get-Content $schemaPath -Raw
-          if ($schema -notmatch 'provider\s*=\s*"postgresql"') { throw "Expected PostgreSQL source schema" }
-          $schema = $schema -replace 'provider\s*=\s*"postgresql"', 'provider = "sqlite"'
-          Set-Content $schemaPath $schema -Encoding utf8
+          $ErrorActionPreference = 'Stop'
+          $target = Join-Path $env:RUNNER_TEMP 'btps-desktop-template'
+          $prepared = node scripts/prepare-desktop-template.cjs --output $target | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$prepared.seedIsEmpty) { throw 'Empty desktop template generation failed' }
+          Copy-Item (Join-Path $target 'schema.prisma') 'server/prisma/schema.prisma' -Force
+          Copy-Item (Join-Path $target 'seed.db') 'server/prisma/seed.db' -Force
+          Copy-Item (Join-Path $target 'manifest.json') 'desktop-template-manifest.json' -Force
+          'EXISTING_DB_COMPATIBLE=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host 'Fresh installs only: old databases remain unchanged and lack Order.pickupNumber'
 
       - name: Generate Prisma client
         run: |
@@ -105,12 +114,6 @@ jobs:
 
       - name: Build POS
         run: npm run build:pos
-
-      - name: Install POS dependencies
-        run: |
-          cd client-pos
-          npm install --prefer-offline=false
-          Set-Location ..
 
       - name: Ensure electron-pos-printer in node_modules
         run: |
@@ -134,6 +137,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEBUG: electron-builder
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
+
+      - name: Validate packaged template, clients and synthetic legacy compatibility
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $appPath = (Resolve-Path 'release/win-unpacked/BTPS.exe').Path
+          $resources = (Resolve-Path 'release/win-unpacked/resources/app.asar.unpacked').Path
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          & $appPath scripts/validate-desktop-template.cjs --resources $resources --report 'desktop-compatibility-report.json'
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged database/client validation failed' }
+          Remove-Item Env:ELECTRON_RUN_AS_NODE
 
       - name: Smoke test packaged local API
         run: |
@@ -187,10 +200,21 @@ jobs:
           name: BTPS-build-dist
           path: release/
 
+      - name: Upload compatibility evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: BTPS-validation-evidence
+          path: |
+            desktop-template-manifest.json
+            desktop-compatibility-report.json
+
   publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && inputs.publish == true && needs.build.outputs.existing_db_compatible == 'true'
     needs: build
     runs-on: windows-latest
     environment: windows-build
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
