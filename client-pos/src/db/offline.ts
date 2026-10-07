@@ -1,3 +1,4 @@
+import { assertCheckoutBackend, currentBackendIdentity, readBackendAuth } from '../utils/backendIdentity'
 import { confirmRetriedCheckout } from '../utils/checkoutIntent'
 import { withCheckoutSyncLock, checkoutSyncLeaseMs } from '../utils/checkoutSyncClaim'
 import Dexie, { Table } from 'dexie'
@@ -19,6 +20,12 @@ export interface LocalProduct {
 export interface LocalOrder {
   id?: number
   localId: string
+  backendUrl?: string
+  locallyAcceptedAt?: Date
+  occurredAt?: Date
+  cloudReceipt?: Record<string, unknown>
+  cacheEvidence?: {backendUrl:string; catalogVersion:string; catalogFetchedAt:Date; quotedProducts:unknown[]; paymentConfig:unknown; shiftConfig:unknown}
+  manualPayment?: {kind: 'qris_manual'; actorId: string; at: Date; evidence: 'customer_success_photo'; bankConfirmed: false}
   serverId?: string
   storeId: string
   staffId: string
@@ -90,6 +97,7 @@ export class SyncManager {
   private isOnline = navigator.onLine
   private syncInterval: number | null = null
   private isSyncing = false
+  private resyncRequested = false
   private listeners: Set<(event: SyncEvent) => void> = new Set()
   private boundOnlineHandler = () => this.handleOnline()
   private boundOfflineHandler = () => this.handleOffline()
@@ -148,66 +156,77 @@ export class SyncManager {
 
   // A claimed row is never uploaded by another tab. Review requires an explicit retry.
   async syncPendingOrders(review = false) {
-    if (!this.isOnline || this.isSyncing) return
+    if (!this.isOnline) return
+    if (this.isSyncing) { this.resyncRequested = true; return }
     let auth: any
     try { auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state } catch { return }
     if (!auth?.token || !auth.user?.storeId || !['admin', 'manager', 'cashier'].includes(auth.user.role)) return
     this.isSyncing = true
     try { await withCheckoutSyncLock(auth.user.storeId, () => this.uploadClaimedOrders(auth, review)) }
     catch (error) { this.emit({type:'sync:error',error:String(error)}) }
-    finally { this.isSyncing = false }
-  }
-
-  private async uploadClaimedOrders(auth: any, review: boolean) {
-    this.emit({ type: 'sync:start' })
-    const claimed: LocalOrder[] = []
-    try {
-      await db.transaction('rw', db.orders, async () => {
-        const rows = await db.orders.where('status').equals(review ? 'review' : 'pending').and(o => o.storeId === auth.user.storeId).toArray()
-        for (const order of rows) {
-          try { orderSyncPayload(order) } catch {
-            await db.orders.update(order.id!, { status: 'review', error: 'CHECKOUT_SNAPSHOT_REQUIRED' })
-            continue
-          }
-          const syncClaim = {id:crypto.randomUUID(),expiresAt:Date.now()+checkoutSyncLeaseMs}
-          await db.orders.update(order.id!, { status: 'syncing', syncAttempts: order.syncAttempts + 1, syncClaim })
-          claimed.push({...order,syncClaim})
-        }
-      })
-      if (!claimed.length) return
-      const bulk = claimed.length > 1
-      const apiUrl = connectionManager.getCurrentUrl()
-      const currentAuth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
-      if (currentAuth?.token !== auth.token || currentAuth?.user?.storeId !== auth.user.storeId) throw new Error('CHECKOUT_AUTH_CHANGED')
-      const response = await fetch(`${apiUrl}/orders${bulk ? '/bulk-sync' : ''}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
-        body: JSON.stringify(bulk ? { orders: claimed.map(orderSyncPayload) } : orderSyncPayload(claimed[0]))
-      })
-      const body = await response.json().catch(() => null)
-      let syncedCount = 0
-      for (const [index, order] of claimed.entries()) {
-        const item = bulk ? body?.data?.results?.[index] : { success: response.ok, data: body?.data }
-        const accepted = (bulk ? response.status === 200 : response.status === 201) && item?.success && typeof item.data?.id === 'string' && item.data?.orderNumber === order.orderNumber
-        if (accepted) await confirmRetriedCheckout(order, item.data)
-        else await this.releaseClaim(order,String(item?.error || body?.message || `HTTP ${response.status}`))
-        if (accepted) { syncedCount++; this.emit({ type: 'sync:success', orderId: order.localId, serverId: item.data.id }) }
-      }
-      // Fresh 201 confirmation atomically removes its own barrier; never print from recovery upload.
-      this.emit({ type: 'sync:complete', syncedCount, failedCount: claimed.length - syncedCount })
-    } catch (error) {
-      // No bulk-to-single fallback after response loss: the first write may have committed.
-      for (const order of claimed) {
-        try { await this.releaseClaim(order,String(error)) } catch { /* durable syncing row remains a recovery barrier */ }
-      }
-      this.emit({ type: 'sync:error', error: String(error) })
+    finally {
+      this.isSyncing = false
+      if (this.resyncRequested) { this.resyncRequested = false; void this.syncPendingOrders() }
     }
   }
 
-  private async releaseClaim(order: LocalOrder, error: string) {
-    await db.transaction('rw', db.orders, async () => {
+  private async uploadClaimedOrders(auth: any, review: boolean) {
+    this.emit({type:'sync:start'})
+    let syncedCount = 0, failedCount = 0
+    const rows = await db.orders.where('status').anyOf(review ? ['review'] : ['pending','syncing']).and(row=>row.storeId===auth.user.storeId).toArray()
+    for (const candidate of rows) {
+      // Web Locks prove that a previous document no longer owns a request. Without
+      // them, lease expiry is needed before retrying a locally accepted UUID.
+      if (candidate.status==='syncing' && (!candidate.locallyAcceptedAt || (!navigator.locks && (candidate.syncClaim?.expiresAt || 0)>Date.now()))) continue
+      if (candidate.backendUrl && candidate.backendUrl !== currentBackendIdentity()) continue
+      let order: LocalOrder | undefined
+      try {
+        orderSyncPayload(candidate)
+        assertCheckoutBackend(candidate.backendUrl,candidate.storeId)
+        await db.transaction('rw',db.orders,async()=> {
+          const current = await db.orders.get(candidate.id!)
+          if (!current || current.status!==candidate.status || current.syncClaim?.id!==candidate.syncClaim?.id) return
+          const syncClaim = {id:crypto.randomUUID(),expiresAt:Date.now()+checkoutSyncLeaseMs}
+          await db.orders.update(current.id!,{status:'syncing',syncAttempts:current.syncAttempts+1,syncClaim})
+          order = {...current,syncClaim}
+        })
+        if (!order) continue
+        const target = assertCheckoutBackend(order.backendUrl,order.storeId)
+        const currentAuth = readBackendAuth()
+        if (currentAuth.token!==auth.token || currentAuth.apiUrl!==auth.apiUrl || currentAuth.user?.storeId!==auth.user.storeId) throw new Error('CHECKOUT_AUTH_CHANGED')
+        const response = await fetch(`${target}/orders${order.locallyAcceptedAt ? '/bulk-sync' : ''}`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify(order.locallyAcceptedAt ? {orders:[orderSyncPayload(order)]} : orderSyncPayload(order))})
+        const body = await response.json().catch(()=>null)
+        const result = order.locallyAcceptedAt ? body?.data?.results?.[0] : {success:response.status===201,data:body?.data}
+        if ((order.locallyAcceptedAt ? response.status===200 : response.status===201) && result?.success && typeof result.data?.id==='string' && result.data.orderNumber===order.orderNumber) {
+          await confirmRetriedCheckout(order,result.data)
+          if ((await db.orders.get(order.id!))?.status !== 'synced') { failedCount++; continue }
+          syncedCount++
+          this.emit({type:'sync:success',orderId:order.localId,serverId:result.data.id})
+        } else {
+          if (response.status === 401) {
+            const {useAuthStore} = await import('../stores/auth')
+            const current = readBackendAuth()
+            if (current.token === auth.token && current.apiUrl === auth.apiUrl && current.user?.storeId === auth.user.storeId) useAuthStore.getState().expireCloudSession()
+          }
+          const definite = [400,401,403,404,409,422].includes(response.status) || (response.status===200 && result?.success===false)
+          await this.releaseClaim(order,String(result?.error || body?.message || `HTTP ${response.status}`),!definite)
+          failedCount++
+        }
+      } catch (error) {
+        failedCount++
+        if (order) await this.releaseClaim(order,String(error),true).catch(()=>{})
+        else if (!candidate.backendUrl || !candidate.checkoutRequest || (error instanceof Error && error.message === 'CHECKOUT_SNAPSHOT_REQUIRED')) await db.orders.update(candidate.id!,{status:'review',error:'CHECKOUT_BACKEND_EVIDENCE_REQUIRED'})
+        this.emit({type:'sync:error',error:String(error)})
+      }
+    }
+    this.emit({type:'sync:complete',syncedCount,failedCount})
+  }
+
+  private async releaseClaim(order: LocalOrder, error: string, retry: boolean) {
+    await db.transaction('rw',db.orders,async()=> {
       const current = await db.orders.get(order.id!)
-      if (current?.status === 'syncing' && order.syncClaim && current.syncClaim?.id === order.syncClaim.id) {
-        await db.orders.update(order.id!,{status:'review',error})
+      if (current?.status==='syncing' && order.syncClaim && current.syncClaim?.id===order.syncClaim.id) {
+        await db.orders.update(order.id!,{status:retry && current.locallyAcceptedAt ? 'pending' : 'review',error})
       }
     })
   }
@@ -441,6 +460,7 @@ export async function getLockScreenPin(): Promise<string | null> {
 const OFFLINE_CREDS_KEY = 'offlineCredentials'
 
 export interface OfflineCredentials {
+  apiUrl?: string
   phone: string
   passwordHash: string
   user: {

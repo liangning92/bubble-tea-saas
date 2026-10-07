@@ -1,3 +1,5 @@
+import { recordLocalSale } from '../utils/offlineSale'
+import { backendAuthHeaders } from '../utils/backendIdentity'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, discardPreparedCheckout, definiteFirstRejection, acknowledgeRecoveredCheckout, quarantineCheckoutRecovery, type CheckoutIntent } from '../utils/checkoutIntent'
 import { ScanPage } from './ScanPage'
@@ -324,7 +326,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     qrImage?: string
     qrString?: string
     externalId?: string
-    status: 'idle' | 'waiting' | 'paid' | 'expired' | 'failed'
+    status: 'idle' | 'waiting' | 'paid' | 'manual' | 'expired' | 'failed'
   }>({ status: 'idle' })
 
   // Refs for keyboard handler to avoid stale closure (initialized to undefined, synced via useEffect)
@@ -820,103 +822,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     let cancelled = false
 
     const loadProducts = async () => {
-      if (navigator.onLine) {
-        try {
-          const res = await fetch(`${connectionManager.getCurrentUrl()}/products?storeId=${storeId}&status=active`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-          })
-          const data = await res.json()
-          if (cancelled) return
-          if (data?.data?.list) {
-            // 在线时缓存产品到IndexedDB
-            const localProducts: LocalProduct[] = data.data.list.map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              description: p.description,
-              image: p.image,
-              categoryId: p.category?.id || '',
-              categoryName: p.category?.name || '',
-              specs: p.specs || [],
-              addons: p.addons?.map((a: any) => ({
-                id: a.addon?.id || '',
-                name: a.addon?.name || '',
-                price: a.addon?.price || 0
-              })) || []
-            }))
-            await productCache.saveProducts(localProducts)
-
-            if (!cancelled) {
-              setProducts(data.data.list)
-              const firstCat = data.data.list[0]?.category?.name
-              if (firstCat) setFilter(firstCat)
-              setLoading(false)
-            }
-          } else {
-            // data.data.list 为空
-            if (!cancelled) setLoading(false)
-          }
-        } catch (e) {
-          if (cancelled) return
-          // 在线读取失败，尝试从缓存加载
-          const cached = await productCache.getProducts()
-          if (cached.length > 0) {
-            setProducts(cached.map(p => ({
-              id: p.id,
-              name: p.name,
-              description: p.description,
-              image: p.image,
-              category: { id: p.categoryId, name: p.categoryName },
-              specs: p.specs || [],
-              addons: (p.addons || []).map(a => ({ addonId: a.id, addon: a }))
-            })))
-            showToast(t('pos.offlineMode') + ' - ' + t('pos.loadingFromCache'), 'info')
-          } else {
-            // 无缓存，加载示例产品
-            const demoProducts = productCache.getDemoProducts()
-            setProducts(demoProducts.map(p => ({
-              id: p.id,
-              name: p.name,
-              description: p.description,
-              image: p.image,
-              category: { id: p.categoryId, name: p.categoryName },
-              specs: p.specs,
-              addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
-            })))
-            showToast(t('pos.demoMode'), 'info')
-          }
-          if (!cancelled) setLoading(false)
-        }
-      } else {
-        // 离线模式，从缓存读取
-        const cached = await productCache.getProducts()
+      try {
+        const response = await posApi.getProducts(storeId)
         if (cancelled) return
-        if (cached.length > 0) {
-          setProducts(cached.map(p => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            image: p.image,
-            category: { id: p.categoryId, name: p.categoryName },
-            specs: p.specs || [],
-            addons: (p.addons || []).map(a => ({ addonId: a.id, addon: a }))
-          })))
-          if (!cancelled) setLoading(false)
-        } else {
-          // 无缓存，加载示例产品
-          const demoProducts = productCache.getDemoProducts()
-          setProducts(demoProducts.map(p => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            image: p.image,
-            category: { id: p.categoryId, name: p.categoryName },
-            specs: p.specs,
-            addons: p.addons.map(a => ({ addonId: a.id, addon: a }))
-          })))
-          showToast(t('pos.demoMode'), 'info')
-          if (!cancelled) setLoading(false)
-        }
-      }
+        const list = response.data?.data?.list
+        setProducts(Array.isArray(list) ? list : [])
+        if (list?.[0]?.category?.name) setFilter(list[0].category.name)
+      } catch {
+        if (!cancelled) { setProducts([]); showToast(t('offlineSale.initialize'),'warning') }
+      } finally { if (!cancelled) setLoading(false) }
     }
 
     loadProducts()
@@ -934,7 +848,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       try {
         // Check if server has newer products
         const versionRes = await fetch(`${connectionManager.getCurrentUrl()}/products/pos/version?storeId=${storeId}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+          headers: backendAuthHeaders(connectionManager.getCurrentUrl(),storeId)
         })
 
         if (versionRes.ok) {
@@ -947,7 +861,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           if (hasNewer) {
             // Fetch all products
             const res = await fetch(`${connectionManager.getCurrentUrl()}/products?storeId=${storeId}&status=active`, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {}
+              headers: backendAuthHeaders(connectionManager.getCurrentUrl(),storeId)
             })
             const data = await res.json()
 
@@ -1012,6 +926,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }, [])
 
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
+  useEffect(() => { if (user?.storeId) void fetchShiftData() }, [user?.storeId])
+
   const loadConfig = useCallback(() => {
     // Guard: only load when storeId is available (not during initial loading with 'default')
     const storeId = user?.storeId || localStorage.getItem('storeId') || (user as any)?.staff?.storeId
@@ -1502,10 +1418,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     const storeId = user?.storeId || 'default'
     const token = useAuthStore.getState().token
 
-    fetch(`${connectionManager.getCurrentUrl()}/channels?storeId=${storeId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
-      .then(r => r.json())
+    posApi.getChannels(storeId)
+      .then(r => r.data)
       .then(data => {
         const apiChannels = data?.data?.list || []
         if (apiChannels.length > 0) {
@@ -2084,6 +1998,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 积分抵扣：每100积分抵扣1印尼盾，强制取整避免产生小数零头
   const pointsDiscount = Math.floor((pointsToRedeem || 0) / 100)
   const total = Math.max(0, Math.round(subtotal + tax - discountAmount - pointsDiscount))
+  useEffect(() => { setQrisData({status:'idle'}) }, [showPaymentModal,paymentMethod,total])
+
   const change = paidAmount ? Math.max(0, (parseInt(paidAmount) || 0) - total) : 0
 
   // Sync totalRef after total is calculated
@@ -2376,7 +2292,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       intent = await prepareCheckout(orderData, cart, { subtotal, ppn: tax, finalAmount: total }, basketGeneration)
       await claimCheckout(intent)
       sent = true
-      const res = await posApi.createOrder(intent.request)
+      const res = await posApi.createOrder(intent.request,intent.backendUrl)
       const serverOrder = res.data?.data
       if (!serverOrder?.id || serverOrder.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
       await finishCheckout(intent, 'accepted', serverOrder.id)
@@ -2832,7 +2748,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut) return
 
-    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
+    if (!recovery || ((paymentMethod !== 'cash' && qrisData.status !== 'manual') && (recovery.blocked || recovery.confirmed.length > 0))) { showToast(t('checkoutIntent.review'), 'warning'); return }
 
     if (!paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod)) {
       showToast(t(paymentConfigReady ? 'pos.paymentMethodDisabled' : 'pos.paymentConfigUnavailable'), 'error')
@@ -2879,7 +2795,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
 
     // QRIS: If paid, proceed to create order
-    if (paymentMethod === 'qris' && qrisData.status !== 'paid') {
+    if (paymentMethod === 'qris' && qrisData.status !== 'paid' && qrisData.status !== 'manual') {
       // Handle expired/failed status with user feedback
       if (qrisData.status === 'expired') {
         showToast(t('pos.qrisExpired'), 'warning')
@@ -2973,16 +2889,26 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     try {
       // Both recovery writes must commit before an HTTP request can leave this browser.
-      intent = await prepareCheckout(orderData, cart, { subtotal, ppn: tax, finalAmount: total }, basketGeneration)
-      await claimCheckout(intent)
-      sent = true
-      const res = await posApi.createOrder(intent.request)
+      if (qrisData.status === 'manual') orderData.note = [orderData.note,t('offlineSale.qrisPending')].filter(Boolean).join(' ')
+      if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || discountAmount || selectedCoupon)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+      let res
+      if ((paymentMethod === 'cash' || qrisData.status === 'manual') && !member && !pointsToRedeem && !discountAmount && !selectedCoupon) {
+        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,qrisData.status === 'manual')
+        accepted = true
+        Object.assign(orderData,local.checkoutRequest)
+        res = {data:{data:{id:local.localId,orderNumber:local.orderNumber,pickupNumber:local.pickupNumber,grandTotal:local.finalAmount}}}
+      } else {
+        intent = await prepareCheckout(orderData,cart,{subtotal,ppn:tax,finalAmount:total},basketGeneration)
+        await claimCheckout(intent)
+        sent = true
+        res = await posApi.createOrder(intent.request,intent.backendUrl)
+        const verified = res.data?.data
+        if (!verified?.id || verified.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
+        await finishCheckout(intent,'accepted',verified.id)
+        accepted = true
+        Object.assign(orderData,intent.request)
+      }
       const response = res.data?.data
-      if (!response?.id || response.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
-      // Durable acknowledgement precedes printing, cart clearing and success output.
-      await finishCheckout(intent, 'accepted', response.id)
-      accepted = true
-      Object.assign(orderData, intent.request)
       const orderNum = response.orderNumber
       const finalPickupNum = response.pickupNumber || orderData.pickupNumber
       setOfflineSaveFailed(false)
@@ -3062,7 +2988,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart()
       setShowPaymentModal(false)
-      showToast(`${t('pos.orderSuccess')} #${finalPickupNum}`, 'success')
+      showToast(`${t(paymentMethod === 'cash' || qrisData.status === 'manual' ? 'offlineSale.saved' : 'pos.orderSuccess')} #${finalPickupNum}`, 'success')
+      setQrisData({status:'idle'})
+      void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
       setDineInCount(1)
@@ -3078,7 +3006,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart();setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent) {
         setOfflineSaveFailed(true)
-        showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : 'checkoutIntent.saveFailed'), 'error')
+        showToast(t(error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
         return
       }
       const definite = definiteFirstRejection(error, intent?.request.orderNumber)
@@ -3287,7 +3215,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     return (
       <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
-        {(!recovery || recovery.blocked || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
+        {(!recovery || recovery.intent || recovery.rows.some(row=>!row.locallyAcceptedAt) || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
           <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
           {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
           {!recovery?.intent && <ul className="text-sm break-all">{recovery?.rows.map(row => <li key={row.id}>{String(row.orderNumber || row.localId || '')}</li>)}</ul>}
@@ -3305,6 +3233,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>}
         </section>}
         {!!recovery?.quarantined.length && <section data-testid="checkout-quarantine" role="status" className="p-2 bg-amber-50 text-sm"><strong>{t('checkoutIntent.quarantined')}</strong><ul>{recovery.quarantined.map(row=><li key={row.id}>{row.orderNumber}</li>)}</ul></section>}
+        {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
+        {!!recovery?.rows.filter(row=>row.locallyAcceptedAt).length && <section data-testid="offline-sales" role="status" className="p-2 bg-amber-50 text-sm"><strong>{t('offlineSale.queue')}</strong><ul>{recovery.rows.filter(row=>row.locallyAcceptedAt).map(row=><li key={row.id}>{row.orderNumber} · {t(row.status === 'pending' || row.status === 'syncing' ? 'offlineSale.awaitUpload' : 'offlineSale.review')}{row.manualPayment ? ` · ${t('offlineSale.qrisPending')}` : ''}</li>)}</ul>{recovery.rows.some(row=>row.locallyAcceptedAt && row.status==='review') && <button type="button" className="underline" onClick={()=>{void syncManager.syncPendingOrders(true)}}>{t('checkoutIntent.retry')}</button>}</section>}
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
         <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
@@ -3849,7 +3779,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   const pNum = getNextPickupNumber(selectedChannel?.code)
                   setPaymentModalOrderNum(pNum)
                   setShowPaymentModal(true)
-                }} disabled={!recovery || recovery.blocked || recovery.confirmed.length > 0 || isCheckingOut} className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base disabled:bg-gray-300 active:scale-95 transition-transform touch-feedback">
+                }} disabled={!recovery || isCheckingOut} className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base disabled:bg-gray-300 active:scale-95 transition-transform touch-feedback">
                   💰 {t('pos.checkout')}
                 </button>
               </>
@@ -4021,7 +3951,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         return (
                           <button
                             key={m.id}
-                            onClick={() => setPaymentMethod(m.id)}
+                            onClick={() => {setPaymentMethod(m.id);setQrisData({status:'idle'})}}
                             className={`p-2 rounded-xl border-2 flex items-center gap-2 transition-all touch-feedback text-left ${
                               isSelected
                                 ? 'border-primary bg-primary/10 text-primary font-bold shadow-sm ring-1 ring-primary'
@@ -4055,6 +3985,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           <span className="text-[10px] text-gray-400 mt-0.5">{t('pos.customerDisplaySynced', '客显副屏已同步全屏展示')}</span>
                         </div>
                       )}
+                      <label className="text-sm text-amber-800 mt-2"><input data-testid="manual-qris-confirm" type="checkbox" checked={qrisData.status === 'manual'} onChange={e=>setQrisData({status:e.target.checked?'manual':'idle'})} /> {t('offlineSale.qrisManual')}</label>
+                      {qrisData.status === 'manual' && <p role="status" className="text-sm text-amber-800">{t('offlineSale.qrisPending')}</p>}
                       {qrisData.status === 'paid' && (
                         <div className="text-center py-4 text-emerald-600">
                           <CheckCircle size={36} className="mx-auto mb-1 text-emerald-600" />
@@ -4153,7 +4085,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       </h4>
                       <p className="text-xs text-gray-500 mt-1 max-w-xs">
                         {paymentMethod === 'qris'
-                          ? t('pos.qrisHelp', '请提示顾客扫码，支付成功后系统将自动出单')
+                          ? t('offlineSale.qrisPending')
                           : t('pos.externalPayHelp', '请引导顾客在外接刷卡机 (EDC) 或扫码机上完成刷卡/交易，完成后点击下方确认结账')}
                       </p>
                       <div className="mt-3 px-3 py-1 bg-white rounded-lg border text-xs font-mono font-bold text-gray-700">
@@ -4198,7 +4130,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <button
                   onClick={handleCheckout}
                   disabled={
-                    isCheckingOut || !recovery || recovery.blocked || recovery.confirmed.length > 0 ||
+                    isCheckingOut || !recovery ||
                     !paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod) ||
                     (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
                     (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||

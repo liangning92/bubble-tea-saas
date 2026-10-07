@@ -150,7 +150,7 @@ export function LoginPage() {
       // Try online login first
       const response = await posApi.login(phone, password)
       const { token, user } = response.data.data
-      await login(token, user, password)
+      await login(token, user, password, response.config.baseURL || getApiUrl())
 
       // Handle remember me - only store phone number, never password
       if (rememberMe) {
