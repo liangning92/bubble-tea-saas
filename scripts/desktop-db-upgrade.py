@@ -16,7 +16,12 @@ import urllib.parse
 import uuid
 
 LOCAL_COLUMNS = ('pickupNumber', 'requestFingerprint', 'requestReceipt')
-CHANGES = ['Order.' + name + ' nullable TEXT' for name in LOCAL_COLUMNS] + ['Order_pickupNumber_idx nonunique index']
+COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
+    ('Order','checkoutTaxAmount','INTEGER'), ('Staff','baseSalary','INTEGER'),
+    ('Inventory','ledgerSequence','BIGINT NOT NULL DEFAULT 0'), ('Inventory','ledgerEpoch','BIGINT NOT NULL DEFAULT 0'),
+    ('StockInLog','ledgerSequence','BIGINT'), ('StockOutLog','ledgerSequence','BIGINT'),
+    ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'")]
+CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence and LocalSchemaMigration tables and indexes', 'Order_pickupNumber_idx nonunique index']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
 
 
@@ -84,7 +89,7 @@ def integrity(c):
 def catalog_from_empty(db, source_sha):
     with closing(connection(db)) as c:
         integrity(c)
-        result = {'version': 1, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}}
+        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ('PaymentEvidence','LocalSchemaMigration')) OR (type='index' AND tbl_name IN ('PaymentEvidence','LocalSchemaMigration') AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name")]}
         for table in tables(c):
             if c.execute('SELECT count(*) FROM ' + quote(table)).fetchone()[0]:
                 fail('CATALOG_REQUIRES_EMPTY_TEMPLATE')
@@ -98,16 +103,18 @@ def catalog_from_empty(db, source_sha):
 
 
 def supported_schema(c, catalog, allow_missing=True):
-    if catalog.get('version') != 1 or catalog.get('changes') != CHANGES:
+    if catalog.get('version') != 2 or catalog.get('changes') != CHANGES:
         fail('UNSUPPORTED_UPGRADE_CATALOG')
     actual_tables = set(tables(c))
     for table, expected in catalog['tables'].items():
         if table not in actual_tables:
+            if table in ('PaymentEvidence','LocalSchemaMigration') and allow_missing:
+                continue
             fail('UNSUPPORTED_SCHEMA_MISSING_TABLE')
         fields = {r[1]: {'type': r[2].upper(), 'notnull': r[3], 'pk': r[5]}
                   for r in c.execute('PRAGMA table_info(' + quote(table) + ')')}
         for name, spec in expected.items():
-            if table == 'Order' and name in LOCAL_COLUMNS and name not in fields and allow_missing:
+            if any(t==table and n==name for t,n,_ in COLUMN_ADDITIONS) and name not in fields and allow_missing:
                 continue
             if fields.get(name) != spec:
                 fail('UNSUPPORTED_SCHEMA_COLUMN')
@@ -269,11 +276,18 @@ def prepare(db, old_app, catalog, processes, registry=None):
             supported_schema(c, catalog)
             if fingerprints(c, columns) != history:
                 fail('DATABASE_CHANGED_AFTER_SNAPSHOT')
-            names = [r[1] for r in c.execute('PRAGMA table_info("Order")')]
-            added_columns = [name for name in LOCAL_COLUMNS if name not in names]
-            added_column = 'pickupNumber' in added_columns
-            for name in added_columns:
-                c.execute('ALTER TABLE "Order" ADD COLUMN ' + quote(name) + ' TEXT')
+            added_columns = []
+            added_column = False
+            for table,name,declaration in COLUMN_ADDITIONS:
+                names = [r[1] for r in c.execute('PRAGMA table_info('+quote(table)+')')]
+                if name not in names:
+                    c.execute('ALTER TABLE '+quote(table)+' ADD COLUMN '+quote(name)+' '+declaration)
+                    added_columns.append(table+'.'+name)
+                    if table=='Order' and name=='pickupNumber': added_column=True
+            if any(table in catalog['tables'] and table not in tables(c) for table in ('PaymentEvidence','LocalSchemaMigration')):
+                ddl=catalog.get('newTableDDL',[])
+                if not ddl or any(not any(table in statement for table in ('PaymentEvidence','LocalSchemaMigration')) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
+                for statement in ddl: c.execute(statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ', 1).replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ', 1).replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ', 1))
             added_index = not supported_schema(c, catalog, allow_missing=False)
             if added_index:
                 c.execute('CREATE INDEX "Order_pickupNumber_idx" ON "Order"("pickupNumber")')

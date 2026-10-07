@@ -1,3 +1,4 @@
+import {Link} from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -189,7 +190,7 @@ export function InventoryPage() {
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1>
+          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1><Link to="/inventory/count" className="text-blue-600">{t('countFlow.title')}</Link>
           <div className="flex gap-2">
             <button
               onClick={() => setShowLowStockOnly(!showLowStockOnly)}

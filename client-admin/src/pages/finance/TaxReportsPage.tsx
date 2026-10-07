@@ -215,7 +215,7 @@ export function TaxReportsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-orange-50 rounded-lg">
                   <p className="text-sm text-gray-500">{t('finance.ppnCollected')}</p>
-                  <p className="text-xl font-bold text-orange-600">{formatCurrency(previewData.ppnCollected || 0)}</p>
+                  <p className="text-xl font-bold text-orange-600">{(previewData.ppnCollected == null ? '—' : formatCurrency(previewData.ppnCollected))}</p>
                   <p className="text-xs text-gray-400">{previewData.ppnRate || 11}%</p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg">

@@ -1,3 +1,4 @@
+import {requireVerifiedReceiptIncome} from '../services/ReceiptFinancialEvidenceService'
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -25,6 +26,7 @@ router.get('/revenue', authenticate, authorize('admin', 'manager'), async (req: 
       where,
       include: { items: true }
     })
+    await requireVerifiedReceiptIncome(orders)
 
     // Calculate revenue
     let totalRevenue = 0
@@ -86,6 +88,7 @@ router.get('/revenue', authenticate, authorize('admin', 'manager'), async (req: 
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get revenue report error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get revenue report' })
   }
@@ -112,6 +115,7 @@ router.get('/daily', authenticate, authorize('admin', 'manager'), async (req: Au
       where,
       orderBy: { createdAt: 'asc' }
     })
+    await requireVerifiedReceiptIncome(orders)
 
     const dailyStats: Record<string, { date: string; orders: number; revenue: number }> = {}
 
@@ -132,6 +136,7 @@ router.get('/daily', authenticate, authorize('admin', 'manager'), async (req: Au
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get daily report error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get daily report' })
   }
@@ -152,6 +157,7 @@ router.get('/hourly', authenticate, authorize('admin', 'manager'), async (req: A
     if (storeId) where.storeId = storeId as string
 
     const orders = await prisma.order.findMany({ where })
+    await requireVerifiedReceiptIncome(orders)
 
     const hourlyStats: { hour: number; orders: number; revenue: number }[] = []
     for (let i = 0; i < 24; i++) {
@@ -170,6 +176,7 @@ router.get('/hourly', authenticate, authorize('admin', 'manager'), async (req: A
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get hourly report error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get hourly report' })
   }
@@ -283,6 +290,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
       },
       include: { items: true }
     })
+    await requireVerifiedReceiptIncome(todayOrders)
 
     const todayRevenue = todayOrders.reduce((sum, o) => sum + o.finalAmount, 0)
     const todayCost = todayOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.bomCost, 0), 0)
@@ -296,6 +304,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
         createdAt: { gte: yesterdayUTC, lt: todayUTC }
       }
     })
+    await requireVerifiedReceiptIncome(yesterdayOrders)
     const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + o.finalAmount, 0)
 
     // ============ 本月数据 ============
@@ -307,6 +316,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
       },
       include: { items: true }
     })
+    await requireVerifiedReceiptIncome(monthOrders)
     const monthRevenue = monthOrders.reduce((sum, o) => sum + o.finalAmount, 0)
     const monthCost = monthOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.bomCost, 0), 0)
     const monthProfit = monthRevenue - monthCost
@@ -441,6 +451,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
       }
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get dashboard error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get dashboard data' })
   }
@@ -476,6 +487,7 @@ router.get('/channels', authenticate, authorize('admin', 'manager'), async (req:
         where: { ...where, channelId: channel.id, status: 'completed' },
         include: { items: true }
       })
+      await requireVerifiedReceiptIncome(orders)
 
       const orderCount = orders.length
       const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0)
@@ -506,6 +518,7 @@ router.get('/channels', authenticate, authorize('admin', 'manager'), async (req:
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get channel reports error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get channel reports' })
   }
@@ -533,6 +546,7 @@ router.get('/channels/:id', authenticate, authorize('admin', 'manager'), async (
       where,
       include: { items: true }
     })
+    await requireVerifiedReceiptIncome(orders)
 
     const orderCount = orders.length
     const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0)
@@ -575,6 +589,7 @@ router.get('/channels/:id', authenticate, authorize('admin', 'manager'), async (
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get channel report error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get channel report' })
   }
@@ -608,6 +623,7 @@ router.get('/commissions', authenticate, authorize('admin', 'manager'), async (r
       const orders = await prisma.order.findMany({
         where: { ...where, channelId: channel.id, status: 'completed' }
       })
+      await requireVerifiedReceiptIncome(orders)
 
       const orderCount = orders.length
       const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0)
@@ -641,6 +657,7 @@ router.get('/commissions', authenticate, authorize('admin', 'manager'), async (r
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message, explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get commissions error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get commissions' })
   }

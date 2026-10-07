@@ -1,4 +1,4 @@
-import { containsFilter } from '../utils/stringFilter'
+import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
 import { getTierBenefitByLevel } from './TierBenefitService'
 
@@ -16,8 +16,8 @@ export async function getMembers(filter: MemberFilter) {
   if (filter.level) where.level = filter.level
   if (filter.search) {
     where.OR = [
-      { name: containsFilter(filter.search) },
-      { phone: containsFilter(filter.search) }
+      { name: containsText(filter.search) },
+      { phone: containsText(filter.search) }
     ]
   }
 
@@ -112,22 +112,14 @@ export async function updateMember(memberId: string, data: Partial<{
 
 // Earn points
 export async function earnPoints(memberId: string, points: number, note: string, orderId?: string) {
-  const member = await prisma.member.update({
-    where: { id: memberId },
-    data: {
-      points: { increment: points },
-      lastVisit: new Date()
-    }
-  })
-
-  await prisma.pointLog.create({
-    data: {
-      memberId,
-      type: 'earn',
-      points,
-      note,
-      orderId
-    }
+  if (!Number.isSafeInteger(points) || points <= 0) throw new Error('Invalid points amount')
+  const member = await prisma.$transaction(async (tx) => {
+    const updated = await tx.member.update({
+      where: { id: memberId },
+      data: { points: { increment: points }, lastVisit: new Date() }
+    })
+    await tx.pointLog.create({ data: { memberId, type: 'earn', points, note, orderId } })
+    return updated
   })
 
   // Check for level upgrade
@@ -138,53 +130,30 @@ export async function earnPoints(memberId: string, points: number, note: string,
 
 // Redeem points
 export async function redeemPoints(memberId: string, points: number, note: string, orderId?: string) {
-  const member = await prisma.member.findUnique({
-    where: { id: memberId }
+  if (!Number.isSafeInteger(points) || points <= 0) throw new Error('Invalid points amount')
+  return prisma.$transaction(async (tx) => {
+    const redeemed = await tx.member.updateMany({
+      where: { id: memberId, points: { gte: points } },
+      data: { points: { decrement: points } }
+    })
+    if (redeemed.count !== 1) throw new Error('Insufficient points')
+    await tx.pointLog.create({ data: { memberId, type: 'redeem', points: -points, note, orderId } })
+    return tx.member.findUniqueOrThrow({ where: { id: memberId } })
   })
-
-  if (!member || member.points < points) {
-    throw new Error('Insufficient points')
-  }
-
-  const updated = await prisma.member.update({
-    where: { id: memberId },
-    data: {
-      points: { decrement: points }
-    }
-  })
-
-  await prisma.pointLog.create({
-    data: {
-      memberId,
-      type: 'redeem',
-      points: -points,
-      note,
-      orderId
-    }
-  })
-
-  return updated
 }
 
 // Adjust points (admin)
 export async function adjustPoints(memberId: string, points: number, note: string) {
-  const member = await prisma.member.update({
-    where: { id: memberId },
-    data: {
-      points: { increment: points }
-    }
+  if (!Number.isSafeInteger(points) || points === 0) throw new Error('Invalid points amount')
+  return prisma.$transaction(async (tx) => {
+    const adjusted = await tx.member.updateMany({
+      where: { id: memberId, ...(points < 0 ? { points: { gte: -points } } : {}) },
+      data: { points: { increment: points } }
+    })
+    if (adjusted.count !== 1) throw new Error('Insufficient points')
+    await tx.pointLog.create({ data: { memberId, type: 'adjust', points, note } })
+    return tx.member.findUniqueOrThrow({ where: { id: memberId } })
   })
-
-  await prisma.pointLog.create({
-    data: {
-      memberId,
-      type: 'adjust',
-      points,
-      note
-    }
-  })
-
-  return member
 }
 
 // Check and upgrade member level based on totalSpent (using TierBenefit configuration)
@@ -197,9 +166,9 @@ export async function checkLevelUpgrade(memberId: string) {
 
   // Get threshold from TierBenefit config (descending order: diamond > gold > silver > bronze)
   const tierThresholds = [
-    { level: 'diamond', threshold: 0 },
-    { level: 'gold', threshold: 0 },
-    { level: 'silver', threshold: 0 },
+    { level: 'diamond', threshold: 5000000 },
+    { level: 'gold', threshold: 2000000 },
+    { level: 'silver', threshold: 500000 },
     { level: 'bronze', threshold: 0 }
   ]
 

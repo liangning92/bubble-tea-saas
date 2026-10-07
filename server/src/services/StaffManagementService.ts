@@ -9,7 +9,7 @@ export async function getStaffPerformance(storeId: string, startDate: Date, endD
     where: {
       storeId,
       createdAt: { gte: startDate, lte: endDate },
-      status: { not: 'refunded' }
+      status: { in: ['paid','completed'] }
     }
   })
 
@@ -62,7 +62,7 @@ export async function getAttendanceAnalytics(storeId: string, month: number, yea
     const workDays = staffAttendances.filter(a => a.checkInTime).length
     const lateDays = staffAttendances.filter(a => {
       if (!a.checkInTime) return false
-      const hour = new Date(a.checkInTime).getHours()
+      const hour = new Date(a.checkInTime.getTime()+7*3600000).getUTCHours()
       return hour >= 9
     }).length
 
@@ -177,10 +177,10 @@ export async function generatePayroll(storeId: string, month: number, year: numb
         const gracePeriod = attendanceRule.gracePeriod || 0
         const checkInTime = new Date(a.checkInTime)
         const lateThreshold = startHour * 60 + startMin + gracePeriod
-        const checkInMinutes = checkInTime.getHours() * 60 + checkInTime.getMinutes()
+        const checkInMinutes = new Date(checkInTime.getTime()+7*3600000).getUTCHours() * 60 + checkInTime.getUTCMinutes()
         return checkInMinutes > lateThreshold
       }
-      return new Date(a.checkInTime).getHours() >= 9
+      return new Date(a.checkInTime.getTime()+7*3600000).getUTCHours() >= 9
     }).length
 
     // Calculate work hours
@@ -194,13 +194,8 @@ export async function generatePayroll(storeId: string, month: number, year: numb
     const regularHours = workDays * 8
     const overtimeHours = Math.max(0, totalHours - regularHours)
 
-    // Position-based salary
-    const positionSalaries: Record<string, number> = {
-      '店长': 5000000,
-      '副店长': 4000000,
-      '店员': 3500000
-    }
-    const baseSalary = positionSalaries[staff.position] || 3500000
+    if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
+    const baseSalary = staff.baseSalary
     const overtimePay = Math.round(overtimeHours * (baseSalary / 176) * 1.5)
 
     // Deductions
@@ -324,7 +319,7 @@ export async function getStaffKPIs(storeId: string, month: number, year: number)
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { not: 'refunded' }
+        status: { in: ['paid','completed'] }
       }
     }),
     prisma.attendance.findMany({
@@ -342,7 +337,7 @@ export async function getStaffKPIs(storeId: string, month: number, year: number)
     const workDays = staffAttendance.filter(a => a.checkInTime).length
     const lateDays = staffAttendance.filter(a => {
       if (!a.checkInTime) return false
-      return new Date(a.checkInTime).getHours() >= 9
+      return new Date(a.checkInTime.getTime()+7*3600000).getUTCHours() >= 9
     }).length
 
     const totalRevenue = staffOrders.reduce((sum, o) => sum + o.finalAmount, 0)

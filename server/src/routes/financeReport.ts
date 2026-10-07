@@ -46,6 +46,7 @@ router.get('/download', authenticate, authorize('admin', 'manager'), async (req:
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
     res.send(buffer)
   } catch (error: any) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message,explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Download report error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to generate report' })
   }

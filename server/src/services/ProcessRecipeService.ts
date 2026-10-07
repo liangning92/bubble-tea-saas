@@ -1,3 +1,4 @@
+import {convertQuantity} from '../utils/inventoryUnits'
 import prisma from '../config/database'
 
 // Get all recipes for a store
@@ -87,21 +88,8 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
       if (!input.inventoryId || !input.inventory) continue
       const inv = input.inventory
       const deductQty = input.quantity * multiplier
-      const unit = (inv.unit || '').toLowerCase()
-      const isPerPiece = ['个', '支', '卷', 'pce', '件', '张', 'pcs'].includes(unit)
-      const isKgOrL = ['kg', 'l', 'liter', 'kilogram'].includes(unit)
-      const ratio = inv.concentrateRatio || 1
-      // 防止除零
-      const safeRatio = ratio === 0 ? 1 : ratio
-
-      // 计算单位成本
-      let unitCost = Number(inv.avgCost || 0)
-      if (isKgOrL) {
-        // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
-        unitCost = unitCost / 1000 / safeRatio
-      } else if (!isPerPiece) {
-        unitCost = unitCost / safeRatio
-      }
+      // Recipe inputs are stored in each input material's existing inventory unit.
+      const unitCost = Number(inv.avgCost || 0)
 
       totalInputCost += deductQty * unitCost
 
@@ -127,14 +115,16 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
     }
 
     // 计算产出单位成本 = 总投入成本 / 总产出数量
-    const outputUnitCost = totalOutputQty > 0 ? Math.round(totalInputCost / totalOutputQty) : 0
+    if(totalOutputQty<=0)throw new Error('INVALID_PROCESS_OUTPUT')
+    const outputUnitCost = totalInputCost / totalOutputQty
+    let cumulativeOutput=0,allocatedCost=0
 
     // 添加产出到库存（按名称查找或创建）
     for (const output of outputs) {
-      const addQty = output.quantity * multiplier
+      const recipeQty = output.quantity * multiplier
       const outputName = output.name
 
-      if (!outputName) continue
+      if (!outputName) throw new Error('INVALID_PROCESS_OUTPUT')
 
       // 查找或创建产出库存
       let outputInv = await tx.inventory.findFirst({
@@ -160,13 +150,19 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
         })
       }
 
+      const addQty=convertQuantity(recipeQty,recipe.outputUnit,outputInv.unit)
+      cumulativeOutput+=recipeQty
+      const cumulativeCost=Math.round(totalInputCost*cumulativeOutput/totalOutputQty)
+      const outputTotalCost=cumulativeCost-allocatedCost
+      allocatedCost=cumulativeCost
+      const ledgerUnitCost=outputTotalCost/addQty
       // 加权平均计算新均价
       const currentStock = outputInv.currentStock || 0
       const currentAvgCost = outputInv.avgCost || 0
       const newTotalStock = currentStock + addQty
       const newAvgCost = newTotalStock > 0
-        ? Math.round((Number(currentStock) * Number(currentAvgCost) + addQty * outputUnitCost) / newTotalStock)
-        : outputUnitCost
+        ? Math.round((Number(currentStock) * Number(currentAvgCost) + outputTotalCost) / newTotalStock)
+        : Math.round(ledgerUnitCost)
 
       await tx.inventory.update({
         where: { id: outputInv.id },
@@ -179,8 +175,8 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
         data: {
           inventoryId: outputInv.id,
           quantity: addQty,
-          unitCost: outputUnitCost,
-          totalAmount: addQty * outputUnitCost,
+          unitCost: Math.round(ledgerUnitCost),
+          totalAmount: Math.round(outputTotalCost),
           note: `加工产出: ${recipe.name}`
         }
       })

@@ -65,7 +65,7 @@ router.get('/inventory/:inventoryId/breakdown', authenticate, async (req: AuthRe
   try {
     const { quantity } = req.query
     const qty = quantity ? parseFloat(quantity as string) : 1
-    const breakdown = await bomService.getInventoryCostBreakdown(req.params.inventoryId, qty)
+    const breakdown = await bomService.getInventoryCostBreakdown(req.params.inventoryId, qty, typeof req.query.unit === 'string' ? req.query.unit : undefined)
     res.json({ code: 200, data: breakdown })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })

@@ -54,7 +54,7 @@ const managerToken=jwt.sign({...claims,id:'manager',phone:'synthetic-manager',ro
 const publicHeaders={Authorization:'Bearer '+managerToken};
 const assertPublic=value=>{if(!value||typeof value!=='object')return;assert.equal('requestReceipt' in value,false);assert.equal('requestFingerprint' in value,false);for(const nested of Object.values(value))assertPublic(nested);};
 for(const id of [saved.id,legacy.id]){
- const statusResponse=await fetch(base+'/api/orders/'+id+'/status',{method:'PUT',headers:{...publicHeaders,'Content-Type':'application/json'},body:JSON.stringify({status:'completed'})});assert.equal(statusResponse.status,200);const statusBody=await statusResponse.json();assertPublic(statusBody);assert.equal(statusBody.data.id,id);
+ const statusResponse=await fetch(base+'/api/orders/'+id+'/status',{method:'PUT',headers:{...publicHeaders,'Content-Type':'application/json'},body:JSON.stringify({status:'completed'})});assert.equal(statusResponse.status,409);const statusBody=await statusResponse.json();assertPublic(statusBody);assert.equal(statusBody.message,'ORDER_FINANCIAL_STATUS_PROTECTED');
  const detailResponse=await fetch(base+'/api/orders/'+id,{headers:publicHeaders});assert.equal(detailResponse.status,200);assertPublic(await detailResponse.json());
  await prisma.refundRequest.create({data:{orderId:id,reason:'Synthetic public projection',requestedBy:'staff'}});
 }

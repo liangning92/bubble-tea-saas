@@ -1,5 +1,7 @@
+import { requireVerifiedReceiptIncome } from './ReceiptFinancialEvidenceService'
+import { netReceivedAmount } from '../utils/refundAllocation'
 import prisma from '../config/database'
-import { subDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from '../utils/dateUtils'
+import { formatDate, subDays, startOfDay, endOfDay, startOfMonth, endOfMonth } from '../utils/dateUtils'
 import * as FixedAssetService from './FixedAssetService'
 
 // ==================== HELPERS ====================
@@ -54,11 +56,12 @@ export interface RevenueSummary {
   totalCost: number
   grossProfit: number
   grossMargin: number
-  ppnCollected: number
-  ppnPaid: number
-  ppnRefunded: number  // PPN refunded due to partial/total refunds
+  ppnCollected: number | null
+  ppnPaid: number | null
+  ppnRefunded: number | null  // PPN refunded due to partial/total refunds
   netRevenue: number
   totalRefunded: number
+  missingTaxOrders: number
 }
 
 export async function getRevenueSummary(storeId: string, startDate: Date, endDate: Date): Promise<RevenueSummary> {
@@ -69,7 +72,7 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
         createdAt: { gte: startDate, lte: endDate },
         status: { in: ['completed', 'paid'] }
       },
-      include: { items: true, refundRequests: { where: { status: 'approved' } } }
+      include: { items: true, refundRequests: { where: { status: {in:['approved','paid']} } } }
     }),
     getPpnRate(storeId),
     // Get approved refunds for this period
@@ -85,35 +88,20 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
   // Calculate total refunded amount
   const totalRefunded = refunds.reduce((sum, r) => sum + (r.amount || 0), 0)
 
-  // Calculate revenue after deducting refunds
-  const totalRevenue = orders.reduce((sum, o) => {
-    const refundedAmount = o.refundRequests.reduce((s, r) => s + (r.amount || 0), 0)
-    return sum + Math.max(0, o.totalAmount - refundedAmount)
-  }, 0)
-
+  await requireVerifiedReceiptIncome(orders)
+  const totalRevenue = orders.reduce((sum,o)=>sum+netReceivedAmount(o),0)
   const totalOrders = orders.length
-  const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
-
-  // Calculate cost from order items (proportional to non-refunded portion)
-  const totalCost = orders.reduce((sum, o) => {
-    const refundedAmount = o.refundRequests.reduce((s, r) => s + (r.amount || 0), 0)
-    const refundRatio = refundedAmount > 0 && o.totalAmount > 0
-      ? Math.max(0, (o.totalAmount - refundedAmount) / o.totalAmount) : 1
-    return sum + o.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity * refundRatio, 0)
-  }, 0)
-
-  const grossProfit = totalRevenue - totalCost
-  const grossMargin = totalRevenue > 0 ? Math.round(grossProfit / totalRevenue * 100) : 0
-
-  // PPN based on configured rate
-  const ppnCollected = Math.round(totalRevenue * ppnRate)
-  const ppnPaid = Math.round(totalCost * ppnRate)
-
-  // Calculate PPN refund proportionally - when orders are refunded, PPN should also be refunded
-  // PPN is part of the order total, so refund ratio applies
-  const ppnRefunded = Math.round(totalRefunded * ppnRate)
-
-  const netRevenue = totalRevenue + ppnCollected - ppnPaid - ppnRefunded
+  const avgOrderValue = totalOrders ? Math.round(totalRevenue/totalOrders) : 0
+  // Prepared goods remain consumed after a customer dissatisfaction refund.
+  const totalCost = orders.reduce((sum,o)=>sum+o.items.reduce((n,i)=>n+i.bomCost*i.quantity,0),0)
+  const missingTaxOrders = orders.filter(o=>o.checkoutTaxAmount===null).length
+  const ppnCollected = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+Math.round((o.checkoutTaxAmount || 0)*netReceivedAmount(o)/Math.max(1,o.finalAmount)),0)
+  const ppnRefunded = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+(o.checkoutTaxAmount || 0)-Math.round((o.checkoutTaxAmount || 0)*netReceivedAmount(o)/Math.max(1,o.finalAmount)),0)
+  // Purchase cost is not evidence of deductible input VAT.
+  const ppnPaid = null
+  const netRevenue = totalRevenue
+  const grossProfit = totalRevenue-totalCost
+  const grossMargin = totalRevenue ? Math.round(grossProfit/totalRevenue*100) : 0
 
   return {
     totalRevenue,
@@ -126,7 +114,8 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
     ppnPaid,
     ppnRefunded,
     netRevenue,
-    totalRefunded
+    totalRefunded,
+    missingTaxOrders
   }
 }
 
@@ -141,7 +130,7 @@ export async function getDailyRevenueTrend(storeId: string, days: number = 30) {
       createdAt: { gte: startDate, lte: endDate },
       status: { in: ['completed', 'paid'] }
     },
-    include: { items: true }
+    include: { items: true,refundRequests:{where:{status:{in:['approved','paid']}}} }
   })
 
   // Group by day
@@ -149,14 +138,14 @@ export async function getDailyRevenueTrend(storeId: string, days: number = 30) {
 
   for (let i = 0; i <= days; i++) {
     const d = subDays(new Date(), days - i)
-    const key = d.toISOString().slice(0, 10)
+    const key = formatDate(d)
     dailyMap[key] = { revenue: 0, cost: 0, orders: 0 }
   }
 
   for (const order of orders) {
-    const key = new Date(order.createdAt).toISOString().slice(0, 10)
+    const key = formatDate(order.createdAt)
     if (dailyMap[key]) {
-      dailyMap[key].revenue += order.totalAmount
+      dailyMap[key].revenue += netReceivedAmount(order)
       dailyMap[key].cost += order.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0)
       dailyMap[key].orders++
     }
@@ -188,9 +177,9 @@ export async function getHourlyRevenueDistribution(storeId: string, date: Date) 
   const hourlyMap = new Array(24).fill(0).map(() => ({ orders: 0, revenue: 0 }))
 
   for (const order of orders) {
-    const hour = new Date(order.createdAt).getHours()
+    const hour = new Date(order.createdAt.getTime()+7*3600000).getUTCHours()
     hourlyMap[hour].orders++
-    hourlyMap[hour].revenue += order.totalAmount
+    hourlyMap[hour].revenue += netReceivedAmount(order)
   }
 
   return hourlyMap.map((data, hour) => ({
@@ -210,7 +199,7 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
         createdAt: { gte: startDate, lte: endDate },
         status: { in: ['completed', 'paid'] }
       },
-      include: { items: true }
+      include: { items: true,refundRequests:{where:{status:{in:['approved','paid']}}} }
     }),
     // Get all inventory cost changes in period (filtered by storeId via relation)
     prisma.stockInLog.aggregate({
@@ -230,7 +219,7 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
     })
   ])
 
-  const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0)
+  const revenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
   const cogs = orders.reduce((sum, o) =>
     sum + o.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0), 0)
 
@@ -275,8 +264,9 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
 // ==================== FINANCIAL STATEMENTS ====================
 
 export async function getIncomeStatement(storeId: string, month: number, year: number, includeDepreciation: boolean = false) {
-  const startDate = startOfMonth(new Date(year, month - 1))
-  const endDate = endOfMonth(new Date(year, month - 1))
+  const monthAnchor=new Date(`${year}-${String(month).padStart(2,'0')}-01T00:00:00+07:00`)
+  const startDate = startOfMonth(monthAnchor)
+  const endDate = endOfMonth(monthAnchor)
 
   const summary = await getRevenueSummary(storeId, startDate, endDate)
   const profit = await getProfitAnalysis(storeId, startDate, endDate)
@@ -324,12 +314,13 @@ export async function getIncomeStatement(storeId: string, month: number, year: n
 // ==================== CASH FLOW ====================
 
 export async function getBalanceSheet(storeId: string, month: number, year: number) {
-  const startDate = startOfMonth(new Date(year, month - 1))
-  const endDate = endOfMonth(new Date(year, month - 1))
+  const monthAnchor=new Date(`${year}-${String(month).padStart(2,'0')}-01T00:00:00+07:00`)
+  const startDate = startOfMonth(monthAnchor)
+  const endDate = endOfMonth(monthAnchor)
   const [orders, expenses, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
     prisma.order.findMany({
       where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid'] } },
-      include: { items: true }
+      include: { items: true,refundRequests:{where:{status:{in:['approved','paid']}}} }
     }),
     prisma.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } } }),
     FixedAssetService.getDepreciationSchedule(storeId),
@@ -338,7 +329,7 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
     prisma.purchaseOrder.aggregate({ where: { storeId, status: { in: ['pending', 'approved'] } }, _sum: { totalAmount: true } })
   ])
 
-  const revenue = orders.reduce((sum, order) => sum + order.totalAmount, 0)
+  const revenue = orders.reduce((sum, order) => sum + netReceivedAmount(order), 0)
   const cost = orders.reduce((sum, order) => sum + order.items.reduce((subtotal, item) => subtotal + (item.bomCost || 0) * item.quantity, 0), 0)
   const expensesTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0)
   const cash = bankAccounts.reduce((sum, account) => sum + account.balance, 0)
@@ -365,15 +356,17 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
 
 export async function getCashFlow(storeId: string, startDate: Date, endDate: Date) {
   // Cash inflows (orders) - filtered by storeId
-  const cashSales = await prisma.order.aggregate({
+  const cashOrders = await prisma.order.findMany({
     where: {
       storeId,
       createdAt: { gte: startDate, lte: endDate },
       status: { in: ['completed', 'paid'] },
       paymentMethod: 'cash'
     },
-    _sum: { finalAmount: true }
+    include: { refundRequests: true }
   })
+  await requireVerifiedReceiptIncome(cashOrders)
+  const cashSales = cashOrders.reduce((sum, order) => sum + netReceivedAmount(order), 0)
 
   // Cash outflows (inventory purchases) - join through Inventory to filter by storeId
   const inventoryPurchases = await prisma.stockInLog.aggregate({
@@ -412,7 +405,7 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
       end: endDate.toISOString().slice(0, 10)
     },
     inflows: {
-      cashSales: cashSales._sum.finalAmount || 0,
+      cashSales: cashSales,
       otherSales: 0
     },
     outflows: {
@@ -421,22 +414,23 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
       otherExpenses: expenseOutflows._sum.amount || 0
     },
     totalOutflows,
-    netCashFlow: (cashSales._sum.finalAmount || 0) - totalOutflows
+    netCashFlow: (cashSales) - totalOutflows
   }
 }
 
 // ==================== TAX REPORTING ====================
 
 export async function getTaxReport(storeId: string, month: number, year: number) {
-  const startDate = startOfMonth(new Date(year, month - 1))
-  const endDate = endOfMonth(new Date(year, month - 1))
+  const monthAnchor=new Date(`${year}-${String(month).padStart(2,'0')}-01T00:00:00+07:00`)
+  const startDate = startOfMonth(monthAnchor)
+  const endDate = endOfMonth(monthAnchor)
 
   const [orders, ppnRate, taxableRatio, refunds] = await Promise.all([
     prisma.order.findMany({
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { in: ['completed', 'paid'] }
+        status: { in: ['completed', 'paid','refunded'] }
       }
     }),
     getPpnRate(storeId),
@@ -444,7 +438,7 @@ export async function getTaxReport(storeId: string, month: number, year: number)
     // Get approved refunds for this period to calculate PPN refund
     prisma.refundRequest.findMany({
       where: {
-        status: 'approved',
+        status: {in:['approved','paid']},
         order: { storeId },
         approvedAt: { gte: startDate, lte: endDate }
       }
@@ -453,20 +447,16 @@ export async function getTaxReport(storeId: string, month: number, year: number)
 
   const discountAmount = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0)
 
-  // Apply tax category from Order.taxCategory field (taxable | exempt)
-  const taxableOrders = orders.filter(o => (o as any).taxCategory !== 'exempt')
-  const taxExemptRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0) -
-    taxableOrders.reduce((sum, o) => sum + o.totalAmount, 0)
-
-  const rawTaxableBase = taxableOrders.reduce((sum, o) => sum + o.totalAmount, 0) - discountAmount
-  // Apply user-configurable taxable ratio (申报比例)
-  const taxableBase = Math.round(rawTaxableBase * taxableRatio / 100)
-  const ppnCollected = Math.round(taxableBase * ppnRate)
-
-  // Calculate total refunded amount and proportional PPN refund
-  const totalRefunded = refunds.reduce((sum, r) => sum + (r.amount || 0), 0)
-  const ppnRefunded = Math.round(totalRefunded * ppnRate)
-
+  await requireVerifiedReceiptIncome(orders)
+  const missingTaxOrders = orders.filter(o=>o.checkoutTaxAmount===null).length
+  const taxExemptRevenue = orders.filter(o=>o.checkoutTaxAmount===0).reduce((sum,o)=>sum+o.finalAmount,0)
+  const rawTaxableBase = orders.filter(o=>(o.checkoutTaxAmount || 0)>0).reduce((sum,o)=>sum+o.finalAmount-(o.checkoutTaxAmount || 0),0)
+  const taxableBase = rawTaxableBase
+  const ppnCollected = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+(o.checkoutTaxAmount || 0),0)
+  // Refund tax requires the original receipt; current tax settings never rewrite it.
+  const refundOrders = await prisma.order.findMany({where:{id:{in:[...new Set(refunds.map(r=>r.orderId))]}},select:{id:true,finalAmount:true,checkoutTaxAmount:true}})
+  const ppnRefunded = refundOrders.some(o=>o.checkoutTaxAmount===null) ? null : refunds.reduce((sum,r)=>{const o=refundOrders.find(o=>o.id===r.orderId);return sum+(o ? Math.round((o.checkoutTaxAmount || 0)*r.amount/Math.max(1,o.finalAmount)) : 0)},0)
+  const totalRefunded = refunds.reduce((sum,r)=>sum+r.amount,0)
   // Group by payment method for PPH reporting
   const byPaymentMethod: Record<string, number> = {}
   for (const order of orders) {
@@ -519,7 +509,7 @@ export async function getTaxReport(storeId: string, month: number, year: number)
   return {
     period: `${year}-${month.toString().padStart(2, '0')}`,
     taxId: '01', // Simplified tax ID
-    totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+    totalRevenue: orders.reduce((sum, o) => sum + o.finalAmount, 0),
     taxExemptRevenue,
     taxableRevenue: Math.max(0, taxableBase),
     rawTaxableBase,  // Before ratio adjustment
@@ -527,6 +517,7 @@ export async function getTaxReport(storeId: string, month: number, year: number)
     ppnCollected,
     ppnRefunded,      // PPN refunded due to partial/total refunds
     ppnRate,
+    missingTaxOrders,
     totalRefunded,    // Total refund amount for the period
     revenueByPaymentMethod: byPaymentMethod,
     orderCount: orders.length,
@@ -537,8 +528,9 @@ export async function getTaxReport(storeId: string, month: number, year: number)
 // ==================== GOAL TRACKING ====================
 
 export async function getGoalTracking(storeId: string, month: number, year: number, targetRevenue: number) {
-  const startDate = startOfMonth(new Date(year, month - 1))
-  const endDate = endOfMonth(new Date(year, month - 1))
+  const monthAnchor=new Date(`${year}-${String(month).padStart(2,'0')}-01T00:00:00+07:00`)
+  const startDate = startOfMonth(monthAnchor)
+  const endDate = endOfMonth(monthAnchor)
 
   const summary = await getRevenueSummary(storeId, startDate, endDate)
 

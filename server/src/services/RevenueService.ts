@@ -1,3 +1,5 @@
+import {netReceivedAmount} from '../utils/refundAllocation'
+import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import prisma from '../config/database'
 import { businessCalendarDate } from '../utils/revenueDateRange'
 
@@ -12,8 +14,10 @@ export async function getRevenueByChannel(storeId: string, startDate: Date, endD
         lte: endDate
       }
     },
-    include: { channel: true }
+    include: { channel: true, refundRequests: {where:{status:{in:['approved','paid']}}} }
   })
+
+  await requireVerifiedReceiptIncome(orders)
 
   // Group by channel
   const channelMap: Record<string, { revenue: number; orders: number }> = {}
@@ -23,7 +27,7 @@ export async function getRevenueByChannel(storeId: string, startDate: Date, endD
     if (!channelMap[channelName]) {
       channelMap[channelName] = { revenue: 0, orders: 0 }
     }
-    channelMap[channelName].revenue += order.totalAmount || 0
+    channelMap[channelName].revenue += netReceivedAmount(order)
     channelMap[channelName].orders += 1
   }
 
@@ -45,10 +49,12 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
         gte: startDate,
         lte: endDate
       }
-    }
+    },
+    include:{refundRequests:{where:{status:{in:['approved','paid']}}}}
   })
 
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+  await requireVerifiedReceiptIncome(orders)
+  const totalRevenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
   const totalOrders = orders.length
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
 
@@ -91,8 +97,11 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
         gte: startDate,
         lte: endDate
       }
-    }
+    },
+    include:{refundRequests:{where:{status:{in:['approved','paid']}}}}
   })
+
+  await requireVerifiedReceiptIncome(orders)
 
   // Group by date
   const dailyMap: Record<string, { revenue: number; orders: number }> = {}
@@ -102,7 +111,7 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
     if (!dailyMap[dateStr]) {
       dailyMap[dateStr] = { revenue: 0, orders: 0 }
     }
-    dailyMap[dateStr].revenue += order.totalAmount || 0
+    dailyMap[dateStr].revenue += netReceivedAmount(order)
     dailyMap[dateStr].orders += 1
   }
 

@@ -4,13 +4,13 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const serverRequire=name=>require(require.resolve(name,{paths:[path.resolve('server')]}));
 function inventoryRouter(){
  const exports={},calls=[],auth=(req,res,next)=>next();
- const deps={express:serverRequire('express'),zod:serverRequire('zod'),'../middlewares/auth':{authenticate:auth,authorize:()=>auth},'../utils/storeHelper':{getStoreId:()=> 'synthetic-store'},'../utils/validation':{validateBody:()=>auth},'../services/InventoryAlertConfigService':{},'../services/InventoryService':{getInventoryById:async id=>{calls.push(id);return null;},getConsumptionAnalysis:()=>assert.fail('Unreachable named analysis handler'),getAnomalySummary:()=>assert.fail('Unreachable named summary handler')}};
+ const deps={express:serverRequire('express'),zod:serverRequire('zod'),'../middlewares/auth':{authenticate:auth,authorize:()=>auth},'../utils/storeHelper':{getStoreId:()=> 'synthetic-store'},'../utils/validation':{validateBody:()=>auth},'../config/database':{__esModule:true,default:{}},'../utils/publicProduct':{},'../middlewares/resourceStore':{requireResourceStore:()=>auth},'../services/InventoryAlertConfigService':{getInventoryAlertConfig:async()=>({varianceWarningPercent:10,varianceCriticalPercent:20})},'../services/InventoryService':{getInventoryById:async id=>{calls.push(id);return null;},getConsumptionAnalysis:async()=>{calls.push('consumption-analysis');return [];},getAnomalySummary:async()=>{calls.push('anomaly-summary');return {};}}};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync('server/src/routes/inventory.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,{exports,require:name=>{if(!(name in deps))throw Error('Unexpected dependency '+name);return deps[name];},console,Date});
  return {router:exports.inventoryRouter,calls};
 }
-for(const endpoint of ['consumption-analysis','anomaly-summary'])test('actual existing inventory route shadows '+endpoint+'; dashboard must expose unavailable',async()=>{
- const {router,calls}=inventoryRouter();const layer=router.stack.find(layer=>layer.route?.methods.get&&layer.match('/'+endpoint));assert.equal(layer.route.path,'/:id');let status=200,body;
+for(const endpoint of ['consumption-analysis','anomaly-summary'])test('named inventory '+endpoint+' handler is reachable before the ID route',async()=>{
+ const {router,calls}=inventoryRouter();const layer=router.stack.find(layer=>layer.route?.methods.get&&layer.match('/'+endpoint));assert.equal(layer.route.path,'/'+endpoint);let status=200,body;
  const response={status(code){status=code;return this;},json(value){body=value;return this;}};
  await layer.route.stack.at(-1).handle({params:layer.params,user:{storeId:'synthetic-store'},query:{startDate:'2026-10-01',endDate:'2026-10-07'}},response);
- assert.deepEqual(calls,[endpoint]);assert.equal(status,404);assert.equal(body.message,'Inventory not found');
+ assert.deepEqual(calls,[endpoint]);assert.equal(status,200);assert.equal(body.code,200);
 });

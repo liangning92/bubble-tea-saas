@@ -1,3 +1,4 @@
+import {RefundRequestForm} from '../components/RefundRequestForm'
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +19,8 @@ interface Order {
   createdAt: string
   channel?: string
   items: Array<{
+    id: string
+    productName?: string
     productId?: string
     name: string
     quantity: number
@@ -36,10 +39,7 @@ export function OrderHistoryPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showRefundModal, setShowRefundModal] = useState(false)
-  const [refundReason, setRefundReason] = useState('')
-  const [refundSubmitting, setRefundSubmitting] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deleteReason, setDeleteReason] = useState('')
 
   const loadTodayOrders = useCallback(async () => {
     setIsLoading(true)
@@ -99,49 +99,6 @@ export function OrderHistoryPage() {
     return colors[status] || 'bg-gray-100 text-gray-600'
   }
 
-  // Delete order (cashier mistake)
-  const handleDeleteOrder = async () => {
-    if (!selectedOrder || !deleteReason.trim()) {
-      showToast(t('orders.deleteReasonRequired'), 'error')
-      return
-    }
-
-    setRefundSubmitting(true)
-    try {
-      await posApi.requestRefund({ orderId: selectedOrder.id, reason: deleteReason, staffId: user?.staff?.id })
-      showToast(t('orders.deleteSuccess'), 'success')
-      setShowDeleteModal(false)
-      setSelectedOrder(null)
-      setDeleteReason('')
-      loadTodayOrders()
-    } catch {
-      showToast(t('orders.deleteFailed'), 'error')
-    } finally {
-      setRefundSubmitting(false)
-    }
-  }
-
-  // Refund request submit
-  const handleRefundSubmit = async () => {
-    if (!selectedOrder || !refundReason.trim()) {
-      showToast(t('orders.refundReasonRequired'), 'error')
-      return
-    }
-    setRefundSubmitting(true)
-    try {
-      await posApi.requestRefund({ orderId: selectedOrder.id, reason: refundReason, staffId: user?.staff?.id })
-      showToast(t('orders.refundSubmitted'), 'success')
-      setShowRefundModal(false)
-      setRefundReason('')
-      setSelectedOrder(null)
-      loadTodayOrders()
-    } catch {
-      showToast(t('orders.refundFailed'), 'error')
-    } finally {
-      setRefundSubmitting(false)
-    }
-  }
-
   const handleRebuy = (order: Order) => {
     const cartItems = order.items.map(item => ({
       productId: item.productId || '',
@@ -175,6 +132,7 @@ export function OrderHistoryPage() {
               {new Date().toLocaleDateString()}
             </p>
           </div>
+          <button className="text-sm" onClick={()=>navigate('/receipt-sync')}>{t('receiptSync.title')}</button>
           <button onClick={loadTodayOrders} className="ml-auto p-2 hover:bg-gray-100 rounded-lg">
             <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
           </button>
@@ -318,96 +276,7 @@ export function OrderHistoryPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => setShowDeleteModal(false)}>
-          <div className="bg-white rounded-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-              <AlertTriangle className="text-red-500" />
-              {t('orders.deleteOrderConfirm')}
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {t('orders.deleteOrderHint')}
-            </p>
-            <textarea
-              value={deleteReason}
-              onChange={(e) => setDeleteReason(e.target.value)}
-              placeholder={t('orders.deleteReasonPlaceholder')}
-              className="w-full p-3 border rounded-xl mb-4"
-              rows={3}
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1 py-3 border rounded-xl"
-              >
-                {t('orders.cancel')}
-              </button>
-              <button
-                onClick={handleDeleteOrder}
-                disabled={refundSubmitting}
-                className="flex-1 py-3 bg-red-500 text-white rounded-xl disabled:opacity-50"
-              >
-                {refundSubmitting ? t('orders.processing') : t('orders.confirmDelete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Refund Request Modal */}
-      {showRefundModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-[90%] max-w-md rounded-xl overflow-hidden">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="font-bold flex items-center gap-2">
-                <AlertTriangle size={20} className="text-red-500" />
-                {t('orders.refundModalTitle')}
-              </h3>
-              <button onClick={() => { setShowRefundModal(false); setRefundReason('') }} className="p-2 hover:bg-gray-100 rounded-lg">
-                <span className="sr-only">Close</span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-sm text-gray-500">{t('orders.orderNumber')}</p>
-                <p className="font-medium">{selectedOrder.orderNumber}</p>
-                <p className="text-sm text-gray-500 mt-2">{t('orders.refundAmount')}</p>
-                <p className="font-bold text-lg text-red-500">{formatCurrency(selectedOrder.finalAmount)}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">{t('orders.refundReason')}</label>
-                <textarea
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  placeholder={t('orders.refundReasonPlaceholder')}
-                  rows={3}
-                  className="w-full p-3 border rounded-xl resize-none"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setShowRefundModal(false); setRefundReason('') }}
-                  className="flex-1 py-3 border rounded-xl"
-                >
-                  {t('orders.cancel')}
-                </button>
-                <button
-                  onClick={handleRefundSubmit}
-                  disabled={refundSubmitting || !refundReason.trim()}
-                  className="flex-1 py-3 bg-red-500 text-white rounded-xl disabled:opacity-50"
-                >
-                  {refundSubmitting ? t('orders.submitting') : t('orders.confirmSubmit')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {(showDeleteModal||showRefundModal)&&selectedOrder&&<div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"><div className="bg-white w-full max-w-md rounded-xl max-h-[90vh] overflow-y-auto"><RefundRequestForm order={selectedOrder} onCancel={()=>{setShowDeleteModal(false);setShowRefundModal(false)}} onDone={()=>{setShowDeleteModal(false);setShowRefundModal(false);setSelectedOrder(null);loadTodayOrders();showToast(t('refundPolicy.submitted'),'success')}}/></div></div>}
     </div>
   )
 }

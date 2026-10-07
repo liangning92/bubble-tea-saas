@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import {queueApi} from '../../services/api'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Ticket,
@@ -24,59 +25,25 @@ interface QueueTicket {
 export function QueueManagePage() {
   const { t } = useTranslation()
   const [soundEnabled, setSoundEnabled] = useState(true)
-  const [nextNumber, setNextNumber] = useState<number>(53)
-  const [tickets, setTickets] = useState<QueueTicket[]>([
-    { id: 'Q001', ticketNumber: 47, status: 'served', customerName: 'Ahmad', orderCount: 2, createdAt: new Date(Date.now() - 30 * 60000).toISOString() },
-    { id: 'Q002', ticketNumber: 48, status: 'served', customerName: 'Siti', orderCount: 1, createdAt: new Date(Date.now() - 25 * 60000).toISOString() },
-    { id: 'Q003', ticketNumber: 49, status: 'waiting', customerName: 'Budi', orderCount: 3, createdAt: new Date(Date.now() - 15 * 60000).toISOString() },
-    { id: 'Q004', ticketNumber: 50, status: 'waiting', orderCount: 2, createdAt: new Date(Date.now() - 10 * 60000).toISOString() },
-    { id: 'Q005', ticketNumber: 51, status: 'waiting', orderCount: 1, createdAt: new Date(Date.now() - 5 * 60000).toISOString() },
-    { id: 'Q006', ticketNumber: 52, status: 'waiting', orderCount: 4, createdAt: new Date().toISOString() },
-  ])
-
+  const [tickets,setTickets]=useState<QueueTicket[]>([])
+  const [nextNumber,setNextNumber]=useState(1)
+  const [error,setError]=useState(false)
+  const requestId=useRef<string|null>(null)
+  const load=async()=>{try{const r=await queueApi.list();setTickets(r.data.data.tickets);setNextNumber(r.data.data.nextNumber);setError(false)}catch{setError(true)}}
+  useEffect(()=>{void load();const timer=setInterval(load,2000);return()=>clearInterval(timer)},[])
+  const action=async(run:()=>Promise<unknown>)=>{try{await run();await load()}catch{setError(true)}}
   // Get current called ticket
   const currentTicket = tickets.find(t => t.status === 'called')
   const waitingTickets = tickets.filter(t => t.status === 'waiting')
 
-  // Generate new ticket
-  const handleGenerateTicket = () => {
-    const newTicket: QueueTicket = {
-      id: `Q${nextNumber.toString().padStart(3, '0')}`,
-      ticketNumber: nextNumber,
-      status: 'waiting',
-      orderCount: Math.floor(Math.random() * 3) + 1,
-      createdAt: new Date().toISOString()
-    }
-    setTickets([...tickets, newTicket])
-    setNextNumber(nextNumber + 1)
-  }
-
-  // Call next ticket
-  const handleCallNext = () => {
-    if (waitingTickets.length === 0) return
-
-    const next = waitingTickets[0]
-    setTickets(tickets.map(t =>
-      t.id === next.id ? { ...t, status: 'called' } : t
-    ))
-  }
-
-  // Mark as served
-  const handleMarkServed = (ticketId: string) => {
-    setTickets(tickets.map(t =>
-      t.id === ticketId ? { ...t, status: 'served' } : t
-    ))
-  }
-
-  // Cancel ticket
-  const handleCancel = (ticketId: string) => {
-    setTickets(tickets.map(t =>
-      t.id === ticketId ? { ...t, status: 'cancelled' } : t
-    ))
-  }
+  const handleGenerateTicket = () => action(async()=>{requestId.current ||= crypto.randomUUID();await queueApi.create(requestId.current);requestId.current=null})
+  const handleCallNext = () => action(()=>queueApi.callNext())
+  const handleMarkServed = (id:string) => action(()=>queueApi.status(id,'served'))
+  const handleCancel = (id:string) => action(()=>queueApi.status(id,'cancelled'))
 
   return (
     <div className="p-6">
+      {error && <p role="alert">{t('dashboardNavigation.loadFailed')}</p>}
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">

@@ -132,7 +132,8 @@ export const posApi = {
   },
   deleteOrder: (id: string) => api.delete(`/orders/${id}`),
   getOrders: (params?: any) => api.get('/orders', { params }),
-  requestRefund: (data: { orderId: string; reason: string; staffId?: string }) =>
+  getRefundQuote: (id: string) => api.get(`/orders/${id}/refund-quote`),
+  requestRefund: (data: { orderId: string; reason: string; staffId?: string; reasonCode: string; selectedItemIds?: string[]; requestId?: string; items?: {itemId:string;quantity:number}[] }) =>
     api.post('/orders/refund-request', data),
 
   // Members

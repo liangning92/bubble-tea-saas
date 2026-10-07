@@ -6,6 +6,8 @@ export function InventoryIndexPage() {
   const location = useLocation()
 
   const tabs = [
+    {key:'consumption',label:t('varianceFlow.title'),path:'/inventory/consumption'},
+    {key:'count',label:t('countFlow.title'),path:'/inventory/count'},
     { key: 'list', label: t('inventory.list'), path: '/inventory' },
     { key: 'logs', label: t('inventory.logs'), path: '/inventory/logs' },
     { key: 'process', label: t('inventory.process'), path: '/inventory/process' },

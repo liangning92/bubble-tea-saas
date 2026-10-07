@@ -1,3 +1,4 @@
+import { ReceiptSyncPage } from './pages/ReceiptSyncPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { POSPage } from './pages/POSPage'
 import { LoginPage } from './pages/LoginPage'
@@ -34,6 +35,7 @@ function App() {
           <POSPage scanRoute />
         </ProtectedRoute>
       } />
+      <Route path="/receipt-sync" element={<ProtectedRoute><ReceiptSyncPage /></ProtectedRoute>} />
       <Route path="/history" element={
         <ProtectedRoute>
           <OrderHistoryPage />

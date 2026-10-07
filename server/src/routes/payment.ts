@@ -1,4 +1,8 @@
 import { Router, Request, Response } from 'express'
+// @ts-ignore - existing multer dependency has no type package
+import multer from 'multer'
+import prisma from '../config/database'
+import { savePaymentEvidence, getPaymentEvidence, evidenceMetadata } from '../services/PaymentEvidenceService'
 import { createQrisPayment, handleQrisWebhook, getQrisPaymentStatus } from '../services/PaymentService'
 import { z } from 'zod'
 import { timingSafeEqual } from 'crypto'
@@ -8,6 +12,45 @@ const router = Router()
 router.use((req, res, next) => {
   if (req.path === '/qris/webhook') return next()
   return authenticate(req as AuthRequest, res, next)
+})
+
+// Private manual-payment evidence, never exposed through public /uploads.
+const evidenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 1 } }).single('photo')
+router.post('/evidence', (req: AuthRequest, res: Response) => {
+  evidenceUpload(req, res, async error => {
+    if (error) return res.status(400).json({ code: 400, message: 'INVALID_PAYMENT_IMAGE' })
+    try {
+      const amount = z.coerce.number().int().positive().max(1000000000).parse(req.body.amount)
+      const data = await savePaymentEvidence(req.user!.storeId, req.user!.id, amount, req.file?.buffer)
+      res.status(201).json({ code: 201, data })
+    } catch (error) {
+      const known = ['INVALID_PAYMENT_IMAGE', 'INVALID_PAYMENT_EVIDENCE', 'PAYMENT_EVIDENCE_ALREADY_USED']
+      const message = error instanceof Error && known.includes(error.message) ? error.message : 'INVALID_PAYMENT_EVIDENCE'
+      const status = message === 'PAYMENT_EVIDENCE_ALREADY_USED' ? 409 : 400
+      res.status(status).json({ code: status, message })
+    }
+  })
+})
+router.get('/evidence/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const record = await getPaymentEvidence(req.params.id, req.user!.storeId)
+    if (!record) return res.status(404).json({ code: 404, message: 'Not found' })
+    res.setHeader('Content-Type', record.mimeType)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Content-Disposition', 'attachment; filename="payment-evidence"')
+    res.send(record.image)
+  } catch { res.status(500).json({ code: 500, message: 'Evidence unavailable' }) }
+})
+router.get('/order/:orderId/evidence', async (req: AuthRequest, res: Response) => {
+  try {
+    const data = await prisma.paymentEvidence.findFirst({
+      where: { orderId: req.params.orderId, storeId: req.user!.storeId }, select: evidenceMetadata
+    })
+    if (!data) return res.status(404).json({ code: 404, message: 'Not found' })
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json({ code: 200, data })
+  } catch { res.status(500).json({ code: 500, message: 'Evidence unavailable' }) }
 })
 
 // Create QRIS payment

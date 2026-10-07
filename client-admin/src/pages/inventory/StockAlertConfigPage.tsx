@@ -100,12 +100,12 @@ export function StockAlertConfigPage() {
   const [hasChanges, setHasChanges] = useState(false)
 
   useEffect(() => {
-    if (data?.data) {
-      setConfig(data.data)
+    if (data?.data?.data) {
+      setConfig(data.data.data)
     }
   }, [data])
 
-  const defaults = (data as any)?.defaults || {
+  const defaults = data?.data?.defaults || {
     lowStockWarningDays: 7,
     lowStockCriticalDays: 3,
     varianceWarningPercent: 10,

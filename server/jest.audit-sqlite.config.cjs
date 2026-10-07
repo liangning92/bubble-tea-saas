@@ -1,0 +1,3 @@
+const root=process.env.AUDIT_SQLITE_ROOT;
+if(!/^\/tmp\/bubble-audit-sqlite-[A-Za-z0-9_-]+$/.test(root||'') || process.env.DATABASE_URL!==`file:${root}/cloud.db` || process.env.AUDIT_SQLITE_LOCAL!==`file:${root}/local.db` || process.env.AUDIT_SQLITE_CLIENT!==`${root}/client`) throw new Error('Only new task-owned SQLite databases allowed');
+module.exports={rootDir:'.',testEnvironment:'node',testMatch:['<rootDir>/audit-sqlite-tests/**/*.test.ts'],transform:{'^.+\\.ts$':['ts-jest',{tsconfig:{module:'CommonJS',esModuleInterop:true},diagnostics:true}]},maxWorkers:1,cache:false,testTimeout:20000,setupFiles:['<rootDir>/audit-sqlite-tests/safety.cjs'],moduleNameMapper:{'^@prisma/client$':`${root}/client`}};

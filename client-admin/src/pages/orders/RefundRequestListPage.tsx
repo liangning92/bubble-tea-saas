@@ -1,3 +1,4 @@
+import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '../../services/api'
@@ -10,6 +11,8 @@ interface RefundRequest {
   orderId: string
   orderNumber: string
   reason: string
+  reasonCode?: string
+  selectedItemIds?: string
   status: 'pending' | 'approved' | 'rejected'
   requestedBy: string
   requestedByName?: string
@@ -49,9 +52,10 @@ export function RefundRequestListPage() {
 
   const handleApprove = async () => {
     if (!selectedRequest) return
+    if (!confirmPreparedRefund(selectedRequest, t)) return
     setSubmitting(true)
     try {
-      await adminApi.approveRefund(selectedRequest.id, { note: actionNote })
+      await adminApi.approveRefund(selectedRequest.id, { verifiedPrepared: selectedRequest.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRequest.reasonCode === 'paid_unprepared', note: actionNote })
       alert(t('orders.refundApproved'))
       setSelectedRequest(null)
       setActionNote('')
@@ -188,6 +192,7 @@ export function RefundRequestListPage() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-sm text-gray-500 mb-1">{t('orders.refundReason')}</p>
                 <p className="text-sm">{selectedRequest.reason}</p>
+              <RefundPolicyReview request={selectedRequest} />
               </div>
 
               {selectedRequest.order?.items && (

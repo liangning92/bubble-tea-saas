@@ -3,7 +3,7 @@ import { DashboardReadFailure, DashboardContextNotice } from '../../components/D
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { bomApi } from '../../services/api'
+import { bomApi, inventoryApi } from '../../services/api'
 import { formatItemName } from '../../utils/helpers'
 import { Loader2, AlertTriangle, Package } from 'lucide-react'
 
@@ -14,6 +14,9 @@ export function StockAlertsPage() {
 
   useEffect(()=>{setForecastDays([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)},[context.forecastDays])
 
+  const {data:settings}=useQuery({queryKey:['inventory-alert-config'],queryFn:()=>inventoryApi.getAlertConfig()})
+  const config=settings?.data?.data
+  const fmt=(v:number|null)=>v===null?'—':Number(v.toFixed(3))
   // 低库存预警
   const { data: alertsData, isLoading, isError, refetch } = useQuery({
     queryKey: ['bom-alerts',context.storeId,forecastDays],
@@ -31,6 +34,8 @@ export function StockAlertsPage() {
   return (
     <div className="space-y-6">
       <DashboardContextNotice current />
+      <p>{t('varianceFlow.forecastHint')}</p>
+      {config&&<p>{t(config.enableLowStockAlert?'varianceFlow.enabled':'varianceFlow.disabled')} · {t('varianceFlow.warning')} {config.lowStockWarningDays} d · {t('varianceFlow.critical')} {config.lowStockCriticalDays} d · {config.autoCheckIntervalHours} h</p>}
       <div className="flex items-center justify-between">
         <div />
         <select
@@ -115,13 +120,13 @@ export function StockAlertsPage() {
                 <div className="font-medium">{formatItemName(alert.name, i18n.language)}</div>
                 <div className="text-sm text-gray-500">
                   {t('inventory.currentStock')}: {alert.currentStock} {alert.unit} |
-                  {t('inventory.daysLeft')}: {alert.daysUntilStockOut} {t('bom.days')}
+                  {t('inventory.daysLeft')}: {fmt(alert.daysUntilStockOut)} {t('bom.days')}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-sm text-gray-500">{t('inventory.suggestOrder')}</div>
                 <div className="text-lg font-bold text-orange-600">
-                  {alert.suggestedReorderQty} {alert.unit}
+                  {fmt(alert.suggestedReorderQty)} {alert.unit}
                 </div>
               </div>
             </div>

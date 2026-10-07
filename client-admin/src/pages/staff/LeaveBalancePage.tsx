@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
-import { staffApi } from '../../services/api'
+import { staffApi, leaveApi } from '../../services/api'
 import { RefreshCw, Save, Search } from 'lucide-react'
 
 interface LeaveBalance {
@@ -36,21 +36,17 @@ export function LeaveBalancePage() {
       const staffResponse = await staffApi.list({ storeId: user?.storeId, page: 1, pageSize: 100 })
       const staffList = staffResponse.data?.data?.list || staffResponse.data?.data || []
 
-      // For now, display placeholder data - in real implementation, call leave balance API
-      const balanceData = staffList.map((staff: any) => ({
-        staffId: staff.id,
-        staffName: staff.name,
-        employeeNumber: staff.employeeNumber,
-        year,
-        annualLeave: 12,
-        sickLeave: 14,
-        usedLeave: 0,
-        usedSick: 0,
-        broughtForward: 0
+      const balanceData = await Promise.all(staffList.map(async (staff: any) => {
+        const response = await leaveApi.getBalance(staff.id, year)
+        const balance = response.data?.data
+        if (!balance) throw new Error(`Leave balance not initialized: ${staff.name}`)
+        return {...balance,staffId:staff.id,staffName:staff.name,employeeNumber:staff.employeeNumber || ''}
       }))
 
       setBalances(balanceData)
     } catch (error) {
+      setBalances([])
+      alert(t('dashboardNavigation.loadFailed'))
       console.error('Failed to load balances:', error)
     } finally {
       setLoading(false)
@@ -60,20 +56,10 @@ export function LeaveBalancePage() {
   const handleSave = async (balance: LeaveBalance) => {
     setSaving(balance.staffId)
     try {
-      // Call API to update balance
-      await fetch(`/api/leave/balance/${balance.staffId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${useAuthStore.getState().token}`
-        },
-        body: JSON.stringify({
-          year,
-          annualLeave: balance.annualLeave,
-          sickLeave: balance.sickLeave,
-          broughtForward: balance.broughtForward
-        })
+      await leaveApi.setBalance(balance.staffId, {
+        year,annualLeave:balance.annualLeave,sickLeave:balance.sickLeave,broughtForward:balance.broughtForward
       })
+      await loadBalances()
       alert(t('common.saveSuccess'))
     } catch (error) {
       console.error('Failed to save:', error)
@@ -113,7 +99,7 @@ export function LeaveBalancePage() {
             onChange={e => setYear(parseInt(e.target.value))}
             className="input w-32"
           >
-            {[2024, 2025, 2026].map(y => (
+            {Array.from({length:5},(_,i)=>new Date().getFullYear()-2+i).map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>

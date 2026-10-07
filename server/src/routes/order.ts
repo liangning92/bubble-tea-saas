@@ -1,15 +1,30 @@
 import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
-import prisma from '../config/database'
-import { Router } from 'express'
+import {quoteItemRefund,requestItemRefund,approveItemRefund,itemRefundRecord} from '../services/ItemRefundService'
+import { allowedPreviousOrderStatuses } from '../utils/orderStatusPolicy'
+import { validateRefundApproval } from '../utils/refundPolicy'
+import { Router, Response } from 'express'
 import { z } from 'zod'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import { getStoreId } from '../utils/storeHelper'
 import { validateBody } from '../utils/validation'
 import * as OrderService from '../services/OrderService'
+import prisma from '../config/database'
 
 const router = Router()
+
+function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: string } | null) {
+  if (!order) {
+    res.status(404).json({ code: 404, message: 'Order not found' })
+    return false
+  }
+  if (!canAccessStore(req.user!, order.storeId)) {
+    res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    return false
+  }
+  return true
+}
 
 // Validation schema
 const createOrderSchema = z.object({
@@ -30,23 +45,25 @@ const createOrderSchema = z.object({
       name: z.string(),
       price: z.number().int()
     })).optional().default([])
-  })),
-  discountAmount: z.number().int().optional().default(0),
-  pointsRedeemed: z.number().int().optional().default(0),
+  })).min(1),
+  discountAmount: z.number().int().min(0).optional().default(0),
+  pointsRedeemed: z.number().int().min(0).optional().default(0),
+  qrisExternalId: z.string().max(100).optional(),
+  paymentEvidenceId: z.string().max(100).optional(),
   taxEnabled: z.boolean().optional().default(true),
   paymentMethod: z.enum(['cash', 'qris', 'gopay', 'ovo', 'dana', 'shopeepay', 'debit', 'card', 'member', 'bca_va', 'mandiri_va']),
   status: z.enum(['completed', 'suspended']).optional().default('completed'),
   customerCount: z.number().int().optional().default(1),
   dineInCount: z.number().int().optional(),
   tableNumber: z.string().optional(),
+  callerPhone: z.string().max(50).optional(),
+  driverPickupTime: z.coerce.date().optional(),
+  purchaseOrderNo: z.string().max(100).optional(),
+  socialRef: z.string().max(200).optional(),
+  note: z.string().max(2000).optional(),
   platformOrderId: z.string().optional(),
   orderNumber: z.string().optional(),
-  pickupNumber: z.string().optional(),
-  note: z.string().optional(),
-  callerPhone: z.string().optional(),
-  driverPickupTime: z.coerce.date().optional(),
-  purchaseOrderNo: z.string().optional(),
-  socialRef: z.string().optional()
+  pickupNumber: z.string().optional()
 })
 
 // GET /api/orders
@@ -86,7 +103,7 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
     const { status } = req.query
     const storeId = getStoreId(req)
 
-    const where: any = {}
+    const where: any = { order: { storeId } }
     if (status && status !== 'all') where.status = status
 
     const requests = await prisma.refundRequest.findMany({
@@ -103,7 +120,7 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
 
     res.json({
       code: 200,
-      data: { list: filtered },
+      data: { list: filtered.map(request => ({ ...request, orderNumber: request.order.orderNumber })) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -112,15 +129,20 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
   }
 })
 
+// Original recorded allocation only; never current catalogue prices.
+router.get('/:id/refund-quote',authenticate,async(req:AuthRequest,res)=>{
+ try { const order=await prisma.order.findUnique({where:{id:req.params.id}});if(!checkOrderAccess(req,res,order))return
+ res.json({code:200,data:await quoteItemRefund(req.params.id,order!.storeId)})
+ }catch(error:any){res.status(409).json({code:409,message:error.message})}
+})
+
 // GET /api/orders/:id
 router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const order = await OrderService.getOrderById(id)
 
-    if (!order) {
-      return res.status(404).json({ code: 404, message: 'Order not found' })
-    }
+    if (!checkOrderAccess(req, res, order)) return
 
     res.json({
       code: 200,
@@ -156,7 +178,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     // Existing sessions are historical records, but a disabled shift cannot accept new sales.
     const activeShift = await prisma.shift.findFirst({ where: { storeId, key: openShift.shift, isActive: true } })
     if (!activeShift) return res.status(409).json({ code: 409, message: 'SHIFT_DISABLED' })
-    const order = await OrderService.createOrder(req.body)
+    const order = await OrderService.createOrder(req.body, { actorId: req.user!.id, storeId, allowCreate: true })
 
     res.status(201).json({
       code: 201,
@@ -222,10 +244,19 @@ router.post('/refund-request', authenticate, async (req: AuthRequest, res) => {
       return res.status(400).json({ code: 400, message: 'Missing orderId or reason' })
     }
 
+    const order = await prisma.order.findUnique({ where: { id: orderId } })
+    if (!checkOrderAccess(req, res, order)) return
+    if(req.body.amount!==undefined)return res.status(400).json({code:400,message:'REFUND_AMOUNT_SERVER_CALCULATED'})
+    if(req.body.items!==undefined){
+      const body=z.object({requestId:z.string(),orderId:z.string(),reason:z.string().trim().min(1).max(2000),reasonCode:z.string(),items:z.array(z.object({itemId:z.string(),quantity:z.number().int().positive()})).min(1).max(500)}).parse(req.body)
+      const result=await requestItemRefund({requestId:body.requestId!,orderId:body.orderId!,reason:body.reason!,reasonCode:body.reasonCode!,items:body.items,storeId:order!.storeId,requestedBy:req.user!.staffId||req.user!.id})
+      return res.status(201).json({code:201,data:result})
+    }
     const result = await OrderService.createRefundRequest({
       orderId,
       reason,
-      requestedBy: staffId || req.user!.staffId || req.user!.id
+      requestedBy: req.user!.staffId || req.user!.id,
+      reasonCode: req.body.reasonCode, selectedItemIds: req.body.selectedItemIds, requestId: req.body.requestId
     })
 
     res.status(201).json({
@@ -235,6 +266,9 @@ router.post('/refund-request', authenticate, async (req: AuthRequest, res) => {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if(error instanceof z.ZodError)return res.status(400).json({code:400,message:'INVALID_REFUND_ITEMS'})
+    if(error instanceof Error && /^(REFUND_|UNPREPARED_|REPLICA_)/.test(error.message))return res.status(409).json({code:409,message:error.message})
+    if (error instanceof Error && ['INVALID_REFUND_ITEMS', 'REFUND_CLASSIFICATION_REQUIRED'].includes(error.message)) return res.status(400).json({ code: 400, message: error.message })
     console.error('Refund request error:', error)
     res.status(500).json({ code: 500, message: 'Failed to submit refund request' })
   }
@@ -246,6 +280,9 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
     const { id } = req.params
     const { status } = req.body
 
+    const existing = await prisma.order.findUnique({ where: { id } })
+    if (!checkOrderAccess(req, res, existing)) return
+    allowedPreviousOrderStatuses(status)
     const order = await OrderService.updateOrderStatus(id, status)
 
     res.json({
@@ -255,6 +292,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && ['ORDER_FINANCIAL_STATUS_PROTECTED','ORDER_STATUS_TRANSITION_CONFLICT'].includes(error.message)) return res.status(409).json({ code: 409, message: error.message })
     console.error('Update order status error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update order status' })
   }
@@ -267,9 +305,7 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 
     // Only allow deleting suspended orders
     const order = await prisma.order.findUnique({ where: { id } })
-    if (!order) {
-      return res.status(404).json({ code: 404, message: 'Order not found' })
-    }
+    if (!checkOrderAccess(req, res, order)) return
     if (order.status !== 'suspended') {
       return res.status(400).json({ code: 400, message: 'Only suspended orders can be deleted' })
     }
@@ -293,14 +329,9 @@ router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (r
     const { id } = req.params
     const { reason } = req.body
 
-    const order = await OrderService.refundOrder(id, reason, req.user!.staffId)
-
-    res.json({
-      code: 200,
-      message: 'Order refunded',
-      data: publicOrder(order),
-      timestamp: new Date().toISOString()
-    })
+    const existing = await prisma.order.findUnique({ where: { id } })
+    if (!checkOrderAccess(req, res, existing)) return
+    return res.status(409).json({ code: 409, message: 'REFUND_REQUEST_REQUIRED' })
   } catch (error: any) {
     if (error?.message === 'ORDER_ALREADY_REFUNDED') {
       return res.status(400).json({ code: 400, message: 'Order already refunded' })
@@ -318,45 +349,49 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
 
     const request = await prisma.refundRequest.findUnique({
       where: { id },
-      include: { order: true }
+      include: { order: { include: { items: true } } }
     })
 
     if (!request) {
       return res.status(404).json({ code: 404, message: 'Refund request not found' })
     }
 
-    // Validate refund amount does not exceed order total
-    if (request.amount > request.order.totalAmount) {
+    if (!checkOrderAccess(req, res, request.order)) return
+
+    if(itemRefundRecord(request.selectedItemIds)){
+      const result=await approveItemRefund(request.id,{storeId:request.order.storeId,id:req.user!.staffId||req.user!.id,role:req.user!.role},req.body.verifiedPrepared===true,note)
+      return res.json({code:200,data:result,message:'Refund accounting approved; external payment is manual'})
+    }
+    const refundAmount = request.amount === 0 ? request.order.finalAmount : request.amount
+    // Compare with actual received total, including tax and discounts.
+    if (refundAmount > request.order.finalAmount) {
       return res.status(400).json({
         code: 400,
-        message: `Refund amount (${request.amount}) cannot exceed order total (${request.order.totalAmount})`
+        message: `Refund amount (${request.amount}) cannot exceed received total (${request.order.finalAmount})`
       })
     }
 
     // Validate refund amount is positive
-    if (request.amount <= 0) {
+    if (!Number.isSafeInteger(refundAmount) || refundAmount <= 0) {
       return res.status(400).json({
         code: 400,
         message: 'Refund amount must be greater than 0'
       })
     }
 
+    if(request.status==='approved')return res.json({code:200,message:'Refund already approved'})
     if (request.status !== 'pending') {
       return res.status(400).json({ code: 400, message: 'Refund request already processed' })
     }
 
-    // Full rollback first (status, points, coupons, cash, inventory) — idempotent
-    await OrderService.refundOrder(request.orderId, note || request.reason, req.user!.staffId, request.amount)
+    validateRefundApproval(request, request.order, req.user!.role, req.body.verifiedPrepared === true, req.body.verifiedUnprepared === true)
 
-    // Update refund request status
-    await prisma.refundRequest.update({
-      where: { id },
-      data: {
-        status: 'approved',
-        approvedBy: req.user!.staffId || req.user!.id,
-        approvedAt: new Date(),
-        note
-      }
+    // Classification and explicit administrator verification determine physical stock reversal.
+    await OrderService.refundOrder(request.orderId, note || request.reason, req.user!.staffId, refundAmount, {
+      requestId: request.id,
+      approvedBy: req.user!.staffId || req.user!.id,
+      restoreUnprepared: request.reasonCode === 'paid_unprepared',
+      note
     })
 
     res.json({
@@ -368,6 +403,8 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
     if (error?.message === 'ORDER_ALREADY_REFUNDED') {
       return res.status(400).json({ code: 400, message: 'Order already refunded' })
     }
+    if (['ADMIN_APPROVAL_REQUIRED','UNPREPARED_STOCK_POLICY_REQUIRED','REFUND_CLASSIFICATION_REQUIRED','INVALID_REFUND_ITEMS','PARTIAL_REFUND_POLICY_REQUIRED'].includes(error?.message)) return res.status(error.message === 'ADMIN_APPROVAL_REQUIRED' ? 403 : 409).json({ code: 409, message: error.message })
+    if(/^(REFUND_|REPLICA_)/.test(error?.message||''))return res.status(409).json({code:409,message:error.message})
     console.error('Approve refund error:', error)
     res.status(500).json({ code: 500, message: 'Failed to approve refund' })
   }
@@ -383,8 +420,11 @@ router.post('/refund-requests/:id/reject', authenticate, authorize('admin', 'man
       return res.status(400).json({ code: 400, message: 'Rejection reason is required' })
     }
 
-    await prisma.refundRequest.update({
-      where: { id },
+    const request = await prisma.refundRequest.findUnique({ where: { id }, include: { order: { include: { items: true } } } })
+    if (!checkOrderAccess(req, res, request?.order || null)) return
+    if (request.status !== 'pending') return res.status(409).json({ code: 409, message: 'Refund request already processed' })
+    const rejected = await prisma.refundRequest.updateMany({
+      where: { id, status: 'pending' },
       data: {
         status: 'rejected',
         approvedBy: req.user!.staffId || req.user!.id,
@@ -393,6 +433,7 @@ router.post('/refund-requests/:id/reject', authenticate, authorize('admin', 'man
       }
     })
 
+    if (rejected.count !== 1) return res.status(409).json({ code: 409, message: 'Refund request already processed' })
     res.json({
       code: 200,
       message: 'Refund rejected',

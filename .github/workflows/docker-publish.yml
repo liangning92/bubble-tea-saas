@@ -30,12 +30,16 @@ jobs:
         include:
           - service: api
             context: server
+            dockerfile: server/Dockerfile
           - service: admin
-            context: client-admin
+            context: .
+            dockerfile: client-admin/Dockerfile
           - service: pos
-            context: client-pos
+            context: .
+            dockerfile: client-pos/Dockerfile
           - service: staff
-            context: client-staff
+            context: .
+            dockerfile: client-staff/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -45,10 +49,11 @@ jobs:
           IMAGE_OWNER: ${{ github.repository_owner }}
           SERVICE: ${{ matrix.service }}
           BUILD_CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${IMAGE_OWNER,,}/bubble-tea-${SERVICE}:sha-${SOURCE_SHA}"
-          docker build --label "org.opencontainers.image.revision=${SOURCE_SHA}" "$BUILD_CONTEXT" -t "$IMAGE"
+          docker build -f "$DOCKERFILE" --label "org.opencontainers.image.revision=${SOURCE_SHA}" "$BUILD_CONTEXT" -t "$IMAGE"
           test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
           mkdir -p verified-image
           docker save "$IMAGE" -o verified-image/image.tar

@@ -1,4 +1,5 @@
 import { TrainingLibraryPage } from './pages/TrainingLibraryPage'
+import {InventoryCountPage} from './pages/InventoryCountPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { LoginPage } from './pages/LoginPage'
@@ -41,6 +42,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <Routes>
+      <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"

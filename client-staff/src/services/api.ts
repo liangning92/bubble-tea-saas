@@ -14,6 +14,9 @@ const getAuthHeader = () => {
 }
 
 export const staffApi = {
+  getInventoryCounts:async()=> (await axios.get(`${API_BASE}/inventory-counts`,{headers:getAuthHeader()})).data,
+  recordInventoryCount:async(countId:string,itemId:string,data:any)=>(await axios.put(`${API_BASE}/inventory-counts/${countId}/item/${itemId}`,data,{headers:getAuthHeader()})).data,
+
   // Auth
   login: async (phone: string, password: string) => {
     const response = await axios.post(`${API_BASE}/auth/login`, { phone, password })

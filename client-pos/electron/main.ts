@@ -477,9 +477,8 @@ async function startLocalServer(): Promise<void> {
     }
   }
 
-  // skip db push at runtime - causes issues with existing databases (data loss, corruption)
-  // if schema is outdated, rebuild the app from a fresh installer
-  // ensureSchemaUpToDate(userDbPath)
+  // Express performs explicit versioned SQLite upgrades, with a verified snapshot
+  // and transactional rollback, before listening. Never call destructive db push here.
 
   // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
   const unpackedRoot = path.join(process.resourcesPath, 'app.asar.unpacked')
@@ -898,9 +897,9 @@ h3{margin-top:16px;color:#569cd6}
     })
 
     // 监听渲染进程崩溃
-    mainWindow.webContents.on('crashed', (event, killed) => {
-      console.error('[Electron] Renderer process crashed, killed:', killed)
-      if (mainWindow) showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `killed: ${killed}`)
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      console.error('[Electron] Renderer process exited:', details.reason)
+      if (mainWindow) showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `reason: ${details.reason}`)
     })
   }
 
@@ -916,7 +915,7 @@ h3{margin-top:16px;color:#569cd6}
     console.error('[Electron] Failed to load:', errorCode, errorDescription)
   })
 
-  mainWindow.webContents.on('crashed', () => {
+  mainWindow.webContents.on('render-process-gone', () => {
     console.error('[Electron] Renderer process crashed')
   })
 
@@ -991,7 +990,7 @@ function createCustomerWindow() {
     console.error('[Electron] Customer display failed to load:', errorCode, errorDescription)
   })
 
-  customerWindow.webContents.on('crashed', () => {
+  customerWindow.webContents.on('render-process-gone', () => {
     console.error('[Electron] Customer display renderer crashed')
   })
 

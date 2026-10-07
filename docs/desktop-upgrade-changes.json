@@ -1,0 +1,15 @@
+[
+  "Order.pickupNumber TEXT",
+  "Order.requestFingerprint TEXT",
+  "Order.requestReceipt TEXT",
+  "Order.checkoutTaxAmount INTEGER",
+  "Staff.baseSalary INTEGER",
+  "Inventory.ledgerSequence BIGINT NOT NULL DEFAULT 0",
+  "Inventory.ledgerEpoch BIGINT NOT NULL DEFAULT 0",
+  "StockInLog.ledgerSequence BIGINT",
+  "StockOutLog.ledgerSequence BIGINT",
+  "RefundRequest.reasonCode TEXT NOT NULL DEFAULT 'legacy'",
+  "RefundRequest.selectedItemIds TEXT NOT NULL DEFAULT '[]'",
+  "PaymentEvidence and LocalSchemaMigration tables and indexes",
+  "Order_pickupNumber_idx nonunique index"
+]

@@ -6,8 +6,8 @@ import * as ProductManagementService from '../services/ProductManagementService'
 const router = Router()
 
 function parseReportDate(value: unknown, fallback: Date, endOfDay = false): Date {
-  const date = value ? new Date(String(value)) : fallback
-  if (endOfDay && value && /^\d{4}-\d{2}-\d{2}$/.test(String(value))) date.setUTCHours(23, 59, 59, 999)
+  const dayOnly = value && /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+  const date = dayOnly ? new Date(String(value)+(endOfDay?'T23:59:59.999+07:00':'T00:00:00+07:00')) : value ? new Date(String(value)) : fallback
   return date
 }
 
@@ -204,6 +204,7 @@ router.get('/cash-flow', authenticate, authorize('admin', 'manager'), async (req
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'RECEIPT_NET_INCOME_UNVERIFIED') return res.status(409).json({code:409,message:error.message,explanation:'Net income is unverified for this report range because included receipt copies lack refund evidence.'})
     console.error('Get cash flow error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get cash flow' })
   }

@@ -1,5 +1,6 @@
 import { useDashboardContext, requireRead, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
+import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -14,6 +15,8 @@ interface RefundRequest {
   orderId: string
   orderNumber: string
   reason: string
+  reasonCode?: string
+  selectedItemIds?: string
   status: 'pending' | 'approved' | 'rejected'
   requestedByName?: string
   createdAt: string
@@ -81,8 +84,9 @@ export function OrderListPage() {
 
   const handleApproveRefund = async () => {
     if (!selectedRefund) return
+    if (!confirmPreparedRefund(selectedRefund, t)) return
     try {
-      await adminApi.approveRefund(selectedRefund.id, { note: refundNote })
+      await adminApi.approveRefund(selectedRefund.id, { verifiedPrepared: selectedRefund.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRefund.reasonCode === 'paid_unprepared', note: refundNote })
       alert(t('orders.refundApproved'))
       setSelectedRefund(null)
       setRefundAction(null)
@@ -313,6 +317,7 @@ export function OrderListPage() {
             <div className="bg-gray-50 rounded-xl p-4 mb-4">
               <p className="font-medium">{selectedRefund.orderNumber}</p>
               <p className="text-sm text-gray-500">{selectedRefund.reason}</p>
+              <RefundPolicyReview request={selectedRefund} />
             </div>
             {refundAction === 'reject' && (
               <div className="mb-4">

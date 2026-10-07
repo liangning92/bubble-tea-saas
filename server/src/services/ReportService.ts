@@ -1,3 +1,5 @@
+import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
+import {netReceivedAmount} from '../utils/refundAllocation'
 import prisma from '../config/database'
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays } from '../utils/dateUtils'
 import { getLowStockAlerts } from './BomService'
@@ -26,22 +28,23 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
       where: {
         storeId,
         createdAt: { gte: todayStart, lte: todayEnd },
-        status: { not: 'refunded' }
+        status: { in: ['completed', 'paid'] }
       },
-      include: { items: true }
+      include: { items: true, refundRequests: true }
     }),
     // Month's orders
     prisma.order.findMany({
       where: {
         storeId,
         createdAt: { gte: monthStart, lte: monthEnd },
-        status: { not: 'refunded' }
+        status: { in: ['completed', 'paid'] }
       },
-      include: { items: true }
+      include: { items: true, refundRequests: true }
     }),
     // Today's staff attendance (via staff relationship)
     prisma.attendance.findMany({
       where: {
+        staff: { storeId },
         checkInTime: { gte: todayStart, lte: todayEnd }
       },
       include: { staff: { select: { name: true } } }
@@ -57,8 +60,10 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
     })
   ])
 
-  const todayRevenue = todayOrders.reduce((sum, o) => sum + o.finalAmount, 0)
-  const monthRevenue = monthOrders.reduce((sum, o) => sum + o.finalAmount, 0)
+  await requireVerifiedReceiptIncome([...todayOrders, ...monthOrders])
+
+  const todayRevenue = todayOrders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
+  const monthRevenue = monthOrders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
   const todayOrderCount = todayOrders.length
   const monthOrderCount = monthOrders.length
 
@@ -88,7 +93,7 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
   // Payment method distribution
   const paymentStats: Record<string, number> = {}
   todayOrders.forEach(order => {
-    paymentStats[order.paymentMethod] = (paymentStats[order.paymentMethod] || 0) + order.finalAmount
+    paymentStats[order.paymentMethod] = (paymentStats[order.paymentMethod] || 0) + netReceivedAmount(order)
   })
 
   // Filter low stock alerts by urgency
@@ -150,14 +155,16 @@ export async function getSalesReport(storeId: string, dateRange: DateRange) {
     where: {
       storeId,
       createdAt: { gte: dateRange.startDate, lte: dateRange.endDate },
-      status: { not: 'refunded' }
+      status: { in: ['completed', 'paid'] }
     },
     include: {
       items: true,
+      refundRequests: true,
       member: { select: { name: true, phone: true } }
     },
     orderBy: { createdAt: 'desc' }
   })
+  await requireVerifiedReceiptIncome(orders)
 
   // Group by date
   const dailySales: Record<string, { orders: number; revenue: number; items: number }> = {}
@@ -168,7 +175,7 @@ export async function getSalesReport(storeId: string, dateRange: DateRange) {
       dailySales[dateKey] = { orders: 0, revenue: 0, items: 0 }
     }
     dailySales[dateKey].orders++
-    dailySales[dateKey].revenue += order.finalAmount
+    dailySales[dateKey].revenue += netReceivedAmount(order)
     dailySales[dateKey].items += order.items.reduce((sum, i) => sum + i.quantity, 0)
   })
 
@@ -189,10 +196,10 @@ export async function getSalesReport(storeId: string, dateRange: DateRange) {
   return {
     summary: {
       totalOrders: orders.length,
-      totalRevenue: orders.reduce((sum, o) => sum + o.finalAmount, 0),
+      totalRevenue: orders.reduce((sum, o) => sum + netReceivedAmount(o), 0),
       totalItems: orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0),
       avgOrderValue: orders.length > 0
-        ? Math.round(orders.reduce((sum, o) => sum + o.finalAmount, 0) / orders.length)
+        ? Math.round(orders.reduce((sum, o) => sum + netReceivedAmount(o), 0) / orders.length)
         : 0
     },
     dailySales: Object.entries(dailySales)
@@ -213,9 +220,11 @@ export async function getStaffReport(storeId: string, dateRange: DateRange) {
     where: {
       storeId,
       createdAt: { gte: dateRange.startDate, lte: dateRange.endDate },
-      status: { not: 'refunded' }
-    }
+      status: { in: ['completed', 'paid'] }
+    },
+    include: {refundRequests:true}
   })
+  await requireVerifiedReceiptIncome(orders)
 
   // Get staff names for the staffIds in orders
   const staffIds = [...new Set(orders.map(o => o.staffId))]
@@ -234,7 +243,7 @@ export async function getStaffReport(storeId: string, dateRange: DateRange) {
       staffStats[staffId] = { name: staffNameMap[staffId] || 'Unknown', orderCount: 0, revenue: 0 }
     }
     staffStats[staffId].orderCount++
-    staffStats[staffId].revenue += order.finalAmount
+    staffStats[staffId].revenue += netReceivedAmount(order)
   })
 
   // Get staff list for attendance lookup

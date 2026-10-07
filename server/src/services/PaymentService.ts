@@ -1,3 +1,6 @@
+import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
+import {netReceivedAmount} from '../utils/refundAllocation'
+import { randomUUID } from 'crypto'
 import prisma from '../config/database'
 
 export type PaymentMethod = 'cash' | 'gopay' | 'ovo' | 'dana' | 'shopeepay' | 'member' | 'bca_va' | 'mandiri_va'
@@ -54,97 +57,12 @@ export async function getAvailablePayments(storeId: string) {
   })
 }
 
-// Create payment (mock implementation - simulates QR code generation)
-export async function createPayment(data: CreatePaymentData): Promise<PaymentResult> {
-  const { orderId, method, amount } = data
-
-  // Get order
-  const order = await prisma.order.findUnique({
-    where: { id: orderId }
-  })
-
-  if (!order) {
-    return {
-      success: false,
-      status: 'error',
-      message: 'Order not found'
-    }
-  }
-
-  // Create payment record
-  const payment = await prisma.config.create({
-    data: {
-      storeId: order.storeId,
-      category: 'payment_transactions',
-      key: `payment_${Date.now()}`,
-      value: JSON.stringify({
-        orderId,
-        method,
-        amount,
-        status: 'pending',
-        createdAt: new Date()
-      })
-    }
-  })
-
-  // Mock QR code generation for e-wallets
-  if (method !== 'cash' && method !== 'member') {
-    // Generate mock QR code (in production, this would call payment provider API)
-    const qrCode = generateMockQRCode(orderId, method, amount)
-
-    return {
-      success: true,
-      paymentId: payment.id,
-      qrCode,
-      deeplink: getDeeplink(method),
-      status: 'pending',
-      message: `${method.toUpperCase()} payment ready`
-    }
-  }
-
-  // Cash payment - instant success
-  return {
-    success: true,
-    paymentId: payment.id,
-    status: 'completed',
-    message: 'Cash payment confirmed'
-  }
+// Payment completion requires the order transaction or a verified provider callback.
+export async function createPayment(_data:CreatePaymentData):Promise<PaymentResult>{
+ return {success:false,status:'unavailable',message:'Use the verified checkout or configured QRIS provider'}
 }
-
-// Simulate payment callback (in production, this comes from payment provider)
-export async function simulatePaymentCallback(paymentId: string, status: 'success' | 'failed') {
-  const payment = await prisma.config.findFirst({
-    where: { id: paymentId }
-  })
-
-  if (!payment) {
-    throw new Error('Payment not found')
-  }
-
-  const paymentData = JSON.parse(payment.value)
-
-  // Update payment status
-  await prisma.config.update({
-    where: { id: paymentId },
-    data: {
-      key: payment.key,
-      value: JSON.stringify({
-        ...paymentData,
-        status: status === 'success' ? 'completed' : 'failed',
-        completedAt: new Date()
-      })
-    }
-  })
-
-  // If success, update order status
-  if (status === 'success') {
-    await prisma.order.update({
-      where: { id: paymentData.orderId },
-      data: { status: 'completed' }
-    })
-  }
-
-  return { success: status === 'success' }
+export async function simulatePaymentCallback(_paymentId:string,_status:'success'|'failed'){
+ throw new Error('SIMULATED_PAYMENT_CALLBACK_DISABLED')
 }
 
 // Get payment status
@@ -167,25 +85,6 @@ export async function getPaymentStatus(paymentId: string) {
     createdAt: paymentData.createdAt,
     completedAt: paymentData.completedAt
   }
-}
-
-// Generate mock QR code (base64 placeholder)
-function generateMockQRCode(orderId: string, method: string, amount: number): string {
-  // In production, this would call the actual payment provider's API
-  // For now, return a placeholder QR code
-  const mockData = `${method.toUpperCase()}|${orderId}|${amount}`
-  return `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`
-}
-
-// Get deeplink for e-wallet apps
-function getDeeplink(method: string): string {
-  const deeplinks: Record<string, string> = {
-    gopay: 'gojek://pay',
-    ovo: 'ovo://pay',
-    dana: 'dana://pay',
-    shopeepay: 'shopeepay://pay'
-  }
-  return deeplinks[method] || ''
 }
 
 // Calculate payment fee
@@ -223,9 +122,11 @@ export async function getPaymentSummary(storeId: string, date: Date) {
     where: {
       storeId,
       createdAt: { gte: startOfDay, lte: endOfDay },
-      status: { not: 'refunded' }
-    }
+      status: { in: ['completed', 'paid'] }
+    },
+    include: {refundRequests:true}
   })
+  await requireVerifiedReceiptIncome(orders)
 
   const summary: Record<string, { count: number; amount: number }> = {}
 
@@ -234,13 +135,13 @@ export async function getPaymentSummary(storeId: string, date: Date) {
       summary[order.paymentMethod] = { count: 0, amount: 0 }
     }
     summary[order.paymentMethod].count++
-    summary[order.paymentMethod].amount += order.finalAmount
+    summary[order.paymentMethod].amount += netReceivedAmount(order)
   })
 
   return {
     date: date.toISOString().slice(0, 10),
     totalOrders: orders.length,
-    totalAmount: orders.reduce((sum, o) => sum + o.finalAmount, 0),
+    totalAmount: orders.reduce((sum, o) => sum + netReceivedAmount(o), 0),
     byMethod: summary
   }
 }
@@ -274,13 +175,18 @@ export async function createQrisPayment(storeId: string, orderId: string, amount
   expiresAt?: string
   error?: string
 }> {
+  const order = await prisma.order.findUnique({where:{id:orderId}})
+  if(!order || order.storeId!==storeId)return {success:false,error:'PAYMENT_ORDER_NOT_FOUND'}
+  if(order.finalAmount!==amount || order.paymentMethod!=='qris')return {success:false,error:'PAYMENT_ORDER_MISMATCH'}
+  if(order.status!=='pending')return {success:false,error:'PAYMENT_ORDER_STATE_INVALID'}
   const xenditConfig = await getXenditConfig(storeId)
   if (!xenditConfig || !xenditConfig.enabled) {
     return { success: false, error: 'Xendit QRIS not enabled' }
   }
 
-  const externalId = `QRIS-${orderId}-${Date.now()}`
+  const externalId = `QRIS2-${randomUUID()}`
   const apiBaseUrl = process.env.API_BASE_URL
+  if (!process.env.XENDIT_CALLBACK_TOKEN) return {success:false,error:'XENDIT_CALLBACK_TOKEN environment variable not configured'}
   if (!apiBaseUrl) {
     return { success: false, error: 'API_BASE_URL environment variable not configured' }
   }
@@ -320,6 +226,7 @@ export async function createQrisPayment(storeId: string, orderId: string, amount
       data: {
         storeId,
         externalId: data.external_id,
+        orderId,
         xenditId: data.id,
         amount,
         status: 'pending',
@@ -349,49 +256,44 @@ export async function handleQrisWebhook(payload: {
   paid_at?: string
 }): Promise<{ success: boolean; orderId?: string }> {
   const { external_id, status } = payload
+  const providerStatus = status.toUpperCase()
+  const newStatus = ['PAID', 'COMPLETED'].includes(providerStatus) ? 'completed' :
+    providerStatus === 'EXPIRED' ? 'expired' : providerStatus === 'FAILED' ? 'failed' : null
 
-  // Find payment by external_id
-  const qrisPayment = await prisma.qrisPayment.findUnique({
-    where: { externalId: external_id }
-  })
+  return prisma.$transaction(async (tx) => {
+    const payment = await tx.qrisPayment.findUnique({ where: { externalId: external_id } })
+    if (!payment) return { success: false }
+    if (payload.amount !== undefined && payload.amount !== payment.amount) return { success: false }
+    // A settled callback replay must still reconcile a previously linked order.
+    if(payment.status==='completed' && newStatus!=='completed')return {success:true,orderId:payment.orderId||undefined}
+    // Ignore informational/unrecognized events; never turn them into a failure.
+    if (!newStatus) return { success: true }
 
-  if (!qrisPayment) {
-    console.error('QRIS payment not found:', external_id)
-    return { success: false }
-  }
-
-  if (payload.amount !== undefined && payload.amount !== qrisPayment.amount) {
-    console.error('QRIS webhook amount mismatch:', external_id)
-    return { success: false }
-  }
-  if (qrisPayment.status === 'completed') return { success: true, orderId: qrisPayment.orderId || undefined }
-
-  // Update status
-  const newStatus = ['PAID', 'COMPLETED'].includes(status.toUpperCase()) ? 'completed' :
-    status.toUpperCase() === 'EXPIRED' ? 'expired' : 'failed'
-  await prisma.qrisPayment.update({
-    where: { id: qrisPayment.id },
-    data: {
-      status: newStatus,
-      callbackData: JSON.stringify(payload)
-    }
-  })
-
-  // Extract orderId from external_id (format: QRIS-{orderId}-{timestamp})
-  const orderIdMatch = external_id.match(/^QRIS-(.+?)-\d+$/)
-  const orderId = orderIdMatch ? orderIdMatch[1] : qrisPayment.orderId
-
-  // Update order status to completed if payment is successful
-  if (newStatus === 'completed' && orderId) {
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: 'completed' }
-    }).catch(err => {
-      console.error('Failed to update order status:', err)
+    const changed = payment.status==='completed' ? {count:1} : await tx.qrisPayment.updateMany({
+      where: { id: payment.id, status: payment.status },
+      data: { status: newStatus, callbackData: JSON.stringify(payload) }
     })
-  }
+    // Another callback won. Ask the provider to retry against the new state.
+    if (changed.count !== 1) throw new Error('PAYMENT_STATE_CHANGED')
 
-  return { success: true, orderId }
+    // POS creates a QR before creating the order. Never interpret its client
+    // reference as a database id; only an explicit stored relationship is trusted.
+    if (newStatus === 'completed' && payment.orderId) {
+      const order = await tx.order.findUnique({ where: { id: payment.orderId } })
+      if (!order || order.storeId !== payment.storeId || order.finalAmount !== payment.amount) {
+        throw new Error('PAYMENT_ORDER_MISMATCH')
+      }
+      if (!['pending', 'completed', 'paid'].includes(order.status)) throw new Error('PAYMENT_ORDER_STATE_INVALID')
+      if (order.status === 'pending') {
+        const updated = await tx.order.updateMany({
+          where: { id: order.id, storeId: payment.storeId, status: { in: ['pending'] } },
+          data: { status: 'completed' }
+        })
+        if (updated.count !== 1) throw new Error('PAYMENT_ORDER_STATE_CHANGED')
+      }
+    }
+    return { success: true, orderId: payment.orderId || undefined }
+  })
 }
 
 export async function getQrisPaymentStatus(externalId: string) {

@@ -1,8 +1,11 @@
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import prisma from '../config/database'
 
 const router = Router()
+const staffStore = requireResourceStore(req=>prisma.staff.findUnique({where:{id:req.params.staffId || req.body.staffId},select:{storeId:true}}))
+const salaryStore = requireResourceStore(async req=>{const row=await prisma.salary.findUnique({where:{id:req.params.id},select:{staff:{select:{storeId:true}}}});return row?.staff || null})
 
 // GET /api/salaries
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
@@ -36,7 +39,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 })
 
 // POST /api/salaries
-router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize('admin'), staffStore, async (req: AuthRequest, res) => {
   try {
     const { staffId, month, baseSalary, overtime, commission, bonus, deduction, status } = req.body
 
@@ -64,7 +67,7 @@ router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res)
 })
 
 // PUT /api/salaries/:id
-router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, authorize('admin', 'manager'), salaryStore, async (req: AuthRequest, res) => {
   try {
     const { baseSalary, overtime, commission, bonus, deduction, status } = req.body
 
@@ -90,7 +93,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 })
 
 // PUT /api/salaries/:id/mark-paid
-router.put('/:id/mark-paid', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, async (req: AuthRequest, res) => {
   try {
     const salary = await prisma.salary.update({
       where: { id: req.params.id },
@@ -104,7 +107,7 @@ router.put('/:id/mark-paid', authenticate, authorize('admin'), async (req: AuthR
 })
 
 // DELETE /api/salaries/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, authorize('admin'), salaryStore, async (req: AuthRequest, res) => {
   try {
     await prisma.salary.delete({ where: { id: req.params.id } })
     res.json({ code: 200, message: 'Salary deleted' })
@@ -115,7 +118,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
 })
 
 // GET /api/salaries/calculate/:staffId
-router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), staffStore, async (req: AuthRequest, res) => {
   try {
     const { staffId } = req.params
     const { month } = req.query // format: YYYY-MM
@@ -128,7 +131,7 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), a
     // Get staff info
     const staff = await prisma.staff.findUnique({
       where: { id: staffId },
-      select: { name: true }
+      select: { name: true, baseSalary:true }
     })
 
     if (!staff) {
@@ -187,7 +190,8 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), a
     }, 0)
 
     // Calculate salary - using default 0 for baseSalary as it's not in schema
-    const baseSalary = 0
+    if(staff.baseSalary===null)return res.status(409).json({code:409,message:'STAFF_BASE_SALARY_REQUIRED'})
+    const baseSalary = staff.baseSalary
     const dailyRate = baseSalary / totalDays
     const attendanceDeduction = absentDays * dailyRate
     const lateDeduction = lateDays * dailyRate * 0.1 // 10% fine for late

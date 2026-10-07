@@ -1,3 +1,10 @@
+import {startRecurringExpenseScheduler} from './services/RecurringExpenseService'
+import {batchImportRouter} from './routes/batchImport'
+import {queueRouter} from './routes/queue'
+import {serviceHealth} from './services/HealthService'
+import prisma from './config/database'
+import { upgradeLocalSqlite } from './utils/sqliteUpgrade'
+import { aiPermissionsRouter } from './routes/aiPermissions'
 // Global BigInt JSON serialization support
 (BigInt.prototype as any).toJSON = function () {
   return Number(this)
@@ -175,24 +182,10 @@ app.use('/uploads', (req, res, next) => {
   next()
 }, express.static(uploadsPath))
 
-// Health Check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'bubble-tea-api',
-    version: '2.0.0'
-  })
-})
-
-// POS Health Check (same as /health, at /api/health for POS client compatibility)
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'bubble-tea-api',
-    version: '2.0.0'
-  })
+// Readiness checks verify dependencies used by the running service.
+app.get(['/health','/api/health'], async (_req,res)=>{
+  const health=await serviceHealth()
+  res.status(health.status==='ok'?200:503).json(health)
 })
 
 // Version Check for POS updates
@@ -209,6 +202,8 @@ app.get('/api/version', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRouter)
+app.use('/api/queue', queueRouter)
+app.use('/api/import', batchImportRouter)
 // Enforce authentication for every API route by default. Only credential entry,
 // one-time setup/sync tickets, health checks, and the signed payment webhook are public.
 app.use('/api', (req, res, next) => {
@@ -281,6 +276,7 @@ app.use('/api/points-rules', pointsRuleRouter)
 app.use('/api/rewards', rewardCatalogRouter)
 app.use('/api/revenue', revenueRouter)
 app.use('/api/payments', paymentRouter)
+app.use('/api/ai', aiPermissionsRouter)
 app.use('/api/announcement', announcementRouter)
 app.use('/api/hardware', hardwareRouter)
 app.use('/api/sync', syncRouter)
@@ -291,8 +287,10 @@ app.use(errorHandler)
 
 // Start Server with Socket.IO
 if (process.env.NODE_ENV !== 'test') {
+  upgradeLocalSqlite(prisma, config.databaseUrl).then(() => {
   console.log('[Server] About to listen on port', config.port)
   httpServer.listen(config.port, '0.0.0.0', () => {
+  startRecurringExpenseScheduler()
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -325,6 +323,11 @@ if (process.env.NODE_ENV !== 'test') {
   console.log('[Server] Starting marketing scheduler...')
   startMarketingScheduler()
   console.log('[Server] Marketing scheduler started')
+  })
+  }).catch(async error => {
+    console.error('[Schema] Startup blocked; database upgrade failed:', error.message)
+    await prisma.$disconnect()
+    process.exit(1)
   })
 }
 

@@ -51,6 +51,11 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
           storeId: targetStoreId,
           status: 'active'
         }))
+      }).catch(async (error: unknown) => {
+        // Concurrent first reads may both bootstrap this store. Never overwrite the winner.
+        if ((error as { code?: string })?.code !== 'P2002') throw error
+        const existing = await prisma.channel.findMany({ where: { storeId: targetStoreId } })
+        if (!DEFAULT_CHANNELS.every(channel => existing.some(row => row.code === channel.code))) throw error
       }).then(() => prisma.channel.findMany({
         where: { storeId: targetStoreId },
         orderBy: { sortOrder: 'asc' }

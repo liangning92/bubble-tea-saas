@@ -45,6 +45,8 @@ export interface LocalOrder {
   finalAmount: number
   discountAmount: number
   paymentMethod: string
+  qrisExternalId?: string
+  paymentEvidenceId?: string
   taxEnabled: boolean
   pointsRedeemed: number
   orderNumber: string

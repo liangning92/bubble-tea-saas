@@ -1,4 +1,9 @@
-import { clearOrdinarySyncedConfigs } from '../services/TrainingLibraryStore'
+import {internalConfigWhere} from '../utils/configAccess'
+import { ordinaryConfigWhere } from '../services/TrainingLibraryStore'
+import {COUNT_OBSERVATION_PREFIX} from '../utils/countObservation'
+import { createReceiptSyncRouter, receiptTicket } from './receiptSync'
+import { RECEIPT_SYNC_PREFIX } from '../services/ReceiptSyncService'
+import { orderSnapshot } from '../utils/orderSnapshot'
 import { Router, Request, Response } from 'express'
 import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
@@ -15,6 +20,8 @@ const prisma = new PrismaClient({
     timeout: 10000   // 10s max query
   }
 })
+
+router.use(createReceiptSyncRouter(prisma))
 
 // CLOUD API base URL
 const CLOUD_API = 'https://api.aicube.online'
@@ -80,6 +87,7 @@ router.post('/connect', syncConnectLimiter, async (req: Request, res: Response) 
         storeName: store.name || 'My Store',
         tenantId: store.tenantId || 'default-tenant',
         syncTicket,
+        receiptSyncTicket: receiptTicket(storeId,token),
       }
     })
   } catch (err: any) {
@@ -168,7 +176,7 @@ router.post('/full', async (req: Request, res: Response) => {
         await tx.product.deleteMany()
         await tx.addon.deleteMany()
         await tx.category.deleteMany()
-        await clearOrdinarySyncedConfigs(tx)
+        await tx.config.deleteMany({ where: { AND:[ordinaryConfigWhere,internalConfigWhere,{key:{not:{startsWith:RECEIPT_SYNC_PREFIX}}},{key:{not:{startsWith:COUNT_OBSERVATION_PREFIX}}}] } })
 
         // Create Tenant
         const tenantId = store.tenantId || 'default-tenant'
@@ -327,15 +335,16 @@ router.post('/order', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     }
 
-    // Upsert order - idempotent, safe to retry
+    // An upload is an immutable snapshot, not a financial correction endpoint.
     await prisma.$transaction(async (tx) => {
-      // Delete existing items for this order (clean slate for items)
-      await tx.orderItem.deleteMany({ where: { orderId: order.id } }).catch(() => {})
-
-      // Upsert the order
-      await tx.order.upsert({
-        where: { id: order.id },
-        create: {
+      const existing = await tx.order.findUnique({ where: { id: order.id }, include: { items: true } })
+      if (existing) {
+        if (existing.storeId !== order.storeId) throw new Error('ORDER_STORE_MISMATCH')
+        if (orderSnapshot(existing) !== orderSnapshot(order)) throw new Error('ORDER_SYNC_CONFLICT')
+        return // Exact replay: no deletes, rewrites or duplicated effects.
+      }
+      // INSERT keeps concurrent conflicting arrivals from updating the winner.
+      await tx.order.create({ data: {
           id: order.id,
           storeId: order.storeId,
           channelId: order.channelId || null,
@@ -370,33 +379,13 @@ router.post('/order', authenticate, async (req: AuthRequest, res: Response) => {
               bomCost: item.bomCost || 0,
             }))
           },
-        },
-        update: {
-          totalAmount: order.totalAmount,
-          discountAmount: order.discountAmount || 0,
-          finalAmount: order.finalAmount,
-          status: order.status,
-          paymentMethod: order.paymentMethod,
-          items: {
-            deleteMany: {},
-            create: (order.items || []).map((item: any) => ({
-              id: item.id,
-              productId: item.productId,
-              productName: item.productName,
-              specId: item.specId,
-              specName: item.specName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              addons: typeof item.addons === 'string' ? item.addons : JSON.stringify(item.addons || '[]'),
-              bomCost: item.bomCost || 0,
-            }))
-          },
-        },
-      })
+        } })
     })
 
     return res.json({ code: 200, message: 'Order synced to cloud' })
   } catch (err: any) {
+    if (err?.message === 'ORDER_STORE_MISMATCH') return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (err?.message === 'ORDER_SYNC_CONFLICT' || err?.code === 'P2002') return res.status(409).json({ code: 409, message: 'ORDER_SYNC_CONFLICT' })
     console.error('[sync/order] Error:', err)
     return res.status(500).json({ code: 500, message: err.message || 'Order sync failed' })
   }

@@ -1,3 +1,5 @@
+> 当前正式部署、数据库迁移和安装包发布以 [修复版部署说明](docs/DEPLOYMENT-REMEDIATION.md) 为准；下文历史部署示例不用于直接覆盖现有环境。
+
 # 🧋 Bubble Tea SaaS POS System
 
 > Indonesia Market Edition - 印尼奶茶店智能经营平台

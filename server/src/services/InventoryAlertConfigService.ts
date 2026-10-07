@@ -1,3 +1,4 @@
+import {z} from 'zod'
 import prisma from '../config/database'
 
 // Default inventory alert config
@@ -28,6 +29,7 @@ export interface InventoryAlertConfig {
   autoCheckIntervalHours: number
 }
 
+const alertSchema=z.object({lowStockWarningDays:z.number().finite().positive(),lowStockCriticalDays:z.number().finite().positive(),varianceWarningPercent:z.number().finite().positive(),varianceCriticalPercent:z.number().finite().positive(),enableLowStockAlert:z.boolean(),enableConsumptionAlert:z.boolean(),autoCheckIntervalHours:z.number().finite().min(1).max(720)}).refine(v=>v.lowStockCriticalDays<=v.lowStockWarningDays&&v.varianceCriticalPercent>=v.varianceWarningPercent)
 /**
  * Get inventory alert config for a store
  */
@@ -42,7 +44,8 @@ export async function getInventoryAlertConfig(storeId: string): Promise<Inventor
     if (config.key === 'inventory_alert_config') {
       try {
         const saved = JSON.parse(config.value)
-        Object.assign(result, saved)
+        const parsed=alertSchema.safeParse({...result,...saved})
+        if(parsed.success)Object.assign(result,parsed.data)
       } catch {
         // Use defaults
       }
@@ -60,7 +63,7 @@ export async function saveInventoryAlertConfig(
   config: Partial<InventoryAlertConfig>
 ): Promise<InventoryAlertConfig> {
   const current = await getInventoryAlertConfig(storeId)
-  const updated = { ...current, ...config }
+  const updated = alertSchema.parse({ ...current, ...config }) as InventoryAlertConfig
 
   await prisma.config.upsert({
     where: { storeId_key: { storeId, key: 'inventory_alert_config' } },

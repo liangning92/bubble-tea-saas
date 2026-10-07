@@ -5,6 +5,7 @@ import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, d
 import { ScanPage } from './ScanPage'
 import { decodeScanIdentity, resolveScanProduct, validCatalogSpec, validCatalogPrice, ScanIdentity } from '../utils/barcodeIdentity'
 import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
+import { ManualQrEvidence, ManualQrProof } from '../components/ManualQrEvidence'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -281,6 +282,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 删除申请弹窗
   const [deleteModalOrder, setDeleteModalOrder] = useState<any>(null)
   const [deleteReason, setDeleteReason] = useState('')
+  const [refundReasonCode, setRefundReasonCode] = useState<'customer_dissatisfied'|'paid_unprepared'>('customer_dissatisfied')
+  const [refundItemIds, setRefundItemIds] = useState<string[]>([])
+  useEffect(() => { setRefundReasonCode('customer_dissatisfied'); setRefundItemIds((deleteModalOrder?.items || []).map((item: any) => item.id).filter(Boolean)) }, [deleteModalOrder?.id])
   const [isSubmittingDelete, setIsSubmittingDelete] = useState(false)
 
   // 支付 - 使用orderStore
@@ -328,6 +332,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     externalId?: string
     status: 'idle' | 'waiting' | 'paid' | 'manual' | 'expired' | 'failed'
   }>({ status: 'idle' })
+  const [manualProof, setManualProof] = useState<ManualQrProof | null>(null)
 
   // Refs for keyboard handler to avoid stale closure (initialized to undefined, synced via useEffect)
   const cartRef = useRef(cart)
@@ -1748,6 +1753,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await posApi.requestRefund({
         orderId: deleteModalOrder.id,
         reason: deleteReason,
+        reasonCode: refundReasonCode,
+        selectedItemIds: refundItemIds,
         staffId: user?.id
       })
       showToast(t('orders.deleteRequestSubmitted'), 'success')
@@ -2042,23 +2049,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       })
     }
   }, [cart, subtotal, tax, discountAmount, total, appliedPromotion, isManualDiscount, selectedChannel?.code, activeDiscountRules])
-
-  // 当选择 QRIS 且生成二维码后，推流收款二维码到副屏
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const api = (window as any).electronAPI
-    if (!api?.sendPaymentQr) return
-
-    if (showPaymentModal && paymentMethod === 'qris' && qrisData.status === 'waiting' && qrisData.qrImage) {
-      api.sendPaymentQr({
-        qrImage: qrisData.qrImage,
-        amount: total,
-        orderNumber: paymentModalOrderNum
-      })
-    } else if (!showPaymentModal || paymentMethod !== 'qris' || qrisData.status !== 'waiting') {
-      api.sendPaymentQr(null)
-    }
-  }, [showPaymentModal, paymentMethod, qrisData.status, qrisData.qrImage, total, paymentModalOrderNum])
 
   // Auto-apply coupon discount when selected coupon changes
   useEffect(() => {
@@ -2755,59 +2745,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       return
     }
 
-    // QRIS: Generate QR code first
-    if (paymentMethod === 'qris' && qrisData.status === 'idle') {
-      // Check if online - QRIS requires internet connection
-      if (!navigator.onLine) {
-        showToast(t('pos.qrisOfflineNotice'), 'warning')
-        setIsCheckingOut(false)
-        return
-      }
-      setIsCheckingOut(true)
-      try {
-        const res = await posApi.createQrisPayment(user?.storeId || 'default', `ORDER-${Date.now()}`, total)
-        if (res.data?.success) {
-          setQrisData({
-            qrImage: res.data.data.qrImage,
-            qrString: res.data.data.qrString,
-            externalId: res.data.data.externalId,
-            status: 'waiting'
-          })
-          setIsCheckingOut(false)
-          return // Wait for webhook or manual confirmation
-        } else {
-          showToast(res.data?.error || t('pos.qrisCreateFailed'), 'error')
-          setIsCheckingOut(false)
-          return
-        }
-      } catch (error: any) {
-        showToast(t('pos.qrisOfflineNotice'), 'warning')
-        setIsCheckingOut(false)
-        return
-      }
-    }
-
-    // QRIS: If already waiting, confirm payment manually
-    if (paymentMethod === 'qris' && qrisData.status === 'waiting') {
-      // For now, allow manual confirmation after payment is received
-      showToast(t('pos.confirmPaymentManual'), 'info')
+    if (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total)) {
+      showToast(t('manualPayment.required'), 'warning')
       return
-    }
-
-    // QRIS: If paid, proceed to create order
-    if (paymentMethod === 'qris' && qrisData.status !== 'paid' && qrisData.status !== 'manual') {
-      // Handle expired/failed status with user feedback
-      if (qrisData.status === 'expired') {
-        showToast(t('pos.qrisExpired'), 'warning')
-        setQrisData({ status: 'idle', qrImage: '', qrString: '', externalId: '' })
-        return
-      }
-      if (qrisData.status === 'failed') {
-        showToast(t('pos.qrisFailed'), 'error')
-        setQrisData({ status: 'idle', qrImage: '', qrString: '', externalId: '' })
-        return
-      }
-      return // Wait for payment (idle/waiting)
     }
 
     // 渠道必填字段检查与安全解析
@@ -2860,6 +2800,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         addons: item.addons.map(a => ({ name: a.name, price: a.price }))
       })),
       paymentMethod,
+      paymentEvidenceId: paymentMethod === 'qris' ? manualProof?.id : undefined,
       discountAmount,              // 折扣金额（客户端计算）
       pointsRedeemed: pointsToRedeem,  // 积分抵扣（客户端计算）
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
@@ -2950,7 +2891,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 现金支付：开钱箱联动控制
       // 若开启了自动打印小票 (posReceipt.autoPrint !== false)，开钱箱指令直接内嵌在小票打印作业首部原子发送，杜绝并发调用造成的端口争用与双击脉冲；
       // 仅当未开启自动打印小票时，才单独下发独立的 openCashDrawer 指令。
-      const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
+      // Reuse the same unique receipt id after a lost response.
+    const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
       if (shouldOpenDrawer && posReceipt.autoPrint === false) {
         const target = printerTarget('receipt')
         try {
@@ -3911,7 +3853,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     console.error('Failed to log modal close:', e)
                   }
                   setShowPaymentModal(false)
-                  setQrisData({ status: 'idle' })
+                  setManualProof(null)
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
               >
@@ -3966,35 +3908,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
-                  {/* QRIS 扫码展示区 (若选中QRIS时在左列直接呈现) */}
-                  {paymentMethod === 'qris' && (
-                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex flex-col items-center justify-center">
-                      {qrisData.status === 'idle' && (
-                        <div className="text-center py-4">
-                          <QrCode size={36} className="mx-auto text-gray-400 mb-1" />
-                          <p className="text-xs text-gray-500">{t('pos.qrisInstruction', '请出示二维码由顾客手机扫码')}</p>
-                        </div>
-                      )}
-                      {qrisData.status === 'waiting' && qrisData.qrImage && (
-                        <div className="flex flex-col items-center">
-                          <img src={qrisData.qrImage} alt="QRIS" className="w-32 h-32 object-contain rounded-lg border bg-white p-1" />
-                          <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-amber-600">
-                            <Loader2 size={14} className="animate-spin" />
-                            <span>{t('pos.waitingPayment', '等待顾客扫码支付...')}</span>
-                          </div>
-                          <span className="text-[10px] text-gray-400 mt-0.5">{t('pos.customerDisplaySynced', '客显副屏已同步全屏展示')}</span>
-                        </div>
-                      )}
-                      <label className="text-sm text-amber-800 mt-2"><input data-testid="manual-qris-confirm" type="checkbox" checked={qrisData.status === 'manual'} onChange={e=>setQrisData({status:e.target.checked?'manual':'idle'})} /> {t('offlineSale.qrisManual')}</label>
-                      {qrisData.status === 'manual' && <p role="status" className="text-sm text-amber-800">{t('offlineSale.qrisPending')}</p>}
-                      {qrisData.status === 'paid' && (
-                        <div className="text-center py-4 text-emerald-600">
-                          <CheckCircle size={36} className="mx-auto mb-1 text-emerald-600" />
-                          <p className="font-bold text-sm">{t('pos.paymentReceived', '扫码收款已成功')}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {paymentMethod === 'qris' && <div><ManualQrEvidence amount={total} onChange={setManualProof} /><label className="text-sm text-amber-800"><input type="checkbox" checked={qrisData.status==='manual'} onChange={e=>setQrisData({status:e.target.checked?'manual':'idle'})}/> {t('offlineSale.qrisManual')}</label>{qrisData.status==='manual' && <p>{t('offlineSale.qrisPending')}</p>}</div>}
                 </div>
 
                 {/* 右列 (现金输入键盘 / 非现金引导) */}
@@ -4134,7 +4048,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     !paymentConfigReady || !paymentMethods.some(m => m.id === paymentMethod) ||
                     (paymentMethod === 'cash' && Boolean(paidAmount) && parseInt(paidAmount) < total) ||
                     (paymentSettings.minAmount > 0 && total < paymentSettings.minAmount) ||
-                    (paymentMethod === 'qris' && qrisData.status === 'waiting')
+                    (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total))
                   }
                   className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"
                 >
@@ -4143,8 +4057,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <Loader2 size={16} className="animate-spin" />
                       <span>{t('common.loading', '正在结账...')}</span>
                     </>
-                  ) : paymentMethod === 'qris' && qrisData.status === 'waiting' ? (
-                    t('pos.waitingPayment', '等待支付')
+                  ) : paymentMethod === 'qris' && !manualProof ? (
+                    t('manualPayment.required')
                   ) : (
                     <>
                       <span>💰</span>
@@ -4984,6 +4898,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
               <h3 className="font-bold">{t('toolbar.history')}</h3>
+              <button className="text-sm text-primary" onClick={() => navigate('/receipt-sync')}>{t('receiptSync.title')}</button>
               <button onClick={() => setShowHistoryModal(false)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
                 <X size={20} />
               </button>
@@ -5048,6 +4963,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <p className="text-sm text-gray-500">{formatCurrency(deleteModalOrder.finalAmount || deleteModalOrder.totalAmount)}</p>
               </div>
               <div>
+                <label className="block text-sm font-medium">{t('refundPolicy.reason')}<select className="block w-full p-2 border rounded my-2" value={refundReasonCode} onChange={e=>setRefundReasonCode(e.target.value as 'customer_dissatisfied'|'paid_unprepared')}><option value="customer_dissatisfied">{t('refundPolicy.customer_dissatisfied')}</option><option value="paid_unprepared">{t('refundPolicy.paid_unprepared')}</option></select></label>
+                <p className="text-sm text-amber-700 mb-2">{t(refundReasonCode === 'paid_unprepared' ? 'refundPolicy.unpreparedBlocked' : 'refundPolicy.noRestock')}</p>
+                <div className="space-y-1 mb-3">{(deleteModalOrder.items || []).map((item: any)=><label key={item.id} className="flex gap-2 text-sm"><input type="checkbox" checked={refundItemIds.includes(item.id)} onChange={e=>setRefundItemIds(e.target.checked ? [...refundItemIds,item.id] : refundItemIds.filter(id=>id!==item.id))}/>{item.quantity} × {item.productName}</label>)}</div>
                 <label className="block text-sm font-medium mb-2">{t('orders.deleteReason')}</label>
                 <textarea
                   value={deleteReason}
@@ -5059,7 +4977,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               </div>
               <button
                 onClick={submitDeleteRequest}
-                disabled={!deleteReason.trim() || isSubmittingDelete}
+                disabled={!deleteReason.trim() || !refundItemIds.length || isSubmittingDelete}
                 className="w-full py-3 bg-red-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isSubmittingDelete ? (

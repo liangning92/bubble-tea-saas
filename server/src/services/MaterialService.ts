@@ -1,3 +1,4 @@
+import {convertQuantity,normalizedUnit} from '../utils/inventoryUnits'
 import prisma from '../config/database'
 
 // ============================================
@@ -125,6 +126,11 @@ export async function updateInventory(id: string, data: Partial<{
   maxStock: number
   shelfLife: number
 }>) {
+  const permitted=new Set(['name','category','type','unit','avgCost','concentrateRatio','safetyStock','minStock','maxStock','shelfLife','processRecipeId'])
+  if(Object.keys(data).some(key=>!permitted.has(key)))throw new Error('INVENTORY_METADATA_FIELD_NOT_ALLOWED')
+  const current=await prisma.inventory.findUniqueOrThrow({where:{id}})
+  if(data.unit!==undefined&&normalizedUnit(data.unit)!==normalizedUnit(current.unit))throw new Error('INVENTORY_UNIT_IMMUTABLE')
+  delete data.unit
   return prisma.inventory.update({
     where: { id },
     data
@@ -327,17 +333,8 @@ export async function executeProcessing(
     const inv = input.inventory
     if (!inv) continue
     const deductQty = input.quantity * multiplier
-    const ratio = inv.concentrateRatio || 1
-    const safeRatio = ratio === 0 ? 1 : ratio
-    const itemUnit = (inv.unit || '个').toLowerCase()
-    const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(itemUnit)
-
-    let unitCost = Number(inv.avgCost || 0)
-    if (!isPerPiece) {
-      // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
-      unitCost = unitCost / 1000 / safeRatio
-    }
-    // 个/件等：直接使用，不需要转换
+    const itemUnit=inv.unit
+    const unitCost=Number(inv.avgCost||0)
 
     const cost = Number(deductQty) * unitCost
     totalInputCost += cost
@@ -357,13 +354,14 @@ export async function executeProcessing(
   for (const output of recipe.items.filter(i => i.type === 'output')) {
     totalOutputQty += output.quantity * multiplier
   }
+  totalOutputQty=convertQuantity(totalOutputQty,recipe.outputUnit,recipe.outputInventory.unit)
   const outputUnitCost = totalOutputQty > 0 ? Math.round(totalInputCost / totalOutputQty) : 0
 
   // 构建产出记录（使用 outputInventory）
   const outputItems = [{
     inventoryId: recipe.outputInventory.id,
     name: recipe.outputInventory.name,
-    unit: recipe.outputUnit,
+    unit: recipe.outputInventory.unit,
     quantity: totalOutputQty,
     unitCost: outputUnitCost,
     cost: totalInputCost

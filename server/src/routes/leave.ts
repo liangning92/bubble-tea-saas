@@ -1,3 +1,4 @@
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -5,6 +6,7 @@ import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as LeaveService from '../services/LeaveService'
 
 const router = Router()
+const staffStore = requireResourceStore(req => prisma.staff.findUnique({where:{id:req.params.staffId},select:{storeId:true}}))
 
 // Validation schemas
 const applyLeaveSchema = z.object({
@@ -127,7 +129,7 @@ router.get('/balance', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/leave/balance/:staffId - Admin/Manager view staff member's leave balance
-router.get('/balance/:staffId', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/balance/:staffId', authenticate, authorize('admin', 'manager'), staffStore, async (req: AuthRequest, res) => {
   try {
     const { staffId } = req.params
     const year = parseInt(req.query.year as string) || new Date().getFullYear()
@@ -269,7 +271,7 @@ router.put('/reject/:id', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // PUT /api/leave/balance/:staffId - Set staff leave balance
-router.put('/balance/:staffId', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/balance/:staffId', authenticate, authorize('admin', 'manager'), staffStore, async (req: AuthRequest, res) => {
   try {
     const { staffId } = req.params
     const validated = setBalanceSchema.parse(req.body)

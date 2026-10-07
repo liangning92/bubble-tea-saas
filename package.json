@@ -26,6 +26,7 @@
     "test:playwright:i18n": "npx playwright test tests/i18n.spec.ts",
     "test:playwright:pos": "npx playwright test tests/pos.spec.ts",
     "db:generate": "cd server && npx prisma generate",
+    "db:generate:sqlite": "cd server && npx prisma generate --schema prisma/schema.sqlite.prisma",
     "db:push": "cd server && npx prisma db push",
     "db:seed": "cd server && npm run db:seed",
     "docker:up": "docker-compose up -d",
@@ -41,7 +42,7 @@
     "i18n:check": "npm run i18n:check:pos && npm run i18n:check:admin && npm run i18n:check:staff",
     "check": "npm run typecheck && npm run build",
     "lint": "npm run lint --workspaces --if-present",
-    "electron:build": "npm run version:update && npm run db:generate && npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
+    "electron:build": "npm run version:update && npm run db:generate:sqlite && npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
     "version:update": "node scripts/update-version.js",
     "electron:compile": "tsc -p client-pos/tsconfig.electron.json",
     "electron:dev": "npm run build:pos && npm run build:server && npm run electron:compile && electron .",
@@ -56,18 +57,17 @@
     "@prisma/client": "^5.22.0",
     "asar": "^3.2.0",
     "electron-log": "^5.4.4",
-    "electron-printer": "^0.0.5",
     "electron-updater": "^6.8.9",
     "node-thermal-printer": "^4.6.0",
     "pdfkit": "^0.19.1",
     "socket.io": "^4.8.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.0",
     "@playwright/test": "^1.61.1",
-    "electron": "^33.4.0",
-    "electron-builder": "^26.0.12",
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.8.3",
     "vercel": "^54.14.0"
   },

@@ -28,6 +28,6 @@ for (table,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND
 c.close()
 `,path.join(output,'schema.sql'),path.join(output,'seed.db')],{stdio:'pipe'});
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-const manifest={output,sourceSchemaSha256:hash(path.join(repo,'server/prisma/schema.prisma')),desktopSchemaSha256:hash(path.join(output,'schema.sqlite.prisma')),seedSha256:hash(path.join(output,'seed.db')),seedIsEmpty:true,existingDatabaseCompatible:false,existingDatabaseBlocker:'Order.pickupNumber missing in archived old SQLite template; no runtime migration is permitted',requiredExistingDatabaseChanges:['Order.pickupNumber nullable TEXT','Order_pickupNumber_idx index']};
+const manifest={output,sourceSchemaSha256:hash(path.join(repo,'server/prisma/schema.prisma')),desktopSchemaSha256:hash(path.join(output,'schema.sqlite.prisma')),seedSha256:hash(path.join(output,'seed.db')),seedIsEmpty:true,existingDatabaseCompatible:false,existingDatabaseBlocker:'Installer must back up and validate old databases before additive schema upgrade',requiredExistingDatabaseChanges:['Order.pickupNumber','Order.requestFingerprint','Order.requestReceipt','Order.checkoutTaxAmount','Staff.baseSalary','Inventory ledger fields and triggers','RefundRequest reasonCode and selectedItemIds','PaymentEvidence table and indexes']};
 fs.writeFileSync(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2));
 console.log(JSON.stringify(manifest));

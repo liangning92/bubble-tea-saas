@@ -23,11 +23,18 @@ class UpgradeTests(unittest.TestCase):
         (self.app / 'history-file').write_bytes(b'preserve-me')
         template = self.root / 'empty.db'
         with closing(sqlite3.connect(template)) as c, c:
-            c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB, pickupNumber TEXT, requestFingerprint TEXT, requestReceipt TEXT)')
+            c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB, pickupNumber TEXT, requestFingerprint TEXT, requestReceipt TEXT, checkoutTaxAmount INTEGER)')
+        with closing(sqlite3.connect(template)) as c, c:
+            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest']:
+                fields=', '.join(U.quote(name)+' '+declaration for t,name,declaration in U.COLUMN_ADDITIONS if t==table)
+                c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY, '+fields+')')
+            c.execute('CREATE TABLE PaymentEvidence (id TEXT PRIMARY KEY, orderId TEXT, image BLOB)')
         self.catalog = U.catalog_from_empty(template, 'a' * 40)
         with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB)')
             c.execute('INSERT INTO "Order" VALUES (?, ?, ?)', ('historical', 123.45, b'\x00\xff'))
+            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest']:
+                c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY)')
         self.before = U.digest(self.db)
         self.app_before = U.tree_manifest(self.app)
 
@@ -37,12 +44,12 @@ class UpgradeTests(unittest.TestCase):
     def test_success_preserves_every_old_value_and_verified_backups(self):
         receipt = self.prepare()
         self.assertTrue(receipt['columnAdded'])
-        self.assertEqual(receipt['columnsAdded'], list(U.LOCAL_COLUMNS))
+        self.assertEqual(receipt['columnsAdded'], [t+'.'+n for t,n,_ in U.COLUMN_ADDITIONS])
         self.assertTrue(receipt['indexAdded'])
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
         with closing(sqlite3.connect(self.db)) as c, c:
-            self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None)])
+            self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
 
     def test_repeat_is_idempotent_and_preserves_existing_pickup_values(self):
@@ -62,7 +69,7 @@ class UpgradeTests(unittest.TestCase):
             c.execute('ALTER TABLE "Order" ADD COLUMN requestFingerprint TEXT')
             c.execute('UPDATE "Order" SET requestFingerprint=?', ('old-fingerprint',))
         receipt = self.prepare()
-        self.assertEqual(receipt['columnsAdded'], ['pickupNumber', 'requestReceipt'])
+        self.assertEqual(receipt['columnsAdded'], [t+'.'+n for t,n,_ in U.COLUMN_ADDITIONS if not (t=='Order' and n=='requestFingerprint')])
         with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT requestFingerprint,requestReceipt,pickupNumber FROM "Order"').fetchone(), ('old-fingerprint', None, None))
 

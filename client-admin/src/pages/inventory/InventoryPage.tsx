@@ -21,7 +21,7 @@ export function InventoryPage() {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showEditItem, setShowEditItem] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
-  const [stockForm, setStockForm] = useState({ quantity: '', unitCost: '', note: '' })
+  const [stockForm, setStockForm] = useState({ quantity: '', unitCost: '', note: '', inputUnit:'' })
   const [addForm, setAddForm] = useState({ name: '', category: 'raw_material', type: 'raw_material', unit: 'kg', avgCost: '', safetyStock: '', processRecipeId: '' })
   const [search, setSearch] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
@@ -76,7 +76,7 @@ export function InventoryPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory-alerts'] })
       setShowStockIn(false)
       setSelectedItem(null)
-      setStockForm({ quantity: '', unitCost: '', note: '' })
+      setStockForm({ quantity: '', unitCost: '', note: '', inputUnit:'' })
     }
   })
 
@@ -87,7 +87,7 @@ export function InventoryPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory-alerts'] })
       setShowStockOut(false)
       setSelectedItem(null)
-      setStockForm({ quantity: '', unitCost: '', note: '' })
+      setStockForm({ quantity: '', unitCost: '', note: '', inputUnit:'' })
     }
   })
 
@@ -194,7 +194,8 @@ export function InventoryPage() {
       inventoryId: selectedItem.id,
       storeId: user?.storeId,
       quantity: parseFloat(stockForm.quantity),
-      unitCost: parseInt(stockForm.unitCost) || selectedItem.avgCost,
+      inputUnit:stockForm.inputUnit||selectedItem.unit,
+      unitCost: stockForm.unitCost === '' ? undefined : Number(stockForm.unitCost),
       note: stockForm.note
     })
   }
@@ -229,9 +230,9 @@ export function InventoryPage() {
       name: selectedItem.name,
       category: selectedItem.category,
       unit: selectedItem.unit,
-      currentStock: parseInt(selectedItem.currentStock) || 0,
+      packaging:selectedItem.packaging?.unit ? {...selectedItem.packaging,quantity:Number(selectedItem.packaging.quantity),baseUnit:selectedItem.unit} : null,
       avgCost: parseInt(selectedItem.avgCost) || 0,
-      safetyStock: parseInt(selectedItem.safetyStock) || 0
+      safetyStock: parseFloat(selectedItem.safetyStock) || 0
     }
     updateItemMutation.mutate({
       id: selectedItem.id,
@@ -589,6 +590,7 @@ export function InventoryPage() {
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('inventory.unit') || 'Unit'}</label>
                   <select
+                    disabled
                     value={selectedItem.unit}
                     onChange={(e) => setSelectedItem({...selectedItem, unit: e.target.value})}
                     className="input w-full"
@@ -608,11 +610,17 @@ export function InventoryPage() {
                   </select>
                 </div>
               </div>
+              <p className="text-sm text-amber-700">{t('inventoryUnits.fixed')}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <label>{t('inventoryUnits.pack')}<input className="input w-full" value={selectedItem.packaging?.unit||''} onChange={e=>setSelectedItem({...selectedItem,packaging:{...selectedItem.packaging,unit:e.target.value}})}/></label>
+                <label>{t('inventoryUnits.factor')} ({selectedItem.unit})<input type="number" min="0.000001" step="any" className="input w-full" value={selectedItem.packaging?.quantity||''} onChange={e=>setSelectedItem({...selectedItem,packaging:{...selectedItem.packaging,quantity:e.target.value}})}/></label>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('inventory.currentStock') || 'Current Stock'}</label>
                   <input
                     type="number"
+                    readOnly
                     value={selectedItem.currentStock}
                     onChange={(e) => setSelectedItem({...selectedItem, currentStock: e.target.value})}
                     className="input w-full"
@@ -663,8 +671,12 @@ export function InventoryPage() {
               </button>
             </div>
             <div className="space-y-4">
+              <label className="block">{t('inventoryUnits.input')}<select className="input w-full" value={stockForm.inputUnit||selectedItem.unit} onChange={e=>setStockForm({...stockForm,inputUnit:e.target.value,unitCost:''})}>
+                {[...new Set([selectedItem.unit,...(['kg','g'].includes(selectedItem.unit.toLowerCase())?['kg','g']:['l','ml'].includes(selectedItem.unit.toLowerCase())?['L','ml']:[]),...(selectedItem.packaging?.unit?[selectedItem.packaging.unit]:[])])].map(unit=><option key={unit}>{unit}</option>)}
+              </select></label>
+              <p className="text-sm">{t('inventoryUnits.cost')} ({stockForm.inputUnit||selectedItem.unit})</p>
               <div>
-                <label className="block text-sm font-medium mb-1">{t('inventory.quantity') || 'Quantity'} ({selectedItem.unit}) *</label>
+                <label className="block text-sm font-medium mb-1">{t('inventory.quantity') || 'Quantity'} ({stockForm.inputUnit||selectedItem.unit}) *</label>
                 <input
                   type="number"
                   value={stockForm.quantity}
