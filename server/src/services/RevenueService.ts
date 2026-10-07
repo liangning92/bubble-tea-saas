@@ -1,5 +1,5 @@
 import prisma from '../config/database'
-import { format } from "date-fns"
+import { businessCalendarDate } from '../utils/revenueDateRange'
 
 // Channel revenue by date range
 export async function getRevenueByChannel(storeId: string, startDate: Date, endDate: Date) {
@@ -98,7 +98,7 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
   const dailyMap: Record<string, { revenue: number; orders: number }> = {}
 
   for (const order of orders) {
-    const dateStr = format(order.createdAt, 'yyyy-MM-dd')
+    const dateStr = businessCalendarDate(order.createdAt)
     if (!dailyMap[dateStr]) {
       dailyMap[dateStr] = { revenue: 0, orders: 0 }
     }

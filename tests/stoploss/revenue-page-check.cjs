@@ -1,0 +1,49 @@
+// Actual native App/router/React Query. Only API boundaries are synthetic; no external traffic.
+const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
+const origin='http://127.0.0.1:6302';
+const cases=['custom','cross-month','incomplete','reverse','empty','read-error','malformed','date-race','store-race','preference-race','preference-store-race','fixed-week','id','zh','no-store','role-race','cashier','summary-only-error','channel-only-error','overview-error'];
+(async()=>{const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href);const tw=(await import(pathToFileURL(path.resolve('client-admin/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-admin/src/**/*.{js,ts,jsx,tsx}')];const server=await createServer({configFile:false,root:path.resolve('client-admin'),cacheDir:'/tmp/revenue-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6302,strictPort:true,proxy:{}},resolve:{alias:{'@':path.resolve('client-admin/src')}}});let browser;
+try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync('/tmp/revenue-page-evidence',{recursive:true});
+for(const scenario of (process.env.REVENUE_SCENARIOS||cases.join(',')).split(',')){
+ const context=await browser.newContext({viewport:{width:1500,height:1200},timezoneId:'Asia/Jakarta',serviceWorkers:'block'}),requests=[],errors=[],held=[];let fail=true;
+ await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.origin!==origin)return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();const params=Object.fromEntries(url.searchParams);requests.push({path:url.pathname,params,method:req.method()});assert.ok(req.method()==='GET'||(url.pathname==='/api/config'&&req.method()==='POST'),'Only synthetic preference save may mutate');let status=200,data=[];
+ if(url.pathname==='/api/config'&&req.method()==='GET'&&['preference-race','preference-store-race'].includes(scenario)&&params.storeId==='own'){held.push(()=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({code:200,data:[{key:'revenue.defaultPeriod',value:'month'}]})}));return;}
+ if(url.pathname.startsWith('/api/revenue/')){
+  const custom=params.period==='custom',amount=params.storeId==='second'?700000:custom?(params.startDate==='2026-10-09'?900000:400000):params.period==='week'?200000:params.period==='month'?300000:100000;
+  const totals={revenue:scenario==='empty'&&custom?0:amount,orders:scenario==='empty'&&custom?0:2,avgOrderValue:scenario==='empty'&&custom?0:amount/2};
+  data=url.pathname.endsWith('/summary')?{current:totals,previous:{revenue:200000,orders:1,avgOrderValue:200000},revenueChange:100,ordersChange:100}:scenario==='empty'&&custom?[]:[{channel:'Synthetic selected '+(params.storeId||'own'),...totals}];
+  if(fail&&custom&&(scenario==='read-error'||(scenario==='summary-only-error'&&url.pathname.endsWith('/summary'))||(scenario==='channel-only-error'&&url.pathname.endsWith('/by-channel'))))status=503;if(fail&&scenario==='overview-error'&&params.period==='week')status=503;if(custom&&scenario==='malformed')data={};
+  if((scenario==='date-race'&&custom&&params.startDate==='2026-10-07')||(scenario==='store-race'&&params.storeId==='own')){const body=JSON.stringify({code:200,data});held.push(()=>route.fulfill({status:200,contentType:'application/json',body}));return;}
+ }
+ await route.fulfill({status,contentType:'application/json',body:JSON.stringify({code:status,data})});});
+ await context.addInitScript(({scenario})=>{localStorage.setItem('bubble-tea-language',['id','zh'].includes(scenario)?scenario:'en');sessionStorage.setItem('auth-storage',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',user:{id:'manager',role:scenario==='cashier'?'cashier':'manager',storeId:scenario==='no-store'?'':'own',staff:null}},version:0}));},{scenario});
+ const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto(origin+'/finance/revenue');
+ const selected=page.getByTestId('revenue-selected-range'),overview=page.getByTestId('revenue-fixed-overview'),table=page.getByTestId('revenue-selected-table');
+ const fill=async(start,end)=>{await page.locator('input[type=date]').nth(0).fill(start);await page.locator('input[type=date]').nth(1).fill(end);};
+ const customRequests=()=>requests.filter(r=>r.path.startsWith('/api/revenue/')&&r.params.period==='custom');
+ if(scenario==='cashier'){await expect(page.getByTestId('revenue-role-denied')).toBeVisible();assert.equal(requests.filter(r=>r.path.startsWith('/api/revenue/')).length,0);}
+ else if(scenario==='role-race'){await expect(table).toBeVisible();await page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');useAuthStore.getState().updateUser({role:'cashier'});});await expect(page.getByTestId('revenue-role-denied')).toBeVisible();assert.equal(await table.count(),0);}
+ else if(scenario==='no-store'){await expect(page.getByTestId('dashboard-read-failure')).toBeVisible();assert.equal(requests.filter(r=>r.path.startsWith('/api/revenue/')).length,0);}
+ else if(scenario==='store-race'||scenario==='preference-store-race'){
+  await expect.poll(()=>held.length).toBeGreaterThan(0);await page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');useAuthStore.getState().updateUser({storeId:'second'});});await expect(table).toContainText('Synthetic selected second');for(const release of held.splice(0))await release();await expect(selected).toContainText('Rp 700.000');await expect(table).not.toContainText('Synthetic selected own');await expect(page.getByRole('button',{name:'Today',exact:true})).toHaveClass(/bg-primary/);
+ }
+ else if(scenario==='fixed-week'){await expect(table).toBeVisible();await page.getByRole('button',{name:'This Week',exact:true}).click();await expect(selected).toContainText('Rp 200.000');await expect(overview).toContainText('Fixed-period overview');await expect(selected.getByTestId('revenue-selected-summary')).toContainText('100%');}
+ else if(['id','zh'].includes(scenario)){await expect(table).toBeVisible();await expect(overview).toContainText(scenario==='id'?'Ringkasan periode tetap':'固定周期概览');await expect(selected).toContainText(scenario==='id'?'Waktu Jakarta':'雅加达时间');}
+ else{
+  if(scenario!=='preference-race')await expect(table).toBeVisible();await page.getByRole('button',{name:'Custom',exact:true}).click();await expect(page.getByTestId('revenue-range-invalid')).toBeVisible();assert.equal(customRequests().length,0);
+  if(scenario==='incomplete'){await page.locator('input[type=date]').nth(0).fill('2026-10-07');await expect(page.getByTestId('revenue-range-invalid')).toBeVisible();assert.equal(customRequests().length,0);}
+  else if(scenario==='reverse'){await fill('2026-10-09','2026-10-07');await expect(page.getByTestId('revenue-range-invalid')).toBeVisible();assert.equal(customRequests().length,0);assert.equal(await table.count(),0);}
+  else{
+   await fill(scenario==='cross-month'?'2026-09-30':'2026-10-07',scenario==='cross-month'?'2026-10-01':'2026-10-07');
+   if(scenario==='date-race'){await expect.poll(()=>held.length).toBe(2);await fill('2026-10-09','2026-10-09');await expect(selected).toContainText('Rp 900.000');for(const release of held.splice(0))await release();await expect(selected).toContainText('Rp 900.000');await expect(selected).not.toContainText('Rp 400.000');}
+   else if(scenario==='preference-race'){await expect(table).toBeVisible();for(const release of held.splice(0))await release();await expect(page.locator('input[type=date]').nth(0)).toHaveValue('2026-10-07');await expect(selected).toContainText('Rp 400.000');}
+   else if(['read-error','summary-only-error','channel-only-error','malformed'].includes(scenario)){await expect(selected.getByTestId('dashboard-read-failure')).toBeVisible();assert.equal(await table.count(),0);if(scenario!=='malformed'){fail=false;await selected.getByRole('button',{name:'Reload',exact:true}).click();await expect(table).toBeVisible();}}
+   else if(scenario==='overview-error'){await expect(table).toContainText('Rp 400.000');await expect(overview.getByTestId('dashboard-read-failure')).toBeVisible();assert.equal(await overview.getByText('Rp 0',{exact:true}).count(),0);fail=false;await overview.getByRole('button',{name:'Reload',exact:true}).click();await expect(overview).toContainText('Rp 300.000');}
+   else if(scenario==='empty'){await expect(selected).toContainText('No data');await expect(selected.getByTestId('revenue-selected-summary')).toContainText('Rp 0');}
+   else{await expect(table).toContainText('Rp 400.000');await expect(selected.getByTestId('revenue-selected-summary')).toContainText('Rp 400.000');await expect(table.locator('tfoot')).toContainText('Rp 400.000');await expect(overview).toContainText('Rp 300.000');}
+   const channel=customRequests().filter(r=>r.path.endsWith('/by-channel')).at(-1),summary=customRequests().filter(r=>r.path.endsWith('/summary')).at(-1);assert.ok(channel&&summary);assert.deepEqual(channel.params,summary.params);assert.equal(channel.params.storeId,'own');
+  }
+ }
+ for(const release of held.splice(0))await release();assert.deepEqual(errors,[]);await page.screenshot({path:'/tmp/revenue-page-evidence/'+scenario+'.png'});console.log('PASS native revenue '+scenario);await context.close();
+}
+}finally{if(browser)await browser.close();await server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

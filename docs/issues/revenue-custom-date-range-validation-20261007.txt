@@ -1,0 +1,37 @@
+# Revenue date range validation — 2026-10-07
+
+Branch fix/revenue-custom-date-range; base bfee6b70a192f7912ebd4507dafe4a8552cb9054. Fixed local increment for review; no push, merge or production publication.
+
+Changed behavior:
+- Revenue selected channel table, selected summary and footer read the same immutable params (period/custom date bounds/authenticated store). Fixed today/week/month overview is separate and explicitly labelled. Custom incomplete/invalid/reverse input does not request fallback ranges or expose previous valid table data. Summary uses the existing API current/previous/revenueChange fields; raw revenue amount computation remains unchanged. Misleading net label and invented per-channel growth are removed.
+- Store/role/date query keys fence old responses; late preference reads cannot replace a manual choice or a different store selection. Cashier/current role denial hides cached data and disables revenue reads. Existing preference save retained; all test preference writes synthetic only.
+- Revenue date-only queries use WIB midnight through23:59:59.999 inclusive, independent of host TZ. Full timezone-bearing timestamps retain exact precision/meaning. Invalid calendar dates, unsupported periods, custom incomplete/reversed ranges and repeated date query parameters return400. Sunday week start retained. Missing-period defaults retained: by-channel today, summary month, daily current month-to-today; daily one-sided dates supported. Daily date grouping uses WIB too. Existing comparison month clamping retained; no comparison/revenue/refund/tax/cost amount formula change.
+
+Executed results:
+- node tests/stoploss/revenue-page-check.cjs:20/20 PASS; /tmp/revenue-pages.log. Actual native App/React Router/React Query Chromium. Cases: custom/cross-month/incomplete/reverse/empty/read failure/malformed/date race/store race/preference race/preference-store race/fixed week/Indonesian/Chinese/missing store/role change/cashier/summary-only failure/channel-only failure/overview failure. English exercised by all other cases. API boundaries synthetic; outbound requests blocked. Screenshots /tmp/revenue-page-evidence/<case>.png.
+- node tests/stoploss/revenue-http-check.cjs:5 verification groups PASS under UTC; REVENUE_TEST_TZ=Asia/Jakarta repeat:5 groups PASS. Actual current server JWT/authorization, Express revenue route, RevenueService and Prisma execute against a freshly created test-owned /tmp SQLite DB with generated client/DDL equivalent to the tracked PostgreSQL model. Schema equivalence asserted before use; this does not certify the stale repository SQLite schema/seed or production PostgreSQL acceptance.
+  Business Oct7 bounds Oct6T17:00:00.000Z—Oct7T16:59:59.999Z; cross-month Sept30—Oct1; exact offset Aug7T10:12:13.001+07:00—10:12:13.999+07:00. Each set inserts start−1ms/start/end/end+1ms, foreign-store and pending orders; only start/end completed/paid orders included, and by-channel/summary/daily totals agree. Daily keys are WIB calendar dates. Validation400, auth401, cashier403, manager forged store403; admin result continues existing auth-store scope. Empty arrays and successful zero totals confirmed. Defaults and daily partial-bound compatibility exercised. No production DB or credential/config writes.
+- node --test tests/stoploss/*.test.cjs:75/75 PASS (existing68 +7 new range units); /tmp/revenue-all-unit.log. New units cover UTC/Jakarta/New York independence, exact bounds, cross-month/leap validation, offsets, invalid/reversed/array values, legacy defaults, daily one-sided dates and comparison clamping.
+- npm run typecheck:all four workspaces PASS; /tmp/revenue-all-types.log.
+- npm run i18n:check:all three clients PASS; /tmp/revenue-i18n.log. Baseline hardcoded-language-label warnings retained.
+- npm run build --workspace client-admin -- --outDir /tmp/revenue-admin-build-final:PASS; /tmp/revenue-admin-build.log. Existing bundle-size warning.
+- ./node_modules/.bin/tsc -p server/tsconfig.json --outDir /tmp/revenue-server-build:PASS; /tmp/revenue-server-build.log. Same server build compiler/config, output isolated to /tmp.
+- bash scripts/security-review.sh:18 PASS/0 FAIL/1 baseline store-access warning; /tmp/revenue-security.log. git diff --check PASS.
+
+Limits/scope:
+Only RevenuePage, admin translations, revenue router, new revenue date utility and daily revenue date grouping are changed. Expense and finance reports untouched; no schema/DB migration/historical ledger changes, production source installs/config/credentials, POS checkout algorithms or deployment/update/release workflow changes. Existing repository smoke command launches the general dev server and requires real test account credentials; it was not pointed at real services. The isolated native App scenarios above are the scoped smoke/regression evidence. Prior commits and source trees retained. No approval rejection in this increment.
+
+Actual HTTP terminal logs:
+PASS actual HTTP UTC business-day: ±1ms, inclusive endpoints, table/summary parity, foreign/pending excluded
+PASS actual HTTP UTC cross-month: ±1ms, inclusive endpoints, table/summary parity, foreign/pending excluded
+PASS actual HTTP UTC explicit-offset: ±1ms, inclusive endpoints, table/summary parity, foreign/pending excluded
+PASS actual HTTP UTC input400/auth401/role403/manager foreign403 and admin auth-store filtering
+PASS actual HTTP UTC missing-period defaults and optional daily dates
+Evidence: /tmp/revenue-http-6Psp2h/evidence.json
+
+PASS actual HTTP Asia/Jakarta business-day: ±1ms, inclusive endpoints, table/summary parity, foreign/pending excluded
+PASS actual HTTP Asia/Jakarta cross-month: ±1ms, inclusive endpoints, table/summary parity, foreign/pending excluded
+PASS actual HTTP Asia/Jakarta explicit-offset: ±1ms, inclusive endpoints, table/summary parity, foreign/pending excluded
+PASS actual HTTP Asia/Jakarta input400/auth401/role403/manager foreign403 and admin auth-store filtering
+PASS actual HTTP Asia/Jakarta missing-period defaults and optional daily dates
+Evidence: /tmp/revenue-http-r9NGh7/evidence.json
