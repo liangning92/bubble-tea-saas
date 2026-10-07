@@ -1,3 +1,4 @@
+import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import prisma from '../config/database'
@@ -14,6 +15,8 @@ const router = Router()
 const createOrderSchema = z.object({
   storeId: z.string(),
   channelId: z.string().optional(),
+  channelName: z.string().optional(),
+  shiftSessionId: z.string().optional(),
   staffId: z.string(),
   memberId: z.string().optional(),
   items: z.array(z.object({
@@ -38,7 +41,12 @@ const createOrderSchema = z.object({
   tableNumber: z.string().optional(),
   platformOrderId: z.string().optional(),
   orderNumber: z.string().optional(),
-  pickupNumber: z.string().optional()
+  pickupNumber: z.string().optional(),
+  note: z.string().optional(),
+  callerPhone: z.string().optional(),
+  driverPickupTime: z.coerce.date().optional(),
+  purchaseOrderNo: z.string().optional(),
+  socialRef: z.string().optional()
 })
 
 // GET /api/orders
@@ -91,7 +99,7 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
       orderBy: { createdAt: 'desc' }
     })
 
-    const filtered = requests.filter(r => r.order?.storeId === storeId)
+    const filtered = requests.filter(r => r.order?.storeId === storeId).map(r => ({ ...r, order: publicOrder(r.order) }))
 
     res.json({
       code: 200,
@@ -116,7 +124,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -133,6 +141,8 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     if (!storeId || req.body.storeId !== storeId) {
       return res.status(403).json({ code: 403, message: 'Store access denied' })
     }
+    const replay = await findOrderReplay(req.body)
+    if (replay) return res.status(201).json({ code: 201, message: 'Order created', data: replay, timestamp: new Date().toISOString() })
     const openShift = await prisma.shiftSession.findFirst({
       where: { storeId, status: 'open' },
       select: { id: true, shift: true }
@@ -151,10 +161,11 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     res.status(201).json({
       code: 201,
       message: 'Order created',
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
+    if (error instanceof OrderReplayConflict) return res.status(error.code === 'ORDER_STORE_MISMATCH' ? 403 : 409).json({ code: error.code === 'ORDER_STORE_MISMATCH' ? 403 : 409, message: error.code })
     if (error instanceof OrderBusinessRejection && error.rolledBack) {
       return res.status(409).json({ code: 409, message: error.code, details: error.message, rejection: { code: error.code, outcome: 'not_committed', orderNumber: req.body.orderNumber } })
     }
@@ -165,49 +176,40 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
   }
 })
 
-// POST /api/orders/bulk-sync - POS端离线订单批量同步
-router.post('/bulk-sync', authenticate, async (req: AuthRequest, res) => {
+// POST /api/orders/bulk-sync - each input uses the single-order schema and replay contract.
+router.post('/bulk-sync', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
-    const { orders } = req.body
-    if (!Array.isArray(orders) || orders.length === 0) {
-      return res.status(400).json({ code: 400, message: 'Invalid or empty orders array' })
-    }
-
+    const input = req.body.orders
+    if (!Array.isArray(input) || !input.length) return res.status(400).json({ code: 400, message: 'Invalid or empty orders array' })
     const storeId = req.user!.storeId
-    if (!storeId || orders.some((order: any) => order.storeId !== storeId)) {
-      return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (!storeId || input.some(order => order?.storeId !== storeId)) return res.status(403).json({ code: 403, message: 'Store access denied' })
+    const parsed = z.array(createOrderSchema).safeParse(input)
+    if (!parsed.success) return res.status(400).json({ code: 400, message: 'Invalid order request' })
+    const results = []
+    // Zod checked required fields; strictNullChecks=false widens its inferred object properties.
+    const orders = parsed.data as OrderService.CreateOrderData[]
+    for (const [index, order] of orders.entries()) {
+      try {
+        // Authentication/store checks precede this replay; mutable admission follows it.
+        const replay = await findOrderReplay(order)
+        if (replay) { results.push({ index, localId: order.orderNumber, success: true, data: replay }); continue }
+        const session = order.shiftSessionId
+          ? await prisma.shiftSession.findFirst({ where: { id: order.shiftSessionId, storeId }, select: { id: true, shift: true } })
+          : await prisma.shiftSession.findFirst({ where: { storeId, status: 'open' }, select: { id: true, shift: true } })
+        if (!session) throw new Error('OPEN_SHIFT_REQUIRED')
+        if (session.shift === 'off') throw new Error('SHIFT_DISABLED')
+        const active = await prisma.shift.findFirst({ where: { storeId, key: session.shift, isActive: true }, select: { id: true } })
+        if (!active) throw new Error('SHIFT_DISABLED')
+        const paymentError = await checkPaymentMethod(storeId, order.paymentMethod)
+        if (paymentError) throw new Error(paymentError)
+        results.push({ index, localId: order.orderNumber, success: true, data: await OrderService.createOrder(order) })
+      } catch (error: any) {
+        results.push({ index, localId: order.orderNumber, success: false, error: error.message || 'Failed to create order' })
+      }
     }
-
-    // Offline orders may arrive after their shift was closed, but each must
-    // belong to a real shift at this store. Legacy queued orders without a
-    // session id can only sync while a shift is currently open.
-    const openShift = await prisma.shiftSession.findFirst({
-      where: { storeId, status: 'open' },
-      select: { id: true }
-    })
-    const referencedShiftIds = [...new Set(orders.map((order: any) => order.shiftSessionId).filter((id: any) => typeof id === 'string'))]
-    const referencedShifts = referencedShiftIds.length
-      ? await prisma.shiftSession.findMany({ where: { id: { in: referencedShiftIds }, storeId }, select: { id: true } })
-      : []
-    const validShiftIds = new Set(referencedShifts.map(shift => shift.id))
-    const hasInvalidShift = orders.some((order: any) => {
-      if (order.shiftSessionId) return !validShiftIds.has(order.shiftSessionId)
-      return !openShift
-    })
-    if (hasInvalidShift) {
-      return res.status(409).json({ code: 409, message: 'OPEN_SHIFT_REQUIRED' })
-    }
-
-    const results = await OrderService.bulkCreateOrders(orders)
-    res.json({
-      code: 200,
-      message: 'Bulk sync completed',
-      data: { results },
-      timestamp: new Date().toISOString()
-    })
+    return res.json({ code: 200, message: 'Bulk sync completed', data: { results }, timestamp: new Date().toISOString() })
   } catch (error: any) {
-    console.error('Bulk sync error:', error)
-    res.status(500).json({ code: 500, message: error?.message || 'Failed to process bulk sync' })
+    return res.status(500).json({ code: 500, message: error.message || 'Failed to process bulk sync' })
   }
 })
 
@@ -249,7 +251,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
     res.json({
       code: 200,
       message: 'Order status updated',
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -296,7 +298,7 @@ router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (r
     res.json({
       code: 200,
       message: 'Order refunded',
-      data: order,
+      data: publicOrder(order),
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -413,7 +415,7 @@ router.get('/kds/list', authenticate, authorize('admin', 'manager', 'staff'), as
 
     res.json({
       code: 200,
-      data: { list: orders },
+      data: { list: orders.map(publicOrder) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {

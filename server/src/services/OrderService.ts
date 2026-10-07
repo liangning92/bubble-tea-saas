@@ -1,3 +1,4 @@
+import { findOrderReplay, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
 import { containsFilter } from '../utils/stringFilter'
 import { OrderBusinessRejection } from './OrderBusinessRejection'
 import prisma from '../config/database'
@@ -9,6 +10,9 @@ import { getOrCreatePointsRule, calculatePoints } from './PointsRuleService'
 export interface CreateOrderData {
   storeId: string
   channelId?: string
+  channelName?: string
+  shiftSessionId?: string
+  dineInCount?: number
   staffId: string
   memberId?: string
   customerCount?: number
@@ -516,7 +520,7 @@ export async function getOrders(params: {
   ])
 
   return {
-    list: orders,
+    list: orders.map(publicOrder),
     pagination: {
       page,
       pageSize,
@@ -528,7 +532,7 @@ export async function getOrders(params: {
 
 // Get single order by ID
 export async function getOrderById(orderId: string) {
-  return prisma.order.findUnique({
+  const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
       items: true,
@@ -536,6 +540,7 @@ export async function getOrderById(orderId: string) {
       store: true
     }
   })
+  return order ? publicOrder(order) : null
 }
 
 // Get channel-specific price for a product
@@ -567,6 +572,8 @@ async function getChannelPrice(channelId: string, productId: string, defaultPric
 
 // Create new order
 export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
+  const replay = await findOrderReplay(data)
+  if (replay) return replay
   // DEBUG: log taxEnabled value
 
   // Get channel info for pricing lookup with smart code resolution and foreign key protection
@@ -734,6 +741,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   }
 
   // Create order with transaction
+  let created = false
   const order = await prisma.$transaction(async (tx) => {
     // Use pre-generated order number
 
@@ -836,8 +844,18 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
       })
     }
 
-    return { ...newOrder, lowStockWarnings: inventoryResult.lowStockWarnings }
+    const response = { ...publicOrder(newOrder), lowStockWarnings: inventoryResult.lowStockWarnings, ppnAmount, grandTotal }
+    await tx.order.update({ where: { id: newOrder.id }, data: {
+      requestFingerprint: orderRequestFingerprint(data), requestReceipt: encodeOrderReceipt(data, response)
+    } })
+    created = true
+    return response
   }).catch(async error => {
+    created = false
+    if (['P2002', 'P2034', 'P2028'].includes(error?.code)) {
+      const winner = await findOrderReplay(data)
+      if (winner) return winner
+    }
     // Certify only after transaction rejection AND an independent read proves no order exists.
     if (error instanceof OrderBusinessRejection && orderNumber) {
       try { error.rolledBack = !(await prisma.order.findUnique({where:{orderNumber},select:{id:true}})) } catch { error.rolledBack = false }
@@ -847,17 +865,13 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
 
 
   // Process referral rewards AFTER transaction (skip for suspended orders)
-  if (data.memberId && data.status !== 'suspended') {
+  if (created && data.memberId && data.status !== 'suspended') {
     processOrderReferralRewards(order.id).catch(err => {
       console.error('Failed to process referral rewards:', err)
     })
   }
 
-  return {
-    ...order,
-    ppnAmount,
-    grandTotal
-  }
+  return order
 }
 
 // Update order status

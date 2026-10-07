@@ -1,3 +1,4 @@
+import { publicOrder } from '../services/OrderReplayService'
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -155,7 +156,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: { ...member, orderCount: member._count.orders, visitCount, ordersPage: orderPage, ordersPageSize: orderPageSize, totalSpent: spent._sum.finalAmount || 0, lastVisit: lastOrder?.createdAt || null, _count: undefined },
+      data: { ...member, orders: member.orders.map(publicOrder), orderCount: member._count.orders, visitCount, ordersPage: orderPage, ordersPageSize: orderPageSize, totalSpent: spent._sum.finalAmount || 0, lastVisit: lastOrder?.createdAt || null, _count: undefined },
       timestamp: new Date().toISOString()
     })
   } catch (error) {

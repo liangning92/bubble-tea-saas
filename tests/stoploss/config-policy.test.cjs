@@ -10,7 +10,7 @@ function moduleAt(path, deps){
 const auth={authenticate:(req,res,next)=>next(),authorize:(...roles)=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({message:'Forbidden'})};
 function routes(path,db,extra={}){
  const handlers={};const router={};for(const method of ['get','post','put','delete'])router[method]=(url,...fns)=>{handlers[method+url]=fns;};
- moduleAt(path,{'../services/OrderBusinessRejection':moduleAt('server/src/services/OrderBusinessRejection.ts',{}),'express':{Router:()=>router},'../middlewares/auth':auth,'../config/database':{__esModule:true,default:db,prisma:db},'../utils/dateUtils':{},'../services/ShiftSummaryEvidence':moduleAt('server/src/services/ShiftSummaryEvidence.ts',{}),...extra});
+ moduleAt(path,{'../services/OrderReplayService':moduleAt('server/src/services/OrderReplayService.ts',{'crypto':require('node:crypto'),'../config/database':{__esModule:true,default:db}}),'../services/OrderBusinessRejection':moduleAt('server/src/services/OrderBusinessRejection.ts',{}),'express':{Router:()=>router},'../middlewares/auth':auth,'../config/database':{__esModule:true,default:db,prisma:db},'../utils/dateUtils':{},'../services/ShiftSummaryEvidence':moduleAt('server/src/services/ShiftSummaryEvidence.ts',{}),...extra});
  return async (key,req)=>{const res={code:200,status(n){this.code=n;return this;},json(data){this.data=data;return this;}};
  const chain=handlers[key];let i=0;async function next(){if(i<chain.length)return chain[i++](req,res,next);}await next();return res;};
 }

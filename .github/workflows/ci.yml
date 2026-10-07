@@ -48,5 +48,14 @@ jobs:
           node --test tests/stoploss/*.test.cjs
           PYTHONDONTWRITEBYTECODE=1 python3 tests/stoploss/desktop-upgrade-preflight.test.py
 
+      - name: Verify real HTTP order receipt replay on isolated SQLite and PostgreSQL
+        run: |
+          runtime=$(node scripts/prepare-order-receipt-runtime.cjs | python3 -c 'import json,sys; print(json.load(sys.stdin)["runtime"])')
+          export RECEIPT_RUNTIME="$runtime"
+          export RECEIPT_DEPS="$GITHUB_WORKSPACE/server/node_modules:$GITHUB_WORKSPACE/node_modules"
+          RECEIPT_PROVIDER=sqlite node tests/stoploss/order-receipt-http-check.cjs
+          export PATH="$(pg_config --bindir):$PATH"
+          RECEIPT_PROVIDER=postgresql node tests/stoploss/order-receipt-http-check.cjs
+
       - name: Build API and frontend applications
         run: npm run build
