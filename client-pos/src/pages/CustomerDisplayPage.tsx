@@ -188,40 +188,58 @@ export function CustomerDisplayPage() {
   useEffect(() => {
     const api = (window as any).electronAPI
     if (!api) return
+    let completeTimer: ReturnType<typeof setTimeout> | undefined
+    const cancelComplete = () => {
+      clearTimeout(completeTimer)
+      completeTimer = undefined
+    }
+    const unsubscribe: unknown[] = []
 
-    api.onOrderUpdate((data: OrderData) => {
+    unsubscribe.push(api.onOrderUpdate((data: OrderData) => {
+      cancelComplete()
       setOrderData(data)
       setDisplayState('ordering')
       setPaymentQr(null)
       setOrderComplete({ show: false, orderNumber: '' })
-    })
+    }))
 
-    api.onOrderClear(() => {
+    unsubscribe.push(api.onOrderClear(() => {
+      cancelComplete()
       setOrderData(null)
       setPaymentQr(null)
+      setOrderComplete({ show: false, orderNumber: '' })
       setDisplayState('idle')
-    })
+    }))
 
-    api.onOrderComplete((orderNumber: string) => {
+    unsubscribe.push(api.onOrderComplete((orderNumber: string) => {
+      cancelComplete()
       setDisplayState('complete')
       setPaymentQr(null)
       setOrderComplete({ show: true, orderNumber })
-      setTimeout(() => {
+      completeTimer = setTimeout(() => {
+        completeTimer = undefined
+        setOrderData(null)
         setDisplayState('idle')
         setOrderComplete({ show: false, orderNumber: '' })
       }, 5000)
-    })
+    }))
 
     if (api.onPaymentQr) {
-      api.onPaymentQr((qrData: any) => {
+      unsubscribe.push(api.onPaymentQr((qrData: any) => {
         if (qrData && qrData.qrImage) {
+          cancelComplete()
+          setOrderComplete({ show: false, orderNumber: '' })
           setPaymentQr(qrData)
           setDisplayState('paying')
         } else {
           setPaymentQr(null)
           setDisplayState(prev => (prev === 'paying' ? 'ordering' : prev))
         }
-      })
+      }))
+    }
+    return () => {
+      cancelComplete()
+      unsubscribe.forEach(remove => { if (typeof remove === 'function') remove() })
     }
   }, [])
 

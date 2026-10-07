@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getApiUrl } from '../config'
 import { connectionManager } from '../services/ConnectionManager'
+import { probeLocalStorage } from '../utils/storageDiagnostics'
 
 interface LogEntry {
   level: 'debug' | 'info' | 'warn' | 'error'
@@ -13,6 +14,7 @@ interface DiagnosticStatus {
   api: 'ok' | 'error' | 'checking'
   apiLatency: number | null
   db: 'ok' | 'error' | 'unknown'
+  serverDb: 'ok' | 'error' | 'unknown'
   network: 'online' | 'offline'
   version: string
   userData: string
@@ -26,6 +28,7 @@ export function DiagnosticsPage() {
     api: 'checking',
     apiLatency: null,
     db: 'unknown' as 'ok' | 'error' | 'unknown',
+    serverDb: 'unknown',
     network: navigator.onLine ? 'online' : 'offline',
     version: '',
     userData: '',
@@ -48,22 +51,20 @@ export function DiagnosticsPage() {
     // API test
     let apiStatus: 'ok' | 'error' = 'error'
     let latency: number | null = null
+    let serverDb: 'ok' | 'error' | 'unknown' = 'unknown'
     const apiUrl = getApiUrl()
     try {
       const start = Date.now()
       const res = await fetch(`${apiUrl}/health`, { method: 'GET', signal: AbortSignal.timeout(5000) })
       latency = Date.now() - start
       apiStatus = res.ok ? 'ok' : 'error'
+      const health = await res.json()
+      if (health.dependencies?.database === 'ok') serverDb = 'ok'
+      else if (health.dependencies?.database === 'unavailable') serverDb = 'error'
     } catch {}
 
     // DB test
-    let dbStatus: 'ok' | 'error' | 'unknown' = 'unknown'
-    try {
-      if ('indexedDB' in window) {
-        const dbs = await indexedDB.databases()
-        dbStatus = dbs.length >= 0 ? 'ok' : 'error'
-      }
-    } catch { dbStatus = 'error' }
+    const dbStatus = await probeLocalStorage() ? 'ok' : 'error'
 
     // Electron log entries via IPC
     let logs: LogEntry[] = []
@@ -81,6 +82,7 @@ export function DiagnosticsPage() {
       api: apiStatus,
       apiLatency: latency,
       db: dbStatus,
+      serverDb,
       network: navigator.onLine ? 'online' : 'offline',
       version,
       logs,
@@ -137,6 +139,7 @@ export function DiagnosticsPage() {
               <StatusBadge label={t("diag_cloud_api", "Cloud API")} value={status.api} />
               <StatusBadge label={t("diag_local_network", "Local Network")} value={status.network} />
               <StatusBadge label={t("diag_local_db", "Local Database")} value={status.db} />
+              <StatusBadge label={t('diagnosticChecks.serverDb')} value={status.serverDb} />
               <div className="flex items-center gap-3 p-3 bg-white rounded-xl border">
                 <span className="text-gray-500 text-sm">{t("diag_api_latency", "API Latency")}</span>
                 <span className={`font-bold ${status.apiLatency && status.apiLatency < 1000 ? 'text-green-600' : 'text-red-600'}`}>
@@ -144,6 +147,7 @@ export function DiagnosticsPage() {
                 </span>
               </div>
             </div>
+            <p className="text-sm text-gray-600">{t('diagnosticChecks.scope')}</p>
 
             <div className="bg-white rounded-xl border p-3 space-y-2">
               <h2 className="font-bold text-sm text-gray-700">{t("diag_sys_info", "System Info")}</h2>

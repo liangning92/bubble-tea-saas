@@ -21,17 +21,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 监听来自主屏的订单更新
   onOrderUpdate: (callback: (orderData: any) => void) => {
-    ipcRenderer.on('order-update', (_event, data) => callback(data))
+    const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+    ipcRenderer.on('order-update', listener)
+    return () => ipcRenderer.removeListener('order-update', listener)
   },
 
   // 监听清空命令
   onOrderClear: (callback: () => void) => {
-    ipcRenderer.on('order-clear', () => callback())
+    const listener = () => callback()
+    ipcRenderer.on('order-clear', listener)
+    return () => ipcRenderer.removeListener('order-clear', listener)
   },
 
   // 监听订单完成
   onOrderComplete: (callback: (orderNumber: string) => void) => {
-    ipcRenderer.on('order-complete', (_event, data) => callback(data))
+    const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data)
+    ipcRenderer.on('order-complete', listener)
+    return () => ipcRenderer.removeListener('order-complete', listener)
   },
 
   // 打印小票
@@ -61,7 +67,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 监听付款二维码 (副屏端)
   onPaymentQr: (callback: (qrData: any) => void) => {
-    ipcRenderer.on('payment-qr', (_event, data) => callback(data))
+    const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+    ipcRenderer.on('payment-qr', listener)
+    return () => ipcRenderer.removeListener('payment-qr', listener)
   },
 
   // 打印交接班对账小票 (Z-Report)

@@ -27,7 +27,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
     const { storeId, supplierId, status, startDate, endDate } = req.query
 
     const orders = await PurchaseOrderService.getPurchaseOrders({
-      storeId: storeId as string || req.user!.storeId,
+      storeId: getStoreId(req),
       supplierId: supplierId as string,
       status: status as string,
       startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
@@ -39,7 +39,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       data: { list: orders },
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get purchase orders error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get purchase orders' })
   }
@@ -56,7 +56,7 @@ router.get('/pending', authenticate, authorize('admin', 'manager'), async (req: 
       data: { list: orders },
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get pending purchase orders error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get pending purchase orders' })
   }
@@ -68,7 +68,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     const { id } = req.params
     const order = await PurchaseOrderService.getPurchaseOrderById(id)
 
-    if (!order) {
+    if (!order || (req.user!.role !== 'admin' && order.storeId !== getStoreId(req))) {
       return res.status(404).json({ code: 404, message: 'Purchase order not found' })
     }
 
@@ -77,7 +77,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
       data: order,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get purchase order error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get purchase order' })
   }
@@ -88,6 +88,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
   try {
     const order = await PurchaseOrderService.createPurchaseOrder({
       ...req.body,
+      storeId: req.user!.role === 'admin' ? req.body.storeId : getStoreId(req),
       expectedDate: req.body.expectedDate ? new Date(req.body.expectedDate) : undefined
     })
 
@@ -97,9 +98,9 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
       data: order,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create purchase order error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to create purchase order' })
+    res.status(error.statusCode || 500).json({ code: error.statusCode || 500, message: error.statusCode ? error.message : 'Failed to create purchase order' })
   }
 })
 
@@ -109,7 +110,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
     const { id } = req.params
     const { status } = req.body
 
-    const order = await PurchaseOrderService.updatePurchaseOrderStatus(id, status)
+    const order = await PurchaseOrderService.updatePurchaseOrderStatus(id, status, req.user!.role === 'admin' ? undefined : getStoreId(req))
 
     res.json({
       code: 200,
@@ -117,9 +118,9 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
       data: order,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Update purchase order status error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to update purchase order status' })
+    res.status(error.statusCode || 500).json({ code: error.statusCode || 500, message: error.statusCode ? error.message : 'Failed to update purchase order status' })
   }
 })
 
@@ -128,7 +129,7 @@ router.post('/:id/receive', authenticate, authorize('admin', 'manager'), async (
   try {
     const { id } = req.params
 
-    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId)
+    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId, req.user!.role === 'admin' ? undefined : getStoreId(req))
 
     res.json({
       code: 200,
@@ -138,7 +139,7 @@ router.post('/:id/receive', authenticate, authorize('admin', 'manager'), async (
     })
   } catch (error: any) {
     console.error('Receive purchase order error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to receive purchase order' })
+    res.status(error.statusCode || 500).json({ code: error.statusCode || 500, message: error.statusCode ? error.message : 'Failed to receive purchase order' })
   }
 })
 
@@ -148,7 +149,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
     const { id } = req.params
     const { reason } = req.body
 
-    const order = await PurchaseOrderService.cancelPurchaseOrder(id, reason || 'Cancelled by admin')
+    const order = await PurchaseOrderService.cancelPurchaseOrder(id, reason || 'Cancelled by admin', req.user!.role === 'admin' ? undefined : getStoreId(req))
 
     res.json({
       code: 200,
@@ -156,9 +157,9 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
       data: order,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Cancel purchase order error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to cancel purchase order' })
+    res.status(error.statusCode || 500).json({ code: error.statusCode || 500, message: error.statusCode ? error.message : 'Failed to cancel purchase order' })
   }
 })
 

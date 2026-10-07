@@ -48,6 +48,7 @@ import { SalaryIndexPage } from './pages/staff/SalaryIndexPage'
 import { PointsIndexPage as StaffPointsIndexPage } from './pages/staff/PointsIndexPage'
 import { PointsRuleConfigPage as StaffPointsRuleConfigPage } from './pages/staff/PointsRuleConfigPage'
 import { RewardsPage } from './pages/staff/RewardsPage'
+import { PurchaseOrderListPage } from './pages/purchases/PurchaseOrderListPage'
 import { SupplierListPage } from './pages/purchases/SupplierListPage'
 import { MemberListPage } from './pages/members/MemberListPage'
 import { MemberDetailPage } from './pages/members/MemberDetailPage'
@@ -185,6 +186,7 @@ function App() {
           <Route path="consumption" element={<ConsumptionAnalysisPage />} />
           <Route path="restock" element={<RestockSuggestionPage />} />
           <Route path="suppliers" element={<SupplierListPage />} />
+          <Route path="purchase-orders" element={<PurchaseOrderListPage />} />
         </Route>
 
         {/* 3. 运营功能 */}

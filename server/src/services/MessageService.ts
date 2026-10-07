@@ -227,16 +227,11 @@ interface WhatsAppProvider {
   send(phone: string, templateName: string, variables: Record<string, string>): Promise<SendMessageResult>
 }
 
-// Mock SMS Provider (for development/testing)
-class MockSMSProvider implements SMSProvider {
-  async send(phone: string, message: string): Promise<SendMessageResult> {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 100))
-    return {
-      success: true,
-      messageId: `mock_sms_${Date.now()}`,
-      cost: 150 // 150 IDR per SMS
-    }
+// Unconfigured channels must never report simulated sends as real customer messages.
+class UnavailableMessageProvider implements SMSProvider {
+  constructor(private reason: string) {}
+  async send(): Promise<SendMessageResult> {
+    return { success: false, error: this.reason, cost: 0 }
   }
 }
 
@@ -272,6 +267,7 @@ class FonnteWhatsAppProvider implements WhatsAppProvider {
           'Authorization': this.token,
           'Content-Type': 'application/json'
         },
+        signal: AbortSignal.timeout(10000),
         body: JSON.stringify({
           target,
           message,
@@ -280,7 +276,7 @@ class FonnteWhatsAppProvider implements WhatsAppProvider {
       })
 
       const data: any = await response.json()
-      if (data.status) {
+      if (response.ok && data.status === true) {
         return {
           success: true,
           messageId: data.id?.[0] || `fonnte_${Date.now()}`,
@@ -303,24 +299,15 @@ class FonnteWhatsAppProvider implements WhatsAppProvider {
   }
 }
 
-// Get provider instance based on type
+// Only configured, implemented providers can send messages.
 function getProvider(provider: string, config: Record<string, string>): SMSProvider | WhatsAppProvider {
-  switch (provider) {
-    case 'fonnte':
-    case 'whatsapp': {
-      const token = config.token || config.apiKey || 'HGt2zDh3URhKLNfbYdk3'
-      return new FonnteWhatsAppProvider(token)
-    }
-    case 'twilio':
-      return new MockSMSProvider()
-    case 'nexmo':
-      return new MockSMSProvider()
-    default:
-      if (config.token || config.apiKey) {
-        return new FonnteWhatsAppProvider(config.token || config.apiKey)
-      }
-      return new MockSMSProvider()
+  if (provider === 'fonnte' || provider === 'whatsapp') {
+    const credential = config.token || config.apiKey
+    const token = typeof credential === 'string' ? credential.trim() : ''
+    return token ? new FonnteWhatsAppProvider(token)
+      : new UnavailableMessageProvider('Message channel credentials are missing. Configure this channel before sending.')
   }
+  return new UnavailableMessageProvider('This message provider is not integrated. Configure a supported channel before sending.')
 }
 
 // Send message to member
@@ -398,7 +385,9 @@ export async function sendMessageToMember(
   const finalBody = replaceVariables(body, variables)
 
   // Get provider and send
-  const provider = getProvider(channel.provider, JSON.parse(channel.config))
+  let channelConfig: Record<string, string> = {}
+  try { channelConfig = JSON.parse(channel.config) || {} } catch {}
+  const provider = getProvider(channel.provider, channelConfig)
 
   let result: SendMessageResult
   if (channelType === 'whatsapp') {
