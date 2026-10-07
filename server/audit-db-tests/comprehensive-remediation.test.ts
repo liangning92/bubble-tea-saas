@@ -50,3 +50,13 @@ test('recurring catch-up is serialized and cannot duplicate a paid occurrence af
  await generateRecurringExpenses(s.id,new Date('2026-10-07T01:00:00Z'))
  expect(await prisma.expense.count({where:{storeId:s.id}})).toBe(0)
 })
+
+test('full prepared refunds retain consumed cost; unprepared reversals do not inflate profit cost',async()=>{
+ const s=await store(),category=await prisma.category.create({data:{storeId:s.id,name:'Synthetic'}}),product=await prisma.product.create({data:{storeId:s.id,categoryId:category.id,name:'Synthetic',code:randomUUID()}}),spec=await prisma.spec.create({data:{productId:product.id,name:'S',price:100}})
+ for(const [reasonCode,bomCost] of [['customer_dissatisfied',30],['paid_unprepared',50]] as const){
+ const order=await prisma.order.create({data:{storeId:s.id,staffId:'synthetic',orderNumber:randomUUID(),status:'refunded',paymentMethod:'cash',totalAmount:100,finalAmount:100,checkoutTaxAmount:0,items:{create:[{productId:product.id,productName:'Tea',specId:spec.id,specName:'S',quantity:1,unitPrice:100,bomCost,addons:'[]'}]}}})
+ await prisma.refundRequest.create({data:{orderId:order.id,amount:100,reason:'Synthetic',reasonCode,status:'approved',requestedBy:'synthetic',approvedAt:new Date()}})
+ }
+ const result=await financeRevenue(s.id,new Date(0),new Date('2100-01-01'))
+ expect(result.totalRevenue).toBe(0);expect(result.totalCost).toBe(30);expect(result.grossProfit).toBe(-30)
+})

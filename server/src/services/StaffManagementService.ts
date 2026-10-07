@@ -1,3 +1,5 @@
+import {netReceivedAmount} from '../utils/refundAllocation'
+import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import prisma from '../config/database'
 import { subDays, startOfMonth, endOfMonth } from '../utils/dateUtils'
 import { getStaffConfig } from './StaffConfigService'
@@ -10,9 +12,10 @@ export async function getStaffPerformance(storeId: string, startDate: Date, endD
       storeId,
       createdAt: { gte: startDate, lte: endDate },
       status: { in: ['paid','completed'] }
-    }
+    },include:{refundRequests:true}
   })
 
+  await requireVerifiedReceiptIncome(orders)
   const staffStats: Record<string, { name: string; orders: number; revenue: number }> = {}
 
   for (const order of orders) {
@@ -25,7 +28,7 @@ export async function getStaffPerformance(storeId: string, startDate: Date, endD
       }
     }
     staffStats[order.staffId].orders++
-    staffStats[order.staffId].revenue += order.finalAmount
+    staffStats[order.staffId].revenue += netReceivedAmount(order)
   }
 
   return Object.entries(staffStats)

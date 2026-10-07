@@ -70,7 +70,7 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { in: ['completed', 'paid'] }
+        status: { in: ['completed', 'paid','refunded'] }
       },
       include: { items: true, refundRequests: { where: { status: {in:['approved','paid']} } } }
     }),
@@ -90,10 +90,10 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
 
   await requireVerifiedReceiptIncome(orders)
   const totalRevenue = orders.reduce((sum,o)=>sum+netReceivedAmount(o),0)
-  const totalOrders = orders.length
+  const totalOrders = orders.filter(o=>o.status!=='refunded').length
   const avgOrderValue = totalOrders ? Math.round(totalRevenue/totalOrders) : 0
   // Prepared goods remain consumed after a customer dissatisfaction refund.
-  const totalCost = orders.reduce((sum,o)=>sum+o.items.reduce((n,i)=>n+i.bomCost*i.quantity,0),0)
+  const totalCost = orders.reduce((sum,o)=>sum+(o.refundRequests.some(r=>r.reasonCode==='paid_unprepared')?0:o.items.reduce((n,i)=>n+i.bomCost*i.quantity,0)),0)
   const missingTaxOrders = orders.filter(o=>o.checkoutTaxAmount===null).length
   const ppnCollected = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+Math.round((o.checkoutTaxAmount || 0)*netReceivedAmount(o)/Math.max(1,o.finalAmount)),0)
   const ppnRefunded = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+(o.checkoutTaxAmount || 0)-Math.round((o.checkoutTaxAmount || 0)*netReceivedAmount(o)/Math.max(1,o.finalAmount)),0)
@@ -401,8 +401,8 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
 
   return {
     period: {
-      start: startDate.toISOString().slice(0, 10),
-      end: endDate.toISOString().slice(0, 10)
+      start: formatDate(startDate),
+      end: formatDate(endDate)
     },
     inflows: {
       cashSales: cashSales,

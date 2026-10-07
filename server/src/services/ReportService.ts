@@ -1,7 +1,7 @@
 import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import {netReceivedAmount} from '../utils/refundAllocation'
 import prisma from '../config/database'
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays } from '../utils/dateUtils'
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays,formatDate } from '../utils/dateUtils'
 import { getLowStockAlerts } from './BomService'
 import { getConsumptionAnalysis } from './InventoryService'
 
@@ -70,7 +70,7 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
   // Calculate today hourly distribution
   const hourlyOrders = new Array(24).fill(0)
   todayOrders.forEach(order => {
-    const hour = new Date(order.createdAt).getHours()
+    const hour = new Date(new Date(order.createdAt).getTime()+7*3600000).getUTCHours()
     hourlyOrders[hour]++
   })
 
@@ -170,7 +170,7 @@ export async function getSalesReport(storeId: string, dateRange: DateRange) {
   const dailySales: Record<string, { orders: number; revenue: number; items: number }> = {}
 
   orders.forEach(order => {
-    const dateKey = new Date(order.createdAt).toISOString().slice(0, 10)
+    const dateKey = formatDate(new Date(order.createdAt))
     if (!dailySales[dateKey]) {
       dailySales[dateKey] = { orders: 0, revenue: 0, items: 0 }
     }
@@ -269,7 +269,7 @@ export async function getStaffReport(storeId: string, dateRange: DateRange) {
       staffAttendance[a.staffId] = { name: staffNameById[a.staffId] || 'Unknown', workDays: 0, lateDays: 0 }
     }
     staffAttendance[a.staffId].workDays++
-    if (a.checkInTime && new Date(a.checkInTime).getHours() > 9) {
+    if (a.checkInTime && new Date(new Date(a.checkInTime).getTime()+7*3600000).getUTCHours() > 9) {
       staffAttendance[a.staffId].lateDays++
     }
   })

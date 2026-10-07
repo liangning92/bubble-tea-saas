@@ -1,3 +1,4 @@
+import {startOfDay as businessDayStart,endOfDay as businessDayEnd,formatDate} from '../utils/dateUtils'
 import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import {netReceivedAmount} from '../utils/refundAllocation'
 import { randomUUID } from 'crypto'
@@ -113,10 +114,8 @@ export function calculatePaymentFee(amount: number, method: PaymentMethod): numb
 
 // Get daily payment summary
 export async function getPaymentSummary(storeId: string, date: Date) {
-  const startOfDay = new Date(date)
-  startOfDay.setHours(0, 0, 0, 0)
-  const endOfDay = new Date(date)
-  endOfDay.setHours(23, 59, 59, 999)
+  const startOfDay = businessDayStart(date)
+  const endOfDay = businessDayEnd(date)
 
   const orders = await prisma.order.findMany({
     where: {
@@ -139,7 +138,7 @@ export async function getPaymentSummary(storeId: string, date: Date) {
   })
 
   return {
-    date: date.toISOString().slice(0, 10),
+    date: formatDate(date),
     totalOrders: orders.length,
     totalAmount: orders.reduce((sum, o) => sum + netReceivedAmount(o), 0),
     byMethod: summary

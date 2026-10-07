@@ -27,7 +27,8 @@ export function requireRefundEvidence(order:RefundOrder){
 }
 
 /** Net original-order receipts for reports; never rewrite the immutable sale snapshot. */
-export function netReceivedAmount(order:{finalAmount:number;refundRequests?:{amount:number;status:string}[]}) {
+export function netReceivedAmount(order:{finalAmount:number;status?:string;refundRequests?:{amount:number;status:string}[]}) {
+ if(order.status==='refunded')return 0
  const refunded=(order.refundRequests||[]).filter(r=>r.status==='approved'||r.status==='paid').reduce((sum,r)=>sum+r.amount,0)
  return Math.max(0,order.finalAmount-refunded)
 }
