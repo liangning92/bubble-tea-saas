@@ -1,3 +1,4 @@
+import { containsFilter } from '../utils/stringFilter'
 import { OrderBusinessRejection } from './OrderBusinessRejection'
 import prisma from '../config/database'
 import { config } from '../config/env'
@@ -464,8 +465,8 @@ export async function getOrders(params: {
   if (search && search.trim()) {
     const s = search.trim()
     where.OR = [
-      { orderNumber: { contains: s, mode: 'insensitive' } },
-      { pickupNumber: { contains: s, mode: 'insensitive' } }
+      { orderNumber: containsFilter(s) },
+      { pickupNumber: containsFilter(s) }
     ]
   }
 

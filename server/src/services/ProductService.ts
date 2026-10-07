@@ -1,3 +1,4 @@
+import { containsFilter } from '../utils/stringFilter'
 import prisma from '../config/database'
 import { getInventoryCostBreakdown } from './BomService'
 
@@ -207,9 +208,9 @@ export async function getProducts(filter: ProductFilter) {
   if (filter.status) where.status = filter.status
   if (filter.search) {
     where.OR = [
-      { name: { contains: filter.search, mode: 'insensitive' } },
-      { description: { contains: filter.search, mode: 'insensitive' } },
-      { code: { contains: filter.search, mode: 'insensitive' } }
+      { name: containsFilter(filter.search) },
+      { description: containsFilter(filter.search) },
+      { code: containsFilter(filter.search) }
     ]
   }
 

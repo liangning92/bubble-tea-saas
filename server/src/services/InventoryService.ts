@@ -1,3 +1,4 @@
+import { containsFilter } from '../utils/stringFilter'
 import prisma from '../config/database'
 
 // ============================================
@@ -43,7 +44,7 @@ export async function getInventory(filter: InventoryFilter) {
   if (filter.categoryId) where.category = filter.categoryId
   if (filter.search) {
     where.OR = [
-      { name: { contains: filter.search, mode: 'insensitive' } }
+      { name: containsFilter(filter.search) }
     ]
   }
 
@@ -303,7 +304,7 @@ export async function getStockInLogs(
   }
 
   if (filter.search) {
-    where.inventory.name = { contains: filter.search, mode: 'insensitive' }
+    where.inventory.name = containsFilter(filter.search)
   }
 
   if (filter.startDate || filter.endDate) {
@@ -369,7 +370,7 @@ export async function getStockOutLogs(
   }
 
   if (filter.search) {
-    where.inventory.name = { contains: filter.search, mode: 'insensitive' }
+    where.inventory.name = containsFilter(filter.search)
   }
 
   if (filter.startDate || filter.endDate) {

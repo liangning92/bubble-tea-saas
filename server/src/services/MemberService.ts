@@ -1,3 +1,4 @@
+import { containsFilter } from '../utils/stringFilter'
 import prisma from '../config/database'
 import { getTierBenefitByLevel } from './TierBenefitService'
 
@@ -15,8 +16,8 @@ export async function getMembers(filter: MemberFilter) {
   if (filter.level) where.level = filter.level
   if (filter.search) {
     where.OR = [
-      { name: { contains: filter.search, mode: 'insensitive' } },
-      { phone: { contains: filter.search, mode: 'insensitive' } }
+      { name: containsFilter(filter.search) },
+      { phone: containsFilter(filter.search) }
     ]
   }
 

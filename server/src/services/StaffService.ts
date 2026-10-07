@@ -1,3 +1,4 @@
+import { containsFilter } from '../utils/stringFilter'
 import prisma from '../config/database'
 import bcrypt from 'bcryptjs'
 
@@ -17,8 +18,8 @@ export async function getStaff(filter: StaffFilter) {
   if (filter.status) where.status = filter.status
   if (filter.search) {
     where.OR = [
-      { name: { contains: filter.search, mode: 'insensitive' } },
-      { phone: { contains: filter.search, mode: 'insensitive' } }
+      { name: containsFilter(filter.search) },
+      { phone: containsFilter(filter.search) }
     ]
   }
 

@@ -30,6 +30,10 @@ async function main() {
     try {
       assert.equal(client._engineConfig.activeProvider, 'sqlite');
       assert.deepEqual(await client.order.findMany(), []);
+      const filter = resources
+        ? require(path.join(resources, 'server/dist/utils/stringFilter.js')).containsFilter('SYNTHETIC', 'file:fixture.db')
+        : { contains: 'SYNTHETIC' };
+      assert.deepEqual(await client.order.findMany({ where: { orderNumber: filter } }), []);
       checked.push(clientPath);
     } finally { await client.$disconnect(); }
   }

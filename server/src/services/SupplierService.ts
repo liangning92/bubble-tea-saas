@@ -1,3 +1,4 @@
+import { containsFilter } from '../utils/stringFilter'
 import prisma from '../config/database'
 
 export interface SupplierFilter {
@@ -14,8 +15,8 @@ export async function getSuppliers(filter: SupplierFilter) {
   if (filter.isActive !== undefined) where.isActive = filter.isActive
   if (filter.search) {
     where.OR = [
-      { name: { contains: filter.search, mode: 'insensitive' } },
-      { contactPerson: { contains: filter.search, mode: 'insensitive' } },
+      { name: containsFilter(filter.search) },
+      { contactPerson: containsFilter(filter.search) },
       { phone: { contains: filter.search } }
     ]
   }
