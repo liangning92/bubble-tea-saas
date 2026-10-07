@@ -1,4 +1,24 @@
 import prisma from '../config/database'
+import { formatDate } from '../utils/dateUtils'
+
+export class ExpenseInputError extends Error {}
+
+export function normalizeExpenseDate(value: Date | string): Date {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const date = new Date(`${value}T00:00:00+07:00`)
+    if (Number.isFinite(date.getTime()) && formatDate(date) === value) return date
+  } else if (value instanceof Date || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value))) {
+    const date = new Date(value)
+    if (Number.isFinite(date.getTime())) return date
+  }
+  throw new ExpenseInputError('Invalid expense date')
+}
+
+function validateAmount(amount: number): void {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 2147483647) {
+    throw new ExpenseInputError('Expense amount must be a positive integer within the supported range')
+  }
+}
 
 // Get expenses with filtering
 export async function getExpenses(storeId: string, options?: {
@@ -53,14 +73,11 @@ export async function createExpense(data: {
   category: string
   amount: number
   description: string
-  date: Date
+  date: Date | string
   referenceId?: string
   referenceType?: string
 }) {
-  // Validate amount > 0
-  if (!data.amount || data.amount <= 0) {
-    throw new Error('Expense amount must be greater than 0')
-  }
+  validateAmount(data.amount)
   return prisma.expense.create({
     data: {
       storeId: data.storeId,
@@ -68,7 +85,7 @@ export async function createExpense(data: {
       category: data.category,
       amount: data.amount,
       description: data.description,
-      date: data.date,
+      date: normalizeExpenseDate(data.date),
       referenceId: data.referenceId,
       referenceType: data.referenceType
     }
@@ -86,12 +103,9 @@ export async function updateExpense(expenseId: string, data: {
   category?: string
   amount?: number
   description?: string
-  date?: Date
+  date?: Date | string
 }) {
-  // Validate amount > 0 if provided
-  if (data.amount !== undefined && data.amount <= 0) {
-    throw new Error('Expense amount must be greater than 0')
-  }
+  if (data.amount !== undefined) validateAmount(data.amount)
   return prisma.expense.update({
     where: { id: expenseId },
     data: {
@@ -99,7 +113,7 @@ export async function updateExpense(expenseId: string, data: {
       ...(data.category && { category: data.category }),
       ...(data.amount !== undefined && { amount: data.amount }),
       ...(data.description !== undefined && { description: data.description }),
-      ...(data.date && { date: data.date })
+      ...(data.date !== undefined && { date: normalizeExpenseDate(data.date) })
     }
   })
 }
@@ -116,10 +130,10 @@ export async function createExpensesBulk(data: Array<{
   category: string
   amount: number
   description: string
-  date: Date
+  date: Date | string
 }>) {
-  // Filter out invalid amounts
-  const valid = data.filter(d => d.amount && d.amount > 0)
+  for (const item of data) validateAmount(item.amount)
+  const valid = data
   if (valid.length === 0) {
     throw new Error('No valid expenses to import')
   }
@@ -130,7 +144,7 @@ export async function createExpensesBulk(data: Array<{
       category: d.category,
       amount: d.amount,
       description: d.description,
-      date: d.date
+      date: normalizeExpenseDate(d.date)
     }))
   })
 }

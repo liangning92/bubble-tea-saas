@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth'
 import { expenseApi, reimbursementApi } from '../../services/api'
 import { Plus, X, Trash2, Calendar, Tag, Upload, Download, Settings, Edit2, Check, RefreshCw, ArrowLeft } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { expenseAmountFromInput, expenseCalendarDate } from '../../utils/expenseInput'
 
 interface Expense {
   id: string
@@ -135,7 +136,7 @@ export function ExpenseListPage() {
     category: 'other',
     amount: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: expenseCalendarDate(),
     type: 'operational'
   })
 
@@ -145,7 +146,7 @@ export function ExpenseListPage() {
     category: 'other',
     amount: '',
     frequency: 'monthly' as 'daily' | 'weekly' | 'monthly',
-    nextDueDate: new Date().toISOString().split('T')[0]
+    nextDueDate: expenseCalendarDate()
   })
 
   useEffect(() => {
@@ -312,26 +313,25 @@ export function ExpenseListPage() {
 
   const handleSave = async () => {
     try {
-      if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      const amount = expenseAmountFromInput(formData.amount)
+      if (amount === null || !formData.date || !formData.category || !formData.type) {
         alert(t('common.required'))
         return
       }
 
       // Validate: prevent future dates
-      const today = new Date().toISOString().split('T')[0]
+      const today = expenseCalendarDate()
       if (formData.date > today) {
         alert(t('expense.noFutureDate'))
         return
       }
 
       setIsSaving(true)
-      // Parse amount - remove thousand separators before converting to number
-      const rawAmount = formData.amount.replace(/,/g, '')
       const data = {
         storeId: user?.storeId,
         type: formData.type,
         category: formData.category,
-        amount: Math.round(parseFloat(rawAmount || '0') * 100),
+        amount,
         description: formData.description,
         date: formData.date
       }
@@ -375,7 +375,7 @@ export function ExpenseListPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `expenses_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `expenses_${expenseCalendarDate()}.xlsx`
       a.click()
       window.URL.revokeObjectURL(url)
     } catch (error) {
@@ -460,14 +460,14 @@ export function ExpenseListPage() {
       return
     }
 
-    // Parse amount - remove thousand separators before converting to number
-    const rawAmount = recurringForm.amount.replace(/,/g, '')
+    const amount = expenseAmountFromInput(recurringForm.amount)
+    if (amount === null) { alert(t('common.required')); return }
     const newItem: RecurringExpense = {
       id: crypto.randomUUID(),
       storeId: user?.storeId || '',
       name: recurringForm.name,
       category: recurringForm.category,
-      amount: Math.round(parseFloat(rawAmount || '0') * 100),
+      amount,
       frequency: recurringForm.frequency,
       nextDueDate: recurringForm.nextDueDate,
       active: true
@@ -481,7 +481,7 @@ export function ExpenseListPage() {
       category: 'other',
       amount: '',
       frequency: 'monthly',
-      nextDueDate: new Date().toISOString().split('T')[0]
+      nextDueDate: expenseCalendarDate()
     })
   }
 
@@ -522,7 +522,7 @@ export function ExpenseListPage() {
       category: 'other',
       amount: '',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: expenseCalendarDate(),
       type: 'operational'
     })
     setSelectedExpense(null)
@@ -541,7 +541,7 @@ export function ExpenseListPage() {
       category: expense.category,
       amount: displayAmount,
       description: expense.description || '',
-      date: expense.date.split('T')[0],
+      date: expenseCalendarDate(expense.date),
       type: expense.type
     })
     setShowModal(true)
@@ -1113,7 +1113,7 @@ export function ExpenseListPage() {
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  max={new Date().toISOString().split('T')[0]}
+                  max={expenseCalendarDate()}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                 />
               </div>
