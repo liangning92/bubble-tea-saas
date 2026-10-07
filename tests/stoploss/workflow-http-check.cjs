@@ -152,6 +152,7 @@ assert.equal(await prisma.messageLog.count({where:{memberId:'message-fixture',st
 assert.equal(await prisma.messageLog.count({where:{memberId:'message-fixture',status:'delivered'}}),0);
 console.log('PASS messages: unsupported/missing/malformed provider settings fail honestly, no external sends, no success ledger or invented costs');
 
+const purchaseHours=await require('./revenue-purchase-hours-scenarios.cjs')({prisma,check,call,provider});fs.writeFileSync(output+'/'+provider+'-purchase-hours.json',JSON.stringify(purchaseHours,null,2));
 const staffWorkflows=await require('./staff-workflow-scenarios.cjs')({prisma,check,call,provider});fs.writeFileSync(output+'/'+provider+'-staff-workflows.json',JSON.stringify(staffWorkflows,null,2));
 fs.writeFileSync(output+'/'+provider+'-writes.json',JSON.stringify(writes,null,2));console.log('PASS '+provider+' workflow persistence '+writes.length+' requests: category/type lifecycle, accounts, budgets, assets, rewards, batch store scoping');
 assert.deepEqual(findings,[], 'Configured collection reads must not return server errors');

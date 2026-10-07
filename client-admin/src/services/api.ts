@@ -212,6 +212,7 @@ export const reportApi = {
 
 // Revenue (by Channel)
 export const revenueApi = {
+  purchaseHours: (params?: any) => api.get('/revenue/purchase-hours', { params }),
   byChannel: (params?: any) => api.get('/revenue/by-channel', { params }),
   summary: (params?: any) => api.get('/revenue/summary', { params }),
   daily: (params?: any) => api.get('/revenue/daily', { params })

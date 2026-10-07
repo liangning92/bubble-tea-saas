@@ -337,7 +337,7 @@ export function StaffDepositListPage() {
                   <span className="font-medium">{formatDate(deposit.startDate)}</span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-gray-500 text-sm block">{t('staff.totalAmount')}</span>
+                  <span className="text-gray-500 text-sm block">{t('staff.depositTarget')}</span>
                   <span className="font-medium">{formatCurrency(deposit.totalAmount)}</span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
@@ -432,7 +432,11 @@ export function StaffDepositListPage() {
                 <div className="flex justify-between items-center mb-1"><label className="text-sm font-medium text-gray-700">{t('staff.depositRule')} *</label><Link className="text-primary underline" to="/staff/salary/deposit-rules">{t('staff.depositRules')}</Link></div>
                 <select
                   value={createForm.depositRuleId}
-                  onChange={e => setCreateForm({ ...createForm, depositRuleId: e.target.value })}
+                  onChange={e => {
+                    const depositRuleId = e.target.value
+                    const rule = rules.find(item => item.id === depositRuleId)
+                    setCreateForm(form => ({ ...form, depositRuleId, totalAmount: rule ? String(rule.depositAmount / 100) : '' }))
+                  }}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                 >
                   <option value="">{t('staff.selectRule')}</option>
@@ -445,14 +449,17 @@ export function StaffDepositListPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.totalAmount')} (Rp) *</label>
+                <label htmlFor="deposit-target" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.depositTarget')} (Rp) *</label>
                 <input
+                  id="deposit-target"
                   type="number"
+                  min="1"
+                  step="1"
                   value={createForm.totalAmount}
                   onChange={e => setCreateForm({ ...createForm, totalAmount: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  placeholder="500000"
                 />
+                <p className="mt-1 text-sm text-gray-500">{t('staff.depositTargetHint')}</p>
               </div>
 
               <div className="flex gap-3 pt-4">
