@@ -9,10 +9,12 @@ export function SalaryIndexPage() {
   const tabs = [
     { key: 'salary', label: t('staff.salaryTab', '工资'), path: '/staff/salary/salary', icon: Wallet },
     { key: 'reimbursement', label: t('nav.reimbursement'), path: '/staff/salary/reimbursement', icon: Receipt },
+    { key: 'deposit-rules', label: t('staff.depositRules'), path: '/staff/salary/deposit-rules', icon: Coins },
     { key: 'deposit', label: t('staff.deposit'), path: '/staff/salary/deposit', icon: Coins },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.includes(tab.key))?.key || 'salary'
+  const currentTab = [...tabs].sort((a, b) => b.path.length - a.path.length)
+    .find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'salary'
 
   return (
     <div className="flex flex-col h-full">
@@ -25,6 +27,7 @@ export function SalaryIndexPage() {
               <Link
                 key={tab.key}
                 to={tab.path}
+                aria-current={currentTab === tab.key ? 'page' : undefined}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   currentTab === tab.key
                     ? 'bg-primary text-white shadow-sm'

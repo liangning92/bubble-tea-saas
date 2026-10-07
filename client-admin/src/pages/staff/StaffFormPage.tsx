@@ -37,6 +37,8 @@ export function StaffFormPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [resetError, setResetError] = useState('')
+  const [saveError, setSaveError] = useState('')
+  const showSaveError = (error: any) => setSaveError(error?.response?.data?.errors?.map((item: any) => `${item.field}: ${item.message}`).join('; ') || error?.response?.data?.message || error?.message || t('common.error'))
 
   const resetPasswordMutation = useMutation({
     mutationFn: (password: string) => staffApi.resetPassword(id!, password),
@@ -104,14 +106,13 @@ export function StaffFormPage() {
       navigate('/staff')
     },
     onError: (error: any) => {
-      console.error('Create staff error:', error)
-      console.error('Error response:', error?.response?.data)
-      alert(error?.response?.data?.message || error.message || 'Failed to create staff')
+      showSaveError(error)
     }
   })
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => staffApi.update(id!, data),
+    onError: showSaveError,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff'] })
       navigate('/staff')
@@ -120,6 +121,8 @@ export function StaffFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (createMutation.isPending || updateMutation.isPending) return
+    setSaveError('')
 
     const submitData: any = { ...form }
     // Add storeId from current user
@@ -128,8 +131,8 @@ export function StaffFormPage() {
 
     // Convert empty strings to appropriate values
     submitData.baseSalary = submitData.baseSalary === '' ? undefined : Number(submitData.baseSalary)
-    if (submitData.hourlyRate === '') submitData.hourlyRate = undefined
-    if (submitData.weeklyHours === '') submitData.weeklyHours = undefined
+    submitData.hourlyRate = submitData.hourlyRate === '' ? undefined : Number(submitData.hourlyRate)
+    submitData.weeklyHours = submitData.weeklyHours === '' ? undefined : Number(submitData.weeklyHours)
     if (submitData.hireDate === '') submitData.hireDate = undefined
     if (submitData.password === '') submitData.password = undefined
 
@@ -158,12 +161,14 @@ export function StaffFormPage() {
 
       <div className="card max-w-3xl">
         <form onSubmit={handleSubmit} className="space-y-6">
+          <p className="text-sm text-gray-600">{t('staff.formRequiredHelp')}</p>
+          {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.name')} *</label>
+              <label htmlFor="staff-name" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.name')} *</label>
               <input
-                type="text"
+                id="staff-name" type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="input"
@@ -171,9 +176,9 @@ export function StaffFormPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.phone')} *</label>
+              <label htmlFor="staff-phone" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.phone')} *</label>
               <input
-                type="tel"
+                id="staff-phone" type="tel"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 className="input"
@@ -187,9 +192,9 @@ export function StaffFormPage() {
           {!isEdit && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.password')} *</label>
+                <label htmlFor="staff-password" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.password')} *</label>
                 <input
-                  type="password"
+                  id="staff-password" type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   className="input"
@@ -199,9 +204,9 @@ export function StaffFormPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.systemRole')}</label>
+                <label htmlFor="staff-role" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.systemRole')}</label>
                 <select
-                  value={form.role}
+                  id="staff-role" value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="input"
                 >
@@ -215,9 +220,9 @@ export function StaffFormPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.position')} *</label>
+              <label htmlFor="staff-position" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.position')} *</label>
               <select
-                value={form.position}
+                id="staff-position" value={form.position}
                 onChange={(e) => setForm({ ...form, position: e.target.value })}
                 className="input"
                 required
@@ -230,9 +235,9 @@ export function StaffFormPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.status')}</label>
+              <label htmlFor="staff-status" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.status')}</label>
               <select
-                value={form.status}
+                id="staff-status" value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
                 className="input"
               >
@@ -246,9 +251,9 @@ export function StaffFormPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.employmentType')}</label>
+              <label htmlFor="staff-employmentType" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.employmentType')}</label>
               <select
-                value={form.employmentType}
+                id="staff-employmentType" value={form.employmentType}
                 onChange={(e) => setForm({ ...form, employmentType: e.target.value })}
                 className="input"
               >
@@ -259,9 +264,9 @@ export function StaffFormPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hireDate')}</label>
+              <label htmlFor="staff-hireDate" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hireDate')}</label>
               <input
-                type="date"
+                id="staff-hireDate" type="date"
                 value={form.hireDate}
                 onChange={(e) => setForm({ ...form, hireDate: e.target.value })}
                 className="input"
@@ -269,14 +274,14 @@ export function StaffFormPage() {
             </div>
           </div>
 
-          <label className="block text-sm">{t('salary.baseSalary')} (IDR)<input className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
+          <label htmlFor="staff-baseSalary" className="block text-sm">{t('salary.baseSalary')} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
           {/* Part-time fields */}
           {(form.employmentType === 'part_time' || form.employmentType === 'intern') && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.weeklyHours')}</label>
+                <label htmlFor="staff-weeklyHours" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.weeklyHours')}</label>
                 <input
-                  type="number"
+                  id="staff-weeklyHours" type="number"
                   value={form.weeklyHours}
                   onChange={(e) => setForm({ ...form, weeklyHours: e.target.value })}
                   className="input"
@@ -285,9 +290,9 @@ export function StaffFormPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hourlyRate')} (IDR)</label>
+                <label htmlFor="staff-hourlyRate" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hourlyRate')} (IDR)</label>
                 <input
-                  type="number"
+                  id="staff-hourlyRate" type="number"
                   value={form.hourlyRate}
                   onChange={(e) => setForm({ ...form, hourlyRate: e.target.value })}
                   className="input"
@@ -299,18 +304,18 @@ export function StaffFormPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.email')}</label>
+              <label htmlFor="staff-email" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.email')}</label>
               <input
-                type="email"
+                id="staff-email" type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.address')}</label>
+              <label htmlFor="staff-address" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.address')}</label>
               <input
-                type="text"
+                id="staff-address" type="text"
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
                 className="input"
@@ -322,18 +327,18 @@ export function StaffFormPage() {
             <h3 className="font-medium text-gray-900 mb-4">{t('staff.emergencyContact')}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactName')}</label>
+                <label htmlFor="staff-emergencyContact" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactName')}</label>
                 <input
-                  type="text"
+                  id="staff-emergencyContact" type="text"
                   value={form.emergencyContact}
                   onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })}
                   className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactPhone')}</label>
+                <label htmlFor="staff-emergencyPhone" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactPhone')}</label>
                 <input
-                  type="tel"
+                  id="staff-emergencyPhone" type="tel"
                   value={form.emergencyPhone}
                   onChange={(e) => setForm({ ...form, emergencyPhone: e.target.value })}
                   className="input"
@@ -346,18 +351,18 @@ export function StaffFormPage() {
             <h3 className="font-medium text-gray-900 mb-4">{t('staff.bankInfo')}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankName')}</label>
+                <label htmlFor="staff-bankName" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankName')}</label>
                 <input
-                  type="text"
+                  id="staff-bankName" type="text"
                   value={form.bankName}
                   onChange={(e) => setForm({ ...form, bankName: e.target.value })}
                   className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankAccount')}</label>
+                <label htmlFor="staff-bankAccount" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankAccount')}</label>
                 <input
-                  type="text"
+                  id="staff-bankAccount" type="text"
                   value={form.bankAccount}
                   onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
                   className="input"
@@ -382,7 +387,7 @@ export function StaffFormPage() {
           )}
 
           <div className="flex gap-3 pt-4">
-            <button type="submit" className="btn-primary">{t('common.save')}</button>
+            <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="btn-primary">{t('common.save')}</button>
             <Link to="/staff" className="btn-secondary">{t('common.cancel')}</Link>
           </div>
         </form>

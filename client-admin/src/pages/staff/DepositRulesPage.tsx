@@ -34,6 +34,8 @@ export function DepositRulesPage() {
   const { user } = useAuthStore()
   const [rules, setRules] = useState<DepositRule[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingRule, setEditingRule] = useState<DepositRule | null>(null)
   const [formData, setFormData] = useState({
@@ -72,7 +74,7 @@ export function DepositRulesPage() {
         monthlyAmount: rule.monthlyAmount ? String(rule.monthlyAmount / 100) : '',
         maxDeductions: rule.maxDeductions ? String(rule.maxDeductions) : '',
         refundType: rule.refundType,
-        prorataPercent: rule.prorataPercent ? String(rule.prorataPercent) : ''
+        prorataPercent: rule.prorataPercent ? String(rule.prorataPercent > 1 ? rule.prorataPercent : rule.prorataPercent * 100) : ''
       })
     } else {
       setEditingRule(null)
@@ -86,15 +88,23 @@ export function DepositRulesPage() {
         prorataPercent: ''
       })
     }
+    setSaveError('')
     setShowModal(true)
   }
 
   const handleSave = async () => {
+    if (saving) return
+    setSaveError('')
     if (!formData.name || !formData.depositAmount) {
-      alert(t('staff.pleaseFillRequiredFields'))
+      setSaveError(t('staff.pleaseFillRequiredFields'))
       return
     }
 
+    if (Number(formData.depositAmount) <= 0 || (formData.deductionType !== 'one_time' && Number(formData.monthlyAmount) <= 0) || (formData.deductionType === 'limited' && Number(formData.maxDeductions) <= 0) || (formData.refundType === 'prorata' && (formData.prorataPercent === '' || Number(formData.prorataPercent) < 0 || Number(formData.prorataPercent) > 100))) {
+      setSaveError(t('staff.pleaseFillRequiredFields'))
+      return
+    }
+    setSaving(true)
     try {
       const payload = {
         name: formData.name,
@@ -103,7 +113,7 @@ export function DepositRulesPage() {
         monthlyAmount: formData.monthlyAmount ? Math.round(parseFloat(formData.monthlyAmount) * 100) : undefined,
         maxDeductions: formData.maxDeductions ? parseInt(formData.maxDeductions) : undefined,
         refundType: formData.refundType,
-        prorataPercent: formData.prorataPercent ? parseFloat(formData.prorataPercent) : undefined
+        prorataPercent: formData.prorataPercent ? parseFloat(formData.prorataPercent) / 100 : undefined
       }
 
       if (editingRule) {
@@ -113,10 +123,9 @@ export function DepositRulesPage() {
       }
       setShowModal(false)
       loadRules()
-    } catch (error) {
-      console.error('Failed to save:', error)
-      alert(t('staff.failedToSaveDepositRule'))
-    }
+    } catch (error: any) {
+      setSaveError(error?.response?.data?.errors?.map((item: any) => item.message).join('; ') || error?.response?.data?.message || t('staff.failedToSaveDepositRule'))
+    } finally { setSaving(false) }
   }
 
   const handleDelete = async (id: string) => {
@@ -199,7 +208,7 @@ export function DepositRulesPage() {
               {rule.prorataPercent && (
                 <div>
                   <span className="text-gray-500">{t('staff.prorataPercent')}:</span>
-                  <span className="ml-2 font-medium">{rule.prorataPercent}%</span>
+                  <span className="ml-2 font-medium">{rule.prorataPercent > 1 ? rule.prorataPercent : rule.prorataPercent * 100}%</span>
                 </div>
               )}
             </div>
@@ -223,6 +232,7 @@ export function DepositRulesPage() {
             </h3>
 
             <div className="space-y-4">
+              {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.ruleName')} *</label>
                 <input
@@ -316,7 +326,7 @@ export function DepositRulesPage() {
                 <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
                   {t('common.cancel')}
                 </button>
-                <button onClick={handleSave} className="flex-1 py-2 bg-primary text-white rounded-lg">
+                <button onClick={handleSave} disabled={saving} className="flex-1 py-2 bg-primary text-white rounded-lg">
                   {t('common.save')}
                 </button>
               </div>

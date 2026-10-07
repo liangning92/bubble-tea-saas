@@ -150,6 +150,15 @@ export const inventoryApi = {
   cancelInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/cancel')
 }
 
+async function depositChange(operation: 'deduct' | 'refund', data: any) {
+  const key = 'deposit.intent.' + JSON.stringify([useAuthStore.getState().user?.id, operation, data])
+  const requestId = localStorage.getItem(key) || crypto.randomUUID()
+  localStorage.setItem(key, requestId)
+  const response = await api.post(`/deposit/${operation}`, { ...data, requestId })
+  localStorage.removeItem(key)
+  return response
+}
+
 // Staff
 export const staffApi = {
   list: (params?: any) => api.get('/staff', { params }),
@@ -762,9 +771,9 @@ export const depositApi = {
   getStaffDeposit: (staffId: string) => api.get('/deposit/staff/' + staffId),
   createStaffDeposit: (data: any) => api.post('/deposit/staff', data),
   calculateDeduction: (staffDepositId: string) => api.get('/deposit/calculate/' + staffDepositId),
-  recordDeduction: (data: any) => api.post('/deposit/deduct', data),
+  recordDeduction: (data: any) => depositChange('deduct', data),
   calculateRefund: (staffDepositId: string) => api.get('/deposit/refund/calculate/' + staffDepositId),
-  processRefund: (data: any) => api.post('/deposit/refund', data)
+  processRefund: (data: any) => depositChange('refund', data)
 }
 
 // Attendance Rules

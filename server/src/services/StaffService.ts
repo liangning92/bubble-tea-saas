@@ -1,3 +1,5 @@
+import { getStaffConfig } from './StaffConfigService'
+import { formatDate, startOfDay } from '../utils/dateUtils'
 import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
 import bcrypt from 'bcryptjs'
@@ -239,7 +241,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     }),
     // Get the store's default attendance rule
     prisma.attendanceRule.findFirst({
-      where: { storeId: (await prisma.staff.findUnique({ where: { id: staffId } }))?.storeId || '', isDefault: true, isActive: true }
+      where: { storeId: (await prisma.staff.findUnique({ where: { id: staffId } }))?.storeId || '', isActive: true },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }]
     }),
     // Get active staff deposits
     prisma.staffDeposit.findMany({
@@ -252,33 +255,68 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
   // Use attendance rule or defaults
   const rule = attendanceRule
-  const workStartHour = rule ? parseInt(rule.workStartTime.split(':')[0]) : 9
   const gracePeriod = rule?.gracePeriod ?? 15
-  const lateDeductionFixed = rule?.lateDeductionFixed ?? 50000
   const overtimeRate = rule?.overtimeRate ?? 1.5
   const overtimeMinHours = rule?.overtimeMinHours ?? 1
 
   // Calculate work days
-  const workDays = attendances.filter(a => a.checkInTime).length
+  const workDays = new Set(attendances.map(a => formatDate(a.checkInTime))).size
 
   // Calculate late days based on workStartTime + gracePeriod
-  const lateDays = attendances.filter(a => {
+  const lateDays = new Set(attendances.filter(a => {
     if (!a.checkInTime) return false
     const checkIn = new Date(a.checkInTime.getTime()+7*3600000)
     const [hour,minute]=(rule?.workStartTime || '09:00').split(':').map(Number)
     return checkIn.getUTCHours()*60+checkIn.getUTCMinutes()>hour*60+minute+gracePeriod
-  }).length
+  }).map(a => formatDate(a.checkInTime))).size
 
   if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
   const baseSalary = staff.baseSalary
   let deductions = 0
   let bonuses = 0
-  let depositDeductions: { ruleName: string; amount: number }[] = []
+  let depositDeductions: { staffDepositId: string; ruleName: string; amount: number; amountMinor: number }[] = []
 
-  // Late penalty based on attendance rule
-  if (rule?.lateDeductionType === 'fixed') {
-    deductions += lateDays * lateDeductionFixed
+  const [schedules, leaves] = await Promise.all([
+    prisma.schedule.findMany({ where: { staffId, date: { gte: startDate, lte: endDate }, shift: { not: 'off' } } }),
+    prisma.leave.findMany({ where: { staffId, status: 'approved', startDate: { lte: endDate }, endDate: { gte: startDate } } })
+  ])
+  const attendanceDays = new Map<string, { checkIn: Date; checkOut: Date | null }>()
+  for (const attendance of attendances) {
+    const key = formatDate(attendance.checkInTime)
+    const previous = attendanceDays.get(key)
+    attendanceDays.set(key, { checkIn: previous && previous.checkIn < attendance.checkInTime ? previous.checkIn : attendance.checkInTime,
+      checkOut: previous?.checkOut && (!attendance.checkOutTime || previous.checkOut > attendance.checkOutTime) ? previous.checkOut : attendance.checkOutTime })
   }
+  const onLeave = (key: string) => leaves.some(leave => key >= formatDate(leave.startDate) && key <= formatDate(leave.endDate))
+  const dailySalary = baseSalary / 26
+  const penalty = (type: string | undefined, count: number, fixed: number | null | undefined, ratio: number | null | undefined) => type === 'fixed' ? Math.round(count * (fixed || 0) / 100) : type === 'daily_rate' ? Math.round(count * dailySalary * (ratio ?? 1)) : 0
+  const latePenalty = penalty(rule?.lateDeductionType, [...attendanceDays].filter(([key, day]) => !onLeave(key) && day.checkIn.getTime() > new Date(`${key}T${rule?.workStartTime || '09:00'}:00+07:00`).getTime() + gracePeriod * 60000).length, rule?.lateDeductionFixed, rule?.lateDeductionDailyRate)
+  const earlyLeaveDays = [...attendanceDays].filter(([key, day]) => {
+    if (!day.checkOut || onLeave(key)) return false
+    let end = new Date(`${key}T${rule?.workEndTime || '18:00'}:00+07:00`)
+    const start = new Date(`${key}T${rule?.workStartTime || '09:00'}:00+07:00`)
+    if (end <= start) end = new Date(end.getTime() + 86400000)
+    return day.checkOut < end
+  }).length
+  const absentDays = [...new Set(schedules.map(schedule => formatDate(schedule.date)))].filter(key => {
+    const scheduledEnd = new Date(`${key}T${rule?.workEndTime || '18:00'}:00+07:00`)
+    return key >= formatDate(staff.hireDate) && scheduledEnd < new Date() && !attendanceDays.has(key) && !onLeave(key)
+  }).length
+  let sickDays = 0
+  let unpaidDays = 0
+  for (const leave of leaves) {
+    const begin = Math.max(startOfDay(leave.startDate).getTime(), startDate.getTime())
+    const end = Math.min(startOfDay(leave.endDate).getTime(), startOfDay(endDate).getTime())
+    const days = Math.max(0, (end - begin) / 86400000 + 1) * (leave.halfDay ? 0.5 : 1)
+    if (leave.leaveType === 'sick') sickDays += days
+    else {
+      const type = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: staff.storeId, code: leave.leaveType } } })
+      if (leave.leaveType === 'unpaid' || type?.paidLeave === false) unpaidDays += days
+    }
+  }
+  deductions += latePenalty + penalty(rule?.earlyLeaveDeductionType, earlyLeaveDays, rule?.earlyLeaveDeductionFixed, rule?.earlyLeaveDeductionDailyRate)
+    + penalty(rule?.absenceDeductionType, absentDays, rule?.absenceDeductionFixed, rule?.absenceDeductionDailyRate)
+    + penalty(rule?.sickLeaveDeductionType, sickDays, rule?.sickLeaveDeductionFixed, rule?.sickLeaveDeductionDailyRate) + Math.round(unpaidDays * dailySalary)
 
   // Calculate deposit monthly deductions
   for (const deposit of activeDeposits) {
@@ -289,12 +327,12 @@ export async function calculateSalary(staffId: string, month: number, year: numb
       case 'one_time':
         // One-time: deduct full amount in first month if not yet deducted
         if (deposit.deductionCount === 0) {
-          monthlyDeduction = depositRule.depositAmount
+          monthlyDeduction = deposit.totalAmount
         }
         break
       case 'monthly': {
         // Monthly: deduct monthlyAmount until fully paid
-        const remaining = depositRule.depositAmount - deposit.deductedAmount
+        const remaining = deposit.totalAmount - deposit.deductedAmount
         if (remaining > 0) {
           monthlyDeduction = Math.min(depositRule.monthlyAmount || 0, remaining)
         }
@@ -303,7 +341,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
       case 'limited': {
         // Limited: deduct up to maxDeductions times
         if (deposit.deductionCount < (depositRule.maxDeductions || 0)) {
-          const remaining = depositRule.depositAmount - deposit.deductedAmount
+          const remaining = deposit.totalAmount - deposit.deductedAmount
           if (remaining > 0) {
             monthlyDeduction = Math.min(depositRule.monthlyAmount || 0, remaining)
           }
@@ -313,22 +351,17 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     }
 
     if (monthlyDeduction > 0) {
-      deductions += monthlyDeduction
-      depositDeductions.push({ ruleName: depositRule.name, amount: monthlyDeduction })
+      const deductionIDR = Math.round(monthlyDeduction / 100)
+      deductions += deductionIDR
+      depositDeductions.push({ staffDepositId: deposit.id, ruleName: depositRule.name, amount: deductionIDR, amountMinor: monthlyDeduction })
     }
   }
 
-  // Calculate work hours for overtime
-  const totalHours = attendances.reduce((sum, a) => {
-    if (a.checkOutTime) {
-      return sum + Math.abs(
-        new Date(a.checkOutTime).getTime() - new Date(a.checkInTime).getTime()
-      ) / (1000 * 60 * 60)
-    }
-    return sum
-  }, 0)
+  const featureConfig = await getStaffConfig(staff.storeId)
+  if (featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
 
-  const overtimeHours = Math.max(0, totalHours - workDays * 8)
+  const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId, status: 'approved', date: { gte: startDate, lte: endDate } } })
+  const overtimeHours = approvedOvertime.reduce((sum, request) => sum + request.hours, 0)
   const hourlyRate = baseSalary / 176
   const overtimePay = overtimeHours >= overtimeMinHours
     ? Math.floor(overtimeHours * hourlyRate * overtimeRate)
@@ -346,6 +379,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     overtimePay,
     deductions,
     depositDeductions,
+    latePenalty, earlyLeaveDays, absentDays, sickDays, unpaidDays,
+    calculationBasis: { workDaysPerMonth: 26, hoursPerMonth: 176 },
     bonuses,
     totalSalary: baseSalary + overtimePay + bonuses - deductions
   }

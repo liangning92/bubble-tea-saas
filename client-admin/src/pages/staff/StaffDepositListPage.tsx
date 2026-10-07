@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { depositApi, staffApi } from '../../services/api'
@@ -233,7 +234,7 @@ export function StaffDepositListPage() {
   }
 
   const getRemainingAmount = (deposit: StaffDeposit) => {
-    return deposit.totalAmount - deposit.deductedAmount - deposit.refundedAmount
+    return Math.max(0, deposit.totalAmount - deposit.deductedAmount)
   }
 
   return (
@@ -428,7 +429,7 @@ export function StaffDepositListPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.depositRule')} *</label>
+                <div className="flex justify-between items-center mb-1"><label className="text-sm font-medium text-gray-700">{t('staff.depositRule')} *</label><Link className="text-primary underline" to="/staff/salary/deposit-rules">{t('staff.depositRules')}</Link></div>
                 <select
                   value={createForm.depositRuleId}
                   onChange={e => setCreateForm({ ...createForm, depositRuleId: e.target.value })}

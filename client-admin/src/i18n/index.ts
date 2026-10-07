@@ -708,6 +708,8 @@ const resources = {
         "avg": "Rata-rata",
         "thisMonth": "Bulan Ini",
         "subtotal": "Subtotal",
+        "salaryNotSet": "Belum diatur",
+        "formRequiredHelp": "Kolom bertanda * wajib diisi; kolom lainnya opsional. Kolom pilihan memiliki nilai awal.",
         "depositRules": "Aturan Deposit",
         "depositRulesDescription": "Kelola aturan pemotongan dan pengembalian deposit karyawan",
         "addDepositRule": "Tambah Aturan",
@@ -960,6 +962,8 @@ const resources = {
         "schedule": "Jadwal",
         "salaryTab": "Gaji",
         "salary": {
+          "depositPortion": "Termasuk potongan deposit",
+          "adminCreateOnly": "Hanya administrator dapat membuat catatan gaji",
           "selectStaffMonth": "Pilih Karyawan dan Bulan",
           "calcFailed": "Gagal Menghitung",
           "confirmDelete": "Konfirmasi hapus catatan gaji ini?",
@@ -1081,6 +1085,8 @@ const resources = {
         "certificate": "Sertifikat",
         "scheduled": "Terjadwal",
         "inProgress": "Sedang Berlangsung",
+        "salaryNotSet": "Belum diatur",
+        "formRequiredHelp": "Kolom bertanda * wajib diisi; kolom lainnya opsional. Kolom pilihan memiliki nilai awal.",
         "depositRules": "Aturan Deposit",
         "depositRulesDescription": "Kelola aturan deposit dan refund karyawan",
         "addDepositRule": "Tambah Aturan",
@@ -5039,6 +5045,8 @@ const resources = {
         "avg": "avg",
         "thisMonth": "this month",
         "subtotal": "Subtotal",
+        "salaryNotSet": "Not set",
+        "formRequiredHelp": "Fields marked * are required; other fields are optional. Select fields have defaults.",
         "depositRules": "Deposit Rules",
         "depositRulesDescription": "Manage staff deposit deduction and refund rules",
         "addDepositRule": "Add Rule",
@@ -6195,6 +6203,8 @@ const resources = {
         "schedule": "Schedule",
         "salaryTab": "Salary",
         "salary": {
+          "depositPortion": "Deposit included in deductions",
+          "adminCreateOnly": "Only administrators can create payroll records",
           "selectStaffMonth": "Select Staff and Month",
           "calcFailed": "Calculation Failed",
           "confirmDelete": "Confirm delete this salary record?",
@@ -6503,6 +6513,8 @@ const resources = {
         "shiftName": "Shift Name (EN)",
         "shiftNameId": "Shift Name (ID)",
         "shiftNameZh": "Shift Name (ZH)",
+        "salaryNotSet": "Not set",
+        "formRequiredHelp": "Fields marked * are required; other fields are optional. Select fields have defaults.",
         "depositRules": "Deposit Rules",
         "depositRuleNamePlaceholder": "Enter deposit rule name",
         "leaveBalance": "Leave Balance",
@@ -7964,6 +7976,8 @@ const resources = {
         "avg": "平均",
         "thisMonth": "本月",
         "subtotal": "小计",
+        "salaryNotSet": "未设置",
+        "formRequiredHelp": "标有 * 的字段必填，其他字段可选；选择项已有默认值。",
         "depositRules": "押金规则",
         "depositRulesDescription": "管理员工押金扣款和退款规则",
         "addDepositRule": "添加规则",
@@ -8954,6 +8968,8 @@ const resources = {
         "notesPlaceholder": "附加说明...",
         "passingScorePlaceholder": "0-100",
         "salary": {
+          "depositPortion": "扣款中包含押金",
+          "adminCreateOnly": "仅管理员可新增工资记录",
           "selectStaffMonth": "请选择员工与月份",
           "calcFailed": "计算失败",
           "confirmDelete": "确认删除此工资单？",
@@ -8982,6 +8998,8 @@ const resources = {
         "training": "培训",
         "trainingNamePlaceholder": "例如：基础咖啡师培训",
         "attendanceRules": "考勤规则",
+        "salaryNotSet": "未设置",
+        "formRequiredHelp": "标有 * 的字段必填，其他字段可选；选择项已有默认值。",
         "depositRules": "押金规则",
         "depositRuleNamePlaceholder": "输入押金规则名称",
         "leaveBalance": "假期余额",
@@ -10999,6 +11017,20 @@ const getInitialLanguage = () => {
   }
   return 'id'
 }
+
+// Complete staff labels misplaced under orders in older dictionaries.
+for (const language of Object.keys(resources) as Array<keyof typeof resources>) {
+  const translations = resources[language].translation as unknown as Record<string, Record<string, unknown>>
+  for (const key of Object.keys(resources.zh.translation.staff)) {
+    if (translations.staff[key] === undefined && translations.orders[key] !== undefined) translations.staff[key] = translations.orders[key]
+  }
+}
+
+
+Object.assign(resources.en.translation.staff, {
+  salaryLink: 'View Payroll', depositRulesLabel: 'Deposit Rules', attendanceRulesLabel: 'Attendance Rules',
+  attendanceRulesDescription: 'Manage attendance and deduction rules'
+})
 
 i18n.use(initReactI18next).init({
   resources,

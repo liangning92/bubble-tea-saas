@@ -7,6 +7,10 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+export function formatMinorCurrency(amount: number): string {
+  return formatCurrency(amount / 100)
+}
+
 export function formatCurrencyByLang(amount: number, lang: string = 'id'): string {
   const localeMap: Record<string, string> = {
     'id': 'id-ID',

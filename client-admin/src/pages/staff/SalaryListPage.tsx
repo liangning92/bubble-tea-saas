@@ -13,6 +13,7 @@ interface Salary {
   id: string
   staffId: string
   month: string
+  depositDeductions?: Array<{staffDepositId: string; amountMinor: number}>
   baseSalary: number
   overtime: number
   commission: number
@@ -48,6 +49,8 @@ export function SalaryListPage() {
   // Modal state
   const [showModal, setShowModal] = useState(false)
   const [editingSalary, setEditingSalary] = useState<Salary | null>(null)
+  const [depositPlan, setDepositPlan] = useState<{staffId: string; month: string; items: Array<{staffDepositId: string; amountMinor: number}>} | null>(null)
+  const [saveError, setSaveError] = useState('')
   const [formData, setFormData] = useState({
     staffId: '',
     month: '',
@@ -91,7 +94,7 @@ export function SalaryListPage() {
   const loadStaff = async () => {
     try {
       const response = await staffApi.list({ storeId: user?.storeId, pageSize: 100 })
-      setStaffOptions(response.data?.data?.data?.list || [])
+      setStaffOptions(response.data?.data?.list || [])
     } catch (error) {
       console.error('Failed to load staff:', error)
     }
@@ -102,7 +105,7 @@ export function SalaryListPage() {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
-    }).format(amount / 100)
+    }).format(amount)
   }
 
   const formatMonth = (monthStr: string) => {
@@ -122,6 +125,8 @@ export function SalaryListPage() {
   }
 
   const handleOpenModal = (salary?: Salary) => {
+    setSaveError('')
+    setDepositPlan(salary ? { staffId: salary.staffId, month: salary.month, items: salary.depositDeductions || [] } : null)
     if (salary) {
       setEditingSalary(salary)
       setFormData({
@@ -166,13 +171,14 @@ export function SalaryListPage() {
       const data = response.data?.data
 
       if (data) {
-        setFormData(prev => ({
+        setDepositPlan({ staffId: formData.staffId, month: formData.month, items: data.depositDeductions || [] })
+        setFormData(prev => prev.staffId !== formData.staffId || prev.month !== formData.month ? prev : ({
           ...prev,
           baseSalary: String(data.baseSalary || 0),
-          overtime: String(data.overtime || 0),
+          overtime: String(data.overtimePay || 0),
           commission: String(data.commission || 0),
-          bonus: String(data.bonus || 0),
-          deduction: String(data.deduction || 0)
+          bonus: String(data.bonuses || 0),
+          deduction: String(data.deductions || 0)
         }))
       }
     } catch (error) {
@@ -189,6 +195,10 @@ export function SalaryListPage() {
       return
     }
 
+    if (saving) return
+    const amounts = ['baseSalary', 'overtime', 'commission', 'bonus', 'deduction'].map(key => Number(formData[key as keyof typeof formData]))
+    if (amounts.some(value => !Number.isSafeInteger(value) || value < 0) || calculateFinalAmount() < 0) { setSaveError(t('common.required')); return }
+    setSaveError('')
     setSaving(true)
     try {
       const data = {
@@ -199,7 +209,8 @@ export function SalaryListPage() {
         overtime: parseInt(formData.overtime) || 0,
         commission: parseInt(formData.commission) || 0,
         bonus: parseInt(formData.bonus) || 0,
-        deduction: parseInt(formData.deduction) || 0
+        deduction: parseInt(formData.deduction) || 0,
+        depositDeductions: depositPlan?.staffId === formData.staffId && depositPlan?.month === formData.month ? depositPlan.items : []
         // 注意: finalAmount 由服务端统一计算，不要前端计算后发送
       }
 
@@ -210,9 +221,8 @@ export function SalaryListPage() {
       }
       loadSalaries()
       handleCloseModal()
-    } catch (error) {
-      console.error('Failed to save salary:', error)
-      alert(t('common.error'))
+    } catch (error: any) {
+      setSaveError(error?.response?.data?.errors?.map((item: any) => item.message).join('; ') || error?.response?.data?.message || t('common.error'))
     } finally {
       setSaving(false)
     }
@@ -259,6 +269,8 @@ export function SalaryListPage() {
           </div>
           <button
             onClick={() => handleOpenModal()}
+            disabled={user?.role !== 'admin'}
+            title={user?.role !== 'admin' ? t('staff.salary.adminCreateOnly') : undefined}
             className="flex items-center gap-2 bg-white text-primary px-4 py-2 rounded-lg font-medium hover:bg-gray-100"
           >
             <Plus size={20} />
@@ -327,6 +339,8 @@ export function SalaryListPage() {
             <p>{t('staff.salary.noSalaries')}</p>
             <button
               onClick={() => handleOpenModal()}
+            disabled={user?.role !== 'admin'}
+            title={user?.role !== 'admin' ? t('staff.salary.adminCreateOnly') : undefined}
               className="mt-4 text-primary font-medium"
             >
               {t('staff.salary.addFirst')}
@@ -395,6 +409,7 @@ export function SalaryListPage() {
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
+                    disabled={user?.role !== 'admin'}
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
@@ -403,6 +418,7 @@ export function SalaryListPage() {
                 )}
                 <button
                   onClick={() => handleDelete(salary.id)}
+                  disabled={salary.status !== 'pending' || user?.role !== 'admin'}
                   className="py-2 px-3 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
                 >
                   {t('common.delete')}
@@ -427,6 +443,7 @@ export function SalaryListPage() {
             </div>
 
             <div className="space-y-4">
+              {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
               {/* Staff Select */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -545,6 +562,7 @@ export function SalaryListPage() {
                 />
               </div>
 
+              {depositPlan?.staffId === formData.staffId && depositPlan?.month === formData.month && depositPlan.items.length > 0 && <p className="text-sm text-gray-600">{t('staff.salary.depositPortion')}: {formatCurrency(depositPlan.items.reduce((sum, item) => sum + item.amountMinor, 0) / 100)}</p>}
               {/* Final Amount Preview */}
               <div className="p-4 bg-gray-50 rounded-xl">
                 <div className="flex justify-between items-center">
@@ -565,7 +583,7 @@ export function SalaryListPage() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || calculating}
                   className="flex-1 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {saving ? (

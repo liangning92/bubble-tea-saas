@@ -1,3 +1,4 @@
+import { calculateSalary } from './StaffService'
 import {netReceivedAmount} from '../utils/refundAllocation'
 import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import prisma from '../config/database'
@@ -142,96 +143,13 @@ export async function getScheduleCoverage(storeId: string, weekStart: Date) {
 // ==================== PAYROLL ====================
 
 export async function generatePayroll(storeId: string, month: number, year: number) {
-  const startDate = startOfMonth(new Date(year, month - 1))
-  const endDate = endOfMonth(new Date(year, month - 1))
-
-  const staffList = await prisma.staff.findMany({
-    where: { storeId, status: 'active' }
-  })
-
-  // Check if attendance bonus is enabled
-  const config = await getStaffConfig(storeId)
-  const attendanceBonusEnabled = config.attendanceBonus
-
-  // Get attendance rule for work days calculation
-  const attendanceRule = await prisma.attendanceRule.findFirst({
-    where: { storeId, isActive: true }
-  })
-  const workDaysPerMonth = 26 // Default working days per month
-
-  const salaries: any[] = []
-
+  const staffList = await prisma.staff.findMany({ where: { storeId, status: 'active' } })
+  const salaries = []
   for (const staff of staffList) {
-    // Get attendance
-    const attendances = await prisma.attendance.findMany({
-      where: {
-        staffId: staff.id,
-        checkInTime: { gte: startDate, lte: endDate }
-      }
-    })
-
-    const workDays = attendances.filter(a => a.checkInTime).length
-
-    // Calculate late days based on rule or default
-    const lateDays = attendances.filter(a => {
-      if (!a.checkInTime) return false
-      if (attendanceRule) {
-        const [startHour, startMin] = attendanceRule.workStartTime.split(':').map(Number)
-        const gracePeriod = attendanceRule.gracePeriod || 0
-        const checkInTime = new Date(a.checkInTime)
-        const lateThreshold = startHour * 60 + startMin + gracePeriod
-        const checkInMinutes = new Date(checkInTime.getTime()+7*3600000).getUTCHours() * 60 + checkInTime.getUTCMinutes()
-        return checkInMinutes > lateThreshold
-      }
-      return new Date(a.checkInTime.getTime()+7*3600000).getUTCHours() >= 9
-    }).length
-
-    // Calculate work hours
-    let totalHours = 0
-    for (const att of attendances) {
-      if (att.checkInTime && att.checkOutTime) {
-        totalHours += (new Date(att.checkOutTime).getTime() - new Date(att.checkInTime).getTime()) / (1000 * 60 * 60)
-      }
-    }
-
-    const regularHours = workDays * 8
-    const overtimeHours = Math.max(0, totalHours - regularHours)
-
-    if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
-    const baseSalary = staff.baseSalary
-    const overtimePay = Math.round(overtimeHours * (baseSalary / 176) * 1.5)
-
-    // Deductions
-    let lateDeduction = 0
-    if (attendanceRule && attendanceRule.lateDeductionType === 'fixed' && attendanceRule.lateDeductionFixed) {
-      lateDeduction = lateDays * attendanceRule.lateDeductionFixed
-    } else {
-      lateDeduction = lateDays * 50000 // Default Rp 50,000 per late
-    }
-
-    // Attendance bonus: awarded if no late days and worked required days
-    let attendanceBonus = 0
-    if (attendanceBonusEnabled && lateDays === 0 && workDays >= workDaysPerMonth - 2) {
-      attendanceBonus = 200000 // Rp 200,000 perfect attendance bonus
-    }
-
-    const finalSalary = baseSalary + overtimePay + attendanceBonus - lateDeduction
-
-    salaries.push({
-      staffId: staff.id,
-      name: staff.name,
-      position: staff.position,
-      period: `${year}-${month.toString().padStart(2, '0')}`,
-      baseSalary,
-      workDays,
-      lateDays,
-      lateDeduction,
-      overtimeHours: Math.round(overtimeHours * 10) / 10,
-      overtimePay,
-      finalSalary
-    })
+    if (staff.baseSalary === null) { salaries.push({ staffId: staff.id, name: staff.name, position: staff.position, error: 'STAFF_BASE_SALARY_REQUIRED' }); continue }
+    const result = await calculateSalary(staff.id, month, year)
+    salaries.push({ ...result, name: staff.name, position: staff.position, period: `${year}-${String(month).padStart(2, '0')}`, lateDeduction: result.latePenalty, finalSalary: result.totalSalary })
   }
-
   return salaries
 }
 

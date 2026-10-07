@@ -99,6 +99,13 @@ jobs:
           if ! command -v ffmpeg >/dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg; fi
           DEVICE_EVIDENCE_DIR=workflow-evidence/pos-devices node tests/stoploss/pos-device-diagnostics-page-check.cjs
 
+      - name: Verify dashboard scope and current POS payment, barcode and printer workflows
+        run: |
+          node tests/stoploss/admin-dashboard-page-check.cjs
+          node tests/stoploss/continuous-offline-page-check.cjs
+          node tests/stoploss/barcode-page-check.cjs
+          node tests/stoploss/printer-page-check.cjs
+
       - name: Save workflow browser evidence
         if: always()
         uses: actions/upload-artifact@v4

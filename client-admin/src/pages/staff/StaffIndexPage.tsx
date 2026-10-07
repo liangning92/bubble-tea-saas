@@ -14,8 +14,8 @@ export function StaffIndexPage() {
     { key: 'points', label: t('staff.points'), path: '/staff/points' },
   ]
 
-  const isActive = (path: string) => location.pathname === path
-  const currentTab = tabs.find(tab => isActive(tab.path))?.key || 'staff'
+  const currentTab = [...tabs].sort((a, b) => b.path.length - a.path.length)
+    .find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'staff'
 
   return (
     <div className="flex flex-col h-full">
@@ -26,6 +26,7 @@ export function StaffIndexPage() {
             <Link
               key={tab.key}
               to={tab.path}
+                aria-current={currentTab === tab.key ? 'page' : undefined}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                 currentTab === tab.key
                   ? 'bg-primary text-white shadow-sm'

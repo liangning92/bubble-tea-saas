@@ -18,12 +18,13 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), r
 
     const result = await calculateSalary(
       staffId,
-      parseInt(month as string),
-      parseInt(year as string)
+      Number(month),
+      Number(year)
     )
 
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
-  } catch (error) {
+  } catch (error: any) {
+    if (['INVALID_SALARY_PERIOD', 'STAFF_BASE_SALARY_REQUIRED'].includes(error.message)) return res.status(400).json({ code: 400, message: error.message })
     console.error('Calculate salary error:', error)
     res.status(500).json({ code: 500, message: 'Failed to calculate salary' })
   }

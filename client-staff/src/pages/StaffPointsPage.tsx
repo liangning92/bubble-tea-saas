@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -29,10 +30,12 @@ export function StaffPointsPage() {
   const [points, setPoints] = useState<any>(null)
   const [logs, setLogs] = useState<PointLog[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [redeeming, setRedeeming] = useState<string | null>(null)
 
   const loadData = async () => {
+    setLoadError(false)
     setIsLoading(true)
     try {
       const [pointsRes, logsRes, rewardsRes] = await Promise.all([
@@ -40,10 +43,11 @@ export function StaffPointsPage() {
         staffApi.getMyPointLogs(),
         staffApi.getAvailableRewards()
       ])
-      setPoints(pointsRes.data?.data)
-      setLogs(logsRes.data?.data?.list || [])
-      setRewards(rewardsRes.data?.data || [])
+      setPoints(pointsRes.data)
+      setLogs(logsRes.data?.list || [])
+      setRewards(rewardsRes.data || [])
     } catch (error) {
+      setLoadError(true)
       console.error('Failed to load points:', error)
     } finally {
       setIsLoading(false)
@@ -70,6 +74,8 @@ export function StaffPointsPage() {
       setRedeeming(null)
     }
   }
+
+  if (loadError) return <LoadFailure retry={loadData} />
 
   if (isLoading) {
     return (

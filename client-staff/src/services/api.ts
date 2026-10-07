@@ -135,6 +135,11 @@ export const staffApi = {
   },
 
   // Leave Types
+  getReimbursementTypes: async () => {
+    const response = await axios.get(`${API_BASE}/reimbursement-types`, { headers: getAuthHeader() })
+    return response.data
+  },
+
   getLeaveTypes: async () => {
     const response = await axios.get(`${API_BASE}/leave-types`, {
       headers: getAuthHeader()
@@ -439,7 +444,8 @@ export const staffApi = {
 
   createOvertimeRequest: async (data: {
     date: string
-    hours: number
+    startTime: string
+    endTime: string
     reason?: string
   }) => {
     const response = await axios.post(`${API_BASE}/overtime`, data, {

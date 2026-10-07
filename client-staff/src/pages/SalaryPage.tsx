@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
 import { Wallet, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
+import { LoadFailure } from '../components/LoadFailure'
+import { downloadPayslip } from '../utils/payslip'
 import { formatCurrency } from '../utils/helpers'
 
 export function SalaryPage() {
@@ -10,44 +12,40 @@ export function SalaryPage() {
   const { user } = useAuthStore()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [loadError, setLoadError] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const [salary, setSalary] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (user?.staffId) {
-      loadSalary()
-    }
-  }, [user, currentMonth])
-
-  const loadSalary = async () => {
+    let active = true
+    setSalary(null)
+    setLoadError(false)
     setIsLoading(true)
-    try {
-      const response = await staffApi.getMySalary(
-        user!.staffId,
-        currentMonth.getMonth() + 1,
-        currentMonth.getFullYear()
-      )
-      if (response.data) {
-        setSalary(response.data)
-      }
-    } catch (error) {
-      console.error('Failed to load salary:', error)
-    } finally {
+    if (!user?.staffId) {
       setIsLoading(false)
+      return
     }
-  }
+    staffApi.getMySalary(user.staffId, currentMonth.getMonth() + 1, currentMonth.getFullYear())
+      .then(response => { if (active) setSalary(response.data || null) })
+      .catch(error => { if (active) { setLoadError(true); console.error('Failed to load salary:', error) } })
+      .finally(() => { if (active) setIsLoading(false) })
+    return () => { active = false }
+  }, [user?.staffId, currentMonth, retryCount])
 
   const goToPrevMonth = () => {
-    const prev = new Date(currentMonth)
+    const prev = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
     prev.setMonth(prev.getMonth() - 1)
     setCurrentMonth(prev)
   }
 
   const goToNextMonth = () => {
-    const next = new Date(currentMonth)
+    const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
     next.setMonth(next.getMonth() + 1)
     setCurrentMonth(next)
   }
+
+  if (loadError) return <LoadFailure retry={() => setRetryCount(count => count + 1)} />
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -131,6 +129,10 @@ export function SalaryPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
+                  <span className="text-gray-500">{t('salary.commissions')}</span>
+                  <span className="font-medium text-green-600">+{formatCurrency(salary.commissions || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between">
                   <span className="text-gray-500">{t('salary.deductions')}</span>
                   <span className="font-medium text-red-600">
                     -{formatCurrency(salary.deductions)}
@@ -164,7 +166,7 @@ export function SalaryPage() {
             </div>
 
             {/* Download Button */}
-            <button className="w-full py-4 bg-white border border-primary text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary hover:text-white transition-colors">
+            <button onClick={() => downloadPayslip(salary, { title: t('salary.title'), baseSalary: t('salary.baseSalary'), overtimePay: t('salary.overtime'), commissions: t('salary.commissions'), bonuses: t('salary.bonuses'), deductions: t('salary.deductions'), totalSalary: t('salary.totalSalary') })} className="w-full py-4 bg-white border border-primary text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary hover:text-white transition-colors">
               <Download size={20} />
               {t('salary.downloadSlip')}
             </button>

@@ -1,4 +1,5 @@
 import { parseDateBoundary } from '../utils/businessDate'
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
 // @ts-ignore - multer types not available
@@ -8,12 +9,14 @@ import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as ReimbursementService from '../services/ReimbursementService'
 
+const uploadDir = path.join(process.env.UPLOADS_PATH || path.resolve(__dirname, '../../uploads'), 'reimbursements')
 const router = Router()
+const reimbursementStore = requireResourceStore(req => prisma.reimbursement.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/reimbursements/')
+    cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
@@ -37,15 +40,14 @@ const upload = multer({
 
 // Validation schemas
 const applyReimbursementSchema = z.object({
-  type: z.enum(['transportation', 'meals', 'communication', 'medical', 'other']),
-  amount: z.number().min(1),
+  type: z.string().trim().min(1).max(100),
+  amount: z.number().int().positive().max(2000000000),
   description: z.string().min(1),
   receiptUrls: z.array(z.string()).optional()
 })
 
 // Ensure upload directory exists
 import fs from 'fs'
-const uploadDir = 'uploads/reimbursements/'
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true })
 }
@@ -66,6 +68,12 @@ router.post('/apply', authenticate, async (req: AuthRequest, res) => {
     }
 
     const validated = applyReimbursementSchema.parse(req.body)
+    const configuredType = await prisma.reimbursementType.findUnique({ where: { storeId_code: { storeId: staff.storeId, code: validated.type } } })
+    if ((configuredType && !configuredType.isActive) || (!configuredType && !['transportation', 'meals', 'communication', 'medical', 'other'].includes(validated.type))) {
+      return res.status(400).json({ code: 400, message: 'Select an active reimbursement type' })
+    }
+    if (configuredType?.maxAmount && validated.amount > configuredType.maxAmount) return res.status(400).json({ code: 400, message: 'Amount exceeds this reimbursement type limit' })
+    if (configuredType?.requiresReceipt && !validated.receiptUrls?.length) return res.status(400).json({ code: 400, message: 'A receipt is required for this reimbursement type' })
 
     const reimbursement = await ReimbursementService.applyReimbursement({
       staffId: staff.id,
@@ -233,7 +241,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // PUT /api/reimbursement/approve/:id - Approve reimbursement
-router.put('/approve/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/approve/:id', authenticate, authorize('admin', 'manager'), reimbursementStore, async (req: AuthRequest, res) => {
   try {
     const reimbursement = await ReimbursementService.approveReimbursement(req.params.id, req.user!.id)
 
@@ -250,7 +258,7 @@ router.put('/approve/:id', authenticate, authorize('admin', 'manager'), async (r
 })
 
 // PUT /api/reimbursement/reject/:id - Reject reimbursement
-router.put('/reject/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/reject/:id', authenticate, authorize('admin', 'manager'), reimbursementStore, async (req: AuthRequest, res) => {
   try {
     const { reason } = req.body
     const reimbursement = await ReimbursementService.rejectReimbursement(req.params.id, req.user!.id, reason || '')
@@ -268,7 +276,7 @@ router.put('/reject/:id', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // PUT /api/reimbursement/mark-paid/:id - Mark as paid
-router.put('/mark-paid/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/mark-paid/:id', authenticate, authorize('admin', 'manager'), reimbursementStore, async (req: AuthRequest, res) => {
   try {
     const reimbursement = await ReimbursementService.markAsPaid(req.params.id, req.user!.id)
 

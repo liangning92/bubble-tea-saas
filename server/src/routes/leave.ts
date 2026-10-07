@@ -1,4 +1,4 @@
-import { parseDateBoundary } from '../utils/businessDate'
+import { parseDateBoundary, parseBusinessDate } from '../utils/businessDate'
 import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -7,14 +7,15 @@ import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as LeaveService from '../services/LeaveService'
 
 const router = Router()
+const leaveStore = requireResourceStore(req => prisma.leave.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 const staffStore = requireResourceStore(req => prisma.staff.findUnique({where:{id:req.params.staffId},select:{storeId:true}}))
 
 // Validation schemas
 const applyLeaveSchema = z.object({
-  leaveType: z.enum(['annual', 'sick', 'unpaid', 'maternity', 'paternity', 'bereavement', 'other']),
-  startDate: z.string(),
-  endDate: z.string(),
-  totalDays: z.number().min(1),
+  leaveType: z.string().trim().min(1).max(100),
+  startDate: z.string().transform(parseBusinessDate),
+  endDate: z.string().transform(parseBusinessDate),
+  totalDays: z.number().positive(),
   reason: z.string().optional(),
   halfDay: z.boolean().optional(),
   contactPhone: z.string().optional(),
@@ -45,6 +46,15 @@ router.post('/apply', authenticate, async (req: AuthRequest, res) => {
     }
 
     const validated = applyLeaveSchema.parse(req.body)
+    const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: staff.storeId, code: validated.leaveType } } })
+    if ((configuredType && !configuredType.isActive) || (!configuredType && !['annual', 'sick', 'unpaid', 'maternity', 'paternity', 'bereavement', 'other'].includes(validated.leaveType))) return res.status(400).json({ code: 400, message: 'Select an active leave type' })
+    if (configuredType?.requiresProof && !validated.attachmentUrl) return res.status(400).json({ code: 400, message: 'Proof is required for this leave type' })
+    const days = (validated.endDate.getTime() - validated.startDate.getTime()) / 86400000 + 1
+    const expectedDays = validated.halfDay && days === 1 ? 0.5 : days
+    if (validated.halfDay && days === 1 && validated.totalDays === 1) validated.totalDays = 0.5
+    if (!Number.isInteger(days) || days < 1 || days > 366 || validated.totalDays !== expectedDays || (validated.halfDay && days !== 1)) {
+      return res.status(400).json({ code: 400, message: 'Leave duration must match the selected calendar dates' })
+    }
 
     const leave = await LeaveService.applyLeave({
       staffId: staff.id,
@@ -237,7 +247,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // PUT /api/leave/approve/:id - Approve leave
-router.put('/approve/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/approve/:id', authenticate, authorize('admin', 'manager'), leaveStore, async (req: AuthRequest, res) => {
   try {
     const leave = await LeaveService.approveLeave(req.params.id, req.user!.id)
 
@@ -254,7 +264,7 @@ router.put('/approve/:id', authenticate, authorize('admin', 'manager'), async (r
 })
 
 // PUT /api/leave/reject/:id - Reject leave
-router.put('/reject/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/reject/:id', authenticate, authorize('admin', 'manager'), leaveStore, async (req: AuthRequest, res) => {
   try {
     const { reason } = req.body
     const leave = await LeaveService.rejectLeave(req.params.id, req.user!.id, reason || '')

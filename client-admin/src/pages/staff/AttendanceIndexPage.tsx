@@ -16,7 +16,8 @@ export function AttendanceIndexPage() {
     { key: 'rules', label: t('staff.attendanceRules'), path: '/staff/attendance/rules', icon: Settings },
   ]
 
-  const currentTab = tabs.find(tab => location.pathname.includes(tab.key))?.key || 'dashboard'
+  const currentTab = [...tabs].sort((a, b) => b.path.length - a.path.length)
+    .find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'dashboard'
 
   return (
     <div className="flex flex-col h-full">
@@ -29,6 +30,7 @@ export function AttendanceIndexPage() {
               <Link
                 key={tab.key}
                 to={tab.path}
+                aria-current={currentTab === tab.key ? 'page' : undefined}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   currentTab === tab.key
                     ? 'bg-primary text-white shadow-sm'
