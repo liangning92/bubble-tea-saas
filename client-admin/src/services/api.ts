@@ -34,6 +34,17 @@ api.interceptors.response.use(
 
 export default api
 
+export interface DeliveryPlatformConnection {
+  platform: 'grabfood' | 'gofood' | 'shopee'
+  status: 'not_connected'
+  reason: 'API_ACCESS_PENDING'
+  capabilities: { orders: boolean; accept: boolean; status: boolean; menu: boolean; webhooks: boolean }
+}
+
+export const deliveryApi = {
+  platforms: (storeId: string) => api.get<{ code: number; data: { platforms: DeliveryPlatformConnection[] } }>('/delivery/platforms', { params: { storeId } })
+}
+
 // Update API base URL dynamically (for API URL configuration)
 export function updateApiUrl(url: string) {
   api.defaults.baseURL = url

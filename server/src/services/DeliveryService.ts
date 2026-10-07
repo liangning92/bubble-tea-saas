@@ -1,7 +1,8 @@
 import prisma from '../config/database'
+import type { ExternalDeliveryPlatform, DeliveryStatus } from './delivery/PlatformAdapter'
 
-export type DeliveryPlatform = 'grabfood' | 'gofood' | 'shopee' | 'direct'
-export type DeliveryStatus = 'new' | 'confirmed' | 'preparing' | 'ready' | 'picked_up' | 'delivered' | 'cancelled' | 'refunded'
+export type DeliveryPlatform = ExternalDeliveryPlatform | 'direct'
+export type { DeliveryStatus } from './delivery/PlatformAdapter'
 
 export interface DeliveryOrder {
   id: string
@@ -164,99 +165,9 @@ export async function getDeliveryStats(storeId: string, date: Date) {
   return summary
 }
 
-// Platform adapter interface (for future integration with actual platforms)
-export interface PlatformAdapter {
-  fetchOrders(): Promise<DeliveryOrder[]>
-  confirmOrder(orderId: string): Promise<boolean>
-  updateStatus(orderId: string, status: DeliveryStatus): Promise<boolean>
-  syncMenu(products: any[]): Promise<boolean>
-}
-
-// Mock GrabFood adapter
-export class GrabFoodAdapter implements PlatformAdapter {
-  private apiKey: string
-  private storeId: string
-
-  constructor(apiKey: string, storeId: string) {
-    this.apiKey = apiKey
-    this.storeId = storeId
-  }
-
-  async fetchOrders(): Promise<DeliveryOrder[]> {
-    // In production, this would call GrabFood API
-    // For now, return empty array (mock)
-    return []
-  }
-
-  async confirmOrder(orderId: string): Promise<boolean> {
-    // In production, call GrabFood API to confirm
-    return true
-  }
-
-  async updateStatus(orderId: string, status: DeliveryStatus): Promise<boolean> {
-    // In production, call GrabFood API to update status
-    return true
-  }
-
-  async syncMenu(products: any[]): Promise<boolean> {
-    // In production, call GrabFood API to sync menu
-    return true
-  }
-}
-
-// Mock GoFood adapter
-export class GoFoodAdapter implements PlatformAdapter {
-  private apiKey: string
-  private storeId: string
-
-  constructor(apiKey: string, storeId: string) {
-    this.apiKey = apiKey
-    this.storeId = storeId
-  }
-
-  async fetchOrders(): Promise<DeliveryOrder[]> {
-    return []
-  }
-
-  async confirmOrder(orderId: string): Promise<boolean> {
-    return true
-  }
-
-  async updateStatus(orderId: string, status: DeliveryStatus): Promise<boolean> {
-    return true
-  }
-
-  async syncMenu(products: any[]): Promise<boolean> {
-    return true
-  }
-}
-
-// Mock ShopeeFood adapter
-export class ShopeeAdapter implements PlatformAdapter {
-  private apiKey: string
-  private storeId: string
-
-  constructor(apiKey: string, storeId: string) {
-    this.apiKey = apiKey
-    this.storeId = storeId
-  }
-
-  async fetchOrders(): Promise<DeliveryOrder[]> {
-    return []
-  }
-
-  async confirmOrder(orderId: string): Promise<boolean> {
-    return true
-  }
-
-  async updateStatus(orderId: string, status: DeliveryStatus): Promise<boolean> {
-    return true
-  }
-
-  async syncMenu(products: any[]): Promise<boolean> {
-    return true
-  }
-}
+// Platform adapters are intentionally unavailable until provider access is granted.
+export { GrabFoodAdapter, GoFoodAdapter, ShopeeAdapter, DeliveryPlatformUnavailable } from './delivery/PlatformAdapter'
+export type { PlatformAdapter } from './delivery/PlatformAdapter'
 
 // Unified order inbox - aggregates all platforms
 export async function getUnifiedOrderInbox(storeId: string) {

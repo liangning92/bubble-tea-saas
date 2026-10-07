@@ -77,6 +77,7 @@ import { errorHandler } from './middlewares/errorHandler'
 import { notFoundHandler } from './middlewares/notFound'
 import { socketManager } from './socket'
 import { authenticate, AuthRequest } from './middlewares/auth'
+import { deliveryRouter } from './routes/delivery'
 
 const app = express()
 const httpServer = http.createServer(app)
@@ -266,6 +267,7 @@ app.use('/api/bom', bomRouter)
 app.use('/api/material', materialRouter)
 app.use('/api/salaries', salaryRouter)
 app.use('/api/channels', channelRouter)
+app.use('/api/delivery', deliveryRouter)
 app.use('/api/product-price', productPriceRouter)
 app.use('/api/marketing/referrals', referralRouter)
 app.use('/api/marketing/campaign-categories', campaignCategoryRouter)
