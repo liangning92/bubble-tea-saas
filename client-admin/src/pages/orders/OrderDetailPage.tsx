@@ -1,10 +1,11 @@
 import { useDashboardContext, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
+import { PaymentEvidencePanel } from '../../components/PaymentEvidencePanel'
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { orderApi } from '../../services/api'
+import api, { orderApi } from '../../services/api'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import { ArrowLeft, Printer, RotateCcw, CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react'
 
@@ -28,10 +29,11 @@ export function OrderDetailPage() {
   })
 
   const refundMutation = useMutation({
-    mutationFn: (reason: string) => orderApi.refund(id!, reason),
+    mutationFn: (reason: string) => api.post('/orders/refund-request', { orderId: id, reason, reasonCode: 'customer_dissatisfied', selectedItemIds: (data?.data?.data?.items || []).map((item: {id:string}) => item.id) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order',context.storeId,id] })
       setShowRefund(false)
+      alert(t('refundPolicy.submitted'))
     }
   })
 
@@ -51,7 +53,7 @@ export function OrderDetailPage() {
   }
 
   const canRefund = order.status !== 'refunded' && order.status !== 'cancelled'
-  const canChangeStatus = order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'refunded'
+  const canChangeStatus = ['pending', 'preparing'].includes(order.status)
 
   return (
     <div>
@@ -84,6 +86,7 @@ export function OrderDetailPage() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">{t('orders.date')}:</span> <span className="font-medium">{formatDateTime(order.createdAt)}</span></div>
               <div><span className="text-gray-500">{t('orders.payment')}:</span> <span className="font-medium uppercase">{order.paymentMethod}</span></div>
+              {order.paymentMethod === 'qris' && <PaymentEvidencePanel orderId={order.id} />}
               {order.member &&<div><span className="text-gray-500">{t('orders.customer')}:</span> <span className="font-medium">{order.member.name} ({order.member.phone})</span></div>}
            </div>
           </div>
@@ -120,20 +123,19 @@ export function OrderDetailPage() {
               <div className="space-y-2">
                 {order.status === 'pending' && <button onClick={() => updateStatusMutation.mutate('preparing')} className="btn-primary w-full">{t('orders.startPrepare')}</button>}
                 {order.status === 'preparing' && <button onClick={() => updateStatusMutation.mutate('ready')} className="btn-primary w-full">{t('orders.markReady')}</button>}
-                {order.status === 'ready' && <button onClick={() => updateStatusMutation.mutate('completed')} className="btn-primary w-full">{t('orders.complete')}</button>}
               </div>
             </div>
           )}
 
           {canRefund && (
             <div className="card">
-              <h2 className="font-semibold text-gray-900 mb-4">{t('orders.refund')}</h2>
+              <h2 className="font-semibold text-gray-900 mb-4">{t('refundPolicy.requestFull')}</h2>
               {!showRefund ? (
-                <button onClick={() => setShowRefund(true)} className="btn-danger w-full">{t('orders.refund')}</button>
+                <button onClick={() => setShowRefund(true)} className="btn-danger w-full">{t('refundPolicy.requestFull')}</button>
               ) : (
                 <div className="space-y-3">
                   <textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder={t('orders.refundReason')} className="input text-sm" rows={3} />
-                  <button onClick={() => refundMutation.mutate(refundReason)} disabled={refundMutation.isPending} className="btn-danger w-full">{refundMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
+                  <button onClick={() => window.confirm(t('refundPolicy.requestFullConfirm')) && refundMutation.mutate(refundReason)} disabled={refundMutation.isPending || !refundReason.trim()} className="btn-danger w-full">{refundMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
                   <button onClick={() => setShowRefund(false)} className="btn-secondary w-full">{t('common.cancel')}</button>
                 </div>
               )}

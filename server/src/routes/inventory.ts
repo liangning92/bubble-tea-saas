@@ -1,3 +1,5 @@
+import prisma from '../config/database'
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -7,12 +9,14 @@ import * as InventoryService from '../services/InventoryService'
 import { getInventoryAlertConfig, saveInventoryAlertConfig, DEFAULT_INVENTORY_ALERT_CONFIG } from '../services/InventoryAlertConfigService'
 
 const router = Router()
+const resourceAccess = requireResourceStore(req => prisma.inventory.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 
 // Validation schemas
 const stockInSchema = z.object({
   inventoryId: z.string(),
   storeId: z.string().optional(),
-  quantity: z.number().positive(),
+  quantity: z.number().finite().positive(),
+  inputUnit: z.string().min(1).max(30).optional(),
   unitCost: z.number().int().optional(),
   note: z.string().optional(),
   staffId: z.string().optional(),
@@ -22,7 +26,8 @@ const stockInSchema = z.object({
 const stockOutSchema = z.object({
   inventoryId: z.string(),
   storeId: z.string().optional(),
-  quantity: z.number().positive(),
+  quantity: z.number().finite().positive(),
+  inputUnit: z.string().min(1).max(30).optional(),
   reason: z.enum(['sold', 'loss', 'adjust', 'expired', 'transfer']),
   note: z.string().optional(),
   staffId: z.string().optional(),
@@ -49,7 +54,7 @@ const createInventorySchema = z.object({
   concentrateRatio: z.number().optional()
 })
 
-const updateInventorySchema = createInventorySchema.partial()
+const updateInventorySchema = createInventorySchema.partial().extend({packaging:z.object({unit:z.string().min(1).max(30),quantity:z.number().finite().positive(),baseUnit:z.string()}).nullable().optional()})
 
 // GET /api/inventory
 router.get('/', authenticate, async (req: AuthRequest, res) => {
@@ -116,27 +121,6 @@ router.get('/logs', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// GET /api/inventory/:id
-router.get('/:id', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params
-    const item = await InventoryService.getInventoryById(id)
-
-    if (!item) {
-      return res.status(404).json({ code: 404, message: 'Inventory not found' })
-    }
-
-    res.json({
-      code: 200,
-      data: item,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Get inventory item error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to get inventory item' })
-  }
-})
-
 // POST /api/inventory/stock-in
 router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), validateBody(stockInSchema), async (req: AuthRequest, res) => {
   try {
@@ -144,7 +128,7 @@ router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), v
     const item = await InventoryService.stockIn({
       ...req.body,
       storeId: req.user!.storeId,
-      staffId: req.body.staffId || req.user!.staffId
+      staffId: req.user!.staffId || req.user!.id
     })
 
     res.status(201).json({
@@ -166,7 +150,7 @@ router.post('/stock-out', authenticate, authorize('admin', 'manager', 'staff'), 
     const item = await InventoryService.stockOut({
       ...req.body,
       storeId: req.user!.storeId,
-      staffId: req.body.staffId || req.user!.staffId
+      staffId: req.user!.staffId || req.user!.id
     })
 
     res.json({
@@ -182,7 +166,7 @@ router.post('/stock-out', authenticate, authorize('admin', 'manager', 'staff'), 
 })
 
 // PUT /api/inventory/:id/adjust
-router.put('/:id/adjust', authenticate, authorize('admin', 'manager'), validateBody(adjustSchema), async (req: AuthRequest, res) => {
+router.put('/:id/adjust', authenticate, resourceAccess, authorize('admin', 'manager'), validateBody(adjustSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const item = await InventoryService.adjustInventory(
@@ -291,26 +275,8 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
   }
 })
 
-// PUT /api/inventory/:id
-router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(updateInventorySchema), async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params
-    const item = await InventoryService.updateInventory(id, req.body)
-
-    res.json({
-      code: 200,
-      message: 'Inventory updated',
-      data: item,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error: any) {
-    console.error('Update inventory error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to update inventory' })
-  }
-})
-
 // DELETE /api/inventory/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, resourceAccess, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     await InventoryService.deleteInventory(id)
@@ -450,7 +416,46 @@ router.put('/alert-config', authenticate, authorize('admin', 'manager'), async (
     })
   } catch (error) {
     console.error('Save inventory alert config error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to save inventory alert config' })
+    res.status(400).json({ code: 400, message: 'Invalid inventory alert configuration' })
+  }
+})
+
+// PUT /api/inventory/:id
+router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), validateBody(updateInventorySchema), async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params
+    const item = await InventoryService.updateInventory(id, req.body)
+
+    res.json({
+      code: 200,
+      message: 'Inventory updated',
+      data: item,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error: any) {
+    console.error('Update inventory error:', error)
+    res.status(500).json({ code: 500, message: error.message || 'Failed to update inventory' })
+  }
+})
+
+// GET /api/inventory/:id
+router.get('/:id', authenticate, resourceAccess, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params
+    const item = await InventoryService.getInventoryById(id)
+
+    if (!item) {
+      return res.status(404).json({ code: 404, message: 'Inventory not found' })
+    }
+
+    res.json({
+      code: 200,
+      data: item,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get inventory item error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get inventory item' })
   }
 })
 

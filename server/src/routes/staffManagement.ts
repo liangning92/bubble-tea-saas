@@ -1,11 +1,13 @@
 import prisma from '../config/database'
 import { trainingStaffAccess, trainingRecordAccess } from '../middlewares/trainingAccess'
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as StaffManagementService from '../services/StaffManagementService'
 import { startOfMonth, endOfMonth } from '../utils/dateUtils'
 
 const router = Router()
+const trainingAccess = requireResourceStore(req => prisma.training.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 
 // ==================== PERFORMANCE ====================
 
@@ -157,7 +159,7 @@ router.get('/sales-stats', authenticate, authorize('admin', 'manager'), async (r
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { not: 'refunded' }
+        status: { in: ['completed', 'paid'] }
       }
     })
 

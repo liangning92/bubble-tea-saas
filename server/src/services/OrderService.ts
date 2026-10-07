@@ -1,9 +1,17 @@
-import { findOrderReplay, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
+import { findOrderReplay as replayReceipt, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
 import { containsFilter } from '../utils/stringFilter'
 import { OrderBusinessRejection } from './OrderBusinessRejection'
+import {orderNumberCandidate,isOrderNumberCollision} from '../utils/orderNumber'
+import {convertQuantity} from '../utils/inventoryUnits'
+import {inventoryQuantityCost} from './InventoryQuantityService'
+import { replicaKey } from './ReceiptSyncService'
+import { containsText } from '../utils/textSearch'
+import { validateRefundItems } from '../utils/refundPolicy'
+import { allowedPreviousOrderStatuses } from '../utils/orderStatusPolicy'
+import { Prisma } from '@prisma/client'
 import prisma from '../config/database'
 import { config } from '../config/env'
-import { startOfTodayJakarta } from '../utils/dateUtils'
+import { startOfTodayJakarta,formatDate } from '../utils/dateUtils'
 import { processOrderReferralRewards } from './ReferralService'
 import { getOrCreatePointsRule, calculatePoints } from './PointsRuleService'
 
@@ -39,10 +47,17 @@ export interface CreateOrderData {
   pointsRedeemed?: number    // 积分抵扣金额
   taxEnabled?: boolean       // 是否计算税费（根据客户端配置）
   paymentMethod: string
+  qrisExternalId?: string
+  paymentEvidenceId?: string
+  manualPaymentActorId?: string
   status?: string           // 订单状态: completed, suspended
 }
 
+export interface OrderRequestContext { actorId: string; storeId: string; allowCreate: boolean }
+
 export interface OrderResult {
+  replayed?: boolean
+  replayedBy?: string
   id: string
   orderNumber: string
   pickupNumber?: string | null
@@ -55,16 +70,14 @@ export interface OrderResult {
   createdAt: Date
 }
 
-// Generate secure non-sequential order number: {prefix}{YYYYMMDD}-{scrambled}
-// Uses Knuth multiplicative hashing on daily counter to prevent competitors from guessing daily sales volume
-export async function generateOrderNumber(storeId: string, prefix: string = 'ORD'): Promise<string> {
-  const date = new Date()
-  const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '') // YYYYMMDD
+// Keep store/day counter for pickup queues; authoritative identities are globally random and DB-unique.
+export async function generateOrderNumber(storeId: string, prefix: string = 'ORD', date:Date = new Date()): Promise<string> {
+  const dateStr = formatDate(date).replace(/-/g, '') // YYYYMMDD
   const today = dateStr
 
   // Atomic upsert: create if not exists, increment if exists
   // This avoids race conditions between findUnique/create/update
-  const counter = await prisma.orderCounter.upsert({
+  await prisma.orderCounter.upsert({
     where: {
       storeId_date: { storeId, date: today }
     },
@@ -78,95 +91,7 @@ export async function generateOrderNumber(storeId: string, prefix: string = 'ORD
     }
   })
 
-  // Knuth's multiplicative hash to scramble the sequential counter into an unpredictable 6-digit number
-  // Formula: ((counter * 2654435761) ^ 0x5bf03635) >>> 0) % 900000 + 100000
-  const seq = counter.counter
-  const scrambled = (((seq * 2654435761) ^ 0x5bf03635) >>> 0) % 900000 + 100000
-  return `${prefix}${today}-${scrambled}`
-}
-
-// Calculate cost for a single inventory item (recursive for semi_finished)
-/**
- * 成本计算公式：
- * 成本 = 配方用量 × (avgCost / 1000 / concentrateRatio)
- *
- * 单位转换：
- * - kg/L 库存 → g/ml 配方用量：÷1000
- * - 个/支/卷/pce/件/张：直接使用，无需转换
- *
- * 浓缩比例：
- * - concentrateRatio > 1：浓缩液需要稀释，如茶叶10倍浓缩，实际用量 = 配方用量 / ratio
- */
-async function calculateItemCost(inventoryId: string, quantity: number): Promise<number> {
-  const inv = await prisma.inventory.findUnique({
-    where: { id: inventoryId }
-  })
-
-  if (!inv) return 0
-
-  const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes((inv.unit || '').toLowerCase())
-  const ratio = inv.concentrateRatio || 1
-  // 防止除零
-  const safeRatio = ratio === 0 ? 1 : ratio
-
-  // If raw_material, calculate cost directly
-  if (inv.type === 'raw_material') {
-    const costPerUnit = inv.avgCost || 0
-    if (isPerPiece) {
-      // 个/件等：直接 × avgCost
-      return quantity * Number(costPerUnit)
-    } else {
-      // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
-      // 公式：quantity(g/ml) × (avgCost(分/kg) / 1000 / ratio)
-      return quantity * Number(costPerUnit) / 1000 / safeRatio
-    }
-  }
-
-  // If semi_finished, recursively calculate cost from process recipe
-  if (inv.type === 'semi_finished' && inv.processRecipeId) {
-    const recipe = await prisma.processRecipe.findUnique({
-      where: { id: inv.processRecipeId },
-      include: {
-        items: { include: { inventory: true } }
-      }
-    })
-
-    if (!recipe) return 0
-
-    // Find output item to determine ratio
-    const outputItem = recipe.items.find(i => i.type === 'output')
-    if (!outputItem || outputItem.quantity === 0) return 0
-
-    const outputRatio = outputItem.quantity // e.g., 2600ml (output)
-
-    // Calculate total cost of inputs for one output unit
-    let inputCostPerOutput = 0
-    for (const input of recipe.items.filter(i => i.type === 'input')) {
-      const inputInv = input.inventory
-      if (!inputInv) continue
-
-      const inputIsPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes((inputInv.unit || '').toLowerCase())
-      const inputRatio = inputInv.concentrateRatio || 1
-      const safeInputRatio = inputRatio === 0 ? 1 : inputRatio
-      const inputCostPerUnit = inputInv.avgCost || 0
-
-      if (inputIsPerPiece) {
-        // 个/件：直接 × avgCost
-        inputCostPerOutput += input.quantity * Number(inputCostPerUnit)
-      } else {
-        // kg/L：先 ÷1000 转换为 g/ml，再 ÷concentrateRatio
-        inputCostPerOutput += input.quantity * Number(inputCostPerUnit) / 1000 / safeInputRatio
-      }
-    }
-
-    // Calculate cost for requested quantity
-    // formula: (qty / outputRatio) * inputCostPerOutput
-    const outputMultiplier = quantity / outputRatio
-    return Math.round(inputCostPerOutput * outputMultiplier)
-  }
-
-  // finished_goods or unknown type - no BOM deduction
-  return 0
+  return orderNumberCandidate(date,prefix)
 }
 
 // Calculate BOM cost for a product (recursive for semi_finished items)
@@ -178,7 +103,7 @@ export async function calculateBOMCost(productId: string): Promise<number> {
 
   let totalCost = 0
   for (const item of bomItems) {
-    totalCost += await calculateItemCost(item.inventoryId, item.quantity)
+    totalCost += await inventoryQuantityCost(prisma, item.inventoryId, item.quantity, item.unit)
   }
   return Math.round(totalCost)
 }
@@ -212,7 +137,8 @@ async function deductInventoryRecursive(
   qty: number,
   orderId: string,
   depth: number = 0,
-  allowNegative: boolean = false
+  allowNegative: boolean = false,
+  storeId?: string
 ): Promise<DeductResult> {
   // Prevent infinite recursion
   if (depth > 10) {
@@ -227,8 +153,10 @@ async function deductInventoryRecursive(
     return { success: false, error: `Inventory not found: ${inventoryId}` }
   }
 
+  if (storeId && inv.storeId !== storeId) throw new Error('INVENTORY_STORE_MISMATCH')
+
   // If raw_material, deduct directly (with stock check)
-  if (inv.type === 'raw_material') {
+  if (inv.type === 'raw_material' || inv.type === 'finished_goods' || (inv.type === 'semi_finished' && !inv.processRecipeId)) {
     // 行业惯例（哗啦啦/客如云）：前台收银不能因账面库存滞后而拒单。
     // 开启负库存销售时允许扣成负数，事后由店长补录入库/盘点对冲。
     if (inv.currentStock < qty && !allowNegative) {
@@ -251,6 +179,7 @@ async function deductInventoryRecursive(
         inventoryId,
         quantity: qty,
         reason: 'sold',
+        note: JSON.stringify({version:1,ledgerUnit:inv.unit,ledgerQuantity:qty}),
         orderId
       }
     })
@@ -276,7 +205,9 @@ async function deductInventoryRecursive(
       return { success: false, error: `No output item found in recipe: ${recipe.id}` }
     }
 
-    const outputRatio = outputItem.quantity // e.g., 2600ml
+    if (recipe.storeId !== inv.storeId) throw new Error('INVENTORY_STORE_MISMATCH')
+    const outputRatio = outputItem.quantity
+    qty = convertQuantity(qty, inv.unit, recipe.outputUnit)
 
     // Recursively deduct each input in the recipe
     const inputs = recipe.items.filter(i => i.type === 'input')
@@ -286,14 +217,13 @@ async function deductInventoryRecursive(
       // If 1kg + 2600ml -> 2600ml output, and we need qty ml of output:
       // input_qty = (qty / outputRatio) * input.quantity
       const inputQty = (qty / outputRatio) * input.quantity
-      const result = await deductInventoryRecursive(tx, input.inventoryId, inputQty, orderId, depth + 1, allowNegative)
+      const result = await deductInventoryRecursive(tx, input.inventoryId, inputQty, orderId, depth + 1, allowNegative, storeId)
       if (!result.success) return result
     }
     return { success: true }
   }
 
-  // finished_goods - skip (not used as raw material)
-  return { success: true }
+  throw new Error('INVENTORY_TYPE_UNSUPPORTED')
 }
 
 // Deduct inventory result
@@ -335,8 +265,8 @@ export async function deductInventory(storeId: string, orderId: string, items: a
 
       for (const bom of bomItems) {
         usedInventoryIds.add(bom.inventoryId)
-        const deductQty = bom.quantity * item.quantity
-        const result = await deductInventoryRecursive(transactionClient, bom.inventoryId, deductQty, orderId, 0, allowNegative)
+        const deductQty = convertQuantity(bom.quantity * item.quantity, bom.unit, bom.inventory.unit)
+        const result = await deductInventoryRecursive(transactionClient, bom.inventoryId, deductQty, orderId, 0, allowNegative, storeId)
         if (!result.success) {
           if (result.insufficientStock) {
             const { name, available, needed } = result.insufficientStock
@@ -469,8 +399,8 @@ export async function getOrders(params: {
   if (search && search.trim()) {
     const s = search.trim()
     where.OR = [
-      { orderNumber: containsFilter(s) },
-      { pickupNumber: containsFilter(s) }
+      { orderNumber: containsText(s) },
+      { pickupNumber: containsText(s) }
     ]
   }
 
@@ -570,11 +500,29 @@ async function getChannelPrice(channelId: string, productId: string, defaultPric
   return defaultPrice
 }
 
+export async function findOrderReplay(data: CreateOrderData, context?: OrderRequestContext): Promise<OrderResult | null> {
+  if (context && (!context.actorId || context.storeId !== data.storeId)) throw new Error('ORDER_REPLAY_STORE_MISMATCH')
+  const receipt = await replayReceipt(data)
+  return receipt ? {...receipt,replayed:true,replayedBy:context?.actorId} : null
+}
+
 // Create new order
-export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
-  const replay = await findOrderReplay(data)
+export async function createOrder(data: CreateOrderData, context?: OrderRequestContext): Promise<OrderResult> {
+  const replay = await findOrderReplay(data, context)
   if (replay) return replay
-  // DEBUG: log taxEnabled value
+  if (context && !context.allowCreate) throw new Error('OPEN_SHIFT_REQUIRED')
+  const fingerprint = orderRequestFingerprint(data)
+  const paymentActorId = context?.actorId || data.manualPaymentActorId
+  // References from a client/offline queue must belong to the sale's store.
+  const productIds = [...new Set(data.items.map(item => item.productId))]
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds }, storeId: data.storeId }, select: { id: true }
+  })
+  if (products.length !== productIds.length) throw new Error('PRODUCT_STORE_MISMATCH')
+  if (data.memberId) {
+    const member = await prisma.member.findUnique({ where: { id: data.memberId }, select: { storeId: true } })
+    if (!member || member.storeId !== data.storeId) throw new Error('MEMBER_STORE_MISMATCH')
+  }
 
   // Get channel info for pricing lookup with smart code resolution and foreign key protection
   let channel: any = null
@@ -641,6 +589,8 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     } catch {}
   }
 
+  if (channel && channel.storeId !== data.storeId) throw new Error('CHANNEL_STORE_MISMATCH')
+
   // Calculate totals with channel-specific pricing
   let totalAmount = 0
   const itemsWithPrices = await Promise.all(
@@ -671,10 +621,22 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   // Points discount: 100 points = 1 IDR (same as client calculation)
   const pointsDiscount = Math.floor(effectivePointsRedeemed / 100)
   const finalAmount = totalAmount - (data.discountAmount || 0) - pointsDiscount
+  if (finalAmount < 0) throw new Error('DISCOUNT_EXCEEDS_TOTAL')
 
   // Add PPN (Indonesian tax 11%) - only if taxEnabled is not explicitly false
   const ppnAmount = data.taxEnabled !== false ? Math.round(finalAmount * config.indonesia.ppnRate) : 0
   const grandTotal = Math.max(0, finalAmount + ppnAmount)
+
+  let confirmedQris: { id: string; orderId: string | null } | null = null
+  // A missing provider reference is the existing manually confirmed static-QR path.
+  // Only an explicit provider reference asserts provider verification.
+  if (data.paymentMethod === 'qris' && data.status !== 'suspended' && data.qrisExternalId !== undefined) {
+    if (!data.qrisExternalId?.startsWith('QRIS2-')) throw new Error('QRIS_PAYMENT_REFERENCE_REQUIRED')
+    const payment = await prisma.qrisPayment.findUnique({ where: { externalId: data.qrisExternalId } })
+    if (!payment || payment.status !== 'completed') throw new Error('QRIS_PAYMENT_NOT_CONFIRMED')
+    if (payment.storeId !== data.storeId || payment.amount !== grandTotal) throw new Error('QRIS_PAYMENT_MISMATCH')
+    confirmedQris = payment
+  }
 
   // Calculate BOM cost for each item
   const itemsWithCost = await Promise.all(
@@ -685,6 +647,18 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
       bomCost: await calculateBOMCost(item.productId)
     }))
   )
+
+  // Manual evidence is a staff confirmation, not proof of provider settlement.
+  let manualProofOrderId: string | null = null
+  if (data.paymentEvidenceId) {
+    if (data.paymentMethod !== 'qris' || data.qrisExternalId || data.status === 'suspended' || !paymentActorId) throw new Error('INVALID_PAYMENT_EVIDENCE')
+    const proof = await prisma.paymentEvidence.findUnique({ where: { id: data.paymentEvidenceId }, select: { storeId: true, amount: true, uploadedBy: true, orderId: true } })
+    if (!proof || proof.storeId !== data.storeId || proof.amount !== grandTotal) throw new Error('PAYMENT_EVIDENCE_MISMATCH')
+    if (proof.uploadedBy !== paymentActorId) throw new Error('PAYMENT_EVIDENCE_ORIGINAL_OPERATOR_REQUIRED')
+    manualProofOrderId = proof.orderId
+  }
+
+  if (manualProofOrderId) throw new Error('PAYMENT_EVIDENCE_ALREADY_USED')
 
   // Calculate member points BEFORE transaction (needs member info + points rule)
   let calculatedPoints = 0
@@ -719,6 +693,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     orderNumber = undefined
   }
 
+  const generatedOrderNumber = !orderNumber
   // 确保系统订单号为安全非线性流水号
   if (!orderNumber) {
     orderNumber = await generateOrderNumber(data.storeId)
@@ -742,7 +717,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
 
   // Create order with transaction
   let created = false
-  const order = await prisma.$transaction(async (tx) => {
+  const persistOrder = () => prisma.$transaction(async (tx) => {
     // Use pre-generated order number
 
     const newOrder = await tx.order.create({
@@ -753,6 +728,8 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
         memberId: data.memberId,
         customerCount: data.customerCount || 1,
         orderNumber,
+        requestFingerprint: fingerprint,
+        checkoutTaxAmount: ppnAmount,
         pickupNumber,
         totalAmount,  // 服务端计算的订单总额（含渠道调价）
         discountAmount: data.discountAmount || 0,
@@ -783,6 +760,21 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
       include: { items: true }
     })
 
+    if (data.paymentEvidenceId) {
+      const claimed = await tx.paymentEvidence.updateMany({
+        where: { id: data.paymentEvidenceId, storeId: data.storeId, amount: grandTotal, uploadedBy: paymentActorId, orderId: null, confirmedAt: null, verification: 'unverified' },
+        data: { orderId: newOrder.id, confirmedBy: paymentActorId, confirmedAt: new Date(), verification: 'staff_confirmed' }
+      })
+      if (claimed.count !== 1) throw new Error('PAYMENT_EVIDENCE_ALREADY_USED')
+    }
+    if (confirmedQris) {
+      const claimed = await tx.qrisPayment.updateMany({
+        where: { id: confirmedQris.id, storeId: data.storeId, status: 'completed', orderId: null },
+        data: { orderId: newOrder.id }
+      })
+      if (claimed.count !== 1) throw new Error('QRIS_PAYMENT_ALREADY_LINKED')
+    }
+
     // Deduct inventory and get low stock warnings (skip for suspended orders)
     const inventoryResult = data.status === 'suspended'
       ? { success: true, errors: [], lowStockWarnings: [] }
@@ -809,7 +801,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
     }
 
     // Update member points (skip for suspended orders)
-    if (data.memberId && calculatedPoints > 0 && data.status !== 'suspended') {
+    if (data.memberId && data.status !== 'suspended') {
       await tx.member.update({
         where: { id: data.memberId },
         data: {
@@ -818,7 +810,7 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
           lastVisit: new Date()
         }
       })
-      await tx.pointLog.create({
+      if (calculatedPoints > 0) await tx.pointLog.create({
         data: {
           memberId: data.memberId,
           type: 'earn',
@@ -864,6 +856,17 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
   })
 
 
+  let order:Awaited<ReturnType<typeof persistOrder>>
+  for(let attempt=0;;attempt++){
+    try{order=await persistOrder();break}
+    catch(error){
+      if(!isOrderNumberCollision(error))throw error
+      if(!generatedOrderNumber){const replay=await findOrderReplay(data,context);if(replay)return replay;throw error}
+      if(attempt>=4)throw new Error('ORDER_NUMBER_ALLOCATION_RETRY_EXHAUSTED')
+      orderNumber=orderNumberCandidate()
+    }
+  }
+
   // Process referral rewards AFTER transaction (skip for suspended orders)
   if (created && data.memberId && data.status !== 'suspended') {
     processOrderReferralRewards(order.id).catch(err => {
@@ -876,14 +879,16 @@ export async function createOrder(data: CreateOrderData): Promise<OrderResult> {
 
 // Update order status
 export async function updateOrderStatus(orderId: string, status: string) {
-  return prisma.order.update({
-    where: { id: orderId },
-    data: { status }
+  const previous = allowedPreviousOrderStatuses(status)
+  return prisma.$transaction(async tx => {
+    const updated = await tx.order.updateMany({ where: { id: orderId, status: { in: [...previous] } }, data: { status } })
+    if (updated.count !== 1) throw new Error('ORDER_STATUS_TRANSITION_CONFLICT')
+    return tx.order.findUniqueOrThrow({ where: { id: orderId } })
   })
 }
 
 // Refund order (idempotent, transactional, full rollback of points / coupons / cash)
-export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number) {
+export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean }) {
   const note = `Refund: ${reason || 'No reason provided'}`
 
   const order = await prisma.$transaction(async (tx) => {
@@ -903,6 +908,32 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
       include: { items: true }
     })
 
+    if (await tx.config.findUnique({ where: { storeId_key: { storeId: o.storeId, key: replicaKey(o.id) } } })) throw new Error('REPLICA_FINANCIAL_ACTION_LOCAL_ONLY')
+
+    const earlier=await tx.refundRequest.findFirst({where:{orderId:o.id,status:{in:['approved','paid']}}})
+    if(earlier)throw new Error('REFUND_REMAINING_ITEMS_REQUIRED')
+
+    if (refundAmount !== undefined && (!Number.isSafeInteger(refundAmount) || refundAmount <= 0 || refundAmount > o.finalAmount)) {
+      throw new Error('INVALID_REFUND_AMOUNT')
+    }
+
+    if (approval?.restoreUnprepared) {
+      const request = await tx.refundRequest.findUnique({ where: { id: approval.requestId } })
+      if (!request || request.orderId !== o.id || request.reasonCode !== 'paid_unprepared' || request.status !== 'pending') throw new Error('INVALID_UNPREPARED_APPROVAL')
+      // Reverse original quantities, including exploded subrecipes; never recalculate today's BOM.
+      const deductions = await tx.stockOutLog.findMany({ where: { orderId: o.id, reason: 'sold' }, include: { inventory: true } })
+      if (!deductions.length) throw new Error('REFUND_STOCK_EVIDENCE_REQUIRED')
+      for (const log of deductions) {
+        if (log.inventory.storeId !== o.storeId || !Number.isFinite(log.quantity) || log.quantity <= 0) throw new Error('INVALID_ORIGINAL_STOCK_LEDGER')
+        let snapshot: any
+        try { snapshot = JSON.parse(log.note || '') } catch { throw new Error('REFUND_STOCK_EVIDENCE_REQUIRED') }
+        if (snapshot.version !== 1 || snapshot.ledgerQuantity !== log.quantity || snapshot.ledgerUnit !== log.inventory.unit) throw new Error('REFUND_STOCK_EVIDENCE_REQUIRED')
+        await tx.inventory.update({ where: { id: log.inventoryId }, data: { currentStock: { increment: log.quantity } } })
+        // Signed stock-out reversal leaves average carrying cost unchanged; no invented purchase.
+        await tx.stockOutLog.create({ data: { inventoryId: log.inventoryId, orderId: o.id, quantity: -log.quantity, reason: 'refund_unprepared', note: `Reverse ${log.id}; approved ${approval.requestId} by ${approval.approvedBy}` } })
+      }
+    }
+
     // 1. Member points & spend rollback (based on actual point logs of this order)
     if (o.memberId) {
       const logs = await tx.pointLog.findMany({
@@ -911,18 +942,17 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
       const earned = logs.filter(l => l.type === 'earn').reduce((s, l) => s + Math.max(0, l.points), 0)
       const redeemed = logs.filter(l => l.type === 'redeem').reduce((s, l) => s + Math.abs(l.points), 0)
 
-      const member = await tx.member.findUnique({ where: { id: o.memberId } })
-      if (member) {
-        // Never drive points negative (member may have already spent the earned points)
+      let applied = false
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const member = await tx.member.findUnique({ where: { id: o.memberId } })
+        if (!member) { applied = true; break }
         const deductEarned = Math.min(earned, member.points + redeemed)
         const netChange = redeemed - deductEarned
-        await tx.member.update({
-          where: { id: o.memberId },
-          data: {
-            points: { increment: netChange },
-            totalSpent: { decrement: Math.min(o.finalAmount, member.totalSpent ?? o.finalAmount) }
-          }
+        const updated = await tx.member.updateMany({
+          where: { id: o.memberId, points: member.points, totalSpent: member.totalSpent },
+          data: { points: { increment: netChange }, totalSpent: { decrement: Math.min(o.finalAmount, member.totalSpent) } }
         })
+        if (updated.count !== 1) continue // Concurrent redemption/refund changed the snapshot; read it again.
         if (deductEarned > 0) {
           await tx.pointLog.create({
             data: { memberId: o.memberId, type: 'adjust', points: -deductEarned, orderId: o.id, note: `${note} (reverse earned)` }
@@ -933,7 +963,10 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
             data: { memberId: o.memberId, type: 'adjust', points: redeemed, orderId: o.id, note: `${note} (return redeemed)` }
           })
         }
+        applied = true
+        break
       }
+      if (!applied) throw new Error('REFUND_MEMBER_CONFLICT') // Entire refund rolls back; caller may retry.
     }
 
     // 2. Restore coupons used on this order (POS stores orderNumber, others may store id)
@@ -958,35 +991,53 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
       })
     }
 
+    if (approval) {
+      const approved = await tx.refundRequest.updateMany({
+        where: { id: approval.requestId, orderId, status: 'pending' },
+        data: { status: 'approved', amount: refundAmount ?? o.finalAmount, approvedBy: approval.approvedBy, approvedAt: new Date(), note: approval.note }
+      })
+      if (approved.count !== 1) throw new Error('REFUND_REQUEST_ALREADY_PROCESSED')
+    }
+    // Prepared refunds never restore ingredients. Unprepared reversals above share this transaction.
     return o
   })
-
-  // 4. Return inventory to stock (own transaction)
-  await returnInventory(order.id, order.items)
 
   return order
 }
 
 // Create refund request (from POS)
 export async function createRefundRequest(params: {
+  requestId?: string
   orderId: string
   reason: string
   requestedBy: string
+  reasonCode?: string
+  selectedItemIds?: string[]
 }) {
-  const order = await prisma.order.findUnique({
-    where: { id: params.orderId }
+  return prisma.$transaction(async tx=>{
+  await tx.order.updateMany({where:{id:params.orderId},data:{updatedAt:new Date()}})
+  if(params.requestId){
+    if(!/^[A-Za-z0-9-]{16,100}$/.test(params.requestId))throw Error('REFUND_REQUEST_ID_REQUIRED')
+    const prior=await tx.refundRequest.findUnique({where:{id:params.requestId}})
+    if(prior){if(prior.orderId!==params.orderId||prior.reason!==params.reason||prior.reasonCode!==params.reasonCode||prior.requestedBy!==params.requestedBy||prior.selectedItemIds!==JSON.stringify(params.selectedItemIds))throw Error('REFUND_IDEMPOTENCY_CONFLICT');return prior}
+  }
+  const order = await tx.order.findUnique({
+    where: { id: params.orderId }, include: { items: true }
   })
 
   if (!order) {
     throw new Error('Order not found')
   }
 
+  if (!['customer_dissatisfied', 'paid_unprepared'].includes(params.reasonCode || '')) throw new Error('REFUND_CLASSIFICATION_REQUIRED')
+  const selectedItemIds = validateRefundItems(order.items.map(item => item.id), params.selectedItemIds)
+
   if (order.status !== 'completed') {
     throw new Error('Only completed orders can be refunded')
   }
 
   // Check for existing pending refund request
-  const existingRequest = await prisma.refundRequest.findFirst({
+  const existingRequest = await tx.refundRequest.findFirst({
     where: {
       orderId: params.orderId,
       status: 'pending'
@@ -997,7 +1048,7 @@ export async function createRefundRequest(params: {
   }
 
   // Validate total refunded amount won't exceed order total
-  const approvedRefunds = await prisma.refundRequest.findMany({
+  const approvedRefunds = await tx.refundRequest.findMany({
     where: {
       orderId: params.orderId,
       status: { in: ['approved', 'paid'] }
@@ -1005,21 +1056,26 @@ export async function createRefundRequest(params: {
   })
   const totalAlreadyRefunded = approvedRefunds.reduce((sum, r) => sum + (r.amount || 0), 0)
   // Default amount=0 means full refund, so check if order is already fully refunded
-  if (totalAlreadyRefunded >= order.totalAmount) {
+  if (approvedRefunds.length > 0 || totalAlreadyRefunded >= order.finalAmount) {
     throw new Error('Order has already been fully refunded')
   }
 
   // Create refund request
-  const refundRequest = await prisma.refundRequest.create({
+  const refundRequest = await tx.refundRequest.create({
     data: {
+      id:params.requestId,
       orderId: params.orderId,
       reason: params.reason,
+      reasonCode: params.reasonCode,
+      selectedItemIds: JSON.stringify(selectedItemIds),
       requestedBy: params.requestedBy,
+      amount: order.finalAmount,
       status: 'pending'
     }
   })
 
   return refundRequest
+  })
 }
 
 // Return inventory result type
@@ -1059,8 +1115,8 @@ async function returnInventoryRecursive(
       data: {
         inventoryId,
         quantity: qty,
-        unitCost: inv.avgCost,
-        totalAmount: qty * inv.avgCost,
+        unitCost: Number(inv.avgCost),
+        totalAmount: Math.round(qty * Number(inv.avgCost)),
         note: `Refund: Return ${inv.name}`
       }
     })
@@ -1108,8 +1164,8 @@ async function returnInventoryRecursive(
     data: {
       inventoryId,
       quantity: qty,
-      unitCost: inv.avgCost,
-      totalAmount: qty * inv.avgCost,
+      unitCost: Number(inv.avgCost),
+      totalAmount: Math.round(qty * Number(inv.avgCost)),
       note: `Refund: Return ${inv.name}`
     }
   })
@@ -1117,10 +1173,10 @@ async function returnInventoryRecursive(
 }
 
 // Return inventory to stock (for refunds) - with transaction
-export async function returnInventory(orderId: string, items: any[]) {
+export async function returnInventory(orderId: string, items: any[], transaction?: Prisma.TransactionClient) {
   const errors: string[] = []
 
-  await prisma.$transaction(async (tx) => {
+  const restore = async (tx: Prisma.TransactionClient) => {
     for (const item of items) {
       const bomItems = await tx.bOMItem.findMany({
         where: { productId: item.productId },
@@ -1136,7 +1192,9 @@ export async function returnInventory(orderId: string, items: any[]) {
         }
       }
     }
-  })
+  }
+  if (transaction) await restore(transaction)
+  else await prisma.$transaction(restore)
 
   return { success: errors.length === 0, errors }
 }
@@ -1169,13 +1227,13 @@ export async function getKDSOrders(storeId: string, options?: {
  * Bulk create orders for POS offline sync.
  * Processes multiple orders, returning individual success/failure results for each order.
  */
-export async function bulkCreateOrders(ordersData: CreateOrderData[]): Promise<Array<{ index: number; localId?: string; success: boolean; data?: any; error?: string }>> {
+export async function bulkCreateOrders(ordersData: CreateOrderData[], context?: OrderRequestContext, creationAllowed?: readonly boolean[]): Promise<Array<{ index: number; localId?: string; success: boolean; data?: any; error?: string }>> {
   const results: Array<{ index: number; localId?: string; success: boolean; data?: any; error?: string }> = []
 
   for (let i = 0; i < ordersData.length; i++) {
     const orderData = ordersData[i]
     try {
-      const order = await createOrder(orderData)
+      const order = await createOrder(orderData, context ? { ...context, allowCreate: creationAllowed?.[i] === true } : undefined)
       results.push({
         index: i,
         localId: orderData.orderNumber,

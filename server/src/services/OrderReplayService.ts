@@ -28,6 +28,8 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
     tableNumber: data.tableNumber ?? null, callerPhone: data.callerPhone ?? null,
     driverPickupTime: data.driverPickupTime ? new Date(data.driverPickupTime).toISOString() : null,
     purchaseOrderNo: data.purchaseOrderNo ?? null, socialRef: data.socialRef ?? null, note: data.note ?? null,
+    ...(data.qrisExternalId !== undefined ? {qrisExternalId:data.qrisExternalId} : {}),
+    ...(data.paymentEvidenceId !== undefined ? {paymentEvidenceId:data.paymentEvidenceId} : {}),
     items: data.items.map(item => ({ productId: item.productId, productName: item.productName,
       specId: item.specId, specName: item.specName, quantity: item.quantity, unitPrice: item.unitPrice,
       addons: (item.addons ?? []).map(addon => ({ name: addon.name, price: addon.price })) }))
@@ -35,8 +37,8 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
   return 'v1:' + createHash('sha256').update(canonical(request)).digest('hex')
 }
 
-export function publicOrder<T extends object>(order: T): Omit<T, 'requestFingerprint' | 'requestReceipt'> {
-  const { requestFingerprint: _fingerprint, requestReceipt: _receipt, ...result } = order as T & { requestFingerprint?: string | null; requestReceipt?: string | null }
+export function publicOrder<T extends object>(order: T): Omit<T, 'requestFingerprint' | 'requestReceipt' | 'replayed' | 'replayedBy'> {
+  const { requestFingerprint: _fingerprint, requestReceipt: _receipt, replayed: _replayed, replayedBy: _replayedBy, ...result } = order as T & { requestFingerprint?: string | null; requestReceipt?: string | null; replayed?:boolean; replayedBy?:string }
   return result
 }
 

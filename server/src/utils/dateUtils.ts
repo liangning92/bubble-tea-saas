@@ -1,86 +1,18 @@
-// Date utility functions
-
-export function startOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-/**
- * Get start of today in Asia/Jakarta (WIB, UTC+7) timezone
- * This ensures consistent "today" calculation regardless of server timezone
- * Used for POS cash management, shift reports, etc.
- */
-export function startOfTodayJakarta(): Date {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jakarta',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(new Date())
-
-  const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '1')
-  const year = getPart('year')
-  const month = getPart('month') - 1 // JS months are 0-indexed
-  const day = getPart('day')
-
-  const today = new Date(0)
-  today.setFullYear(year, month, day)
-  today.setHours(0, 0, 0, 0)
-  return today
-}
-
-export function endOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(23, 59, 59, 999)
-  return d
-}
-
-export function startOfWeek(date: Date, startDay: number = 1): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = (day < startDay ? 7 : 0) + day - startDay
-  d.setDate(d.getDate() - diff)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-export function endOfWeek(date: Date, startDay: number = 1): Date {
-  const d = startOfWeek(date, startDay)
-  d.setDate(d.getDate() + 6)
-  d.setHours(23, 59, 59, 999)
-  return d
-}
-
-export function startOfMonth(date: Date): Date {
-  const d = new Date(date)
-  d.setDate(1)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-export function endOfMonth(date: Date): Date {
-  const d = new Date(date)
-  d.setMonth(d.getMonth() + 1)
-  d.setDate(0)
-  d.setHours(23, 59, 59, 999)
-  return d
-}
-
-export function addDays(date: Date, days: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
-export function subDays(date: Date, days: number): Date {
-  return addDays(date, -days)
-}
-
-export function addMonths(date: Date, months: number): Date {
-  const d = new Date(date)
-  d.setMonth(d.getMonth() + months)
-  return d
+const WIB = 7 * 3600000
+const calendar = (date:Date) => new Date(date.getTime()+WIB)
+const instant = (date:Date) => new Date(date.getTime()-WIB)
+export function startOfDay(date:Date):Date { const d=calendar(date); d.setUTCHours(0,0,0,0);return instant(d) }
+export function endOfDay(date:Date):Date { return new Date(startOfDay(date).getTime()+86400000-1) }
+export function startOfTodayJakarta():Date { return startOfDay(new Date()) }
+export function startOfWeek(date:Date,startDay:number=1):Date { const d=calendar(startOfDay(date));d.setUTCDate(d.getUTCDate()-((d.getUTCDay()-startDay+7)%7));return instant(d) }
+export function endOfWeek(date:Date,startDay:number=1):Date {return new Date(startOfWeek(date,startDay).getTime()+7*86400000-1)}
+export function startOfMonth(date:Date):Date {const d=calendar(date);return new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)-WIB)}
+export function endOfMonth(date:Date):Date {const d=calendar(date);return new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1)-WIB-1)}
+export function addDays(date:Date,days:number):Date {return new Date(date.getTime()+days*86400000)}
+export function subDays(date:Date,days:number):Date {return addDays(date,-days)}
+export function addMonths(date:Date,months:number):Date {
+ const d=calendar(date),day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months)
+ const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return instant(d)
 }
 
 export function subMonths(date: Date, months: number): Date {
@@ -88,12 +20,13 @@ export function subMonths(date: Date, months: number): Date {
 }
 
 export function formatDate(date: Date, format: string = 'YYYY-MM-DD'): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
+  const local = calendar(date)
+  const year = local.getUTCFullYear()
+  const month = String(local.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(local.getUTCDate()).padStart(2, '0')
+  const hours = String(local.getUTCHours()).padStart(2, '0')
+  const minutes = String(local.getUTCMinutes()).padStart(2, '0')
+  const seconds = String(local.getUTCSeconds()).padStart(2, '0')
 
   return format
     .replace('YYYY', String(year))
@@ -112,13 +45,7 @@ export function getWeekNumber(date: Date): number {
   return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
 }
 
-export function isSameDay(date1: Date, date2: Date): boolean {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  )
-}
+export function isSameDay(a:Date,b:Date):boolean {return startOfDay(a).getTime()===startOfDay(b).getTime()}
 
 export function isToday(date: Date): boolean {
   return isSameDay(date, new Date())

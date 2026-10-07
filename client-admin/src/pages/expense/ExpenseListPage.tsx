@@ -259,18 +259,10 @@ export function ExpenseListPage() {
     }
   }
 
+  const [recurringRevision,setRecurringRevision]=useState(0)
   const loadRecurringExpenses = async () => {
-    try {
-      // TODO: 后续应迁移到服务端 API，当前使用 localStorage 是临时方案
-      // localStorage 会在浏览器清除或更换设备时丢失数据
-      if (!user?.storeId) return
-      const stored = localStorage.getItem(`recurring_expenses_${user.storeId}`)
-      if (stored) {
-        setRecurringExpenses(JSON.parse(stored))
-      }
-    } catch (error) {
-      console.error('Failed to load recurring expenses:', error)
-    }
+    try { if(!user?.storeId)return;const r=await expenseApi.getRecurring();setRecurringExpenses(r.data.data.items);setRecurringRevision(r.data.data.revision) }
+    catch(error){alert(t('dashboardNavigation.loadFailed'));console.error('Recurring load failed',error)}
   }
 
   const loadCustomTypes = async () => {
@@ -313,11 +305,9 @@ export function ExpenseListPage() {
     }
   }
 
-  const saveRecurringExpenses = (items: RecurringExpense[]) => {
-    // TODO: 后续应迁移到服务端 API，当前使用 localStorage 是临时方案
-    if (!user?.storeId) return
-    localStorage.setItem(`recurring_expenses_${user.storeId}`, JSON.stringify(items))
-    setRecurringExpenses(items)
+  const saveRecurringExpenses = async (items:RecurringExpense[]) => {
+    try{const r=await expenseApi.saveRecurring(items,recurringRevision);setRecurringExpenses(r.data.data.items);setRecurringRevision(r.data.data.revision);return true}
+    catch{alert(t('common.saveFailed'));await loadRecurringExpenses();return false}
   }
 
   const handleSave = async () => {
@@ -464,7 +454,7 @@ export function ExpenseListPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleSaveRecurring = () => {
+  const handleSaveRecurring = async () => {
     if (!recurringForm.name || !recurringForm.amount) {
       alert(t('common.required'))
       return
@@ -473,7 +463,7 @@ export function ExpenseListPage() {
     // Parse amount - remove thousand separators before converting to number
     const rawAmount = recurringForm.amount.replace(/,/g, '')
     const newItem: RecurringExpense = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       storeId: user?.storeId || '',
       name: recurringForm.name,
       category: recurringForm.category,
@@ -484,7 +474,7 @@ export function ExpenseListPage() {
     }
 
     const updated = [...recurringExpenses, newItem]
-    saveRecurringExpenses(updated)
+    if(!await saveRecurringExpenses(updated))return
     setShowRecurringModal(false)
     setRecurringForm({
       name: '',

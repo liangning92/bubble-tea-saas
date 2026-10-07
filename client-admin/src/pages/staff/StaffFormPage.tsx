@@ -27,6 +27,7 @@ export function StaffFormPage() {
     bankAccount: '',
     status: 'active',
     employmentType: 'full_time',
+    baseSalary: '',
     hourlyRate: '',
     weeklyHours: '',
     hireDate: ''
@@ -86,7 +87,8 @@ export function StaffFormPage() {
         bankAccount: s.bankAccount || '',
         status: s.status || 'active',
         employmentType: s.employmentType || 'full_time',
-        hourlyRate: s.hourlyRate || '',
+        baseSalary: s.baseSalary ?? '',
+        hourlyRate: s.hourlyRate ?? '',
         weeklyHours: s.weeklyHours || '',
         hireDate: s.hireDate ? new Date(s.hireDate).toISOString().slice(0, 10) : ''
       })
@@ -125,6 +127,7 @@ export function StaffFormPage() {
 
 
     // Convert empty strings to appropriate values
+    submitData.baseSalary = submitData.baseSalary === '' ? undefined : Number(submitData.baseSalary)
     if (submitData.hourlyRate === '') submitData.hourlyRate = undefined
     if (submitData.weeklyHours === '') submitData.weeklyHours = undefined
     if (submitData.hireDate === '') submitData.hireDate = undefined
@@ -266,6 +269,7 @@ export function StaffFormPage() {
             </div>
           </div>
 
+          <label className="block text-sm">{t('salary.baseSalary')} (IDR)<input className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
           {/* Part-time fields */}
           {(form.employmentType === 'part_time' || form.employmentType === 'intern') && (
             <div className="grid grid-cols-2 gap-4">

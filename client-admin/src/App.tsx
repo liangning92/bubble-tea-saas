@@ -1,4 +1,6 @@
 import { TrainingLibraryPage } from './pages/TrainingLibraryPage'
+import {ConsumptionAnalysisPage} from './pages/inventory/ConsumptionAnalysisPage'
+import { AiPermissionsPage } from './pages/settings/AiPermissionsPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
@@ -23,6 +25,7 @@ import { StaffIndexPage } from './pages/staff/StaffIndexPage'
 import { StaffListPage } from './pages/staff/StaffListPage'
 import { StaffFormPage } from './pages/staff/StaffFormPage'
 import { StaffDetailPage } from './pages/staff/StaffDetailPage'
+import { LeaveBalancePage } from './pages/staff/LeaveBalancePage'
 import { LeaveListPage } from './pages/staff/LeaveListPage'
 import { LeaveTypeConfigPage } from './pages/staff/LeaveTypeConfigPage'
 import { LeaveKanbanPage } from './pages/staff/LeaveKanbanPage'
@@ -179,6 +182,7 @@ function App() {
           <Route path="consumption-analysis" element={<DashboardFeatureUnavailable />} />
           <Route path="alert-config" element={<StockAlertConfigPage />} />
           <Route path="count" element={<InventoryCountPage />} />
+          <Route path="consumption" element={<ConsumptionAnalysisPage />} />
           <Route path="restock" element={<RestockSuggestionPage />} />
           <Route path="suppliers" element={<SupplierListPage />} />
         </Route>
@@ -203,6 +207,7 @@ function App() {
             <Route index element={<AttendanceDashboardPage />} />
             <Route path="dashboard" element={<AttendanceDashboardPage />} />
             <Route path="leave" element={<LeaveListPage />} />
+            <Route path="leave/balance" element={<LeaveBalancePage />} />
             <Route path="leave/types" element={<LeaveTypeConfigPage />} />
             <Route path="leave/kanban" element={<LeaveKanbanPage />} />
             <Route path="correction" element={<AttendanceCorrectionListPage />} />
@@ -336,6 +341,7 @@ function App() {
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<POSSettingsPage />} />
+        <Route path="settings/ai" element={<AiPermissionsPage />} />
 
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />

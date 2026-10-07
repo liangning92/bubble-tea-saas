@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { inventoryApi } from '../../services/api'
@@ -25,6 +25,8 @@ interface InventoryCountItem {
   countedQty?: number
   variance?: number
   countedAt?: string
+  movementSinceObservation?:number
+  varianceAmountEstimate?:number
   countedBy?: string
   note?: string
   inventory?: {
@@ -32,6 +34,7 @@ interface InventoryCountItem {
     name: string
     unit: string
     currentStock: number
+    updatedAt:string
   }
 }
 
@@ -62,8 +65,11 @@ export function InventoryCountPage() {
 
   const counts: InventoryCount[] = countsData?.data?.data?.list || []
 
+  useEffect(()=>{if(selectedCount){const latest=counts.find(c=>c.id===selectedCount.id);if(latest)setSelectedCount(latest)}},[countsData])
+  const showError=(error:any)=>{alert(error?.response?.data?.message||t('countFlow.refresh'));queryClient.invalidateQueries({queryKey:['inventory-counts']})}
   // Create mutation
   const createMutation = useMutation({
+    onError:showError,
     mutationFn: (data: any) => inventoryApi.createInventoryCount(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
@@ -79,6 +85,7 @@ export function InventoryCountPage() {
 
   // Update count item mutation
   const updateItemMutation = useMutation({
+    onError:showError,
     mutationFn: ({ countId, itemId, data }: { countId: string; itemId: string; data: any }) =>
       inventoryApi.updateInventoryCountItem(countId, itemId, data),
     onSuccess: () => {
@@ -89,6 +96,7 @@ export function InventoryCountPage() {
 
   // Complete count mutation
   const completeMutation = useMutation({
+    onError:showError,
     mutationFn: (id: string) => inventoryApi.completeInventoryCount(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
@@ -100,6 +108,7 @@ export function InventoryCountPage() {
 
   // Cancel count mutation
   const cancelMutation = useMutation({
+    onError:showError,
     mutationFn: (id: string) => inventoryApi.cancelInventoryCount(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
@@ -118,7 +127,7 @@ export function InventoryCountPage() {
     })
   }
 
-  const handleUpdateItem = (item: InventoryCountItem, countedQty: number) => {
+  const handleUpdateItem = (item: InventoryCountItem, countedQty: number,note?:string) => {
     if (!selectedCount) return
     updateItemMutation.mutate({
       countId: selectedCount.id,
@@ -126,7 +135,9 @@ export function InventoryCountPage() {
       data: {
         countedQty,
         countedBy: user?.staff?.id || '',
-        note: item.note
+        note,
+        expectedStock:item.inventory?.currentStock,
+        observedVersion:item.inventory?.updatedAt
       }
     })
   }
@@ -260,6 +271,8 @@ export function InventoryCountPage() {
 
     return (
       <div className="space-y-6">
+        <p className="text-sm text-amber-700">{t('countFlow.hint')}</p>
+        <button onClick={()=>queryClient.invalidateQueries({queryKey:['inventory-counts']})}>{t('countFlow.refresh')}</button>
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -362,9 +375,9 @@ export function InventoryCountPage() {
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3">{t('inventory.material')}</th>
-                  <th className="pb-3 text-right">{t('inventory.systemQty')}</th>
+                  <th className="pb-3 text-right">{t('countFlow.theory')}</th>
                   <th className="pb-3 text-right">{t('inventory.actualQty')}</th>
-                  <th className="pb-3 text-right">{t('inventory.varianceCol')}</th>
+                  <th className="pb-3 text-right">{t('inventory.varianceCol')}</th><th>{t('countFlow.movement')}</th><th>{t('countFlow.amount')}</th><th>{t('countFlow.reason')}</th>
                   {selectedCount.status === 'in_progress' && (
                     <th className="pb-3 text-center">{t('inventory.action')}</th>
                   )}
@@ -382,7 +395,7 @@ export function InventoryCountPage() {
                         <span className="font-medium">{formatItemName(item.inventory?.name || 'Unknown', i18n.language)}</span>
                         <span className="text-sm text-gray-500 ml-2">({item.inventory?.unit})</span>
                       </td>
-                      <td className="py-3 text-right text-gray-600">{item.systemQty}</td>
+                      <td className="py-3 text-right text-gray-600">{item.countedAt?item.systemQty:item.inventory?.currentStock}</td>
                       <td className="py-3 text-right">
                         {item.countedQty !== undefined && item.countedQty !== null ? (
                           <span className={variance !== 0 && variance !== null ? 'font-bold text-orange-600' : ''}>
@@ -401,11 +414,13 @@ export function InventoryCountPage() {
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
+                      <td>{item.movementSinceObservation??'—'}</td><td>{item.varianceAmountEstimate??'—'}</td><td>{item.note||'—'}</td>
                       {selectedCount.status === 'in_progress' && (
                         <td className="py-3 text-center">
                           <CountItemInput
                             item={item}
-                            onUpdate={(qty) => handleUpdateItem(item, qty)}
+                            key={item.id+item.inventory?.updatedAt}
+                            onUpdate={(qty,note) => handleUpdateItem(item, qty,note)}
                             isUpdating={updateItemMutation.isPending}
                           />
                         </td>
@@ -507,17 +522,18 @@ function CountItemInput({
   isUpdating
 }: {
   item: InventoryCountItem
-  onUpdate: (qty: number) => void
+  onUpdate: (qty: number,note:string) => void
   isUpdating: boolean
 }) {
   const { t } = useTranslation()
   const [value, setValue] = useState(item.countedQty?.toString() || '')
-  const [showInput, setShowInput] = useState(!item.countedQty)
+  const [reason,setReason]=useState(item.note||'')
+  const [showInput, setShowInput] = useState(item.countedQty===null||item.countedQty===undefined)
 
   const handleSubmit = () => {
     const qty = parseFloat(value)
     if (!isNaN(qty) && qty >= 0) {
-      onUpdate(qty)
+      onUpdate(qty,reason)
       setShowInput(false)
     }
   }
@@ -535,6 +551,7 @@ function CountItemInput({
           placeholder="0"
           disabled={isUpdating}
         />
+        <input className="input input-sm w-32" value={reason} onChange={e=>setReason(e.target.value)} placeholder={t('countFlow.reason')}/>
         <button onClick={handleSubmit} disabled={isUpdating} className="btn btn-sm btn-primary">
           <Check size={14} />
         </button>

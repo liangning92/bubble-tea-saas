@@ -329,7 +329,7 @@ export function FinanceReportsPage() {
                 </div>
                 <div className="flex justify-between items-center py-1 pl-4">
                   <span className="text-gray-600">{t('finance.ppnCollected')}</span>
-                  <span className="font-medium text-red-600">-{formatCurrency(income.revenue?.ppnCollected || 0)}</span>
+                  <span className="font-medium text-red-600">-{(income.revenue?.ppnCollected == null ? '—' : formatCurrency(income.revenue?.ppnCollected))}</span>
                 </div>
                 <div className="flex justify-between items-center py-1 pl-4 font-semibold border-t">
                   <span>{t('finance.netSales')}</span>
@@ -602,7 +602,7 @@ export function FinanceReportsPage() {
                     </div>
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <p className="text-sm text-gray-500">{t('finance.ppnCollected')}</p>
-                      <p className="text-xl font-bold">{formatCurrency(previewData.data.revenue?.ppnCollected ?? previewData.data.ppnCollected ?? 0)}</p>
+                      <p className="text-xl font-bold">{((previewData.data.revenue ? previewData.data.revenue.ppnCollected : previewData.data.ppnCollected) == null ? '—' : formatCurrency(previewData.data.revenue ? previewData.data.revenue.ppnCollected : previewData.data.ppnCollected))}</p>
                     </div>
                   </div>
                   <div className="p-4 bg-green-50 rounded-lg">

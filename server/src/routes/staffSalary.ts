@@ -1,3 +1,5 @@
+import prisma from '../config/database'
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { calculateSalary } from '../services/StaffService'
@@ -5,7 +7,7 @@ import { calculateSalary } from '../services/StaffService'
 const router = Router()
 
 // GET /api/staff-salary/calculate/:staffId
-router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), requireResourceStore(req=>prisma.staff.findUnique({where:{id:req.params.staffId},select:{storeId:true}})), async (req: AuthRequest, res) => {
   try {
     const { staffId } = req.params
     const { month, year } = req.query

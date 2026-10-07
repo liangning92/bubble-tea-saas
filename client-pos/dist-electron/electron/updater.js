@@ -39,7 +39,7 @@ function setupUpdater(window) {
     mainWindow = window;
     // Configure auto-updater
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoInstallOnAppQuit = false;
     // Tell electron-updater where to find updates (GitHub Releases)
     // Read from env vars (set in electron-builder extraMetadata or CI environment)
     const owner = process.env.UPDATER_OWNER || 'liangning92';
@@ -141,8 +141,12 @@ function setupIpcHandlers() {
     });
     // Install update and restart
     electron_1.ipcMain.handle('install-update', () => {
-        log('info', 'Installing update and restarting...');
-        autoUpdater.quitAndInstall(false, true);
+        // No real legacy database compatibility/migration clearance has been granted.
+        // Refuse BEFORE quitting the currently usable POS, even after downloading.
+        const message = 'Upgrade clearance required; your current POS stays open. / 请等待升级确认，当前收银程序将保持运行。 / Tunggu persetujuan peningkatan; POS saat ini tetap berjalan.';
+        log('warn', 'Installation blocked pending legacy database clearance');
+        sendToRenderer('update-error', message);
+        return false;
     });
 }
 /**

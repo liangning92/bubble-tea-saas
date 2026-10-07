@@ -1,3 +1,4 @@
+import {changeMemberBalance} from '../services/MemberBalanceService'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -604,40 +605,11 @@ router.post('/members/:id/balance/topup', authenticate, authorize('admin'), asyn
     const { id } = req.params
     const { amount, note } = req.body
 
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
       return res.status(400).json({ code: 400, message: 'Valid amount is required' })
     }
 
-    const member = await prisma.member.findUnique({
-      where: { id },
-      select: { id: true, balance: true, storeId: true }
-    })
-
-    if (!member || member.storeId !== req.user!.storeId) {
-      return res.status(404).json({ code: 404, message: 'Member not found' })
-    }
-
-    const balanceBefore = member.balance
-    const balanceAfter = balanceBefore + amount
-
-    // Update balance and create log in transaction
-    const [updatedMember, log] = await prisma.$transaction([
-      prisma.member.update({
-        where: { id },
-        data: { balance: balanceAfter }
-      }),
-      prisma.memberBalanceLog.create({
-        data: {
-          memberId: id,
-          type: 'topup',
-          amount,
-          balanceBefore,
-          balanceAfter,
-          note: note || 'Topup',
-          operatorId: req.user!.id
-        }
-      })
-    ])
+    const {member:updatedMember,log} = await changeMemberBalance(id, req.user!.storeId, amount, 'topup', req.user!.id, note, req.body.requestId)
 
     res.json({
       code: 200,
@@ -667,44 +639,11 @@ router.post('/members/:id/balance/deduct', authenticate, authorize('admin', 'man
     const { id } = req.params
     const { amount, note } = req.body
 
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
       return res.status(400).json({ code: 400, message: 'Valid amount is required' })
     }
 
-    const member = await prisma.member.findUnique({
-      where: { id },
-      select: { id: true, balance: true, storeId: true }
-    })
-
-    if (!member || member.storeId !== req.user!.storeId) {
-      return res.status(404).json({ code: 404, message: 'Member not found' })
-    }
-
-    if (member.balance < amount) {
-      return res.status(400).json({ code: 400, message: 'Insufficient balance' })
-    }
-
-    const balanceBefore = member.balance
-    const balanceAfter = balanceBefore - amount
-
-    // Update balance and create log in transaction
-    const [updatedMember, log] = await prisma.$transaction([
-      prisma.member.update({
-        where: { id },
-        data: { balance: balanceAfter }
-      }),
-      prisma.memberBalanceLog.create({
-        data: {
-          memberId: id,
-          type: 'deduct',
-          amount: -amount,
-          balanceBefore,
-          balanceAfter,
-          note: note || 'Deduct',
-          operatorId: req.user!.id
-        }
-      })
-    ])
+    const {member:updatedMember,log} = await changeMemberBalance(id, req.user!.storeId, amount, 'deduct', req.user!.id, note, req.body.requestId)
 
     res.json({
       code: 200,

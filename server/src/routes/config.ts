@@ -1,4 +1,8 @@
+import {internalConfigWhere,isInternalConfig,isSecretConfig} from '../utils/configAccess'
 import { isTrainingLibraryKey, ordinaryConfigWhere } from '../services/TrainingLibraryStore'
+import {COUNT_OBSERVATION_PREFIX} from '../utils/countObservation'
+import { RECEIPT_SYNC_PREFIX } from '../services/ReceiptSyncService'
+import { AI_POLICY_KEY } from '../services/AiPermissionService'
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -23,7 +27,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       return res.status(403).json({ code: 403, message: 'Store access denied' })
     }
 
-    const where: any = { ...ordinaryConfigWhere }
+    const where: any = { AND: [ordinaryConfigWhere, internalConfigWhere, { key: { not: AI_POLICY_KEY } }, { key: { not: { startsWith: RECEIPT_SYNC_PREFIX } } }, {key:{not:{startsWith:COUNT_OBSERVATION_PREFIX}}}] }
     if (storeId) {
       where.storeId = { in: [storeId as string, ''] }
     } else {
@@ -39,6 +43,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     // Transform to key-value object (storeId specific will overwrite global '')
     const result: Record<string, any> = {}
     configs.forEach(c => {
+      if (req.user!.role !== 'admin' && isSecretConfig(c.key)) return
       try {
         result[c.key] = JSON.parse(c.value)
       } catch {
@@ -102,8 +107,10 @@ router.put('/staff/features', authenticate, authorize('admin', 'manager'), async
 router.get('/:storeId/:key', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId, key } = req.params
-    if (key === 'paymentMethods' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (storeId !== '' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (isInternalConfig(key) || (isSecretConfig(key) && req.user!.role !== 'admin')) return res.status(403).json({code:403,message:'Protected configuration'})
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
+    if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
     let config = await prisma.config.findUnique({
       where: { storeId_key: { storeId, key } }
@@ -144,6 +151,7 @@ router.put('/hardware-settings', authenticate, async (req: AuthRequest, res) => 
     if (!storeId || !hardwareSettings) {
       return res.status(400).json({ code: 400, message: 'Missing storeId or hardwareSettings' })
     }
+    if (storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({code:403,message:'Store access denied'})
     const valueStr = JSON.stringify(hardwareSettings)
     const config = await prisma.config.upsert({
       where: { storeId_key: { storeId, key: 'hardwareSettings' } },
@@ -161,8 +169,10 @@ router.put('/hardware-settings', authenticate, async (req: AuthRequest, res) => 
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(configSchema), async (req: AuthRequest, res) => {
   try {
     const { storeId, key, value, category } = req.body
-    if (key === 'paymentMethods' && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (isInternalConfig(key) || (isSecretConfig(key) && req.user!.role !== 'admin')) return res.status(403).json({code:403,message:'Protected configuration'})
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
+    if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
     const valueStr = typeof value === 'string' ? value : JSON.stringify(value)
 
@@ -188,6 +198,9 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
 router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { storeId, configs } = req.body // configs: [{key, value, category}]
+    if (storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({code:403,message:'Store access denied'})
+    if (Array.isArray(configs) && configs.some(c=>isInternalConfig(c?.key)||(isSecretConfig(c?.key)&&req.user!.role!=='admin'))) return res.status(403).json({code:403,message:'Protected configuration'})
+    if (!Array.isArray(configs) || configs.some(c => c?.key === AI_POLICY_KEY || (typeof c?.key === 'string' && (c.key.startsWith(RECEIPT_SYNC_PREFIX)||c.key.startsWith(COUNT_OBSERVATION_PREFIX))))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
     if (!Array.isArray(configs)) return res.status(400).json({code:400,message:'Invalid configs'})
     if (configs.some((c: { key?: string }) => c?.key === 'paymentMethods') && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
@@ -225,7 +238,9 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
 router.delete('/:storeId/:key', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { storeId, key } = req.params
+    if (isInternalConfig(key) || (isSecretConfig(key) && req.user!.role !== 'admin')) return res.status(403).json({code:403,message:'Protected configuration'})
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
+    if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
     await prisma.config.delete({
       where: { storeId_key: { storeId, key } }

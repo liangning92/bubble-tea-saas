@@ -1,3 +1,4 @@
+import {queueApi} from '../../services/api'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -26,22 +27,9 @@ export function QueueDisplayPage() {
   const [currentNumber, setCurrentNumber] = useState<number>(0)
   const [displayQueue, setDisplayQueue] = useState<QueueTicket[]>([])
 
-  const mockQueue: QueueTicket[] = [
-    { id: 'Q001', ticketNumber: 45, status: 'served', orderCount: 2 },
-    { id: 'Q002', ticketNumber: 46, status: 'served', orderCount: 1 },
-    { id: 'Q003', ticketNumber: 47, status: 'called', customerName: 'Ahmad', orderCount: 3, calledAt: new Date().toISOString() },
-    { id: 'Q004', ticketNumber: 48, status: 'waiting', orderCount: 2, estimatedWait: 5 },
-    { id: 'Q005', ticketNumber: 49, status: 'waiting', orderCount: 1, estimatedWait: 10 },
-    { id: 'Q006', ticketNumber: 50, status: 'waiting', orderCount: 4, estimatedWait: 15 },
-    { id: 'Q007', ticketNumber: 51, status: 'waiting', orderCount: 2, estimatedWait: 20 },
-    { id: 'Q008', ticketNumber: 52, status: 'waiting', orderCount: 1, estimatedWait: 25 },
-  ]
-
-  useEffect(() => {
-    setDisplayQueue(mockQueue)
-    const called = mockQueue.find(q => q.status === 'called')
-    if (called) setCurrentNumber(called.ticketNumber)
-  }, [])
+  const [error,setError]=useState(false)
+  const load=async()=>{try{const r=await queueApi.list();const list=r.data.data.tickets as QueueTicket[];setDisplayQueue(list);const called=[...list].reverse().find(t=>t.status==='called');setCurrentNumber(called?.ticketNumber||0);setError(false)}catch{setError(true)}}
+  useEffect(()=>{void load();const timer=setInterval(load,2000);return()=>clearInterval(timer)},[])
 
   // Called numbers for display
   const calledNumbers = displayQueue
@@ -55,6 +43,7 @@ export function QueueDisplayPage() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-pink-50 to-purple-50">
       {/* Header */}
+      {error && <p role="alert">{t('dashboardNavigation.loadFailed')}</p>}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -99,7 +88,7 @@ export function QueueDisplayPage() {
             <div className="absolute inset-0 rounded-3xl border-4 border-primary animate-ping opacity-25" />
           </div>
           <p className="text-gray-500 mt-4 text-lg">
-            {mockQueue.find(q => q.ticketNumber === currentNumber)?.customerName || t('queue.silakanKeKasir')}
+            {displayQueue.find(q => q.ticketNumber === currentNumber)?.customerName || t('queue.silakanKeKasir')}
           </p>
         </div>
 

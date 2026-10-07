@@ -22,10 +22,10 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^14.0.0",
-    "react-router-dom": "^6.22.0",
+    "react-router-dom": "^7.18.4",
     "recharts": "^2.10.0",
     "tailwind-merge": "^2.2.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

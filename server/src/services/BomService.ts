@@ -1,3 +1,6 @@
+import {getInventoryAlertConfig} from './InventoryAlertConfigService'
+import {convertQuantity} from '../utils/inventoryUnits'
+import {inventoryQuantityCost} from './InventoryQuantityService'
 import prisma from '../config/database'
 
 /**
@@ -15,8 +18,8 @@ export async function getProductsWithBomCost(storeId: string) {
     }
   })
 
-  return products.map(product => {
-    const bomCost = calculateBomCost(product.bomItems)
+  return Promise.all(products.map(async product => {
+    const bomCost = await calculateBomCost(product.bomItems)
     const defaultSpec = product.specs[0]
     const sellingPrice = defaultSpec?.price || 0
     const profit = sellingPrice - bomCost
@@ -33,7 +36,7 @@ export async function getProductsWithBomCost(storeId: string) {
       profitRate,
       bomItemCount: product.bomItems.length
     }
-  })
+  }))
 }
 
 /**
@@ -59,7 +62,7 @@ export async function getProductBomDetail(productId: string) {
 
     // 对于 semi_finished 类型，使用 getInventoryCostBreakdown 递归计算
     if (inv?.type === 'semi_finished' && inv.processRecipeId) {
-      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity)
+      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity, item.unit)
       return {
         inventoryId: inv.id,
         name: inv.name,
@@ -67,9 +70,9 @@ export async function getProductBomDetail(productId: string) {
         quantity: item.quantity,
         costPerUnit: breakdown.cost / (item.quantity || 1),
         totalCost: breakdown.cost,
-        currentStock: inv.currentStock,
+        currentStock: Math.sign(inv.currentStock)*convertQuantity(Math.abs(inv.currentStock), inv.unit, item.unit),
         avgCost: Number(inv.avgCost),
-        safetyStock: inv.safetyStock,
+        safetyStock: convertQuantity(inv.safetyStock, inv.unit, item.unit),
         inventoryType: 'semi_finished',
         costBreakdown: breakdown.breakdown ? {
           processRecipeName: breakdown.processRecipeName,
@@ -79,15 +82,8 @@ export async function getProductBomDetail(productId: string) {
     }
 
     // 对于 raw_material，直接计算
-    const invUnit = (inv?.unit || '个').toLowerCase()
-    let factor = 1
-    if (invUnit === 'kg') factor = 1000
-    if (invUnit === 'l') factor = 1000
-
-    const ratio = inv?.concentrateRatio || 1
-    const safeRatio = ratio === 0 ? 1 : ratio
-    const cpu = Number(inv?.avgCost || 0) / factor / safeRatio
-    const totalCost = (item.quantity || 0) * cpu
+    const cpu = convertQuantity(1, item.unit, inv.unit) * Number(inv.avgCost)
+    const totalCost = item.quantity * cpu
 
     return {
       inventoryId: inv?.id || item.inventoryId,
@@ -96,10 +92,10 @@ export async function getProductBomDetail(productId: string) {
       quantity: item.quantity,
       costPerUnit: Math.round(cpu * 100) / 100,
       totalCost: Math.round(totalCost),
-      currentStock: inv?.currentStock,
+      currentStock: Math.sign(inv.currentStock)*convertQuantity(Math.abs(inv.currentStock), inv.unit, item.unit),
       avgCost: Number(inv?.avgCost || 0),
-      safetyStock: inv?.safetyStock,
-      inventoryType: 'raw_material'
+      safetyStock: convertQuantity(inv.safetyStock, inv.unit, item.unit),
+      inventoryType: inv.type
     }
   }))
 
@@ -127,199 +123,37 @@ export async function getProductBomDetail(productId: string) {
   }
 }
 
-/**
- * 单位换算系数
- * 将配方单位(g/ml/个)转换为库存单位(kg/L/个)需要的除数
- * 例如: 库存是 kg, 配方用 g, 需要除以 1000
- */
-function getConversionFactor(inventoryUnit: string, recipeUnit: string): number {
-  const invUnit = (inventoryUnit || '').toLowerCase()
-  const recUnit = (recipeUnit || '').toLowerCase()
-
-  // 如果单位相同，不需要换算
-  if (invUnit === recUnit) return 1
-
-  // 库存是 kg，配方用 g 或 ml
-  if (invUnit === 'kg') {
-    if (recUnit === 'g' || recUnit === 'ml') return 1000
-  }
-
-  // 库存是 L，配方用 ml
-  if (invUnit === 'l') {
-    if (recUnit === 'ml') return 1000
-  }
-
-  // 其他情况默认 1 (包括: g->g, ml->ml, 个->个, kg->kg 等)
-  return 1
-}
-
-/**
- * 计算BOM成本
- * 公式: 成本 = 配方用量 × (avgCost / 1000 / concentrateRatio)
- *
- * 单位转换：
- * - kg/L 库存 → g/ml 配方用量：÷1000
- * - 个/支/卷/pce/件/张：直接使用，无需转换
- *
- * 浓缩比例：
- * - concentrateRatio > 1：浓缩液需要稀释，如茶叶10倍浓缩，实际用量 = 配方用量 / ratio
- */
-function calculateBomCost(bomItems: { quantity: number; costPerUnit: number; unit?: string; totalCost?: number; inventory: { avgCost: number | bigint; concentrateRatio: number; unit: string } }[]) {
-  let totalBomCost = 0
-
-  for (const item of bomItems) {
-    const qty = item.quantity || 0
-    const invUnit = (item.inventory?.unit || '个').toLowerCase()
-    const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(invUnit)
-    const ratio = item.inventory?.concentrateRatio || 1
-    // 防止除零
-    const safeRatio = ratio === 0 ? 1 : ratio
-
-    // 优先使用 costPerUnit，如果为 0 则使用 inventory.avgCost
-    let cpu = item.costPerUnit || Number(item.inventory?.avgCost) || 0
-
-    if (!isPerPiece) {
-      // kg/L inventory: divide by 1000 to convert to g/ml
-      // g/ml inventory: avgCost is already per unit, no conversion needed
-      if (invUnit === 'kg' || invUnit === 'l') {
-        cpu = cpu / 1000
-      }
-      // Apply concentrateRatio (for diluted/concentrated items)
-      cpu = cpu / safeRatio
-    }
-    // 个/件等：直接使用 cpu，不需要转换
-
-    totalBomCost += qty * cpu
-  }
-
-  return Math.round(totalBomCost)
+async function calculateBomCost(bomItems: {inventoryId:string;quantity:number;unit:string}[]) {
+ let total=0
+ for(const item of bomItems)total+=await inventoryQuantityCost(prisma,item.inventoryId,item.quantity,item.unit)
+ return Math.round(total)
 }
 
 /**
  * 获取原料使用预测（根据历史销售）
  */
 export async function getMaterialUsageForecast(storeId: string, days: number = 30) {
-  // 获取历史销售数据
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - days)
-
-  const orders = await prisma.order.findMany({
-    where: {
-      storeId,
-      status: 'completed',
-      createdAt: { gte: startDate }
-    },
-    include: {
-      items: true
-    }
-  })
-
-  // 计算每天平均销售量
-  const orderCount = orders.length
-  if (orderCount === 0) return []
-
-  // 按产品统计销售量
-  const productSales: Record<string, { productId: string; productName: string; quantity: number }> = {}
-
-  for (const order of orders) {
-    for (const item of order.items) {
-      if (!productSales[item.productId]) {
-        productSales[item.productId] = {
-          productId: item.productId,
-          productName: item.productName || '',
-          quantity: 0
-        }
-      }
-      productSales[item.productId].quantity += item.quantity
-    }
-  }
-
-  // 计算每种原料的消耗预测
-  const materialUsage: Record<string, {
-    inventoryId: string
-    name: string
-    unit: string
-    avgCost: number
-    dailyUsage: number
-    totalUsage: number
-    currentStock: number
-    daysUntilStockOut: number | null
-    suggestedReorderQty: number | null
-  }> = {}
-
-  for (const sale of Object.values(productSales)) {
-    const bomItems = await prisma.bOMItem.findMany({
-      where: { productId: sale.productId },
-      include: { inventory: true }
-    })
-
-    const dailyQty = sale.quantity / days
-
-    for (const bom of bomItems) {
-      const inv = bom.inventory
-      if (!inv) continue
-
-      const ratio = inv.concentrateRatio || 1
-      const itemUnit = bom.unit || inv.unit || '个'
-      const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(itemUnit)
-
-      let usagePerProduct = bom.quantity * dailyQty
-      if (!isPerPiece) {
-        usagePerProduct = usagePerProduct / ratio
-      }
-
-      if (!materialUsage[inv.id]) {
-        materialUsage[inv.id] = {
-          inventoryId: inv.id,
-          name: inv.name,
-          unit: inv.unit,
-          avgCost: Number(inv.avgCost),
-          dailyUsage: 0,
-          totalUsage: 0,
-          currentStock: inv.currentStock,
-          daysUntilStockOut: null,
-          suggestedReorderQty: null
-        }
-      }
-
-      materialUsage[inv.id].dailyUsage += usagePerProduct
-      materialUsage[inv.id].totalUsage += usagePerProduct * days
-    }
-  }
-
-  // 计算库存预警
-  const result = Object.values(materialUsage).map(mat => {
-    mat.dailyUsage = Math.round(mat.dailyUsage * 100) / 100
-    mat.totalUsage = Math.round(mat.totalUsage)
-
-    if (mat.dailyUsage > 0) {
-      mat.daysUntilStockOut = Math.floor(mat.currentStock / mat.dailyUsage)
-
-      // 如果库存不足7天，建议补货量
-      if (mat.daysUntilStockOut <= 7) {
-        //建议补货量 = 7天用量 * 1.5 (安全库存)
-        mat.suggestedReorderQty = Math.ceil(mat.dailyUsage * 7 * 1.5)
-      }
-    }
-
-    return mat
-  })
-
-  return result.sort((a, b) => (a.daysUntilStockOut || 999) - (b.daysUntilStockOut || 999))
+  if(!Number.isInteger(days)||days<1||days>365)throw new Error('INVALID_FORECAST_DAYS')
+  const settings=await getInventoryAlertConfig(storeId)
+  const startDate=new Date(Date.now()-days*86400000)
+  const materials=await prisma.inventory.findMany({where:{storeId},include:{stockOutLogs:{where:{createdAt:{gte:startDate},reason:{in:['sold','refund_unprepared']}}}}})
+  return materials.map(mat=>{
+    const totalUsage=mat.stockOutLogs.reduce((sum,log)=>sum+log.quantity,0)
+    const dailyUsage=Math.max(0,totalUsage)/days
+    const daysUntilStockOut=dailyUsage>0?Math.max(0,mat.currentStock/dailyUsage):null
+    return {inventoryId:mat.id,name:mat.name,unit:mat.unit,avgCost:Number(mat.avgCost),currentStock:mat.currentStock,totalUsage,dailyUsage,daysUntilStockOut,
+      suggestedReorderQty:dailyUsage>0?Math.max(0,dailyUsage*settings.lowStockWarningDays-mat.currentStock):null,
+      basis:'recorded_sales_ledger_estimate',historyDays:days}
+  }).sort((a,b)=>(a.daysUntilStockOut??Infinity)-(b.daysUntilStockOut??Infinity))
 }
 
-/**
- * 获取低库存预警（基于预测消耗）
- */
-export async function getLowStockAlerts(storeId: string, days: number = 7) {
-  const usageForecast = await getMaterialUsageForecast(storeId, days)
-
-  return usageForecast
-    .filter(mat => mat.daysUntilStockOut !== null && mat.daysUntilStockOut <= days)
-    .map(mat => ({
-      ...mat,
-      urgency: mat.daysUntilStockOut <= 3 ? 'critical' : mat.daysUntilStockOut <= 7 ? 'warning' : 'normal'
-    }))
+/** Forecast is advisory; no purchase or external notification is issued. */
+export async function getLowStockAlerts(storeId:string,days:number=30){
+ const settings=await getInventoryAlertConfig(storeId)
+ if(!settings.enableLowStockAlert)return []
+ return (await getMaterialUsageForecast(storeId,days))
+  .filter(mat=>mat.currentStock<=0||(mat.daysUntilStockOut!==null&&mat.daysUntilStockOut<=settings.lowStockWarningDays))
+  .map(mat=>({...mat,urgency:mat.currentStock<=0||(mat.daysUntilStockOut!==null&&mat.daysUntilStockOut<=settings.lowStockCriticalDays)?'critical':'warning'}))
 }
 
 /**
@@ -338,101 +172,18 @@ export async function calculateProductCost(productId: string): Promise<number> {
  * 获取原料的成本分解（支持 semi_finished 递归展开）
  * 用于配方编辑页面显示每个原料的成本来源
  */
-export async function getInventoryCostBreakdown(inventoryId: string, quantity: number) {
-  const inv = await prisma.inventory.findUnique({
-    where: { id: inventoryId }
-  })
-
-  if (!inv) {
-    return { type: 'unknown', cost: 0, breakdown: null }
-  }
-
-  const invUnit = (inv.unit || '个').toLowerCase()
-  let factor = 1
-  if (invUnit === 'kg') factor = 1000
-  if (invUnit === 'l') factor = 1000
-
-  if (inv.type === 'raw_material') {
-    const ratio = inv.concentrateRatio || 1
-    const safeRatio = ratio === 0 ? 1 : ratio
-    const cpu = Number(inv.avgCost || 0) / factor / safeRatio
-    return {
-      type: 'raw_material',
-      cost: Math.round(quantity * cpu),
-      breakdown: null
-    }
-  }
-
-  if (inv.type === 'semi_finished' && inv.processRecipeId) {
-    const recipe = await prisma.processRecipe.findUnique({
-      where: { id: inv.processRecipeId },
-      include: {
-        items: { include: { inventory: true } }
-      }
-    })
-
-    if (!recipe) {
-      return { type: 'semi_finished', cost: 0, breakdown: null }
-    }
-
-    const outputItem = recipe.items.find(i => i.type === 'output')
-    if (!outputItem || outputItem.quantity === 0) {
-      return { type: 'semi_finished', cost: 0, breakdown: null }
-    }
-
-    const outputRatio = outputItem.quantity
-    const outputMultiplier = quantity / outputRatio
-
-    // 计算每个投入原料的成本
-    const breakdown: Array<{
-      inventoryId: string
-      name: string
-      unit: string
-      quantity: number
-      costPerUnit: number
-      totalCost: number
-    }> = []
-
-    let totalInputCost = 0
-
-    for (const input of recipe.items.filter(i => i.type === 'input')) {
-      const inputInv = input.inventory
-      if (!inputInv) continue
-
-      const inputUnit = (inputInv.unit || '个').toLowerCase()
-      const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(inputUnit)
-      const inputRatio = inputInv.concentrateRatio || 1
-      const safeRatio = inputRatio === 0 ? 1 : inputRatio
-
-      const inputQty = input.quantity * outputMultiplier
-      let inputCpu = Number(inputInv.avgCost || 0)
-      if (!isPerPiece) {
-        // kg/L：先 ÷1000 再 ÷concentrateRatio
-        inputCpu = inputCpu / 1000 / safeRatio
-      }
-      const inputCost = Math.round(inputQty * inputCpu)
-
-      breakdown.push({
-        inventoryId: inputInv.id,
-        name: inputInv.name,
-        unit: inputInv.unit,
-        quantity: Math.round(inputQty * 100) / 100,
-        costPerUnit: Math.round(Number(inputCpu) * 100) / 100,
-        totalCost: inputCost
-      })
-
-      totalInputCost += inputCost
-    }
-
-    return {
-      type: 'semi_finished',
-      cost: totalInputCost,
-      breakdown,
-      processRecipeId: recipe.id,
-      processRecipeName: recipe.name,
-      outputQuantity: outputRatio
-    }
-  }
-
-  return { type: inv.type || 'unknown', cost: 0, breakdown: null }
+export async function getInventoryCostBreakdown(inventoryId:string,quantity:number,unit?:string) {
+ const inv=await prisma.inventory.findUnique({where:{id:inventoryId}})
+ if(!inv)return {type:'unknown',cost:0,breakdown:null}
+ const cost=Math.round(await inventoryQuantityCost(prisma,inventoryId,quantity,unit||inv.unit))
+ if(inv.type!=='semi_finished'||!inv.processRecipeId)return {type:inv.type,cost,breakdown:null}
+ const recipe=await prisma.processRecipe.findUniqueOrThrow({where:{id:inv.processRecipeId},include:{items:{include:{inventory:true}}}})
+ const output=recipe.items.find(i=>i.type==='output')!
+ const multiplier=convertQuantity(quantity,unit||inv.unit,recipe.outputUnit)/output.quantity
+ const breakdown=await Promise.all(recipe.items.filter(i=>i.type==='input'&&i.inventory).map(async input=>{
+  const quantity=input.quantity*multiplier,inventory=input.inventory!
+  const totalCost=await inventoryQuantityCost(prisma,inventory.id,quantity,inventory.unit,0,inv.storeId)
+  return {inventoryId:inventory.id,name:inventory.name,unit:inventory.unit,quantity,costPerUnit:quantity?totalCost/quantity:0,totalCost:Math.round(totalCost)}
+ }))
+ return {type:inv.type,cost,breakdown,processRecipeName:recipe.name,processRecipeId:recipe.id,outputQuantity:output.quantity}
 }

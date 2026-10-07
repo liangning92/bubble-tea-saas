@@ -228,6 +228,7 @@ model Staff {
   position             String                 @default("店员")
   status               String                 @default("active") // active | inactive | resigned | suspended
   employmentType       String                 @default("full_time") // full_time | part_time | contract | intern
+  baseSalary           Int? // Contract monthly salary; NULL requires configuration
   hourlyRate           Int? // 兼职/临时工时薪（分）
   weeklyHours          Float? // 每周工作时长
   hireDate             DateTime?
@@ -727,6 +728,8 @@ model Inventory {
   category            String // 茶叶 | 奶精 | 糖浆 | 小料
   type                String               @default("raw_material") // raw_material | semi_finished | finished_goods
   unit                String // kg | ml | 个
+  ledgerSequence      BigInt               @default(0)
+  ledgerEpoch         BigInt               @default(0)
   currentStock        Float                @default(0)
   avgCost             BigInt               @default(0) // 均价(分/kg或分/ml)
   concentrateRatio    Float                @default(1) // 浓缩比例(比如茶叶浓缩10倍)
@@ -748,6 +751,7 @@ model Inventory {
 
 model StockInLog {
   id          String    @id @default(cuid())
+  ledgerSequence BigInt?
   inventoryId String
   inventory   Inventory @relation(fields: [inventoryId], references: [id])
   batchId     String? // 可选：关联批次
@@ -759,10 +763,13 @@ model StockInLog {
   staffId     String? // 入库操作员
   note        String?
   createdAt   DateTime  @default(now())
+  @@unique([inventoryId, ledgerSequence])
+
 }
 
 model StockOutLog {
   id          String    @id @default(cuid())
+  ledgerSequence BigInt?
   inventoryId String
   inventory   Inventory @relation(fields: [inventoryId], references: [id])
   quantity    Float
@@ -770,6 +777,8 @@ model StockOutLog {
   orderId     String?
   note        String?
   createdAt   DateTime  @default(now())
+  @@unique([inventoryId, ledgerSequence])
+
 }
 
 // ============================================
@@ -1270,6 +1279,9 @@ model Order {
   memberId         String?
   member           Member?         @relation(fields: [memberId], references: [id])
   orderNumber      String          @unique // 订单号(格式: YYYYMMDD-XXXXXX)
+  requestFingerprint String?       // Original request hash; NULL for historical orders
+  requestReceipt     String?       // Server-generated versioned first response; not an accounting measure
+  checkoutTaxAmount Int? // Immutable checkout tax
   pickupNumber     String?         // 取餐号/叫号凭据 (如 A01 ~ A99 循环)
   totalAmount      Int // 总金额(分)
   discountAmount   Int             @default(0)
@@ -1288,8 +1300,11 @@ model Order {
   note             String? // 备注
   items            OrderItem[]
   refundRequests   RefundRequest[]
+  paymentEvidence  PaymentEvidence?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+
+  @@index([pickupNumber])
 }
 
 // 退款申请
@@ -1299,6 +1314,8 @@ model RefundRequest {
   order       Order     @relation(fields: [orderId], references: [id])
   amount      Int       @default(0) // 退款金额（分），0表示全额退款
   reason      String // 退款原因
+  reasonCode  String @default("legacy") // customer_dissatisfied | paid_unprepared | legacy
+  selectedItemIds String @default("[]") // JSON order item IDs, never product IDs
   status      String    @default("pending") // pending | approved | rejected
   requestedBy String // 申请人staffId
   approvedBy  String? // 审批人staffId
@@ -2069,4 +2086,31 @@ model AutomationLog {
   completedAt DateTime?
 
   @@map("automation_logs")
+}
+
+// Private customer payment screenshot; never served by public /uploads.
+model PaymentEvidence {
+  id String @id @default(cuid())
+  storeId String
+  orderId String? @unique
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amount Int
+  uploadedBy String
+  createdAt DateTime @default(now())
+  confirmedBy String?
+  confirmedAt DateTime?
+  verification String @default("unverified")
+  sha256 String
+  mimeType String
+  image Bytes
+  @@unique([storeId, sha256])
+  @@index([storeId])
+}
+
+// Application-managed local SQLite upgrade history; unused on cloud.
+model LocalSchemaMigration {
+  version Int @id
+  checksum String
+  backupPath String
+  appliedAt DateTime @default(now())
 }

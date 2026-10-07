@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -80,6 +81,7 @@ export function SettingsPage() {
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
+        {user?.role === 'admin' && <Link className="text-primary underline" to="/settings/ai">{t('aiPermissions.title')}</Link>}
       </div>
 
       {/* Tab Navigation */}

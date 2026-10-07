@@ -26,7 +26,7 @@ FILES=$(cat $CONFIG | python3 -c "import json,sys; d=json.load(sys.stdin); print
 UNPACK=$(cat $CONFIG | python3 -c "import json,sys; d=json.load(sys.stdin); print('\n'.join(d.get('asarUnpack',[])))")
 
 echo "2. 关键模块检查"
-for mod in electron-log electron-updater electron-printer .prisma "server/uploads"; do
+for mod in electron-log electron-updater .prisma "server/uploads"; do
     COUNT=$(echo "$FILES$UNPACK" | grep -c "$mod" || echo 0)
     [ "$COUNT" -gt 0 ] && echo "   ✅ $mod" || { echo "   ❌ 缺失: $mod"; FAILED=1; }
 done

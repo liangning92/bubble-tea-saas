@@ -114,6 +114,7 @@ export function RecipeEditPage() {
     if (bomData?.data) {
       const items = (bomData.data.data.bomDetails || []).map((item: any) => ({
         ...item,
+        cost:item.costPerUnit,
         quantityStr: item.quantity?.toString() || '',
         type: item.inventoryType || item.type || 'raw_material',
         currentStock: item.currentStock,
@@ -136,9 +137,9 @@ export function RecipeEditPage() {
   }, [isDirty])
 
   // 获取 semi_finished 项的成本分解
-  const fetchCostBreakdown = useCallback(async (index: number, inventoryId: string, quantity: number) => {
+  const fetchCostBreakdown = useCallback(async (index: number, inventoryId: string, quantity: number, unit?:string) => {
     try {
-      const res = await bomApi.getInventoryBreakdown(inventoryId, quantity)
+      const res = await bomApi.getInventoryBreakdown(inventoryId, quantity, unit)
       if (res.data.code === 200) {
         setBomItems(prev => prev.map((item, i) =>
           i === index ? { ...item, costBreakdown: res.data.data } : item
@@ -196,7 +197,7 @@ export function RecipeEditPage() {
         // 如果是 semi_finished，自动获取成本分解
         if (inventory.type === 'semi_finished') {
           const qty = parseFloat(newItem.quantityStr) || 1
-          fetchCostBreakdown(index, inventoryId, qty)
+          fetchCostBreakdown(index, inventoryId, qty, inventory.unit)
         }
         return newItem
       }))
@@ -217,7 +218,7 @@ export function RecipeEditPage() {
       // 如果是 semi_finished，重新计算成本分解
       if (newItem.type === 'semi_finished' && newItem.inventoryId) {
         const qty = parseFloat(finalValue) || 1
-        fetchCostBreakdown(index, newItem.inventoryId, qty)
+        fetchCostBreakdown(index, newItem.inventoryId, qty, newItem.unit)
       }
       return newItem
     }))
@@ -259,7 +260,8 @@ export function RecipeEditPage() {
     updateBomMutation.mutate({
       bomItems: validItems.map(item => ({
         inventoryId: item.inventoryId,
-        quantity: parseFloat(item.quantityStr) || 0
+        quantity: parseFloat(item.quantityStr) || 0,
+        unit:item.unit
       }))
     })
   }
@@ -456,9 +458,16 @@ export function RecipeEditPage() {
                   </div>
 
                   {/* 单位 */}
-                  <div className="w-16 text-gray-500 text-sm text-center flex-shrink-0">
-                    {item.unit || '-'}
-                  </div>
+                  <select className="w-16 text-gray-500 text-sm" value={item.unit||''} onChange={e=>{
+                    const unit=e.target.value,inv=inventoryList.find((x:any)=>x.id===item.inventoryId)
+                    if(!inv)return
+                    const size=(u:string)=>['kg','l'].includes(u.toLowerCase())?1000:1
+                    const factor=size(unit)/size(inv.unit)
+                    setBomItems(prev=>prev.map((row,i)=>i===index?{...row,unit,cost:Number(inv.avgCost)*factor,currentStock:inv.currentStock/factor,safetyStock:inv.safetyStock/factor,costBreakdown:undefined}:row));setIsDirty(true)
+                    if(inv.type==='semi_finished')fetchCostBreakdown(index,inv.id,parseFloat(item.quantityStr)||0,unit)
+                  }}>
+                    {[...new Set([item.unit||'',...(['kg','g'].includes((item.unit||'').toLowerCase())?['kg','g']:['l','ml'].includes((item.unit||'').toLowerCase())?['L','ml']:[])])].map(unit=><option key={unit}>{unit}</option>)}
+                  </select>
 
                   {/* 小计 */}
                   <div className="w-28 text-right font-medium text-sm flex-shrink-0">

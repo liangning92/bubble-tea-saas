@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import winreg
+import runpy
 
 assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -47,8 +48,12 @@ def fixture(collision=False):
     shutil.copy2(SEED, DB)
     with closing(sqlite3.connect(DB)) as c, c:
         c.execute('DROP INDEX Order_pickupNumber_idx')
-        for name in ('pickupNumber', 'requestFingerprint', 'requestReceipt'):
-            c.execute('ALTER TABLE "Order" DROP COLUMN ' + name)
+        c.execute('DROP TABLE PaymentEvidence')
+        c.execute('DROP TABLE LocalSchemaMigration')
+        c.execute('DROP INDEX StockInLog_inventoryId_ledgerSequence_key')
+        c.execute('DROP INDEX StockOutLog_inventoryId_ledgerSequence_key')
+        for table,name in [('Order','pickupNumber'),('Order','requestFingerprint'),('Order','requestReceipt'),('Order','checkoutTaxAmount'),('Staff','baseSalary'),('Inventory','ledgerSequence'),('Inventory','ledgerEpoch'),('StockInLog','ledgerSequence'),('StockOutLog','ledgerSequence'),('RefundRequest','reasonCode'),('RefundRequest','selectedItemIds')]:
+            c.execute('ALTER TABLE "'+table+'" DROP COLUMN "'+name+'"')
         c.execute('INSERT INTO Tenant (id,name,updatedAt) VALUES (?,?,?)', ('tenant', 'Owned synthetic tenant', 0))
         c.execute('INSERT INTO Store (id,tenantId,name,updatedAt) VALUES (?,?,?,?)', ('store', 'tenant', 'Owned synthetic store', 0))
         c.execute('INSERT INTO "Order" (id,storeId,staffId,orderNumber,totalAmount,finalAmount,paymentMethod,updatedAt) VALUES (?,?,?,?,?,?,?,?)', ('historical','store','staff','OLD-001',125000,125000,'cash',0))
@@ -150,7 +155,7 @@ try:
     receipt = json.loads((TEMP / 'result.json').read_text())
     assert result['historicalRowsPreserved'] and historic() == history
     assert receipt['columnAdded'] and receipt['indexAdded']
-    assert receipt['columnsAdded'] == ['pickupNumber','requestFingerprint','requestReceipt']
+    assert receipt['columnsAdded'] == ['Order.pickupNumber','Order.requestFingerprint','Order.requestReceipt','Order.checkoutTaxAmount','Staff.baseSalary','Inventory.ledgerSequence','Inventory.ledgerEpoch','StockInLog.ledgerSequence','StockOutLog.ledgerSequence','RefundRequest.reasonCode','RefundRequest.selectedItemIds']
     assert sha(pathlib.Path(receipt['databaseBackup'])) == receipt['databaseBackupSha256']
     invoke('verify')
     CASES.append('compiled-helper-old-database-upgrade-and-verified-backups')
@@ -193,7 +198,7 @@ try:
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
     report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'cases': CASES,
-              'changes': ['Order.pickupNumber nullable TEXT', 'Order.requestFingerprint nullable TEXT', 'Order.requestReceipt nullable TEXT', 'Order_pickupNumber_idx nonunique index']}
+              'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES']}
     (ROOT / 'desktop-manual-upgrade-report.json').write_text(json.dumps(report, indent=2))
     manifest_path = ROOT / 'desktop-template-manifest.json'
     manifest = json.loads(manifest_path.read_text())

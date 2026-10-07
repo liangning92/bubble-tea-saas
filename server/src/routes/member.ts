@@ -1,4 +1,6 @@
 import { publicOrder } from '../services/OrderReplayService'
+import { redeemPoints, adjustPoints } from '../services/MemberService'
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -9,6 +11,7 @@ import * as MarketingService from '../services/MarketingAutomationService'
 import { sendMessageToMember } from '../services/MessageService'
 
 const router = Router()
+const resourceAccess = requireResourceStore(req => prisma.member.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 
 // Validation schemas
 const createMemberSchema = z.object({
@@ -118,7 +121,7 @@ router.get('/barcode/:barcode', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/members/:id
-router.get('/:id', authenticate, async (req: AuthRequest, res) => {
+router.get('/:id', authenticate, resourceAccess, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { type, limit } = req.query
@@ -170,8 +173,8 @@ router.get('/phone/:phone', authenticate, async (req: AuthRequest, res) => {
   try {
     const { phone } = req.params
 
-    const member = await prisma.member.findUnique({
-      where: { phone },
+    const member = await prisma.member.findFirst({
+      where: { phone, storeId: getStoreId(req) },
       include: {
         _count: { select: { orders: true } }
       }
@@ -319,7 +322,7 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
 })
 
 // PUT /api/members/:id
-router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { name, level, points } = req.body
@@ -342,7 +345,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 })
 
 // DELETE /api/members/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, resourceAccess, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
@@ -360,48 +363,30 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
 })
 
 // POST /api/members/:id/redeem
-router.post('/:id/redeem', authenticate, validateBody(redeemPointsSchema), async (req: AuthRequest, res) => {
+router.post('/:id/redeem', authenticate, resourceAccess, validateBody(redeemPointsSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { points } = req.body
 
-    const member = await prisma.member.findUnique({ where: { id } })
-    if (!member) {
-      return res.status(404).json({ code: 404, message: 'Member not found' })
-    }
-
-    if (member.points < points) {
-      return res.status(400).json({ code: 400, message: 'Insufficient points' })
-    }
-
-    await prisma.member.update({
-      where: { id },
-      data: { points: { decrement: points } }
-    })
-
-    await prisma.pointLog.create({
-      data: {
-        memberId: id,
-        type: 'redeem',
-        points: -points,
-        note: `Redeemed ${points} points`
-      }
-    })
+    const member = await redeemPoints(id, points, `Redeemed ${points} points`)
 
     res.json({
       code: 200,
       message: 'Points redeemed',
-      data: { remainingPoints: member.points - points },
+      data: { remainingPoints: member.points },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && ['Insufficient points', 'Invalid points amount'].includes(error.message)) {
+      return res.status(400).json({ code: 400, message: error.message })
+    }
     console.error('Redeem points error:', error)
     res.status(500).json({ code: 500, message: 'Failed to redeem points' })
   }
 })
 
 // GET /api/members/:id/points-history
-router.get('/:id/points-history', authenticate, async (req: AuthRequest, res) => {
+router.get('/:id/points-history', authenticate, resourceAccess, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
@@ -423,31 +408,13 @@ router.get('/:id/points-history', authenticate, async (req: AuthRequest, res) =>
 })
 
 // POST /api/members/:id/adjust-points
-router.post('/:id/adjust-points', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/:id/adjust-points', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { points, note } = req.body
 
-    const member = await prisma.member.findUnique({ where: { id } })
-    if (!member) {
-      return res.status(404).json({ code: 404, message: 'Member not found' })
-    }
-
-    const newPoints = Math.max(0, member.points + points)
-
-    await prisma.member.update({
-      where: { id },
-      data: { points: newPoints }
-    })
-
-    await prisma.pointLog.create({
-      data: {
-        memberId: id,
-        type: 'adjust',
-        points,
-        note: note || 'Manual adjustment'
-      }
-    })
+    const member = await adjustPoints(id, points, note || 'Manual adjustment')
+    const newPoints = member.points
 
     res.json({
       code: 200,
@@ -456,6 +423,9 @@ router.post('/:id/adjust-points', authenticate, authorize('admin', 'manager'), a
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && ['Insufficient points', 'Invalid points amount'].includes(error.message)) {
+      return res.status(400).json({ code: 400, message: error.message })
+    }
     console.error('Adjust points error:', error)
     res.status(500).json({ code: 500, message: 'Failed to adjust points' })
   }

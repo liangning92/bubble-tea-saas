@@ -1,3 +1,5 @@
+import * as XLSX from 'xlsx'
+import {batchImportApi} from '../../services/api'
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -51,14 +53,16 @@ export function ImportPage() {
   const [dragActive, setDragActive] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [preview, setPreview] = useState<any[]>([])
+  const [allRows,setAllRows]=useState<any[]>([])
+  const [requestId,setRequestId]=useState(crypto.randomUUID())
 
   // 导入mutation
   const importMutation = useMutation({
     mutationFn: async (data: { type: ImportType; rows: any[] }) => {
-      // 模拟API调用
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      return { success: true, total: data.rows.length, imported: data.rows.length, failed: 0, errors: [] }
+      const response=await batchImportApi.run({...data,requestId})
+      return response.data.data as ImportResult
     },
+    onError:()=>alert(t('common.saveFailed')),
     onSuccess: (data) => {
       setResult(data)
       queryClient.invalidateQueries({ queryKey: ['products'] })
@@ -70,24 +74,25 @@ export function ImportPage() {
   const handleFile = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return
     const file = files[0]
+    setAllRows([]);setPreview([]);setResult(null)
+    if(file.size>5*1024*1024){setFile(null);alert(t('common.error'));return}
     setFile(file)
 
     // 解析CSV
     const reader = new FileReader()
     reader.onload = (e) => {
+      try {
       const text = e.target?.result as string
-      const lines = text.split('\n').filter(line => line.trim())
-      const headers = lines[0].split(',').map(h => h.trim())
-      const rows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim())
-        const obj: any = {}
-        headers.forEach((h, i) => obj[h] = values[i] || '')
-        return obj
-      })
+      const workbook=XLSX.read(text,{type:'string',raw:true})
+      const rows=XLSX.utils.sheet_to_json<Record<string,string>>(workbook.Sheets[workbook.SheetNames[0]],{raw:false,defval:''})
+      setAllRows(rows)
+      setRequestId(crypto.randomUUID())
       setPreview(rows.slice(0, 5))
+      } catch {setAllRows([]);setPreview([]);alert(t('common.error'))}
     }
+    reader.onerror=()=>{setAllRows([]);setPreview([]);alert(t('common.error'))}
     reader.readAsText(file)
-  }, [])
+  }, [t])
 
   // 拖放处理
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -121,7 +126,7 @@ export function ImportPage() {
         ['supplies', '200000', 'Packaging supplies', '2024-01-10', 'operational']
       ]
     }
-    const sampleRows = sampleData[type].map(row => row.join(',')).join('\n')
+    const sampleRows = sampleData[type].map(row => row.map(value => '"'+value.replace(/"/g,'""')+'"').join(',')).join('\n')
     const csv = headers + '\n' + sampleRows
 
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -137,7 +142,7 @@ export function ImportPage() {
   const handleImport = () => {
     if (!preview.length) return
 
-    importMutation.mutate({ type: importType, rows: preview })
+    importMutation.mutate({ type: importType, rows: allRows })
   }
 
   return (

@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const printerTarget_1 = require("./printerTarget");
 const electron_1 = require("electron");
 const crypto_1 = require("crypto");
 const path_1 = __importDefault(require("path"));
@@ -462,9 +463,8 @@ async function startLocalServer() {
             return;
         }
     }
-    // skip db push at runtime - causes issues with existing databases (data loss, corruption)
-    // if schema is outdated, rebuild the app from a fresh installer
-    // ensureSchemaUpToDate(userDbPath)
+    // Express performs explicit versioned SQLite upgrades, with a verified snapshot
+    // and transactional rollback, before listening. Never call destructive db push here.
     // unpackedRoot = resources/app.asar.unpacked/（Node 模块实际位置）
     const unpackedRoot = path_1.default.join(process.resourcesPath, 'app.asar.unpacked');
     // server 模块在 app.asar.unpacked/server/node_modules
@@ -856,10 +856,10 @@ h3{margin-top:16px;color:#569cd6}
             }
         });
         // 监听渲染进程崩溃
-        mainWindow.webContents.on('crashed', (event, killed) => {
-            console.error('[Electron] Renderer process crashed, killed:', killed);
+        mainWindow.webContents.on('render-process-gone', (_event, details) => {
+            console.error('[Electron] Renderer process exited:', details.reason);
             if (mainWindow)
-                showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `killed: ${killed}`);
+                showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `reason: ${details.reason}`);
         });
     }
     mainWindow.on('closed', () => {
@@ -872,7 +872,7 @@ h3{margin-top:16px;color:#569cd6}
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
         console.error('[Electron] Failed to load:', errorCode, errorDescription);
     });
-    mainWindow.webContents.on('crashed', () => {
+    mainWindow.webContents.on('render-process-gone', () => {
         console.error('[Electron] Renderer process crashed');
     });
     console.log('[Electron] Main window created');
@@ -932,7 +932,7 @@ function createCustomerWindow() {
     customerWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
         console.error('[Electron] Customer display failed to load:', errorCode, errorDescription);
     });
-    customerWindow.webContents.on('crashed', () => {
+    customerWindow.webContents.on('render-process-gone', () => {
         console.error('[Electron] Customer display renderer crashed');
     });
     customerWindow.on('closed', () => {
@@ -1209,67 +1209,27 @@ electron_1.ipcMain.on('payment-qr', (_event, qrData) => {
         customerWindow.webContents.send('payment-qr', qrData);
     }
 });
-/**
- * 自动识别打印机名称：优先使用传入参数（支持精确匹配和模糊匹配），未指定时自动查找 Windows 默认打印机或热敏小票打印机
- */
+/** Resolve the exact configured device; no system/fuzzy/default fallback. */
 async function resolvePrinterName(providedName) {
-    const trimmed = (providedName || '').trim();
-    // 获取系统已安装的所有打印机（限制 1.5 秒超时熔断，防止假死驱动阻塞收银线程）
-    let installedPrinters = [];
+    const direct = (providedName || '').trim();
+    if (!direct)
+        throw new Error('No printer target configured');
+    if (/^COM\d+$/i.test(direct) || /^\\\\[^\\]+\\[^\\]+$/.test(direct))
+        return (0, printerTarget_1.exactPrinterName)(direct, []);
+    if (!mainWindow || mainWindow.isDestroyed())
+        throw new Error('Printer inventory unavailable');
+    let timer;
     try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            const getPrinters = mainWindow.webContents.getPrintersAsync();
-            const timeout = new Promise((r) => setTimeout(() => r([]), 1500));
-            installedPrinters = await Promise.race([getPrinters, timeout]);
-        }
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Printer inventory timeout')), 1500);
+        });
+        const installed = await Promise.race([mainWindow.webContents.getPrintersAsync(), timeout]);
+        return (0, printerTarget_1.exactPrinterName)(direct, installed);
     }
-    catch (err) {
-        writeCrash(`[PRINTER RESOLVE] getPrintersAsync failed: ${err.message}`);
+    finally {
+        if (timer)
+            clearTimeout(timer);
     }
-    // 1. 如果收银员指定了名称
-    if (trimmed) {
-        // 虚拟串口 COM 口或网络共享路径直接返回
-        if (/^COM\d+/i.test(trimmed) || trimmed.startsWith('\\\\')) {
-            return trimmed;
-        }
-        if (installedPrinters.length > 0) {
-            // 1a. 优先全字精确匹配（忽略大小写）
-            const exact = installedPrinters.find(p => p.name.toLowerCase() === trimmed.toLowerCase());
-            if (exact) {
-                writeCrash(`[PRINTER RESOLVE] Exact match: '${trimmed}' -> '${exact.name}'`);
-                return exact.name;
-            }
-            // 1b. 模糊匹配：例如输入 'POS-80'，实际驱动名为 'POS-80 Series' 或 'XP-80 POS'
-            const fuzzy = installedPrinters.find(p => p.name.toLowerCase().includes(trimmed.toLowerCase()) ||
-                trimmed.toLowerCase().includes(p.name.toLowerCase()));
-            if (fuzzy) {
-                writeCrash(`[PRINTER RESOLVE] Fuzzy match: '${trimmed}' -> '${fuzzy.name}'`);
-                return fuzzy.name;
-            }
-        }
-        // 未在系统列表中找到时，仍返回用户输入的名称（由打印子系统尝试打开）
-        writeCrash(`[PRINTER RESOLVE] Using provided printer name directly: '${trimmed}'`);
-        return trimmed;
-    }
-    // 2. 未指定名称时的自动探测策略
-    if (installedPrinters.length > 0) {
-        // 2a. 查找系统默认打印机
-        const defaultPrinter = installedPrinters.find(p => p.isDefault);
-        if (defaultPrinter?.name) {
-            writeCrash(`[PRINTER RESOLVE] Auto-selected default printer: '${defaultPrinter.name}'`);
-            return defaultPrinter.name;
-        }
-        // 2b. 查找热敏/小票/POS关键词打印机
-        const thermalPrinter = installedPrinters.find(p => /pos|receipt|thermal|xp-|epson|tsp|58|80|printer/i.test(p.name));
-        if (thermalPrinter?.name) {
-            writeCrash(`[PRINTER RESOLVE] Auto-selected thermal printer: '${thermalPrinter.name}'`);
-            return thermalPrinter.name;
-        }
-        // 2c. 回退至第 1 台可用打印机
-        writeCrash(`[PRINTER RESOLVE] Auto-selected first printer: '${installedPrinters[0].name}'`);
-        return installedPrinters[0].name;
-    }
-    return '';
 }
 /**
  * 原生 Windows winspool.drv RAW 方式发送二进制指令（钱箱脉冲、ESC/POS 小票）
@@ -1442,7 +1402,7 @@ if ($res) {
  */
 electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
     try {
-        let printerName = await resolvePrinterName(data.printerName);
+        const printerName = data.printerHost ? '' : await resolvePrinterName(data.printerName);
         const { printerHost, printerPort, blocks, openCashDrawer: shouldOpenDrawer } = data;
         writeCrash(`[PRINT] ====== print-receipt called ======`);
         writeCrash(`[PRINT] resolved printerName='${printerName}' (original: '${data.printerName}')`);
@@ -1499,7 +1459,8 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 return { success: true };
             }
             catch (netErr) {
-                writeCrash(`[PRINT] printViaNetworkRaw failed: ${netErr.message}, trying local printer fallback if available...`);
+                writeCrash(`[PRINT] printViaNetworkRaw failed: ${netErr.message}`);
+                return { success: false, error: netErr.message };
             }
         }
         if (!printerName) {
@@ -1519,49 +1480,16 @@ electron_1.ipcMain.handle('print-receipt', async (_event, data) => {
                 return { success: false, error: comErr.message };
             }
         }
-        // 2. Windows 原生 winspool.drv RAW 方式（最高优先级，直接写入打印后台）
+        // A transport exception does not prove that the spooler rejected the job.
+        // Submit once; no automatic protocol retry or additional drawer pulse.
         try {
             await sendRawBytesToWindowsPrinter(printerName, rawBytes);
             writeCrash('[PRINT] sendRawBytesToWindowsPrinter success');
             return { success: true };
         }
         catch (winRawErr) {
-            writeCrash(`[PRINT] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
-        }
-        // 3. 回退尝试 PosPrinter.sendRawCommand
-        if (PosPrinter?.sendRawCommand) {
-            try {
-                await PosPrinter.sendRawCommand(printerName, rawBytes);
-                writeCrash('[PRINT] PosPrinter.sendRawCommand success');
-                return { success: true };
-            }
-            catch (rawErr) {
-                writeCrash(`[PRINT] PosPrinter.sendRawCommand failed: ${rawErr.message}, trying printViaWindowsRaw...`);
-            }
-        }
-        // 4. 回退尝试 printViaWindowsRaw
-        try {
-            await printViaWindowsRaw({ ...data, printerName });
-            writeCrash('[PRINT] printViaWindowsRaw fallback success');
-            // printViaWindowsRaw 为纯文本通道，无法发送钱箱脉冲；若开启开钱箱，额外发送一次钱箱脉冲保底
-            if (shouldOpenDrawer && drawerCmd.length > 0) {
-                try {
-                    await sendRawBytesToWindowsPrinter(printerName, drawerCmd);
-                }
-                catch { }
-            }
-            return { success: true };
-        }
-        catch (winErr) {
-            writeCrash(`[PRINT] printViaWindowsRaw fallback failed: ${winErr.message}`);
-            // 若打印彻底失败但需开钱箱，独立发送钱箱脉冲保底
-            if (shouldOpenDrawer && drawerCmd.length > 0) {
-                try {
-                    await sendRawBytesToWindowsPrinter(printerName, drawerCmd);
-                }
-                catch { }
-            }
-            return { success: false, error: winErr.message };
+            writeCrash(`[PRINT] Delivery unconfirmed: ${winRawErr.message}`);
+            return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message };
         }
     }
     catch (error) {
@@ -1696,7 +1624,7 @@ async function printViaWindowsRaw(data) {
  */
 electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
     try {
-        let printerName = await resolvePrinterName(data?.printerName);
+        const printerName = data?.printerHost ? '' : await resolvePrinterName(data?.printerName);
         const pulseMs = Math.max(20, Math.min(500, data?.cashDrawerPulse || 100));
         writeCrash(`[CASH DRAWER] ====== open-cash-drawer called ======`);
         writeCrash(`[CASH DRAWER] resolved printerName='${printerName}' (original: '${data?.printerName}')`);
@@ -1724,6 +1652,7 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
             }
             catch (netErr) {
                 writeCrash(`[CASH DRAWER] printViaNetworkRaw cash drawer failed: ${netErr.message}`);
+                return { success: false, error: netErr.message };
             }
         }
         if (!printerName) {
@@ -1743,38 +1672,14 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
                 return { success: false, error: comErr.message };
             }
         }
-        // 2. Windows 原生 winspool.drv RAW 方式（最高优先级，直接写入打印机 Spooler 队列）
+        // A failed send may already have pulsed the drawer. Never pulse automatically again.
         try {
             await sendRawBytesToWindowsPrinter(printerName, drawerCmd);
-            writeCrash('[CASH DRAWER] sendRawBytesToWindowsPrinter success');
             return { success: true };
         }
-        catch (winRawErr) {
-            writeCrash(`[CASH DRAWER] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
+        catch (error) {
+            return { success: false, deliveryStatus: 'unconfirmed', error: 'Drawer delivery unconfirmed: ' + error.message };
         }
-        // 3. 回退尝试 PosPrinter.sendRawCommand
-        if (PosPrinter?.sendRawCommand) {
-            try {
-                await PosPrinter.sendRawCommand(printerName, drawerCmd);
-                writeCrash('[CASH DRAWER] PosPrinter.sendRawCommand success');
-                return { success: true };
-            }
-            catch (drawerErr) {
-                writeCrash(`[CASH DRAWER] PosPrinter.sendRawCommand failed: ${drawerErr.message}, trying PosPrinter.openCashDrawer...`);
-            }
-        }
-        // 4. 回退尝试 PosPrinter.openCashDrawer
-        if (PosPrinter?.openCashDrawer) {
-            try {
-                await PosPrinter.openCashDrawer(printerName, { onTime: pulseMs, offTime: pulseMs });
-                writeCrash('[CASH DRAWER] PosPrinter.openCashDrawer success');
-                return { success: true };
-            }
-            catch (posDrawerErr) {
-                writeCrash(`[CASH DRAWER] PosPrinter.openCashDrawer failed: ${posDrawerErr.message}`);
-            }
-        }
-        return { success: false, error: 'All cash drawer opening methods failed for: ' + printerName };
     }
     catch (error) {
         writeCrash(`[CASH DRAWER] error: ${error.message}`);
@@ -1786,7 +1691,8 @@ electron_1.ipcMain.handle('open-cash-drawer', async (_event, data) => {
  */
 electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
     try {
-        const { orderNum, pickupNumber, printerName, printerHost, printerPort, items } = data;
+        const { orderNum, pickupNumber, printerHost, printerPort, items } = data;
+        const printerName = printerHost ? '' : await resolvePrinterName(data.printerName);
         writeCrash(`[KITCHEN] ====== send-kitchen-order called ======`);
         writeCrash(`[KITCHEN] orderNum='${orderNum}' pickupNumber='${pickupNumber || ''}' printerName='${printerName}'`);
         writeCrash(`[KITCHEN] printerHost='${printerHost}' port=${printerPort}`);
@@ -1837,16 +1743,8 @@ electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
                     return { success: true };
                 }
                 catch (winRawErr) {
-                    writeCrash(`[KITCHEN] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
-                }
-                try {
-                    await PosPrinter.sendRawCommand(printerName, rawBytes);
-                    writeCrash('[KITCHEN] sendRawCommand success');
-                    return { success: true };
-                }
-                catch (rawErr) {
-                    writeCrash(`[KITCHEN] sendRawCommand failed: ${rawErr.message}`);
-                    return { success: false, error: rawErr.message };
+                    writeCrash(`[KITCHEN] Delivery unconfirmed: ${winRawErr.message}`);
+                    return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message };
                 }
             }
         }
@@ -1864,7 +1762,7 @@ electron_1.ipcMain.handle('send-kitchen-order', async (_event, data) => {
 electron_1.ipcMain.handle('print-shift-report', async (_event, data) => {
     try {
         writeCrash(`[SHIFT-REPORT] ====== print-shift-report called ======`);
-        const resolvedName = await resolvePrinterName(data.printerName);
+        const resolvedName = data.printerHost ? '' : await resolvePrinterName(data.printerName);
         const text = generateShiftReportText(data);
         if (data.printerHost && data.printerPort) {
             try {
@@ -1903,16 +1801,8 @@ electron_1.ipcMain.handle('print-shift-report', async (_event, data) => {
                     return { success: true };
                 }
                 catch (winRawErr) {
-                    writeCrash(`[SHIFT-REPORT] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
-                }
-                try {
-                    await PosPrinter.sendRawCommand(resolvedName, rawBytes);
-                    writeCrash('[SHIFT-REPORT] sendRawCommand success');
-                    return { success: true };
-                }
-                catch (rawErr) {
-                    writeCrash(`[SHIFT-REPORT] sendRawCommand failed: ${rawErr.message}`);
-                    return { success: false, error: rawErr.message };
+                    writeCrash(`[SHIFT-REPORT] Delivery unconfirmed: ${winRawErr.message}`);
+                    return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message };
                 }
             }
         }
@@ -1933,7 +1823,7 @@ electron_1.ipcMain.handle('print-cup-stickers', async (_event, data) => {
         if (!stickers || stickers.length === 0)
             return { success: true };
         writeCrash(`[STICKER] ====== print-cup-stickers called, count=${stickers.length} ======`);
-        const resolvedName = await resolvePrinterName(printerName);
+        const resolvedName = printerHost ? '' : await resolvePrinterName(printerName);
         const chunks = [];
         for (const item of stickers) {
             if (isTspl) {
@@ -1980,17 +1870,8 @@ electron_1.ipcMain.handle('print-cup-stickers', async (_event, data) => {
                     return { success: true };
                 }
                 catch (winRawErr) {
-                    writeCrash(`[STICKER] sendRawBytesToWindowsPrinter failed: ${winRawErr.message}, trying PosPrinter fallback...`);
-                }
-                // 2. 回退尝试 PosPrinter.sendRawCommand
-                try {
-                    await PosPrinter.sendRawCommand(resolvedName, rawBytes);
-                    writeCrash('[STICKER] sendRawCommand success');
-                    return { success: true };
-                }
-                catch (rawErr) {
-                    writeCrash(`[STICKER] sendRawCommand failed: ${rawErr.message}`);
-                    return { success: false, error: rawErr.message };
+                    writeCrash(`[STICKER] Delivery unconfirmed: ${winRawErr.message}`);
+                    return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message };
                 }
             }
         }

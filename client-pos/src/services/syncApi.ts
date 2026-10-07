@@ -18,6 +18,7 @@ export interface SyncConnectResult {
   storeName: string
   tenantId: string
   syncTicket: string
+  receiptSyncTicket: string
 }
 
 export interface SyncFullResult {
@@ -104,5 +105,13 @@ export async function localSetup(
   if (!res.ok) {
     throw new Error(data.message || 'Local setup failed')
   }
+  return data.data
+}
+
+// Short-lived ticket and current local login only; never persist cloud credentials.
+export async function sendReceiptBatch(token: string, ticket: string, cursor?: string): Promise<{ results: Array<{id:string;status:string;error?:string}>; nextCursor:string|null }> {
+  const res=await fetch(`${getSyncApiBase()}/api/sync/receipts/send`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({ticket,...(cursor?{cursor}:{})})})
+  const data=await res.json()
+  if(!res.ok)throw new Error(data.message||'RECEIPT_SEND_FAILED')
   return data.data
 }

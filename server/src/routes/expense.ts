@@ -1,3 +1,6 @@
+import {validExpenseDate} from '../services/RecurringExpenseService'
+import prisma from '../config/database'
+import {z} from 'zod'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as ExpenseService from '../services/ExpenseService'
@@ -5,6 +8,15 @@ import * as FinanceAuditService from '../services/FinanceAuditService'
 import * as XLSX from 'xlsx'
 
 const router = Router()
+
+const recurringSchema=z.array(z.object({id:z.string().min(1).max(100),storeId:z.string().optional(),name:z.string().min(1).max(200),category:z.string().max(100),amount:z.number().int().positive(),frequency:z.enum(['daily','weekly','monthly']),nextDueDate:z.string().refine(validExpenseDate),active:z.boolean()})).max(500)
+router.get('/recurring',authenticate,authorize('admin','manager'),async(req:AuthRequest,res,next)=>{try{const record=await prisma.config.findUnique({where:{storeId_key:{storeId:req.user!.storeId,key:'expenses.recurring'}}});res.json({code:200,data:record?JSON.parse(record.value):{revision:0,items:[]}})}catch(e){next(e)}})
+router.put('/recurring',authenticate,authorize('admin','manager'),async(req:AuthRequest,res,next)=>{try{
+ const items=recurringSchema.parse(req.body.items).map(item=>({...item,storeId:req.user!.storeId})),revision=z.number().int().min(0).parse(req.body.revision)
+ if(new Set(items.map(i=>i.id)).size!==items.length)return res.status(400).json({code:400,message:'DUPLICATE_RECURRING_ID'})
+ const data=await prisma.$transaction(async tx=>{await tx.store.update({where:{id:req.user!.storeId},data:{updatedAt:new Date()}});const where={storeId_key:{storeId:req.user!.storeId,key:'expenses.recurring'}};const current=await tx.config.findUnique({where});const value=current?JSON.parse(current.value):{revision:0,items:[]};if(value.revision!==revision)throw Error('RECURRING_REVISION_CONFLICT');const next={revision:revision+1,items};await tx.config.upsert({where,create:{storeId:req.user!.storeId,key:'expenses.recurring',category:'expense',value:JSON.stringify(next)},update:{value:JSON.stringify(next)}});return next})
+ res.json({code:200,data})
+}catch(e){if((e as Error).message==='RECURRING_REVISION_CONFLICT')return res.status(409).json({code:409,message:'RECURRING_REVISION_CONFLICT'});next(e)}})
 
 // GET /api/expenses
 router.get('/', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
@@ -66,6 +78,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), async (
 router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const oldExpense = await ExpenseService.getExpenseById(req.params.id)
+    if (!oldExpense || oldExpense.storeId !== req.user!.storeId) return res.status(404).json({code:404,message:'Expense not found'})
     const expense = await ExpenseService.updateExpense(req.params.id, req.body)
     await FinanceAuditService.createAuditLog({
       storeId: req.user!.storeId,
@@ -158,6 +171,7 @@ router.get('/export', authenticate, authorize('admin', 'manager'), async (req: A
 router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const expense = await ExpenseService.getExpenseById(req.params.id)
+    if (!expense || expense.storeId !== req.user!.storeId) return res.status(404).json({code:404,message:'Expense not found'})
     await ExpenseService.deleteExpense(req.params.id)
     if (expense) {
       await FinanceAuditService.createAuditLog({

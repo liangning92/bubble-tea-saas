@@ -1,4 +1,6 @@
-import { containsFilter } from '../utils/stringFilter'
+import {physicalInventoryVariance} from './InventoryVarianceService'
+import {convertQuantity,normalizedUnit,validatePackage,InventoryPackage} from '../utils/inventoryUnits'
+import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
 
 // ============================================
@@ -29,6 +31,7 @@ export interface StockOperation {
   inventoryId: string
   storeId: string
   quantity: number
+  inputUnit?: string
   reason: string
   note?: string
   staffId?: string
@@ -44,7 +47,7 @@ export async function getInventory(filter: InventoryFilter) {
   if (filter.categoryId) where.category = filter.categoryId
   if (filter.search) {
     where.OR = [
-      { name: containsFilter(filter.search) }
+      { name: containsText(filter.search) }
     ]
   }
 
@@ -54,12 +57,19 @@ export async function getInventory(filter: InventoryFilter) {
     orderBy: { name: 'asc' }
   })
 
+  const packages=await prisma.config.findMany({where:{key:{startsWith:'inventoryPackage:'},...(filter.storeId?{storeId:filter.storeId}:{})}})
+  const enriched=items.map(item=>{
+    const saved=packages.find(p=>p.storeId===item.storeId&&p.key===`inventoryPackage:${item.id}`)
+    let packaging:InventoryPackage|null=null
+    try{if(saved)packaging=validatePackage(JSON.parse(saved.value),item.unit)}catch{}
+    return {...item,packaging}
+  })
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
-    return serializeBigInt(items.filter(item => item.currentStock <= item.safetyStock))
+    return serializeBigInt(enriched.filter(item => item.currentStock <= item.safetyStock))
   }
 
-  return serializeBigInt(items)
+  return serializeBigInt(enriched)
 }
 
 // Get single inventory item
@@ -82,7 +92,7 @@ export async function getInventoryById(inventoryId: string) {
 
 // Stock in operation
 export async function stockIn(data: StockOperation & { unitCost?: number }) {
-  const { inventoryId, storeId, quantity, unitCost, note, staffId, supplierId } = data
+  const { inventoryId, storeId, unitCost, note, staffId, supplierId } = data
 
   return prisma.$transaction(async (tx) => {
     // Get current inventory
@@ -94,34 +104,40 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
       throw new Error('Inventory not found')
     }
 
+    if(!Number.isFinite(data.quantity)||data.quantity<=0||unitCost!==undefined&&(!Number.isSafeInteger(unitCost)||unitCost<0))throw new Error('INVALID_STOCK_INPUT')
+    const inputUnit=data.inputUnit||inventory.unit
+    const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
+    const pack=saved?validatePackage(JSON.parse(saved.value),inventory.unit):null
+    const quantity=convertQuantity(data.quantity,inputUnit,inventory.unit,pack)
+    if(quantity<=0)throw new Error('INVALID_QUANTITY')
+    const totalAmount=Math.round((unitCost||0)*data.quantity)
+    const baseCost=quantity>0?Math.round(totalAmount/quantity):0
+    if(!Number.isSafeInteger(totalAmount)||totalAmount>2147483647||baseCost>2147483647)throw new Error('INVALID_STOCK_COST')
+    const logNote=JSON.stringify({version:1,kind:'receipt',inputQuantity:data.quantity,inputUnit,ledgerUnit:inventory.unit,ledgerQuantity:quantity,inputUnitCost:unitCost??0,pack,note:note||''})
+
     // Calculate new average cost only if unitCost is provided and positive
     const avgCost = Number(inventory.avgCost)
     let newAvgCost = avgCost
     if (unitCost && unitCost > 0) {
       const totalCurrentValue = avgCost * inventory.currentStock
-      const totalNewValue = unitCost * quantity
+      const totalNewValue = totalAmount
       newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (inventory.currentStock + quantity))
     }
 
-    // Update inventory
-    const updated = await tx.inventory.update({
-      where: { id: inventoryId },
-      data: {
-        currentStock: { increment: quantity },
-        avgCost: newAvgCost
-      }
-    })
+    const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:inventory.currentStock,avgCost:inventory.avgCost},data:{currentStock:{increment:quantity},avgCost:newAvgCost}})
+    if(changed.count!==1)throw new Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
+    const updated=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
 
     // Create stock in log
     await tx.stockInLog.create({
       data: {
         inventoryId,
         quantity,
-        unitCost: unitCost || 0,
-        totalAmount: (unitCost || 0) * quantity,
+        unitCost: baseCost,
+        totalAmount,
         supplierId,
         staffId,
-        note
+        note: logNote
       }
     })
 
@@ -131,7 +147,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
 
 // Stock out operation
 export async function stockOut(data: StockOperation) {
-  const { inventoryId, storeId, quantity, reason, note, staffId, orderId } = data
+  const { inventoryId, storeId, reason, note, staffId, orderId } = data
 
   return prisma.$transaction(async (tx) => {
     // Get current inventory
@@ -143,17 +159,15 @@ export async function stockOut(data: StockOperation) {
       throw new Error('Inventory not found')
     }
 
+    if(!Number.isFinite(data.quantity)||data.quantity<=0)throw new Error('INVALID_QUANTITY')
+    const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit)
     if (inventory.currentStock < quantity) {
       throw new Error('Insufficient stock')
     }
 
-    // Update inventory
-    const updated = await tx.inventory.update({
-      where: { id: inventoryId },
-      data: {
-        currentStock: { decrement: quantity }
-      }
-    })
+    const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:{gte:quantity}},data:{currentStock:{decrement:quantity}}})
+    if(changed.count!==1)throw new Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
+    const updated=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
 
     // Create stock out log
     await tx.stockOutLog.create({
@@ -304,7 +318,7 @@ export async function getStockInLogs(
   }
 
   if (filter.search) {
-    where.inventory.name = containsFilter(filter.search)
+    where.inventory.name = containsText(filter.search)
   }
 
   if (filter.startDate || filter.endDate) {
@@ -370,7 +384,7 @@ export async function getStockOutLogs(
   }
 
   if (filter.search) {
-    where.inventory.name = containsFilter(filter.search)
+    where.inventory.name = containsText(filter.search)
   }
 
   if (filter.startDate || filter.endDate) {
@@ -448,14 +462,23 @@ export async function updateInventory(
     maxStock: number
     safetyStock: number
     shelfLife: number
+    packaging: InventoryPackage | null
     concentrateRatio: number
   }>
 ) {
-  const result = await prisma.inventory.update({
-    where: { id: inventoryId },
-    data
+  return prisma.$transaction(async tx=>{
+    if('ledgerSequence' in data||'ledgerEpoch' in data)throw new Error('INVENTORY_METADATA_FIELD_NOT_ALLOWED')
+    const current=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
+    if(data.unit!==undefined&&normalizedUnit(data.unit)!==normalizedUnit(current.unit))throw new Error('INVENTORY_UNIT_IMMUTABLE')
+    if(data.currentStock!==undefined&&data.currentStock!==current.currentStock)throw new Error('USE_INVENTORY_COUNT_OR_ADJUSTMENT')
+    const {packaging,unit,currentStock,...fields}=data
+    if(packaging!==undefined){
+      const key=`inventoryPackage:${inventoryId}`
+      if(packaging===null)await tx.config.deleteMany({where:{storeId:current.storeId,key}})
+      else{const value=JSON.stringify(validatePackage(packaging,current.unit));await tx.config.upsert({where:{storeId_key:{storeId:current.storeId,key}},create:{storeId:current.storeId,key,value,category:'inventory'},update:{value}})}
+    }
+    return serializeBigInt(await tx.inventory.update({where:{id:inventoryId},data:fields}))
   })
-  return serializeBigInt(result)
 }
 
 // Delete inventory item
@@ -553,161 +576,7 @@ export interface ConsumptionAnalysisFilter {
  *
  * 如果 variancePercent > varianceThreshold，标记为异常
  */
-export async function getConsumptionAnalysis(filter: ConsumptionAnalysisFilter) {
-  const {
-    storeId,
-    startDate,
-    endDate,
-    varianceThreshold = 10,  // 默认10%阈值
-    varianceCriticalThreshold = varianceThreshold * 2,
-    category
-  } = filter
-  const rangeStart = new Date(startDate)
-  const rangeEnd = new Date(endDate)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(endDate)) rangeEnd.setUTCHours(23, 59, 59, 999)
-
-  // 获取时间范围内的订单
-  const orders = await prisma.order.findMany({
-    where: {
-      storeId,
-      createdAt: {
-        gte: rangeStart,
-        lte: rangeEnd
-      },
-      status: { in: ['completed', 'refunded'] }
-    },
-    include: {
-      items: {
-        include: {
-          product: {
-            include: {
-              bomItems: {
-                include: {
-                  inventory: true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  })
-
-  // 计算每个库存物料的理论消耗和实际消耗
-  const consumptionMap = new Map<string, {
-    theoretical: number
-    actual: number
-    orderCount: number
-    lastOrderDate: string | null
-    inventoryName: string
-    unit: string
-    category: string
-  }>()
-
-  // 计算理论消耗
-  for (const order of orders) {
-    for (const item of order.items) {
-      const product = item.product
-      const orderQty = item.quantity
-
-      for (const bomItem of product.bomItems) {
-        const invId = bomItem.inventoryId
-        const theoreticalQty = bomItem.quantity * orderQty
-
-        const existing = consumptionMap.get(invId) || {
-          theoretical: 0,
-          actual: 0,
-          orderCount: 0,
-          lastOrderDate: null,
-          inventoryName: bomItem.inventory.name,
-          unit: bomItem.inventory.unit,
-          category: bomItem.inventory.category
-        }
-
-        existing.theoretical += theoreticalQty
-        existing.orderCount += 1
-        if (!existing.lastOrderDate || order.createdAt > new Date(existing.lastOrderDate)) {
-          existing.lastOrderDate = order.createdAt.toISOString()
-        }
-
-        consumptionMap.set(invId, existing)
-      }
-    }
-  }
-
-  // 获取实际消耗（从StockOutLog）
-  const stockOutLogs = await prisma.stockOutLog.findMany({
-    where: {
-      inventory: { storeId },
-      createdAt: {
-        gte: new Date(startDate),
-        lte: new Date(endDate)
-      },
-      reason: { in: ['sold', 'adjust'] }
-    },
-    include: { inventory: true }
-  })
-
-  //累加实际消耗
-  for (const log of stockOutLogs) {
-    const existing = consumptionMap.get(log.inventoryId) || {
-      theoretical: 0,
-      actual: 0,
-      orderCount: 0,
-      lastOrderDate: null,
-      inventoryName: log.inventory?.name || 'Unknown',
-      unit: log.inventory?.unit || '',
-      category: log.inventory?.category || ''
-    }
-
-    existing.actual += log.quantity
-    consumptionMap.set(log.inventoryId, existing)
-  }
-
-  // 计算差异并标记状态
-  const analysisResults: ConsumptionAnalysis[] = []
-
-  for (const [inventoryId, data] of consumptionMap) {
-    // 跳过没有实际消耗也没有理论消耗的
-    if (data.theoretical === 0 && data.actual === 0) continue
-
-    // 如果设定了分类过滤，跳过不匹配的
-    if (category && data.category !== category) continue
-
-    const variance = data.actual - data.theoretical
-    const variancePercent = data.theoretical > 0
-      ? (Math.abs(variance) / data.theoretical) * 100
-      : (data.actual > 0 ? 100 : 0)
-
-    // 判断状态
-    let varianceStatus: 'normal' | 'warning' | 'critical' = 'normal'
-    if (data.theoretical > 0) {
-      if (variancePercent > varianceThreshold * 2) {
-        varianceStatus = 'critical'
-      } else if (variancePercent > varianceThreshold) {
-        varianceStatus = 'warning'
-      }
-    } else if (data.actual > 0) {
-      varianceStatus = 'critical'  // 有实际消耗但没有理论消耗（可能BOM未配置）
-    }
-
-    analysisResults.push({
-      inventoryId,
-      inventoryName: data.inventoryName,
-      unit: data.unit,
-      theoreticalConsumption: Math.round(data.theoretical * 100) / 100,
-      actualConsumption: Math.round(data.actual * 100) / 100,
-      variance: Math.round(variance * 100) / 100,
-      variancePercent: Math.round(variancePercent * 10) / 10,
-      varianceStatus,
-      orderCount: data.orderCount,
-      lastOrderDate: data.lastOrderDate
-    })
-  }
-
-  // 按差异百分比降序排列，异常的排在前面
-  return analysisResults.sort((a, b) => b.variancePercent - a.variancePercent)
-}
+export async function getConsumptionAnalysis(filter:ConsumptionAnalysisFilter){return physicalInventoryVariance(filter)}
 
 // 获取异常预警汇总
 export async function getAnomalySummary(filter: ConsumptionAnalysisFilter) {
@@ -715,6 +584,7 @@ export async function getAnomalySummary(filter: ConsumptionAnalysisFilter) {
 
   const summary = {
     total: analysis.length,
+    unavailable: analysis.filter(a => a.varianceStatus === 'unavailable').length,
     normal: analysis.filter(a => a.varianceStatus === 'normal').length,
     warning: analysis.filter(a => a.varianceStatus === 'warning').length,
     critical: analysis.filter(a => a.varianceStatus === 'critical').length,

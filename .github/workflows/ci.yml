@@ -58,5 +58,8 @@ jobs:
           export PATH="$(pg_config --bindir):$PATH"
           RECEIPT_PROVIDER=postgresql node tests/stoploss/order-receipt-http-check.cjs
 
+      - name: Verify audited transaction and authorization regressions
+        run: npx --prefix server jest --config server/jest.audit.config.cjs --runInBand
+
       - name: Build API and frontend applications
         run: npm run build

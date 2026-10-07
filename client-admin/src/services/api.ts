@@ -34,6 +34,28 @@ api.interceptors.response.use(
 
 export default api
 
+// Keep the same request identity after a lost response, including across reloads.
+async function balanceChange(memberId:string,type:'topup'|'deduct',amount:number,note?:string){
+ const actor=useAuthStore.getState().user?.id||'unknown'
+ const key='balance.intent.'+JSON.stringify([actor,memberId,type,amount,note||''])
+ const requestId=localStorage.getItem(key)||crypto.randomUUID()
+ localStorage.setItem(key,requestId)
+ const response=await api.post(`/marketing/members/${memberId}/balance/${type}`,{amount,note,requestId})
+ localStorage.removeItem(key)
+ return response
+}
+
+export interface DeliveryPlatformConnection {
+  platform: 'grabfood' | 'gofood' | 'shopee'
+  status: 'not_connected'
+  reason: 'API_ACCESS_PENDING'
+  capabilities: { orders: boolean; accept: boolean; status: boolean; menu: boolean; webhooks: boolean }
+}
+
+export const deliveryApi = {
+  platforms: (storeId: string) => api.get<{ code: number; data: { platforms: DeliveryPlatformConnection[] } }>('/delivery/platforms', { params: { storeId } })
+}
+
 // Update API base URL dynamically (for API URL configuration)
 export function updateApiUrl(url: string) {
   api.defaults.baseURL = url
@@ -86,7 +108,7 @@ export const orderApi = {
 // Refund Requests
 export const adminApi = {
   getRefundRequests: (status?: string) => api.get('/orders/refund-requests', { params: { status } }),
-  approveRefund: (id: string, data: { note?: string }) => api.post('/orders/refund-requests/' + id + '/approve', data),
+  approveRefund: (id: string, data: { note?: string; verifiedPrepared?: boolean; verifiedUnprepared?: boolean }) => api.post('/orders/refund-requests/' + id + '/approve', data),
   rejectRefund: (id: string, data: { note: string }) => api.post('/orders/refund-requests/' + id + '/reject', data)
 }
 
@@ -241,6 +263,7 @@ export const leaveApi = {
   get: (id: string) => api.get('/leave/' + id),
   approve: (id: string) => api.put('/leave/approve/' + id),
   reject: (id: string, reason?: string) => api.put('/leave/reject/' + id, { reason }),
+  getBalance: (staffId: string, year: number) => api.get('/leave/balance/' + staffId, {params:{year}}),
   setBalance: (staffId: string, data: any) => api.put('/leave/balance/' + staffId, data)
 }
 
@@ -324,6 +347,8 @@ export const processRecipeApi = {
 
 // Expenses
 export const expenseApi = {
+  getRecurring:()=>api.get('/expenses/recurring'),
+  saveRecurring:(items:any[],revision:number)=>api.put('/expenses/recurring',{items,revision}),
   list: (params?: any) => api.get('/expenses', { params }),
   get: (id: string) => api.get('/expenses/' + id),
   create: (data: any) => api.post('/expenses', data),
@@ -527,9 +552,9 @@ export const bomApi = {
   getMaterialUsage: (days?: number) => api.get('/bom/materials/usage', { params: days ? { days } : undefined }),
   getLowStockAlerts: (days?: number) => api.get('/bom/materials/low-stock-alert', { params: days ? { days } : undefined }),
   getRecipeCost: (productId: string) => api.get('/bom/recipes/' + productId + '/cost'),
-  getInventoryBreakdown: (inventoryId: string, quantity?: number) =>
+  getInventoryBreakdown: (inventoryId: string, quantity?: number, unit?:string) =>
     api.get('/bom/inventory/' + inventoryId + '/breakdown', {
-      params: quantity ? { quantity } : undefined
+      params: {quantity,unit}
     })
 }
 
@@ -623,8 +648,8 @@ export const marketingApi = {
   searchMember: (phone: string) => api.get('/marketing/members/search', { params: { phone } }),
   getMemberBalance: (memberId: string) => api.get('/marketing/members/' + memberId + '/balance'),
   getBalanceLogs: (storeId: string) => api.get('/marketing/balance-logs', { params: { storeId } }),
-  memberTopup: (memberId: string, amount: number, note?: string) => api.post('/marketing/members/' + memberId + '/balance/topup', { amount, note }),
-  memberDeduct: (memberId: string, amount: number, note?: string) => api.post('/marketing/members/' + memberId + '/balance/deduct', { amount, note }),
+  memberTopup: (memberId: string, amount: number, note?: string) => balanceChange(memberId,'topup',amount,note),
+  memberDeduct: (memberId: string, amount: number, note?: string) => balanceChange(memberId,'deduct',amount,note),
   // Discount Rules
   discountRules: (storeId?: string) => api.get('/marketing/discount-rules', { params: storeId ? { storeId } : undefined }),
   createDiscountRule: (data: any) => api.post('/marketing/discount-rules', data),
@@ -765,3 +790,12 @@ export const posActionLogApi = {
     api.get('/pos-action-logs/stats', { params }),
   getSessions: () => api.get('/pos-action-logs/sessions'),
 }
+
+export const queueApi = {
+  list:()=>api.get('/queue'),
+  create:(requestId:string)=>api.post('/queue',{requestId}),
+  callNext:()=>api.post('/queue/call-next'),
+  status:(id:string,status:'served'|'cancelled')=>api.put(`/queue/${id}/status`,{status})
+}
+
+export const batchImportApi={run:(data:any)=>api.post('/import',data)}

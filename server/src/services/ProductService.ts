@@ -1,4 +1,6 @@
-import { containsFilter } from '../utils/stringFilter'
+import {convertQuantity} from '../utils/inventoryUnits'
+import {inventoryQuantityCost} from './InventoryQuantityService'
+import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
 import { getInventoryCostBreakdown } from './BomService'
 
@@ -148,43 +150,23 @@ function getConversionFactor(inventoryUnit: string, recipeUnit: string): number 
 }
 
 // Calculate product cost from BOM items (handles semi_finished recursively)
-export async function calculateProductCost(productId: string): Promise<number> {
-  const bomItems = await prisma.bOMItem.findMany({
-    where: { productId },
-    include: { inventory: true }
-  })
-
-  let totalCost = 0
-  for (const item of bomItems) {
-    const inv = item.inventory
-    if (!inv) continue
-
-    // For semi_finished items, recursively calculate cost from process recipe
-    if (inv.type === 'semi_finished' && inv.processRecipeId) {
-      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity)
-      totalCost += breakdown.cost
-    } else {
-      // For raw materials, calculate directly
-      const invUnit = (inv.unit || '个').toLowerCase()
-      const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(invUnit)
-      const ratio = inv.concentrateRatio || 1
-      const safeRatio = ratio === 0 ? 1 : ratio
-
-      let cpu = item.costPerUnit || inv.avgCost || 0
-      if (!isPerPiece) {
-        // kg/L inventory: divide by 1000 to convert to g/ml
-        // g/ml inventory: avgCost is already per unit, no conversion needed
-        if (invUnit === 'kg' || invUnit === 'l') {
-          cpu = Number(cpu) / 1000
-        }
-        // Apply concentrateRatio (for diluted/concentrated items)
-        cpu = Number(cpu) / safeRatio
-      }
-      totalCost += (item.quantity || 0) * Number(cpu)
-    }
-  }
-
-  return Math.round(totalCost)
+export async function calculateProductCost(productId: string,db:any=prisma): Promise<number> {
+ const rows=await db.bOMItem.findMany({where:{productId},include:{inventory:true}})
+ let cost=0
+ for(const row of rows)cost+=await inventoryQuantityCost(db,row.inventoryId,row.quantity,row.unit)
+ return Math.round(cost)
+}
+async function bomRows(db:any,productId:string,storeId:string,items:{inventoryId:string;quantity:number;unit?:string}[]){
+ const rows=[]
+ for(const item of items){
+  const inv=await db.inventory.findFirst({where:{id:item.inventoryId,storeId}})
+  if(!inv)throw new Error('INVENTORY_STORE_MISMATCH')
+  const unit=item.unit||inv.unit
+  convertQuantity(item.quantity,unit,inv.unit)
+  const totalCost=Math.round(await inventoryQuantityCost(db,inv.id,item.quantity,unit))
+  rows.push({productId,inventoryId:inv.id,quantity:item.quantity,unit,totalCost,costPerUnit:Math.round(item.quantity?totalCost/item.quantity:0),inventoryType:inv.type})
+ }
+ return rows
 }
 
 // Recalculate product cost and persist to database
@@ -208,9 +190,9 @@ export async function getProducts(filter: ProductFilter) {
   if (filter.status) where.status = filter.status
   if (filter.search) {
     where.OR = [
-      { name: containsFilter(filter.search) },
-      { description: containsFilter(filter.search) },
-      { code: containsFilter(filter.search) }
+      { name: containsText(filter.search) },
+      { description: containsText(filter.search) },
+      { code: containsText(filter.search) }
     ]
   }
 
@@ -347,16 +329,11 @@ export async function createProduct(data: CreateProductData) {
     // Create BOM items and calculate cost
     if (data.bomItems && data.bomItems.length > 0) {
       await tx.bOMItem.createMany({
-        data: data.bomItems.map(bom => ({
-          productId: product.id,
-          inventoryId: bom.inventoryId,
-          quantity: bom.quantity,
-          unit: bom.unit || '个'
-        }))
+        data: await bomRows(tx,product.id,product.storeId,data.bomItems)
       })
 
       // Calculate and update cost
-      const cost = await calculateProductCost(product.id)
+      const cost = await calculateProductCost(product.id,tx)
       await tx.product.update({
         where: { id: product.id },
         data: { costPrice: cost }
@@ -488,16 +465,11 @@ export async function updateProduct(productId: string, data: Partial<CreateProdu
       await tx.bOMItem.deleteMany({ where: { productId } })
       if (data.bomItems.length > 0) {
         await tx.bOMItem.createMany({
-          data: data.bomItems.map(bom => ({
-            productId,
-            inventoryId: bom.inventoryId,
-            quantity: bom.quantity,
-            unit: bom.unit || '个'
-          }))
+          data: await bomRows(tx,productId,product.storeId,data.bomItems)
         })
       }
       // Recalculate cost
-      const cost = await calculateProductCost(productId)
+      const cost = await calculateProductCost(productId,tx)
       await tx.product.update({
         where: { id: productId },
         data: { costPrice: cost }
@@ -524,54 +496,15 @@ export async function updateProduct(productId: string, data: Partial<CreateProdu
 }
 
 // Update product BOM only (recipe)
-export async function updateProductBom(productId: string, bomItems: { inventoryId: string; quantity: number }[]) {
-  // Delete existing BOM items
-  await prisma.bOMItem.deleteMany({ where: { productId } })
-
-  // Create new BOM items with cost info
-  if (bomItems && bomItems.length > 0) {
-    // Fetch inventory data for cost calculation
-    const inventoryIds = bomItems.map(b => b.inventoryId)
-    const inventories = await prisma.inventory.findMany({
-      where: { id: { in: inventoryIds } }
-    })
-    const invMap = Object.fromEntries(inventories.map(i => [i.id, i]))
-
-    await prisma.bOMItem.createMany({
-      data: bomItems.map(bom => {
-        const inv = invMap[bom.inventoryId]
-        const inventoryType = inv?.type || 'raw_material'
-        const costPerUnit = Number(inv?.avgCost) || 0
-        const totalCost = Math.round(bom.quantity * Number(costPerUnit))
-        return {
-          productId,
-          inventoryId: bom.inventoryId,
-          quantity: bom.quantity,
-          unit: inv?.unit || '个',
-          costPerUnit,
-          totalCost,
-          inventoryType
-        }
-      })
-    })
-  }
-
-  // Recalculate cost
-  const cost = await calculateProductCost(productId)
-  await prisma.product.update({
-    where: { id: productId },
-    data: { costPrice: cost }
-  })
-
-  // Return updated product with BOM
-  return prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      bomItems: {
-        include: { inventory: true }
-      }
-    }
-  })
+export async function updateProductBom(productId:string,bomItems:{inventoryId:string;quantity:number;unit?:string}[]){
+ return prisma.$transaction(async tx=>{
+  const product=await tx.product.findUniqueOrThrow({where:{id:productId}})
+  const rows=await bomRows(tx,productId,product.storeId,bomItems||[])
+  await tx.bOMItem.deleteMany({where:{productId}})
+  if(rows.length)await tx.bOMItem.createMany({data:rows})
+  await tx.product.update({where:{id:productId},data:{costPrice:await calculateProductCost(productId,tx)}})
+  return tx.product.findUnique({where:{id:productId},include:{bomItems:{include:{inventory:true}}}})
+ })
 }
 
 // Soft delete product
@@ -723,7 +656,7 @@ export async function getProductCostDetail(productId: string) {
 
     // For semi_finished items, use getInventoryCostBreakdown recursively
     if (inv?.type === 'semi_finished' && inv.processRecipeId) {
-      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity)
+      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity, item.unit)
       return {
         id: item.id,
         inventoryId: item.inventoryId,
@@ -748,27 +681,7 @@ export async function getProductCostDetail(productId: string) {
       }
     }
 
-    // For raw materials, calculate directly
-    const costPerUnit = inv?.avgCost || 0
-    const ratio = inv?.concentrateRatio || 1
-    const safeRatio = ratio === 0 ? 1 : ratio
-    const invUnit = (inv?.unit || '个').toLowerCase()
-    const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(invUnit)
-
-    let unitCost = 0
-    if (isPerPiece) {
-      unitCost = Number(costPerUnit)
-    } else {
-      // kg/L inventory: divide by 1000 to convert to g/ml
-      // g/ml inventory: avgCost is already per unit, no conversion needed
-      if (invUnit === 'kg' || invUnit === 'l') {
-        unitCost = Number(costPerUnit) / 1000
-      } else {
-        unitCost = Number(costPerUnit)
-      }
-      // Apply concentrateRatio (divide by ratio for diluted/concentrated items)
-      unitCost = Number(unitCost) / safeRatio
-    }
+    const unitCost=convertQuantity(1,item.unit,inv.unit)*Number(inv.avgCost)
 
     const totalCost = Math.round(item.quantity * unitCost)
 
@@ -780,7 +693,7 @@ export async function getProductCostDetail(productId: string) {
       unit: item.unit,
       costPerUnit: Math.round(unitCost * 10000) / 10000,
       totalCost,
-      type: 'raw_material',
+      type: inv.type,
       inventory: inv ? {
         id: inv.id,
         name: inv.name,

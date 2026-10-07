@@ -1,11 +1,15 @@
+import {publicProduct} from '../utils/publicProduct'
+import prisma from '../config/database'
+import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
 import { z } from 'zod'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as ProductService from '../services/ProductService'
 import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
+const resourceAccess = requireResourceStore(req => prisma.product.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 
 // Validation schemas
 const createProductSchema = z.object({
@@ -30,6 +34,7 @@ const createProductSchema = z.object({
   })).optional(),
   bomItems: z.array(z.object({
     inventoryId: z.string(),
+    unit: z.string().min(1).max(30).optional(),
     quantity: z.number().positive()
   })).optional(),
   channelPrices: z.array(z.object({
@@ -61,7 +66,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: { list: products },
+      data: { list: publicProduct(products,req.user!.role) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -78,7 +83,7 @@ router.get('/pos', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: { list: products },
+      data: { list: publicProduct(products,req.user!.role) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -120,7 +125,7 @@ router.get('/barcode/:barcode', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: product,
+      data: publicProduct(product,req.user!.role),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -130,7 +135,7 @@ router.get('/barcode/:barcode', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/products/:id
-router.get('/:id', authenticate, async (req: AuthRequest, res) => {
+router.get('/:id', authenticate, resourceAccess, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const product = await ProductService.getProductById(id)
@@ -141,7 +146,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: product,
+      data: publicProduct(product,req.user!.role),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -151,7 +156,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // GET /api/products/:id/cost - Get product cost detail (admin/manager only)
-router.get('/:id/cost', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/:id/cost', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const costDetail = await ProductService.getProductCostDetail(id)
@@ -179,7 +184,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
     res.status(201).json({
       code: 201,
       message: 'Product created',
-      data: product,
+      data: publicProduct(product,req.user!.role),
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -190,7 +195,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 })
 
 // PUT /api/products/:id
-router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const product = await ProductService.updateProduct(id, req.body)
@@ -198,7 +203,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     res.json({
       code: 200,
       message: 'Product updated',
-      data: product,
+      data: publicProduct(product,req.user!.role),
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -212,7 +217,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 })
 
 // DELETE /api/products/:id (soft delete)
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, resourceAccess, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     await ProductService.deleteProduct(id)
@@ -229,7 +234,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
 })
 
 // PUT /api/products/:id/status - Update product status
-router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id/status', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { status } = req.body
@@ -247,7 +252,7 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // POST /api/products/:id/restore - Restore deleted product
-router.post('/:id/restore', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.post('/:id/restore', authenticate, resourceAccess, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const product = await ProductService.restoreProduct(id)
@@ -255,7 +260,7 @@ router.post('/:id/restore', authenticate, authorize('admin'), async (req: AuthRe
     res.json({
       code: 200,
       message: 'Product restored',
-      data: product,
+      data: publicProduct(product,req.user!.role),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -268,6 +273,10 @@ router.post('/:id/restore', authenticate, authorize('admin'), async (req: AuthRe
 router.post('/batch-status', authenticate, authorize('admin', 'manager'), validateBody(batchStatusSchema), async (req: AuthRequest, res) => {
   try {
     const { productIds, status } = req.body
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, storeId: true } })
+    if (products.length !== new Set(productIds).size || products.some(product => !canAccessStore(req.user!, product.storeId))) {
+      return res.status(403).json({ code: 403, message: 'Product store access denied' })
+    }
     await ProductService.batchUpdateStatus(productIds, status)
 
     res.json({
@@ -303,11 +312,12 @@ router.post('/recalculate-costs', authenticate, authorize('admin'), async (req: 
 const bomUpdateSchema = z.object({
   bomItems: z.array(z.object({
     inventoryId: z.string(),
+    unit: z.string().min(1).max(30).optional(),
     quantity: z.number().min(0)
   }))
 })
 
-router.put('/:id/bom', authenticate, authorize('admin', 'manager'), validateBody(bomUpdateSchema), async (req: AuthRequest, res) => {
+router.put('/:id/bom', authenticate, resourceAccess, authorize('admin', 'manager'), validateBody(bomUpdateSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { bomItems } = req.body

@@ -1,7 +1,6 @@
 node_modules
 .git
 .github
-shared
 *.md
 *.log
 .env
@@ -47,5 +46,12 @@ full_flow_test.js
 inventory-debug.png
 product-list-debug.png
 debug-*.png
-*.png
 *.zip
+
+**/node_modules
+**/dist
+**/dist-electron
+**/*.db
+**/.env*
+handoff
+recovery

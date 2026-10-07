@@ -10,7 +10,8 @@ New-Item -ItemType Directory $target | Out-Null
 $oldExe = Join-Path $target 'BTPS.exe'
 $aliveScript = Join-Path $fixture 'keep-synthetic-old-process.cjs'
 Set-Content $aliveScript 'setInterval(() => {}, 1000)' -Encoding utf8
-$guid = node -e "const {UUID}=require('builder-util-runtime'); console.log(UUID.v5('com.bubbletea.pos',UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')))"
+$guid = node -e "const path=require('node:path');const {UUID}=require(require.resolve('builder-util-runtime',{paths:[path.dirname(require.resolve('electron-updater'))]})); console.log(UUID.v5('com.bubbletea.pos',UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')))"
+if ($LASTEXITCODE -ne 0 -or $guid -notmatch '^[a-f0-9-]{36}$') { throw 'Cannot resolve the actual installer registry GUID' }
 $registry = "HKCU:\Software\$guid"
 if (Test-Path $registry) { throw 'Existing registry refused: runner is not clean' }
 $dataRoot = Join-Path $env:APPDATA 'BTPS'

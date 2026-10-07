@@ -1,4 +1,4 @@
-import { containsFilter } from '../utils/stringFilter'
+import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
 import bcrypt from 'bcryptjs'
 
@@ -18,8 +18,8 @@ export async function getStaff(filter: StaffFilter) {
   if (filter.status) where.status = filter.status
   if (filter.search) {
     where.OR = [
-      { name: containsFilter(filter.search) },
-      { phone: containsFilter(filter.search) }
+      { name: containsText(filter.search) },
+      { user: { phone: containsText(filter.search) } }
     ]
   }
 
@@ -117,7 +117,7 @@ export async function updateStaff(staffId: string, data: Partial<{
   position: string
   email: string
   address: string
-  salary: number
+  baseSalary: number
   status: string
   employmentType: string
   hourlyRate: number
@@ -225,8 +225,9 @@ export async function getSchedule(staffId: string, date: Date) {
 
 // Salary operations
 export async function calculateSalary(staffId: string, month: number, year: number) {
-  const startDate = new Date(year, month - 1, 1)
-  const endDate = new Date(year, month, 0)
+  if(!Number.isInteger(month)||month<1||month>12||!Number.isInteger(year)||year<2000||year>2100)throw new Error('INVALID_SALARY_PERIOD')
+  const startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
+  const endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
 
   const [staff, attendances, attendanceRule, activeDeposits] = await Promise.all([
     prisma.staff.findUnique({ where: { id: staffId } }),
@@ -252,10 +253,10 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   // Use attendance rule or defaults
   const rule = attendanceRule
   const workStartHour = rule ? parseInt(rule.workStartTime.split(':')[0]) : 9
-  const gracePeriod = rule?.gracePeriod || 15
-  const lateDeductionFixed = rule?.lateDeductionFixed || 50000
-  const overtimeRate = rule?.overtimeRate || 1.5
-  const overtimeMinHours = rule?.overtimeMinHours || 1
+  const gracePeriod = rule?.gracePeriod ?? 15
+  const lateDeductionFixed = rule?.lateDeductionFixed ?? 50000
+  const overtimeRate = rule?.overtimeRate ?? 1.5
+  const overtimeMinHours = rule?.overtimeMinHours ?? 1
 
   // Calculate work days
   const workDays = attendances.filter(a => a.checkInTime).length
@@ -263,19 +264,13 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   // Calculate late days based on workStartTime + gracePeriod
   const lateDays = attendances.filter(a => {
     if (!a.checkInTime) return false
-    const checkIn = new Date(a.checkInTime)
-    const graceEnd = new Date(checkIn)
-    graceEnd.setHours(workStartHour, gracePeriod, 0, 0)
-    return checkIn > graceEnd
+    const checkIn = new Date(a.checkInTime.getTime()+7*3600000)
+    const [hour,minute]=(rule?.workStartTime || '09:00').split(':').map(Number)
+    return checkIn.getUTCHours()*60+checkIn.getUTCMinutes()>hour*60+minute+gracePeriod
   }).length
 
-  // Base salary - use position-based default
-  const positionSalaries: Record<string, number> = {
-    '店长': 5000000,
-    '副店长': 4000000,
-    '店员': 3500000
-  }
-  let baseSalary = positionSalaries[staff.position] || 3500000
+  if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
+  const baseSalary = staff.baseSalary
   let deductions = 0
   let bonuses = 0
   let depositDeductions: { ruleName: string; amount: number }[] = []
