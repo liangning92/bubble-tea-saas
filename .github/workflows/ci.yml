@@ -57,6 +57,8 @@ jobs:
           RECEIPT_PROVIDER=sqlite node tests/stoploss/order-receipt-http-check.cjs
           export PATH="$(pg_config --bindir):$PATH"
           RECEIPT_PROVIDER=postgresql node tests/stoploss/order-receipt-http-check.cjs
+          INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=sqlite node tests/stoploss/expense-save-http-check.cjs
+          INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=postgresql node tests/stoploss/expense-save-http-check.cjs
 
       - name: Verify audited transaction and authorization regressions
         run: npx --prefix server jest --config server/jest.audit.config.cjs --runInBand

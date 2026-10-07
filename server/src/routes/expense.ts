@@ -70,7 +70,8 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), async (
     res.status(201).json({ code: 201, data: expense })
   } catch (error: any) {
     console.error('Create expense error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to create expense' })
+    const status = error instanceof ExpenseService.ExpenseInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error.message || 'Failed to create expense' })
   }
 })
 
@@ -93,7 +94,8 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     res.json({ code: 200, data: expense })
   } catch (error: any) {
     console.error('Update expense error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to update expense' })
+    const status = error instanceof ExpenseService.ExpenseInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error.message || 'Failed to update expense' })
   }
 })
 
@@ -120,14 +122,15 @@ router.post('/bulk', authenticate, authorize('admin'), async (req: AuthRequest, 
       category: e.category,
       amount: e.amount,
       description: e.description || '',
-      date: new Date(e.date)
+      date: e.date
     }))
 
     const result = await ExpenseService.createExpensesBulk(data)
     res.status(201).json({ code: 201, data: { count: result.count } })
   } catch (error: any) {
     console.error('Bulk import error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to import expenses' })
+    const status = error instanceof ExpenseService.ExpenseInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error.message || 'Failed to import expenses' })
   }
 })
 
