@@ -1,0 +1,104 @@
+name: Publish Verified Windows Installer (Manual Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Explicitly publish updater release after legacy compatibility clearance'
+        type: boolean
+        default: false
+      source_sha:
+        description: 'Full 40-character verified source SHA already in master history'
+        required: true
+      verification_run_id:
+        description: 'Successful GitHub Windows verification run for that exact SHA'
+        required: true
+
+concurrency:
+  group: publish-windows-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gate:
+    if: inputs.publish == true && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      run_id: ${{ steps.source.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: source
+        name: Require exact reviewed source and successful prior Windows verification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.source_sha }}
+          VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+        run: node .github/scripts/check-release-source.cjs windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: BTPS-validation-evidence
+          path: evidence/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.source.outputs.run_id }}
+      - name: Refuse before publication without legacy compatibility clearance
+        run: |
+          node - <<'JS'
+          const fs=require('fs'),assert=require('assert/strict');
+          const manifest=JSON.parse(fs.readFileSync('evidence/desktop-template-manifest.json','utf8'));
+          const compatibility=JSON.parse(fs.readFileSync('evidence/desktop-compatibility-report.json','utf8'));
+          const guard=JSON.parse(fs.readFileSync('evidence/desktop-upgrade-gate-report.json','utf8'));
+          assert.equal(manifest.existingDatabaseCompatible,true,'Legacy compatibility has not been cleared; no Release may be created');
+          assert.equal(compatibility.newTemplateCompatible,true);
+          assert.equal(guard.databaseBytesPreserved,true);
+          assert.equal(guard.cases.length,3);
+          assert.ok(guard.cases.every(row=>row.oldProcessPreserved&&row.installerExitCode===73));
+          JS
+
+  publish:
+    needs: gate
+    if: inputs.publish == true && github.ref == 'refs/heads/master' && needs.gate.result == 'success'
+    runs-on: windows-latest
+    environment: windows-build
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: BTPS-build-dist
+          path: release/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.gate.outputs.run_id }}
+      - name: Publish exact verified installer without rebuilding
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifest = Get-Content 'release/latest.yml' -Raw
+          if ($manifest -notmatch '(?m)^version: (\d+\.\d+\.\d+)\s*$') { throw 'Invalid verified version' }
+          $version = $Matches[1]
+          $exePath = "release/BTPS-$version-Windows-x64.exe"
+          $blockmapPath = "$exePath.blockmap"
+          foreach ($file in @($exePath, $blockmapPath)) {
+            if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) { throw "Missing verified artifact: $file" }
+          }
+          if (!$manifest.Contains("BTPS-$version-Windows-x64.exe")) { throw 'Installer/version mismatch' }
+          $hash = [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.IO.File]::ReadAllBytes((Resolve-Path $exePath))))
+          if (!$manifest.Contains($hash)) { throw 'Installer SHA512 mismatch' }
+          $tag = "v$version"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) { throw 'Release already exists; do not overwrite another release' }
+          gh release create $tag --draft --target $env:RELEASE_SHA --title "BTPS $version" --notes "Verified installer from $($env:RELEASE_SHA)." --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Draft creation failed' }
+          gh release upload $tag $exePath $blockmapPath 'release/latest.yml' --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Verified upload failed; draft remains unpublished' }
+          gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Publication failed' }

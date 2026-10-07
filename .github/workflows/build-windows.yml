@@ -9,11 +9,6 @@ on:
         description: 'Version (空=自动生成，例: 2026.10.293)'
         required: false
         default: ''
-      publish:
-        description: 'Publish updater release (manual master only, compatibility clearance required)'
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
@@ -213,53 +208,3 @@ jobs:
             desktop-template-manifest.json
             desktop-compatibility-report.json
             desktop-upgrade-gate-report.json
-
-  publish:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && inputs.publish == true && needs.build.outputs.existing_db_compatible == 'true'
-    needs: build
-    runs-on: windows-latest
-    environment: windows-build
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: BTPS-build-dist
-          path: release/
-
-      - name: Validate and publish complete update
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = $env:RELEASE_VERSION
-          $tag = "v$version"
-          $exePath = "release/BTPS-$version-Windows-x64.exe"
-          $blockmapPath = "$exePath.blockmap"
-          $latestYml = "release/latest.yml"
-          foreach ($file in @($exePath, $blockmapPath, $latestYml)) {
-            if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) { throw "Missing update artifact: $file" }
-          }
-          $manifest = Get-Content $latestYml -Raw
-          if ($manifest -notmatch "(?m)^version: $([regex]::Escape($version))\s*$") { throw "Update version mismatch" }
-          if (!$manifest.Contains("BTPS-$version-Windows-x64.exe")) { throw "Update installer mismatch" }
-          $actualHash = [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.IO.File]::ReadAllBytes((Resolve-Path $exePath))))
-          if (!$manifest.Contains($actualHash)) { throw "Update installer checksum mismatch" }
-          $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            if (!(($existing | ConvertFrom-Json).isDraft)) { throw "Published release already exists: $tag" }
-          } else {
-            gh release create $tag --draft --target $env:RELEASE_SHA --title "BTPS $version" --notes "POS source repairs, product analysis and automatic update notifications." --repo $env:GITHUB_REPOSITORY
-            if ($LASTEXITCODE -ne 0) { throw "Release creation failed" }
-          }
-          gh release upload $tag $exePath $blockmapPath $latestYml --clobber --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw "Update artifact upload failed" }
-          gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }

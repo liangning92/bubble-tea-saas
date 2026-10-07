@@ -41,5 +41,10 @@ jobs:
       - name: Check translations
         run: npm run i18n:check
 
+      - name: Check stop-loss and release gates with isolated synthetic files
+        run: |
+          node --test tests/stoploss/*.test.cjs
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/stoploss/desktop-upgrade-preflight.test.py
+
       - name: Build API and frontend applications
         run: npm run build

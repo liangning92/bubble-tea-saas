@@ -1,0 +1,110 @@
+name: Publish Verified Docker SHA (Manual Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Explicitly publish verified immutable SHA tags (never latest)'
+        type: boolean
+        default: false
+      source_sha:
+        description: 'Full 40-character verified source SHA already in master history'
+        required: true
+      verification_run_id:
+        description: 'Successful Docker verification run for that exact SHA'
+        required: true
+
+concurrency:
+  group: publish-docker-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gate:
+    if: inputs.publish == true && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      run_id: ${{ steps.source.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: source
+        name: Require exact reviewed source and successful prior verification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.source_sha }}
+          VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+        run: node .github/scripts/check-release-source.cjs docker
+
+  publish:
+    needs: gate
+    if: inputs.publish == true && github.ref == 'refs/heads/master' && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, admin, pos, staff]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-verified-${{ needs.gate.outputs.sha }}-${{ matrix.service }}
+          path: verified-image/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.gate.outputs.run_id }}
+      - name: Verify and load previously built image (no rebuild)
+        env:
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${IMAGE_OWNER,,}/bubble-tea-${SERVICE}:sha-${RELEASE_SHA}"
+          jq -e --arg sha "$RELEASE_SHA" --arg service "$SERVICE" '.sourceSha == $sha and .service == $service' verified-image/manifest.json
+          EXPECTED_HASH=$(jq -r '.imageTarSha256' verified-image/manifest.json)
+          test "$(sha256sum verified-image/image.tar | cut -d' ' -f1)" = "$EXPECTED_HASH"
+          docker load -i verified-image/image.tar
+          test "$(docker image inspect "$IMAGE" --format '{{.Id}}')" = "$(jq -r '.imageId' verified-image/manifest.json)"
+          test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Preserve an already published SHA tag
+        env:
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${IMAGE_OWNER,,}/bubble-tea-${SERVICE}:sha-${RELEASE_SHA}"
+          if docker manifest inspect "$IMAGE" > existing-manifest.json 2> registry-inspect-error.txt; then
+            IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
+            jq -e --arg id "$IMAGE_ID" '.config.digest == $id' existing-manifest.json || { echo 'Refusing to overwrite an existing SHA tag with a different image'; exit 1; }
+            echo 'IMAGE_ALREADY_PUBLISHED=true' >> "$GITHUB_ENV"
+          else
+            ERROR_TEXT=$(cat registry-inspect-error.txt)
+            if [[ ! "$ERROR_TEXT" =~ (manifest\ unknown|no\ such\ manifest|MANIFEST_UNKNOWN) ]]; then
+              echo 'Registry state is unknown; refusing publication'
+              exit 1
+            fi
+          fi
+      - name: Publish only the explicitly selected immutable SHA tag
+        if: env.IMAGE_ALREADY_PUBLISHED != 'true'
+        env:
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          docker push "ghcr.io/${IMAGE_OWNER,,}/bubble-tea-${SERVICE}:sha-${RELEASE_SHA}"
