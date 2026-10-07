@@ -1,4 +1,6 @@
 import { prisma } from '../config/database'
+import { Prisma } from '@prisma/client'
+import { BusinessInputError } from '../utils/businessDate'
 
 // Default points values (fallback)
 const DEFAULT_POINTS = {
@@ -14,9 +16,8 @@ async function getPointsRule(storeId: string) {
   const rule = await prisma.staffPointRule.findUnique({
     where: { storeId }
   })
-  if (!rule || !rule.isActive) {
-    return DEFAULT_POINTS
-  }
+  if (!rule) return DEFAULT_POINTS
+  if (!rule.isActive) return { perfectAttendance: 0, goodPerformance: 0, completedTraining: 0, holidayWork: 0, overtimePerHour: 0 }
   return {
     perfectAttendance: rule.perfectAttendancePoints,
     goodPerformance: rule.goodPerformancePoints,
@@ -27,16 +28,10 @@ async function getPointsRule(storeId: string) {
 }
 
 // Get or create staff point balance
-export async function getOrCreateStaffPoint(staffId: string, storeId: string) {
-  let staffPoint = await prisma.staffPoint.findUnique({ where: { staffId } })
-
-  if (!staffPoint) {
-    staffPoint = await prisma.staffPoint.create({
-      data: { staffId, storeId, balance: 0, totalEarned: 0, totalRedeemed: 0 }
-    })
-  }
-
-  return staffPoint
+export async function getOrCreateStaffPoint(staffId: string, storeId: string, db: Prisma.TransactionClient = prisma) {
+  const staff = await db.staff.findUnique({ where: { id: staffId }, select: { storeId: true } })
+  if (!staff || (storeId && storeId !== staff.storeId)) throw new BusinessInputError('Staff store mismatch')
+  return db.staffPoint.upsert({ where: { staffId }, create: { staffId, storeId: staff.storeId, balance: 0, totalEarned: 0, totalRedeemed: 0 }, update: { storeId: staff.storeId } })
 }
 
 // Get point balance for a staff
@@ -99,111 +94,34 @@ export async function awardPoints(data: {
   createdBy?: string
   expiresAt?: Date
 }) {
-  const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId)
-
-  // Create log entry
-  const log = await prisma.staffPointLog.create({
-    data: {
-      staffId: data.staffId,
-      storeId: data.storeId,
-      type: 'earn',
-      points: data.points,
-      reason: data.reason,
-      referenceId: data.referenceId,
-      note: data.note,
-      expiresAt: data.expiresAt,
-      createdBy: data.createdBy
-    }
+  if (!Number.isSafeInteger(data.points) || data.points < 0) throw new BusinessInputError('Points must be non-negative integers')
+  return prisma.$transaction(async tx => {
+    const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId, tx)
+    await tx.staffPoint.update({ where: { staffId: data.staffId }, data: { balance: { increment: data.points }, totalEarned: { increment: data.points } } })
+    return tx.staffPointLog.create({ data: { ...data, storeId: staffPoint.storeId, type: 'earn' } })
   })
-
-  // Update balance
-  await prisma.staffPoint.update({
-    where: { staffId: data.staffId },
-    data: {
-      balance: { increment: data.points },
-      totalEarned: { increment: data.points }
-    }
-  })
-
-  return log
 }
 
-// Redeem points
-export async function redeemPoints(data: {
-  staffId: string
-  storeId: string
-  points: number
-  reason: string
-  referenceId?: string
-  note?: string
-}) {
-  const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId)
-
-  if (staffPoint.balance < data.points) {
-    throw new Error('Insufficient points balance')
-  }
-
-  // Create log entry (negative points for redeem)
-  const log = await prisma.staffPointLog.create({
-    data: {
-      staffId: data.staffId,
-      storeId: data.storeId,
-      type: 'redeem',
-      points: -data.points,
-      reason: data.reason,
-      referenceId: data.referenceId,
-      note: data.note
-    }
+// Redeem points with an atomic balance check and matching history.
+export async function redeemPoints(data: { staffId: string; storeId: string; points: number; reason: string; referenceId?: string; note?: string }) {
+  if (!Number.isSafeInteger(data.points) || data.points <= 0) throw new BusinessInputError('Points must be positive integers')
+  return prisma.$transaction(async tx => {
+    const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId, tx)
+    const changed = await tx.staffPoint.updateMany({ where: { staffId: data.staffId, balance: { gte: data.points } }, data: { balance: { decrement: data.points }, totalRedeemed: { increment: data.points } } })
+    if (changed.count !== 1) throw new BusinessInputError('Insufficient points balance')
+    return tx.staffPointLog.create({ data: { ...data, storeId: staffPoint.storeId, type: 'redeem', points: -data.points } })
   })
-
-  // Update balance
-  await prisma.staffPoint.update({
-    where: { staffId: data.staffId },
-    data: {
-      balance: { decrement: data.points },
-      totalRedeemed: { increment: data.points }
-    }
-  })
-
-  return log
 }
 
-// Manual adjustment (admin)
-export async function adjustPoints(data: {
-  staffId: string
-  storeId: string
-  points: number
-  reason: string
-  note?: string
-  createdBy: string
-}) {
-  const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId)
-
-  // Create log entry (positive or negative)
-  const log = await prisma.staffPointLog.create({
-    data: {
-      staffId: data.staffId,
-      storeId: data.storeId,
-      type: 'adjust',
-      points: data.points,
-      reason: 'manual_adjust',
-      note: data.note || data.reason,
-      createdBy: data.createdBy
-    }
+// Manual adjustments preserve the exact amount in the balance and history.
+export async function adjustPoints(data: { staffId: string; storeId: string; points: number; reason: string; note?: string; createdBy: string }) {
+  if (!Number.isSafeInteger(data.points)) throw new BusinessInputError('Points must be integers')
+  return prisma.$transaction(async tx => {
+    const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId, tx)
+    const changed = await tx.staffPoint.updateMany({ where: { staffId: data.staffId, ...(data.points < 0 ? { balance: { gte: -data.points } } : {}) }, data: { balance: { increment: data.points }, ...(data.points > 0 ? { totalEarned: { increment: data.points } } : { totalRedeemed: { increment: -data.points } }) } })
+    if (changed.count !== 1) throw new BusinessInputError('Insufficient points balance')
+    return tx.staffPointLog.create({ data: { staffId: data.staffId, storeId: staffPoint.storeId, type: 'adjust', points: data.points, reason: 'manual_adjust', note: data.note || data.reason, createdBy: data.createdBy } })
   })
-
-  // Update balance
-  const newBalance = staffPoint.balance + data.points
-  await prisma.staffPoint.update({
-    where: { staffId: data.staffId },
-    data: {
-      balance: newBalance >= 0 ? newBalance : 0,
-      totalEarned: data.points > 0 ? staffPoint.totalEarned + data.points : staffPoint.totalEarned,
-      totalRedeemed: data.points < 0 ? staffPoint.totalRedeemed + Math.abs(data.points) : staffPoint.totalRedeemed
-    }
-  })
-
-  return log
 }
 
 // Process expired points
@@ -222,30 +140,17 @@ export async function processExpiredPoints(storeId: string) {
 
   const results = []
   for (const log of expiredLogs) {
-    // Create expire log
-    await prisma.staffPointLog.create({
-      data: {
-        staffId: log.staffId,
-        storeId: log.storeId,
-        type: 'expire',
-        points: -log.points,
-        reason: 'expired',
-        referenceId: log.id,
-        note: 'Points expired'
-      }
+    const applied = await prisma.$transaction(async tx => {
+      const staffPoint = await getOrCreateStaffPoint(log.staffId, log.storeId, tx)
+      const marked = await tx.staffPointLog.updateMany({ where: { id: log.id, expiredAt: null }, data: { expiredAt: now } })
+      if (marked.count !== 1) return false
+      const points = Math.max(0, Math.min(staffPoint.balance, log.points))
+      const changed = await tx.staffPoint.updateMany({ where: { staffId: log.staffId, balance: { gte: points } }, data: { balance: { decrement: points } } })
+      if (changed.count !== 1) throw new BusinessInputError('Points balance changed; retry expiry')
+      await tx.staffPointLog.create({ data: { staffId: log.staffId, storeId: log.storeId, type: 'expire', points: -points, reason: 'expired', referenceId: log.id, note: 'Points expired' } })
+      return true
     })
-
-    // Update balance
-    await prisma.staffPoint.update({
-      where: { staffId: log.staffId },
-      data: { balance: { decrement: log.points } }
-    })
-
-    // Mark original log as expired
-    await prisma.staffPointLog.update({
-      where: { id: log.id },
-      data: { expiredAt: now }
-    })
+    if (!applied) continue
 
     results.push(log.id)
   }
@@ -254,9 +159,10 @@ export async function processExpiredPoints(storeId: string) {
 }
 
 // Get all rewards
-export async function getRewards(storeId: string) {
+export async function getRewards(storeId: string, includeInactive = false) {
+  const archived = includeInactive ? await prisma.config.findMany({ where: { storeId, key: { startsWith: 'staffPointReward.archived:' } }, select: { key: true } }) : []
   return prisma.staffPointReward.findMany({
-    where: { storeId, isActive: true },
+    where: { storeId, ...(includeInactive ? { id: { notIn: archived.map(row => row.key.slice('staffPointReward.archived:'.length)) } } : { isActive: true }) },
     orderBy: { pointsCost: 'asc' }
   })
 }
@@ -269,6 +175,7 @@ export async function createReward(data: {
   pointsCost: number
   value?: string
   stock?: number
+  isActive?: boolean
 }) {
   return prisma.staffPointReward.create({
     data: {
@@ -277,7 +184,8 @@ export async function createReward(data: {
       type: data.type,
       pointsCost: data.pointsCost,
       value: data.value,
-      stock: data.stock
+      stock: data.stock,
+      isActive: data.isActive ?? true
     }
   })
 }
@@ -299,9 +207,11 @@ export async function updateReward(id: string, data: Partial<{
 
 // Delete reward
 export async function deleteReward(id: string) {
-  return prisma.staffPointReward.update({
-    where: { id },
-    data: { isActive: false }
+  return prisma.$transaction(async tx => {
+    const reward = await tx.staffPointReward.update({ where: { id }, data: { isActive: false } })
+    const key = `staffPointReward.archived:${id}`
+    await tx.config.upsert({ where: { storeId_key: { storeId: reward.storeId, key } }, create: { storeId: reward.storeId, key, value: JSON.stringify({ archivedAt: new Date().toISOString() }), category: 'staff' }, update: {} })
+    return reward
   })
 }
 
@@ -312,20 +222,12 @@ export async function createRedemption(data: {
   rewardId: string
   pointsCost: number
 }) {
+  const reward = await prisma.staffPointReward.findFirst({ where: { id: data.rewardId, storeId: data.storeId, isActive: true } })
+  if (!reward || (reward.stock !== null && reward.stock <= 0)) throw new BusinessInputError('Reward is unavailable')
+  if (!Number.isSafeInteger(reward.pointsCost) || reward.pointsCost <= 0 || data.pointsCost !== reward.pointsCost) throw new BusinessInputError('Reward points cost has changed')
   const staffPoint = await getOrCreateStaffPoint(data.staffId, data.storeId)
-
-  if (staffPoint.balance < data.pointsCost) {
-    throw new Error('Insufficient points balance')
-  }
-
-  return prisma.staffPointRedemption.create({
-    data: {
-      staffId: data.staffId,
-      storeId: data.storeId,
-      rewardId: data.rewardId,
-      pointsCost: data.pointsCost
-    }
-  })
+  if (staffPoint.balance < reward.pointsCost) throw new BusinessInputError('Insufficient points balance')
+  return prisma.staffPointRedemption.create({ data: { ...data, pointsCost: reward.pointsCost } })
 }
 
 // Get pending redemptions
@@ -342,54 +244,29 @@ export async function getPendingRedemptions(storeId: string) {
 
 // Approve/fulfill redemption
 export async function fulfillRedemption(id: string, fulfilledBy: string, checkStock: boolean = true) {
-  const redemption = await prisma.staffPointRedemption.findUnique({
-    where: { id },
-    include: { reward: true }
-  })
-
-  if (!redemption) {
-    throw new Error('Redemption not found')
-  }
-
-  // Check stock if reward has stock management
-  if (checkStock && redemption.reward?.stock !== null && redemption.reward?.stock !== undefined) {
-    if (redemption.reward.stock <= 0) {
-      throw new Error('Reward is out of stock')
+  return prisma.$transaction(async tx => {
+    const redemption = await tx.staffPointRedemption.findUnique({ where: { id }, include: { reward: true } })
+    if (!redemption || !['pending', 'approved'].includes(redemption.status)) throw new BusinessInputError('Redemption is no longer pending')
+    if (!redemption.reward?.isActive || redemption.reward.storeId !== redemption.storeId) throw new BusinessInputError('Reward is unavailable')
+    const transition = await tx.staffPointRedemption.updateMany({ where: { id, status: redemption.status }, data: { status: 'fulfilled', fulfilledAt: new Date(), fulfilledBy } })
+    if (transition.count !== 1) throw new BusinessInputError('Redemption is no longer pending')
+    await getOrCreateStaffPoint(redemption.staffId, redemption.storeId, tx)
+    const balance = await tx.staffPoint.updateMany({ where: { staffId: redemption.staffId, balance: { gte: redemption.pointsCost } }, data: { balance: { decrement: redemption.pointsCost }, totalRedeemed: { increment: redemption.pointsCost } } })
+    if (balance.count !== 1) throw new BusinessInputError('Insufficient points balance')
+    if (checkStock && redemption.reward.stock !== null) {
+      const stock = await tx.staffPointReward.updateMany({ where: { id: redemption.rewardId, isActive: true, stock: { gt: 0 } }, data: { stock: { decrement: 1 } } })
+      if (stock.count !== 1) throw new BusinessInputError('Reward is out of stock')
     }
-    // Deduct stock
-    await prisma.staffPointReward.update({
-      where: { id: redemption.rewardId },
-      data: { stock: { decrement: 1 } }
-    })
-  }
-
-  const updated = await prisma.staffPointRedemption.update({
-    where: { id },
-    data: {
-      status: 'fulfilled',
-      fulfilledAt: new Date(),
-      fulfilledBy
-    }
+    await tx.staffPointLog.create({ data: { staffId: redemption.staffId, storeId: redemption.storeId, type: 'redeem', points: -redemption.pointsCost, reason: 'reward', referenceId: id, createdBy: fulfilledBy } })
+    return tx.staffPointRedemption.findUniqueOrThrow({ where: { id } })
   })
-
-  // Deduct points
-  await prisma.staffPoint.update({
-    where: { staffId: redemption.staffId },
-    data: {
-      balance: { decrement: redemption.pointsCost },
-      totalRedeemed: { increment: redemption.pointsCost }
-    }
-  })
-
-  return updated
 }
 
-// Cancel redemption
+// Cancellation cannot reverse an already fulfilled redemption.
 export async function cancelRedemption(id: string) {
-  return prisma.staffPointRedemption.update({
-    where: { id },
-    data: { status: 'cancelled' }
-  })
+  const changed = await prisma.staffPointRedemption.updateMany({ where: { id, status: { in: ['pending', 'approved'] } }, data: { status: 'cancelled' } })
+  if (changed.count !== 1) throw new BusinessInputError('Redemption is no longer pending')
+  return prisma.staffPointRedemption.findUniqueOrThrow({ where: { id } })
 }
 
 // Award points for perfect attendance (call at end of month)

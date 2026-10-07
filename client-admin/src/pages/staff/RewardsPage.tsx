@@ -7,6 +7,8 @@ import { Gift, Plus, RefreshCw, Edit, Trash2, CheckCircle, XCircle, Clock } from
 interface Reward {
   id: string
   name: string
+  type: string
+  value?: string | null
   description: string
   pointsCost: number
   stock: number
@@ -18,6 +20,8 @@ interface Redemption {
   id: string
   staffId: string
   staffName: string
+  staff?: { name: string }
+  reward?: { name: string }
   rewardId: string
   rewardName: string
   pointsCost: number
@@ -27,7 +31,7 @@ interface Redemption {
 
 export function RewardsPage() {
   const { t } = useTranslation()
-  const { token, user } = useAuthStore()
+  const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<'catalog' | 'redemptions'>('catalog')
   const [rewards, setRewards] = useState<Reward[]>([])
   const [redemptions, setRedemptions] = useState<Redemption[]>([])
@@ -45,13 +49,12 @@ export function RewardsPage() {
   const loadRewards = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/staff-point-rewards?storeId=${user?.storeId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      const data = await res.json()
-      if (data.code === 200) {
-        setRewards(data.data || [])
-      }
+      const res = await staffPointsApi.getRewards()
+      setRewards((res.data.data || []).map((reward: Reward) => {
+        let description = ''
+        try { description = JSON.parse(reward.value || '{}').description || '' } catch { /* Legacy non-JSON reward values remain unchanged. */ }
+        return { ...reward, description }
+      }))
     } catch (error) {
       console.error('Failed to load rewards:', error)
     } finally {
@@ -64,7 +67,7 @@ export function RewardsPage() {
     try {
       const res = await staffPointsApi.getPendingRedemptions()
       if (res.data?.code === 200) {
-        setRedemptions(res.data.data || [])
+        setRedemptions((res.data.data || []).map((redemption: Redemption) => ({ ...redemption, staffName: redemption.staff?.name || redemption.staffName, rewardName: redemption.reward?.name || redemption.rewardName })))
       }
     } catch (error) {
       console.error('Failed to load redemptions:', error)
@@ -84,28 +87,15 @@ export function RewardsPage() {
   const handleSave = async () => {
     setIsLoading(true)
     try {
-      const method = editingReward ? 'PUT' : 'POST'
-      const url = editingReward ? `/api/staff-point-rewards/${editingReward.id}` : '/api/staff-point-rewards'
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          ...formData,
-          storeId: user?.storeId
-        })
-      })
-      const data = await res.json()
-      if (data.code === 200) {
-        await loadRewards()
-        setShowForm(false)
-        setEditingReward(null)
-        setFormData({ name: '', description: '', pointsCost: 100, stock: 10, isActive: true })
-      } else {
-        alert(data.message || 'Failed to save')
-      }
+      let value: Record<string, unknown> = {}
+      try { value = JSON.parse(editingReward?.value || '{}') } catch { /* Preserve existing reward semantics through partial updates. */ }
+      const payload = { name: formData.name, type: editingReward?.type || 'merchandise', pointsCost: formData.pointsCost, stock: formData.stock, isActive: formData.isActive, value: JSON.stringify({ ...value, description: formData.description }) }
+      if (editingReward) await staffPointsApi.updateReward(editingReward.id, payload)
+      else await staffPointsApi.createReward(payload)
+      await loadRewards()
+      setShowForm(false)
+      setEditingReward(null)
+      setFormData({ name: '', description: '', pointsCost: 100, stock: 10, isActive: true })
     } catch (error) {
       console.error('Failed to save:', error)
       alert(t('common.error'))
@@ -118,7 +108,7 @@ export function RewardsPage() {
     setEditingReward(reward)
     setFormData({
       name: reward.name,
-      description: reward.description,
+      description: reward.description || '',
       pointsCost: reward.pointsCost,
       stock: reward.stock,
       isActive: reward.isActive
@@ -129,14 +119,8 @@ export function RewardsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm(t('common.confirm') + '?')) return
     try {
-      const res = await fetch(`/api/staff-point-rewards/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      const data = await res.json()
-      if (data.code === 200) {
-        await loadRewards()
-      }
+      await staffPointsApi.deleteReward(id)
+      await loadRewards()
     } catch (error) {
       console.error('Failed to delete:', error)
     }
@@ -144,14 +128,7 @@ export function RewardsPage() {
 
   const handleToggleActive = async (reward: Reward) => {
     try {
-      await fetch(`/api/staff-point-rewards/${reward.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ ...reward, isActive: !reward.isActive })
-      })
+      await staffPointsApi.updateReward(reward.id, { isActive: !reward.isActive })
       await loadRewards()
     } catch (error) {
       console.error('Failed to toggle:', error)
@@ -362,7 +339,7 @@ export function RewardsPage() {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">
               {editingReward ? t('common.edit') : t('common.add')} {t('staff.reward')}
@@ -410,7 +387,7 @@ export function RewardsPage() {
                 <button onClick={() => setShowForm(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
                   {t('common.cancel')}
                 </button>
-                <button onClick={handleSave} className="flex-1 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">
+                <button onClick={handleSave} disabled={isLoading || !formData.name.trim() || !Number.isSafeInteger(formData.pointsCost) || formData.pointsCost < 1 || !Number.isSafeInteger(formData.stock) || formData.stock < 0} className="flex-1 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">
                   {t('common.save')}
                 </button>
               </div>

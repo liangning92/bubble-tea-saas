@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
@@ -627,8 +628,8 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
     if (staffId) where.staffId = staffId as string
     if (startDate || endDate) {
       where.checkInTime = {}
-      if (startDate) where.checkInTime.gte = new Date(startDate as string)
-      if (endDate) where.checkInTime.lte = new Date(endDate as string)
+      if (startDate) where.checkInTime.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.checkInTime.lte = parseDateBoundary(endDate as string, true)
     }
 
     const attendances = await prisma.attendance.findMany({

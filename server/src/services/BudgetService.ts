@@ -1,4 +1,5 @@
 import prisma from '../config/database'
+import { startOfMonth, endOfMonth } from '../utils/dateUtils'
 
 export async function getBudgets(storeId: string, options?: {
   category?: string
@@ -69,12 +70,8 @@ export async function getBudgetSummary(storeId: string, year: number, month?: nu
   })
 
   // Get actual expenses for comparison
-  const startDate = month
-    ? new Date(year, month - 1, 1)
-    : new Date(year, 0, 1)
-  const endDate = month
-    ? new Date(year, month, 0)
-    : new Date(year, 11, 31)
+  const startDate = startOfMonth(new Date(Date.UTC(year, month ? month - 1 : 0, 1)))
+  const endDate = endOfMonth(new Date(Date.UTC(year, month ? month - 1 : 11, 1)))
 
   const expenses = await prisma.expense.findMany({
     where: {

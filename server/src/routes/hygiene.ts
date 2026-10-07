@@ -1,3 +1,4 @@
+import { formatDate } from '../utils/dateUtils'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -171,13 +172,24 @@ router.get('/tasks', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+router.get('/tasks/my/pending', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const staffId = req.user!.staffId
+    if (!staffId) return res.status(400).json({ code: 400, message: 'staffId required' })
+    const tasks = await HygieneService.getPendingTasks(req.user!.storeId, { staffId })
+    res.json({ code: 200, data: { count: tasks.length, list: tasks } })
+  } catch (error: any) {
+    res.status(500).json({ code: 500, message: error.message })
+  }
+})
+
 // GET /api/hygiene/tasks/my - 获取当前员工任务 (必须在 /tasks/:id 前面)
 router.get('/tasks/my', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
     if (!staffId) return res.status(400).json({ code: 400, message: 'staffId required' })
     const { date } = req.query
-    const tasks = await HygieneService.getTasksByStaff(staffId, (date as string) || new Date().toISOString().split('T')[0])
+    const tasks = await HygieneService.getTasksByStaff(staffId, (date as string) || formatDate(new Date()))
     res.json({ code: 200, data: { list: tasks } })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -231,7 +243,7 @@ router.post('/tasks/temporary', authenticate, authorize('admin', 'manager'), asy
     const { name, areaCode, staffId, priority, description, dueTime, date } = req.body
     const storeId = req.user!.storeId
     // 使用用户提供的日期或默认为今天
-    const taskDate = date || new Date().toISOString().split('T')[0]
+    const taskDate = date || formatDate(new Date())
 
     const task = await HygieneService.createTemporaryTask(storeId, {
       name,

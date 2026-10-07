@@ -867,6 +867,7 @@ function AccountTypeModal({
               </select>
               <button
                 onClick={handleAddType}
+                aria-label={t('common.add')}
                 className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-sm"
               >
                 <Plus size={16} />

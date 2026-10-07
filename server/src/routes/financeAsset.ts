@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { BusinessInputError } from '../utils/businessDate'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as FixedAssetService from '../services/FixedAssetService'
 
@@ -51,11 +52,12 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 // POST /api/finance/assets
 router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    const asset = await FixedAssetService.createFixedAsset(req.body)
+    const asset = await FixedAssetService.createFixedAsset({ ...req.body, storeId: req.user!.storeId })
     res.status(201).json({ code: 201, data: asset })
   } catch (error: any) {
     console.error('Create asset error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to create asset' })
+    const status = error instanceof BusinessInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error.message || 'Failed to create asset' })
   }
 })
 
@@ -66,7 +68,8 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
     res.json({ code: 200, data: asset })
   } catch (error: any) {
     console.error('Update asset error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to update asset' })
+    const status = error instanceof BusinessInputError ? 400 : 500
+    res.status(status).json({ code: status, message: error.message || 'Failed to update asset' })
   }
 })
 

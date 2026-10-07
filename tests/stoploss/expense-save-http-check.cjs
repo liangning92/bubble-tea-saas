@@ -26,6 +26,16 @@ assert.equal(await prisma.expense.count(),1);assert.equal(await prisma.financeAu
 const list=await send('GET','');assert.equal(list.status,200);assert.equal((await list.json()).data.list[0].amount,1600000);
 const iso=await send('POST','',{...payload,date:'2026-10-07T10:30:00.000Z'});assert.equal(iso.status,201);assert.equal((await iso.json()).data.date,'2026-10-07T10:30:00.000Z');
 console.log('PASS '+provider+' real HTTP expense create/edit/list: date-only conversion, ISO compatibility, amount precision, audit logs, invalid dates/amounts rejected without writes, authenticated store binding');
+const category={key:'custom_delivery',label:'Synthetic delivery fee',color:'text-blue-600',isDefault:false};
+assert.equal((await send('PUT','/categories',{categories:[category]})).status,200);
+const categories=await send('GET','/categories');assert.equal(categories.status,200);assert.deepEqual((await categories.json()).data.list,[category]);
+assert.deepEqual(JSON.parse((await prisma.config.findUnique({where:{storeId_key:{storeId:'store',key:'expense.categories'}}})).value),[category]);
+assert.equal(await prisma.expense.count(),2);assert.equal(await prisma.financeAuditLog.count(),3);
+assert.equal((await send('PUT','/categories',{categories:[{...category,label:'Renamed'}]})).status,200);
+assert.equal((await (await send('GET','/categories')).json()).data.list[0].label,'Renamed');
+assert.equal((await send('PUT','/categories',{categories:[]})).status,200);
+assert.deepEqual((await (await send('GET','/categories')).json()).data.list,[]);
+console.log('PASS '+provider+' category collection PUT bypasses expense-id route: persisted create/read/rename/remove, no expense mutations');
 const {expenseAmountFromInput,expenseCalendarDate}=require(path.resolve('client-admin/src/utils/expenseInput.ts'));
 for(const text of ['4580000','4.580.000','4,580,000'])assert.equal(expenseAmountFromInput(text),458000000);
 for(const text of ['', '0','-100','1.5','1,5','abc','999999999999'])assert.equal(expenseAmountFromInput(text),null);

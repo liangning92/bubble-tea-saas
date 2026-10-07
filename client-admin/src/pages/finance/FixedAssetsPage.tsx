@@ -1,3 +1,4 @@
+import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { assetApi } from '../../services/api'
@@ -91,7 +92,7 @@ export function FixedAssetsPage() {
     try {
       const data = {
         ...formData,
-        purchaseDate: new Date(formData.purchaseDate),
+        purchaseDate: formData.purchaseDate,
         originalValue: Number(formData.originalValue),
         usefulLife: Number(formData.usefulLife),
         salvageValue: Number(formData.salvageValue)
@@ -117,7 +118,7 @@ export function FixedAssetsPage() {
     setFormData({
       name: asset.name,
       description: asset.description || '',
-      purchaseDate: asset.purchaseDate.slice(0, 10),
+      purchaseDate: expenseCalendarDate(asset.purchaseDate),
       originalValue: asset.originalValue,
       usefulLife: asset.usefulLife,
       salvageValue: asset.salvageValue,

@@ -1,4 +1,10 @@
 import prisma from '../config/database'
+import { parseBusinessDate } from '../utils/businessDate'
+import { endOfDay } from '../utils/dateUtils'
+const rewardDate = (value: Date | string, until = false) => {
+  const date = parseBusinessDate(value)
+  return until && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? endOfDay(date) : date
+}
 
 // Get all rewards for store
 export async function getRewards(storeId: string) {
@@ -41,8 +47,8 @@ export async function createReward(data: {
   pointsCost: number
   value: number
   stock?: number
-  validFrom: Date
-  validUntil: Date
+  validFrom: Date | string
+  validUntil: Date | string
   isActive?: boolean
 }) {
   return prisma.rewardCatalog.create({
@@ -56,8 +62,8 @@ export async function createReward(data: {
       pointsCost: data.pointsCost,
       value: data.value,
       stock: data.stock,
-      validFrom: data.validFrom,
-      validUntil: data.validUntil,
+      validFrom: rewardDate(data.validFrom),
+      validUntil: rewardDate(data.validUntil, true),
       isActive: data.isActive ?? true
     }
   })
@@ -73,13 +79,13 @@ export async function updateReward(id: string, data: Partial<{
   pointsCost: number
   value: number
   stock: number
-  validFrom: Date
-  validUntil: Date
+  validFrom: Date | string
+  validUntil: Date | string
   isActive: boolean
 }>) {
   return prisma.rewardCatalog.update({
     where: { id },
-    data
+    data: { ...data, ...(data.validFrom !== undefined && { validFrom: rewardDate(data.validFrom) }), ...(data.validUntil !== undefined && { validUntil: rewardDate(data.validUntil, true) }) }
   })
 }
 

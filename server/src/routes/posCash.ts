@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import prisma from '../config/database'
@@ -17,8 +18,8 @@ router.get('/events', authenticate, authorize('admin', 'manager', 'cashier'), as
     const where: any = { storeId }
     if (startDate || endDate) {
       where.createdAt = {}
-      if (startDate) where.createdAt.gte = new Date(startDate as string)
-      if (endDate) where.createdAt.lte = new Date(endDate as string)
+      if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.createdAt.lte = parseDateBoundary(endDate as string, true)
     }
     if (type) where.type = type
     if (shift) where.shift = shift
@@ -87,8 +88,8 @@ router.get('/shifts', authenticate, authorize('admin', 'manager', 'cashier'), as
     const where: any = { storeId }
     if (startDate || endDate) {
       where.openedAt = {}
-      if (startDate) where.openedAt.gte = new Date(startDate as string)
-      if (endDate) where.openedAt.lte = new Date(endDate as string)
+      if (startDate) where.openedAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.openedAt.lte = parseDateBoundary(endDate as string, true)
     }
 
     const shifts = await prisma.shiftSession.findMany({

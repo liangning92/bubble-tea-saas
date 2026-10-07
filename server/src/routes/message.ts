@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { z } from 'zod'
@@ -189,8 +190,8 @@ router.get('/logs', authenticate, authorize('admin', 'manager'), async (req: Aut
       type: type as string,
       channelType: channelType as string,
       status: status as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
+      startDate: startDate ? parseDateBoundary(startDate as string) : undefined,
+      endDate: endDate ? parseDateBoundary(endDate as string, true) : undefined,
       limit: limit ? Number(limit) : 50,
       offset: offset ? Number(offset) : 0
     })

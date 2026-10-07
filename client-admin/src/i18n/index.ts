@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      staffPointSettings: { overtimePerHour: "Poin per jam lembur" },
       revenueLayout: {"title": "Ringkasan pendapatan", "netRevenue": "Pendapatan bersih", "vsPrevious": "dibanding periode sebelumnya", "channelRevenue": "Pendapatan per kanal", "channelDetails": "Rincian kanal"},
       pageHelp: {"title": "Bantuan", "aiDisabled": "Eksekusi AI belum aktif"},
       itemRefund: {manual: "Persetujuan mencatat pengembalian; QR statis tidak mentransfer uang otomatis."},
@@ -3666,6 +3667,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      staffPointSettings: { overtimePerHour: "Points per overtime hour" },
       revenueLayout: {"title": "Revenue overview", "netRevenue": "Net revenue", "vsPrevious": "vs previous period", "channelRevenue": "Revenue by channel", "channelDetails": "Channel details"},
       pageHelp: {"title": "Help", "aiDisabled": "AI execution is inactive"},
       itemRefund: {manual: "Approval records the refund; static QR does not automatically transfer money."},
@@ -7265,6 +7267,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      staffPointSettings: { overtimePerHour: "每小时加班积分" },
       revenueLayout: {"title": "营收概览", "netRevenue": "净营收", "vsPrevious": "较上一周期", "channelRevenue": "渠道营收", "channelDetails": "渠道明细"},
       pageHelp: {"title": "帮助", "aiDisabled": "AI执行尚未启用"},
       itemRefund: {manual: "审批记录退款，不代表静态二维码自动打款。"},

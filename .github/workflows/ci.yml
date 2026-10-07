@@ -53,15 +53,51 @@ jobs:
         run: |
           runtime=$(node scripts/prepare-order-receipt-runtime.cjs | python3 -c 'import json,sys; print(json.load(sys.stdin)["runtime"])')
           export RECEIPT_RUNTIME="$runtime"
+          echo "RECEIPT_RUNTIME=$runtime" >> "$GITHUB_ENV"
           export RECEIPT_DEPS="$GITHUB_WORKSPACE/server/node_modules:$GITHUB_WORKSPACE/node_modules"
           RECEIPT_PROVIDER=sqlite node tests/stoploss/order-receipt-http-check.cjs
           export PATH="$(pg_config --bindir):$PATH"
           RECEIPT_PROVIDER=postgresql node tests/stoploss/order-receipt-http-check.cjs
           INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=sqlite node tests/stoploss/expense-save-http-check.cjs
           INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=postgresql node tests/stoploss/expense-save-http-check.cjs
+          INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=sqlite node tests/stoploss/workflow-http-check.cjs
+          INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=postgresql node tests/stoploss/workflow-http-check.cjs
 
       - name: Verify audited transaction and authorization regressions
         run: npx --prefix server jest --config server/jest.audit.config.cjs --runInBand
 
       - name: Build API and frontend applications
         run: npm run build
+
+      - name: Install Chromium for workflow regression tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify built admin and staff workflows against isolated PostgreSQL
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          npm exec --workspace=client-admin -- vite preview --host 127.0.0.1 --port 6311 --strictPort > /tmp/workflow-admin-preview.log 2>&1 &
+          admin_preview_pid=$!
+          npm exec --workspace=client-staff -- vite preview --host 127.0.0.1 --port 6312 --strictPort > /tmp/workflow-staff-preview.log 2>&1 &
+          staff_preview_pid=$!
+          trap 'kill "$admin_preview_pid" "$staff_preview_pid" 2>/dev/null || true' EXIT
+          node - <<'JS'
+          (async()=>{
+            for (const port of [6311,6312]) {
+              let ready=false;
+              for(let i=0;i<40;i++) {
+                try { if((await fetch(`http://127.0.0.1:${port}`)).ok){ready=true;break} } catch {}
+                await new Promise(resolve=>setTimeout(resolve,250));
+              }
+              if(!ready)throw Error(`Preview ${port} unavailable`);
+            }
+          })().catch(error=>{console.error(error);process.exitCode=1});
+          JS
+          WORKFLOW_BROWSER=1 WORKFLOW_EVIDENCE_DIR=workflow-evidence INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_DEPS="$GITHUB_WORKSPACE/server/node_modules:$GITHUB_WORKSPACE/node_modules" INTENT_PROVIDER=postgresql node tests/stoploss/workflow-http-check.cjs
+
+      - name: Save workflow browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-browser-evidence
+          path: workflow-evidence/
+          retention-days: 14

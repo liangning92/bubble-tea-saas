@@ -1,3 +1,4 @@
+import { parseDateBoundary } from '../utils/businessDate'
 import {requireVerifiedReceiptIncome} from '../services/ReceiptFinancialEvidenceService'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -18,8 +19,8 @@ router.get('/revenue', authenticate, authorize('admin', 'manager'), async (req: 
 
     if (startDate || endDate) {
       where.createdAt = {}
-      if (startDate) where.createdAt.gte = new Date(startDate as string)
-      if (endDate) where.createdAt.lte = new Date(endDate as string)
+      if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.createdAt.lte = parseDateBoundary(endDate as string, true)
     }
 
     const orders = await prisma.order.findMany({
@@ -106,8 +107,8 @@ router.get('/daily', authenticate, authorize('admin', 'manager'), async (req: Au
 
     if (startDate || endDate) {
       where.createdAt = {}
-      if (startDate) where.createdAt.gte = new Date(startDate as string)
-      if (endDate) where.createdAt.lte = new Date(endDate as string)
+      if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.createdAt.lte = parseDateBoundary(endDate as string, true)
     }
 
     // Group by day
@@ -467,8 +468,8 @@ router.get('/channels', authenticate, authorize('admin', 'manager'), async (req:
 
     const dateWhere: any = {}
     if (startDate || endDate) {
-      if (startDate) dateWhere.gte = new Date(startDate as string)
-      if (endDate) dateWhere.lte = new Date(endDate as string)
+      if (startDate) dateWhere.gte = parseDateBoundary(startDate as string)
+      if (endDate) dateWhere.lte = parseDateBoundary(endDate as string, true)
     }
     if (Object.keys(dateWhere).length > 0) {
       where.createdAt = dateWhere
@@ -538,8 +539,8 @@ router.get('/channels/:id', authenticate, authorize('admin', 'manager'), async (
     const where: any = { channelId: id, status: 'completed' }
     if (startDate || endDate) {
       where.createdAt = {}
-      if (startDate) where.createdAt.gte = new Date(startDate as string)
-      if (endDate) where.createdAt.lte = new Date(endDate as string)
+      if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
+      if (endDate) where.createdAt.lte = parseDateBoundary(endDate as string, true)
     }
 
     const orders = await prisma.order.findMany({
@@ -605,8 +606,8 @@ router.get('/commissions', authenticate, authorize('admin', 'manager'), async (r
 
     const dateWhere: any = {}
     if (startDate || endDate) {
-      if (startDate) dateWhere.gte = new Date(startDate as string)
-      if (endDate) dateWhere.lte = new Date(endDate as string)
+      if (startDate) dateWhere.gte = parseDateBoundary(startDate as string)
+      if (endDate) dateWhere.lte = parseDateBoundary(endDate as string, true)
     }
     if (Object.keys(dateWhere).length > 0) {
       where.createdAt = dateWhere

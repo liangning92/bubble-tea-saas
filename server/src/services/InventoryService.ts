@@ -501,7 +501,7 @@ export async function deleteInventory(inventoryId: string) {
 }
 // Get batch list
 export async function getBatches(storeId: string, inventoryId?: string) {
-  const where: any = { storeId }
+  const where: any = { inventory: { storeId } }
   if (inventoryId) where.inventoryId = inventoryId
 
   return prisma.batch.findMany({
