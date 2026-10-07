@@ -1,3 +1,4 @@
+import { publicOrder } from '../services/OrderReplayService'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -390,7 +391,7 @@ router.get('/:id/orders', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: { list: orders, total, page: pageNum, pageSize: size, totalPages: Math.ceil(total / size) },
+      data: { list: orders.map(publicOrder), total, page: pageNum, pageSize: size, totalPages: Math.ceil(total / size) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
