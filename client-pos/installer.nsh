@@ -1,7 +1,9 @@
 # Manual upgrade: no automatic process killing, no database replacement.
+!ifndef BUILD_UNINSTALLER
 Var BTPSOldApp
 Var BTPSUpgradeReceipt
 Var BTPSInstallStarted
+!endif
 
 !macro customHeader
   !ifndef BUILD_UNINSTALLER
