@@ -118,6 +118,11 @@ def drive_installer(exe):
                 observed.add(page_state)
                 print('Owned NSIS page: ' + page_state, flush=True)
             user.SetForegroundWindow(hwnd)
+            error_ok = next((c for c in controls if c[2].replace('&', '').strip().lower() == 'ok' and user.IsWindowEnabled(c[0])), None)
+            if error_ok:
+                user.PostMessageW(error_ok[0], 0xF5, 0, 0)
+                process.wait(timeout=30)
+                raise RuntimeError('Owned NSIS installation refused: ' + page_state)
             yes = next((c for c in controls if c[1] == 6 and user.IsWindowEnabled(c[0])), None)
             if yes:
                 visited_confirmation = True

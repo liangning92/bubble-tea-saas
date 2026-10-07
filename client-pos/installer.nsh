@@ -49,7 +49,7 @@ Var BTPSInstallStarted
     Quit
     btps_upgrade_confirmed:
     InitPluginsDir
-    File /oname=btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
+    File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed'
     Pop $R0
@@ -61,7 +61,7 @@ Var BTPSInstallStarted
     ${EndIf}
   ${Else}
     InitPluginsDir
-    File /oname=btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
+    File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
   ${EndIf}
 !macroend
 
