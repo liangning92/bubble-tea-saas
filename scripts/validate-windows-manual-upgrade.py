@@ -78,11 +78,21 @@ def drive_installer(exe):
     # Click ordinary visible NSIS controls. No test flag or confirmation bypass is shipped.
     user = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user.EnumChildWindows.argtypes = [wintypes.HWND, callback_type, wintypes.LPARAM]
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user.IsWindowVisible.argtypes = user.IsWindowEnabled.argtypes = [wintypes.HWND]
+    user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user.GetDlgCtrlID.argtypes = [wintypes.HWND]
+    user.SetForegroundWindow.argtypes = [wintypes.HWND]
     user.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user.SendMessageW.restype = wintypes.LPARAM
+    user.PostMessageW.argtypes = user.SendMessageW.argtypes
+    user.PostMessageW.restype = wintypes.BOOL
     process = subprocess.Popen([str(exe), '/D=' + str(APP)])
     visited_confirmation = False
     finish_seen = False
+    observed = set()
     deadline = time.monotonic() + 300
     while process.poll() is None and time.monotonic() < deadline:
         windows = []
@@ -103,10 +113,15 @@ def drive_installer(exe):
                 controls.append((control, user.GetDlgCtrlID(control), buf.value))
                 return True
             user.EnumChildWindows(hwnd, child, 0)
+            page_state = json.dumps([(control_id, text) for _, control_id, text in controls], ensure_ascii=True)
+            if page_state not in observed:
+                observed.add(page_state)
+                print('Owned NSIS page: ' + page_state, flush=True)
+            user.SetForegroundWindow(hwnd)
             yes = next((c for c in controls if c[1] == 6 and user.IsWindowEnabled(c[0])), None)
             if yes:
                 visited_confirmation = True
-                user.SendMessageW(yes[0], 0xF5, 0, 0)
+                user.PostMessageW(yes[0], 0xF5, 0, 0)
                 continue
             next_button = next((c for c in controls if c[1] == 1 and user.IsWindowEnabled(c[0]) and user.IsWindowVisible(c[0])), None)
             if next_button:
@@ -114,12 +129,12 @@ def drive_installer(exe):
                     finish_seen = True
                     for control, _, text in controls:
                         if ('run' in text.lower() or 'launch' in text.lower()) and user.SendMessageW(control, 0xF0, 0, 0) == 1:
-                            user.SendMessageW(control, 0xF5, 0, 0)
-                user.SendMessageW(next_button[0], 0xF5, 0, 0)
+                            user.PostMessageW(control, 0xF5, 0, 0)
+                user.PostMessageW(next_button[0], 0xF5, 0, 0)
         time.sleep(.5)
     if process.poll() is None:
         process.terminate()  # Only the installer this synthetic test owns.
-        raise RuntimeError('Owned interactive installer did not finish within timeout')
+        raise RuntimeError('Owned interactive installer did not finish within timeout; page states: ' + str(sorted(observed)))
     assert process.returncode == 0 and visited_confirmation and finish_seen, ('NSIS UI', process.returncode, visited_confirmation, finish_seen)
 
 
