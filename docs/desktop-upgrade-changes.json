@@ -11,5 +11,6 @@
   "RefundRequest.reasonCode TEXT NOT NULL DEFAULT 'legacy'",
   "RefundRequest.selectedItemIds TEXT NOT NULL DEFAULT '[]'",
   "PaymentEvidence and LocalSchemaMigration tables and indexes",
-  "Order_pickupNumber_idx nonunique index"
+  "Order_pickupNumber_idx nonunique index",
+  "Preserve compatible legacy INTEGER affinity for leave day Float columns"
 ]
