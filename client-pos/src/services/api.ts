@@ -210,8 +210,12 @@ export const posApi = {
   getShiftHandover: (id: string) => api.get('/pos-cash/shifts/' + id + '/handover'),
   getCurrentShift: () => api.get('/pos-cash/shifts/current'),
   openShift: (data: { openFloat: number; shift: string }) => api.post('/pos-cash/shifts/open', data),
-  closeShift: (data: { actualCash: number; closeNote?: string; nextStaffId?: string }) =>
-    api.post('/pos-cash/shifts/close', data),
+  closeShift: async (data: { actualCash: number; closeNote?: string; nextStaffId?: string }) => {
+    const response = await api.post('/pos-cash/shifts/close', data)
+    const auth = readBackendAuth()
+    if (auth.user?.storeId) await saveSnapshot('/pos-cash/shifts/current', {data:{hasOpenShift:false,shift:null}}, backendIdentity(auth.apiUrl!), auth.user.storeId, true)
+    return response
+  },
   getCashSummary: (params?: any) => api.get('/pos-cash/summary', { params }),
 
   // Announcements

@@ -95,8 +95,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 安装更新并重启
-  installUpdate: () => {
-    return ipcRenderer.invoke('install-update')
+  installUpdate: (snapshot: any) => {
+    return ipcRenderer.invoke('install-update', snapshot)
   },
   showUpdateInstaller: () => ipcRenderer.invoke('show-update-installer'),
 

@@ -2,8 +2,8 @@
 const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 (async()=>{const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href);const tw=(await import(pathToFileURL(path.resolve('client-pos/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-pos/src/**/*.{js,ts,jsx,tsx}')];const server=await createServer({configFile:false,root:path.resolve('client-pos'),cacheDir:'/tmp/pos-continuous-offline-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6203,strictPort:true},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
 try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync('/tmp/pos-continuous-offline-evidence',{recursive:true});
-for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sales,restart,lost-receipt,reconnect,targets,qris,order-save-failure,generation-save-failure,refused,uninitialized,crashed-sync,legacy,foreign-store,expired-auth,multi-tab,policy,logo-warning').split(',')){
- const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),posts=[],errors=[],actionLogs=[],journals=new Map(),receipts=new Map();let disconnected=false,loseOnce=(scenario==='lost-receipt'||scenario==='uncertain-card-to-cash'),refuse=scenario==='refused';
+for(const scenario of (process.env.OFFLINE_SCENARIOS||'closed-before-open,closed-before-confirm,closed-then-offline,payment-validation,ten-sales,restart,lost-receipt,reconnect,targets,qris,order-save-failure,generation-save-failure,refused,uninitialized,crashed-sync,legacy,foreign-store,expired-auth,multi-tab,policy,logo-warning').split(',')){
+ const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),posts=[],errors=[],actionLogs=[],journals=new Map(),receipts=new Map();let shiftOpen=true;let disconnected=false,loseOnce=(scenario==='lost-receipt'||scenario==='uncertain-card-to-cash'),refuse=scenario==='refused';
  const origin='http://127.0.0.1:6203',target=origin+'/api';
  await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.origin!==origin){if(scenario==='fallback-blocks-offline'&&url.href==='https://api.aicube.online/api/health')return route.fulfill({status:200,contentType:'application/json',body:'{"status":"ok"}'});return route.abort();}if(!url.pathname.startsWith('/api/'))return route.continue();if(disconnected)return route.abort('internetdisconnected');let data={},status=200;
  if(url.pathname==='/api/pos-action-logs'&&req.method()==='POST')actionLogs.push(req.postDataJSON());
@@ -14,7 +14,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sa
  if(scenario==='partial-config-cache'&&url.pathname==='/api/config'&&url.searchParams.get('category')==='pos')data={paymentMethods:{cash:true}};
  if(url.pathname==='/api/channels'||url.pathname.includes('discount-rules'))data=[];
  if(url.pathname==='/api/shifts')data=[{key:'custom-day',name:'Custom day'}];
- if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:true,shift:{id:'session',shift:'custom-day'}};
+ if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:shiftOpen,shift:shiftOpen?{id:'session',shift:'custom-day'}:null};
  if(url.pathname==='/api/orders/received-receipts'){const body=req.postDataJSON();journals.set(body.orderNumber,body);status=201;data={id:'journal-'+body.orderNumber,orderNumber:body.orderNumber};}
  if(url.pathname==='/api/orders'||url.pathname==='/api/orders/bulk-sync'){
   const body=req.postDataJSON(),orders=body.orders||[body];posts.push({body,token:req.headers().authorization});
@@ -39,6 +39,24 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sa
  const pay=async(qris=false)=>{await addCart();await page.getByRole('button',{name:/Checkout/}).click();if(qris){await page.getByRole('button',{name:/QRIS/}).click();await page.getByRole('checkbox',{name:/record static QRIS payment manually/}).check();await expect(page.getByText('Manual confirmation; awaiting owner’s account reconciliation. Not bank confirmation.',{exact:true}).first()).toBeVisible();}else await page.getByRole('button',{name:/Exact/}).click();await page.getByRole('button',{name:qris?/Save photo and confirm payment|Confirm Payment/:/Confirm Payment/}).click();};
  await initialize();
 
+ if(['closed-before-open','closed-before-confirm','closed-then-offline'].includes(scenario)) {
+  await addCart();
+  if(scenario==='closed-before-confirm') {
+   await page.getByRole('button',{name:/Checkout/}).click();
+   await page.getByRole('button',{name:/Exact/}).click();
+  }
+  shiftOpen=false;
+  if(scenario==='closed-then-offline') {
+   await page.evaluate(async()=>{const {posApi}=await import('/src/services/api.ts');await posApi.closeShift({actualCash:0});});
+   await offline();
+  }
+  if(scenario==='closed-before-confirm') await page.getByRole('button',{name:/Confirm Payment/}).click();
+  else await page.getByRole('button',{name:/Checkout/}).click();
+  await expect(page.getByText('Open a shift before accepting payments.',{exact:true})).toBeVisible();
+  assert.equal((await read()).length,0);assert.equal(posts.length,0);assert.equal(journals.size,0);assert.equal(await page.evaluate(()=>window.calls.length),0);
+  if(scenario!=='closed-before-confirm')await expect(page.getByRole('button',{name:/Confirm Payment/})).toHaveCount(0);
+  assert.deepEqual(errors,[]);console.log('PASS '+scenario+': stale open-shift cache never permits payment or print; basket preserved');await context.close();continue;
+ }
  if(scenario==='payment-validation'){
   await addCart();await page.getByRole('button',{name:/Checkout/}).click();const confirm=page.getByRole('button',{name:/Confirm Payment/});
   await expect(confirm).toBeDisabled();await expect(page.getByText('Enter the cash received.',{exact:true})).toBeVisible();

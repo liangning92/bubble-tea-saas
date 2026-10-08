@@ -664,6 +664,23 @@ function stopLocalServer(): void {
   }
 }
 
+async function prepareOnlineInstallation(): Promise<void> {
+  mainWindow?.webContents.session.flushStorageData()
+  const child = serverProcess
+  if (!child || child.exitCode !== null) return
+  await new Promise<void>((resolve,reject)=>{
+    const timer = setTimeout(()=>{child.removeListener('exit',done);reject(Error('UPDATE_LOCAL_SERVER_STILL_RUNNING'))},10000)
+    const done = ()=>{clearTimeout(timer);resolve()}
+    child.once('exit',done)
+    if (!child.kill('SIGTERM')) {clearTimeout(timer);child.removeListener('exit',done);reject(Error('UPDATE_LOCAL_SERVER_SHUTDOWN_FAILED'))}
+  })
+}
+
+const onlineInstallationHooks = {
+  prepare: prepareOnlineInstallation,
+  resume: ()=>{if (!serverProcess) startLocalServer()}
+}
+
 // 开发模式检测
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged
 
@@ -3545,7 +3562,7 @@ app.whenReady().then(async () => {
         console.warn('[Electron] Failed to create customer window:', e)
       }
       if (mainWindow) {
-        setupUpdater(mainWindow)
+        setupUpdater(mainWindow,onlineInstallationHooks)
         setTimeout(() => checkForUpdatesOnStart(), 10000)
       }
     } catch (err: any) {
@@ -3563,7 +3580,7 @@ app.whenReady().then(async () => {
     createMainWindow()
     createCustomerWindow()
     if (mainWindow) {
-      setupUpdater(mainWindow)
+      setupUpdater(mainWindow,onlineInstallationHooks)
       setTimeout(() => checkForUpdatesOnStart(), 10000)
     }
   }

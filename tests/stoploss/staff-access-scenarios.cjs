@@ -33,9 +33,11 @@ module.exports=async({prisma,check,call})=>{
  // A base-role change invalidates the existing JWT instead of retaining its old powers.
  state=await check('PUT','/api/staff-permissions',{revision:state.revision,roles:[{...role,baseRole:'cashier',permissions:['pos.expense','personal.salary']}],assignments:state.assignments});
  await check('GET','/api/staff-permissions/me',undefined,401,managerToken);const cashierToken=await token();
+ const originalCategories=(await check('GET','/api/expenses/categories')).list;
  await check('PUT','/api/expenses/categories',{categories:[{key:'access-fixture-supplies',label:'Access fixture supplies'}]});
  const categories=(await check('GET','/api/expenses/categories',undefined,200,cashierToken)).list;
  const expense=await check('POST','/api/expenses',{type:'operational',category:categories[0].key,amount:53000,description:'Access fixture legacy POS expense'},201,cashierToken);
+ await check('PUT','/api/expenses/categories',{categories:originalCategories});
  assert.equal((await prisma.expense.findUnique({where:{id:expense.id}})).amount,5300000);
  await prisma.expense.update({where:{id:expense.id},data:{createdAt:new Date(Date.now()-3600000)}});
  await check('GET','/api/expenses/pos',undefined,200,cashierToken);await check('POST','/api/orders',{storeId:'store'},403,cashierToken);

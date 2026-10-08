@@ -171,6 +171,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 状态 - 使用Zustand stores
   const [cart, setCart] = useState<CartItem[]>([])
+  useEffect(()=>{
+    const guard = (event:Event)=>{
+      const state=useOrderStore.getState(),ui=useUiStore.getState()
+      if(cart.length || state.isCheckingOut || ui.showPaymentModal || ui.showExpenseModal || state.suspendedOrders.some(order=>!order.orderNumber)) event.preventDefault()
+    }
+    window.addEventListener('pos-before-update',guard)
+    return ()=>window.removeEventListener('pos-before-update',guard)
+  },[cart.length])
   const [basketGeneration, setBasketGeneration] = useState('0')
   const [scanRequestVersion, setScanRequestVersion] = useState(0)
   const scanIntentVersion = useRef(0)
@@ -1901,6 +1909,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (useOrderStore.getState().isInstallingUpdate) { e.preventDefault(); return }
       if (showExpenseModal) {
         if (e.key === 'Escape') setShowExpenseModal(false)
         return
@@ -1917,7 +1926,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (e.key === 'F3') { e.preventDefault(); if (availableChannels[2]) setSelectedChannel(availableChannels[2]) }
       if (e.key === 'F4') { e.preventDefault(); if (availableChannels[3]) setSelectedChannel(availableChannels[3]) }
       // F5-F8: 常用金额
-      if (e.key === 'F5' && cartRef.current.length > 0) { e.preventDefault(); const pNum = getNextPickupNumber(selectedChannel?.code); setPaymentModalOrderNum(pNum); setShowPaymentModal(true) }
+      if (e.key === 'F5' && cartRef.current.length > 0) { e.preventDefault(); void beginPayment() }
       // F6: 弹出钱箱 (快捷键)
       if (e.key === 'F6') { e.preventDefault(); handleOpenCashDrawer() }
       // ESC: 关闭弹窗
@@ -2757,10 +2766,33 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
   }
 
+  const paymentOpening = useRef(false)
+  const requireOpenShift = async () => {
+    const response = await posApi.getCurrentShift()
+    const current = response.data?.data
+    if (!current?.hasOpenShift || !current.shift?.id || current.shift.shift === 'off') throw Error('OPEN_SHIFT_REQUIRED')
+  }
+  const showOpenShiftRequired = () => setConfirmModal({
+    isOpen: true, title: t('pos.shiftOpen'), message: t('pos.openShiftRequired'),
+    type: 'warning', onConfirm: () => setShowShiftModal(true)
+  })
+  const beginPayment = async () => {
+    if (paymentOpening.current || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate || !cartRef.current.length) return
+    paymentOpening.current = true
+    try {
+      await requireOpenShift()
+      setPaymentModalOrderNum(getNextPickupNumber(selectedChannel?.code))
+      setShowPaymentModal(true)
+    } catch (error: any) {
+      if (error?.message === 'OPEN_SHIFT_REQUIRED') showOpenShiftRequired()
+      else showToast(t('offlineSale.initialize'), 'error')
+    } finally { paymentOpening.current = false }
+  }
+
   // 结账
   const handleCheckout = async () => {
     // Read the synchronous store value too: two clicks can share one render.
-    if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut) return
+    if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate) return
 
     if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
 
@@ -2843,6 +2875,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
 
     try {
+      // Refresh server state before recording money or issuing any receipt.
+      // The API only falls back to a bound snapshot on a transport outage.
+      await requireOpenShift()
       // Both recovery writes must commit before an HTTP request can leave this browser.
       if (qrisData.status === 'manual') orderData.note = [orderData.note,t('offlineSale.qrisPending')].filter(Boolean).join(' ')
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || discountAmount || selectedCoupon)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
@@ -2962,6 +2997,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     } catch (error: any) {
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
+      if (!sent && error?.message === 'OPEN_SHIFT_REQUIRED') { showOpenShiftRequired(); return }
       if (!sent) {
         setOfflineSaveFailed(true)
         showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
@@ -3743,10 +3779,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 </button>
                 <button onClick={() => {
                   playSoundWithSettings('keypress', soundSettings.keypress)
-                  const pNum = getNextPickupNumber(selectedChannel?.code)
-                  setPaymentModalOrderNum(pNum)
-                  setShowPaymentModal(true)
-                }} disabled={!recovery || isCheckingOut} className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base disabled:bg-gray-300 active:scale-95 transition-transform touch-feedback">
+                  void beginPayment()
+                }} disabled={!recovery || recovery.blocked || recovery.confirmed.length > 0 || isCheckingOut} className="w-full py-3 bg-primary text-white rounded-xl font-bold text-base disabled:bg-gray-300 active:scale-95 transition-transform touch-feedback">
                   💰 {t('pos.checkout')}
                 </button>
               </>

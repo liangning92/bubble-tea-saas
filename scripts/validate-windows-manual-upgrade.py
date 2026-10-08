@@ -94,7 +94,8 @@ def drive_installer(exe):
     user.SendMessageW.restype = wintypes.LPARAM
     user.PostMessageW.argtypes = user.SendMessageW.argtypes
     user.PostMessageW.restype = wintypes.BOOL
-    process = subprocess.Popen([str(exe), '/D=' + str(APP)])
+    # Same interactive handoff arguments used by electron-updater's NsisUpdater.
+    process = subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
     visited_confirmation = False
     finish_seen = False
     observed = set()
@@ -202,7 +203,9 @@ try:
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
     report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
-              'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES']}
+              'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
+              'onlineInstallerArguments': ['--updated', '--force-run'],
+              'onlineInteractiveInstallerVerified': True}
     (ROOT / 'desktop-manual-upgrade-report.json').write_text(json.dumps(report, indent=2))
     manifest_path = ROOT / 'desktop-template-manifest.json'
     manifest = json.loads(manifest_path.read_text())

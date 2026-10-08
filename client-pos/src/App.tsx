@@ -3,6 +3,7 @@ import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { UpdateNotification } from './components/UpdateNotification'
 import { useAuthStore } from './stores/auth'
+import {useOrderStore} from './stores/orderStore'
 
 const ReceiptSyncPage = lazy(() => import('./pages/ReceiptSyncPage').then(module => ({ default: module.ReceiptSyncPage })))
 const POSPage = lazy(() => import('./pages/POSPage').then(module => ({ default: module.POSPage })))
@@ -26,9 +27,11 @@ function RootRoute() {
 }
 
 function App() {
+  const installing=useOrderStore(state=>state.isInstallingUpdate)
   return (
     <>
       <UpdateNotification />
+      <div style={installing?{pointerEvents:'none'}:undefined} onKeyDownCapture={event=>{if(installing){event.preventDefault();event.stopPropagation()}}}>
       <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
@@ -74,6 +77,7 @@ function App() {
       />
       <Route path="/" element={<RootRoute />} />
     </Routes></Suspense>
+    </div>
     </>
   )
 }
