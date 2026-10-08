@@ -1,3 +1,4 @@
+import { updateStaffSystemRole } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
 import { formatDate } from '../utils/dateUtils'
 import { parseDateBoundary } from '../utils/businessDate'
@@ -325,10 +326,7 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthReques
     }
 
     // 更新 user 的 role
-    await prisma.user.update({
-      where: { id: staff.userId },
-      data: { role: role.data }
-    })
+    await updateStaffSystemRole(req.user!, staff.id, role.data)
 
     res.json({
       code: 200,

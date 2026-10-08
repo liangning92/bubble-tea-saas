@@ -1,3 +1,4 @@
+import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -90,6 +91,7 @@ const DEFAULT_CATEGORY_DEFS: ExpenseCategory[] = [
 ]
 
 export function ExpenseListPage() {
+  const canWrite=useEmployeePermission('finance.write')
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -371,6 +373,7 @@ export function ExpenseListPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if(!canWrite)return
     if (!confirm(t('expense.confirmDelete'))) return
     try {
       await expenseApi.delete(id)
@@ -763,6 +766,7 @@ export function ExpenseListPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowTypeModal(true)}
+              disabled={!canWrite || user?.role !== 'admin'}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               title={t('expense.manageTypes')}
             >
@@ -770,6 +774,7 @@ export function ExpenseListPage() {
             </button>
             <button
               onClick={() => setShowRecurringModal(true)}
+              disabled={!canWrite || user?.role !== 'admin'}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               title={t('expense.recurring')}
             >
@@ -798,6 +803,7 @@ export function ExpenseListPage() {
             </button>
             <button
               onClick={openAddModal}
+              disabled={!canWrite}
               className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium flex items-center gap-1"
             >
               <Plus size={18} />
@@ -805,6 +811,7 @@ export function ExpenseListPage() {
             </button>
           </div>
         </div>
+        {!canWrite && <p className="mt-3 text-sm text-amber-700">{t('staffAccess.readOnly')}</p>}
         {importProgress && (
           <div className="mt-2 text-sm text-blue-600">{importProgress}</div>
         )}
@@ -869,6 +876,7 @@ export function ExpenseListPage() {
             </div>
             <button
               onClick={() => setShowRecurringModal(true)}
+              disabled={!canWrite || user?.role !== 'admin'}
               className="text-xs text-blue-600 hover:text-blue-800"
             >
               {t('common.view')}
@@ -914,6 +922,7 @@ export function ExpenseListPage() {
                 <p className="text-gray-500">{t('expense.noExpenses')}</p>
                 <button
                   onClick={openAddModal}
+              disabled={!canWrite}
                   className="mt-2 text-primary hover:text-primary-hover flex items-center gap-1 mx-auto"
                 >
                   <Plus size={16} />
@@ -929,7 +938,7 @@ export function ExpenseListPage() {
                   <div
                     key={expense.id}
                     className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => openEditModal(expense)}
+                    onClick={canWrite ? () => openEditModal(expense) : undefined}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -952,7 +961,8 @@ export function ExpenseListPage() {
                               e.stopPropagation()
                               openEditModal(expense)
                             }}
-                            className="text-blue-500 hover:bg-blue-50 p-1 rounded"
+                            disabled={!canWrite}
+                            className="text-blue-500 hover:bg-blue-50 p-1 rounded disabled:opacity-40"
                           >
                             <Edit2 size={16} />
                           </button>
@@ -961,7 +971,8 @@ export function ExpenseListPage() {
                               e.stopPropagation()
                               handleDelete(expense.id)
                             }}
-                            className="text-red-500 hover:bg-red-50 p-1 rounded"
+                            disabled={!canWrite}
+                            className="text-red-500 hover:bg-red-50 p-1 rounded disabled:opacity-40"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -1341,8 +1352,8 @@ export function ExpenseListPage() {
                   {!type.isDefault && (
                     <button
                       onClick={() => handleRemoveType(type.key)}
-                      disabled={isTypeSaving || !canManageCategories || categoryLoadState !== 'ready'}
-                      className="text-red-500 hover:bg-red-50 p-1 rounded"
+                      disabled={isTypeSaving || !canManageCategories || !canWrite || categoryLoadState !== 'ready'}
+                            className="text-red-500 hover:bg-red-50 p-1 rounded disabled:opacity-40"
                     >
                       <X size={16} />
                     </button>

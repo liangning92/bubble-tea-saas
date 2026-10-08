@@ -1,3 +1,4 @@
+import { staffPermissionsRouter } from './routes/staffPermissions'
 import {startRecurringExpenseScheduler} from './services/RecurringExpenseService'
 import {batchImportRouter} from './routes/batchImport'
 import {queueRouter} from './routes/queue'
@@ -277,6 +278,7 @@ app.use('/api/rewards', rewardCatalogRouter)
 app.use('/api/revenue', revenueRouter)
 app.use('/api/payments', paymentRouter)
 app.use('/api/ai', aiPermissionsRouter)
+app.use('/api/staff-permissions', staffPermissionsRouter)
 app.use('/api/announcement', announcementRouter)
 app.use('/api/hardware', hardwareRouter)
 app.use('/api/sync', syncRouter)

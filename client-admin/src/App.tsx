@@ -8,7 +8,6 @@ import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 const StaffAdjustmentsPage = lazy(() => import('./pages/staff/StaffAdjustmentsPage').then(module => ({ default: module.StaffAdjustmentsPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
 const ConsumptionAnalysisPage = lazy(() => import('./pages/inventory/ConsumptionAnalysisPage').then(module => ({ default: module.ConsumptionAnalysisPage })))
-const AiPermissionsPage = lazy(() => import('./pages/settings/AiPermissionsPage').then(module => ({ default: module.AiPermissionsPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
 const RegisterPage = lazy(() => import('./pages/RegisterPage').then(module => ({ default: module.RegisterPage })))
 const POSMonitorPage = lazy(() => import('./pages/POSMonitorPage').then(module => ({ default: module.POSMonitorPage })))
@@ -130,7 +129,6 @@ const ChannelProductPricingPage = lazy(() => import('./pages/channels/ChannelPro
 const ImportPage = lazy(() => import('./pages/import/ImportPage').then(module => ({ default: module.ImportPage })))
 const AnnouncementListPage = lazy(() => import('./pages/announcement/AnnouncementListPage').then(module => ({ default: module.AnnouncementListPage })))
 const AnnouncementFormPage = lazy(() => import('./pages/announcement/AnnouncementFormPage').then(module => ({ default: module.AnnouncementFormPage })))
-const POSSettingsPage = lazy(() => import('./pages/settings/POSSettingsPage').then(module => ({ default: module.POSSettingsPage })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -347,8 +345,9 @@ function App() {
 
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="settings/pos" element={<POSSettingsPage />} />
-        <Route path="settings/ai" element={<AiPermissionsPage />} />
+        <Route path="settings/pos" element={<SettingsPage />} />
+        <Route path="settings/ai" element={<SettingsPage />} />
+        <Route path="settings/permissions" element={<SettingsPage />} />
 
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />

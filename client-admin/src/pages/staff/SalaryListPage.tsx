@@ -1,3 +1,4 @@
+import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -43,6 +44,7 @@ interface StaffOption {
 }
 
 export function SalaryListPage() {
+  const canWrite=useEmployeePermission('salary.write')
   const { t } = useTranslation()
   const { user } = useAuthStore()
 
@@ -457,7 +459,7 @@ export function SalaryListPage() {
               </div>
 
               <div className="flex gap-2">
-                {salary.status === 'pending' && <button onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{t('common.edit')}</button>}
+                {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{t('common.edit')}</button>}
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
@@ -545,7 +547,7 @@ export function SalaryListPage() {
                   <button
                     type="button"
                     onClick={handleAutoCalculate}
-                    disabled={calculating || depositLoading || !formData.staffId || !formData.month}
+                    disabled={!canWrite || calculating || depositLoading || !formData.staffId || !formData.month}
                     className="px-4 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1 text-sm font-medium"
                   >
                     {calculating ? <Loader2 size={16} className="animate-spin" /> : null}
@@ -641,7 +643,7 @@ export function SalaryListPage() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving || calculating || depositLoading || !!depositError}
+                  disabled={!canWrite || saving || calculating || depositLoading || !!depositError}
                   className="flex-1 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {saving ? (

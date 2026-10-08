@@ -24,6 +24,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if(error.response?.status===403 && error.response?.data?.message?.startsWith('STAFF_ACCESS_')) window.dispatchEvent(new Event('staff-access-changed'))
     if (error.response && error.response.status === 401) {
       useAuthStore.getState().logout()
       window.location.href = '/login'

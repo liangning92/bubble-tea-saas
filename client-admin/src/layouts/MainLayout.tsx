@@ -1,3 +1,5 @@
+import { EmployeeAccessContext } from '../contexts/EmployeeAccess'
+import api from '../services/api'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -40,6 +42,45 @@ export function MainLayout() {
   const { user, logout } = useAuthStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [lang, setLang] = useState(i18n.language)
+  const [access,setAccess]=useState<{actor:string;role:{name:string;permissions:string[]}|null;failed:boolean}|null>(null)
+  const actorKey=(user?.id||'')+':'+(user?.storeId||'')+':'+(user?.role||'')
+  useEffect(()=>{
+    if(user?.role==='admin'){setAccess({actor:actorKey,role:null,failed:false});return}
+    if(!user?.id)return
+    let current=true
+    const refresh=()=>api.get('/staff-permissions/me').then(response=>{if(current)setAccess({actor:actorKey,role:response.data.data.role,failed:false})})
+      .catch(()=>{if(current)setAccess({actor:actorKey,role:null,failed:true})})
+    void refresh()
+    window.addEventListener('focus',refresh)
+    window.addEventListener('staff-access-changed',refresh)
+    return()=>{current=false;window.removeEventListener('focus',refresh);window.removeEventListener('staff-access-changed',refresh)}
+  },[actorKey,user?.role,location.pathname])
+  const ready=user?.role==='admin'||(access?.actor===actorKey&&!access.failed)
+  const customRole=access?.actor===actorKey?access.role:null
+  const visibleNavItems=navItems.filter(item=>{
+    if(user?.role==='admin')return true
+    if(!ready)return false
+    if(!customRole)return true
+    const groups:Record<string,string[]>={
+      '/dashboard':['dashboard.read'], '/products':['products.read'], '/inventory':['inventory.read'],
+      '/finance':['finance.read','dashboard.read'], '/channels':['channels.read'],
+      '/staff':['staff.read','attendance.read','schedules.read','salary.read','deposits.read','rewards.read','training.read'],
+      '/hygiene':['hygiene.read'], '/marketing':['marketing.read','members.read'], '/settings':[]
+    }
+    return (groups[item.path]||[]).some(permission=>customRole.permissions.includes(permission))
+  })
+
+  const navigationTarget=(path:string)=>{
+    if(!customRole)return path
+    const permissions=customRole.permissions
+    if(path==='/finance'&&!permissions.includes('dashboard.read'))return '/finance/expenses'
+    if(path==='/marketing'&&!permissions.includes('marketing.read'))return '/marketing/members'
+    if(path==='/staff'&&!permissions.includes('staff.read')){
+      const pages=[['attendance.read','/staff/attendance'],['schedules.read','/staff/schedule'],['salary.read','/staff/salary'],['deposits.read','/staff/salary/deposit'],['rewards.read','/staff/points'],['training.read','/staff/training']]
+      return pages.find(([permission])=>permissions.includes(permission))?.[1]||path
+    }
+    return path
+  }
 
   // 监听 i18n 语言变化，强制 React 重新渲染
   useEffect(() => {
@@ -63,6 +104,7 @@ export function MainLayout() {
   }
 
   return (
+    <EmployeeAccessContext.Provider value={{role:customRole,ready}}>
     <div className="flex h-screen bg-surface">
       {/* Sidebar */}
       <aside
@@ -96,12 +138,12 @@ export function MainLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 py-4 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path)
             return (
               <Link
                 key={item.path}
-                to={item.path}
+                to={navigationTarget(item.path)}
                 className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-colors ${
                   isActive
                     ? 'bg-primary-light text-primary'
@@ -155,7 +197,7 @@ export function MainLayout() {
                 <p className="font-medium text-gray-900 text-sm">
                   {user?.staff?.name || 'User'}
                 </p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                <p className="text-xs text-gray-500 capitalize">{customRole?.name || user?.role}</p>
               </div>
               <button
                 onClick={handleLogout}
@@ -180,9 +222,10 @@ export function MainLayout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="p-6">
-          <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
+          {!ready ? access?.failed ? <div role="alert" className="card text-red-600">{t('common.error')}<button className="btn-primary ml-4" onClick={()=>window.location.reload()}>{t('common.refresh')}</button></div> : <RouteLoading /> : <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>}
         </div>
       </main>
     </div>
+    </EmployeeAccessContext.Provider>
   )
 }

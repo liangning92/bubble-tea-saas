@@ -155,6 +155,7 @@ console.log('PASS messages: unsupported/missing/malformed provider settings fail
 const purchaseHours=await require('./revenue-purchase-hours-scenarios.cjs')({prisma,check,call,provider});fs.writeFileSync(output+'/'+provider+'-purchase-hours.json',JSON.stringify(purchaseHours,null,2));
 await require('./salary-deposit-auto-scenarios.cjs')({prisma,check});
 await require('./compensation-scenarios.cjs')({prisma,check});
+await require('./staff-access-scenarios.cjs')({prisma,check,call});
 const staffWorkflows=await require('./staff-workflow-scenarios.cjs')({prisma,check,call,provider});fs.writeFileSync(output+'/'+provider+'-staff-workflows.json',JSON.stringify(staffWorkflows,null,2));
 if(process.env.WORKFLOW_MANUAL==='1') await require('./pos-manual-http-scenarios.cjs')({prisma,check,call,base,ownerToken,cashierToken:token,fetch:global.fetch});
 if(process.env.WORKFLOW_MANUAL_UI==='1') await require('./pos-manual-ui-scenarios.cjs')({base,ownerToken,workerToken});
@@ -170,6 +171,8 @@ if(process.env.WORKFLOW_BROWSER==='1'){
  const page=await context.newPage();page.setDefaultTimeout(10000);page.on('dialog',d=>d.accept());const results=[];for(const url of process.env.WORKFLOW_ACTIONS_ONLY==='1'?[]:pagePaths){const errors=[],failed=[];const error=e=>errors.push(e.message),response=r=>{if(r.url().includes('/api/')&&r.status()>=400)failed.push({url:new URL(r.url()).pathname,status:r.status()})};page.on('pageerror',error);page.on('response',response);try{await page.goto('http://127.0.0.1:6311'+url);await page.waitForTimeout(450);const text=await page.locator('body').innerText();results.push({url,actualUrl:new URL(page.url()).pathname,empty:text.trim().length<20,errors,failed});}catch(error){results.push({url,error:error.message})}page.off('pageerror',error);page.off('response',response);}
  if(results.length)fs.writeFileSync(output+'/admin-pages.json',JSON.stringify(results,null,2));console.log('BROWSER',JSON.stringify({pageCount:results.length,failures:results.filter(r=>r.empty||r.errors?.length||r.failed?.length||r.error)},null,2));
 assert.deepEqual(results.filter(r=>r.empty||r.errors?.length||r.failed?.length||r.error),[]);
+await require('./staff-access-browser-scenarios.cjs')({page,browser,prisma,check,base,output,assertEventually});
+if(process.env.WORKFLOW_ACCESS_ONLY==='1'){await context.close();return}
 if(process.env.WORKFLOW_STAFF_ONLY!=='1'){
 await page.goto('http://127.0.0.1:6311/finance/expenses');await page.getByTitle('Manage Types').click();const modal=page.locator('.fixed.inset-0').last();const input=modal.getByPlaceholder('New type name');const addCategory=modal.getByRole('button',{name:'Add',exact:true});
 await addCategory.click();await modal.getByText('Enter a category name before adding.',{exact:true}).waitFor();assert.equal(categoryPutCount,0);

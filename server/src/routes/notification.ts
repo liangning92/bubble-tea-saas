@@ -10,7 +10,8 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     const { type, status, limit = 50 } = req.query
-    const where: any = { storeId }
+    const employeeMessages = ['staff','cashier'].includes(req.user!.role) || !!(req.user!.accessRole && !req.user!.accessRole.permissions.includes('notifications.read'))
+    const where: any = { storeId, ...(employeeMessages ? {memberId:null} : {}) }
     if (type) where.type = type
     if (status) where.status = status
     const notifications = await prisma.notification.findMany({
@@ -53,8 +54,11 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
 // PUT /api/notifications/:id/read
 router.put('/:id/read', authenticate, async (req: AuthRequest, res) => {
   try {
+    const employeeMessages = ['staff','cashier'].includes(req.user!.role) || !!(req.user!.accessRole && !req.user!.accessRole.permissions.includes('notifications.read'))
+    const existing=await prisma.notification.findFirst({where:{id:req.params.id,storeId:req.user!.storeId,...(employeeMessages?{memberId:null}:{})}})
+    if(!existing)return res.status(404).json({code:404,message:'Notification not found'})
     const notification = await prisma.notification.update({
-      where: { id: req.params.id },
+      where: { id: existing.id },
       data: { status: 'read', readAt: new Date() }
     })
     res.json({ code: 200, message: 'Notification marked as read', data: notification, timestamp: new Date().toISOString() })
@@ -69,7 +73,7 @@ router.put('/mark-all-read', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     await prisma.notification.updateMany({
-      where: { storeId, status: 'unread' },
+      where: { storeId, status: 'unread', ...(['staff','cashier'].includes(req.user!.role) || (req.user!.accessRole && !req.user!.accessRole.permissions.includes('notifications.read')) ? {memberId:null} : {}) },
       data: { status: 'read', readAt: new Date() }
     })
     res.json({ code: 200, message: 'All notifications marked as read', timestamp: new Date().toISOString() })
