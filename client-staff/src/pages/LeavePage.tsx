@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { Calendar, Plus, Clock, XCircle, Paperclip, Trash2, Upload, Loader2 } from 'lucide-react'
+import { Calendar, Plus, Clock, XCircle, Paperclip, Trash2, Upload, Loader2, ChevronLeft, Check } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -29,6 +30,16 @@ const LEAVE_TYPE_LABELS_KEYS: Record<string, string> = {
   other: 'leave.otherLeave'
 }
 
+export const DEFAULT_LEAVE_TYPES = [
+  { code: 'annual', name: 'Cuti Tahunan (年假)', key: 'leave.annualLeave', color: '#10B981', deductBalance: true, requiresProof: false },
+  { code: 'sick', name: 'Cuti Sakit (病假)', key: 'leave.sickLeave', color: '#F59E0B', deductBalance: true, requiresProof: true },
+  { code: 'unpaid', name: 'Cuti Tanpa Gaji (事假/无薪假)', key: 'leave.unpaidLeave', color: '#6B7280', deductBalance: false, requiresProof: false },
+  { code: 'maternity', name: 'Cuti Melahirkan (产假)', key: 'leave.maternityLeave', color: '#EC4899', deductBalance: false, requiresProof: true },
+  { code: 'paternity', name: 'Cuti Ayah (陪产假)', key: 'leave.paternityLeave', color: '#8B5CF6', deductBalance: false, requiresProof: true },
+  { code: 'bereavement', name: 'Cuti Duka (丧假)', key: 'leave.bereavementLeave', color: '#374151', deductBalance: false, requiresProof: false },
+  { code: 'other', name: 'Lainnya (其他)', key: 'leave.otherLeave', color: '#3B82F6', deductBalance: false, requiresProof: false }
+]
+
 interface Leave {
   id: string
   leaveType: string
@@ -52,6 +63,7 @@ interface LeaveBalance {
 
 export function LeavePage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { user } = useAuthStore()
 
   const [leaves, setLeaves] = useState<Leave[]>([])
@@ -96,20 +108,27 @@ export function LeavePage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
-      <header className="bg-primary text-white px-4 py-6">
+      <header className="bg-primary text-white px-4 py-6 shadow-md">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Calendar size={28} />
+            <button
+              onClick={() => navigate('/')}
+              className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <Calendar size={26} />
             <div>
               <h1 className="text-xl font-bold">{t('leave.title')}</h1>
-              <p className="text-white/80 text-sm">{t('leave.manageLeave')}</p>
+              <p className="text-white/80 text-xs">{t('leave.manageLeave')}</p>
             </div>
           </div>
           <button
             onClick={() => setShowApplyModal(true)}
-            className="bg-white text-primary p-2 rounded-full"
+            className="bg-white text-primary px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
           >
-            <Plus size={24} />
+            <Plus size={18} />
+            {t('leave.applyLeave', '申请请假')}
           </button>
         </div>
       </header>
@@ -295,8 +314,8 @@ interface ApplyLeaveModalProps {
 
 function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   const { t } = useTranslation()
-  const [leaveType, setLeaveType] = useState('')
-  const [leaveTypes, setLeaveTypes] = useState<any[]>([])
+  const [leaveType, setLeaveType] = useState('annual')
+  const [leaveTypes, setLeaveTypes] = useState<any[]>(DEFAULT_LEAVE_TYPES)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [totalDays, setTotalDays] = useState(1)
@@ -305,19 +324,21 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   const [attachmentUrl, setAttachmentUrl] = useState('')
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [loadingTypes, setLoadingTypes] = useState(true)
+  const [, setLoadingTypes] = useState(true)
 
-  // Fetch leave types from API
+  // Fetch leave types from API with guaranteed fallback
   useEffect(() => {
     const fetchLeaveTypes = async () => {
       try {
         const response = await staffApi.getLeaveTypes()
         if (response.data && response.data.length > 0) {
           setLeaveTypes(response.data)
-          setLeaveType(response.data[0].code)
+          if (!leaveType || !response.data.some((item: any) => item.code === leaveType)) {
+            setLeaveType(response.data[0].code)
+          }
         }
       } catch (error) {
-        console.error('Failed to load leave types:', error)
+        console.warn('Failed to load leave types, using standard defaults:', error)
       } finally {
         setLoadingTypes(false)
       }
@@ -331,6 +352,14 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
       if (Number.isInteger(days) && days > 0) setTotalDays(halfDay && days === 1 ? 0.5 : days)
     }
   }, [startDate, endDate, halfDay])
+
+  const selectedTypeObj = leaveTypes.find(item => item.code === leaveType) || DEFAULT_LEAVE_TYPES.find(item => item.code === leaveType)
+
+  const getLeaveTypeLabel = (type: any): string => {
+    const key = LEAVE_TYPE_LABELS_KEYS[type.code] || `leave.${type.code}Leave`
+    const res = t(key, { defaultValue: type.name })
+    return typeof res === 'string' ? res : type.name
+  }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -350,6 +379,10 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   }
 
   const handleSubmit = async () => {
+    if (!leaveType) {
+      alert(t('leave.selectLeaveType', '请选择请假类型'))
+      return
+    }
     if (!startDate || !endDate) {
       alert(t('leave.selectDateRange'))
       return
@@ -375,34 +408,77 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold">{t('leave.applyLeave')}</h2>
-          <button onClick={onClose} className="p-2">
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
             <XCircle size={24} />
           </button>
         </div>
 
         <div className="space-y-4">
+          {/* 请假类型选择 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('leave.leaveTypes')}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {t('leave.leaveTypes', '请假类型')}
+            </label>
+
+            {/* 快捷点击药丸按钮 */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              {leaveTypes.map((type) => {
+                const isSelected = leaveType === type.code
+                const label = getLeaveTypeLabel(type)
+                return (
+                  <button
+                    key={type.code}
+                    type="button"
+                    onClick={() => setLeaveType(type.code)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+                      isSelected
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isSelected && <Check size={12} />}
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* 标准下拉选择框 */}
             <select
               value={leaveType}
               onChange={(e) => setLeaveType(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-xl"
-              disabled={loadingTypes}
+              className="w-full p-3 border border-gray-200 rounded-xl bg-white text-sm font-medium focus:ring-2 focus:ring-primary focus:border-transparent"
             >
-              {loadingTypes ? (
-                <option value="">{t('common.loading')}</option>
-              ) : (
-                leaveTypes.map((type) => (
-                  <option key={type.code} value={type.code}>
-                    {type.name}
-                  </option>
-                ))
-              )}
+              {leaveTypes.map((type) => (
+                <option key={type.code} value={type.code}>
+                  {getLeaveTypeLabel(type)}
+                </option>
+              ))}
             </select>
+
+            {/* 假期属性贴心提示 */}
+            {selectedTypeObj && (
+              <div className="mt-2 text-xs flex items-center gap-2 flex-wrap">
+                {selectedTypeObj.requiresProof ? (
+                  <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium border border-amber-200/60">
+                    ⚠️ {t('leave.proofRequired', '需上传证明文件或假条')}
+                  </span>
+                ) : null}
+                {selectedTypeObj.deductBalance ? (
+                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium border border-emerald-200/60">
+                    💡 {t('leave.deductsQuota', '扣除对应假期额度')}
+                  </span>
+                ) : (
+                  <span className="text-gray-600 bg-gray-100 px-2 py-0.5 rounded-md font-medium">
+                    💡 {t('leave.noQuotaDeduct', '不扣除年假额度')}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
