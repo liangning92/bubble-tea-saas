@@ -148,9 +148,9 @@ export function CustomerDisplayPage() {
   const appearance = customerDisplayAppearance(dualScreenConfig, displayState === 'idle' ? 'idle' : displayState === 'complete' ? 'complete' : 'ordering')
   const background = appearance.backgroundColor
   const textColor = customerTextColor(background)
-  const promotions = (dualScreenConfig.autoSyncPromotions !== false && activePromotions.length > 0)
+  const promotions = (appearance.autoSyncPromotions !== false && activePromotions.length > 0)
     ? activePromotions
-    : (dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS)
+    : (appearance.promotions ?? DEFAULT_PROMOTIONS)
 
   // Use refs to avoid stale closure in interval callbacks
   const mediaFilesRef = useRef(mediaFiles)
@@ -167,7 +167,7 @@ export function CustomerDisplayPage() {
 
   // Auto-rotate media (images or promotions)
   useEffect(() => {
-    if (!['idle', 'ordering'].includes(displayState) || dualScreenConfig.mediaMode === 'single') return
+    if (!['idle', 'ordering'].includes(displayState) || appearance.mediaMode === 'single') return
 
     const mf = mediaFilesRef.current
     const pr = promotionsRef.current
@@ -184,17 +184,17 @@ export function CustomerDisplayPage() {
       setCurrentPromotion(p => (p + 1) % pr.length)
     }, 5000)
     return () => clearInterval(interval)
-  }, [displayState, mediaFiles.length, promotions.length, dualScreenConfig.mediaMode])
+  }, [displayState, mediaFiles.length, promotions.length, appearance.mediaMode])
 
   // Auto-play video when it's the current media
   useEffect(() => {
     if (['idle', 'ordering'].includes(displayState) && mediaFiles.length > 0 && videoRef.current) {
-      const currentMedia = customerDisplayMedia(mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl, currentMediaIndex)
+      const currentMedia = customerDisplayMedia(mediaFiles, appearance.mediaMode, appearance.fixedMediaUrl, currentMediaIndex)
       if (currentMedia?.isVideo) {
         videoRef.current.play().catch(() => {})
       }
     }
-  }, [currentMediaIndex, displayState, mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl])
+  }, [currentMediaIndex, displayState, mediaFiles, appearance.mediaMode, appearance.fixedMediaUrl])
 
   const [paymentQr, setPaymentQr] = useState<{ qrImage: string; amount: number; orderNumber?: string } | null>(null)
 
@@ -258,7 +258,7 @@ export function CustomerDisplayPage() {
   }, [])
 
   const promotion = promotions[currentPromotion]
-  const currentMedia = customerDisplayMedia(mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl, currentMediaIndex)
+  const currentMedia = customerDisplayMedia(mediaFiles, appearance.mediaMode, appearance.fixedMediaUrl, currentMediaIndex)
 
   // Render column content based on type
   const renderColumnContent = (content: ColumnContent, isVideoRef?: React.RefObject<HTMLVideoElement | null>) => {
@@ -274,7 +274,7 @@ export function CustomerDisplayPage() {
                 ref={isVideoRef as React.RefObject<HTMLVideoElement>}
                 src={media.url}
                 className="w-full h-full"
-                style={{ background: regionBackground, objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }}
+                style={{ background: regionBackground, objectFit: appearance.mediaFit === 'contain' ? 'contain' : 'cover' }}
                 autoPlay
                 loop
                 muted
@@ -282,7 +282,7 @@ export function CustomerDisplayPage() {
               />
             )
           }
-          return <img src={media?.url} alt="" className="w-full h-full" style={{ background: regionBackground, objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }} />
+          return <img src={media?.url} alt="" className="w-full h-full" style={{ background: regionBackground, objectFit: appearance.mediaFit === 'contain' ? 'contain' : 'cover' }} />
         }
         return (
           <div className="w-full h-full flex items-center justify-center" style={{ background: regionBackground, color: regionTextColor }}>
@@ -298,7 +298,7 @@ export function CustomerDisplayPage() {
       case 'welcome':
         return (
           <div className="w-full h-full" style={{ background: regionBackground, color: regionTextColor }}>
-            <PromotionText lines={[dualScreenConfig.welcomeText ?? '']} style={dualScreenConfig.welcomeStyle} />
+            <PromotionText lines={[appearance.welcomeText ?? '']} style={appearance.welcomeStyle} />
           </div>
         )
       case 'order':
@@ -377,7 +377,7 @@ export function CustomerDisplayPage() {
         )
       case 'logo': {
         const displayLogo = localStorage.getItem('pos_store_logo') || ''
-        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={dualScreenConfig.logoStyle} background={regionBackground} />
+        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={appearance.logoStyle} background={regionBackground} />
       }
       default:
         return null
