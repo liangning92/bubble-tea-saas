@@ -274,7 +274,7 @@ export const shiftApi = {
 
 // TV Screen Marketing API
 export const tvScreenApi = {
-  getConfig: (storeId?: string, displayToken?: string) => api.get('/marketing/tv-screen/config', { params: { storeId, displayToken } }),
+  getConfig: (storeId?: string, displayToken?: string) => displayToken ? axios.get(`${getApiUrl().replace(/\/$/, '')}/marketing/tv-screen/config`, {params:{storeId},headers:{'X-TV-Display-Token':displayToken},timeout:5000}) : api.get('/marketing/tv-screen/config', {params:{storeId}}),
   triggerLottery: (data: { orderId: string }) =>
     api.post('/marketing/tv-screen/trigger-lottery', data),
 }

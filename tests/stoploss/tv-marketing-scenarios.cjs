@@ -4,6 +4,8 @@ module.exports=async({prisma,check,call,base,ownerToken})=>{
  const before=await check('GET','/api/marketing/tv-screen/config');assert.equal(before.enabled,false);assert.deepEqual(before.dailySpecials,[]);assert.ok(before.displayToken);
  let anonymous=await fetch(base+'/api/marketing/tv-screen/config');assert.equal(anonymous.status,401);
  const key=before.displayToken;
+ assert.equal((await fetch(base+'/api/marketing/tv-screen/config?storeId=store',{headers:{'X-TV-Display-Token':key}})).status,200);
+ assert.equal((await fetch(base+'/api/marketing/tv-screen/config',{method:'POST',headers:{'Content-Type':'application/json','X-TV-Display-Token':key},body:'{}'})).status,401);
  assert.equal((await fetch(base+'/api/marketing/tv-screen/config?displayToken='+encodeURIComponent(key)+'&storeId=foreign')).status,403);
  assert.equal((await fetch(base+'/api/marketing/tv-screen/config?displayToken=invalid')).status,401);
  assert.equal((await fetch(base+'/api/marketing/tv-screen/config?displayToken='+encodeURIComponent(key))).status,200);

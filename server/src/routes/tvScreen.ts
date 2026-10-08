@@ -26,9 +26,10 @@ async function readConfig(storeId: string) {
   try { return normalizeTvConfig(row ? JSON.parse(row.value) : undefined) } catch { return normalizeTvConfig(undefined) }
 }
 router.get('/config', (req, res, next) => {
-  if (req.query.displayToken) {
+  const displayToken = req.get('X-TV-Display-Token') || req.query.displayToken
+  if (displayToken) {
     try {
-      const storeId = verifyTvDisplayToken(String(req.query.displayToken))
+      const storeId = verifyTvDisplayToken(String(displayToken))
       if (req.query.storeId && req.query.storeId !== storeId) return res.status(403).json({ code:403,message:'Display store mismatch' })
       ;(req as any).tvStoreId = storeId; next()
     } catch { res.status(401).json({ code:401,message:'Invalid display link; open a new link from marketing settings' }) }
