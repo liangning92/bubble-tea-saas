@@ -54,6 +54,10 @@ class UpgradeTests(unittest.TestCase):
 
     def test_success_preserves_every_old_value_and_verified_backups(self):
         receipt = self.prepare()
+        self.assertEqual(pathlib.Path(receipt['appBackup']), U.application_backup_path(self.app, receipt['nonce']))
+        # A 224-character installed file path remains below MAX_PATH after
+        # replacing the four-character BTPS directory with this backup name.
+        self.assertLessEqual(len(pathlib.Path(receipt['appBackup']).name) - len(self.app.name), 15)
         self.assertTrue(receipt['columnAdded'])
         self.assertEqual(receipt['columnsAdded'], [t+'.'+n for t,n,_ in U.COLUMN_ADDITIONS])
         self.assertTrue(receipt['indexAdded'])
@@ -62,6 +66,24 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
+
+    def test_deep_prisma_asset_stays_below_windows_backup_path_limit(self):
+        folder = self.app / 'resources' / 'app.asar.unpacked' / 'server' / 'node_modules' / '.prisma' / 'client'
+        leaf_length = 224 - len(str(folder)) - 1
+        self.assertGreater(leaf_length, 0)
+        asset = folder / ('x' * leaf_length)
+        folder.mkdir(parents=True)
+        asset.write_bytes(b'old-prisma-cache')
+        self.app_before = U.tree_manifest(self.app)
+
+        receipt = self.prepare()
+        relative = asset.relative_to(self.app)
+        previous_backup = self.app.parent / ('.BTPS-upgrade-' + receipt['nonce']) / relative
+        current_backup = pathlib.Path(receipt['appBackup']) / relative
+        self.assertGreaterEqual(len(str(previous_backup)), 260)
+        self.assertLess(len(str(current_backup)), 260)
+        self.assertEqual(current_backup.read_bytes(), b'old-prisma-cache')
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
 
     def test_repeat_is_idempotent_and_preserves_existing_pickup_values(self):
         self.prepare()
@@ -137,7 +159,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
 
     def test_windows_copy_failure_identifies_file_and_stage_without_modifying_database(self):
-        problem = shutil.Error([(str(self.app / 'BTPS.exe'), str(self.app.parent / '.BTPS-upgrade-test' / 'BTPS.exe'), '[WinError 5] Access is denied')])
+        problem = shutil.Error([(str(self.app / 'BTPS.exe'), str(self.app.parent / 'B-test' / 'BTPS.exe'), '[WinError 5] Access is denied')])
         with mock.patch.object(U.shutil, 'copytree', side_effect=problem):
             with self.assertRaises(shutil.Error) as result:
                 self.prepare()
