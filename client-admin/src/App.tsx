@@ -137,6 +137,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+const TvScreenConfigPage = lazy(() => import('./pages/marketing/TvScreenConfigPage').then(module => ({ default: module.TvScreenConfigPage })))
+
 function App() {
   return (
     <Suspense fallback={<RouteLoading />}><Routes>
@@ -309,6 +311,9 @@ function App() {
             <Route path="analytics/campaigns" element={<CampaignReportPage />} />
             <Route path="analytics/referral" element={<ReferralFunnelPage />} />
           </Route>
+
+          {/* 电视大屏互动 */}
+          <Route path="tv-screen" element={<TvScreenConfigPage />} />
         </Route>
 
         {/* 卫生管理 */}

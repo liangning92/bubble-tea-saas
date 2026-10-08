@@ -100,10 +100,10 @@ export function TimedSpecialPage() {
       productName: special.productName || '',
       specialPrice: special.specialPrice,
       originalPrice: special.originalPrice || 0,
-      startTime: special.startTime ? special.startTime.split('T')[0] : '',
-      endTime: special.endTime ? special.endTime.split('T')[0] : '',
+      startTime: special.startTime ? new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(special.startTime)) : '',
+      endTime: special.endTime ? new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(new Date(special.endTime).getTime()-1)) : '',
       daysOfWeek: special.daysOfWeek || [],
-      applicableChannels: special.applicableChannels || [],
+      applicableChannels: typeof special.applicableChannels === 'string' ? JSON.parse(special.applicableChannels) : special.applicableChannels || [],
       status: special.status
     })
     setShowEdit(true)
@@ -114,8 +114,8 @@ export function TimedSpecialPage() {
     const payload = {
       ...form,
       storeId,
-      startTime: form.startTime ? new Date(form.startTime).toISOString() : null,
-      endTime: form.endTime ? new Date(form.endTime).toISOString() : null
+      startTime: form.startTime ? new Date(form.startTime + 'T00:00:00+07:00').toISOString() : null,
+      endTime: form.endTime ? new Date(new Date(form.endTime + 'T00:00:00+07:00').getTime() + 86400000).toISOString() : null
     }
     if (showEdit && editingSpecial) {
       updateMutation.mutate({ id: editingSpecial.id, data: payload })
@@ -323,6 +323,8 @@ export function TimedSpecialPage() {
                 </div>
               </div>
 
+              <div className="flex flex-wrap gap-2">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day,index) => <label key={day}><input type="checkbox" checked={form.daysOfWeek.includes(index)} onChange={e => setForm({...form,daysOfWeek:e.target.checked?[...form.daysOfWeek,index]:form.daysOfWeek.filter(d=>d!==index)})} /> {day}</label>)}</div>
+              <div className="flex flex-wrap gap-2">{['DINE_IN','TAKEAWAY','GOFOOD','GRAB','SHOPEE','POS'].map(channel => <label key={channel}><input type="checkbox" checked={form.applicableChannels.includes(channel)} onChange={e => setForm({...form,applicableChannels:e.target.checked?[...form.applicableChannels,channel]:form.applicableChannels.filter(c=>c!==channel)})} /> {channel}</label>)}</div>
               <div className="flex gap-3 pt-4">
                 <button type="submit" disabled={!form.name || !form.productId || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}

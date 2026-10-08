@@ -117,6 +117,7 @@ export default api
 
 export const posApi = {
   // Products (cached for offline)
+  getActivityPrices: () => api.get('/marketing/activity-prices'),
   getProducts: (storeId: string) => api.get(`/products?storeId=${storeId}&status=active`),
   getProductsForPOS: (storeId: string) => api.get(`/products/pos?storeId=${storeId}`),
   getProductsVersion: (storeId: string) => api.get(`/products/pos/version?storeId=${storeId}`),
@@ -269,4 +270,11 @@ export const posApi = {
 // Shift API - uses admin's /api/shifts endpoint
 export const shiftApi = {
   list: (storeId?: string) => api.get('/shifts', { params: storeId ? { storeId } : undefined }),
+}
+
+// TV Screen Marketing API
+export const tvScreenApi = {
+  getConfig: (storeId?: string, displayToken?: string) => api.get('/marketing/tv-screen/config', { params: { storeId, displayToken } }),
+  triggerLottery: (data: { orderId: string }) =>
+    api.post('/marketing/tv-screen/trigger-lottery', data),
 }

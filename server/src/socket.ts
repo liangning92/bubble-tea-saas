@@ -1,3 +1,4 @@
+import { verifyTvDisplayToken } from './utils/tvDisplayToken'
 import { Server as HttpServer } from 'http'
 import { Server, Socket } from 'socket.io'
 import jwt from 'jsonwebtoken'
@@ -29,6 +30,13 @@ class SocketManager {
 
     // Authentication middleware
     this.io.use(async (socket, next) => {
+      if (socket.handshake.auth.clientType === 'tv') {
+        try {
+          const storeId = verifyTvDisplayToken(socket.handshake.auth.displayToken)
+          socket.data.user = { id: `tv-${socket.id}`, role: 'display', storeId }
+          return next()
+        } catch { return next(new Error('Invalid display token')) }
+      }
       const token = socket.handshake.auth.token
 
       if (typeof token !== 'string' || !token) {
@@ -79,6 +87,7 @@ class SocketManager {
   }
 
   private handleConnection(socket: Socket, user: any) {
+    if (user.role === 'display') { socket.join(`tv:${user.storeId}`); socket.emit('tv:connected', { storeId: user.storeId }); return }
     const userInfo: ConnectedUser = {
       socketId: socket.id,
       userId: user.id,
@@ -250,6 +259,13 @@ class SocketManager {
         timestamp: new Date().toISOString()
       })
     }
+  }
+
+  emitTVLotteryTrigger(storeId: string, data: any) {
+    this.io?.to(`tv:${storeId}`).emit('tv:lottery:trigger', { data })
+  }
+  emitTVConfigUpdate(storeId: string, data: any) {
+    this.io?.to(`tv:${storeId}`).emit('tv:config:update', { data })
   }
 
   // Emit notification to POS display
