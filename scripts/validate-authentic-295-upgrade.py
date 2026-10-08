@@ -73,7 +73,9 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
         class OwnedInstaller:
             def __init__(self,pid):
                 self.pid=pid
-                self.handle=kernel.OpenProcess(0x100001,False,pid)
+                # PROCESS_QUERY_LIMITED_INFORMATION is required by
+                # GetExitCodeProcess in addition to SYNCHRONIZE/TERMINATE.
+                self.handle=kernel.OpenProcess(0x101001,False,pid)
                 assert self.handle
                 self.returncode=None
             def poll(self):

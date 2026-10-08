@@ -3,6 +3,7 @@
 Var BTPSOldApp
 Var BTPSUpgradeReceipt
 Var BTPSInstallStarted
+Var BTPSUpgradeDiagnostic
 !endif
 
 !macro customHeader
@@ -27,6 +28,7 @@ Var BTPSInstallStarted
 !macro customInit
   StrCpy $BTPSInstallStarted "0"
   StrCpy $BTPSUpgradeReceipt ""
+  StrCpy $BTPSUpgradeDiagnostic "$APPDATA\BTPS\logs\upgrade-check.json"
   ReadRegStr $BTPSOldApp HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
   ${If} $BTPSOldApp == ""
     ReadRegStr $BTPSOldApp HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
@@ -51,11 +53,12 @@ Var BTPSInstallStarted
     InitPluginsDir
     File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
-    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed'
+    CreateDirectory "$APPDATA\BTPS\logs"
+    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --diagnostic "$BTPSUpgradeDiagnostic"'
     Pop $R0
     Pop $R1
     ${If} $R0 != "0"
-      MessageBox MB_OK|MB_ICONSTOP "Upgrade stopped before replacing your program. Keep POS closed and contact the manager. Error: $R1$\r$\n升级已停止，原程序保留。请联系负责人。$\r$\nPeningkatan dihentikan; program lama disimpan. Hubungi pengelola." /SD IDOK
+      MessageBox MB_OK|MB_ICONSTOP "Upgrade stopped before replacing your program. Exit code: $R0. Details: $R1$\r$\nCheck: $BTPSUpgradeDiagnostic$\r$\n升级已停止，原程序保留。请联系负责人并提供上方检查文件。$\r$\nPeningkatan dihentikan; program lama disimpan. Hubungi pengelola." /SD IDOK
       SetErrorLevel 73
       Quit
     ${EndIf}

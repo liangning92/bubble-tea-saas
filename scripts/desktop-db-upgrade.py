@@ -25,6 +25,7 @@ CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_A
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
 CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
+LAST_DIAGNOSTIC = None
 
 
 class SchemaCompatibilityError(RuntimeError):
@@ -393,6 +394,7 @@ def load_receipt(result_path, catalog):
 
 
 def main():
+    global LAST_DIAGNOSTIC
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command', required=True)
     build = sub.add_parser('build-catalog')
@@ -404,10 +406,12 @@ def main():
     plan.add_argument('--old-app', required=True)
     plan.add_argument('--result', required=True)
     plan.add_argument('--operator-confirmed', action='store_true', required=True)
+    plan.add_argument('--diagnostic')
     for name in ('verify', 'restore'):
         p = sub.add_parser(name)
         p.add_argument('--receipt', required=True)
     args = parser.parse_args()
+    LAST_DIAGNOSTIC = getattr(args, 'diagnostic', None)
     if args.command == 'build-catalog':
         if getattr(sys, 'frozen', False):
             fail('BUILD_COMMAND_NOT_AVAILABLE_IN_INSTALLER')
@@ -421,11 +425,19 @@ def main():
         require_stopped(windows_processes)
         print(json.dumps({'status': 'stopped'}))
     elif args.command == 'prepare':
+        if args.diagnostic:
+            diagnostic = regular(args.diagnostic)
+            diagnostic.parent.mkdir(parents=True, exist_ok=True)
+            durable_json(diagnostic, {'status': 'running', 'stage': 'profile-database'})
         db = profile_database()
         if db is None:
             fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
+        if args.diagnostic:
+            durable_json(diagnostic, {'status': 'running', 'stage': 'schema-and-backup'})
         receipt = prepare(db, args.old_app, catalog, windows_processes, registry_snapshot())
         durable_json(args.result, receipt)
+        if args.diagnostic:
+            durable_json(diagnostic, {'status': 'prepared', 'reason': None})
         print(json.dumps({'status': 'prepared', 'historicalRowsPreserved': True}))
     else:
         receipt = load_receipt(args.receipt, catalog)
@@ -443,5 +455,10 @@ if __name__ == '__main__':
         report = {'status': 'blocked', 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
         if isinstance(error, SchemaCompatibilityError):
             report['details'] = error.details
+        if LAST_DIAGNOSTIC:
+            try:
+                durable_json(LAST_DIAGNOSTIC, report)
+            except Exception:
+                pass
         print(json.dumps(report))
         sys.exit(73)

@@ -76,10 +76,12 @@ def fixture(collision=False, legacy_affinity=True):
         assert not c.execute('PRAGMA foreign_key_check').fetchall()
 
 
-def invoke(command, expect=0, receipt=None):
+def invoke(command, expect=0, receipt=None, diagnostic=False):
     args = [str(HELPER), command]
     if command == 'prepare':
         args += ['--old-app', str(APP), '--result', str(TEMP / 'result.json'), '--operator-confirmed']
+        if diagnostic:
+            args += ['--diagnostic', str(TEMP / 'upgrade-diagnostic.json')]
     elif command in ('verify', 'restore'):
         args += ['--receipt', str(receipt or TEMP / 'result.json')]
     result = subprocess.run(args, capture_output=True, text=True, timeout=180)
@@ -213,7 +215,9 @@ try:
     CASES.append('compiled-helper-program-rollback-retains-additive-database')
     fixture(collision=True)
     before = sha(DB)
-    invoke('prepare', expect=73)
+    invoke('prepare', expect=73, diagnostic=True)
+    failure = json.loads((TEMP / 'upgrade-diagnostic.json').read_text())
+    assert failure['status'] == 'blocked' and failure['reason']
     assert sha(DB) == before and historic() == history
     CASES.append('compiled-helper-real-ddl-failure-byte-identical-rollback')
     fixture()
