@@ -766,7 +766,6 @@ export function ExpenseListPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowTypeModal(true)}
-              disabled={!canWrite || user?.role !== 'admin'}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               title={t('expense.manageTypes')}
             >
