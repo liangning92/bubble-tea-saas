@@ -250,8 +250,8 @@ try:
     # The original 295 package is named bubble-tea-saas. Put owned history in
     # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
     historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
-    assert not historical_profile.exists(), 'Runner must have no historical 295 profile'
-    (historical_profile / 'data').mkdir(parents=True)
+    assert not (historical_profile / 'data/dev.db').exists(), 'Runner must have no historical 295 database'
+    (historical_profile / 'data').mkdir(parents=True, exist_ok=True)
     shutil.copy2(DB, historical_profile / 'data/dev.db')
     alternate_profile = DATA
     DATA = historical_profile
