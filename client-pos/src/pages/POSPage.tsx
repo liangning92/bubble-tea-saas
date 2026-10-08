@@ -1,3 +1,4 @@
+import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
 import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
 import { reportReceivedPayment } from '../utils/receivedReceipt'
@@ -153,6 +154,8 @@ interface DualScreenConfig {
   autoSyncPromotions?: boolean
   showPromotionDetail?: boolean
   showUpsellHint?: boolean
+  backgroundColor?: string
+  mediaFit?: 'cover' | 'contain'
   mediaMode?: 'rotate' | 'single'
   fixedMediaUrl?: string
   mediaFiles?: Array<{
@@ -162,16 +165,10 @@ interface DualScreenConfig {
     isVideo: boolean
   }>
   idleLayout?: {
-    columns: Array<{
-      width: number
-      content: 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
-    }>
+    columns: CustomerLayoutColumn[]
   }
   orderingLayout?: {
-    columns: Array<{
-      width: number
-      content: 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
-    }>
+    columns: CustomerLayoutColumn[]
   }
 }
 
@@ -1130,6 +1127,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             showUpsellHint: hw.dualScreen.showUpsellHint !== false,
             mediaFiles: hw.dualScreen.mediaFiles || [],
             mediaMode: hw.dualScreen.mediaMode || 'rotate',
+            backgroundColor: hw.dualScreen.backgroundColor,
+            mediaFit: hw.dualScreen.mediaFit || 'cover',
             fixedMediaUrl: hw.dualScreen.fixedMediaUrl || '',
             idleLayout: hw.dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] },
             orderingLayout: hw.dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] },

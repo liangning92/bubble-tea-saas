@@ -1,3 +1,4 @@
+import { CustomerDisplayLayout, CustomerLayoutColumn, customerBackground, customerTextColor } from '../../../shared/components/CustomerDisplayLayout'
 import { CustomerDisplayLogo, CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import { customerDisplayMedia } from '../../../shared/utils/customerDisplayMedia'
 import { PromotionText, PromotionTextStyle } from '../../../shared/components/PromotionText'
@@ -35,10 +36,7 @@ interface MediaFile {
 
 type ColumnContent = 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
 
-interface LayoutColumn {
-  width: number
-  content: ColumnContent
-}
+type LayoutColumn = CustomerLayoutColumn
 
 interface Layout {
   columns: LayoutColumn[]
@@ -50,6 +48,8 @@ interface DualScreenConfig {
   orderingLayout: Layout
   welcomeText: string
   mediaFiles: MediaFile[]
+  backgroundColor?: string
+  mediaFit?: 'cover' | 'contain'
   mediaMode?: 'rotate' | 'single'
   fixedMediaUrl?: string
   promotions: string[]
@@ -143,6 +143,8 @@ export function CustomerDisplayPage() {
   }, [])
 
   const mediaFiles = dualScreenConfig.mediaFiles || []
+  const background = customerBackground(dualScreenConfig.backgroundColor)
+  const textColor = customerTextColor(background)
   const promotions = (dualScreenConfig.autoSyncPromotions !== false && activePromotions.length > 0)
     ? activePromotions
     : (dualScreenConfig.promotions?.length > 0 ? dualScreenConfig.promotions : DEFAULT_PROMOTIONS)
@@ -266,7 +268,8 @@ export function CustomerDisplayPage() {
               <video
                 ref={isVideoRef as React.RefObject<HTMLVideoElement>}
                 src={media.url}
-                className="w-full h-full object-contain"
+                className="w-full h-full"
+                style={{ objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }}
                 autoPlay
                 loop
                 muted
@@ -274,22 +277,22 @@ export function CustomerDisplayPage() {
               />
             )
           }
-          return <img src={media?.url} alt="" className="w-full h-full object-contain" />
+          return <img src={media?.url} alt="" className="w-full h-full" style={{ objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }} />
         }
         return (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 text-white">
+          <div className="w-full h-full flex items-center justify-center" style={{ background, color: textColor }}>
             <span className="text-6xl">{promotion}</span>
           </div>
         )
       case 'promotions':
         return (
-          <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 text-white">
+          <div className="w-full h-full" style={{ background, color: textColor }}>
             <PromotionText lines={promotions} style={dualScreenConfig.promotionsStyle} subtitleStyle={dualScreenConfig.promotionsSubtitleStyle} />
           </div>
         )
       case 'welcome':
         return (
-          <div className="w-full h-full bg-gradient-to-br from-pink-500 to-pink-600 text-white">
+          <div className="w-full h-full" style={{ background, color: textColor }}>
             <PromotionText lines={[dualScreenConfig.welcomeText ?? '']} style={dualScreenConfig.welcomeStyle} />
           </div>
         )
@@ -369,7 +372,7 @@ export function CustomerDisplayPage() {
         )
       case 'logo': {
         const displayLogo = localStorage.getItem('pos_store_logo') || ''
-        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} style={dualScreenConfig.logoStyle} />
+        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} style={dualScreenConfig.logoStyle} background={background} />
       }
       default:
         return null
@@ -416,18 +419,10 @@ export function CustomerDisplayPage() {
     )
   }
 
-  // Render dynamic layout
+  // Render dynamic layout: columns contain independently sized rows.
   return (
-    <div className="min-h-screen bg-gray-900 flex">
-      {currentLayout?.columns.map((col, index) => (
-        <div
-          key={index}
-          className="h-screen overflow-hidden"
-          style={{ width: `${col.width}%` }}
-        >
-          {renderColumnContent(col.content, index === 0 ? videoRef : undefined)}
-        </div>
-      ))}
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background }}>
+      <CustomerDisplayLayout columns={currentLayout?.columns || []} background={background} renderContent={content => renderColumnContent(content, videoRef)} />
     </div>
   )
 }

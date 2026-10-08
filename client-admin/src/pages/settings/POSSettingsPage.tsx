@@ -1,3 +1,4 @@
+import { CustomerDisplayLayout, CustomerLayoutColumn, CustomerLayoutRow, customerRows, equalPercents, customerBackground, customerTextColor } from '../../../../shared/components/CustomerDisplayLayout'
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -160,10 +161,7 @@ const DualScreenMediaUpload: React.FC<{
 // Layout Column types
 type ColumnContent = 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
 
-interface LayoutColumn {
-  width: number
-  content: ColumnContent
-}
+type LayoutColumn = CustomerLayoutColumn
 
 interface Layout {
   columns: LayoutColumn[]
@@ -225,20 +223,49 @@ const _DualScreenLayoutEditor: React.FC<{
 
   const addColumn = () => {
     if (layout.columns.length >= 3) return
-    const newColumns = [...layout.columns, { width: Math.floor(100 / (layout.columns.length + 1)), content: 'promotions' as ColumnContent }]
-    // Redistribute widths
-    const equalWidth = Math.floor(100 / newColumns.length)
-    newColumns.forEach((col) => col.width = equalWidth)
-    onChange({ columns: newColumns })
+    const columns = [...layout.columns, { width: 100, content: 'promotions' as ColumnContent }]
+    const widths = equalPercents(columns.length)
+    onChange({ columns: columns.map((col, i) => ({ ...col, width: widths[i] })) })
   }
-
   const removeColumn = (index: number) => {
     if (layout.columns.length <= 1) return
-    const newColumns = layout.columns.filter((_, idx) => idx !== index)
-    const equalWidth = Math.floor(100 / newColumns.length)
-    newColumns.forEach((col) => col.width = equalWidth)
-    onChange({ columns: newColumns })
+    const columns = layout.columns.filter((_, i) => i !== index)
+    const widths = equalPercents(columns.length)
+    onChange({ columns: columns.map((col, i) => ({ ...col, width: widths[i] })) })
   }
+  const setRows = (index: number, rows: CustomerLayoutRow[]) => {
+    updateColumn(index, { rows, content: rows[0].content })
+  }
+  const addRow = (index: number) => {
+    const col = layout.columns[index]
+    if (!col.rows?.length) {
+      setRows(index, [{ height: 25, content: 'logo' }, { height: 75, content: col.content }])
+      return
+    }
+    if (col.rows.length >= 4) return
+    const rows = [...col.rows, { height: 100, content: 'welcome' as ColumnContent }]
+    const heights = equalPercents(rows.length)
+    setRows(index, rows.map((row, i) => ({ ...row, height: heights[i] })))
+  }
+  const removeRow = (index: number, rowIndex: number) => {
+    const rows = customerRows(layout.columns[index]).filter((_, i) => i !== rowIndex)
+    const heights = equalPercents(rows.length)
+    setRows(index, rows.map((row, i) => ({ ...row, height: heights[i] })))
+  }
+  const moveRow = (index: number, rowIndex: number, direction: number) => {
+    const rows = [...customerRows(layout.columns[index])]
+    const other = rowIndex + direction
+    if (other < 0 || other >= rows.length) return
+    ;[rows[rowIndex], rows[other]] = [rows[other], rows[rowIndex]]
+    setRows(index, rows)
+  }
+  const contentOptions = <>
+    <option value="media">{t('posSettings.columnMedia')}</option>
+    <option value="promotions">{t('posSettings.columnPromotions')}</option>
+    <option value="welcome">{t('posSettings.columnWelcome')}</option>
+    <option value="order">{t('posSettings.columnOrder')}</option>
+    <option value="logo">{t('posSettings.columnLogo')}</option>
+  </>
 
   return (
     <div className="p-3 bg-white rounded-lg border">
@@ -253,40 +280,37 @@ const _DualScreenLayoutEditor: React.FC<{
         </div>
       </div>
 
+      <p className="text-xs text-gray-500 mb-3">{t('posSettings.layoutRowsHint')}</p>
       <div className="space-y-3">
         {layout.columns.map((col, index) => (
-          <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-            <LayoutWidthInput
-              value={col.width}
-              label={`${title} — ${index + 1} (%)`}
-              onChange={(width) => updateColumn(index, { width })}
-            />
-
-            {/* Content type */}
-            <select
-              value={col.content}
-              onChange={(e) => updateColumn(index, { content: e.target.value as ColumnContent })}
-              className="flex-1 text-sm input"
-            >
-              <option value="media">{t('posSettings.columnMedia')}</option>
-              <option value="promotions">{t('posSettings.columnPromotions')}</option>
-              <option value="welcome">{t('posSettings.columnWelcome')}</option>
-              <option value="order">{t('posSettings.columnOrder')}</option>
-              <option value="logo">{t('posSettings.columnLogo')}</option>
-            </select>
-
-            {/* Remove */}
-            {layout.columns.length > 1 && (
-              <button onClick={() => removeColumn(index)} className="p-1 text-red-500 hover:bg-red-50 rounded">
-                <X size={16} />
-              </button>
-            )}
+          <div key={index} className="p-2 bg-gray-50 rounded space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs">{t('posSettings.columnWidth')}</span>
+              <LayoutWidthInput value={col.width} label={`${title} — ${index + 1} (%)`} onChange={width => updateColumn(index, { width })} />
+              <button type="button" className="px-2 py-1 text-xs border rounded" disabled={(col.rows?.length || 1) >= 4} onClick={() => addRow(index)}>{t('posSettings.addRow')}</button>
+              {layout.columns.length > 1 && <button type="button" aria-label={t('posSettings.removeColumn')} onClick={() => removeColumn(index)} className="p-1 text-red-500"><X size={16} /></button>}
+            </div>
+            {customerRows(col).map((row, rowIndex, rows) => (
+              <div key={rowIndex} className="flex items-center gap-2 p-2 bg-white rounded border">
+                {rows.length > 1 && <>
+                  <span className="text-xs">{t('posSettings.rowHeight')}</span>
+                  <LayoutWidthInput value={row.height} label={`${title} — ${index + 1} / ${rowIndex + 1} (%)`} onChange={height => setRows(index, rows.map((r, i) => i === rowIndex ? { ...r, height } : r))} />
+                </>}
+                <select aria-label={`${title} — ${index + 1} / ${rowIndex + 1}`} className="input flex-1 text-sm" value={row.content} onChange={e => setRows(index, rows.map((r, i) => i === rowIndex ? { ...r, content: e.target.value as ColumnContent } : r))}>{contentOptions}</select>
+                {rows.length > 1 && <>
+                  <button type="button" aria-label={t('posSettings.moveRowUp')} disabled={rowIndex === 0} onClick={() => moveRow(index, rowIndex, -1)} className="px-1 disabled:opacity-30">↑</button>
+                  <button type="button" aria-label={t('posSettings.moveRowDown')} disabled={rowIndex === rows.length - 1} onClick={() => moveRow(index, rowIndex, 1)} className="px-1 disabled:opacity-30">↓</button>
+                  <button type="button" aria-label={t('posSettings.removeRow')} onClick={() => removeRow(index, rowIndex)} className="p-1 text-red-500"><X size={14} /></button>
+                </>}
+              </div>
+            ))}
+            {col.rows && col.rows.length > 1 && <p className={`text-xs ${col.rows.reduce((sum, row) => sum + row.height, 0) === 100 ? 'text-gray-500' : 'text-red-600'}`}>{t('posSettings.totalHeight', { height: col.rows.reduce((sum, row) => sum + row.height, 0) })}</p>}
           </div>
         ))}
       </div>
 
       {/* Width sum indicator */}
-      <div className="mt-2 text-xs text-gray-500 text-right">
+      <div className={`mt-2 text-xs text-right ${layout.columns.reduce((sum, col) => sum + col.width, 0) === 100 ? 'text-gray-500' : 'text-red-600'}`}>
         {t('posSettings.totalWidth', { width: layout.columns.reduce((sum, col) => sum + col.width, 0) })}
       </div>
     </div>
@@ -303,6 +327,8 @@ const DualScreenPreview: React.FC<{
   const [currentIndex, setCurrentIndex] = useState(0)
   const promotions = dualScreen.promotions || ['🧋', '🍓', '💳', '🎁']
   const mediaFiles = dualScreen.mediaFiles || []
+  const background = customerBackground(dualScreen.backgroundColor)
+  const textColor = customerTextColor(background)
 
   // Use refs to avoid stale closure in interval callbacks
   const mediaFilesRef = useRef(mediaFiles)
@@ -343,25 +369,25 @@ const DualScreenPreview: React.FC<{
       case 'media':
         if (mediaFiles.length > 0) {
           return currentMedia?.isVideo ? (
-            <video src={receiptMediaUrl(currentMedia.url)} className="w-full h-full object-contain" autoPlay loop muted />
+            <video src={receiptMediaUrl(currentMedia.url)} className="w-full h-full" style={{ objectFit: dualScreen.mediaFit === 'contain' ? 'contain' : 'cover' }} autoPlay loop muted />
           ) : (
-            <img src={receiptMediaUrl(currentMedia?.url)} alt="" className="w-full h-full object-contain" />
+            <img src={receiptMediaUrl(currentMedia?.url)} alt="" className="w-full h-full" style={{ objectFit: dualScreen.mediaFit === 'contain' ? 'contain' : 'cover' }} />
           )
         }
         return (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 text-white">
+          <div className="w-full h-full flex items-center justify-center" style={{ background, color: textColor }}>
             <span className="text-4xl">{currentPromotion}</span>
           </div>
         )
       case 'promotions':
         return (
-          <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+          <div className="w-full h-full" style={{ background, color: textColor }}>
             <PromotionText lines={promotions} style={dualScreen.promotionsStyle} subtitleStyle={dualScreen.promotionsSubtitleStyle} scale={0.5} />
           </div>
         )
       case 'welcome':
         return (
-          <div className="w-full h-full bg-gray-800 text-white">
+          <div className="w-full h-full" style={{ background, color: textColor }}>
             <PromotionText lines={[dualScreen.welcomeText ?? '']} style={dualScreen.welcomeStyle} scale={0.5} />
           </div>
         )
@@ -412,7 +438,7 @@ const DualScreenPreview: React.FC<{
           </div>
         )
       case 'logo':
-        return <CustomerDisplayLogo src={receiptMediaUrl(storeLogo)} fallback="/youme-logo-red.png" style={dualScreen.logoStyle} />
+        return <CustomerDisplayLogo src={receiptMediaUrl(storeLogo)} fallback="/youme-logo-red.png" style={dualScreen.logoStyle} background={background} />
       default:
         return null
     }
@@ -436,7 +462,7 @@ const DualScreenPreview: React.FC<{
       </div>
 
       {/* Preview Screen with dynamic columns */}
-      <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
+      <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9', background }}>
         {previewState === 'complete' ? (
           <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-500 to-green-600 text-white">
             <div className="text-4xl mb-2">{t('posSettings.checkmark')}</div>
@@ -444,17 +470,7 @@ const DualScreenPreview: React.FC<{
             <div className="text-sm opacity-80">{t('posSettings.orderNumber')}</div>
           </div>
         ) : (
-          <div className="w-full h-full flex">
-            {currentLayout.columns.map((col: any, index: number) => (
-              <div
-                key={index}
-                className="h-full overflow-hidden"
-                style={{ width: `${col.width}%` }}
-              >
-                {renderColumnContent(col.content)}
-              </div>
-            ))}
-          </div>
+          <CustomerDisplayLayout columns={currentLayout.columns} renderContent={renderColumnContent} background={background} />
         )}
       </div>
     </div>
@@ -1737,6 +1753,30 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
             {hardwareSettings.dualScreen?.enabled && (
               <div className="space-y-4 mt-4 pt-4 border-t border-gray-200">
+                <div className="p-3 bg-gray-50 rounded-lg space-y-3">
+                  <h4 className="text-sm font-medium">{t('posSettings.customerBackground')}</h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {['#EC6D88', '#D94D6E', '#FCE4EA', '#FFFFFF'].map(color => <button type="button" key={color} aria-label={`${t('posSettings.customerBackground')} ${color}`} title={color} className="w-9 h-9 rounded border-2" style={{ background: color, borderColor: customerBackground(hardwareSettings.dualScreen.backgroundColor) === color ? '#111827' : '#D1D5DB' }} onClick={() => {
+                      const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, backgroundColor: color } }
+                      setHardwareSettings(next); handleSave('hardwareSettings', next)
+                    }} />)}
+                    <label className="flex items-center gap-2 text-sm">{t('posSettings.customColor')}
+                      <input type="color" value={customerBackground(hardwareSettings.dualScreen.backgroundColor)} onChange={e => setHardwareSettings({ ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, backgroundColor: e.target.value } })} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} />
+                    </label>
+                    <span className="text-xs text-gray-500">{customerBackground(hardwareSettings.dualScreen.backgroundColor)}</span>
+                  </div>
+                  <label className="block text-sm">{t('posSettings.mediaFit')}
+                    <select className="input mt-1" value={hardwareSettings.dualScreen.mediaFit || 'cover'} onChange={e => {
+                      const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, mediaFit: e.target.value } }
+                      setHardwareSettings(next); handleSave('hardwareSettings', next)
+                    }}>
+                      <option value="cover">{t('posSettings.mediaCover')}</option>
+                      <option value="contain">{t('posSettings.mediaContain')}</option>
+                    </select>
+                  </label>
+                  <p className="text-xs text-gray-500">{t('posSettings.mediaFitHint')}</p>
+                </div>
+
                 {/* Welcome Text */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenWelcome')}</label>
