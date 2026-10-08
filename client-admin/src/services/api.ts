@@ -438,6 +438,7 @@ export const bankTransactionApi = {
 
 // Finance API (combined)
 export const financeApi = {
+  shiftSessions: (params: { startDate: string; endDate: string }) => api.get('/finance/shift-sessions', { params }),
   // Financial reports
   revenue: (params?: any) => api.get('/finance/revenue', { params }),
   daily: (params?: any) => api.get('/finance/revenue/daily', { params }),
