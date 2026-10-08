@@ -20,7 +20,7 @@ import urllib.request
 OLD_HASH = 'a8bae6ebd282d643b9eff983b8a79cefc0d6c45ca26212852c51a005d2c7dcd8'
 
 
-def validate(root, temp, app, data, db, drive, historic, verify_started, version):
+def validate(root, temp, app, data, db, drive, historic, verify_started, version, alternate_profile):
     assert os.environ.get('GITHUB_ACTIONS') == 'true' and os.name == 'nt'
     old = temp / 'original-295.exe'
     urllib.request.urlretrieve('https://github.com/liangning92/bubble-tea-saas/releases/download/v2026.10.295/BTPS-2026.10.295-Windows-x64.exe', old)
@@ -46,6 +46,8 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
             indexes = [names.index(n) for n in columns]
             c.executemany('INSERT INTO "'+table+'" ('+','.join('"'+n+'"' for n in columns)+') VALUES ('+','.join('?' for n in columns)+')', [tuple(row[i] for i in indexes) for row in values])
     before = historic()
+    alternate_db = alternate_profile / 'data/dev.db'
+    alternate_before = hashlib.sha256(alternate_db.read_bytes()).hexdigest()
     feed = temp / 'feed'
     feed.mkdir()
     candidate = next(root.glob('release/BTPS-*-Windows-x64.exe'))
@@ -61,7 +63,9 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
     try:
         downloaded = subprocess.check_output(['node',str(inspector),'download',str(server.server_port)], text=True, cwd=root, timeout=240).strip()
         result = json.loads(downloaded)
+        print('Original 295 runtime profile: ' + result['userData'], flush=True)
         assert result['version'] == '2026.10.295', result
+        assert pathlib.Path(result['userData']) == data, result
         installer_path = result['installerPath']
         assert hashlib.sha512(pathlib.Path(installer_path).read_bytes()).digest() == hashlib.sha512(candidate.read_bytes()).digest()
         subprocess.run(['node',str(inspector),'install',str(server.server_port)], check=True, cwd=root, timeout=30)
@@ -111,7 +115,8 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
             raise
         runtime=verify_started(version)
         assert historic()==before
-        return {'originalVersion':'2026.10.295','originalInstallerSha256':OLD_HASH,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'restartedRuntime':runtime}
+        assert hashlib.sha256(alternate_db.read_bytes()).hexdigest() == alternate_before
+        return {'originalVersion':'2026.10.295','originalInstallerSha256':OLD_HASH,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'alternateProfilePreserved':True,'restartedRuntime':runtime}
     finally:
         server.shutdown()
         if old_process.poll() is None:

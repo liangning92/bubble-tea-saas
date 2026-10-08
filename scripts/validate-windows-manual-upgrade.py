@@ -247,7 +247,16 @@ try:
     restarted_runtime = verify_started_runtime(expected_version)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
-    authentic = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate'](ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version)
+    # The original 295 package is named bubble-tea-saas. Put owned history in
+    # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
+    historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
+    assert not historical_profile.exists(), 'Runner must have no historical 295 profile'
+    (historical_profile / 'data').mkdir(parents=True)
+    shutil.copy2(DB, historical_profile / 'data/dev.db')
+    alternate_profile = DATA
+    DATA = historical_profile
+    DB = historical_profile / 'data/dev.db'
+    authentic = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate'](ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile)
     report = {'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
@@ -267,3 +276,4 @@ finally:
     # On failure retain all synthetic artifacts for CI diagnosis.
     if len(CASES) == 8:
         shutil.rmtree(DATA)
+        shutil.rmtree(pathlib.Path(os.environ['APPDATA']) / 'BTPS')

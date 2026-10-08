@@ -235,7 +235,28 @@ def profile_database():
             if db.exists():
                 found.add(regular(db))
     if len(found) > 1:
-        fail('AMBIGUOUS_PROFILE_DATABASE')
+        # A running 295 writes its exact userData path to main.log. Previous
+        # failed installs may leave another historical database behind; never
+        # delete it or silently choose it over the profile 295 actually used.
+        active = []
+        for db in found:
+            profile = db.parent.parent
+            log = profile / 'logs' / 'main.log'
+            if log.is_file():
+                with open(regular(log), encoding='utf-8', errors='replace') as stream:
+                    recent = stream.read()[-1024 * 1024:]
+                evidence = 'App version: 2026.10.295, userData: ' + str(profile)
+                if evidence.casefold() in recent.casefold():
+                    active.append(db)
+        if len(active) != 1:
+            selector = pathlib.Path(os.environ['APPDATA']) / 'BTPS' / 'upgrade-active-profile.json'
+            if selector.is_file():
+                recorded = json.loads(regular(selector).read_text(encoding='utf-8'))
+                selected = [db for db in found if recorded.get('format') == 1 and recorded.get('profile') == str(db.parent.parent)]
+                if len(selected) == 1:
+                    return selected[0]
+            fail('AMBIGUOUS_PROFILE_DATABASE')
+        return active[0]
     return next(iter(found), None)
 
 
@@ -445,6 +466,11 @@ def main():
             durable_json(diagnostic, {'status': 'running', 'stage': 'schema-and-backup'})
         receipt = prepare(db, args.old_app, catalog, windows_processes, registry_snapshot())
         durable_json(args.result, receipt)
+        # The new Electron process must reopen exactly the database verified
+        # above even when another old profile remains on disk.
+        selector = regular(pathlib.Path(os.environ['APPDATA']) / 'BTPS' / 'upgrade-active-profile.json')
+        selector.parent.mkdir(parents=True, exist_ok=True)
+        durable_json(selector, {'format': 1, 'profile': str(db.parent.parent), 'sourceSha': catalog['sourceSha']})
         if args.diagnostic:
             durable_json(diagnostic, {'status': 'prepared', 'reason': None})
         print(json.dumps({'status': 'prepared', 'historicalRowsPreserved': True}))

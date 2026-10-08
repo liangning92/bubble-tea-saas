@@ -68,6 +68,7 @@ jobs:
           assert.equal(manual.authentic295.originalUpdaterIpcUsed,true);
           assert.equal(manual.authentic295.downloadedCandidateHashMatched,true);
           assert.equal(manual.authentic295.historicalRowsPreserved,true);
+          assert.equal(manual.authentic295.alternateProfilePreserved,true);
           assert.equal(manual.authentic295.restartedRuntime.version,manual.expectedVersion);
           assert.equal(manual.restartedRuntime.processStarted,true);
           assert.equal(manual.restartedRuntime.originalProfileUsed,true);

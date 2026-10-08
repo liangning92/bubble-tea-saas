@@ -58,7 +58,13 @@ Var BTPSUpgradeDiagnostic
     Pop $R0
     Pop $R1
     ${If} $R0 != "0"
-      MessageBox MB_OK|MB_ICONSTOP "Upgrade stopped before replacing your program. Exit code: $R0. Details: $R1$\r$\nCheck: $BTPSUpgradeDiagnostic$\r$\n升级已停止，原程序保留。请联系负责人并提供上方检查文件。$\r$\nPeningkatan dihentikan; program lama disimpan. Hubungi pengelola." /SD IDOK
+      StrCpy $R3 $R1
+      FileOpen $R2 "$BTPSUpgradeDiagnostic" r
+      ${IfNot} ${Errors}
+        FileRead $R2 $R3
+        FileClose $R2
+      ${EndIf}
+      MessageBox MB_OK|MB_ICONSTOP "Upgrade stopped before replacing your program. Exit code: $R0. Reason: $R3$\r$\nCheck: $BTPSUpgradeDiagnostic$\r$\n升级已停止，原程序保留。请联系负责人并提供上方检查文件。$\r$\nPeningkatan dihentikan; program lama disimpan. Hubungi pengelola." /SD IDOK
       SetErrorLevel 73
       Quit
     ${EndIf}
