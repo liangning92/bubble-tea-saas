@@ -8,6 +8,20 @@ import { setupUpdater, checkForUpdatesOnStart } from './updater'
 // 彻底禁用并隐藏 Windows / Linux 默认顶部菜单栏（File, Edit, View, Window, Help）
 Menu.setApplicationMenu(null)
 import fs from 'fs'
+import {resolvePosDataProfile} from './dataProfile'
+
+// Select the old profile before log initialization, encryption or browser creation.
+// Do not copy databases or create a fresh Chromium profile during an upgrade.
+if (process.platform === 'win32') {
+  try {
+    const currentProfile = app.getPath('userData')
+    const selectedProfile = resolvePosDataProfile(currentProfile,app.getPath('appData'),process.env.LOCALAPPDATA)
+    if (selectedProfile !== currentProfile) app.setPath('userData',selectedProfile)
+  } catch {
+    dialog.showErrorBox('POS data requires verification', 'Multiple historical POS data directories were found. Keep the data and contact the manager.\n发现多个旧收银数据目录，请保留数据并联系负责人核验。')
+    app.exit(73)
+  }
+}
 
 function getOrCreateLocalJwtSecret(): string {
   if (!safeStorage.isEncryptionAvailable()) {

@@ -64,6 +64,7 @@ jobs:
           assert.equal(manual.syntheticOnly,true);
           assert.equal(manual.onlineInteractiveInstallerVerified,true);
           assert.equal(manual.restartedRuntime.processStarted,true);
+          assert.equal(manual.restartedRuntime.originalProfileUsed,true);
           assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
           assert.deepEqual(manual.onlineInstallerArguments,['--updated','--force-run']);
           assert.equal(manual.cases.length,6);

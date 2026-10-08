@@ -157,8 +157,8 @@ def verify_started_runtime(expected_version):
             raw = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', query], env=env, text=True).strip()
             launched = json.loads(raw or '[]')
             log = DATA / 'logs/main.log'
-            if launched and log.is_file() and ('App version: ' + expected_version) in log.read_text(errors='replace'):
-                return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True}
+            if launched and log.is_file() and ('App version: ' + expected_version) in log.read_text(errors='replace') and ('userData: ' + str(DATA)) in log.read_text(errors='replace'):
+                return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'originalProfileUsed': True}
             time.sleep(1)
         raise RuntimeError('Installed POS did not start with expected runtime version')
     finally:
@@ -218,6 +218,7 @@ try:
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
     assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
     restarted_runtime = verify_started_runtime(expected_version)
+    assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
     report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
