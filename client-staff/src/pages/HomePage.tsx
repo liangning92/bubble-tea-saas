@@ -6,8 +6,6 @@ import { staffApi } from '../services/api'
 import {
   Clock,
   Calendar,
-  Wallet,
-  User,
   LogOut,
   Bell,
   CalendarDays,
@@ -18,7 +16,12 @@ import {
   Wallet as WalletIcon,
   BookOpen,
   Globe,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle,
+  Award,
+  ChevronRight,
+  Sparkles,
+  Lock
 } from 'lucide-react'
 
 const LANGUAGES = [
@@ -27,10 +30,51 @@ const LANGUAGES = [
   { code: 'zh', label: '中文', flag: '🇨🇳' }
 ]
 
+interface MonthlyOverviewData {
+  staff: {
+    id: string
+    name: string
+    employeeNumber?: string
+    position?: string
+    storeName?: string
+  }
+  month: string
+  attendance: {
+    presentDays: number
+    lateCount: number
+    earlyLeaveCount: number
+    leaveDays: number
+    todayAttendance: any
+  }
+  pointsAndDiscipline: {
+    currentPoints: number
+    monthlyEarnedPoints: number
+    monthlyDeductedPoints: number
+    rewardsCount: number
+    penaltiesCount: number
+    recentLogs: any[]
+    recentDisciplines: any[]
+  }
+  schedule: {
+    todayShift: {
+      shiftKey: string
+      shiftName: string
+      startTime?: string
+      endTime?: string
+      color?: string
+    } | null
+    weeklyList: any[]
+  }
+  pendingHygieneTasks: number
+  announcements: any[]
+}
+
 export function HomePage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
+
+  const [overview, setOverview] = useState<MonthlyOverviewData | null>(null)
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
   const [pendingTasksCount, setPendingTasksCount] = useState(0)
   const [, setIsLoading] = useState(true)
@@ -46,34 +90,39 @@ export function HomePage() {
 
   useEffect(() => {
     if (user?.staffId) {
-      loadTodayAttendance()
-      loadPendingTasks()
+      loadData()
     }
   }, [user])
 
-  const loadTodayAttendance = async () => {
+  const loadData = async () => {
+    setIsLoading(true)
     try {
-      const response = await staffApi.getTodayAttendance(user!.staffId)
-      if (response.data) {
-        setTodayAttendance(response.data)
+      // 1. Load comprehensive monthly dashboard data
+      const [overviewRes, todayAttRes, pendingTasksRes] = await Promise.all([
+        staffApi.getMonthlyOverview().catch(() => null),
+        staffApi.getTodayAttendance(user!.staffId).catch(() => null),
+        staffApi.getMyPendingTasks().catch(() => null)
+      ])
+
+      if (overviewRes?.data) {
+        setOverview(overviewRes.data)
+      }
+      if (todayAttRes?.data) {
+        setTodayAttendance(todayAttRes.data)
+      } else if (overviewRes?.data?.attendance?.todayAttendance) {
+        setTodayAttendance(overviewRes.data.attendance.todayAttendance)
+      }
+      if (pendingTasksRes?.data?.count !== undefined) {
+        setPendingTasksCount(pendingTasksRes.data.count)
+      } else if (overviewRes?.data?.pendingHygieneTasks !== undefined) {
+        setPendingTasksCount(overviewRes.data.pendingHygieneTasks)
       }
     } catch (error) {
-      console.error('Failed to load attendance:', error)
+      console.error('Failed to load home page data:', error)
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const loadPendingTasks = async () => {
-    try {
-      const response = await staffApi.getMyPendingTasks()
-      if (response.data) {
-        setPendingTasksCount(response.data.count || 0)
-      }
-    } catch (error) {
-      console.error('Failed to load pending tasks:', error)
-    }
-  }
+  };
 
   const handleLogout = () => {
     logout()
@@ -86,12 +135,10 @@ export function HomePage() {
     setShowLangMenu(false)
   }
 
-  // Get current language
   const getCurrentLang = () => {
     return LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
   }
 
-  // Get greeting based on time
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return t('time.morning')
@@ -100,55 +147,55 @@ export function HomePage() {
     return t('time.night')
   }
 
-  // Get current shift
-  const getCurrentShift = () => {
-    const hour = new Date().getHours()
-    if (hour >= 6 && hour < 14) return t('schedule.morningShift')
-    if (hour >= 14 && hour < 22) return t('schedule.afternoonShift')
-    return t('schedule.eveningShift')
-  }
+  const todayShift = overview?.schedule?.todayShift
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-primary text-white px-4 py-6 rounded-b-3xl">
+    <div className="min-h-screen bg-gray-50 pb-24">
+      {/* Top Header */}
+      <header className="bg-primary text-white px-4 pt-6 pb-8 rounded-b-3xl shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-              <span className="text-xl font-bold">
-                {user?.name?.charAt(0) || 'S'}
-              </span>
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center font-bold text-xl shadow-inner">
+              {user?.name?.charAt(0) || 'S'}
             </div>
             <div>
-              <p className="text-white/80 text-sm">{getGreeting()}</p>
-              <p className="font-bold text-lg">{user?.name || 'Staff'}</p>
+              <p className="text-white/80 text-xs">{getGreeting()}</p>
+              <h1 className="font-bold text-lg leading-tight">{user?.name || 'Staff'}</h1>
+              <p className="text-white/70 text-xs mt-0.5">
+                {overview?.staff?.position || user?.position || t('home.staff')} · {overview?.staff?.storeName || 'Store'}
+              </p>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate('/announcements')}
-              className="p-2 bg-white/20 rounded-full"
+              className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors relative"
             >
-              <Bell size={20} />
+              <Bell size={18} />
+              {(overview?.announcements?.length || 0) > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-yellow-400 rounded-full" />
+              )}
             </button>
+
             {/* Language Switcher */}
             <div className="relative">
               <button
                 onClick={() => setShowLangMenu(!showLangMenu)}
-                className="p-2 bg-white/20 rounded-full flex items-center gap-1"
+                className="p-2 bg-white/20 rounded-full flex items-center gap-1 hover:bg-white/30 transition-colors"
               >
-                <Globe size={20} />
+                <Globe size={18} />
                 <span className="text-xs">{getCurrentLang().flag}</span>
-                <ChevronDown size={14} />
+                <ChevronDown size={12} />
               </button>
               {showLangMenu && (
-                <div className="absolute right-0 top-12 bg-white rounded-lg shadow-lg py-2 z-50 min-w-[140px]">
+                <div className="absolute right-0 top-11 bg-white rounded-xl shadow-xl py-2 z-50 min-w-[130px] border border-gray-100">
                   {LANGUAGES.map(lang => (
                     <button
                       key={lang.code}
                       onClick={() => changeLanguage(lang.code)}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-gray-100 ${
-                        i18n.language === lang.code ? 'text-primary font-medium' : 'text-gray-700'
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-gray-50 ${
+                        i18n.language === lang.code ? 'text-primary font-bold bg-pink-50/50' : 'text-gray-700'
                       }`}
                     >
                       <span>{lang.flag}</span>
@@ -158,237 +205,357 @@ export function HomePage() {
                 </div>
               )}
             </div>
+
             <button
               onClick={handleLogout}
-              className="p-2 bg-white/20 rounded-full"
+              className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
             >
-              <LogOut size={20} />
+              <LogOut size={18} />
             </button>
           </div>
         </div>
 
-        {/* Today's Status Card */}
-        <div className="bg-white/10 rounded-2xl p-4">
+        {/* Today Shift & Duty Badge Card */}
+        <div className="bg-white/15 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white/80 text-sm">{getCurrentShift()}</p>
-              <p className="text-white/80 text-sm">{user?.position || 'Staff'}</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                <Calendar size={20} className="text-white" />
+              </div>
+              <div>
+                <p className="text-white/80 text-xs">{t('home.todayScheduleTitle')}</p>
+                <p className="font-bold text-sm text-white">
+                  {todayShift ? `${todayShift.shiftName} (${todayShift.startTime || '08:00'} - ${todayShift.endTime || '16:00'})` : t('home.noShiftToday')}
+                </p>
+              </div>
             </div>
+
             <div className="text-right">
               {todayAttendance ? (
-                <>
-                  <p className={`font-bold text-lg ${
-                    todayAttendance.checkOutTime ? 'text-white/60' : 'text-green-300'
+                <div>
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    todayAttendance.checkOutTime ? 'bg-white/20 text-white' : 'bg-emerald-400 text-emerald-950'
                   }`}>
                     {todayAttendance.checkOutTime ? t('home.checkedIn') : t('home.working')}
+                  </span>
+                  <p className="text-white/70 text-xs mt-1">
+                    {new Date(todayAttendance.checkInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                   </p>
-                  <p className="text-white/60 text-sm">
-                    {new Date(todayAttendance.checkInTime).toLocaleTimeString('id-ID', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </>
+                </div>
               ) : (
-                <p className="text-yellow-300 font-bold">{t('home.notCheckedIn')}</p>
+                <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-400 text-amber-950 animate-pulse">
+                  {t('home.notCheckedIn')}
+                </span>
               )}
             </div>
           </div>
         </div>
       </header>
 
-      {/* Quick Actions */}
-      <div className="p-4">
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          {/* Check In/Out Button */}
+      {/* Main Body */}
+      <div className="px-4 -mt-3 space-y-4">
+
+        {/* 1. Quick Check-In / Check-Out Hero Action */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
+                ? 'bg-emerald-100 text-emerald-600'
+                : 'bg-primary/10 text-primary'
+            }`}>
+              <Clock size={24} />
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900 text-base">
+                {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('attendance.checkOut') : t('attendance.checkIn')}
+              </h2>
+              <p className="text-xs text-gray-500">
+                {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('home.clickToLeave') : t('home.clickToWork')}
+              </p>
+            </div>
+          </div>
+
           <button
             onClick={() => navigate('/attendance')}
-            className={`p-4 rounded-2xl text-left ${
+            className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm ${
               todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
-                ? 'bg-green-500 text-white'
-                : 'bg-white shadow-sm'
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-primary text-white hover:bg-primary/90'
             }`}
           >
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
-                ? 'bg-white/20'
-                : 'bg-primary/10'
-            }`}>
-              <Clock className={`${
-                todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
-                  ? 'text-white'
-                  : 'text-primary'
-              }`} size={24} />
-            </div>
-            <p className={`font-bold ${
-              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
-                ? 'text-white'
-                : 'text-gray-900'
-            }`}>
-              {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('attendance.checkOut') : t('attendance.checkIn')}
-            </p>
-            <p className={`text-sm ${
-              todayAttendance?.checkInTime && !todayAttendance?.checkOutTime
-                ? 'text-white/80'
-                : 'text-gray-500'
-            }`}>
-              {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('home.clickToLeave') : t('home.clickToWork')}
-            </p>
-          </button>
-
-          {/* Attendance Rules */}
-          <button
-            onClick={() => navigate('/attendance/rules')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
-              <ShieldCheck className="text-purple-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('attendance.rules')}</p>
-            <p className="text-sm text-gray-500">{t('attendance.viewRules')}</p>
-          </button>
-
-          {/* Schedule */}
-          <button
-            onClick={() => navigate('/schedule')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
-              <Calendar className="text-blue-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.schedule')}</p>
-            <p className="text-sm text-gray-500">{t('home.viewSchedule')}</p>
-          </button>
-
-          {/* Salary */}
-          <button
-            onClick={() => navigate('/salary')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-3">
-              <Wallet className="text-green-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.salary')}</p>
-            <p className="text-sm text-gray-500">{t('home.viewSalary')}</p>
-          </button>
-
-          {/* Profile */}
-          <button
-            onClick={() => navigate('/profile')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
-              <User className="text-purple-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('nav.profile')}</p>
-            <p className="text-sm text-gray-500">{t('profile.changePassword')}</p>
-          </button>
-
-          {/* Leave */}
-          <button
-            onClick={() => navigate('/leave')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-3">
-              <CalendarDays className="text-orange-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.leave')}</p>
-            <p className="text-sm text-gray-500">{t('home.applyLeave')}</p>
-          </button>
-
-          {/* Reimbursement */}
-          <button
-            onClick={() => navigate('/reimbursement')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center mb-3">
-              <Receipt className="text-teal-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.reimbursement')}</p>
-            <p className="text-sm text-gray-500">{t('home.applyReimbursement')}</p>
-          </button>
-
-          {/* Hygiene Tasks */}
-          <button
-            onClick={() => navigate('/hygiene')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left relative"
-          >
-            {pendingTasksCount > 0 && (
-              <span className="absolute top-2 right-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                {pendingTasksCount > 9 ? '9+' : pendingTasksCount}
-              </span>
-            )}
-            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-3">
-              <ShieldCheck className="text-orange-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('hygiene.title')}</p>
-            <p className="text-sm text-gray-500">{t('hygiene.myTasks')}</p>
-          </button>
-
-          {/* Inventory */}
-          <button
-            onClick={() => navigate('/inventory')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center mb-3">
-              <Package className="text-cyan-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('inventory.title')}</p>
-            <p className="text-sm text-gray-500">{t('inventory.stockInOut')}</p>
-          </button>
-
-          {/* Points */}
-          <button
-            onClick={() => navigate('/points')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center mb-3">
-              <Star className="text-yellow-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.points')}</p>
-            <p className="text-sm text-gray-500">{t('home.viewPoints')}</p>
-          </button>
-
-          {/* Deposit */}
-          <button
-            onClick={() => navigate('/deposit')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-3">
-              <WalletIcon className="text-indigo-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.deposit')}</p>
-            <p className="text-sm text-gray-500">{t('home.viewDeposit')}</p>
-          </button>
-
-          {/* Training */}
-          <button
-            onClick={() => navigate('/training')}
-            className="p-4 bg-white shadow-sm rounded-2xl text-left"
-          >
-            <div className="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center mb-3">
-              <BookOpen className="text-pink-600" size={24} />
-            </div>
-            <p className="font-bold text-gray-900">{t('home.training')}</p>
-            <p className="text-sm text-gray-500">{t('home.viewTraining')}</p>
+            {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('attendance.checkOut') : t('attendance.checkIn')}
           </button>
         </div>
 
-        {/* Training Academy CTA */}
-        <button
-          onClick={() => navigate('/training')}
-          className="w-full bg-gradient-to-r from-pink-500 to-orange-400 text-white rounded-2xl shadow-sm p-4 text-left flex items-center gap-3 mb-4"
-        >
-          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-            <BookOpen size={24} />
+        {/* 2. Urgent / Active Announcement Bar (if any) */}
+        {overview?.announcements && overview.announcements.length > 0 && (
+          <div
+            onClick={() => navigate('/announcements')}
+            className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-2xl p-3 flex items-center gap-3 cursor-pointer shadow-xs"
+          >
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+              <Bell size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded">
+                  {t('home.urgentNotice')}
+                </span>
+                <span className="text-xs font-semibold text-gray-900 truncate">
+                  {overview.announcements[0]?.title}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 truncate mt-0.5">
+                {overview.announcements[0]?.content}
+              </p>
+            </div>
+            <ChevronRight size={16} className="text-gray-400 shrink-0" />
           </div>
-          <div className="flex-1">
-            <p className="font-bold">{t('home.training')}</p>
-            <p className="text-sm text-white/90">
-              {i18n.language === 'zh' ? '服务 · 卫生 · 原料 · 配方制作 · 安全' : i18n.language === 'en' ? 'Service · Hygiene · Materials · Recipes · Safety' : 'Layanan · Kebersihan · Bahan · Resep · Keselamatan'}
+        )}
+
+        {/* 3. Hygiene Tasks Prompt (Current Important Duties) */}
+        <div
+          onClick={() => navigate('/hygiene')}
+          className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between cursor-pointer hover:border-orange-200 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-gray-900 text-sm">{t('home.pendingHygieneBadge')}</h3>
+                {pendingTasksCount > 0 ? (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-600">
+                    {pendingTasksCount} {t('home.hygieneTasksDue')}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700">
+                    ✓ Clean & Done
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">{t('hygiene.myTasks')}</p>
+            </div>
+          </div>
+          <ChevronRight size={18} className="text-gray-400" />
+        </div>
+
+        {/* 4. This Month Profile & Essential Operational Metrics */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-primary" />
+              <h2 className="font-bold text-gray-900 text-sm">{t('home.monthlyProfile')}</h2>
+            </div>
+            <span className="text-xs font-medium text-gray-400">
+              {overview?.month || new Date().toISOString().slice(0, 7)}
+            </span>
+          </div>
+
+          {/* Attendance Health Grid */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-500 mb-2">{t('home.attendanceHealth')}</p>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                <p className="text-lg font-bold text-gray-900">{overview?.attendance?.presentDays || 0}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{t('home.presentDays')}</p>
+              </div>
+
+              <div className={`rounded-xl p-2.5 border ${
+                (overview?.attendance?.lateCount || 0) > 0 ? 'bg-amber-50/70 border-amber-200 text-amber-700' : 'bg-gray-50 border-gray-100 text-gray-900'
+              }`}>
+                <p className="text-lg font-bold">
+                  {overview?.attendance?.lateCount || 0}
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{t('home.lateCount')}</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                <p className="text-lg font-bold text-gray-900">{overview?.attendance?.earlyLeaveCount || 0}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{t('home.earlyLeaveCount')}</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                <p className="text-lg font-bold text-gray-900">{overview?.attendance?.leaveDays || 0}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{t('home.leaveDays')}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Rewards & Penalties / Points Grid */}
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-500">{t('home.rewardsPenalties')}</p>
+              <button
+                onClick={() => navigate('/points')}
+                className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
+              >
+                {t('home.viewPoints')}
+                <ChevronRight size={12} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-amber-50/60 rounded-xl p-2.5 border border-amber-100 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+                  <Star size={16} />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-amber-900">{overview?.pointsAndDiscipline?.currentPoints || 0}</p>
+                  <p className="text-[10px] text-amber-700">{t('home.netPoints')}</p>
+                </div>
+              </div>
+
+              <div className="bg-emerald-50/60 rounded-xl p-2.5 border border-emerald-100 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                  <Award size={16} />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-emerald-900">+{overview?.pointsAndDiscipline?.monthlyEarnedPoints || 0}</p>
+                  <p className="text-[10px] text-emerald-700">{t('home.earnedPoints')}</p>
+                </div>
+              </div>
+
+              <div className="bg-rose-50/60 rounded-xl p-2.5 border border-rose-100 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-500 text-white flex items-center justify-center shrink-0">
+                  <AlertTriangle size={16} />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-rose-900">-{overview?.pointsAndDiscipline?.monthlyDeductedPoints || 0}</p>
+                  <p className="text-[10px] text-rose-700">{t('home.deductedPoints')}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Confidential Notice (Compliance requirement) */}
+          <div className="mt-3 bg-gray-50/80 rounded-xl p-2.5 flex items-center gap-2 border border-gray-200/60 text-gray-500 text-xs">
+            <Lock size={14} className="text-gray-400 shrink-0" />
+            <p className="text-[11px] leading-tight">
+              {t('home.confidentialNotice')}
             </p>
           </div>
+        </div>
+
+        {/* 5. Quick Navigation Grid (All Tools & Sub-modules) */}
+        <div>
+          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
+            {t('home.quickActions')}
+          </h2>
+
+          <div className="grid grid-cols-4 gap-3">
+            {/* Shift Schedule */}
+            <button
+              onClick={() => navigate('/schedule')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-1.5">
+                <Calendar size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('home.schedule')}</span>
+            </button>
+
+            {/* Attendance Rules */}
+            <button
+              onClick={() => navigate('/attendance/rules')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-1.5">
+                <ShieldCheck size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('attendance.rules')}</span>
+            </button>
+
+            {/* Leave Application */}
+            <button
+              onClick={() => navigate('/leave')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-1.5">
+                <CalendarDays size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('home.leave')}</span>
+            </button>
+
+            {/* Reimbursement */}
+            <button
+              onClick={() => navigate('/reimbursement')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-1.5">
+                <Receipt size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('home.reimbursement')}</span>
+            </button>
+
+            {/* Inventory In/Out */}
+            <button
+              onClick={() => navigate('/inventory')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-1.5">
+                <Package size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('inventory.title')}</span>
+            </button>
+
+            {/* Points & Rewards */}
+            <button
+              onClick={() => navigate('/points')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-1.5">
+                <Star size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('home.points')}</span>
+            </button>
+
+            {/* Deposit */}
+            <button
+              onClick={() => navigate('/deposit')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-1.5">
+                <WalletIcon size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('home.deposit')}</span>
+            </button>
+
+            {/* Training Academy */}
+            <button
+              onClick={() => navigate('/training')}
+              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
+            >
+              <div className="w-11 h-11 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center mb-1.5">
+                <BookOpen size={22} />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">{t('home.training')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Training Academy Banner CTA */}
+        <button
+          onClick={() => navigate('/training')}
+          className="w-full bg-gradient-to-r from-pink-500 via-rose-500 to-orange-400 text-white rounded-2xl shadow-sm p-4 text-left flex items-center gap-3 active:scale-[0.99] transition-transform"
+        >
+          <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+            <BookOpen size={22} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm">{t('home.training')}</p>
+            <p className="text-xs text-white/90 truncate">
+              {i18n.language === 'zh'
+                ? '服务标准 · 卫生规范 · 原料品控 · 配方制作'
+                : i18n.language === 'en'
+                ? 'Service Standards · Hygiene SOP · Recipes'
+                : 'Standar Layanan · SOP Kebersihan · Resep'}
+            </p>
+          </div>
+          <ChevronRight size={18} className="text-white/80 shrink-0" />
         </button>
+
       </div>
     </div>
   )
