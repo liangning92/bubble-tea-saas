@@ -92,7 +92,7 @@ def historic():
         return c.execute('SELECT id,totalAmount,finalAmount,paymentMethod FROM "Order"').fetchall()
 
 
-def drive_installer(exe):
+def drive_installer(exe, process=None):
     # Click ordinary visible NSIS controls. No test flag or confirmation bypass is shipped.
     user = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -108,7 +108,7 @@ def drive_installer(exe):
     user.PostMessageW.argtypes = user.SendMessageW.argtypes
     user.PostMessageW.restype = wintypes.BOOL
     # Same interactive handoff arguments used by electron-updater's NsisUpdater.
-    process = subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
+    process = process or subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
     visited_confirmation = False
     finish_seen = False
     observed = set()
@@ -243,7 +243,8 @@ try:
     restarted_runtime = verify_started_runtime(expected_version)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
-    report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
+    authentic = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate'](ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version)
+    report = {'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],
