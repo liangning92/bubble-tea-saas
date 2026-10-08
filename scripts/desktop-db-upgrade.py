@@ -22,7 +22,26 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('StockInLog','ledgerSequence','BIGINT'), ('StockOutLog','ledgerSequence','BIGINT'),
     ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'")]
 CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence and LocalSchemaMigration tables and indexes', 'Order_pickupNumber_idx nonunique index']
+LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
+CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
+
+
+class SchemaCompatibilityError(RuntimeError):
+    def __init__(self, table, column, expected, actual):
+        super().__init__('UNSUPPORTED_SCHEMA_COLUMN')
+        self.details = {'table': table, 'column': column, 'expected': expected, 'actual': actual}
+
+
+def compatible_column(table, name, actual, expected):
+    if actual == expected:
+        return True
+    # These three historical columns stored whole days before half-day leave.
+    # SQLite INTEGER affinity also stores REAL values; preserve the original
+    # table and every historical value rather than rebuilding financial DBs.
+    if (table, name) in LEGACY_INTEGER_FLOAT_COLUMNS and actual is not None:
+        return expected['type'] == 'REAL' and actual == {**expected, 'type': 'INTEGER'}
+    return False
 
 
 def fail(reason):
@@ -116,8 +135,8 @@ def supported_schema(c, catalog, allow_missing=True):
         for name, spec in expected.items():
             if any(t==table and n==name for t,n,_ in COLUMN_ADDITIONS) and name not in fields and allow_missing:
                 continue
-            if fields.get(name) != spec:
-                fail('UNSUPPORTED_SCHEMA_COLUMN')
+            if not compatible_column(table, name, fields.get(name), spec):
+                raise SchemaCompatibilityError(table, name, spec, fields.get(name))
     indexes = c.execute('PRAGMA index_list("Order")').fetchall()
     existing = next((row for row in indexes if row[1] == 'Order_pickupNumber_idx'), None)
     if existing:
@@ -421,5 +440,8 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as error:
-        print(json.dumps({'status': 'blocked', 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}))
+        report = {'status': 'blocked', 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
+        if isinstance(error, SchemaCompatibilityError):
+            report['details'] = error.details
+        print(json.dumps(report))
         sys.exit(73)

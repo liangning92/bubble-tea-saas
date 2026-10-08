@@ -42,10 +42,19 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def fixture(collision=False):
+def fixture(collision=False, legacy_affinity=True):
     if DB.exists():
         DB.unlink()
-    shutil.copy2(SEED, DB)
+    if legacy_affinity:
+        with closing(sqlite3.connect(SEED)) as source:
+            ddl = source.execute("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,name").fetchall()
+        with closing(sqlite3.connect(DB)) as target, target:
+            for (statement,) in ddl:
+                for name in ('totalDays', 'usedLeave', 'usedSick'):
+                    statement = statement.replace('"'+name+'" REAL', '"'+name+'" INTEGER')
+                target.execute(statement)
+    else:
+        shutil.copy2(SEED, DB)
     with closing(sqlite3.connect(DB)) as c, c:
         c.execute('DROP INDEX Order_pickupNumber_idx')
         c.execute('DROP TABLE PaymentEvidence')
@@ -56,6 +65,10 @@ def fixture(collision=False):
             c.execute('ALTER TABLE "'+table+'" DROP COLUMN "'+name+'"')
         c.execute('INSERT INTO Tenant (id,name,updatedAt) VALUES (?,?,?)', ('tenant', 'Owned synthetic tenant', 0))
         c.execute('INSERT INTO Store (id,tenantId,name,updatedAt) VALUES (?,?,?,?)', ('store', 'tenant', 'Owned synthetic store', 0))
+        c.execute('INSERT INTO User (id,phone,password,role,storeId,updatedAt) VALUES (?,?,?,?,?,?)', ('user', 'synthetic-only', 'disabled', 'cashier', 'store', 0))
+        c.execute('INSERT INTO Staff (id,userId,storeId,name,employeeNumber,updatedAt) VALUES (?,?,?,?,?,?)', ('staff', 'user', 'store', 'Owned synthetic staff', 'SYNTHETIC', 0))
+        c.execute('INSERT INTO Leave (id,staffId,storeId,leaveType,startDate,endDate,totalDays,updatedAt) VALUES (?,?,?,?,?,?,?,?)', ('historical-leave', 'staff', 'store', 'annual', 0, 0, 2, 0))
+        c.execute('INSERT INTO LeaveBalance (id,staffId,year,usedLeave,usedSick,updatedAt) VALUES (?,?,?,?,?,?)', ('historical-balance', 'staff', 2026, 3, 4, 0))
         c.execute('INSERT INTO "Order" (id,storeId,staffId,orderNumber,totalAmount,finalAmount,paymentMethod,updatedAt) VALUES (?,?,?,?,?,?,?,?)', ('historical','store','staff','OLD-001',125000,125000,'cash',0))
         if collision:
             c.execute('CREATE VIEW Order_pickupNumber_idx AS SELECT 1')
@@ -177,6 +190,16 @@ try:
     assert sha(pathlib.Path(receipt['databaseBackup'])) == receipt['databaseBackupSha256']
     invoke('verify')
     CASES.append('compiled-helper-old-database-upgrade-and-verified-backups')
+    with closing(sqlite3.connect(DB)) as c:
+        for table, name in (('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')):
+            field = next(row for row in c.execute('PRAGMA table_info("'+table+'")') if row[1] == name)
+            assert field[2] == 'INTEGER'
+    CASES.append('compiled-helper-historical-integer-leave-schema-preserved')
+    script = """const assert=require('node:assert/strict');const {PrismaClient}=require('./server/node_modules/@prisma/client');(async()=>{const p=new PrismaClient();try{assert.equal((await p.leave.findUnique({where:{id:'historical-leave'}})).totalDays,2);const b=await p.leaveBalance.findUnique({where:{id:'historical-balance'}});assert.equal(b.usedLeave,3);assert.equal(b.usedSick,4);await p.leave.update({where:{id:'historical-leave'},data:{totalDays:2.5,updatedAt:new Date(0)}});await p.leaveBalance.update({where:{id:'historical-balance'},data:{usedLeave:3.5,usedSick:4.5,updatedAt:new Date(0)}});assert.equal((await p.leave.findUnique({where:{id:'historical-leave'}})).totalDays,2.5);const half=await p.leaveBalance.findUnique({where:{id:'historical-balance'}});assert.equal(half.usedLeave,3.5);assert.equal(half.usedSick,4.5);await p.leave.update({where:{id:'historical-leave'},data:{totalDays:2,updatedAt:new Date(0)}});await p.leaveBalance.update({where:{id:'historical-balance'},data:{usedLeave:3,usedSick:4,updatedAt:new Date(0)}})}finally{await p.$disconnect()}})().catch(e=>{console.error(e);process.exitCode=1})"""
+    env = dict(os.environ, DATABASE_URL='file:'+DB.as_posix())
+    subprocess.run(['node', '-e', script], cwd=ROOT, env=env, check=True, timeout=60)
+    invoke('verify')
+    CASES.append('generated-prisma-half-day-read-write-on-historical-integer-columns')
     invoke('prepare')
     repeat = json.loads((TEMP / 'result.json').read_text())
     assert not repeat['columnAdded'] and not repeat['indexAdded'] and historic() == history
@@ -237,5 +260,5 @@ try:
 finally:
     # Remove only fixture roots created after absence assertions in this script.
     # On failure retain all synthetic artifacts for CI diagnosis.
-    if len(CASES) == 6:
+    if len(CASES) == 8:
         shutil.rmtree(DATA)
