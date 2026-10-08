@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import shutil
+import socket
 import sqlite3
 import sys
 import tempfile
@@ -209,8 +210,16 @@ def windows_processes():
 
 
 def require_stopped(processes):
-    if {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe', 'node.exe'}:
+    # The old POS may fork a system node.exe for its local API, but other apps
+    # can also run node.exe. Check our listener instead of blocking every Node
+    # process on the cashier's machine.
+    if {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe'}:
         fail('POS_OR_LOCAL_API_STILL_RUNNING')
+    if sys.platform == 'win32':
+        with socket.socket() as listener:
+            listener.settimeout(0.2)
+            if listener.connect_ex(('127.0.0.1', 7072)) == 0:
+                fail('POS_OR_LOCAL_API_STILL_RUNNING')
 
 
 def profile_database():
