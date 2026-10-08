@@ -13,6 +13,7 @@ import socket
 import sqlite3
 import sys
 import tempfile
+import traceback
 import urllib.parse
 import uuid
 
@@ -27,6 +28,7 @@ LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLe
 CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
 LAST_DIAGNOSTIC = None
+LAST_STAGE = 'startup'
 
 
 class SchemaCompatibilityError(RuntimeError):
@@ -176,6 +178,43 @@ def durable_json(path, data):
     os.replace(temp, path)
 
 
+def upgrade_stage(name):
+    global LAST_STAGE
+    LAST_STAGE = name
+    if LAST_DIAGNOSTIC:
+        durable_json(LAST_DIAGNOSTIC, {'status': 'running', 'stage': name})
+
+
+def failure_report(error):
+    report = {'status': 'blocked', 'stage': LAST_STAGE, 'errorType': type(error).__name__}
+    if isinstance(error, SchemaCompatibilityError):
+        report.update(reason=str(error), details=error.details)
+    elif isinstance(error, shutil.Error):
+        # copytree aggregates the individual Windows file-copy failures here.
+        # Dropping them made the 316 dialog say only "Error" on the store PC.
+        problems = error.args[0] if error.args and isinstance(error.args[0], list) else []
+        report['reason'] = 'APPLICATION_BACKUP_COPY_FAILED'
+        report['details'] = [
+            {'source': str(source), 'destination': str(destination), 'error': str(message)}
+            for source, destination, message in problems[:20]
+        ]
+        report['problemCount'] = len(problems)
+    elif isinstance(error, RuntimeError):
+        report['reason'] = str(error)
+    else:
+        report['reason'] = type(error).__name__
+        report['message'] = str(error)[:2000]
+    for name in ('errno', 'winerror', 'filename', 'filename2'):
+        value = getattr(error, name, None)
+        if value is not None:
+            report[name] = str(value)
+    frames = traceback.extract_tb(error.__traceback__)
+    if frames:
+        last = frames[-1]
+        report['location'] = {'file': pathlib.Path(last.filename).name, 'line': last.lineno, 'function': last.name}
+    return report
+
+
 def windows_processes():
     if sys.platform != 'win32':
         fail('WINDOWS_REQUIRED')
@@ -281,6 +320,7 @@ def registry_snapshot():
 
 
 def prepare(db, old_app, catalog, processes, registry=None):
+    upgrade_stage('stop-check')
     require_stopped(processes)
     db, old_app = regular(db), regular(old_app)
     if not db.is_file() or not old_app.is_dir():
@@ -289,15 +329,18 @@ def prepare(db, old_app, catalog, processes, registry=None):
         fail('APPLICATION_DATABASE_PATHS_OVERLAP')
     c = connection(db, writable=True)
     try:
+        upgrade_stage('database-integrity-and-schema')
         integrity(c)
         supported_schema(c, catalog)
         columns = column_map(c)
+        upgrade_stage('database-history-snapshot')
         history = fingerprints(c, columns)
         nonce = str(uuid.uuid4())
         backup_root = db.parent / 'upgrade-backups' / nonce
         regular(backup_root.parent)
         backup_root.mkdir(parents=True, exist_ok=False)
         before_db = backup_root / 'before.db'
+        upgrade_stage('database-backup')
         c.execute('VACUUM INTO ?', (str(before_db),))
         with open(before_db, 'r+b') as stream:
             os.fsync(stream.fileno())
@@ -305,8 +348,10 @@ def prepare(db, old_app, catalog, processes, registry=None):
             integrity(snapshot)
             if fingerprints(snapshot, columns) != history:
                 fail('SNAPSHOT_HISTORY_MISMATCH')
+        upgrade_stage('application-manifest')
         app_files = tree_manifest(old_app)
         app_backup = old_app.parent / ('.BTPS-upgrade-' + nonce)
+        upgrade_stage('application-backup')
         shutil.copytree(old_app, app_backup, copy_function=shutil.copy2)
         if tree_manifest(app_backup) != app_files or tree_manifest(old_app) != app_files:
             fail('APPLICATION_BACKUP_VERIFICATION_FAILED')
@@ -321,6 +366,7 @@ def prepare(db, old_app, catalog, processes, registry=None):
                    'receiptPath': str(receipt_path), 'status': 'backups-verified'}
         durable_json(receipt_path, receipt)
         require_stopped(processes)
+        upgrade_stage('database-schema-upgrade')
         c.execute('BEGIN EXCLUSIVE')
         try:
             supported_schema(c, catalog)
@@ -458,12 +504,10 @@ def main():
         if args.diagnostic:
             diagnostic = regular(args.diagnostic)
             diagnostic.parent.mkdir(parents=True, exist_ok=True)
-            durable_json(diagnostic, {'status': 'running', 'stage': 'profile-database'})
+        upgrade_stage('profile-database')
         db = profile_database()
         if db is None:
             fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
-        if args.diagnostic:
-            durable_json(diagnostic, {'status': 'running', 'stage': 'schema-and-backup'})
         receipt = prepare(db, args.old_app, catalog, windows_processes, registry_snapshot())
         durable_json(args.result, receipt)
         # The new Electron process must reopen exactly the database verified
@@ -487,9 +531,7 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as error:
-        report = {'status': 'blocked', 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
-        if isinstance(error, SchemaCompatibilityError):
-            report['details'] = error.details
+        report = failure_report(error)
         if LAST_DIAGNOSTIC:
             try:
                 durable_json(LAST_DIAGNOSTIC, report)

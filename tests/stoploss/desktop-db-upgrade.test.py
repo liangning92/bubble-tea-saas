@@ -1,9 +1,11 @@
 from contextlib import closing
 import importlib.util
 import pathlib
+import shutil
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location('upgrade', pathlib.Path(__file__).parents[2] / 'scripts/desktop-db-upgrade.py')
 U = importlib.util.module_from_spec(SPEC)
@@ -131,6 +133,19 @@ class UpgradeTests(unittest.TestCase):
         (self.db.parent / 'upgrade-backups').write_bytes(b'obstruction')
         with self.assertRaises(OSError):
             self.prepare()
+        self.assertEqual(U.digest(self.db), self.before)
+        self.assertEqual(U.tree_manifest(self.app), self.app_before)
+
+    def test_windows_copy_failure_identifies_file_and_stage_without_modifying_database(self):
+        problem = shutil.Error([(str(self.app / 'BTPS.exe'), str(self.app.parent / '.BTPS-upgrade-test' / 'BTPS.exe'), '[WinError 5] Access is denied')])
+        with mock.patch.object(U.shutil, 'copytree', side_effect=problem):
+            with self.assertRaises(shutil.Error) as result:
+                self.prepare()
+        report = U.failure_report(result.exception)
+        self.assertEqual(report['stage'], 'application-backup')
+        self.assertEqual(report['reason'], 'APPLICATION_BACKUP_COPY_FAILED')
+        self.assertEqual(report['problemCount'], 1)
+        self.assertIn('Access is denied', report['details'][0]['error'])
         self.assertEqual(U.digest(self.db), self.before)
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
 
