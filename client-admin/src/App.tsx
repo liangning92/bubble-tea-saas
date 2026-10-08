@@ -1,132 +1,135 @@
-import { TrainingLibraryPage } from './pages/TrainingLibraryPage'
-import {ConsumptionAnalysisPage} from './pages/inventory/ConsumptionAnalysisPage'
-import { AiPermissionsPage } from './pages/settings/AiPermissionsPage'
+import { lazy, Suspense } from 'react'
+import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
-import { LoginPage } from './pages/LoginPage'
-import { RegisterPage } from './pages/RegisterPage'
-import { POSMonitorPage } from './pages/POSMonitorPage'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
-import { DashboardPage } from './pages/DashboardPage'
-import { ProductsIndexPage } from './pages/products/ProductsIndexPage'
-import { ProductListPage } from './pages/products/ProductListPage'
-import { ProductFormPage } from './pages/products/ProductFormPage'
-import { OrderListPage } from './pages/orders/OrderListPage'
-import { OrderDetailPage } from './pages/orders/OrderDetailPage'
-import { RefundRequestListPage } from './pages/orders/RefundRequestListPage'
-import { InventoryIndexPage } from './pages/inventory/InventoryIndexPage'
-import { InventoryPage } from './pages/inventory/InventoryPage'
-import { StockLogPage } from './pages/inventory/StockLogPage'
-import { StockAlertsPage } from './pages/inventory/StockAlertsPage'
-import { StockAlertConfigPage } from './pages/inventory/StockAlertConfigPage'
-import { InventoryCountPage } from './pages/inventory/InventoryCountPage'
-import { StaffIndexPage } from './pages/staff/StaffIndexPage'
-import { StaffListPage } from './pages/staff/StaffListPage'
-import { StaffFormPage } from './pages/staff/StaffFormPage'
-import { StaffDetailPage } from './pages/staff/StaffDetailPage'
-import { LeaveBalancePage } from './pages/staff/LeaveBalancePage'
-import { LeaveListPage } from './pages/staff/LeaveListPage'
-import { LeaveTypeConfigPage } from './pages/staff/LeaveTypeConfigPage'
-import { LeaveKanbanPage } from './pages/staff/LeaveKanbanPage'
-import { ScheduleCalendarPage } from './pages/staff/ScheduleCalendarPage'
-import { TrainingListPage } from './pages/staff/TrainingListPage'
-import { StaffPointsPage } from './pages/staff/StaffPointsPage'
-import { DepositRulesPage } from './pages/staff/DepositRulesPage'
-import { StaffDepositListPage } from './pages/staff/StaffDepositListPage'
-import { AttendanceRulesPage } from './pages/staff/AttendanceRulesPage'
-import { ShiftConfigPage } from './pages/staff/ShiftConfigPage'
-import { ReimbursementListPage } from './pages/staff/ReimbursementListPage'
-import { ReimbursementTypeConfigPage } from './pages/staff/ReimbursementTypeConfigPage'
-import { SalaryListPage } from './pages/staff/SalaryListPage'
-import { ShiftSwapListPage } from './pages/staff/ShiftSwapListPage'
-import { AttendanceCorrectionListPage } from './pages/staff/AttendanceCorrectionListPage'
-import { OvertimeRequestListPage } from './pages/staff/OvertimeRequestListPage'
-import { AttendanceIndexPage } from './pages/staff/AttendanceIndexPage'
-import { AttendanceDashboardPage } from './pages/staff/AttendanceDashboardPage'
-import { SalaryIndexPage } from './pages/staff/SalaryIndexPage'
-import { PointsIndexPage as StaffPointsIndexPage } from './pages/staff/PointsIndexPage'
-import { PointsRuleConfigPage as StaffPointsRuleConfigPage } from './pages/staff/PointsRuleConfigPage'
-import { RewardsPage } from './pages/staff/RewardsPage'
-import { PurchaseOrderListPage } from './pages/purchases/PurchaseOrderListPage'
-import { SupplierListPage } from './pages/purchases/SupplierListPage'
-import { MemberListPage } from './pages/members/MemberListPage'
-import { MemberDetailPage } from './pages/members/MemberDetailPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { KDSPage } from './pages/kds/KDSPage'
-import { KDSConfigPage } from './pages/kds/KDSConfigPage'
-import { DeliveryHubPage } from './pages/delivery/DeliveryHubPage'
-import { HygieneIndexPage } from './pages/hygiene/HygieneIndexPage'
-import { HygieneTemplateListPage } from './pages/hygiene/HygieneTemplateListPage'
-import { HygieneTemplateFormPage } from './pages/hygiene/HygieneTemplateFormPage'
-import { HygieneCalendarPage } from './pages/hygiene/HygieneCalendarPage'
-import { HygieneTodayTasksPage } from './pages/hygiene/HygieneTodayTasksPage'
-import { HygieneStatsPage } from './pages/hygiene/HygieneStatsPage'
-import { HygieneAreasPage } from './pages/hygiene/HygieneAreasPage'
-import { HygieneConfigPage } from './pages/hygiene/HygieneConfigPage'
-import { BomAnalysisPage } from './pages/bom/BomAnalysisPage'
-import { RecipeEditPage } from './pages/bom/RecipeEditPage'
-import { ProcessingListPage } from './pages/material/ProcessingListPage'
-import { ProcessingFormPage } from './pages/material/ProcessingFormPage'
-import { RestockSuggestionPage } from './pages/material/RestockSuggestionPage'
-import { MarketingIndexPage } from './pages/marketing/MarketingIndexPage'
-import { PromotionsIndexPage } from './pages/marketing/PromotionsIndexPage'
-import { MembersIndexPage } from './pages/marketing/MembersIndexPage'
-import { PointsIndexPage } from './pages/marketing/PointsIndexPage'
-import { MessagesIndexPage } from './pages/marketing/MessagesIndexPage'
-import { OperationsIndexPage } from './pages/marketing/OperationsIndexPage'
-import { CampaignListPage } from './pages/marketing/CampaignListPage'
-import { CampaignDetailPage } from './pages/marketing/CampaignDetailPage'
-import { CampaignStatsPage } from './pages/marketing/CampaignStatsPage'
-import { CampaignEditPage } from './pages/marketing/CampaignEditPage'
-import { CouponListPage } from './pages/marketing/CouponListPage'
-import { CouponDetailPage } from './pages/marketing/CouponDetailPage'
-import { CouponEditPage } from './pages/marketing/CouponEditPage'
-import { ReferralListPage } from './pages/marketing/ReferralListPage'
-import { ReferralDetailPage } from './pages/marketing/ReferralDetailPage'
-import { TierBenefitsPage } from './pages/marketing/TierBenefitsPage'
-import { PointsExpiryConfigPage } from './pages/marketing/PointsExpiryConfigPage'
-import { MarketingAnalyticsPage } from './pages/marketing/MarketingAnalyticsPage'
-import { CampaignCategoryListPage } from './pages/marketing/CampaignCategoryListPage'
-import { MarketingChannelsPage } from './pages/marketing/MarketingChannelsPage'
-import { NotificationHistoryPage } from './pages/marketing/NotificationHistoryPage'
-import { AutomationPage } from './pages/marketing/AutomationPage'
-import { MessageSettingsPage } from './pages/marketing/MessageSettingsPage'
-import { PointsRuleConfigPage } from './pages/marketing/PointsRuleConfigPage'
-import { RewardCatalogPage } from './pages/marketing/RewardCatalogPage'
-import { MemberBalancePage } from './pages/marketing/MemberBalancePage'
-import { DiscountRulePage } from './pages/marketing/DiscountRulePage'
-import { TimedSpecialPage } from './pages/marketing/TimedSpecialPage'
-import { StackingRulePage } from './pages/marketing/StackingRulePage'
-import { AutomationRulePage } from './pages/marketing/AutomationRulePage'
-import { AutomationLogPage } from './pages/marketing/AutomationLogPage'
-import { MessageStatsPage } from './pages/marketing/MessageStatsPage'
-import { CouponReportPage } from './pages/marketing/CouponReportPage'
-import { CampaignReportPage } from './pages/marketing/CampaignReportPage'
-import { ReferralFunnelPage } from './pages/marketing/ReferralFunnelPage'
-import { ProductAnalysisPage } from './pages/product-analysis/ProductAnalysisPage'
-import { AddonListPage } from './pages/addons/AddonListPage'
-import { CategoryListPage } from './pages/categories/CategoryListPage'
-import { QueueManagePage } from './pages/queue/QueueManagePage'
-import { QueueDisplayPage } from './pages/queue/QueueDisplayPage'
-import { RevenuePage } from './pages/finance/RevenuePage'
-import { FinanceReportsPage } from './pages/finance/FinanceReportsPage'
-import { FinanceIndexPage } from './pages/finance/FinanceIndexPage'
-import { FixedAssetsPage } from './pages/finance/FixedAssetsPage'
-import { TaxReportsPage } from './pages/finance/TaxReportsPage'
-import { AccountsPage } from './pages/finance/AccountsPage'
-import { BudgetPage } from './pages/finance/BudgetPage'
-import { FinanceSettingsPage } from './pages/finance/FinanceSettingsPage'
-import { ExpenseListPage } from './pages/expense/ExpenseListPage'
-import { ChannelIndexPage } from './pages/channels/ChannelIndexPage'
-import { ChannelListPage } from './pages/channels/ChannelListPage'
-import { ChannelReportsPage } from './pages/channels/ChannelReportsPage'
-import { ChannelCommissionPage } from './pages/channels/ChannelCommissionPage'
-import { ChannelProductPricingPage } from './pages/channels/ChannelProductPricingPage'
-import { ImportPage } from './pages/import/ImportPage'
-import { AnnouncementListPage } from './pages/announcement/AnnouncementListPage'
-import { AnnouncementFormPage } from './pages/announcement/AnnouncementFormPage'
-import { POSSettingsPage } from './pages/settings/POSSettingsPage'
+
+const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
+const ConsumptionAnalysisPage = lazy(() => import('./pages/inventory/ConsumptionAnalysisPage').then(module => ({ default: module.ConsumptionAnalysisPage })))
+const AiPermissionsPage = lazy(() => import('./pages/settings/AiPermissionsPage').then(module => ({ default: module.AiPermissionsPage })))
+const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
+const RegisterPage = lazy(() => import('./pages/RegisterPage').then(module => ({ default: module.RegisterPage })))
+const POSMonitorPage = lazy(() => import('./pages/POSMonitorPage').then(module => ({ default: module.POSMonitorPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })))
+const ProductsIndexPage = lazy(() => import('./pages/products/ProductsIndexPage').then(module => ({ default: module.ProductsIndexPage })))
+const ProductListPage = lazy(() => import('./pages/products/ProductListPage').then(module => ({ default: module.ProductListPage })))
+const ProductFormPage = lazy(() => import('./pages/products/ProductFormPage').then(module => ({ default: module.ProductFormPage })))
+const OrderListPage = lazy(() => import('./pages/orders/OrderListPage').then(module => ({ default: module.OrderListPage })))
+const OrderDetailPage = lazy(() => import('./pages/orders/OrderDetailPage').then(module => ({ default: module.OrderDetailPage })))
+const RefundRequestListPage = lazy(() => import('./pages/orders/RefundRequestListPage').then(module => ({ default: module.RefundRequestListPage })))
+const InventoryIndexPage = lazy(() => import('./pages/inventory/InventoryIndexPage').then(module => ({ default: module.InventoryIndexPage })))
+const InventoryPage = lazy(() => import('./pages/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })))
+const StockLogPage = lazy(() => import('./pages/inventory/StockLogPage').then(module => ({ default: module.StockLogPage })))
+const StockAlertsPage = lazy(() => import('./pages/inventory/StockAlertsPage').then(module => ({ default: module.StockAlertsPage })))
+const StockAlertConfigPage = lazy(() => import('./pages/inventory/StockAlertConfigPage').then(module => ({ default: module.StockAlertConfigPage })))
+const InventoryCountPage = lazy(() => import('./pages/inventory/InventoryCountPage').then(module => ({ default: module.InventoryCountPage })))
+const StaffIndexPage = lazy(() => import('./pages/staff/StaffIndexPage').then(module => ({ default: module.StaffIndexPage })))
+const StaffListPage = lazy(() => import('./pages/staff/StaffListPage').then(module => ({ default: module.StaffListPage })))
+const StaffFormPage = lazy(() => import('./pages/staff/StaffFormPage').then(module => ({ default: module.StaffFormPage })))
+const StaffDetailPage = lazy(() => import('./pages/staff/StaffDetailPage').then(module => ({ default: module.StaffDetailPage })))
+const LeaveBalancePage = lazy(() => import('./pages/staff/LeaveBalancePage').then(module => ({ default: module.LeaveBalancePage })))
+const LeaveListPage = lazy(() => import('./pages/staff/LeaveListPage').then(module => ({ default: module.LeaveListPage })))
+const LeaveTypeConfigPage = lazy(() => import('./pages/staff/LeaveTypeConfigPage').then(module => ({ default: module.LeaveTypeConfigPage })))
+const LeaveKanbanPage = lazy(() => import('./pages/staff/LeaveKanbanPage').then(module => ({ default: module.LeaveKanbanPage })))
+const ScheduleCalendarPage = lazy(() => import('./pages/staff/ScheduleCalendarPage').then(module => ({ default: module.ScheduleCalendarPage })))
+const TrainingListPage = lazy(() => import('./pages/staff/TrainingListPage').then(module => ({ default: module.TrainingListPage })))
+const StaffPointsPage = lazy(() => import('./pages/staff/StaffPointsPage').then(module => ({ default: module.StaffPointsPage })))
+const DepositRulesPage = lazy(() => import('./pages/staff/DepositRulesPage').then(module => ({ default: module.DepositRulesPage })))
+const StaffDepositListPage = lazy(() => import('./pages/staff/StaffDepositListPage').then(module => ({ default: module.StaffDepositListPage })))
+const AttendanceRulesPage = lazy(() => import('./pages/staff/AttendanceRulesPage').then(module => ({ default: module.AttendanceRulesPage })))
+const ShiftConfigPage = lazy(() => import('./pages/staff/ShiftConfigPage').then(module => ({ default: module.ShiftConfigPage })))
+const ReimbursementListPage = lazy(() => import('./pages/staff/ReimbursementListPage').then(module => ({ default: module.ReimbursementListPage })))
+const ReimbursementTypeConfigPage = lazy(() => import('./pages/staff/ReimbursementTypeConfigPage').then(module => ({ default: module.ReimbursementTypeConfigPage })))
+const SalaryListPage = lazy(() => import('./pages/staff/SalaryListPage').then(module => ({ default: module.SalaryListPage })))
+const ShiftSwapListPage = lazy(() => import('./pages/staff/ShiftSwapListPage').then(module => ({ default: module.ShiftSwapListPage })))
+const AttendanceCorrectionListPage = lazy(() => import('./pages/staff/AttendanceCorrectionListPage').then(module => ({ default: module.AttendanceCorrectionListPage })))
+const OvertimeRequestListPage = lazy(() => import('./pages/staff/OvertimeRequestListPage').then(module => ({ default: module.OvertimeRequestListPage })))
+const AttendanceIndexPage = lazy(() => import('./pages/staff/AttendanceIndexPage').then(module => ({ default: module.AttendanceIndexPage })))
+const AttendanceDashboardPage = lazy(() => import('./pages/staff/AttendanceDashboardPage').then(module => ({ default: module.AttendanceDashboardPage })))
+const SalaryIndexPage = lazy(() => import('./pages/staff/SalaryIndexPage').then(module => ({ default: module.SalaryIndexPage })))
+const StaffPointsIndexPage = lazy(() => import('./pages/staff/PointsIndexPage').then(module => ({ default: module.PointsIndexPage })))
+const StaffPointsRuleConfigPage = lazy(() => import('./pages/staff/PointsRuleConfigPage').then(module => ({ default: module.PointsRuleConfigPage })))
+const RewardsPage = lazy(() => import('./pages/staff/RewardsPage').then(module => ({ default: module.RewardsPage })))
+const PurchaseOrderListPage = lazy(() => import('./pages/purchases/PurchaseOrderListPage').then(module => ({ default: module.PurchaseOrderListPage })))
+const SupplierListPage = lazy(() => import('./pages/purchases/SupplierListPage').then(module => ({ default: module.SupplierListPage })))
+const MemberListPage = lazy(() => import('./pages/members/MemberListPage').then(module => ({ default: module.MemberListPage })))
+const MemberDetailPage = lazy(() => import('./pages/members/MemberDetailPage').then(module => ({ default: module.MemberDetailPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })))
+const KDSPage = lazy(() => import('./pages/kds/KDSPage').then(module => ({ default: module.KDSPage })))
+const KDSConfigPage = lazy(() => import('./pages/kds/KDSConfigPage').then(module => ({ default: module.KDSConfigPage })))
+const DeliveryHubPage = lazy(() => import('./pages/delivery/DeliveryHubPage').then(module => ({ default: module.DeliveryHubPage })))
+const HygieneIndexPage = lazy(() => import('./pages/hygiene/HygieneIndexPage').then(module => ({ default: module.HygieneIndexPage })))
+const HygieneTemplateListPage = lazy(() => import('./pages/hygiene/HygieneTemplateListPage').then(module => ({ default: module.HygieneTemplateListPage })))
+const HygieneTemplateFormPage = lazy(() => import('./pages/hygiene/HygieneTemplateFormPage').then(module => ({ default: module.HygieneTemplateFormPage })))
+const HygieneCalendarPage = lazy(() => import('./pages/hygiene/HygieneCalendarPage').then(module => ({ default: module.HygieneCalendarPage })))
+const HygieneTodayTasksPage = lazy(() => import('./pages/hygiene/HygieneTodayTasksPage').then(module => ({ default: module.HygieneTodayTasksPage })))
+const HygieneStatsPage = lazy(() => import('./pages/hygiene/HygieneStatsPage').then(module => ({ default: module.HygieneStatsPage })))
+const HygieneAreasPage = lazy(() => import('./pages/hygiene/HygieneAreasPage').then(module => ({ default: module.HygieneAreasPage })))
+const HygieneConfigPage = lazy(() => import('./pages/hygiene/HygieneConfigPage').then(module => ({ default: module.HygieneConfigPage })))
+const BomAnalysisPage = lazy(() => import('./pages/bom/BomAnalysisPage').then(module => ({ default: module.BomAnalysisPage })))
+const RecipeEditPage = lazy(() => import('./pages/bom/RecipeEditPage').then(module => ({ default: module.RecipeEditPage })))
+const ProcessingListPage = lazy(() => import('./pages/material/ProcessingListPage').then(module => ({ default: module.ProcessingListPage })))
+const ProcessingFormPage = lazy(() => import('./pages/material/ProcessingFormPage').then(module => ({ default: module.ProcessingFormPage })))
+const RestockSuggestionPage = lazy(() => import('./pages/material/RestockSuggestionPage').then(module => ({ default: module.RestockSuggestionPage })))
+const MarketingIndexPage = lazy(() => import('./pages/marketing/MarketingIndexPage').then(module => ({ default: module.MarketingIndexPage })))
+const PromotionsIndexPage = lazy(() => import('./pages/marketing/PromotionsIndexPage').then(module => ({ default: module.PromotionsIndexPage })))
+const MembersIndexPage = lazy(() => import('./pages/marketing/MembersIndexPage').then(module => ({ default: module.MembersIndexPage })))
+const PointsIndexPage = lazy(() => import('./pages/marketing/PointsIndexPage').then(module => ({ default: module.PointsIndexPage })))
+const MessagesIndexPage = lazy(() => import('./pages/marketing/MessagesIndexPage').then(module => ({ default: module.MessagesIndexPage })))
+const OperationsIndexPage = lazy(() => import('./pages/marketing/OperationsIndexPage').then(module => ({ default: module.OperationsIndexPage })))
+const CampaignListPage = lazy(() => import('./pages/marketing/CampaignListPage').then(module => ({ default: module.CampaignListPage })))
+const CampaignDetailPage = lazy(() => import('./pages/marketing/CampaignDetailPage').then(module => ({ default: module.CampaignDetailPage })))
+const CampaignStatsPage = lazy(() => import('./pages/marketing/CampaignStatsPage').then(module => ({ default: module.CampaignStatsPage })))
+const CampaignEditPage = lazy(() => import('./pages/marketing/CampaignEditPage').then(module => ({ default: module.CampaignEditPage })))
+const CouponListPage = lazy(() => import('./pages/marketing/CouponListPage').then(module => ({ default: module.CouponListPage })))
+const CouponDetailPage = lazy(() => import('./pages/marketing/CouponDetailPage').then(module => ({ default: module.CouponDetailPage })))
+const CouponEditPage = lazy(() => import('./pages/marketing/CouponEditPage').then(module => ({ default: module.CouponEditPage })))
+const ReferralListPage = lazy(() => import('./pages/marketing/ReferralListPage').then(module => ({ default: module.ReferralListPage })))
+const ReferralDetailPage = lazy(() => import('./pages/marketing/ReferralDetailPage').then(module => ({ default: module.ReferralDetailPage })))
+const TierBenefitsPage = lazy(() => import('./pages/marketing/TierBenefitsPage').then(module => ({ default: module.TierBenefitsPage })))
+const PointsExpiryConfigPage = lazy(() => import('./pages/marketing/PointsExpiryConfigPage').then(module => ({ default: module.PointsExpiryConfigPage })))
+const MarketingAnalyticsPage = lazy(() => import('./pages/marketing/MarketingAnalyticsPage').then(module => ({ default: module.MarketingAnalyticsPage })))
+const CampaignCategoryListPage = lazy(() => import('./pages/marketing/CampaignCategoryListPage').then(module => ({ default: module.CampaignCategoryListPage })))
+const MarketingChannelsPage = lazy(() => import('./pages/marketing/MarketingChannelsPage').then(module => ({ default: module.MarketingChannelsPage })))
+const NotificationHistoryPage = lazy(() => import('./pages/marketing/NotificationHistoryPage').then(module => ({ default: module.NotificationHistoryPage })))
+const AutomationPage = lazy(() => import('./pages/marketing/AutomationPage').then(module => ({ default: module.AutomationPage })))
+const MessageSettingsPage = lazy(() => import('./pages/marketing/MessageSettingsPage').then(module => ({ default: module.MessageSettingsPage })))
+const PointsRuleConfigPage = lazy(() => import('./pages/marketing/PointsRuleConfigPage').then(module => ({ default: module.PointsRuleConfigPage })))
+const RewardCatalogPage = lazy(() => import('./pages/marketing/RewardCatalogPage').then(module => ({ default: module.RewardCatalogPage })))
+const MemberBalancePage = lazy(() => import('./pages/marketing/MemberBalancePage').then(module => ({ default: module.MemberBalancePage })))
+const DiscountRulePage = lazy(() => import('./pages/marketing/DiscountRulePage').then(module => ({ default: module.DiscountRulePage })))
+const TimedSpecialPage = lazy(() => import('./pages/marketing/TimedSpecialPage').then(module => ({ default: module.TimedSpecialPage })))
+const StackingRulePage = lazy(() => import('./pages/marketing/StackingRulePage').then(module => ({ default: module.StackingRulePage })))
+const AutomationRulePage = lazy(() => import('./pages/marketing/AutomationRulePage').then(module => ({ default: module.AutomationRulePage })))
+const AutomationLogPage = lazy(() => import('./pages/marketing/AutomationLogPage').then(module => ({ default: module.AutomationLogPage })))
+const MessageStatsPage = lazy(() => import('./pages/marketing/MessageStatsPage').then(module => ({ default: module.MessageStatsPage })))
+const CouponReportPage = lazy(() => import('./pages/marketing/CouponReportPage').then(module => ({ default: module.CouponReportPage })))
+const CampaignReportPage = lazy(() => import('./pages/marketing/CampaignReportPage').then(module => ({ default: module.CampaignReportPage })))
+const ReferralFunnelPage = lazy(() => import('./pages/marketing/ReferralFunnelPage').then(module => ({ default: module.ReferralFunnelPage })))
+const ProductAnalysisPage = lazy(() => import('./pages/product-analysis/ProductAnalysisPage').then(module => ({ default: module.ProductAnalysisPage })))
+const AddonListPage = lazy(() => import('./pages/addons/AddonListPage').then(module => ({ default: module.AddonListPage })))
+const CategoryListPage = lazy(() => import('./pages/categories/CategoryListPage').then(module => ({ default: module.CategoryListPage })))
+const QueueManagePage = lazy(() => import('./pages/queue/QueueManagePage').then(module => ({ default: module.QueueManagePage })))
+const QueueDisplayPage = lazy(() => import('./pages/queue/QueueDisplayPage').then(module => ({ default: module.QueueDisplayPage })))
+const RevenuePage = lazy(() => import('./pages/finance/RevenuePage').then(module => ({ default: module.RevenuePage })))
+const FinanceReportsPage = lazy(() => import('./pages/finance/FinanceReportsPage').then(module => ({ default: module.FinanceReportsPage })))
+const FinanceIndexPage = lazy(() => import('./pages/finance/FinanceIndexPage').then(module => ({ default: module.FinanceIndexPage })))
+const FixedAssetsPage = lazy(() => import('./pages/finance/FixedAssetsPage').then(module => ({ default: module.FixedAssetsPage })))
+const TaxReportsPage = lazy(() => import('./pages/finance/TaxReportsPage').then(module => ({ default: module.TaxReportsPage })))
+const AccountsPage = lazy(() => import('./pages/finance/AccountsPage').then(module => ({ default: module.AccountsPage })))
+const BudgetPage = lazy(() => import('./pages/finance/BudgetPage').then(module => ({ default: module.BudgetPage })))
+const FinanceSettingsPage = lazy(() => import('./pages/finance/FinanceSettingsPage').then(module => ({ default: module.FinanceSettingsPage })))
+const ExpenseListPage = lazy(() => import('./pages/expense/ExpenseListPage').then(module => ({ default: module.ExpenseListPage })))
+const ChannelIndexPage = lazy(() => import('./pages/channels/ChannelIndexPage').then(module => ({ default: module.ChannelIndexPage })))
+const ChannelListPage = lazy(() => import('./pages/channels/ChannelListPage').then(module => ({ default: module.ChannelListPage })))
+const ChannelReportsPage = lazy(() => import('./pages/channels/ChannelReportsPage').then(module => ({ default: module.ChannelReportsPage })))
+const ChannelCommissionPage = lazy(() => import('./pages/channels/ChannelCommissionPage').then(module => ({ default: module.ChannelCommissionPage })))
+const ChannelProductPricingPage = lazy(() => import('./pages/channels/ChannelProductPricingPage').then(module => ({ default: module.ChannelProductPricingPage })))
+const ImportPage = lazy(() => import('./pages/import/ImportPage').then(module => ({ default: module.ImportPage })))
+const AnnouncementListPage = lazy(() => import('./pages/announcement/AnnouncementListPage').then(module => ({ default: module.AnnouncementListPage })))
+const AnnouncementFormPage = lazy(() => import('./pages/announcement/AnnouncementFormPage').then(module => ({ default: module.AnnouncementFormPage })))
+const POSSettingsPage = lazy(() => import('./pages/settings/POSSettingsPage').then(module => ({ default: module.POSSettingsPage })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -136,7 +139,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <Routes>
+    <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
@@ -348,7 +351,7 @@ function App() {
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />
       </Route>
-    </Routes>
+    </Routes></Suspense>
   )
 }
 

@@ -17,7 +17,8 @@ import {
   Wallet,
   Link2
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
+import { RouteLoading } from '../components/RouteLoading'
 
 // 一级导航只有10个模块
 const navItems = [
@@ -179,7 +180,7 @@ export function MainLayout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="p-6">
-          <Outlet />
+          <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
         </div>
       </main>
     </div>

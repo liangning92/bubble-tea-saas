@@ -72,6 +72,9 @@ jobs:
       - name: Install Chromium for workflow regression tests
         run: npx playwright install --with-deps chromium
 
+      - name: Verify route chunks, authentication and offline desktop assets
+        run: node tests/stoploss/route-splitting-page-check.cjs
+
       - name: Verify built admin and staff workflows against isolated PostgreSQL
         run: |
           export PATH="$(pg_config --bindir):$PATH"
