@@ -463,6 +463,7 @@ const resources = {
       },
       "toolbar": {
         "shift": "Shift",
+        "attendance": "Absensi",
         "suspend": "Tunda",
         "scan": "Pindai",
         "history": "Riwayat",
@@ -1230,6 +1231,7 @@ const resources = {
       },
       "toolbar": {
         "shift": "Shift",
+        "attendance": "Attendance",
         "suspend": "Suspend",
         "scan": "Scan",
         "history": "History",
@@ -1970,6 +1972,7 @@ const resources = {
       },
       "toolbar": {
         "shift": "交班",
+        "attendance": "考勤码",
         "suspend": "挂单",
         "scan": "扫描",
         "history": "历史",

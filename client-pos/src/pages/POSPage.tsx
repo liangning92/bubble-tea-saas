@@ -374,6 +374,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     showHistory: true,
     showScan: true,
     showShift: true,
+    showAttendance: true,
     showCash: false,
     showExpense: true,
     showTasks: true,
@@ -406,6 +407,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       refund: 'toolbar.refund',
       scan: 'toolbar.scan',
       shift: 'toolbar.shift',
+      attendance: 'toolbar.attendance',
       cash: 'toolbar.cash',
       expense: 'toolbar.expense',
       tasks: 'toolbar.tasks',
@@ -3319,6 +3321,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   onClick: () => setShowShiftModal(true)
                 })
               }
+              if (posLayout.showAttendance !== false) {
+                toolbarButtons.push({
+                  id: 'attendance',
+                  icon: <QrCode size={18} />,
+                  labelKey: posLayout.toolbarLabels?.attendance || 'toolbar.attendance',
+                  onClick: () => setShowAttendanceQR(true)
+                })
+              }
               if (posLayout.showSuspend !== false) {
                 toolbarButtons.push({
                   id: 'suspend',
@@ -3410,6 +3420,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         {(() => {
                           const legacyChineseDefaults: Record<string, string> = {
                             '交班': 'shift',
+                            '考勤': 'attendance',
+                            '考勤码': 'attendance',
                             '挂单': 'suspend',
                             '扫码': 'scan',
                             '扫描': 'scan',

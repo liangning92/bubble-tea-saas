@@ -67,6 +67,15 @@ export const staffApi = {
     return response.data
   },
 
+  // Monthly Overview for Home Page
+  getMonthlyOverview: async (params?: { month?: number; year?: number }) => {
+    const response = await axios.get(`${API_BASE}/staff/overview/monthly`, {
+      params,
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
   getAttendanceHistory: async (staffId: string, month: number, year: number) => {
     const response = await axios.get(`${API_BASE}/staff/attendance/history`, {
       params: { staffId, month, year },
@@ -135,11 +144,6 @@ export const staffApi = {
   },
 
   // Leave Types
-  getReimbursementTypes: async () => {
-    const response = await axios.get(`${API_BASE}/reimbursement-types`, { headers: getAuthHeader() })
-    return response.data
-  },
-
   getLeaveTypes: async () => {
     const response = await axios.get(`${API_BASE}/leave-types`, {
       headers: getAuthHeader()
@@ -188,6 +192,13 @@ export const staffApi = {
   },
 
   // Reimbursement
+  getReimbursementTypes: async () => {
+    const response = await axios.get(`${API_BASE}/reimbursement-types`, {
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
   applyReimbursement: async (data: {
     type: string
     amount: number
