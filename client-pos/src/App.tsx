@@ -1,15 +1,19 @@
-import { ReceiptSyncPage } from './pages/ReceiptSyncPage'
+import { lazy, Suspense } from 'react'
+import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { POSPage } from './pages/POSPage'
-import { LoginPage } from './pages/LoginPage'
-import { OrderHistoryPage } from './pages/OrderHistoryPage'
-import { CashManagementPage } from './pages/CashManagementPage'
-import { DiagnosticsPage } from './pages/DiagnosticsPage'
-import { CustomerDisplayPage } from './pages/CustomerDisplayPage'
-import { RegisterMemberPage } from './pages/RegisterMemberPage'
-import { HygieneTasksPage } from './pages/HygieneTasksPage'
 import { UpdateNotification } from './components/UpdateNotification'
 import { useAuthStore } from './stores/auth'
+import {useOrderStore} from './stores/orderStore'
+
+const ReceiptSyncPage = lazy(() => import('./pages/ReceiptSyncPage').then(module => ({ default: module.ReceiptSyncPage })))
+const POSPage = lazy(() => import('./pages/POSPage').then(module => ({ default: module.POSPage })))
+const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
+const OrderHistoryPage = lazy(() => import('./pages/OrderHistoryPage').then(module => ({ default: module.OrderHistoryPage })))
+const CashManagementPage = lazy(() => import('./pages/CashManagementPage').then(module => ({ default: module.CashManagementPage })))
+const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then(module => ({ default: module.DiagnosticsPage })))
+const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage').then(module => ({ default: module.CustomerDisplayPage })))
+const RegisterMemberPage = lazy(() => import('./pages/RegisterMemberPage').then(module => ({ default: module.RegisterMemberPage })))
+const HygieneTasksPage = lazy(() => import('./pages/HygieneTasksPage').then(module => ({ default: module.HygieneTasksPage })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -23,10 +27,12 @@ function RootRoute() {
 }
 
 function App() {
+  const installing=useOrderStore(state=>state.isInstallingUpdate)
   return (
     <>
       <UpdateNotification />
-      <Routes>
+      <div style={installing?{pointerEvents:'none'}:undefined} onKeyDownCapture={event=>{if(installing){event.preventDefault();event.stopPropagation()}}}>
+      <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/register-member" element={<RegisterMemberPage />} />
@@ -70,7 +76,8 @@ function App() {
         }
       />
       <Route path="/" element={<RootRoute />} />
-    </Routes>
+    </Routes></Suspense>
+    </div>
     </>
   )
 }

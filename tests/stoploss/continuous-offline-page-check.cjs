@@ -2,8 +2,8 @@
 const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 (async()=>{const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href);const tw=(await import(pathToFileURL(path.resolve('client-pos/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-pos/src/**/*.{js,ts,jsx,tsx}')];const server=await createServer({configFile:false,root:path.resolve('client-pos'),cacheDir:'/tmp/pos-continuous-offline-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6203,strictPort:true},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
 try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync('/tmp/pos-continuous-offline-evidence',{recursive:true});
-for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sales,restart,lost-receipt,reconnect,targets,qris,order-save-failure,generation-save-failure,refused,uninitialized,crashed-sync,legacy,foreign-store,expired-auth,multi-tab,policy,logo-warning').split(',')){
- const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),posts=[],errors=[],actionLogs=[],journals=new Map(),receipts=new Map();let disconnected=false,loseOnce=(scenario==='lost-receipt'||scenario==='uncertain-card-to-cash'),refuse=scenario==='refused';
+for(const scenario of (process.env.OFFLINE_SCENARIOS||'closed-before-open,closed-before-confirm,closed-then-offline,payment-validation,ten-sales,restart,lost-receipt,reconnect,targets,qris,order-save-failure,generation-save-failure,refused,uninitialized,crashed-sync,legacy,foreign-store,expired-auth,multi-tab,policy,logo-warning').split(',')){
+ const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),posts=[],errors=[],actionLogs=[],journals=new Map(),receipts=new Map();let shiftOpen=true;let disconnected=false,loseOnce=(scenario==='lost-receipt'||scenario==='uncertain-card-to-cash'),refuse=scenario==='refused';
  const origin='http://127.0.0.1:6203',target=origin+'/api';
  await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.origin!==origin){if(scenario==='fallback-blocks-offline'&&url.href==='https://api.aicube.online/api/health')return route.fulfill({status:200,contentType:'application/json',body:'{"status":"ok"}'});return route.abort();}if(!url.pathname.startsWith('/api/'))return route.continue();if(disconnected)return route.abort('internetdisconnected');let data={},status=200;
  if(url.pathname==='/api/pos-action-logs'&&req.method()==='POST')actionLogs.push(req.postDataJSON());
@@ -14,7 +14,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sa
  if(scenario==='partial-config-cache'&&url.pathname==='/api/config'&&url.searchParams.get('category')==='pos')data={paymentMethods:{cash:true}};
  if(url.pathname==='/api/channels'||url.pathname.includes('discount-rules'))data=[];
  if(url.pathname==='/api/shifts')data=[{key:'custom-day',name:'Custom day'}];
- if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:true,shift:{id:'session',shift:'custom-day'}};
+ if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:shiftOpen,shift:shiftOpen?{id:'session',shift:'custom-day'}:null};
  if(url.pathname==='/api/orders/received-receipts'){const body=req.postDataJSON();journals.set(body.orderNumber,body);status=201;data={id:'journal-'+body.orderNumber,orderNumber:body.orderNumber};}
  if(url.pathname==='/api/orders'||url.pathname==='/api/orders/bulk-sync'){
   const body=req.postDataJSON(),orders=body.orders||[body];posts.push({body,token:req.headers().authorization});
@@ -25,7 +25,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sa
   status=body.orders?200:201;data=body.orders?{results:result}:result[0].data;
  }
  await route.fulfill({status,contentType:'application/json',body:JSON.stringify({data})});});
- await context.addInitScript(({target,scenario})=>{localStorage.setItem('pos-api-url',target);localStorage.setItem('pos_lang','en');localStorage.setItem('pos_language','en');if(!sessionStorage.getItem('pos-auth'))sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:target,user:{id:'u',phone:'synthetic',role:'cashier',storeId:'store',staff:{id:'staff',name:'Synthetic'}}},version:0}));window.calls=[];window.fault='';window.networkOffline=false;Object.defineProperty(navigator,'onLine',{get:()=>!window.networkOffline});
+ await context.addInitScript(({target,scenario})=>{localStorage.setItem('pos-api-url',target);localStorage.setItem('pos_lang','en');localStorage.setItem('pos_language','en');if(!sessionStorage.getItem('pos-auth'))sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:target,user:{id:'u',phone:'synthetic',role:'cashier',storeId:'store',staff:{id:'staff',name:'Synthetic'}}},version:0}));window.calls=[];window.fault='';window.networkOffline=false;Object.defineProperty(navigator,'onLine',{get:()=>!window.networkOffline&&localStorage.getItem('synthetic-network-offline')!=='1'});
  const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put;
  IDBObjectStore.prototype.add=function(...args){if(this.transaction.db.name==='POSOffline'&&this.name==='orders'&&window.fault==='order')throw new DOMException('Synthetic quota','QuotaExceededError');return add.apply(this,args);};
  IDBObjectStore.prototype.put=function(...args){if(this.transaction.db.name==='POSOffline'&&this.name==='config'&&String(args[0]?.key).startsWith('checkout.generation:')&&window.fault==='generation')throw new DOMException('Synthetic quota','QuotaExceededError');return put.apply(this,args);};
@@ -33,12 +33,30 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sa
  const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
  const read=()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return await db.orders.toArray();});
  const initialize=async()=>{await page.goto(origin+'/#/pos');await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();await expect.poll(async()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return (await db.config.toArray()).filter(r=>r.key.startsWith('offline.snapshot:')).length;})).toBe(5);};
- const offline=async()=>{disconnected=true;await page.evaluate(()=>{window.networkOffline=true;window.dispatchEvent(new Event('offline'));});};
- const reconnect=async()=>{disconnected=false;await page.evaluate(()=>{window.networkOffline=false;window.dispatchEvent(new Event('online'));});};
+ const offline=async()=>{disconnected=true;await page.evaluate(()=>{window.networkOffline=true;localStorage.setItem('synthetic-network-offline','1');window.dispatchEvent(new Event('offline'));});};
+ const reconnect=async()=>{disconnected=false;await page.evaluate(()=>{window.networkOffline=false;localStorage.removeItem('synthetic-network-offline');window.dispatchEvent(new Event('online'));});};
  const addCart=async()=>{const channel=page.getByRole('button',{name:'Confirm Channel',exact:true});if(await channel.count())await channel.click();await page.getByRole('button',{name:/^Synthetic Tea/}).click();await page.getByRole('button',{name:/Add to Cart/}).click();};
  const pay=async(qris=false)=>{await addCart();await page.getByRole('button',{name:/Checkout/}).click();if(qris){await page.getByRole('button',{name:/QRIS/}).click();await page.getByRole('checkbox',{name:/record static QRIS payment manually/}).check();await expect(page.getByText('Manual confirmation; awaiting owner’s account reconciliation. Not bank confirmation.',{exact:true}).first()).toBeVisible();}else await page.getByRole('button',{name:/Exact/}).click();await page.getByRole('button',{name:qris?/Save photo and confirm payment|Confirm Payment/:/Confirm Payment/}).click();};
  await initialize();
 
+ if(['closed-before-open','closed-before-confirm','closed-then-offline'].includes(scenario)) {
+  await addCart();
+  if(scenario==='closed-before-confirm') {
+   await page.getByRole('button',{name:/Checkout/}).click();
+   await page.getByRole('button',{name:/Exact/}).click();
+  }
+  shiftOpen=false;
+  if(scenario==='closed-then-offline') {
+   await page.evaluate(async()=>{const {posApi}=await import('/src/services/api.ts');await posApi.closeShift({actualCash:0});});
+   await offline();
+  }
+  if(scenario==='closed-before-confirm') await page.getByRole('button',{name:/Confirm Payment/}).click();
+  else await page.getByRole('button',{name:/Checkout/}).click();
+  await expect(page.getByText('Open a shift before accepting payments.',{exact:true})).toBeVisible();
+  assert.equal((await read()).length,0);assert.equal(posts.length,0);assert.equal(journals.size,0);assert.equal(await page.evaluate(()=>window.calls.length),0);
+  if(scenario!=='closed-before-confirm')await expect(page.getByRole('button',{name:/Confirm Payment/})).toHaveCount(0);
+  assert.deepEqual(errors,[]);console.log('PASS '+scenario+': stale open-shift cache never permits payment or print; basket preserved');await context.close();continue;
+ }
  if(scenario==='payment-validation'){
   await addCart();await page.getByRole('button',{name:/Checkout/}).click();const confirm=page.getByRole('button',{name:/Confirm Payment/});
   await expect(confirm).toBeDisabled();await expect(page.getByText('Enter the cash received.',{exact:true})).toBeVisible();
@@ -70,7 +88,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'payment-validation,ten-sa
  }
  if(['partial-config-cache','fallback-blocks-offline','inventory-cache','uncertain-card-to-cash'].includes(scenario)){assert.deepEqual(errors,[]);fs.writeFileSync('/tmp/pos-continuous-offline-evidence/'+scenario+'.json',JSON.stringify({scenario,nativeIndexedDB:true,orders:await read(),requests:posts.map(p=>p.body),output:await page.evaluate(()=>window.calls)},null,2));console.log('PASS review counterexample '+scenario);await context.close();continue;}
  if(scenario==='cached-login'){await page.evaluate(async target=>{const {useAuthStore}=await import('/src/stores/auth.ts');const auth=useAuthStore.getState();await auth.login('synthetic-only',auth.user,'synthetic-password',target);},target);}
- if(scenario==='uninitialized'){await offline();await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');for(const r of await db.config.toArray())if(r.key.startsWith('offline.snapshot:'))await db.config.delete(r.key);});await pay();assert.equal((await read()).length,0);assert.equal(await page.evaluate(()=>window.calls.length),0);}
+ if(scenario==='uninitialized'){await offline();await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');for(const r of await db.config.toArray())if(r.key.startsWith('offline.snapshot:'))await db.config.delete(r.key);});await addCart();await page.getByRole('button',{name:/Checkout/}).click();await page.getByText('Connect once to initialize this store’s identity, catalog, payments and shift.',{exact:true}).waitFor();await expect(page.getByRole('button',{name:/Confirm Payment/})).toHaveCount(0);assert.equal((await read()).length,0);assert.equal(await page.evaluate(()=>window.calls.length),0);}
  else if(scenario==='order-save-failure'||scenario==='generation-save-failure'){await offline();await page.evaluate(f=>window.fault=f,scenario==='order-save-failure'?'order':'generation');await pay();await page.getByText(/Local recovery could not be saved/).first().waitFor();assert.equal((await read()).length,0);assert.equal(await page.evaluate(()=>window.calls.length),0);assert.equal(posts.length,0);await expect(page.getByRole('button',{name:/Confirm Payment/})).toBeEnabled();}
  else if(scenario==='policy'){await offline();await page.evaluate(async()=>{const {recordLocalSale}=await import('/src/utils/offlineSale.ts');const {readCheckoutGeneration}=await import('/src/utils/checkoutIntent.ts');for(const extra of [{pointsRedeemed:1},{memberId:'m'},{discountAmount:1}]){try{await recordLocalSale({storeId:'store',staffId:'staff',paymentMethod:'cash',items:[{productId:'p',specId:'s',quantity:1}],...extra},{subtotal:10000,ppn:0,finalAmount:10000},await readCheckoutGeneration('store'));throw Error('Unexpected policy acceptance');}catch(e){if(e.message!=='OFFLINE_POLICY_UNRESOLVED')throw e;}}});assert.equal((await read()).length,0);}
  else {

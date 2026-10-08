@@ -76,8 +76,8 @@ export function HygieneTasksPage() {
           posApi.getMyTasks(today),
           posApi.getOverdueTasks().catch(() => ({ data: { data: { list: [] } } }))
         ])
-        setTasks(tasksRes?.data?.data?.list || [])
-        setOverdueTasks(overdueRes?.data?.data?.list || [])
+        setTasks(Array.isArray(tasksRes?.data?.data) ? tasksRes.data.data : tasksRes?.data?.data?.list || [])
+        setOverdueTasks(Array.isArray(overdueRes?.data?.data) ? overdueRes.data.data : overdueRes?.data?.data?.list || [])
       } catch (e) {
         setError('Failed to load tasks')
       } finally {
@@ -113,8 +113,8 @@ export function HygieneTasksPage() {
       posApi.getMyTasks(today),
       posApi.getOverdueTasks().catch(() => ({ data: { data: { list: [] } } }))
     ])
-    setTasks(tasksRes?.data?.data?.list || [])
-    setOverdueTasks(overdueRes?.data?.data?.list || [])
+    setTasks(Array.isArray(tasksRes?.data?.data) ? tasksRes.data.data : tasksRes?.data?.data?.list || [])
+    setOverdueTasks(Array.isArray(overdueRes?.data?.data) ? overdueRes.data.data : overdueRes?.data?.data?.list || [])
   }
 
   // Start task

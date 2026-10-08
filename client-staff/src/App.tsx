@@ -1,33 +1,36 @@
-import { TrainingLibraryPage } from './pages/TrainingLibraryPage'
-import {InventoryCountPage} from './pages/InventoryCountPage'
+import { lazy, Suspense } from 'react'
+import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
-import { LoginPage } from './pages/LoginPage'
-import { HomePage } from './pages/HomePage'
-import { AttendancePage } from './pages/AttendancePage'
-import { AttendanceCorrectionPage } from './pages/AttendanceCorrectionPage'
-import { OvertimeRequestPage } from './pages/OvertimeRequestPage'
-import { ShiftSwapPage } from './pages/ShiftSwapPage'
-import { AnnouncementsPage } from './pages/AnnouncementsPage'
-import { SchedulePage } from './pages/SchedulePage'
-import { SalaryPage } from './pages/SalaryPage'
-import { ProfilePage } from './pages/ProfilePage'
-import { LeavePage } from './pages/LeavePage'
-import { ReimbursementPage } from './pages/ReimbursementPage'
-import { HygienePage } from './pages/HygienePage'
-import { InventoryPage } from './pages/InventoryPage'
-import { StaffPointsPage } from './pages/StaffPointsPage'
-import { DepositPage } from './pages/DepositPage'
-import { DepositRulesPage } from './pages/DepositRulesPage'
-import { TrainingPage } from './pages/TrainingPage'
-import { AttendanceRulesPage } from './pages/AttendanceRulesPage'
 import { BottomNav } from './components/BottomNav'
 
 // Layout with BottomNav
+const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
+const InventoryCountPage = lazy(() => import('./pages/InventoryCountPage').then(module => ({ default: module.InventoryCountPage })))
+const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
+const HomePage = lazy(() => import('./pages/HomePage').then(module => ({ default: module.HomePage })))
+const AttendancePage = lazy(() => import('./pages/AttendancePage').then(module => ({ default: module.AttendancePage })))
+const AttendanceCorrectionPage = lazy(() => import('./pages/AttendanceCorrectionPage').then(module => ({ default: module.AttendanceCorrectionPage })))
+const OvertimeRequestPage = lazy(() => import('./pages/OvertimeRequestPage').then(module => ({ default: module.OvertimeRequestPage })))
+const ShiftSwapPage = lazy(() => import('./pages/ShiftSwapPage').then(module => ({ default: module.ShiftSwapPage })))
+const AnnouncementsPage = lazy(() => import('./pages/AnnouncementsPage').then(module => ({ default: module.AnnouncementsPage })))
+const SchedulePage = lazy(() => import('./pages/SchedulePage').then(module => ({ default: module.SchedulePage })))
+const SalaryPage = lazy(() => import('./pages/SalaryPage').then(module => ({ default: module.SalaryPage })))
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then(module => ({ default: module.ProfilePage })))
+const LeavePage = lazy(() => import('./pages/LeavePage').then(module => ({ default: module.LeavePage })))
+const ReimbursementPage = lazy(() => import('./pages/ReimbursementPage').then(module => ({ default: module.ReimbursementPage })))
+const HygienePage = lazy(() => import('./pages/HygienePage').then(module => ({ default: module.HygienePage })))
+const InventoryPage = lazy(() => import('./pages/InventoryPage').then(module => ({ default: module.InventoryPage })))
+const StaffPointsPage = lazy(() => import('./pages/StaffPointsPage').then(module => ({ default: module.StaffPointsPage })))
+const DepositPage = lazy(() => import('./pages/DepositPage').then(module => ({ default: module.DepositPage })))
+const DepositRulesPage = lazy(() => import('./pages/DepositRulesPage').then(module => ({ default: module.DepositRulesPage })))
+const TrainingPage = lazy(() => import('./pages/TrainingPage').then(module => ({ default: module.TrainingPage })))
+const AttendanceRulesPage = lazy(() => import('./pages/AttendanceRulesPage').then(module => ({ default: module.AttendanceRulesPage })))
+
 function LayoutWithNav({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-16">
-      {children}
+      <Suspense fallback={<RouteLoading />}>{children}</Suspense>
       <BottomNav />
     </div>
   )
@@ -41,7 +44,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <Routes>
+    <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
@@ -189,7 +192,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-    </Routes>
+    </Routes></Suspense>
   )
 }
 

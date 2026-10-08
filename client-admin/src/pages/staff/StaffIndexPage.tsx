@@ -10,6 +10,7 @@ export function StaffIndexPage() {
     { key: 'attendance', label: t('staff.attendance'), path: '/staff/attendance' },
     { key: 'schedule', label: t('staff.schedule'), path: '/staff/schedule' },
     { key: 'training', label: t('staff.trainingLabel'), path: '/staff/training' },
+    { key: 'adjustments', label: t('compensation.title'), path: '/staff/adjustments' },
     { key: 'salary', label: t('staff.salaryTab', '工资'), path: '/staff/salary' },
     { key: 'points', label: t('staff.points'), path: '/staff/points' },
   ]

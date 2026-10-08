@@ -1,3 +1,4 @@
+import { selectPrinter } from '../utils/printerRouting'
 import { ShiftSummaryEvidence, ShiftEvidence } from '../components/ShiftSummaryEvidence'
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -66,6 +67,9 @@ export function CashManagementPage() {
 
   const [balance, setBalance] = useState<CashBalance | null>(null)
   const [events, setEvents] = useState<CashEvent[]>([])
+  const [closedShifts, setClosedShifts] = useState<{ id: string; shift: string; closedAt: string }[]>([])
+  const [handoverId, setHandoverId] = useState('')
+  const [printingHandover, setPrintingHandover] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showFloatModal, setShowFloatModal] = useState(false)
   const [showCashOutModal, setShowCashOutModal] = useState(false)
@@ -87,11 +91,14 @@ export function CashManagementPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [balanceRes, eventsRes] = await Promise.all([
+      const [balanceRes, eventsRes, shiftsRes] = await Promise.all([
         posApi.getCashBalance(),
-        posApi.getCashEvents()
+        posApi.getCashEvents(),
+        posApi.getShifts().catch(() => ({ data: { data: { list: [] } } }))
       ])
 
+      const closed = (shiftsRes.data?.data?.list || []).filter((s: any) => s.status === 'closed')
+      setClosedShifts(closed); setHandoverId(previous => closed.some((s: any) => s.id === previous) ? previous : closed[0]?.id || '')
       if (balanceRes.data?.code === 200) {
         setBalance(balanceRes.data.data)
       }
@@ -208,16 +215,37 @@ export function CashManagementPage() {
     }
   }
 
+  const reprintHandover = async () => {
+    if (!handoverId || printingHandover) return
+    setPrintingHandover(true)
+    try {
+      const data = (await posApi.getShiftHandover(handoverId)).data?.data
+      const config = (await posApi.getConfigs(user!.storeId!)).data?.data || {}
+      const selection = selectPrinter(config.hardwareSettings || {}, 'receipt')
+      const api = (window as any).electronAPI
+      if (!selection.ok || !api?.sendPrintShiftReport) throw Error('Printer unavailable')
+      const result = await api.sendPrintShiftReport({ ...selection.target, reportKind: 'handover', paperSize: config.posReceipt?.paperSize || '80mm', language: localStorage.getItem('pos_language') || 'id', storeName: config.storeInfo?.storeName || 'YOUME', shiftType: data.shift, openedAt: data.openedAt, closedAt: data.closedAt, actualCash: data.actualCash, purchaseExpenses: data.purchaseExpenses })
+      if (result?.success === false) throw Error(result.error || 'Print failed')
+    } catch (error) { console.warn('Handover reprint failed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
+    finally { setPrintingHandover(false) }
+  }
+
   const handleCloseShift = async () => {
     if (closeAmount.trim() === '' || !Number.isFinite(Number(closeAmount)) || Number(closeAmount) < 0) {
       showToast(t('shiftEvidence.enterCount'), 'error')
       return
     }
     try {
-      await posApi.closeShift({
+      const response = await posApi.closeShift({
         actualCash: Math.round(parseFloat(closeAmount || '0')),
         closeNote: closeNote
       })
+      try {
+        const config = (await posApi.getConfigs(user!.storeId!)).data?.data || {}
+        const selection = selectPrinter(config.hardwareSettings || {}, 'receipt')
+        const api = (window as any).electronAPI
+        if (selection.ok && api?.sendPrintShiftReport) { const printed = await api.sendPrintShiftReport({ ...selection.target, reportKind: 'handover', paperSize: config.posReceipt?.paperSize || '80mm', storeName: config.storeInfo?.storeName || 'YOUME', language: localStorage.getItem('pos_language') || 'id', cashierName: user?.staff?.name || user?.phone || '', shiftType: response.data?.data?.shift, openedAt: response.data?.data?.openedAt, closedAt: response.data?.data?.closedAt, actualCash: Number(closeAmount), purchaseExpenses: response.data?.data?.purchaseExpenses }); if (printed?.success === false) throw Error(printed.error || 'Print failed') }
+      } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
       setShowShiftCloseModal(false)
       setCloseAmount('')
       setCloseNote('')
@@ -286,6 +314,8 @@ export function CashManagementPage() {
           {/* Current Cash Balance */}
           <div className="p-4">
             <ShiftSummaryEvidence evidence={balance?.summaryEvidence} openFloat={balance?.openFloat} storeId={user?.storeId} />
+
+            {closedShifts.length > 0 && <div className="flex gap-2 mb-4"><select aria-label={t('pos.handoverReceipt')} className="border rounded p-2 flex-1 min-w-0" value={handoverId} onChange={e => setHandoverId(e.target.value)}>{closedShifts.map(s => <option key={s.id} value={s.id}>{s.shift} · {new Date(s.closedAt).toLocaleString()}</option>)}</select><button onClick={reprintHandover} disabled={printingHandover} className="border rounded p-2">{t('pos.reprint')}</button></div>}
 
             {/* Quick Actions */}
             <div className="grid grid-cols-4 gap-2 mb-4">

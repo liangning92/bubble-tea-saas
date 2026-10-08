@@ -1,0 +1,51 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+module.exports=async({page,browser,prisma,check,base,output,assertEventually})=>{
+ const origin='http://127.0.0.1:6311';
+ await page.goto(origin+'/settings');
+ await page.getByRole('button',{name:'Employee Permissions',exact:true}).click();await page.waitForURL('**/settings/permissions');
+ await page.getByRole('button',{name:'Add Role',exact:true}).click();
+ await page.getByLabel('Role Name',{exact:false}).fill('UI Finance Reader');
+ await page.getByLabel('Permission Template',{exact:true}).selectOption('manager');
+ while(await page.getByRole('button',{name:'Clear group',exact:true}).count())await page.getByRole('button',{name:'Clear group',exact:true}).first().click();
+ await page.getByLabel('View finance and expenses',{exact:true}).check();
+ await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('status').filter({hasText:'Roles and employee assignments saved.'}).waitFor();
+ await page.reload();await page.getByLabel('View finance and expenses',{exact:true}).waitFor();assert.equal(await page.getByLabel('View finance and expenses',{exact:true}).isChecked(),true);
+ assert.equal(await page.getByLabel('Create and edit finance records',{exact:true}).isChecked(),false);
+ const employee=await check('POST','/api/staff',{storeId:'store',name:'UI Access Employee',phone:'081277702222',password:'SyntheticOnly2026',role:'manager'},201);
+ const settings=await check('GET','/api/staff-permissions');const role=settings.roles.find(r=>r.name==='UI Finance Reader');assert.ok(role);
+ await page.reload();await page.getByRole('button',{name:'Employee Assignments',exact:true}).click();
+ await page.getByLabel('Role for UI Access Employee',{exact:true}).selectOption(role.id);
+ await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('status').filter({hasText:'Roles and employee assignments saved.'}).waitFor();
+ await page.reload();await page.getByRole('button',{name:'Employee Assignments',exact:true}).click();
+ assert.equal(await page.getByLabel('Role for UI Access Employee',{exact:true}).inputValue(),role.id);
+ await page.getByRole('button',{name:'Change History',exact:true}).click();await page.getByText(/Revision \d+/).first().waitFor();
+ await page.getByRole('button',{name:'Roles',exact:true}).click();
+ fs.mkdirSync(output,{recursive:true});await page.locator('main').screenshot({path:output+'/employee-permissions.png'});
+ // AI is part of the same settings shell, including deep-link refresh and save.
+ await page.getByRole('button',{name:'AI permissions',exact:true}).click();await page.waitForURL('**/settings/ai');
+ await page.getByRole('button',{name:'Employee Permissions',exact:true}).waitFor();
+ const aiBefore=await check('GET','/api/ai/permissions/store');assert.equal(aiBefore.executionEnabled,false);
+ await page.getByLabel('Sales summaries',{exact:true}).check();await page.getByRole('button',{name:'Save',exact:true}).click();
+ await page.getByRole('status').filter({hasText:/draft|saved/i}).waitFor();
+ await page.reload();assert.equal(await page.getByLabel('Sales summaries',{exact:true}).isChecked(),true);
+ assert.equal((await check('GET','/api/ai/permissions/store')).executionEnabled,false);
+ await page.locator('main').screenshot({path:output+'/ai-in-settings.png'});
+ await page.getByRole('button',{name:'POS',exact:true}).click();await page.waitForURL('**/settings/pos');
+ await page.getByRole('button',{name:'Employee Permissions',exact:true}).waitFor();await page.reload();
+ await page.getByRole('button',{name:'Employee Permissions',exact:true}).waitFor();
+ console.log('PASS real settings UI: common navigation, AI draft remains disabled, POS and AI deep links retain shell; custom role and employee assignment survive reload, history visible');
+ const jwt=require('jsonwebtoken'),staff=await prisma.staff.findUnique({where:{id:employee.id},include:{user:true}}),token=jwt.sign({id:staff.userId,role:staff.user.role,storeId:'store',staffId:staff.id,issuedAtMs:Date.now()+100},process.env.JWT_SECRET,{expiresIn:'10m'});
+ const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
+ await context.addInitScript(({token,staff})=>{sessionStorage.setItem('auth-storage',JSON.stringify({state:{token,user:{id:staff.userId,role:'manager',storeId:'store',staff:{id:staff.id,name:staff.name,position:'manager'}},isAuthenticated:true},version:0}));localStorage.setItem('bubble-tea-language','en')},{token,staff});
+ await context.route('**/*',async route=>{const u=new URL(route.request().url());if(u.origin!==origin)return route.abort();if(!u.pathname.startsWith('/api/'))return route.continue();const response=await route.fetch({url:base+u.pathname+u.search});await route.fulfill({response})});
+ try {
+  const reader=await context.newPage();const errors=[];reader.on('pageerror',e=>errors.push(e.message));await reader.goto(origin+'/finance/expenses');
+  await reader.getByText('Your role can view this page; adding, editing and deleting are disabled.',{exact:true}).waitFor();
+  assert.equal(await reader.getByRole('button',{name:'Add Expense',exact:true}).isDisabled(),true);
+  const nav=reader.locator('aside nav');assert.equal(await nav.getByRole('link',{name:'Finance',exact:true}).count(),1);assert.equal(await nav.getByRole('link',{name:'Settings',exact:true}).count(),0);assert.equal(await nav.getByRole('link',{name:'Inventory',exact:true}).count(),0);
+  const forbidden=await reader.evaluate(async()=>{const token=JSON.parse(sessionStorage.getItem('auth-storage')).state.token;return (await fetch('/api/expenses',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({type:'operational',category:'other',amount:5300000,date:'2026-10-08'})})).status});assert.equal(forbidden,403);
+  await reader.locator('main').screenshot({path:output+'/read-only-finance.png'});assert.deepEqual(errors,[]);
+ }finally{await context.close()}
+ const current=await check('GET','/api/staff-permissions');await check('PUT','/api/staff-permissions',{revision:current.revision,roles:[],assignments:[]});
+ console.log('PASS real read-only employee UI: restricted navigation, disabled expense mutation controls and direct API 403');
+};

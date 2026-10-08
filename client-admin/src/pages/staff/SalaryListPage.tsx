@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useEmployeePermission } from '../../contexts/EmployeeAccess'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { salaryApi, staffApi } from '../../services/api'
@@ -13,6 +14,13 @@ interface Salary {
   id: string
   staffId: string
   month: string
+  compensationAdjustmentIds?: string[]
+  compensationRewards?: number
+  compensationPenalties?: number
+  depositDeductionAmount?: number
+  compensationItems?: Array<{id:string;type:string;amount:number;reason:string}>
+  depositNeedsReview?: boolean
+  expectedDepositAmount?: number
   depositDeductions?: Array<{staffDepositId: string; amountMinor: number}>
   baseSalary: number
   overtime: number
@@ -36,6 +44,7 @@ interface StaffOption {
 }
 
 export function SalaryListPage() {
+  const canWrite=useEmployeePermission('salary.write')
   const { t } = useTranslation()
   const { user } = useAuthStore()
 
@@ -51,6 +60,11 @@ export function SalaryListPage() {
   const [editingSalary, setEditingSalary] = useState<Salary | null>(null)
   const [depositPlan, setDepositPlan] = useState<{staffId: string; month: string; items: Array<{staffDepositId: string; amountMinor: number}>} | null>(null)
   const [saveError, setSaveError] = useState('')
+  const [depositLoading, setDepositLoading] = useState(false)
+  const [depositError, setDepositError] = useState('')
+  const appliedDepositAmount = useRef(0)
+  const appliedCompensation = useRef({rewards:0,penalties:0})
+  const [compensationIds,setCompensationIds]=useState<string[]>([])
   const [formData, setFormData] = useState({
     staffId: '',
     month: '',
@@ -62,6 +76,28 @@ export function SalaryListPage() {
   })
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
+
+  useEffect(() => {
+    if (!showModal || !formData.staffId || !formData.month) return
+    let current = true
+    setDepositLoading(true)
+    setDepositError('')
+    salaryApi.depositPlan(formData.staffId, formData.month).then(response => {
+      if (!current) return
+      const items = response.data.data.depositDeductions || []
+      const amount = items.reduce((sum: number, item: {amountMinor: number}) => sum + Math.round(item.amountMinor / 100), 0)
+      const compensation=response.data.data.compensation || {items:[],rewards:0,penalties:0}
+      const previousCompensation=appliedCompensation.current
+      appliedCompensation.current=compensation
+      setCompensationIds(compensation.items.map((item:{id:string})=>item.id))
+      const previous = appliedDepositAmount.current
+      appliedDepositAmount.current = amount
+      setDepositPlan({staffId:formData.staffId, month:formData.month, items})
+      setFormData(prev => ({...prev, bonus:String(Math.max(0,Number(prev.bonus)-previousCompensation.rewards)+compensation.rewards), deduction:String(Math.max(0, Number(prev.deduction) - previous - previousCompensation.penalties) + amount + compensation.penalties)}))
+    }).catch(() => {if (current) setDepositError(t('salaryDeposit.loadFailed'))})
+      .finally(() => {if (current) setDepositLoading(false)})
+    return () => {current = false}
+  }, [showModal, formData.staffId, formData.month, t])
 
   // Get current month in YYYY-MM format
   const getCurrentMonth = () => {
@@ -126,6 +162,10 @@ export function SalaryListPage() {
 
   const handleOpenModal = (salary?: Salary) => {
     setSaveError('')
+    setDepositError('')
+    appliedCompensation.current={rewards:salary?.compensationRewards||0,penalties:salary?.compensationPenalties||0}
+    setCompensationIds(salary?.compensationAdjustmentIds||[])
+    appliedDepositAmount.current = (salary?.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0)
     setDepositPlan(salary ? { staffId: salary.staffId, month: salary.month, items: salary.depositDeductions || [] } : null)
     if (salary) {
       setEditingSalary(salary)
@@ -171,6 +211,9 @@ export function SalaryListPage() {
       const data = response.data?.data
 
       if (data) {
+        appliedCompensation.current=data.compensation || {rewards:0,penalties:0}
+        setCompensationIds(data.compensationAdjustmentIds || [])
+        appliedDepositAmount.current = (data.depositDeductions || []).reduce((sum: number, item: {amountMinor: number}) => sum + Math.round(item.amountMinor / 100), 0)
         setDepositPlan({ staffId: formData.staffId, month: formData.month, items: data.depositDeductions || [] })
         setFormData(prev => prev.staffId !== formData.staffId || prev.month !== formData.month ? prev : ({
           ...prev,
@@ -195,13 +238,15 @@ export function SalaryListPage() {
       return
     }
 
-    if (saving) return
+    if (saving || calculating || depositLoading || depositError) return
+    if (Number(formData.deduction) < appliedDepositAmount.current+appliedCompensation.current.penalties || Number(formData.bonus)<appliedCompensation.current.rewards) {setSaveError(t('salaryDeposit.minimum')); return}
     const amounts = ['baseSalary', 'overtime', 'commission', 'bonus', 'deduction'].map(key => Number(formData[key as keyof typeof formData]))
     if (amounts.some(value => !Number.isSafeInteger(value) || value < 0) || calculateFinalAmount() < 0) { setSaveError(t('common.required')); return }
     setSaveError('')
     setSaving(true)
     try {
       const data = {
+        compensationAdjustmentIds:compensationIds,
         storeId: user?.storeId,
         staffId: formData.staffId,
         month: formData.month,
@@ -234,7 +279,7 @@ export function SalaryListPage() {
       loadSalaries()
     } catch (error) {
       console.error('Failed to mark paid:', error)
-      alert(t('common.error'))
+      alert(t('salaryDeposit.recalculate'))
     }
   }
 
@@ -369,6 +414,14 @@ export function SalaryListPage() {
                 </span>
               </div>
 
+              {(salary.depositDeductions?.length || 0) > 0 && <p className="text-sm text-red-600 mb-2">{t('staff.salary.depositPortion')}: {formatCurrency((salary.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0))}</p>}
+              {salary.depositNeedsReview && <p role="alert" className="text-sm text-amber-700 mb-2">{t('salaryDeposit.recalculate')} {formatCurrency(salary.expectedDepositAmount || 0)}</p>}
+              <div className="grid grid-cols-3 gap-2 mb-3 rounded-xl border p-3">
+                <div><p className="text-gray-500 text-sm">{t('compensation.reward')}</p><p className="font-bold text-green-700">+{formatCurrency(salary.bonus)}</p></div>
+                <div><p className="text-gray-500 text-sm">{t('compensation.penalty')}</p><p className="font-bold text-red-600">−{formatCurrency(salary.compensationPenalties || 0)}</p></div>
+                <div><p className="text-gray-500 text-sm">{t(salary.depositNeedsReview?'compensation.depositPending':'compensation.deposit')}</p><p className="font-bold text-amber-700">−{formatCurrency(salary.depositNeedsReview?salary.expectedDepositAmount || 0:salary.depositDeductionAmount || 0)}</p></div>
+              </div>
+              {!!salary.compensationItems?.length && <ul className="text-sm mb-3">{salary.compensationItems.map(item=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul>}
               {/* Salary breakdown */}
               <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                 <div className="flex justify-between">
@@ -406,10 +459,11 @@ export function SalaryListPage() {
               </div>
 
               <div className="flex gap-2">
+                {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{t('common.edit')}</button>}
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
-                    disabled={user?.role !== 'admin'}
+                    disabled={user?.role !== 'admin' || salary.depositNeedsReview}
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
@@ -493,7 +547,7 @@ export function SalaryListPage() {
                   <button
                     type="button"
                     onClick={handleAutoCalculate}
-                    disabled={calculating || !formData.staffId || !formData.month}
+                    disabled={!canWrite || calculating || depositLoading || !formData.staffId || !formData.month}
                     className="px-4 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1 text-sm font-medium"
                   >
                     {calculating ? <Loader2 size={16} className="animate-spin" /> : null}
@@ -540,6 +594,7 @@ export function SalaryListPage() {
                 <input
                   type="number"
                   value={formData.bonus}
+                  readOnly
                   onChange={(e) => setFormData({ ...formData, bonus: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"
@@ -555,6 +610,7 @@ export function SalaryListPage() {
                 <input
                   type="number"
                   value={formData.deduction}
+                  readOnly
                   onChange={(e) => setFormData({ ...formData, deduction: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"
@@ -562,6 +618,10 @@ export function SalaryListPage() {
                 />
               </div>
 
+              {depositLoading && <p role="status">{t('common.loading')}</p>}
+              {depositError && <p role="alert" className="text-red-600">{depositError}</p>}
+              <p className="text-sm text-gray-500">{t('compensation.payrollHint')}</p>
+              <p className="text-sm text-gray-500">{t('salaryDeposit.hint')}</p>
               {depositPlan?.staffId === formData.staffId && depositPlan?.month === formData.month && depositPlan.items.length > 0 && <p className="text-sm text-gray-600">{t('staff.salary.depositPortion')}: {formatCurrency(depositPlan.items.reduce((sum, item) => sum + item.amountMinor, 0) / 100)}</p>}
               {/* Final Amount Preview */}
               <div className="p-4 bg-gray-50 rounded-xl">
@@ -583,7 +643,7 @@ export function SalaryListPage() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving || calculating}
+                  disabled={!canWrite || saving || calculating || depositLoading || !!depositError}
                   className="flex-1 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {saving ? (

@@ -1,3 +1,5 @@
+import { adjustmentPlan } from './SalaryAdjustmentService'
+import { salaryDepositPlan } from './SalaryDepositPlan'
 import { getStaffConfig } from './StaffConfigService'
 import { formatDate, startOfDay } from '../utils/dateUtils'
 import { containsText } from '../utils/textSearch'
@@ -231,7 +233,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   const startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
   const endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
 
-  const [staff, attendances, attendanceRule, activeDeposits] = await Promise.all([
+  const [staff, attendances, attendanceRule] = await Promise.all([
     prisma.staff.findUnique({ where: { id: staffId } }),
     prisma.attendance.findMany({
       where: {
@@ -244,11 +246,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
       where: { storeId: (await prisma.staff.findUnique({ where: { id: staffId } }))?.storeId || '', isActive: true },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }]
     }),
-    // Get active staff deposits
-    prisma.staffDeposit.findMany({
-      where: { staffId, status: 'active' },
-      include: { depositRule: true }
-    })
+
   ])
 
   if (!staff) throw new Error('Staff not found')
@@ -318,47 +316,15 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     + penalty(rule?.absenceDeductionType, absentDays, rule?.absenceDeductionFixed, rule?.absenceDeductionDailyRate)
     + penalty(rule?.sickLeaveDeductionType, sickDays, rule?.sickLeaveDeductionFixed, rule?.sickLeaveDeductionDailyRate) + Math.round(unpaidDays * dailySalary)
 
-  // Calculate deposit monthly deductions
-  for (const deposit of activeDeposits) {
-    const depositRule = deposit.depositRule
-    let monthlyDeduction = 0
-
-    switch (depositRule.deductionType) {
-      case 'one_time':
-        // One-time: deduct full amount in first month if not yet deducted
-        if (deposit.deductionCount === 0) {
-          monthlyDeduction = deposit.totalAmount
-        }
-        break
-      case 'monthly': {
-        // Monthly: deduct monthlyAmount until fully paid
-        const remaining = deposit.totalAmount - deposit.deductedAmount
-        if (remaining > 0) {
-          monthlyDeduction = Math.min(depositRule.monthlyAmount || 0, remaining)
-        }
-        break
-      }
-      case 'limited': {
-        // Limited: deduct up to maxDeductions times
-        if (deposit.deductionCount < (depositRule.maxDeductions || 0)) {
-          const remaining = deposit.totalAmount - deposit.deductedAmount
-          if (remaining > 0) {
-            monthlyDeduction = Math.min(depositRule.monthlyAmount || 0, remaining)
-          }
-        }
-        break
-      }
-    }
-
-    if (monthlyDeduction > 0) {
-      const deductionIDR = Math.round(monthlyDeduction / 100)
-      deductions += deductionIDR
-      depositDeductions.push({ staffDepositId: deposit.id, ruleName: depositRule.name, amount: deductionIDR, amountMinor: monthlyDeduction })
-    }
-  }
+  depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2, '0')}`)
+  deductions += depositDeductions.reduce((sum, item) => sum + item.amount, 0)
 
   const featureConfig = await getStaffConfig(staff.storeId)
   if (featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
+
+  const compensation = await adjustmentPlan(staff.storeId!,staffId,`${year}-${String(month).padStart(2,'0')}`)
+  bonuses += compensation.rewards
+  deductions += compensation.penalties
 
   const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId, status: 'approved', date: { gte: startDate, lte: endDate } } })
   const overtimeHours = approvedOvertime.reduce((sum, request) => sum + request.hours, 0)
@@ -379,6 +345,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     overtimePay,
     deductions,
     depositDeductions,
+    compensation,
+    compensationAdjustmentIds:compensation.items.map(item=>item.id),
     latePenalty, earlyLeaveDays, absentDays, sickDays, unpaidDays,
     calculationBasis: { workDaysPerMonth: 26, hoursPerMonth: 176 },
     bonuses,

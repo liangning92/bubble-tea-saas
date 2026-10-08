@@ -1,3 +1,5 @@
+import { assignedStaffAccess, StaffAccessError } from '../services/StaffPermissionService'
+import { staffPermissionForRequest } from '../services/StaffPermissionCatalog'
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { config } from '../config/env'
@@ -12,6 +14,7 @@ export interface AuthUser {
   storeId: string
   staffId: string
   issuedAtMs: number
+  accessRole?: {id:string;name:string;baseRole:string;permissions:string[]} | null
 }
 
 export interface AuthRequest extends Request {
@@ -159,9 +162,26 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })
     }
 
+    currentUser.accessRole = await assignedStaffAccess(currentUser)
+    if (currentUser.accessRole) {
+      const permission = staffPermissionForRequest(req.method, req.originalUrl || req.url, currentUser)
+      if (permission && !currentUser.accessRole.permissions.includes(permission)) return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission})
+      if (permission?.startsWith('personal.')) {
+        const requestedStaffIds=[req.query.staffId,req.body?.staffId].filter(id=>typeof id==='string' && id)
+        if(requestedStaffIds.some(id=>id!==currentUser.staffId)) return res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})
+        if(permission==='personal.tasks') {
+          const match=(req.originalUrl||req.url).split('?')[0].match(/\/hygiene\/tasks\/([^/]+)(?:\/|$)/)
+          if(match && match[1]!=='my') {
+            const task=await prisma.hygieneTask.findUnique({where:{id:match[1]},select:{staffId:true,storeId:true}})
+            if(!task || task.staffId!==currentUser.staffId || task.storeId!==currentUser.storeId) return res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})
+          }
+        }
+      }
+    }
     req.user = currentUser
     return requireStoreAccess(req, res, next)
   } catch (error) {
+    if (error instanceof StaffAccessError) return res.status(error.status).json({code:error.status,message:error.message})
     return res.status(401).json({
       code: 401,
       message: 'Invalid or expired token'

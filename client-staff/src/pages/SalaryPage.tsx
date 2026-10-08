@@ -62,6 +62,13 @@ export function SalaryPage() {
         </div>
       </header>
 
+      {salary && <section className="grid grid-cols-3 gap-2 p-4 bg-white border-b">
+        <div><p className="text-xs text-gray-500">{t('compensation.reward')}</p><p className="font-bold text-green-700">+{formatCurrency(salary.bonuses||0)}</p></div>
+        <div><p className="text-xs text-gray-500">{t('compensation.penalty')}</p><p className="font-bold text-red-600">−{formatCurrency(salary.compensationPenalties||0)}</p></div>
+        <div><p className="text-xs text-gray-500">{t('compensation.deposit')}</p><p className="font-bold text-amber-700">−{formatCurrency(salary.depositDeductionAmount||0)}</p></div>
+        {!!salary.compensationItems?.length && <ul className="col-span-3 text-sm">{salary.compensationItems.map((item:any)=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul>}
+      </section>}
+
       {/* Month Navigation */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <button
@@ -166,7 +173,7 @@ export function SalaryPage() {
             </div>
 
             {/* Download Button */}
-            <button onClick={() => downloadPayslip(salary, { title: t('salary.title'), baseSalary: t('salary.baseSalary'), overtimePay: t('salary.overtime'), commissions: t('salary.commissions'), bonuses: t('salary.bonuses'), deductions: t('salary.deductions'), totalSalary: t('salary.totalSalary') })} className="w-full py-4 bg-white border border-primary text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary hover:text-white transition-colors">
+            <button onClick={() => downloadPayslip(salary, { title: t('salary.title'), baseSalary: t('salary.baseSalary'), overtimePay: t('salary.overtime'), commissions: t('salary.commissions'), bonuses: t('salary.bonuses'), compensationPenalties:t('compensation.penalty'), depositDeductionAmount:t('compensation.deposit'), otherDeductions:t('compensation.other'), deductions: t('salary.deductions'), totalSalary: t('salary.totalSalary') })} className="w-full py-4 bg-white border border-primary text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary hover:text-white transition-colors">
               <Download size={20} />
               {t('salary.downloadSlip')}
             </button>

@@ -2,6 +2,7 @@ import {useState, useEffect, useRef} from 'react'
 import {useTranslation} from 'react-i18next'
 import {Download, RefreshCw, Check, AlertCircle, X, FolderOpen} from 'lucide-react'
 import {isNewerUpdate} from '../utils/updateVersion'
+import {useOrderStore} from '../stores/orderStore'
 
 const DISMISSED = 'pos.update.dismissed'
 export function UpdateNotification({className = ''}: {className?: string}) {
@@ -35,24 +36,38 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     })
     const offProgress = api.onUpdateProgress((value: any) => setProgress(value.percent || 0))
     const offError = api.onUpdateError((message: string) => {
+      useOrderStore.getState().setIsInstallingUpdate(false)
       setStatus('error'); setError(message)
       if (manual.current) setVisible(true)
       manual.current = false
     })
     return () => {disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
-  const run = async (action: 'check'|'download'|'show') => {
+  const run = async (action: 'check'|'download'|'show'|'install') => {
     const api = window.electronAPI
     if (!api) return
     manual.current = true; setError(null)
     try {
+      if(action==='install') {
+        const state=useOrderStore.getState()
+        if(state.isInstallingUpdate)return
+        if(state.isCheckingOut || !window.dispatchEvent(new Event('pos-before-update',{cancelable:true})))throw Error(t('updateFlow.busy'))
+        state.setIsInstallingUpdate(true)
+        setStatus('installing')
+        const {db}=await import('../db/offline')
+        const snapshot=await db.transaction('r',db.tables,async()=>({format:'POSOffline-upgrade-v1',capturedAt:new Date().toISOString(),schemaVersion:db.verno,orders:await db.orders.toArray(),syncQueue:await db.syncQueue.toArray(),config:await db.config.toArray(),products:await db.products.toArray()}))
+        if((await api.installUpdate(snapshot))!==true) {
+          state.setIsInstallingUpdate(false);setStatus('error');setVisible(true);manual.current=false
+          return
+        }
+      }
       if (action === 'check') {setStatus('checking'); await api.checkForUpdates()}
       if (action === 'download') {setStatus('downloading'); const result = await api.downloadUpdate(); if ((result as any) === false) throw Error(t('pos.updateError'))}
       if (action === 'show') {
         if (!(await api.showUpdateInstaller()).success) throw Error(t('updateFlow.fileMissing'))
         manual.current = false
       }
-    } catch (err: any) {manual.current = false; setError(err.message); setStatus('error'); setVisible(true)}
+    } catch (err: any) {useOrderStore.getState().setIsInstallingUpdate(false);manual.current = false; setError(err.message); setStatus('error'); setVisible(true)}
   }
   const close = () => {
     if (info?.version && status === 'available') {
@@ -67,7 +82,8 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     {status === 'available' && info && <div className="space-y-3"><p className="text-sm text-gray-600">{t('pos.newVersionReady', {version: info.version})}</p><button onClick={() => void run('download')} className="w-full py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2"><Download size={16}/>{t('pos.downloadUpdate')}</button></div>}
     {status === 'checking' && <p className="flex items-center gap-2"><RefreshCw size={18} className="animate-spin"/>{t('pos.checkingUpdate')}</p>}
     {status === 'downloading' && <div className="space-y-3"><p>{t('pos.downloading')} {progress.toFixed(0)}%</p><div className="bg-gray-200 rounded h-2"><div className="bg-primary h-2 rounded" style={{width: `${Math.min(100, Math.max(0, progress))}%`}}/></div></div>}
-    {status === 'downloaded' && <div className="space-y-3"><p className="flex items-center gap-2 text-green-700"><Check size={18}/>{t('pos.updateReady')}</p><p className="text-sm">{t('updateFlow.manualInstall')}</p><button onClick={() => void run('show')} className="w-full py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2"><FolderOpen size={16}/>{t('updateFlow.openFolder')}</button></div>}
-    {status === 'error' && <div className="space-y-3"><p className="flex items-center gap-2 text-red-600"><AlertCircle size={18}/>{t('updateFlow.failed')}</p>{error && <details className="text-xs text-gray-500"><summary>{t('updateFlow.details')}</summary><p className="break-words">{error}</p></details>}<button onClick={() => void run('check')} className="w-full py-2 border rounded-lg">{t('pos.retry')}</button></div>}
+    {status === 'downloaded' && <div className="space-y-3"><p className="flex items-center gap-2 text-green-700"><Check size={18}/>{t('pos.updateReady')}</p><p className="text-sm">{t('updateFlow.onlineInstall')}</p><button onClick={() => void run('install')} className="w-full py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2"><RefreshCw size={16}/>{t('updateFlow.installRestart')}</button><button onClick={() => void run('show')} className="text-xs text-gray-500 flex items-center gap-1"><FolderOpen size={14}/>{t('updateFlow.openFolder')}</button></div>}
+    {status === 'installing' && <p role="status" className="flex items-center gap-2"><RefreshCw size={18} className="animate-spin"/>{t('updateFlow.installing')}</p>}
+    {status === 'error' && <div className="space-y-3"><p className="flex items-center gap-2 text-red-600"><AlertCircle size={18}/>{t('updateFlow.failed')}</p>{error === t('updateFlow.busy') && <p className="text-sm text-red-600">{error}</p>}{error && error !== t('updateFlow.busy') && <details className="text-xs text-gray-500"><summary>{t('updateFlow.details')}</summary><p className="break-words">{error}</p></details>}<button onClick={() => void run('check')} className="w-full py-2 border rounded-lg">{t('pos.retry')}</button></div>}
   </div></div>
 }

@@ -2,6 +2,8 @@ import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import prisma from '../config/database'
+import { getExpenseCategories } from '../services/ExpenseService'
+import { summarizeShiftPurchases } from '../services/PosExpenseService'
 import { loadShiftSummaryEvidence } from '../services/ShiftSummaryEvidence'
 import { startOfTodayJakarta } from '../utils/dateUtils'
 
@@ -69,7 +71,8 @@ for (const path of ['/balance', '/shifts/current']) {
   router.get(path, authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
     try {
       const data = await loadShiftSummaryEvidence(prisma, req.user!.storeId)
-      res.json({ code: 200, data })
+      const purchaseExpenses = data.shift ? await summarizeShiftPurchases(req.user!.storeId, data.shift.openedAt, new Date()) : null
+      res.json({ code: 200, data: { ...data, purchaseExpenses } })
     } catch (error) {
       console.error('Get shift evidence error:', error)
       res.status(500).json({ code: 500, message: 'Failed to get shift evidence' })
@@ -103,6 +106,16 @@ router.get('/shifts', authenticate, authorize('admin', 'manager', 'cashier'), as
     console.error('Get shifts error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get shifts' })
   }
+})
+
+// Reprints read the immutable closed-session purchase snapshot, never re-record cash or costs.
+router.get('/shifts/:id/handover', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res, next) => {
+  try {
+    const session = await prisma.shiftSession.findFirst({ where: { id: req.params.id, storeId: req.user!.storeId, status: 'closed' } })
+    if (!session) return res.status(404).json({ code: 404, message: 'SHIFT_HANDOVER_NOT_FOUND' })
+    const snapshot = await prisma.config.findUnique({ where: { storeId_key: { storeId: req.user!.storeId, key: 'pos.shift.purchase:' + session.id } } })
+    res.json({ code: 200, data: { ...session, purchaseExpenses: snapshot ? JSON.parse(snapshot.value) : null } })
+  } catch (e) { next(e) }
 })
 
 // POST /api/pos-cash/shifts/open - 开班
@@ -190,13 +203,13 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     }
 
     // 计算期望现金
-    const today = startOfTodayJakarta()
+    const closedAt = new Date()
 
     const shiftEvents = await prisma.cashEvent.findMany({
       where: {
         storeId,
         shift: currentShift.shift,
-        createdAt: { gte: today }
+        createdAt: { gte: currentShift.openedAt, lt: closedAt }
       }
     })
 
@@ -214,32 +227,18 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
       return res.status(400).json({ code: 400, message: 'SHIFT_CASH_DIFFERENCE_LIMIT_EXCEEDED' })
     }
 
-    const session = await prisma.shiftSession.update({
-      where: { id: currentShift.id },
-      data: {
-        status: 'closed',
-        actualCash: actualCash !== undefined ? Math.round(actualCash) : null,
-        expectedCash,
-        cashDifference: difference,
-        closeNote,
-        nextStaffId,
-        closedAt: new Date()
-      }
+    const categories = await getExpenseCategories(storeId)
+    const result = await prisma.$transaction(async tx => {
+      await tx.store.update({ where: { id: storeId }, data: { updatedAt: new Date() } })
+      const purchaseExpenses = await summarizeShiftPurchases(storeId, currentShift.openedAt, closedAt, tx, categories)
+      const changed = await tx.shiftSession.updateMany({ where: { id: currentShift.id, status: 'open' }, data: { status: 'closed', actualCash: actualCash !== undefined ? Math.round(actualCash) : null, expectedCash, cashDifference: difference, closeNote, nextStaffId, closedAt } })
+      if (changed.count !== 1) throw Error('SHIFT_ALREADY_CLOSED')
+      const session = await tx.shiftSession.findUniqueOrThrow({ where: { id: currentShift.id } })
+      await tx.cashEvent.create({ data: { storeId, staffId, type: 'close_shift', amount: actualCash || 0, shift: currentShift.shift, note: `交班 - 差异: ${difference !== null ? difference : 'N/A'}` } })
+      await tx.config.create({ data: { storeId, key: 'pos.shift.purchase:' + session.id, category: 'shift_report', value: JSON.stringify(purchaseExpenses) } })
+      return { ...session, purchaseExpenses }
     })
-
-    // 记录交班事件
-    await prisma.cashEvent.create({
-      data: {
-        storeId,
-        staffId,
-        type: 'close_shift',
-        amount: actualCash || 0,
-        shift: currentShift.shift,
-        note: `交班 - 差异: ${difference !== null ? difference : 'N/A'}`
-      }
-    })
-
-    res.json({ code: 200, data: session })
+    res.json({ code: 200, data: result })
   } catch (error) {
     console.error('Close shift error:', error)
     res.status(500).json({ code: 500, message: 'Failed to close shift' })

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import catalogue from '../data/training-library.json'
 
 const text = z.object({ zh: z.string().min(1).max(20000), id: z.string().min(1).max(20000), en: z.string().max(20000).optional() }).strict()
-const section = z.object({ key: z.string().max(128).optional(), videoId: z.string().uuid().optional(), title: text, points: z.array(text).max(200), tip: text.optional(), warning: text.optional(), errors: z.array(text).max(200).optional(), practice: text.optional(), checklist: z.array(text).max(200).optional() }).strict()
+const section = z.object({ key: z.string().max(128).optional(), videoId: z.string().uuid().optional(), documentId: z.string().uuid().optional(), title: text, points: z.array(text).max(200), tip: text.optional(), warning: text.optional(), errors: z.array(text).max(200).optional(), practice: text.optional(), checklist: z.array(text).max(200).optional() }).strict()
 export const trainingCatalogueSchema = z.object({
   version: z.literal(1),
   modules: z.array(z.object({

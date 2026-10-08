@@ -23,6 +23,7 @@ interface OrderStore {
   paymentModalOrderNum: string
   // Loading states
   isCheckingOut: boolean
+  isInstallingUpdate: boolean
   isSearchingMember: boolean
   // Actions
   addSuspendedOrder: (order: SuspendedOrder) => void
@@ -36,6 +37,7 @@ interface OrderStore {
   setOrderSuccess: (orderNum: string) => void
   setPaymentModalOrderNum: (orderNum: string) => void
   setIsCheckingOut: (checking: boolean) => void
+  setIsInstallingUpdate: (installing: boolean) => void
   setIsSearchingMember: (searching: boolean) => void
   clearOrderState: () => void
 }
@@ -50,6 +52,7 @@ export const useOrderStore = create<OrderStore>((set) => ({
   orderSuccess: '',
   paymentModalOrderNum: '',
   isCheckingOut: false,
+  isInstallingUpdate: false,
   isSearchingMember: false,
 
   addSuspendedOrder: (order) => set((state) => ({
@@ -89,6 +92,7 @@ export const useOrderStore = create<OrderStore>((set) => ({
   setPaymentModalOrderNum: (orderNum) => set({ paymentModalOrderNum: orderNum }),
 
   setIsCheckingOut: (checking) => set({ isCheckingOut: checking }),
+  setIsInstallingUpdate: (installing) => set({ isInstallingUpdate: installing }),
 
   setIsSearchingMember: (searching) => set({ isSearchingMember: searching }),
 

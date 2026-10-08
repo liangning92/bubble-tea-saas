@@ -1,3 +1,4 @@
+import { createPosExpense, getPosExpenses, legacyPosExpenseBody } from '../services/PosExpenseService'
 import { parseDateBoundary } from '../utils/businessDate'
 import {validExpenseDate} from '../services/RecurringExpenseService'
 import prisma from '../config/database'
@@ -19,10 +20,19 @@ router.put('/recurring',authenticate,authorize('admin','manager'),async(req:Auth
  res.json({code:200,data})
 }catch(e){if((e as Error).message==='RECURRING_REVISION_CONFLICT')return res.status(409).json({code:409,message:'RECURRING_REVISION_CONFLICT'});next(e)}})
 
+// POS is a personal daily purchase reimbursement entry; other financial expenses stay in Admin.
+router.get('/pos', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res, next) => {
+  try { res.json({ code: 200, data: { list: await getPosExpenses(req.user!) } }) } catch (e) { next(e) }
+})
+router.post('/pos', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res, next) => {
+  try { res.status(201).json({ code: 201, data: await createPosExpense(req.user!, req.body) }) }
+  catch (e) { if (e instanceof z.ZodError || e instanceof ExpenseService.ExpenseInputError || String((e as Error).message).startsWith('POS_EXPENSE_')) return res.status((e as Error).message === 'POS_EXPENSE_REQUEST_CONFLICT' ? 409 : 400).json({ code: 400, message: (e as Error).message }); next(e) }
+})
+
 // ==================== EXPENSE CATEGORIES (Customizable) ====================
 
 // GET /api/expenses/categories
-router.get('/categories', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/categories', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
     const categories = await ExpenseService.getExpenseCategories(storeId)
@@ -51,6 +61,7 @@ router.put('/categories', authenticate, authorize('admin'), async (req: AuthRequ
 router.get('/', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
+    if (req.user!.role === 'cashier') return res.json({ code: 200, data: { list: await getPosExpenses(req.user!) } })
     const { type, category, startDate, endDate } = req.query
 
     const expenses = await ExpenseService.getExpenses(storeId, {
@@ -86,6 +97,7 @@ router.get('/summary', authenticate, authorize('admin', 'manager'), async (req: 
 // POST /api/expenses
 router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
+    if (req.user!.role === 'cashier') { const expense = await createPosExpense(req.user!, legacyPosExpenseBody(req.body)); return res.status(201).json({ code: 201, data: expense }) }
     const expense = await ExpenseService.createExpense({ ...req.body, storeId: req.user!.storeId })
     await FinanceAuditService.createAuditLog({
       storeId: req.user!.storeId,

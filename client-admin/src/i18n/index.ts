@@ -4,6 +4,159 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      staffAccess: {
+      "title": "Hak Akses Karyawan",
+      "readOnly": "Peran Anda hanya dapat melihat; penambahan, pengubahan dan penghapusan dinonaktifkan.",
+      "hint": "Buat peran khusus, pilih izin, lalu tetapkan karyawan. Perubahan berlaku setelah disimpan; karyawan tanpa peran khusus tetap memakai izin sistem.",
+      "roles": "Peran",
+      "employees": "Penetapan Karyawan",
+      "history": "Riwayat Perubahan",
+      "role": "Peran",
+      "employee": "Karyawan",
+      "addRole": "Tambah Peran",
+      "unnamed": "Peran tanpa nama",
+      "roleName": "Nama Peran",
+      "template": "Templat Hak Akses",
+      "description": "Keterangan (opsional)",
+      "ceiling": "Sesuaikan izin dalam templat yang dipilih. Tindakan khusus admin, termasuk pembayaran gaji, pembuatan akun dan reset kata sandi, peran sistem, AI dan pengelolaan akses, tetap dilakukan admin. Karyawan masuk kembali setelah peran dasar berubah.",
+      "assignedCount": "{{count}} karyawan ditetapkan",
+      "assignedDelete": "Hapus penetapan karyawan sebelum menghapus peran ini.",
+      "selectGroup": "Pilih semua grup",
+      "clearGroup": "Kosongkan grup",
+      "search": "Cari nama atau nomor karyawan",
+      "employeeRole": "Peran untuk {{name}}",
+      "systemDefault": "Izin sistem semula",
+      "owner": "Administrator",
+      "empty": "Pilih Tambah Peran untuk mulai.",
+      "noHistory": "Belum ada perubahan",
+      "revision": "Revisi {{revision}}",
+      "historyCount": "{{roles}} peran · {{employees}} karyawan",
+      "loadFailed": "Gagal memuat hak akses. Coba lagi.",
+      "saveFailed": "Hak akses belum tersimpan. Periksa pengaturan dan coba lagi.",
+      "saved": "Peran dan penetapan karyawan tersimpan.",
+      "conflict": "Admin lain mengubah hak akses. Muat ulang lalu edit kembali.",
+      "nameInvalid": "Isi nama setiap peran; nama harus unik.",
+      "adminOnly": "Hanya admin yang dapat mengelola hak akses karyawan.",
+      "groups": {
+            "dashboard": "Dasbor",
+            "products": "Produk dan Harga",
+            "inventory": "Stok dan Pembelian",
+            "pos": "POS dan Laci Kas",
+            "members": "Anggota dan Promosi",
+            "finance": "Keuangan",
+            "staff": "Pengelolaan Karyawan",
+            "hygiene": "Kebersihan",
+            "channels": "Kanal",
+            "other": "Pesan dan Pengumuman",
+            "personal": "Fitur Pribadi Karyawan"
+      },
+      "base": {
+            "manager": "Manajer",
+            "cashier": "Kasir",
+            "staff": "Karyawan"
+      },
+      "permissions": {
+            "dashboard": {
+                  "read": "Lihat dasbor pendapatan"
+            },
+            "products": {
+                  "read": "Lihat produk",
+                  "write": "Tambah dan ubah produk"
+            },
+            "prices": {
+                  "write": "Ubah harga produk"
+            },
+            "inventory": {
+                  "read": "Lihat stok",
+                  "write": "Kelola stok dan resep",
+                  "count": "Catat penghitungan stok",
+                  "stockIn": "Catat stok masuk",
+                  "stockOut": "Catat stok keluar"
+            },
+            "purchases": {
+                  "read": "Lihat pemasok dan pembelian",
+                  "write": "Kelola pemasok dan pembelian"
+            },
+            "orders": {
+                  "read": "Lihat pesanan",
+                  "create": "Proses penjualan",
+                  "refund": "Ajukan dan proses pengembalian",
+                  "cancel": "Batalkan pesanan",
+                  "status": "Ubah status pesanan dan pengambilan"
+            },
+            "pos": {
+                  "shift": "Buka dan tutup shift",
+                  "cash": "Lihat dan catat arus kas laci",
+                  "expense": "Catat biaya belanja POS"
+            },
+            "members": {
+                  "read": "Lihat anggota",
+                  "write": "Tambah dan ubah anggota"
+            },
+            "marketing": {
+                  "read": "Lihat promosi dan aturan poin",
+                  "write": "Kelola promosi dan aturan poin"
+            },
+            "finance": {
+                  "read": "Lihat keuangan dan pengeluaran",
+                  "write": "Tambah dan ubah catatan keuangan"
+            },
+            "staff": {
+                  "read": "Lihat data karyawan",
+                  "write": "Ubah data karyawan"
+            },
+            "attendance": {
+                  "read": "Lihat absensi dan cuti",
+                  "write": "Kelola absensi dan setujui cuti"
+            },
+            "schedules": {
+                  "read": "Lihat jadwal",
+                  "write": "Kelola jadwal"
+            },
+            "salary": {
+                  "read": "Lihat gaji karyawan",
+                  "write": "Hitung dan ubah gaji tertunda"
+            },
+            "deposits": {
+                  "read": "Lihat deposit dan aturannya",
+                  "write": "Kelola deposit dan aturannya"
+            },
+            "rewards": {
+                  "read": "Lihat penghargaan dan poin karyawan",
+                  "write": "Kelola poin dan penukaran hadiah"
+            },
+            "training": {
+                  "read": "Lihat pengelolaan pelatihan",
+                  "write": "Kelola kursus dan catatan pelatihan"
+            },
+            "hygiene": {
+                  "read": "Lihat pengelolaan kebersihan toko",
+                  "write": "Kelola dan periksa tugas kebersihan"
+            },
+            "channels": {
+                  "read": "Lihat kanal dan pesanan pengiriman",
+                  "write": "Kelola kanal dan pesanan pengiriman"
+            },
+            "notifications": {
+                  "read": "Lihat pesan dan pengumuman toko",
+                  "write": "Terbitkan pesan dan pengumuman"
+            },
+            "personal": {
+                  "profile": "Profil pribadi dan pengajuan biaya",
+                  "attendance": "Absensi pribadi dan pengajuan koreksi",
+                  "schedule": "Jadwal dan tukar shift pribadi",
+                  "salary": "Gaji pribadi",
+                  "leave": "Pengajuan dan saldo cuti pribadi",
+                  "training": "Kursus pelatihan pribadi",
+                  "rewards": "Poin dan penukaran hadiah pribadi",
+                  "tasks": "Laksanakan tugas kebersihan pribadi",
+                  "messages": "Pesan pribadi"
+            }
+      }
+},
+      compensation: {"title": "Penghargaan & Sanksi", "payrollHint":"Catat penghargaan dan sanksi di Manajemen Karyawan → Penghargaan & Sanksi. Gaji merangkum; Hitung memasukkan potongan kehadiran.", "paidLocked":"Gaji bulan ini sudah dibayar; catatan penghargaan dan sanksi terkunci.", "add": "Tambah Catatan", "hint": "Catat penghargaan atau sanksi per karyawan dan bulan. Gaji tertunda diperbarui otomatis; gaji dibayar terkunci. Pembatalan menyimpan riwayat. Nilai dalam Rp, bukan poin.", "staff": "Karyawan", "month": "Bulan Gaji", "type": "Jenis", "amount": "Jumlah", "reason": "Alasan", "status": "Status", "reward": "Penghargaan", "penalty": "Potongan Sanksi", "deposit": "Potongan Deposit", "depositPending":"Deposit Wajib (Periksa)", "other": "Potongan Lain", "active": "Aktif", "cancelled": "Dibatalkan", "cancel": "Batalkan", "cancelConfirm": "Batalkan catatan ini dan perbarui gaji tertunda?", "empty": "Belum ada catatan"},
+      salaryDeposit: {"hint": "Deposit karyawan dihitung otomatis. Simpan membuat rencana; konfirmasi pembayaran mencatat deposit yang dipotong.", "minimum": "Total potongan tidak boleh kurang dari deposit yang wajib dipotong.", "loadFailed": "Gagal menghitung deposit. Buka ulang formulir atau periksa koneksi sebelum menyimpan.", "recalculate": "Edit dan simpan gaji untuk memeriksa potongan deposit sebelum konfirmasi pembayaran."},
+      trainingDocument: {"title": "Panduan bergambar (PDF)", "open": "Buka panduan", "download": "Unduh panduan", "loading": "Memuat…", "retry": "Gagal memuat, coba lagi", "load": "Muat panduan"},
       expenseCategoryFeedback: {"nameRequired": "Masukkan nama kategori sebelum menambah.", "exists": "Kategori “{{name}}” sudah ada. Pilih kategori tersebut.", "added": "Kategori “{{name}}” ditambahkan.", "saving": "Menyimpan…", "saveFailed": "Kategori gagal disimpan. Nama tetap disimpan di kolom; periksa koneksi lalu coba lagi.", "loginRequired": "Sesi masuk telah berakhir. Masuk kembali sebelum menambah kategori.", "adminOnly": "Hanya administrator yang dapat menambah atau menghapus kategori pengeluaran.", "loading": "Memuat kategori…", "loadFailed": "Kategori gagal dimuat. Muat ulang sebelum melakukan perubahan.", "reload": "Muat ulang kategori"},
       "receiptPrinting": { "logoFileMissing": "File logo tidak ditemukan. Unggah kembali logo." },
       staffPointSettings: { overtimePerHour: "Poin per jam lembur" },
@@ -3204,6 +3357,7 @@ const resources = {
         "sat": "Sab"
       },
       "expense": {
+        "purchaseQuantity": "Jumlah",
         "desc": "Kelola pengeluaran dan import export",
         "addExpense": "Tambah Pengeluaran",
         "editExpense": "Edit Pengeluaran",
@@ -3680,6 +3834,159 @@ const resources = {
   },
   "en": {
     "translation": {
+      staffAccess: {
+      "title": "Employee Permissions",
+      "readOnly": "Your role can view this page; adding, editing and deleting are disabled.",
+      "hint": "Create custom roles, choose permissions and assign employees. Changes take effect after saving; unassigned employees keep their existing system permissions.",
+      "roles": "Roles",
+      "employees": "Employee Assignments",
+      "history": "Change History",
+      "role": "Role",
+      "employee": "Employee",
+      "addRole": "Add Role",
+      "unnamed": "Unnamed role",
+      "roleName": "Role Name",
+      "template": "Permission Template",
+      "description": "Description (optional)",
+      "ceiling": "Customize permissions within the selected template. Administrator-only actions, including payroll payment, account creation and password resets, system roles, AI and permission administration, remain with administrators. Employees sign in again after a base-role change.",
+      "assignedCount": "{{count}} employees assigned",
+      "assignedDelete": "Remove employee assignments before deleting this role.",
+      "selectGroup": "Select group",
+      "clearGroup": "Clear group",
+      "search": "Search name or employee number",
+      "employeeRole": "Role for {{name}}",
+      "systemDefault": "Original system permissions",
+      "owner": "Administrator",
+      "empty": "Select Add Role to begin.",
+      "noHistory": "No changes recorded",
+      "revision": "Revision {{revision}}",
+      "historyCount": "{{roles}} roles · {{employees}} employees",
+      "loadFailed": "Could not load permissions. Retry.",
+      "saveFailed": "Permissions were not saved. Check the configuration and retry.",
+      "saved": "Roles and employee assignments saved.",
+      "conflict": "Another administrator changed permissions. Refresh and edit again.",
+      "nameInvalid": "Enter a name for every role; names must be unique.",
+      "adminOnly": "Only administrators can manage employee permissions.",
+      "groups": {
+            "dashboard": "Dashboard",
+            "products": "Products and Prices",
+            "inventory": "Inventory and Purchases",
+            "pos": "POS and Cash Drawer",
+            "members": "Members and Marketing",
+            "finance": "Finance",
+            "staff": "Employee Management",
+            "hygiene": "Hygiene",
+            "channels": "Channels",
+            "other": "Messages and Announcements",
+            "personal": "Employee Personal Features"
+      },
+      "base": {
+            "manager": "Manager",
+            "cashier": "Cashier",
+            "staff": "Staff"
+      },
+      "permissions": {
+            "dashboard": {
+                  "read": "View revenue dashboard"
+            },
+            "products": {
+                  "read": "View products",
+                  "write": "Create and edit products"
+            },
+            "prices": {
+                  "write": "Change product prices"
+            },
+            "inventory": {
+                  "read": "View inventory",
+                  "write": "Manage inventory and recipes",
+                  "count": "Record stock counts",
+                  "stockIn": "Record stock in",
+                  "stockOut": "Record stock out"
+            },
+            "purchases": {
+                  "read": "View suppliers and purchases",
+                  "write": "Manage suppliers and purchases"
+            },
+            "orders": {
+                  "read": "View orders",
+                  "create": "Create sales",
+                  "refund": "Request and process refunds",
+                  "cancel": "Cancel orders",
+                  "status": "Update order and pickup status"
+            },
+            "pos": {
+                  "shift": "Open and close shifts",
+                  "cash": "View and record cash movements",
+                  "expense": "Record POS purchase expenses"
+            },
+            "members": {
+                  "read": "View members",
+                  "write": "Create and edit members"
+            },
+            "marketing": {
+                  "read": "View marketing and point rules",
+                  "write": "Manage marketing and point rules"
+            },
+            "finance": {
+                  "read": "View finance and expenses",
+                  "write": "Create and edit finance records"
+            },
+            "staff": {
+                  "read": "View employee records",
+                  "write": "Edit employee records"
+            },
+            "attendance": {
+                  "read": "View attendance and leave",
+                  "write": "Manage attendance and approve leave"
+            },
+            "schedules": {
+                  "read": "View schedules",
+                  "write": "Manage schedules"
+            },
+            "salary": {
+                  "read": "View employee payroll",
+                  "write": "Calculate and edit pending payroll"
+            },
+            "deposits": {
+                  "read": "View deposits and rules",
+                  "write": "Manage deposits and rules"
+            },
+            "rewards": {
+                  "read": "View employee rewards and points",
+                  "write": "Manage employee points and redemptions"
+            },
+            "training": {
+                  "read": "View training management",
+                  "write": "Manage courses and training records"
+            },
+            "hygiene": {
+                  "read": "View store hygiene management",
+                  "write": "Manage and review hygiene tasks"
+            },
+            "channels": {
+                  "read": "View channels and delivery orders",
+                  "write": "Manage channels and delivery orders"
+            },
+            "notifications": {
+                  "read": "View store messages and announcements",
+                  "write": "Publish messages and announcements"
+            },
+            "personal": {
+                  "profile": "Personal profile and reimbursement requests",
+                  "attendance": "Own clock-in, attendance and corrections",
+                  "schedule": "Own schedules and swaps",
+                  "salary": "Own payroll",
+                  "leave": "Own leave requests and balance",
+                  "training": "Own training courses",
+                  "rewards": "Own points and reward redemption",
+                  "tasks": "Perform own hygiene tasks",
+                  "messages": "Own messages"
+            }
+      }
+},
+      compensation: {"title": "Rewards & Penalties", "payrollHint":"Record rewards and penalties in Employee Management → Rewards & Penalties. Payroll summarizes them; Calculate includes attendance deductions.", "paidLocked":"Payroll is already paid for this month; rewards and penalties are locked.", "add": "Add Adjustment", "hint": "Record an employee reward or penalty for a payroll month. Pending payroll updates automatically; paid payroll is locked. Cancellation retains history. Amounts are IDR, not points.", "staff": "Employee", "month": "Payroll Month", "type": "Type", "amount": "Amount", "reason": "Reason", "status": "Status", "reward": "Rewards", "penalty": "Penalty Deductions", "deposit": "Deposit Deduction", "depositPending":"Deposit Due (Review)", "other": "Other Deductions", "active": "Active", "cancelled": "Cancelled", "cancel": "Cancel Record", "cancelConfirm": "Cancel this adjustment and update pending payroll?", "empty": "No reward or penalty records"},
+      salaryDeposit: {"hint": "Linked employee deposits are included automatically. Saving creates a plan; confirming payment records the deposit collected.", "minimum": "Total deductions cannot be below the deposit due.", "loadFailed": "Could not calculate deposits. Reopen the form or check the connection before saving.", "recalculate": "Edit and save payroll to verify the current deposit deductions before confirming payment."},
+      trainingDocument: {"title": "Illustrated manual (PDF)", "open": "Open manual", "download": "Download manual", "loading": "Loading…", "retry": "Could not load, retry", "load": "Load manual"},
       expenseCategoryFeedback: {"nameRequired": "Enter a category name before adding.", "exists": "Category “{{name}}” already exists. Select the existing category.", "added": "Category “{{name}}” added.", "saving": "Saving…", "saveFailed": "Category could not be saved. Your name is retained; check the connection and try again.", "loginRequired": "Your session has expired. Sign in again before adding a category.", "adminOnly": "Only administrators can add or delete expense categories.", "loading": "Loading categories…", "loadFailed": "Categories could not be loaded. Reload before making changes.", "reload": "Reload categories"},
       "receiptPrinting": { "logoFileMissing": "Logo file is missing. Upload it again." },
       staffPointSettings: { overtimePerHour: "Points per overtime hour" },
@@ -6966,6 +7273,7 @@ const resources = {
         "attendanceDeduction": "Attendance Deduction"
       },
       "expense": {
+        "purchaseQuantity": "Quantity",
         "title": "Expense Management",
         "desc": "Manage expenses and import export",
         "addExpense": "Add Expense",
@@ -7293,6 +7601,159 @@ const resources = {
   },
   "zh": {
     "translation": {
+      staffAccess: {
+      "title": "员工权限",
+      "readOnly": "当前角色只可查看，不能新增、编辑或删除。",
+      "hint": "创建自定义角色，勾选权限并分配员工。点击保存后生效；未分配自定义角色的员工保留现有系统权限。",
+      "roles": "角色管理",
+      "employees": "员工分配",
+      "history": "修改记录",
+      "role": "角色",
+      "employee": "员工",
+      "addRole": "新增角色",
+      "unnamed": "未命名角色",
+      "roleName": "角色名称",
+      "template": "基础权限模板",
+      "description": "角色说明（可选）",
+      "ceiling": "可在基础模板范围内自定义权限。工资发放、新建账号和重置密码、员工系统角色修改、AI和权限管理等管理员专属操作仍由管理员执行。角色身份切换后，员工需要重新登录。",
+      "assignedCount": "已分配 {{count}} 位员工",
+      "assignedDelete": "请先在员工分配中移除该角色，再删除角色。",
+      "selectGroup": "全选本组",
+      "clearGroup": "取消本组",
+      "search": "搜索姓名或员工编号",
+      "employeeRole": "{{name}} 的角色",
+      "systemDefault": "保留原系统权限",
+      "owner": "管理员",
+      "empty": "点击“新增角色”开始设置。",
+      "noHistory": "暂无修改记录",
+      "revision": "版本 {{revision}}",
+      "historyCount": "{{roles}} 个角色 · {{employees}} 位员工",
+      "loadFailed": "权限设置读取失败，请重试。",
+      "saveFailed": "权限未保存，请检查配置后重试。",
+      "saved": "角色与员工分配已保存。",
+      "conflict": "其他管理员已修改权限，请刷新后重新编辑。",
+      "nameInvalid": "请输入角色名称，并确保名称不重复。",
+      "adminOnly": "仅管理员可以管理员工角色和权限。",
+      "groups": {
+            "dashboard": "仪表盘",
+            "products": "商品与价格",
+            "inventory": "库存与采购",
+            "pos": "收银与钱箱",
+            "members": "会员与营销",
+            "finance": "财务",
+            "staff": "员工管理",
+            "hygiene": "卫生管理",
+            "channels": "渠道管理",
+            "other": "消息与公告",
+            "personal": "员工个人功能"
+      },
+      "base": {
+            "manager": "店长",
+            "cashier": "收银员",
+            "staff": "员工"
+      },
+      "permissions": {
+            "dashboard": {
+                  "read": "查看营收仪表盘"
+            },
+            "products": {
+                  "read": "查看商品",
+                  "write": "新增和修改商品"
+            },
+            "prices": {
+                  "write": "修改商品价格"
+            },
+            "inventory": {
+                  "read": "查看库存",
+                  "write": "管理库存和配方",
+                  "count": "库存盘点录入",
+                  "stockIn": "库存入库",
+                  "stockOut": "库存出库"
+            },
+            "purchases": {
+                  "read": "查看供应商和采购单",
+                  "write": "管理供应商和采购单"
+            },
+            "orders": {
+                  "read": "查看订单",
+                  "create": "收银结账",
+                  "refund": "申请和处理退款",
+                  "cancel": "取消订单",
+                  "status": "更新订单和出餐状态"
+            },
+            "pos": {
+                  "shift": "开班和交接班",
+                  "cash": "查看和记录钱箱收支",
+                  "expense": "POS采购费用记账"
+            },
+            "members": {
+                  "read": "查看会员",
+                  "write": "登记和修改会员"
+            },
+            "marketing": {
+                  "read": "查看营销活动和积分规则",
+                  "write": "管理营销活动和积分规则"
+            },
+            "finance": {
+                  "read": "查看财务和支出",
+                  "write": "新增和修改财务记录"
+            },
+            "staff": {
+                  "read": "查看员工档案",
+                  "write": "修改员工档案"
+            },
+            "attendance": {
+                  "read": "查看员工考勤和请假",
+                  "write": "管理考勤和审批请假"
+            },
+            "schedules": {
+                  "read": "查看排班",
+                  "write": "管理排班"
+            },
+            "salary": {
+                  "read": "查看员工工资",
+                  "write": "计算和编辑待发工资"
+            },
+            "deposits": {
+                  "read": "查看押金和押金规则",
+                  "write": "管理押金和押金规则"
+            },
+            "rewards": {
+                  "read": "查看员工奖惩和积分",
+                  "write": "管理员工积分和奖励兑换"
+            },
+            "training": {
+                  "read": "查看培训管理",
+                  "write": "管理培训课程和记录"
+            },
+            "hygiene": {
+                  "read": "查看门店卫生管理",
+                  "write": "管理卫生任务和审核"
+            },
+            "channels": {
+                  "read": "查看渠道和外卖订单",
+                  "write": "管理渠道和外卖订单"
+            },
+            "notifications": {
+                  "read": "查看门店消息和公告",
+                  "write": "发布消息和公告"
+            },
+            "personal": {
+                  "profile": "个人资料和报销申请",
+                  "attendance": "本人打卡、考勤和补签申请",
+                  "schedule": "查看本人排班和换班",
+                  "salary": "查看本人工资",
+                  "leave": "本人请假和余额",
+                  "training": "查看本人培训课程",
+                  "rewards": "本人积分和奖励兑换",
+                  "tasks": "执行本人的卫生任务",
+                  "messages": "查看本人消息"
+            }
+      }
+},
+      compensation: {"title": "奖惩", "payrollHint":"奖励与处罚在“员工管理 → 奖惩”录入。此处只汇总奖金和扣款；考勤扣款通过自动计算带入。", "paidLocked":"该月工资已发放，不能新增或撤销奖惩。", "add": "添加奖惩", "hint": "选择员工和所属月份记录奖励或处罚，自动计入待发工资。已发工资不能修改；撤销保留记录。金额单位 Rp，不改变员工积分。", "staff": "员工", "month": "所属月份", "type": "类型", "amount": "金额", "reason": "原因", "status": "状态", "reward": "奖励", "penalty": "处罚扣款", "deposit": "押金扣款", "depositPending":"应扣押金（待确认）", "other": "其他扣款", "active": "有效", "cancelled": "已撤销", "cancel": "撤销", "cancelConfirm": "确认撤销这笔奖惩？待发工资将同步调整。", "empty": "暂无奖惩记录"},
+      salaryDeposit: {"hint": "押金会按该员工关联的规则自动计入扣款；保存工资只生成计划，确认发放时才登记已扣押金。", "minimum": "扣款总额不能低于本期应扣押金。", "loadFailed": "押金计算失败，关闭后重新打开或检查网络；暂不能保存工资。", "recalculate": "请编辑并保存工资，核对最新押金扣款后再确认发放。"},
+      trainingDocument: {"title": "图示操作手册（PDF）", "open": "打开阅读", "download": "下载手册", "loading": "正在读取…", "retry": "读取失败，点击重试", "load": "读取手册"},
       expenseCategoryFeedback: {"nameRequired": "请先输入类别名称，再点击添加。", "exists": "“{{name}}”类别已存在，请直接选择已有类别。", "added": "已添加“{{name}}”类别。", "saving": "正在添加…", "saveFailed": "类别添加失败，名称已保留。请检查连接后重试。", "loginRequired": "登录已过期，请重新登录后添加类别。", "adminOnly": "只有管理员可以添加或删除支出类别。", "loading": "正在读取类别…", "loadFailed": "类别读取失败，请重新读取后再修改。", "reload": "重新读取类别"},
       "receiptPrinting": { "logoFileMissing": "Logo 图片文件缺失，请重新上传。" },
       staffPointSettings: { overtimePerHour: "每小时加班积分" },
@@ -9547,6 +10008,7 @@ const resources = {
         "confirmDelete": "确认删除"
       },
       "expense": {
+        "purchaseQuantity": "数量",
         "title": "支出管理",
         "desc": "管理支出和导入导出",
         "addExpense": "添加支出",

@@ -1,4 +1,4 @@
-name: Publish Verified Windows Installer (Manual Only)
+name: Publish Verified Windows Installer
 
 on:
   workflow_dispatch:
@@ -62,6 +62,11 @@ jobs:
           assert.equal(manual.installedVersion,manual.expectedVersion,'Installed runtime version must match the advertised build');
           assert.match(manual.installedVersion,/^\d+\.\d+\.\d+$/);
           assert.equal(manual.syntheticOnly,true);
+          assert.equal(manual.onlineInteractiveInstallerVerified,true);
+          assert.equal(manual.restartedRuntime.processStarted,true);
+          assert.equal(manual.restartedRuntime.originalProfileUsed,true);
+          assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
+          assert.deepEqual(manual.onlineInstallerArguments,['--updated','--force-run']);
           assert.equal(manual.cases.length,6);
           assert.deepEqual(manual.changes,JSON.parse(fs.readFileSync('docs/desktop-upgrade-changes.json','utf8')));
           assert.equal(manifest.existingDatabaseCompatible,true,'Legacy compatibility has not been cleared; no Release may be created');

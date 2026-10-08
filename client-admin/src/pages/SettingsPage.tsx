@@ -1,19 +1,22 @@
-import { Link } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone } from 'lucide-react'
+import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone, Shield } from 'lucide-react'
 import { configApi } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { POSSettingsPage } from './settings/POSSettingsPage'
 
-type TabKey = 'store' | 'pos'
+const StaffPermissionsPage = lazy(() => import('./settings/StaffPermissionsPage').then(module => ({default: module.StaffPermissionsPage})))
+const AiPermissionsPage = lazy(() => import('./settings/AiPermissionsPage').then(module => ({default: module.AiPermissionsPage})))
 
 export function SettingsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<TabKey>('store')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const activeTab = location.pathname === '/settings/permissions' ? 'permissions' : location.pathname === '/settings/ai' ? 'ai' : location.pathname === '/settings/pos' ? 'pos' : 'store'
   const [showSuccess, setShowSuccess] = useState(false)
 
   // 店铺信息状态
@@ -29,7 +32,8 @@ export function SettingsPage() {
   // 加载店铺信息
   const { data: configData, isLoading } = useQuery({
     queryKey: ['config', 'store'],
-    queryFn: () => configApi.get()
+    queryFn: () => configApi.get(),
+    enabled: activeTab === 'store'
   })
 
   useEffect(() => {
@@ -62,7 +66,7 @@ export function SettingsPage() {
     }
   }
 
-  if (isLoading) {
+  if (activeTab === 'store' && isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="animate-spin text-primary" size={32} />
@@ -81,13 +85,13 @@ export function SettingsPage() {
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold">{t('settings.title')}</h1>
-        {user?.role === 'admin' && <Link className="text-primary underline" to="/settings/ai">{t('aiPermissions.title')}</Link>}
       </div>
 
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap mb-6">
         <button
-          onClick={() => setActiveTab('store')}
+          onClick={() => navigate('/settings')}
+          aria-current={activeTab === 'store' ? 'page' : undefined}
           className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
             activeTab === 'store'
               ? 'bg-primary text-white'
@@ -98,7 +102,8 @@ export function SettingsPage() {
           {t('settings.store')}
         </button>
         <button
-          onClick={() => setActiveTab('pos')}
+          onClick={() => navigate('/settings/pos')}
+          aria-current={activeTab === 'pos' ? 'page' : undefined}
           className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
             activeTab === 'pos'
               ? 'bg-primary text-white'
@@ -108,6 +113,22 @@ export function SettingsPage() {
           <Smartphone size={18} />
           {t('settings.pos')}
         </button>
+        {user?.role === 'admin' && <button
+          onClick={() => navigate('/settings/permissions')}
+          aria-current={activeTab === 'permissions' ? 'page' : undefined}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'permissions' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          <Shield size={18} />
+          {t('staffAccess.title')}
+        </button>}
+        {user?.role === 'admin' && <button
+          onClick={() => navigate('/settings/ai')}
+          aria-current={activeTab === 'ai' ? 'page' : undefined}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'ai' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          <Shield size={18} />
+          {t('aiPermissions.title')}
+        </button>}
       </div>
 
       {/* 店铺设置 Tab */}
@@ -221,6 +242,10 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      {activeTab === 'permissions' && <Suspense fallback={<div className="flex justify-center py-8" role="status"><Loader2 className="animate-spin text-primary" size={28} /><span className="sr-only">{t('common.loading')}</span></div>}><StaffPermissionsPage /></Suspense>}
+
+      {activeTab === 'ai' && <Suspense fallback={<div className="flex justify-center py-8" role="status"><Loader2 className="animate-spin text-primary" size={28} /><span className="sr-only">{t('common.loading')}</span></div>}><AiPermissionsPage /></Suspense>}
 
       {/* POS设置 Tab */}
       {activeTab === 'pos' && (

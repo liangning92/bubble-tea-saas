@@ -17,7 +17,7 @@ const queryClient = new QueryClient({
   }
 })
 
-const router = createBrowserRouter([{ path: '*', element: <App /> }])
+const router = createBrowserRouter([{ path: '*', element: <ErrorBoundary><App /></ErrorBoundary> }])
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

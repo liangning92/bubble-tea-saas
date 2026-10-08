@@ -1,3 +1,4 @@
+import { TrainingDocument } from './TrainingDocument'
 import { TrainingVideo } from './TrainingVideo'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
@@ -37,6 +38,17 @@ export function TrainingLibraryEditor({ token, onClose }: { token: string | null
       const result = await response.json(); change([...path, 'videoId'], result.data.id); setMessage(t('trainingMedia.saved'))
     } catch { setMessage(t('trainingMedia.failed')) } finally { setBusy(false) }
   }
+  async function uploadDocument(file: File | undefined, path: Path) {
+    if (!file || busy) return
+    if (file.type !== 'application/pdf' || file.size > 20 * 1024 * 1024) { setMessage('请选择 20 MiB 以内的 PDF / Pilih PDF maksimal 20 MiB'); return }
+    setBusy(true); setMessage('')
+    try {
+      const body = new FormData(); body.append('document', file)
+      const response = await fetch('/api/training/library/documents', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body })
+      const result = await response.json(); if (!response.ok) throw Error(result.message)
+      change([...path, 'documentId'], result.data.id); setMessage('手册已上传，请保存草稿并发布 / Panduan diunggah; simpan draf dan terbitkan')
+    } catch { setMessage('上传失败，可重试 / Unggahan gagal; coba lagi') } finally { setBusy(false) }
+  }
   async function write(kind: 'save' | 'publish' | 'restore', id?: string) {
     if (busy) return
     if (kind !== 'save' && dirty) { setMessage('请先保存草稿。 / Simpan draf terlebih dahulu.'); return }
@@ -70,9 +82,9 @@ export function TrainingLibraryEditor({ token, onClose }: { token: string | null
     if (Array.isArray(value)) { const key = path[path.length - 1]; const minimum = key === 'options' ? 2 : key === 'sections' ? 1 : 0; const maximum = key === 'options' ? 20 : key === 'sections' ? 100 : 200; return <div className='pl-3 border-l'>{value.map((item, index) => <div key={index}><span>{index + 1}.</span>{fields(item, [...path, index])}<div className='flex gap-3'><button disabled={index === 0} onClick={() => arrayChange(value, path, 'up', index)}>↑</button><button disabled={index === value.length - 1} onClick={() => arrayChange(value, path, 'down', index)}>↓</button><button disabled={value.length <= minimum} onClick={() => { if (window.confirm('删除此项？ / Hapus butir ini?')) arrayChange(value, path, 'delete', index) }}>删除 / Hapus</button></div></div>)}<button disabled={value.length >= maximum} onClick={() => arrayChange(value, path, 'add')}>添加一项 / Tambah butir</button></div> }
     if (value && typeof value === 'object') {
       const isLesson = path.length === 4 && path[0] === 'modules' && path[2] === 'sections'
-      const keys = Object.keys(value).filter(key => key !== 'reviewed' && key !== 'videoId' && (key !== 'key' || path[0] === 'assessment'))
+      const keys = Object.keys(value).filter(key => key !== 'reviewed' && key !== 'videoId' && key !== 'documentId' && (key !== 'key' || path[0] === 'assessment'))
       if (isLesson) for (const key of optionalLessonFields) if (!keys.includes(key)) keys.push(key)
-      return <div>{isLesson && <fieldset className='my-3 border rounded p-3'><legend>{t('trainingMedia.title')}</legend><p>{t('trainingMedia.limits')}</p>{value.videoId && <><TrainingVideo id={value.videoId} token={token} /><button type='button' onClick={() => change([...path, 'videoId'], undefined)}>{t('trainingMedia.remove')}</button></>}<label className='block'>{t('trainingMedia.upload')}<input aria-label={path.join('.') + '.videoUpload'} type='file' accept='video/mp4,.mp4' disabled={busy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) uploadVideo(path, file) }} /></label></fieldset>}{keys.map(key => <fieldset key={key} className='my-3'><legend className='font-semibold'>{labels[key] || key}</legend>{fields(value[key], [...path, key])}{isLesson && optionalLessonFields.includes(key) && <button aria-label={path.join('.') + '.' + key + (value[key] === undefined ? '.add' : '.remove')} onClick={() => { if (value[key] === undefined) change([...path, key], ['errors', 'checklist'].includes(key) ? [blankText()] : blankText()); else if (window.confirm('删除此字段的中印尼文内容？ / Hapus kedua bahasa pada kolom ini?')) change([...path, key], undefined) }}>{value[key] === undefined ? '添加字段 / Tambah kolom' : '删除字段（双语） / Hapus kolom (dua bahasa)'}</button>}</fieldset>)}</div>
+      return <div>{isLesson && <fieldset className='my-3 border rounded p-3'><legend>PDF 操作手册 / Panduan PDF</legend><label>上传或替换手册 / Unggah panduan<input aria-label={path.join('.') + '.documentUpload'} type='file' accept='application/pdf,.pdf' disabled={busy} onChange={e => { const input = e.currentTarget; uploadDocument(input.files?.[0], path).finally(() => { input.value = '' }) }} /></label>{value.documentId && <><TrainingDocument id={value.documentId} token={token} /><button type='button' onClick={() => change([...path, 'documentId'], undefined)}>移除手册 / Hapus panduan</button></>}</fieldset>}{isLesson && <fieldset className='my-3 border rounded p-3'><legend>{t('trainingMedia.title')}</legend><p>{t('trainingMedia.limits')}</p>{value.videoId && <><TrainingVideo id={value.videoId} token={token} /><button type='button' onClick={() => change([...path, 'videoId'], undefined)}>{t('trainingMedia.remove')}</button></>}<label className='block'>{t('trainingMedia.upload')}<input aria-label={path.join('.') + '.videoUpload'} type='file' accept='video/mp4,.mp4' disabled={busy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) uploadVideo(path, file) }} /></label></fieldset>}{keys.map(key => <fieldset key={key} className='my-3'><legend className='font-semibold'>{labels[key] || key}</legend>{fields(value[key], [...path, key])}{isLesson && optionalLessonFields.includes(key) && <button aria-label={path.join('.') + '.' + key + (value[key] === undefined ? '.add' : '.remove')} onClick={() => { if (value[key] === undefined) change([...path, key], ['errors', 'checklist'].includes(key) ? [blankText()] : blankText()); else if (window.confirm('删除此字段的中印尼文内容？ / Hapus kedua bahasa pada kolom ini?')) change([...path, key], undefined) }}>{value[key] === undefined ? '添加字段 / Tambah kolom' : '删除字段（双语） / Hapus kolom (dua bahasa)'}</button>}</fieldset>)}</div>
     }
     if (path[path.length - 1] === 'key') return <select aria-label={path.join('.')} value={value} onChange={e => change(path, e.target.value)}>{document.modules.map((m: any) => <option key={m.key} value={m.key}>{m.title[language]}</option>)}</select>
     if (typeof value === 'number') return <input aria-label={path.join('.')} className='border p-2' type='number' value={value} onChange={e => change(path, Number(e.target.value))} />

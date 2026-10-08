@@ -1,3 +1,5 @@
+import { updateStaffSystemRole } from '../services/StaffPermissionService'
+import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
 import { formatDate } from '../utils/dateUtils'
 import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
@@ -324,10 +326,7 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthReques
     }
 
     // 更新 user 的 role
-    await prisma.user.update({
-      where: { id: staff.userId },
-      data: { role: role.data }
-    })
+    await updateStaffSystemRole(req.user!, staff.id, role.data)
 
     res.json({
       code: 200,
@@ -910,6 +909,9 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
     const lateDays = new Set(monthAttendances.filter(a => a.status === 'late').map(a => formatDate(a.checkInTime))).size
 
     const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId: staff.id, status: 'approved', date: { gte: monthStart, lte: monthEnd } } })
+    const compensation=await savedAdjustmentPlan(staff.storeId!,salaryRecord.id)
+    const depositPlan=await prisma.config.findUnique({where:{storeId_key:{storeId:staff.storeId!,key:`salary.depositPlan.${salaryRecord.id}`}}})
+    const depositAmount=(depositPlan?JSON.parse(depositPlan.value):[]).reduce((sum:number,item:any)=>sum+Math.round(item.amountMinor/100),0)
     // Transform to match frontend expected format
     const salaryData = {
       staffName: staff.name,
@@ -920,6 +922,7 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
       overtimeHours: approvedOvertime.reduce((sum, entry) => sum + entry.hours, 0),
       overtimePay: salaryRecord.overtime,
       bonuses: salaryRecord.bonus,
+      compensationRewards:compensation.rewards,compensationPenalties:compensation.penalties,compensationItems:compensation.items,depositDeductionAmount:depositAmount,otherDeductions:salaryRecord.deduction-depositAmount-compensation.penalties,
       commissions: salaryRecord.commission,
       deductions: salaryRecord.deduction,
       totalSalary: salaryRecord.finalAmount,

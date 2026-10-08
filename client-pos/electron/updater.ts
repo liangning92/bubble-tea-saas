@@ -1,5 +1,8 @@
 import { BrowserWindow, ipcMain, app, shell } from 'electron'
-import {existsSync} from 'fs'
+import {existsSync, createReadStream} from 'fs'
+import {mkdir, open, readFile} from 'fs/promises'
+import {createHash, randomUUID} from 'crypto'
+import path from 'path'
 import {isNewerUpdate} from '../src/utils/updateVersion'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -11,6 +14,9 @@ let downloadInProgress = false
 let updateDownloaded = false
 let downloadedInfo: {version: string; currentVersion: string} | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
+let installerSha512 = ''
+let installing = false
+let installationHooks: {prepare:()=>Promise<void>;resume:()=>void}
 
 async function checkForUpdates() {
   if (!app.isPackaged || checkInFlight || downloadInProgress || updateDownloaded) return
@@ -35,12 +41,14 @@ log('info', 'Auto-updater initialized')
 /**
  * Initialize updater with main window reference
  */
-export function setupUpdater(window: BrowserWindow) {
+export function setupUpdater(window: BrowserWindow, hooks: {prepare:()=>Promise<void>;resume:()=>void}) {
   mainWindow = window
+  installationHooks = hooks
 
   // Configure auto-updater
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.autoRunAppAfterInstall = true
 
   // Tell electron-updater where to find updates (GitHub Releases)
   // Read from env vars (set in electron-builder extraMetadata or CI environment)
@@ -88,7 +96,13 @@ export function setupUpdater(window: BrowserWindow) {
 
   autoUpdater.on('update-downloaded', (info: any) => {
     downloadInProgress = false
+    if (!isNewerUpdate(info.version, app.getVersion())) {
+      updateDownloaded = false; downloadedInfo = null; installerSha512 = ''
+      sendToRenderer('update-status', 'up-to-date', {version: app.getVersion()})
+      return
+    }
     updateDownloaded = true
+    installerSha512 = info.files?.find((file:any)=>String(file.url).endsWith('.exe'))?.sha512 || info.sha512 || ''
     downloadedInfo = {version: info.version, currentVersion: app.getVersion()}
     log('info', 'Update downloaded:', info.version)
     sendToRenderer('update-status', 'downloaded', { version: info.version, currentVersion: app.getVersion() })
@@ -96,6 +110,7 @@ export function setupUpdater(window: BrowserWindow) {
 
   autoUpdater.on('error', (err: any) => {
     downloadInProgress = false
+    if(installing){installing=false;try{installationHooks.resume()}catch{}}
     log('error', 'Error:', err.message)
     sendToRenderer('update-error', err.message)
   })
@@ -175,13 +190,38 @@ function setupIpcHandlers() {
   })
 
   // Install update and restart
-  ipcMain.handle('install-update', () => {
-    // No real legacy database compatibility/migration clearance has been granted.
-    // Refuse BEFORE quitting the currently usable POS, even after downloading.
-    const message = 'Upgrade clearance required; your current POS stays open. / 请等待升级确认，当前收银程序将保持运行。 / Tunggu persetujuan peningkatan; POS saat ini tetap berjalan.'
-    log('warn', 'Installation blocked pending legacy database clearance')
-    sendToRenderer('update-error', message)
-    return false
+  ipcMain.handle('install-update', async (_event, snapshot: any) => {
+    if (installing) return false
+    installing = true
+    let prepared = false
+    try {
+      const installer = autoUpdater.installerPath
+      if (!app.isPackaged || !updateDownloaded || !downloadedInfo || !isNewerUpdate(downloadedInfo.version,app.getVersion()) || !installer || !existsSync(installer)) throw Error('UPDATE_INSTALLER_UNAVAILABLE')
+      if (!installerSha512 || !snapshot || snapshot.format !== 'POSOffline-upgrade-v1' || !Array.isArray(snapshot.orders) || !Array.isArray(snapshot.syncQueue) || !Array.isArray(snapshot.config) || !Array.isArray(snapshot.products)) throw Error('UPDATE_BACKUP_REQUIRED')
+      const hash = createHash('sha512')
+      for await (const chunk of createReadStream(installer)) hash.update(chunk)
+      if (hash.digest('base64') !== installerSha512) throw Error('UPDATE_INSTALLER_CHECKSUM_MISMATCH')
+      const bytes = Buffer.from(JSON.stringify(snapshot))
+      if (bytes.length > 64 * 1024 * 1024) throw Error('UPDATE_BACKUP_TOO_LARGE')
+      const folder = path.join(app.getPath('userData'),'data','upgrade-backups')
+      await mkdir(folder,{recursive:true})
+      const file = path.join(folder,`indexeddb-before-${downloadedInfo.version}-${randomUUID()}.json`)
+      const handle = await open(file,'wx',0o600)
+      try {await handle.writeFile(bytes);await handle.sync()} finally {await handle.close()}
+      if (createHash('sha256').update(await readFile(file)).digest('hex') !== createHash('sha256').update(bytes).digest('hex')) throw Error('UPDATE_BACKUP_VERIFY_FAILED')
+      prepared = true
+      await installationHooks.prepare()
+      sendToRenderer('update-status','installing',downloadedInfo)
+      // Interactive NSIS retains its verified SQLite/program backup, original
+      // directory checks and failure rollback. No employee file search is needed.
+      autoUpdater.quitAndInstall(false,true)
+      return true
+    } catch (error:any) {
+      if (prepared) {try{installationHooks.resume()}catch{}}
+      installing = false
+      sendToRenderer('update-error',error.message || 'UPDATE_INSTALL_FAILED')
+      return false
+    }
   })
 
 }
