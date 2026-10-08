@@ -1,3 +1,5 @@
+import { getActivityPriceRules } from '../services/ActivityPricingService'
+import { tvScreenRouter } from './tvScreen'
 import {changeMemberBalance} from '../services/MemberBalanceService'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -887,6 +889,10 @@ router.delete('/discount-rules/:id', authenticate, authorize('admin'), async (re
 
 // ==================== TIMED SPECIALS ====================
 
+router.get('/activity-prices', authenticate, async(req:AuthRequest,res)=>{
+  try{res.json({code:200,data:await getActivityPriceRules(req.user!.storeId)})}catch{res.status(500).json({code:500,message:'Failed to load activity prices'})}
+})
+
 // GET /api/marketing/timed-specials - Get all timed specials
 router.get('/timed-specials', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
@@ -900,7 +906,8 @@ router.get('/timed-specials', authenticate, authorize('admin', 'manager'), async
       code: 200,
       data: specials.map(s => ({
         ...s,
-        daysOfWeek: s.daysOfWeek ? JSON.parse(s.daysOfWeek) : []
+        daysOfWeek: s.daysOfWeek ? JSON.parse(s.daysOfWeek) : [],
+        applicableChannels: s.applicableChannels ? JSON.parse(s.applicableChannels) : []
       })),
       timestamp: new Date().toISOString()
     })
@@ -916,9 +923,14 @@ router.post('/timed-specials', authenticate, authorize('admin'), async (req: Aut
     const storeId = req.user!.storeId
     const { name, productId, specialPrice, originalPrice, startTime, endTime, daysOfWeek, applicableChannels, status } = req.body
 
-    if (!name || !productId || !specialPrice || !startTime || !endTime) {
+    if (!name || !productId || !Number.isInteger(specialPrice) || specialPrice < 0 || !startTime || !endTime) {
       return res.status(400).json({ code: 400, message: 'Missing required fields' })
     }
+
+    if (!await prisma.product.findFirst({where:{id:productId,storeId,status:'active'}})) return res.status(400).json({code:400,message:'Select an active product from this store'})
+    if (!Number.isFinite(new Date(startTime).getTime()) || !Number.isFinite(new Date(endTime).getTime()) || new Date(startTime) >= new Date(endTime)) return res.status(400).json({code:400,message:'Invalid activity dates'})
+    if (daysOfWeek && (!Array.isArray(daysOfWeek) || daysOfWeek.some((d:any)=>!Number.isInteger(d)||d<0||d>6))) return res.status(400).json({code:400,message:'Invalid weekdays'})
+    if (applicableChannels && (!Array.isArray(applicableChannels) || applicableChannels.some((c:any)=>!['DINE_IN','TAKEAWAY','GOFOOD','GRAB','SHOPEE','POS'].includes(c)))) return res.status(400).json({code:400,message:'Invalid channels'})
 
     const special = await prisma.timedSpecial.create({
       data: {
@@ -957,6 +969,11 @@ router.put('/timed-specials/:id', authenticate, authorize('admin'), async (req: 
     if (!existing || existing.storeId !== req.user!.storeId) {
       return res.status(404).json({ code: 404, message: 'Timed special not found' })
     }
+
+    if (!name || !productId || !Number.isInteger(specialPrice) || specialPrice < 0 || !await prisma.product.findFirst({where:{id:productId,storeId:req.user!.storeId,status:'active'}})) return res.status(400).json({code:400,message:'Select a valid product and activity price'})
+    if (!Number.isFinite(new Date(startTime).getTime()) || !Number.isFinite(new Date(endTime).getTime()) || new Date(startTime) >= new Date(endTime)) return res.status(400).json({code:400,message:'Invalid activity dates'})
+    if (daysOfWeek && (!Array.isArray(daysOfWeek) || daysOfWeek.some((d:any)=>!Number.isInteger(d)||d<0||d>6))) return res.status(400).json({code:400,message:'Invalid weekdays'})
+    if (applicableChannels && (!Array.isArray(applicableChannels) || applicableChannels.some((c:any)=>!['DINE_IN','TAKEAWAY','GOFOOD','GRAB','SHOPEE','POS'].includes(c)))) return res.status(400).json({code:400,message:'Invalid channels'})
 
     const special = await prisma.timedSpecial.update({
       where: { id },
@@ -1612,5 +1629,7 @@ router.get('/referral-funnel', authenticate, authorize('admin', 'manager'), asyn
     res.status(500).json({ code: 500, message: 'Failed to get referral funnel' })
   }
 })
+
+router.use('/tv-screen', tvScreenRouter)
 
 export { router as marketingRouter }

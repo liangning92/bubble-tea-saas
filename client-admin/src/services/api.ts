@@ -501,6 +501,7 @@ export const uploadApi = {
     const formData = new FormData()
     files.forEach(file => formData.append('files', file))
     return api.post('/upload/dualScreen', formData, {
+      timeout: 120000,
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
@@ -700,7 +701,13 @@ export const marketingApi = {
   couponReports: (storeId: string, period: string) => api.get('/marketing/coupon-reports', { params: { storeId, period } }),
   campaignReports: (storeId: string) => api.get('/marketing/campaign-reports', { params: { storeId } }),
   referralFunnel: (storeId: string, period: string) => api.get('/marketing/referral-funnel', { params: { storeId, period } }),
-  searchProducts: (keyword: string) => api.get('/products', { params: { keyword, storeId: useAuthStore.getState().user?.storeId } })
+  searchProducts: (keyword: string) => api.get('/products', { params: { search: keyword, storeId: useAuthStore.getState().user?.storeId } }),
+
+  // TV Interactive Screen Marketing (小米42寸电视多屏互动)
+  getTvScreenConfig: (storeId?: string) => api.get('/marketing/tv-screen/config', { params: storeId ? { storeId } : undefined }),
+  saveTvScreenConfig: (data: any) => api.post('/marketing/tv-screen/config', data),
+  triggerTvLottery: (data: { orderId?: string; testMode?: boolean }) =>
+    api.post('/marketing/tv-screen/trigger-lottery', data)
 }
 
 // Message Management API

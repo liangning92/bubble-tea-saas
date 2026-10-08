@@ -1,3 +1,5 @@
+import { getActivityPriceRules } from './ActivityPricingService'
+import { activityPrice } from '../utils/activityPricing'
 import { findOrderReplay as replayReceipt, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
 import { containsFilter } from '../utils/stringFilter'
 import { OrderBusinessRejection } from './OrderBusinessRejection'
@@ -53,7 +55,7 @@ export interface CreateOrderData {
   status?: string           // 订单状态: completed, suspended
 }
 
-export interface OrderRequestContext { actorId: string; storeId: string; allowCreate: boolean }
+export interface OrderRequestContext { actorId: string; storeId: string; allowCreate: boolean; validateActivityPricing?: boolean }
 
 export interface OrderResult {
   replayed?: boolean
@@ -591,15 +593,24 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
 
   if (channel && channel.storeId !== data.storeId) throw new Error('CHANNEL_STORE_MISMATCH')
 
+  const activityRules = context?.validateActivityPricing ? await getActivityPriceRules(data.storeId) : []
   // Calculate totals with channel-specific pricing
   let totalAmount = 0
   const itemsWithPrices = await Promise.all(
     data.items.map(async (item) => {
       // Get channel-specific price if available
-      const channelPrice = channel
+      let channelPrice = channel
         ? await getChannelPrice(channel.id, item.productId, item.unitPrice)
         : item.unitPrice
 
+      const offerPrice = activityPrice(activityRules,item.productId,Number.MAX_SAFE_INTEGER,channel?.code || data.channelName || 'DINE_IN')
+      if (offerPrice !== Number.MAX_SAFE_INTEGER) {
+        const spec = await prisma.spec.findFirst({where:{id:item.specId,productId:item.productId}})
+        if (!spec) throw new Error('ACTIVITY_SPEC_NOT_FOUND')
+        const expected = Math.min(spec.price,offerPrice)
+        if (item.unitPrice !== expected) throw new Error('ACTIVITY_PRICE_CHANGED: Refresh the cart before taking payment')
+        channelPrice = expected
+      }
       totalAmount += channelPrice * item.quantity
       return {
         ...item,

@@ -204,7 +204,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     // Existing sessions are historical records, but a disabled shift cannot accept new sales.
     const activeShift = await prisma.shift.findFirst({ where: { storeId, key: openShift.shift, isActive: true } })
     if (!activeShift) return await rejectAdmission('SHIFT_DISABLED')
-    const order = await OrderService.createOrder(req.body, { actorId: req.user!.id, storeId, allowCreate: true })
+    const order = await OrderService.createOrder(req.body, { actorId: req.user!.id, storeId, allowCreate: true, validateActivityPricing: true })
 
     res.status(201).json({
       code: 201,
@@ -218,6 +218,7 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), validat
     if (error instanceof OrderBusinessRejection && error.rolledBack) {
       return res.status(409).json({ code: 409, message: error.code, details: error.message, rejection: { code: error.code, outcome: 'not_committed', orderNumber: req.body.orderNumber } })
     }
+    if (error?.message?.startsWith('ACTIVITY_')) return res.status(409).json({code:409,message:error.message})
     console.error('Create order error:', error)
     // Pass through the actual error message (e.g., "库存不足: 生珍珠 (可用: 500, 需要: 750)")
     const message = error?.message || 'Failed to create order'

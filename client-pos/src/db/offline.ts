@@ -27,7 +27,7 @@ export interface LocalOrder {
   locallyAcceptedAt?: Date
   occurredAt?: Date
   cloudReceipt?: Record<string, unknown>
-  cacheEvidence?: {backendUrl:string; catalogVersion:string; catalogFetchedAt:Date; quotedProducts:unknown[]; paymentConfig:unknown; shiftConfig:unknown}
+  cacheEvidence?: {activityRules?:unknown; activityVersion?:string; activityFetchedAt?:Date; backendUrl:string; catalogVersion:string; catalogFetchedAt:Date; quotedProducts:unknown[]; paymentConfig:unknown; shiftConfig:unknown}
   manualPayment?: {kind: 'qris_manual'; actorId: string; at: Date; evidence: 'customer_success_photo'; bankConfirmed: false}
   serverId?: string
   storeId: string

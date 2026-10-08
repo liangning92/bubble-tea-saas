@@ -157,6 +157,7 @@ await require('./salary-deposit-auto-scenarios.cjs')({prisma,check});
 await require('./compensation-scenarios.cjs')({prisma,check});
 await require('./staff-access-scenarios.cjs')({prisma,check,call});
 const staffWorkflows=await require('./staff-workflow-scenarios.cjs')({prisma,check,call,provider});fs.writeFileSync(output+'/'+provider+'-staff-workflows.json',JSON.stringify(staffWorkflows,null,2));
+await require('./tv-marketing-scenarios.cjs')({prisma,check,call,base,ownerToken});
 if(process.env.WORKFLOW_MANUAL==='1') await require('./pos-manual-http-scenarios.cjs')({prisma,check,call,base,ownerToken,cashierToken:token,fetch:global.fetch});
 if(process.env.WORKFLOW_MANUAL_UI==='1') await require('./pos-manual-ui-scenarios.cjs')({base,ownerToken,workerToken});
 if(process.env.WORKFLOW_FULL==='1'){const full=await require('./full-business-scenarios.cjs')({prisma,check,call,provider});fs.writeFileSync(output+'/'+provider+'-full-business.json',JSON.stringify(full,null,2));console.log('FULL BUSINESS FINDINGS',full.failed.length);}

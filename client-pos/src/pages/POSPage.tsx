@@ -1,3 +1,8 @@
+import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
+import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
+import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
+import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
+import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
 import { reportReceivedPayment } from '../utils/receivedReceipt'
 import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
@@ -11,7 +16,7 @@ import { ManualQrEvidence, ManualQrProof } from '../components/ManualQrEvidence'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { posApi, shiftApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
+import { posApi, tvScreenApi, shiftApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
 import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
 import { db, syncManager, productCache, LocalProduct, getLockScreenPin, saveLockScreenPin } from '../db/offline'
@@ -124,6 +129,7 @@ interface CartItem {
   iceLevel?: string
   iceLevelName?: string
   unitPrice: number
+  baseUnitPrice?: number
   quantity: number
   addons: { id: string; name: string; price: number; qty: number }[]
 }
@@ -144,6 +150,18 @@ interface DualScreenConfig {
   showLogo: boolean
   adImageUrl: string
   promotions: string[]
+  promotionsStyle?: PromotionTextStyle
+  promotionsSubtitleStyle?: PromotionTextStyle
+  logoStyle?: CustomerDisplayLogoStyle
+  welcomeStyle?: PromotionTextStyle
+  autoSyncPromotions?: boolean
+  showPromotionDetail?: boolean
+  showUpsellHint?: boolean
+  stateAppearance?: Partial<Record<CustomerDisplayState, CustomerDisplayAppearance>>
+  backgroundColor?: string
+  mediaFit?: 'cover' | 'contain'
+  mediaMode?: 'rotate' | 'single'
+  fixedMediaUrl?: string
   mediaFiles?: Array<{
     url: string
     filename: string
@@ -151,16 +169,10 @@ interface DualScreenConfig {
     isVideo: boolean
   }>
   idleLayout?: {
-    columns: Array<{
-      width: number
-      content: 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
-    }>
+    columns: CustomerLayoutColumn[]
   }
   orderingLayout?: {
-    columns: Array<{
-      width: number
-      content: 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
-    }>
+    columns: CustomerLayoutColumn[]
   }
 }
 
@@ -320,6 +332,25 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [discountAmount, setDiscountAmount] = useState(0)
   const [tempDiscount, setTempDiscount] = useState('')
   const [isManualDiscount, setIsManualDiscount] = useState(false)
+  const [activityRules, setActivityRules] = useState<ActivityPriceRule[]>([])
+  const [activityClock, setActivityClock] = useState(() => new Date())
+  useEffect(() => {
+    let cancelled = false
+    const refresh = async () => { try { const response = await posApi.getActivityPrices(); if (!cancelled) setActivityRules(Array.isArray(response.data?.data) ? response.data.data : []) } catch {}
+      if (!cancelled) setActivityClock(new Date())
+    }
+    void refresh(); const timer = setInterval(refresh, 15000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [user?.storeId])
+  const getActivityPrice = (productId: string, price: number) => activityPrice(activityRules, productId, price, selectedChannel?.code || 'DINE_IN', activityClock)
+  useEffect(() => {
+    if (showPaymentModal || isCheckingOut) return
+    setCart(previous => {
+      let changed = false
+      const next = previous.map(item => { const base = item.baseUnitPrice ?? item.unitPrice; if (base === undefined) return item; const price = getActivityPrice(item.productId, base); if (price === item.unitPrice) return item; changed = true; return {...item, unitPrice: price} })
+      return changed ? next : previous
+    })
+  }, [activityRules, activityClock, selectedChannel?.code, products, showPaymentModal, isCheckingOut])
   const [activeDiscountRules, setActiveDiscountRules] = useState<any[]>([])
   const [appliedPromotion, setAppliedPromotion] = useState<AppliedPromotion | null>(null)
   // 优惠券状态
@@ -1106,11 +1137,23 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           const newDualScreen: DualScreenConfig = hw.dualScreen ? {
             enabled: hw.dualScreen.enabled ?? false,
             layoutStyle: hw.dualScreen.layoutStyle || 'full',
-            welcomeText: hw.dualScreen.welcomeText || 'YOUME',
+            welcomeText: hw.dualScreen.welcomeText ?? '',
             showLogo: hw.dualScreen.showLogo ?? false,
             adImageUrl: hw.dualScreen.adImageUrl || '',
             promotions: hw.dualScreen.promotions || ['🧋', '🍓', '💳', '🎁'],
+            promotionsStyle: hw.dualScreen.promotionsStyle,
+            promotionsSubtitleStyle: hw.dualScreen.promotionsSubtitleStyle,
+            logoStyle: hw.dualScreen.logoStyle,
+            welcomeStyle: hw.dualScreen.welcomeStyle,
+            autoSyncPromotions: hw.dualScreen.autoSyncPromotions !== false,
+            showPromotionDetail: hw.dualScreen.showPromotionDetail !== false,
+            showUpsellHint: hw.dualScreen.showUpsellHint !== false,
             mediaFiles: hw.dualScreen.mediaFiles || [],
+            mediaMode: hw.dualScreen.mediaMode || 'rotate',
+            backgroundColor: hw.dualScreen.backgroundColor,
+            stateAppearance: hw.dualScreen.stateAppearance,
+            mediaFit: hw.dualScreen.mediaFit || 'cover',
+            fixedMediaUrl: hw.dualScreen.fixedMediaUrl || '',
             idleLayout: hw.dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] },
             orderingLayout: hw.dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] },
           } : hardwareSettings.dualScreen
@@ -2152,14 +2195,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       sugarLevelName: sugarObj ? t(sugarObj.nameKey) : t('pos.normalSugar'),
       iceLevel: selectedIce,
       iceLevelName: iceObj ? t(iceObj.nameKey) : t('pos.normalIce'),
-      unitPrice: selectedSpec.price,
+      unitPrice: getActivityPrice(selectedProduct.id, selectedSpec.price),
+      baseUnitPrice: selectedSpec.price,
       quantity: addonQty,
       addons
     }
 
     setCart(prev => {
       const existIdx = prev.findIndex(
-        i => i.productId === newItem.productId && i.specId === newItem.specId && i.unitPrice === newItem.unitPrice &&
+        i => i.productId === newItem.productId && i.specId === newItem.specId && i.unitPrice === newItem.unitPrice && (i.baseUnitPrice ?? i.unitPrice) === newItem.baseUnitPrice &&
         i.sugarLevel === newItem.sugarLevel && i.iceLevel === newItem.iceLevel &&
         JSON.stringify(i.addons.map(a => [a.id, a.price, a.qty]).sort()) === JSON.stringify(addons.map(a => [a.id, a.price, a.qty]).sort())
       )
@@ -2783,6 +2827,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     paymentOpening.current = true
     try {
       await requireOpenShift()
+      const rulesResponse = await posApi.getActivityPrices()
+      const freshRules = Array.isArray(rulesResponse.data?.data) ? rulesResponse.data.data : []
+      const now = new Date()
+      setActivityRules(freshRules); setActivityClock(now)
+      setCart(previous => previous.map(item => { const base = item.baseUnitPrice ?? item.unitPrice; return base === undefined ? item : {...item, unitPrice: activityPrice(freshRules,item.productId,base,selectedChannel?.code || 'DINE_IN',now)} }))
       setPaymentModalOrderNum(getNextPickupNumber(selectedChannel?.code))
       setShowPaymentModal(true)
     } catch (error: any) {
@@ -2979,6 +3028,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       printCupStickers(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
       electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
+      // Display animation is ancillary; only the server verifies completed order eligibility.
+      if (response.id) tvScreenApi.triggerLottery({ orderId: response.id }).catch(error => console.warn('[POS] TV display unavailable:', error?.response?.status))
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
@@ -3553,7 +3604,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="flex flex-col items-center justify-center w-full mt-1">
                         <span className="font-semibold text-sm text-gray-900 text-center leading-tight truncate w-full">{product.name}</span>
                         {posLayout.showPrice && (
-                          <span className="text-primary font-bold text-sm mt-0.5">{formatCurrency(product.specs[0]?.price || 0)}</span>
+                          <span className="text-primary font-bold text-sm mt-0.5">{formatCurrency(getActivityPrice(product.id, product.specs[0]?.price || 0))}</span>
                         )}
                       </div>
                     </div>
@@ -3561,7 +3612,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     <div className="flex flex-col items-center justify-center w-full px-2">
                       <span className="font-bold text-base text-gray-900 text-center leading-tight line-clamp-2 w-full">{product.name}</span>
                       {posLayout.showPrice && (
-                        <span className="text-primary font-bold text-lg mt-1">{formatCurrency(product.specs[0]?.price || 0)}</span>
+                        <span className="text-primary font-bold text-lg mt-1">{formatCurrency(getActivityPrice(product.id, product.specs[0]?.price || 0))}</span>
                       )}
                     </div>
                   )}
@@ -3821,7 +3872,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           <p className="text-lg font-bold mb-3">{t('barcodeIdentity.chooseSpec')}</p>
           <div className="grid grid-cols-2 gap-2">
             {selectedProduct.specs.map(spec => <button key={spec.id} type="button" onClick={() => handleSpecClick(selectedProduct, spec)} className={`p-3 rounded-xl border-2 text-left ${selectedSpec?.id === spec.id ? 'border-primary bg-primary-light' : 'border-gray-200'}`}>
-              <span className="font-bold">{spec.name}</span><span className="block text-primary">{formatCurrency(spec.price)}</span>
+              <span className="font-bold">{spec.name}</span><span className="block text-primary">{formatCurrency(getActivityPrice(selectedProduct?.id || '', spec.price))}</span>
             </button>)}
           </div>
         </div>}

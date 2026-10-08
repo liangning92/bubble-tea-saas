@@ -26,6 +26,8 @@ function RootRoute() {
   return <Navigate to={isAuthenticated ? "/pos" : "/login"} replace />
 }
 
+const TvDisplayPage = lazy(() => import('./pages/TvDisplayPage').then(module => ({ default: module.TvDisplayPage })))
+
 function App() {
   const installing=useOrderStore(state=>state.isInstallingUpdate)
   return (
@@ -35,6 +37,7 @@ function App() {
       <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
+      <Route path="/tv-display" element={<TvDisplayPage />} />
       <Route path="/register-member" element={<RegisterMemberPage />} />
       <Route path="/scan" element={
         <ProtectedRoute>

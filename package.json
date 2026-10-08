@@ -61,6 +61,7 @@
     "node-thermal-printer": "^4.6.0",
     "pdfkit": "^0.19.1",
     "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
