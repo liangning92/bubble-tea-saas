@@ -587,6 +587,10 @@ export const announcementApi = {
 
 // Salaries
 export const salaryApi = {
+  adjustments: () => api.get('/salaries/adjustments'),
+  createAdjustment: (data: any) => api.post('/salaries/adjustments',data),
+  cancelAdjustment: (id: string) => api.post(`/salaries/adjustments/${id}/cancel`),
+  depositPlan: (staffId: string, month: string) => api.get(`/salaries/deposit-plan/${staffId}`, {params:{month}}),
   list: (params?: any) => api.get('/salaries', { params }),
   create: (data: any) => api.post('/salaries', data),
   update: (id: string, data: any) => api.put('/salaries/' + id, data),

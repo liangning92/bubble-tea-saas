@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 
+const StaffAdjustmentsPage = lazy(() => import('./pages/staff/StaffAdjustmentsPage').then(module => ({ default: module.StaffAdjustmentsPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
 const ConsumptionAnalysisPage = lazy(() => import('./pages/inventory/ConsumptionAnalysisPage').then(module => ({ default: module.ConsumptionAnalysisPage })))
 const AiPermissionsPage = lazy(() => import('./pages/settings/AiPermissionsPage').then(module => ({ default: module.AiPermissionsPage })))
@@ -203,6 +204,7 @@ function App() {
         <Route path="staff" element={<StaffIndexPage />}>
           <Route index element={<StaffListPage />} />
           <Route path="new" element={<StaffFormPage />} />
+          <Route path="adjustments" element={<StaffAdjustmentsPage />} />
           <Route path="deposit" element={<Navigate to="/staff/salary/deposit" replace />} />
           <Route path=":id" element={<StaffDetailPage />} />
           <Route path=":id/edit" element={<StaffFormPage />} />

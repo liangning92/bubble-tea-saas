@@ -1,0 +1,33 @@
+const assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
+module.exports=async({prisma,check})=>{
+ const staff=await check('POST','/api/staff',{storeId:'store',name:'Rewards Fixture',phone:'081299901113',password:'SyntheticOnly2026',baseSalary:1000000},201);
+ const one=await check('POST','/api/deposit/rules',{name:'Rewards Deposit Fixture',depositAmount:30000000,deductionType:'one_time',refundType:'full'},201);
+ const deposit=await check('POST','/api/deposit/staff',{staffId:staff.id,depositRuleId:one.id,totalAmount:30000000},201);
+ await prisma.staffDeposit.update({where:{id:deposit.id},data:{startDate:new Date('2026-10-01T00:00:00+07:00')}});
+ const rewardPayload={staffId:staff.id,month:'2026-10',type:'reward',amount:100000,reason:'Fixture service award',requestId:randomUUID()};
+ const reward=await check('POST','/api/salaries/adjustments',rewardPayload,201);
+ assert.equal((await check('POST','/api/salaries/adjustments',rewardPayload,201)).id,reward.id);
+ await check('POST','/api/salaries/adjustments',{...rewardPayload,amount:200000},409);
+ await check('POST','/api/salaries/adjustments',{...rewardPayload,requestId:randomUUID(),amount:0},400);
+ const penalty=await check('POST','/api/salaries/adjustments',{...rewardPayload,type:'penalty',amount:50000,reason:'Fixture deduction',requestId:randomUUID()},201);
+ const salary=await check('POST','/api/salaries',{staffId:staff.id,month:'2026-10',baseSalary:1000000,deduction:20000},201);
+ assert.equal(salary.bonus,100000);assert.equal(salary.deduction,370000);assert.equal(salary.finalAmount,730000);
+ let row=(await check('GET','/api/salaries?staffId='+staff.id)).list[0];assert.equal(row.compensationRewards,100000);assert.equal(row.compensationPenalties,50000);assert.equal(row.depositDeductionAmount,300000);assert.equal(row.compensationItems.length,2);
+ const third=await check('POST','/api/salaries/adjustments',{...rewardPayload,type:'penalty',amount:30000,reason:'Fixture additional deduction',requestId:randomUUID()},201);
+ assert.equal((await prisma.salary.findUnique({where:{id:salary.id}})).finalAmount,700000);
+ await check('POST','/api/salaries/adjustments/'+third.id+'/cancel',{});await check('POST','/api/salaries/adjustments/'+third.id+'/cancel',{});
+ assert.equal((await prisma.salary.findUnique({where:{id:salary.id}})).finalAmount,730000);
+ row=(await check('GET','/api/salaries?staffId='+staff.id)).list[0];
+ await check('PUT','/api/salaries/'+salary.id,{baseSalary:1000000,bonus:100000,deduction:370000,depositDeductions:row.depositDeductions,compensationAdjustmentIds:row.compensationAdjustmentIds});
+ assert.equal((await prisma.salary.findUnique({where:{id:salary.id}})).finalAmount,730000);
+ const login=await check('POST','/api/auth/login',{phone:'081299901113',password:'SyntheticOnly2026'});
+ const own=await check('GET','/api/staff/salary/my?month=10&year=2026',undefined,200,login.token);assert.equal(own.compensationPenalties,50000);assert.equal(own.depositDeductionAmount,300000);assert.equal(own.otherDeductions,20000);
+ await check('GET','/api/salaries/adjustments',undefined,403,login.token);
+ await check('POST','/api/salaries/'+salary.id+'/mark-paid',{},404); // Payment is PUT only.
+ await check('PUT','/api/salaries/'+salary.id+'/mark-paid',{});
+ assert.equal((await check('POST','/api/salaries/adjustments',rewardPayload,201)).id,reward.id);
+ await check('POST','/api/salaries/adjustments/'+penalty.id+'/cancel',{},409);
+ await check('POST','/api/salaries/adjustments',{...rewardPayload,requestId:randomUUID()},409);
+ assert.equal((await prisma.salary.findUnique({where:{id:salary.id}})).finalAmount,730000);
+ console.log('PASS standalone rewards and penalties: pre/post payroll updates, cancel and replay, reason history, salary split totals, employee own payslip, validation and paid lock');
+};

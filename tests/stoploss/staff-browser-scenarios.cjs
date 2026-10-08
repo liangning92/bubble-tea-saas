@@ -19,14 +19,53 @@ module.exports = async function staffBrowser({ page, browser, prisma, check, bas
   const smallerRule=await check('POST','/api/deposit/rules',{name:'UI Deposit Rp 300000',depositAmount:30000000,deductionType:'monthly',monthlyAmount:10000000,refundType:'full'},201);
   await page.goto(adminOrigin+'/staff/salary/deposit');await page.getByRole('button',{name:'Add Deposit',exact:true}).click();dialog=page.locator('.fixed.inset-0').last();await dialog.locator('select').nth(0).selectOption(staff.id);await dialog.locator('select').nth(1).selectOption(smallerRule.id);assert.equal(await dialog.locator('input[type=number]').inputValue(),'300000');await page.screenshot({path:output+'/deposit-rule-autofill-300000.png',fullPage:true});await dialog.locator('select').nth(1).selectOption(rule.id);assert.equal(await dialog.getByLabel('Deposit collection target (Rp) *').inputValue(),'500000');await dialog.locator('select').nth(1).selectOption('');assert.equal(await dialog.locator('input[type=number]').inputValue(),'');await dialog.locator('select').nth(1).selectOption(rule.id);assert.equal(await dialog.locator('input[type=number]').inputValue(),'500000');await dialog.locator('input[type=number]').fill('500000');await dialog.getByRole('button',{name:'Save',exact:true}).click();await dialog.waitFor({state:'hidden'});const deposit=await prisma.staffDeposit.findFirst({where:{staffId:staff.id}});assert.equal(deposit.totalAmount,50000000);assert.equal(deposit.deductedAmount,0);await page.screenshot({path:output+'/deposit-target-saved.png',fullPage:true});
   passed.push('correct nested navigation, visible rule entry from deposit form, create rule/save/reload and create employee deposit');
-  await page.goto(adminOrigin+'/staff/salary/salary');await page.getByRole('button',{name:/Add Salary/}).click();dialog=page.locator('.fixed.inset-0').last();await dialog.locator('select').selectOption(staff.id);await dialog.locator('input[type=month]').fill('2026-10');await dialog.getByRole('button',{name:/Calculate/}).click();await assertEventually(async()=>assert.equal(await dialog.locator('input[type=number]').nth(0).inputValue(),'4000000'));assert.equal(await dialog.locator('input[type=number]').nth(4).inputValue(),'100000');
-  for(const [index,amount] of [[1,'200000'],[2,'50000'],[3,'100000'],[4,'150000']])await dialog.locator('input[type=number]').nth(index).fill(amount);
+  for(const [type,amount,reason] of [['reward',100000,'UI October award'],['penalty',50000,'UI October deduction']])await check('POST','/api/salaries/adjustments',{staffId:staff.id,month:'2026-10',type,amount,reason,requestId:require('node:crypto').randomUUID()},201);
+  await page.goto(adminOrigin+'/staff/salary/salary');await page.getByRole('button',{name:/Add Salary/}).click();dialog=page.locator('.fixed.inset-0').last();await dialog.locator('select').selectOption(staff.id);await dialog.locator('input[type=month]').fill('2026-10');await dialog.getByRole('button',{name:/Calculate/}).click();await assertEventually(async()=>assert.equal(await dialog.locator('input[type=number]').nth(0).inputValue(),'4000000'));assert.equal(await dialog.locator('input[type=number]').nth(4).inputValue(),'150000');
+  for(const [index,amount] of [[1,'200000'],[2,'50000']])await dialog.locator('input[type=number]').nth(index).fill(amount);
   // The fifth monetary control is deduction; use labels' order from actual DOM below.
-  await dialog.locator('input[type=number]').last().fill('150000');
+  assert.equal(await dialog.locator('input[type=number]').last().inputValue(),'150000');
+  assert.equal(await dialog.locator('input[type=number]').last().getAttribute('readonly'),'');
   await dialog.getByRole('button',{name:'Save',exact:true}).click();await dialog.waitFor({state:'hidden'});const salary=await prisma.salary.findFirst({where:{staffId:staff.id,month:'2026-10'}});assert.equal(salary.finalAmount,4200000);
   await page.reload();await page.getByText('UI Workflow Employee',{exact:true}).last().waitFor();assert.ok((await page.locator('body').innerText()).replace(/\u00a0/g,' ').includes('Rp 4.200.000'));
   const payrollCard=page.locator('.bg-white.rounded-2xl').filter({hasText:'UI Workflow Employee'});await payrollCard.getByRole('button',{name:'Mark as Paid',exact:true}).click();await assertEventually(async()=>assert.equal((await prisma.staffDeposit.findUnique({where:{id:deposit.id}})).deductedAmount,10000000));await check('PUT','/api/salaries/'+salary.id+'/mark-paid',{});assert.equal(await prisma.staffDepositDeduction.count({where:{salaryId:salary.id}}),1);
   passed.push('actual payroll staff selector, auto-calculated base/deposit IDR, component save and total/reload');
+  // Record rewards/penalties through their independent employee navigation.
+  await page.goto(adminOrigin+'/staff/adjustments');
+  await page.locator('a[href="/staff/adjustments"][aria-current=page]').waitFor();
+  for(const [kind,amount,reason] of [['reward','100000','UI service award'],['penalty','25000','UI deduction reason']]) {
+    await page.getByRole('button',{name:'Add Adjustment',exact:true}).click();
+    const panel=page.locator('.fixed.inset-0 form');
+    await panel.getByLabel('Employee',{exact:true}).selectOption(staff.id);
+    await panel.getByLabel('Payroll Month',{exact:true}).fill('2026-11');
+    await panel.getByLabel('Type',{exact:true}).selectOption(kind);
+    await panel.getByLabel('Amount',{exact:true}).fill(amount);
+    await panel.getByLabel('Reason',{exact:true}).fill(reason);
+    await panel.getByRole('button',{name:'Save',exact:true}).click();await panel.waitFor({state:'hidden'});
+    await page.getByText(reason,{exact:true}).waitFor();
+  }
+  await page.goto(adminOrigin+'/staff/salary/salary');await page.getByRole('button',{name:/Add Salary/}).click();dialog=page.locator('.fixed.inset-0').last();
+  await dialog.locator('select').selectOption(staff.id);await dialog.locator('input[type=month]').fill('2026-11');
+  await assertEventually(async()=>assert.equal(await dialog.locator('input[type=number]').last().inputValue(),'125000'));
+  assert.equal(await dialog.locator('input[type=number]').nth(3).inputValue(),'100000');
+  await dialog.locator('input[type=number]').nth(0).fill('4000000');
+  await dialog.getByRole('button',{name:'Save',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  const november=await prisma.salary.findFirst({where:{staffId:staff.id,month:'2026-11'}});assert.equal(november.finalAmount,3975000);
+  await page.goto(adminOrigin+'/staff/adjustments');
+  await page.locator('tr').filter({hasText:'UI deduction reason'}).getByRole('button',{name:'Cancel Record',exact:true}).click();
+  await assertEventually(async()=>assert.equal((await prisma.salary.findUnique({where:{id:november.id}})).finalAmount,4000000));
+  await page.goto(adminOrigin+'/staff/salary/salary');
+  const novemberCard=page.locator('.bg-white.rounded-2xl').filter({hasText:'UI Workflow Employee'}).filter({hasText:'November 2026'});
+  await novemberCard.getByText('Rewards',{exact:true}).waitFor();await novemberCard.getByText('Penalty Deductions',{exact:true}).waitFor();await novemberCard.getByText('Deposit Deduction',{exact:true}).waitFor();
+  await novemberCard.getByRole('button',{name:'Edit',exact:true}).click();dialog=page.locator('.fixed.inset-0').last();
+  await assertEventually(async()=>assert.equal(await dialog.locator('input[type=number]').last().inputValue(),'100000'));
+  await dialog.getByRole('button',{name:'Save',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal((await prisma.salary.findUnique({where:{id:november.id}})).finalAmount,4000000);
+  assert.equal((await prisma.staffDeposit.findUnique({where:{id:deposit.id}})).deductedAmount,10000000);
+  await page.screenshot({path:output+'/salary-rewards-penalties-deposit.png',fullPage:true});
+  await page.goto(adminOrigin+'/staff/adjustments');await page.getByRole('button',{name:'Add Adjustment',exact:true}).click();
+  const lockedForm=page.locator('.fixed.inset-0 form');await lockedForm.getByLabel('Employee',{exact:true}).selectOption(staff.id);await lockedForm.getByLabel('Payroll Month',{exact:true}).fill('2026-10');
+  await lockedForm.getByText('Payroll is already paid for this month; rewards and penalties are locked.',{exact:true}).waitFor();
+  assert.equal(await lockedForm.getByRole('button',{name:'Save',exact:true}).isEnabled(),false);await lockedForm.getByRole('button',{name:'Cancel',exact:true}).click();
+  passed.push('independent employee rewards/penalties UI, reason history, manual payroll automatically includes deposit/rewards/penalties without Calculate, cancellation updates pending payroll, distinct wage cards, edit does not double count');
   const auth=await check('POST','/api/auth/login',{phone:'081234567899',password:'SyntheticStaffOnly2026'});
   const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block',acceptDownloads:true});
   try {
