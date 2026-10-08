@@ -37,11 +37,14 @@ const DualScreenMediaUpload: React.FC<{
   const { t } = useTranslation()
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
     await uploadFiles(Array.from(files))
+    e.target.value = ''
   }
 
   const handleDrop = async (e: React.DragEvent) => {
@@ -53,20 +56,32 @@ const DualScreenMediaUpload: React.FC<{
   }
 
   const uploadFiles = async (files: File[]) => {
+    if (uploading) return
+    setUploadError('')
     setUploading(true)
+    const uploaded: MediaFile[] = []
     try {
-      const response = await uploadApi.uploadDualScreen(files)
-      const newFiles = response.data.data.files || []
-      if (onMediaFilesChange) {
-        // Use functional update to avoid stale closure
-        onMediaFilesChange((current) => [...current, ...newFiles])
-      } else {
-        onUpload([...mediaFiles, ...newFiles])
+      if (files.some(file => file.size > 50 * 1024 * 1024)) {
+        throw new Error(t('posSettings.mediaFileTooLarge'))
       }
-    } catch (error) {
+      // Upload separately so a multi-file selection stays within gateway limits.
+      for (const file of files) {
+        const response = await uploadApi.uploadDualScreen([file])
+        const newFiles = (response.data.data.files || []).map((media: MediaFile) => ({ ...media, url: receiptMediaUrl(media.url) }))
+        if (!newFiles.length) throw new Error(t('common.error'))
+        uploaded.push(...newFiles)
+      }
+    } catch (error: any) {
       console.error('Upload failed:', error)
-      alert(t('common.error'))
+      setUploadError(error?.response?.status === 413
+        ? t('posSettings.mediaFileTooLarge')
+        : error?.response?.data?.message || error?.message || t('common.error'))
     } finally {
+      // Save successful files together, including partial success before an error.
+      if (uploaded.length) {
+        if (onMediaFilesChange) onMediaFilesChange(current => [...current, ...uploaded])
+        else onUpload([...mediaFiles, ...uploaded])
+      }
       setUploading(false)
     }
   }
@@ -81,11 +96,12 @@ const DualScreenMediaUpload: React.FC<{
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('dualScreenFileInput')?.click()}
+        onClick={() => { if (!uploading) inputRef.current?.click() }}
       >
         <input
           type="file"
-          id="dualScreenFileInput"
+          ref={inputRef}
+          disabled={uploading}
           className="hidden"
           accept="image/*,video/*"
           multiple
@@ -104,6 +120,7 @@ const DualScreenMediaUpload: React.FC<{
           </div>
         )}
       </div>
+      {uploadError && <p role="alert" className="text-sm text-red-600">{uploadError}</p>}
 
       {/* Preview Grid */}
       {mediaFiles.length > 0 && (
@@ -112,13 +129,13 @@ const DualScreenMediaUpload: React.FC<{
             <div key={index} className="relative group">
               {file.isVideo ? (
                 <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                  <video src={file.url} className="w-full h-full object-cover rounded-lg" />
+                  <video src={receiptMediaUrl(file.url)} className="w-full h-full object-cover rounded-lg" />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-white text-2xl">▶</span>
                   </div>
                 </div>
               ) : (
-                <img src={file.url} alt="" className="aspect-video object-cover rounded-lg" />
+                <img src={receiptMediaUrl(file.url)} alt={file.filename} className="aspect-video object-cover rounded-lg" />
               )}
               <button
                 onClick={() => onRemove(index)}
@@ -309,10 +326,12 @@ const DualScreenPreview: React.FC<{
       }, 2000)
       return () => clearInterval(interval)
     }
-  }, [previewState])
+  }, [previewState, mediaFiles.length, promotions.length])
 
-  const currentMedia = mediaFiles[currentIndex]
-  const currentPromotion = promotions[currentIndex]
+  useEffect(() => { setCurrentIndex(0) }, [mediaFiles.length, promotions.length])
+
+  const currentMedia = mediaFiles[currentIndex % mediaFiles.length]
+  const currentPromotion = promotions[currentIndex % promotions.length]
 
   // Render column content
   const renderColumnContent = (content: string) => {
@@ -320,9 +339,9 @@ const DualScreenPreview: React.FC<{
       case 'media':
         if (mediaFiles.length > 0) {
           return currentMedia?.isVideo ? (
-            <video src={currentMedia.url} className="w-full h-full object-contain" autoPlay loop muted />
+            <video src={receiptMediaUrl(currentMedia.url)} className="w-full h-full object-contain" autoPlay loop muted />
           ) : (
-            <img src={currentMedia?.url} alt="" className="w-full h-full object-contain" />
+            <img src={receiptMediaUrl(currentMedia?.url)} alt="" className="w-full h-full object-contain" />
           )
         }
         return (

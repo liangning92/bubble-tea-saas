@@ -501,6 +501,7 @@ export const uploadApi = {
     const formData = new FormData()
     files.forEach(file => formData.append('files', file))
     return api.post('/upload/dualScreen', formData, {
+      timeout: 120000,
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
