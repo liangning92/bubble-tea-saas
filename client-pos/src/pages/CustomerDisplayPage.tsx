@@ -5,7 +5,7 @@ import { PromotionText, PromotionTextStyle } from '../../../shared/components/Pr
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../utils/helpers'
-import { YOUME_LOGO_RED } from '../assets/logo'
+import { YOUME_LOGO_RED, YOUME_LOGO_WHITE } from '../assets/logo'
 
 interface OrderItem {
   id: string
@@ -372,7 +372,7 @@ export function CustomerDisplayPage() {
         )
       case 'logo': {
         const displayLogo = localStorage.getItem('pos_store_logo') || ''
-        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} style={dualScreenConfig.logoStyle} background={background} />
+        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={dualScreenConfig.logoStyle} background={background} />
       }
       default:
         return null

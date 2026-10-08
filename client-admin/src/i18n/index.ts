@@ -2886,7 +2886,13 @@ const resources = {
         "mediaContain": "Tampilkan seluruh media",
         "mediaFitHint": "Isi area mempertahankan proporsi tanpa tepi kosong, tetapi memotong sebagian gambar. Tampilkan seluruh media menyisakan latar jika rasio berbeda.",
 
-        "logoStyleHint": "Berlaku pada area Logo. Unggah Logo toko di Pengaturan Struk.",
+        "logoStyleHint": "Logo layar terpisah dari pilihan struk. Otomatis memakai Logo putih pada latar merek; Logo unggahan berasal dari Pengaturan Struk.",
+        "logoVariant": "Versi Logo",
+        "logoAuto": "Otomatis sesuai latar",
+        "logoRed": "Merah",
+        "logoWhite": "Putih",
+        "logoBlack": "Hitam",
+        "logoCustom": "Logo toko yang diunggah",
         "logoSize": "Lebar Logo (%)",
 
         "welcomeTextHint": "Atur ukuran font dan posisi teks sambutan.",
@@ -6239,7 +6245,13 @@ const resources = {
         "mediaContain": "Show complete media",
         "mediaFitHint": "Fill keeps proportions and removes empty borders by cropping edges. Complete media leaves background visible when aspect ratios differ.",
 
-        "logoStyleHint": "Applies to Logo areas. Upload the store Logo in Receipt Settings.",
+        "logoStyleHint": "Display Logo selection is independent of receipts. Automatic uses white on the brand background; uploaded Logos come from Receipt Settings.",
+        "logoVariant": "Logo version",
+        "logoAuto": "Automatic for background",
+        "logoRed": "Red",
+        "logoWhite": "White",
+        "logoBlack": "Black",
+        "logoCustom": "Uploaded store Logo",
         "logoSize": "Logo width (%)",
 
         "welcomeTextHint": "Set the font and position of welcome text.",
@@ -11255,7 +11267,13 @@ const resources = {
         "mediaContain": "完整显示（不裁切）",
         "mediaFitHint": "铺满保持比例、不拉伸，会裁掉部分边缘；完整显示保留整张图片，比例不同时留出品牌色背景。",
 
-        "logoStyleHint": "应用于选择“仅Logo”的区域；图片在“小票设置”上传。",
+        "logoStyleHint": "副屏Logo版本独立于小票；自动配色在品牌背景上使用反白Logo。上传的店铺Logo来自小票设置。",
+        "logoVariant": "Logo版本",
+        "logoAuto": "自动配色（适配背景）",
+        "logoRed": "红色",
+        "logoWhite": "反白",
+        "logoBlack": "黑色",
+        "logoCustom": "上传的店铺Logo",
         "logoSize": "Logo宽度（%）",
 
         "welcomeTextHint": "单独设置欢迎语的字号和显示位置。",

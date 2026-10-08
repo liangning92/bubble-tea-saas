@@ -438,7 +438,7 @@ const DualScreenPreview: React.FC<{
           </div>
         )
       case 'logo':
-        return <CustomerDisplayLogo src={receiptMediaUrl(storeLogo)} fallback="/youme-logo-red.png" style={dualScreen.logoStyle} background={background} />
+        return <CustomerDisplayLogo src={receiptMediaUrl(storeLogo)} fallback="/youme-logo-red.png" whiteFallback="/youme-logo-white.png" style={dualScreen.logoStyle} background={background} />
       default:
         return null
     }
@@ -1945,6 +1945,15 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 <div className="p-3 bg-gray-50 rounded-lg space-y-3">
                   <h4 className="text-sm font-medium">{t('posSettings.logoStyle')}</h4>
                   <p className="text-xs text-gray-500">{t('posSettings.logoStyleHint')}</p>
+                  <label className="block text-sm">{t('posSettings.logoVariant')}
+                    <select aria-label={t('posSettings.logoVariant')} className="input mt-1" value={hardwareSettings.dualScreen.logoStyle?.variant ?? 'auto'} onChange={e => updateLogoStyle({ variant: e.target.value as CustomerDisplayLogoStyle['variant'] }, true)}>
+                      <option value="auto">{t('posSettings.logoAuto')}</option>
+                      <option value="red">{t('posSettings.logoRed')}</option>
+                      <option value="white">{t('posSettings.logoWhite')}</option>
+                      <option value="black">{t('posSettings.logoBlack')}</option>
+                      <option value="custom">{t('posSettings.logoCustom')}</option>
+                    </select>
+                  </label>
                   <div className="grid grid-cols-3 gap-3">
                     <label className="text-sm">{t('posSettings.promotionTextAlign')}
                       <select className="input mt-1" value={hardwareSettings.dualScreen.logoStyle?.horizontalAlign ?? 'center'} onChange={e => updateLogoStyle({ horizontalAlign: e.target.value as CustomerDisplayLogoStyle['horizontalAlign'] }, true)}>
