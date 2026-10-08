@@ -1,7 +1,8 @@
+import { PromotionText, PromotionTextStyle } from '../../../shared/components/PromotionText'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../utils/helpers'
-import { YOUME_LOGO_RED, YOUME_LOGO_WHITE } from '../assets/logo'
+import { YOUME_LOGO_RED } from '../assets/logo'
 
 interface OrderItem {
   id: string
@@ -48,6 +49,8 @@ interface DualScreenConfig {
   welcomeText: string
   mediaFiles: MediaFile[]
   promotions: string[]
+  promotionsStyle?: PromotionTextStyle
+  welcomeStyle?: PromotionTextStyle
   showPromotionDetail?: boolean
   showUpsellHint?: boolean
   autoSyncPromotions?: boolean
@@ -272,67 +275,18 @@ export function CustomerDisplayPage() {
             <span className="text-6xl">{promotion}</span>
           </div>
         )
-      case 'promotions': {
-        const isPromoText = typeof promotion === 'string' && promotion.length > 2
+      case 'promotions':
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 text-white p-6 shadow-inner relative overflow-hidden">
-            <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
-            <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
-            <div className="relative z-10 flex flex-col items-center text-center max-w-md w-full">
-              {isPromoText ? (
-                <div className="bg-white/15 backdrop-blur-md border border-white/20 p-6 rounded-2xl shadow-xl w-full">
-                  <span className="inline-block px-3 py-1 bg-yellow-400 text-purple-950 font-black text-xs rounded-full mb-3 tracking-wider uppercase">
-                    {t('pos.specialOffer')}
-                  </span>
-                  <h3 className="text-2xl sm:text-3xl font-extrabold tracking-wide mb-2 leading-tight drop-shadow-sm">
-                    {promotion}
-                  </h3>
-                  <p className="text-white/80 text-sm">
-                    {dualScreenConfig.welcomeText || t('customer_welcome', 'Welcome')}
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="text-6xl mb-4 animate-bounce">{promotion}</div>
-                  <div className="text-2xl font-bold tracking-wide text-center drop-shadow-sm">
-                    {dualScreenConfig.welcomeText || t('customer_welcome', 'Welcome')}
-                  </div>
-                </>
-              )}
-              <div className="flex gap-2 mt-6">
-                {promotions.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      i === currentPromotion ? 'w-6 bg-white' : 'w-2 bg-white/40'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
+          <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 text-white">
+            <PromotionText lines={promotions} style={dualScreenConfig.promotionsStyle} />
           </div>
         )
-      }
-      case 'welcome': {
-        const storeLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
+      case 'welcome':
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-pink-500 to-pink-600 p-8 text-white">
-            <img
-              src={((storeLogo && !storeLogo.startsWith('/youme-logo')) ? storeLogo : '') || YOUME_LOGO_WHITE}
-              alt="YOUME"
-              onError={(e) => {
-                const target = e.currentTarget as HTMLImageElement
-                target.onerror = null
-                target.src = YOUME_LOGO_WHITE
-              }}
-              className="max-w-[80%] max-h-48 object-contain mb-6 drop-shadow-lg"
-            />
-            {dualScreenConfig.welcomeText && (
-              <h2 className="text-3xl font-bold text-center tracking-wide">{dualScreenConfig.welcomeText}</h2>
-            )}
+          <div className="w-full h-full bg-gradient-to-br from-pink-500 to-pink-600 text-white">
+            <PromotionText lines={[dualScreenConfig.welcomeText ?? '']} style={dualScreenConfig.welcomeStyle} />
           </div>
         )
-      }
       case 'order':
         return (
           <div className="w-full h-full flex flex-col bg-gray-50">

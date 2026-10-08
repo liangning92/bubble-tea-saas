@@ -6,6 +6,7 @@ import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
+import { PromotionText, PromotionTextStyle } from '../../../../shared/components/PromotionText'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
 
@@ -351,15 +352,14 @@ const DualScreenPreview: React.FC<{
         )
       case 'promotions':
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4">
-            <div className="text-3xl mb-2">{currentPromotion}</div>
-            <div className="text-sm text-center">{dualScreen.welcomeText || t('posSettings.welcome')}</div>
+          <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+            <PromotionText lines={promotions} style={dualScreen.promotionsStyle} scale={0.5} />
           </div>
         )
       case 'welcome':
         return (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-            <span className="text-xl font-bold">{dualScreen.welcomeText || t('posSettings.welcome')}</span>
+          <div className="w-full h-full bg-gray-800 text-white">
+            <PromotionText lines={[dualScreen.welcomeText ?? '']} style={dualScreen.welcomeStyle} scale={0.5} />
           </div>
         )
       case 'order':
@@ -742,6 +742,18 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   // 打印机类型定义
   type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
+
+  const updatePromotionStyle = (updates: Partial<PromotionTextStyle>, save = false) => {
+    const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, promotionsStyle: { ...hardwareSettings.dualScreen?.promotionsStyle, ...updates } } }
+    setHardwareSettings(next)
+    if (save) handleSave('hardwareSettings', next)
+  }
+
+  const updateWelcomeStyle = (updates: Partial<PromotionTextStyle>, save = false) => {
+    const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, welcomeStyle: { ...hardwareSettings.dualScreen?.welcomeStyle, ...updates } } }
+    setHardwareSettings(next)
+    if (save) handleSave('hardwareSettings', next)
+  }
 
   // 迁移旧格式到新格式，并确保小票、标签、后厨插槽完备
   const migratePrinterConfig = (hw: any): any => {
@@ -1764,6 +1776,70 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                     const newHardwareSettings = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen!, promotions } }
                     setHardwareSettings(newHardwareSettings)
                   }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder={t('posSettings.promotionsPlaceholder')} />
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-lg space-y-3">
+                  <h4 className="text-sm font-medium">{t('posSettings.promotionTextStyle')}</h4>
+                  <p className="text-xs text-gray-500">{t('posSettings.promotionTextHint')}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <label className="text-sm">{t('posSettings.promotionFontSize')}
+                      <input type="number" min={12} max={96} step={1} className="input mt-1" value={hardwareSettings.dualScreen.promotionsStyle?.fontSize ?? 32}
+                        onChange={e => updatePromotionStyle({ fontSize: Number(e.target.value) })}
+                        onBlur={() => updatePromotionStyle({ fontSize: Math.min(96, Math.max(12, hardwareSettings.dualScreen.promotionsStyle?.fontSize || 32)) }, true)} />
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionFontWeight')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.promotionsStyle?.fontWeight ?? 700} onChange={e => updatePromotionStyle({ fontWeight: Number(e.target.value) as 400 | 500 | 700 }, true)}>
+                        <option value={400}>{t('posSettings.textNormal')}</option><option value={500}>{t('posSettings.textMedium')}</option><option value={700}>{t('posSettings.textBold')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionTextAlign')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.promotionsStyle?.textAlign ?? 'center'} onChange={e => updatePromotionStyle({ textAlign: e.target.value as PromotionTextStyle['textAlign'] }, true)}>
+                        <option value="left">{t('posSettings.textLeft')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="right">{t('posSettings.textRight')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionVerticalAlign')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.promotionsStyle?.verticalAlign ?? 'center'} onChange={e => updatePromotionStyle({ verticalAlign: e.target.value as PromotionTextStyle['verticalAlign'] }, true)}>
+                        <option value="top">{t('posSettings.textTop')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="bottom">{t('posSettings.textBottom')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionLineHeight')}
+                      <input type="number" min={1} max={3} step={0.1} className="input mt-1" value={hardwareSettings.dualScreen.promotionsStyle?.lineHeight ?? 1.5}
+                        onChange={e => updatePromotionStyle({ lineHeight: Number(e.target.value) })}
+                        onBlur={() => updatePromotionStyle({ lineHeight: Math.min(3, Math.max(1, hardwareSettings.dualScreen.promotionsStyle?.lineHeight || 1.5)) }, true)} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-lg space-y-3">
+                  <h4 className="text-sm font-medium">{t('posSettings.welcomeTextStyle')}</h4>
+                  <p className="text-xs text-gray-500">{t('posSettings.welcomeTextHint')}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <label className="text-sm">{t('posSettings.promotionFontSize')}
+                      <input type="number" min={12} max={96} step={1} className="input mt-1" value={hardwareSettings.dualScreen.welcomeStyle?.fontSize ?? 32}
+                        onChange={e => updateWelcomeStyle({ fontSize: Number(e.target.value) })}
+                        onBlur={() => updateWelcomeStyle({ fontSize: Math.min(96, Math.max(12, hardwareSettings.dualScreen.welcomeStyle?.fontSize || 32)) }, true)} />
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionFontWeight')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.welcomeStyle?.fontWeight ?? 700} onChange={e => updateWelcomeStyle({ fontWeight: Number(e.target.value) as 400 | 500 | 700 }, true)}>
+                        <option value={400}>{t('posSettings.textNormal')}</option><option value={500}>{t('posSettings.textMedium')}</option><option value={700}>{t('posSettings.textBold')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionTextAlign')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.welcomeStyle?.textAlign ?? 'center'} onChange={e => updateWelcomeStyle({ textAlign: e.target.value as PromotionTextStyle['textAlign'] }, true)}>
+                        <option value="left">{t('posSettings.textLeft')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="right">{t('posSettings.textRight')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionVerticalAlign')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.welcomeStyle?.verticalAlign ?? 'center'} onChange={e => updateWelcomeStyle({ verticalAlign: e.target.value as PromotionTextStyle['verticalAlign'] }, true)}>
+                        <option value="top">{t('posSettings.textTop')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="bottom">{t('posSettings.textBottom')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionLineHeight')}
+                      <input type="number" min={1} max={3} step={0.1} className="input mt-1" value={hardwareSettings.dualScreen.welcomeStyle?.lineHeight ?? 1.5}
+                        onChange={e => updateWelcomeStyle({ lineHeight: Number(e.target.value) })}
+                        onBlur={() => updateWelcomeStyle({ lineHeight: Math.min(3, Math.max(1, hardwareSettings.dualScreen.welcomeStyle?.lineHeight || 1.5)) }, true)} />
+                    </label>
+                  </div>
                 </div>
 
                 {/* Idle Layout Editor */}

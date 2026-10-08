@@ -1,3 +1,4 @@
+import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
 import { reportReceivedPayment } from '../utils/receivedReceipt'
 import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
@@ -144,6 +145,11 @@ interface DualScreenConfig {
   showLogo: boolean
   adImageUrl: string
   promotions: string[]
+  promotionsStyle?: PromotionTextStyle
+  welcomeStyle?: PromotionTextStyle
+  autoSyncPromotions?: boolean
+  showPromotionDetail?: boolean
+  showUpsellHint?: boolean
   mediaFiles?: Array<{
     url: string
     filename: string
@@ -1106,10 +1112,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           const newDualScreen: DualScreenConfig = hw.dualScreen ? {
             enabled: hw.dualScreen.enabled ?? false,
             layoutStyle: hw.dualScreen.layoutStyle || 'full',
-            welcomeText: hw.dualScreen.welcomeText || 'YOUME',
+            welcomeText: hw.dualScreen.welcomeText ?? '',
             showLogo: hw.dualScreen.showLogo ?? false,
             adImageUrl: hw.dualScreen.adImageUrl || '',
             promotions: hw.dualScreen.promotions || ['🧋', '🍓', '💳', '🎁'],
+            promotionsStyle: hw.dualScreen.promotionsStyle,
+            welcomeStyle: hw.dualScreen.welcomeStyle,
+            autoSyncPromotions: hw.dualScreen.autoSyncPromotions !== false,
+            showPromotionDetail: hw.dualScreen.showPromotionDetail !== false,
+            showUpsellHint: hw.dualScreen.showUpsellHint !== false,
             mediaFiles: hw.dualScreen.mediaFiles || [],
             idleLayout: hw.dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] },
             orderingLayout: hw.dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] },
