@@ -12,7 +12,7 @@ export function CustomerDisplayLogo({ src, fallback, whiteFallback, style = {}, 
   whiteFallback: string
   style?: CustomerDisplayLogoStyle
   background?: string
-}) {
+}): React.ReactElement {
   const size = typeof style.sizePercent === 'number' && Number.isFinite(style.sizePercent) ? Math.min(100, Math.max(10, style.sizePercent)) : 70
   const variant = style.variant || 'auto'
   const rgb = [1, 3, 5].map(i => parseInt(background.slice(i, i + 2), 16))

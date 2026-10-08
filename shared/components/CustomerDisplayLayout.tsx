@@ -1,5 +1,4 @@
 import React from 'react'
-import type { ReactNode } from 'react'
 
 export type CustomerContent = 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
 export interface CustomerLayoutRow { height: number; content: CustomerContent }
@@ -23,7 +22,7 @@ const weight = (value: number) => Number.isFinite(value) && value > 0 ? value : 
 
 export function CustomerDisplayLayout({ columns, renderContent, background }: {
   columns: CustomerLayoutColumn[]
-  renderContent: (content: CustomerContent) => ReactNode
+  renderContent: (content: CustomerContent) => React.ReactNode
   background: string
 }) {
   const total = columns.reduce((sum, col) => sum + weight(col.width), 0)

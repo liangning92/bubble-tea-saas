@@ -335,7 +335,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [activityClock, setActivityClock] = useState(() => new Date())
   useEffect(() => {
     let cancelled = false
-    const refresh = async () => { try { const response = await posApi.getActivityPrices(); if (!cancelled) setActivityRules(response.data?.data || []) } catch {}
+    const refresh = async () => { try { const response = await posApi.getActivityPrices(); if (!cancelled) setActivityRules(Array.isArray(response.data?.data) ? response.data.data : []) } catch {}
       if (!cancelled) setActivityClock(new Date())
     }
     void refresh(); const timer = setInterval(refresh, 15000)
@@ -2826,7 +2826,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     try {
       await requireOpenShift()
       const rulesResponse = await posApi.getActivityPrices()
-      const freshRules = rulesResponse.data?.data || []
+      const freshRules = Array.isArray(rulesResponse.data?.data) ? rulesResponse.data.data : []
       const now = new Date()
       setActivityRules(freshRules); setActivityClock(now)
       setCart(previous => previous.map(item => { const base = products.find(p => p.id === item.productId)?.specs.find(s => s.id === item.specId)?.price; return base === undefined ? item : {...item, unitPrice: activityPrice(freshRules,item.productId,base,selectedChannel?.code || 'DINE_IN',now)} }))

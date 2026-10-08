@@ -1,5 +1,4 @@
 import React from 'react'
-import type { CSSProperties } from 'react'
 
 export interface PromotionTextStyle {
   fontSize?: number
@@ -12,7 +11,7 @@ export interface PromotionTextStyle {
 const bounded = (value: number | undefined, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
-export function promotionTextCSS(style: PromotionTextStyle = {}, scale = 1): CSSProperties {
+export function promotionTextCSS(style: PromotionTextStyle = {}, scale = 1): React.CSSProperties {
   return {
     fontSize: bounded(style.fontSize, 32, 12, 96) * scale,
     fontWeight: [400, 500, 700].includes(style.fontWeight || 0) ? style.fontWeight : 700,

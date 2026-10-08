@@ -83,7 +83,7 @@ const DEFAULT_ORDERING_LAYOUT: Layout = {
   ]
 }
 
-export function CustomerDisplayPage() {
+export function CustomerDisplayPage(): React.ReactElement {
   const { t } = useTranslation()
   const [orderData, setOrderData] = useState<OrderData | null>(null)
   const [orderComplete, setOrderComplete] = useState<{ show: boolean; orderNumber: string }>({
