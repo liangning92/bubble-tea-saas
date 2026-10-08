@@ -11,6 +11,9 @@ SPEC.loader.exec_module(U)
 
 
 class UpgradeTests(unittest.TestCase):
+    def test_unrelated_node_process_does_not_block_pos_upgrade(self):
+        self.assertIsNone(U.require_stopped(lambda: ['node.exe']))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='btps-owned-upgrade-')
         self.addCleanup(self.temp.cleanup)

@@ -76,10 +76,12 @@ def fixture(collision=False, legacy_affinity=True):
         assert not c.execute('PRAGMA foreign_key_check').fetchall()
 
 
-def invoke(command, expect=0, receipt=None):
+def invoke(command, expect=0, receipt=None, diagnostic=False):
     args = [str(HELPER), command]
     if command == 'prepare':
         args += ['--old-app', str(APP), '--result', str(TEMP / 'result.json'), '--operator-confirmed']
+        if diagnostic:
+            args += ['--diagnostic', str(TEMP / 'upgrade-diagnostic.json')]
     elif command in ('verify', 'restore'):
         args += ['--receipt', str(receipt or TEMP / 'result.json')]
     result = subprocess.run(args, capture_output=True, text=True, timeout=180)
@@ -92,7 +94,7 @@ def historic():
         return c.execute('SELECT id,totalAmount,finalAmount,paymentMethod FROM "Order"').fetchall()
 
 
-def drive_installer(exe):
+def drive_installer(exe, process=None):
     # Click ordinary visible NSIS controls. No test flag or confirmation bypass is shipped.
     user = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -108,7 +110,7 @@ def drive_installer(exe):
     user.PostMessageW.argtypes = user.SendMessageW.argtypes
     user.PostMessageW.restype = wintypes.BOOL
     # Same interactive handoff arguments used by electron-updater's NsisUpdater.
-    process = subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
+    process = process or subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
     visited_confirmation = False
     finish_seen = False
     observed = set()
@@ -213,7 +215,9 @@ try:
     CASES.append('compiled-helper-program-rollback-retains-additive-database')
     fixture(collision=True)
     before = sha(DB)
-    invoke('prepare', expect=73)
+    invoke('prepare', expect=73, diagnostic=True)
+    failure = json.loads((TEMP / 'upgrade-diagnostic.json').read_text())
+    assert failure['status'] == 'blocked' and failure['reason']
     assert sha(DB) == before and historic() == history
     CASES.append('compiled-helper-real-ddl-failure-byte-identical-rollback')
     fixture()
@@ -243,7 +247,17 @@ try:
     restarted_runtime = verify_started_runtime(expected_version)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
-    report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
+    # The original 295 package is named bubble-tea-saas. Put owned history in
+    # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
+    historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
+    assert not (historical_profile / 'data/dev.db').exists(), 'Runner must have no historical 295 database'
+    (historical_profile / 'data').mkdir(parents=True, exist_ok=True)
+    shutil.copy2(DB, historical_profile / 'data/dev.db')
+    alternate_profile = DATA
+    DATA = historical_profile
+    DB = historical_profile / 'data/dev.db'
+    authentic = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate'](ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile)
+    report = {'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],
@@ -262,3 +276,4 @@ finally:
     # On failure retain all synthetic artifacts for CI diagnosis.
     if len(CASES) == 8:
         shutil.rmtree(DATA)
+        shutil.rmtree(pathlib.Path(os.environ['APPDATA']) / 'BTPS')

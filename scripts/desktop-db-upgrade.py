@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import shutil
+import socket
 import sqlite3
 import sys
 import tempfile
@@ -25,6 +26,7 @@ CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_A
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
 CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
+LAST_DIAGNOSTIC = None
 
 
 class SchemaCompatibilityError(RuntimeError):
@@ -208,8 +210,16 @@ def windows_processes():
 
 
 def require_stopped(processes):
-    if {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe', 'node.exe'}:
+    # The old POS may fork a system node.exe for its local API, but other apps
+    # can also run node.exe. Check our listener instead of blocking every Node
+    # process on the cashier's machine.
+    if {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe'}:
         fail('POS_OR_LOCAL_API_STILL_RUNNING')
+    if sys.platform == 'win32':
+        with socket.socket() as listener:
+            listener.settimeout(0.2)
+            if listener.connect_ex(('127.0.0.1', 7072)) == 0:
+                fail('POS_OR_LOCAL_API_STILL_RUNNING')
 
 
 def profile_database():
@@ -225,7 +235,28 @@ def profile_database():
             if db.exists():
                 found.add(regular(db))
     if len(found) > 1:
-        fail('AMBIGUOUS_PROFILE_DATABASE')
+        # A running 295 writes its exact userData path to main.log. Previous
+        # failed installs may leave another historical database behind; never
+        # delete it or silently choose it over the profile 295 actually used.
+        active = []
+        for db in found:
+            profile = db.parent.parent
+            log = profile / 'logs' / 'main.log'
+            if log.is_file():
+                with open(regular(log), encoding='utf-8', errors='replace') as stream:
+                    recent = stream.read()[-1024 * 1024:]
+                evidence = 'App version: 2026.10.295, userData: ' + str(profile)
+                if evidence.casefold() in recent.casefold():
+                    active.append(db)
+        if len(active) != 1:
+            selector = pathlib.Path(os.environ['APPDATA']) / 'BTPS' / 'upgrade-active-profile.json'
+            if selector.is_file():
+                recorded = json.loads(regular(selector).read_text(encoding='utf-8'))
+                selected = [db for db in found if recorded.get('format') == 1 and recorded.get('profile') == str(db.parent.parent)]
+                if len(selected) == 1:
+                    return selected[0]
+            fail('AMBIGUOUS_PROFILE_DATABASE')
+        return active[0]
     return next(iter(found), None)
 
 
@@ -393,6 +424,7 @@ def load_receipt(result_path, catalog):
 
 
 def main():
+    global LAST_DIAGNOSTIC
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command', required=True)
     build = sub.add_parser('build-catalog')
@@ -404,10 +436,12 @@ def main():
     plan.add_argument('--old-app', required=True)
     plan.add_argument('--result', required=True)
     plan.add_argument('--operator-confirmed', action='store_true', required=True)
+    plan.add_argument('--diagnostic')
     for name in ('verify', 'restore'):
         p = sub.add_parser(name)
         p.add_argument('--receipt', required=True)
     args = parser.parse_args()
+    LAST_DIAGNOSTIC = getattr(args, 'diagnostic', None)
     if args.command == 'build-catalog':
         if getattr(sys, 'frozen', False):
             fail('BUILD_COMMAND_NOT_AVAILABLE_IN_INSTALLER')
@@ -421,11 +455,24 @@ def main():
         require_stopped(windows_processes)
         print(json.dumps({'status': 'stopped'}))
     elif args.command == 'prepare':
+        if args.diagnostic:
+            diagnostic = regular(args.diagnostic)
+            diagnostic.parent.mkdir(parents=True, exist_ok=True)
+            durable_json(diagnostic, {'status': 'running', 'stage': 'profile-database'})
         db = profile_database()
         if db is None:
             fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
+        if args.diagnostic:
+            durable_json(diagnostic, {'status': 'running', 'stage': 'schema-and-backup'})
         receipt = prepare(db, args.old_app, catalog, windows_processes, registry_snapshot())
         durable_json(args.result, receipt)
+        # The new Electron process must reopen exactly the database verified
+        # above even when another old profile remains on disk.
+        selector = regular(pathlib.Path(os.environ['APPDATA']) / 'BTPS' / 'upgrade-active-profile.json')
+        selector.parent.mkdir(parents=True, exist_ok=True)
+        durable_json(selector, {'format': 1, 'profile': str(db.parent.parent), 'sourceSha': catalog['sourceSha']})
+        if args.diagnostic:
+            durable_json(diagnostic, {'status': 'prepared', 'reason': None})
         print(json.dumps({'status': 'prepared', 'historicalRowsPreserved': True}))
     else:
         receipt = load_receipt(args.receipt, catalog)
@@ -443,5 +490,10 @@ if __name__ == '__main__':
         report = {'status': 'blocked', 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
         if isinstance(error, SchemaCompatibilityError):
             report['details'] = error.details
+        if LAST_DIAGNOSTIC:
+            try:
+                durable_json(LAST_DIAGNOSTIC, report)
+            except Exception:
+                pass
         print(json.dumps(report))
         sys.exit(73)
