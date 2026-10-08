@@ -1,3 +1,4 @@
+import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
 import { reportReceivedPayment } from '../utils/receivedReceipt'
 import { paymentProblem } from '../utils/paymentValidation'
@@ -146,10 +147,14 @@ interface DualScreenConfig {
   adImageUrl: string
   promotions: string[]
   promotionsStyle?: PromotionTextStyle
+  promotionsSubtitleStyle?: PromotionTextStyle
+  logoStyle?: CustomerDisplayLogoStyle
   welcomeStyle?: PromotionTextStyle
   autoSyncPromotions?: boolean
   showPromotionDetail?: boolean
   showUpsellHint?: boolean
+  mediaMode?: 'rotate' | 'single'
+  fixedMediaUrl?: string
   mediaFiles?: Array<{
     url: string
     filename: string
@@ -1117,11 +1122,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             adImageUrl: hw.dualScreen.adImageUrl || '',
             promotions: hw.dualScreen.promotions || ['🧋', '🍓', '💳', '🎁'],
             promotionsStyle: hw.dualScreen.promotionsStyle,
+            promotionsSubtitleStyle: hw.dualScreen.promotionsSubtitleStyle,
+            logoStyle: hw.dualScreen.logoStyle,
             welcomeStyle: hw.dualScreen.welcomeStyle,
             autoSyncPromotions: hw.dualScreen.autoSyncPromotions !== false,
             showPromotionDetail: hw.dualScreen.showPromotionDetail !== false,
             showUpsellHint: hw.dualScreen.showUpsellHint !== false,
             mediaFiles: hw.dualScreen.mediaFiles || [],
+            mediaMode: hw.dualScreen.mediaMode || 'rotate',
+            fixedMediaUrl: hw.dualScreen.fixedMediaUrl || '',
             idleLayout: hw.dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] },
             orderingLayout: hw.dualScreen.orderingLayout || { columns: [{ width: 100, content: 'order' }] },
           } : hardwareSettings.dualScreen

@@ -22,16 +22,18 @@ export function promotionTextCSS(style: PromotionTextStyle = {}, scale = 1): CSS
   }
 }
 
-export function PromotionText({ lines, style = {}, scale = 1 }: {
+export function PromotionText({ lines, style = {}, subtitleStyle, scale = 1 }: {
   lines: string[]
   style?: PromotionTextStyle
+  subtitleStyle?: PromotionTextStyle
   scale?: number
 }) {
   const justifyContent = style.verticalAlign === 'top' ? 'flex-start' : style.verticalAlign === 'bottom' ? 'flex-end' : 'center'
   return (
     <div className="w-full h-full flex flex-col overflow-y-auto p-4" style={{ justifyContent }}>
-      <div className="w-full shrink-0 my-auto" style={{ ...promotionTextCSS(style, scale), marginTop: style.verticalAlign === 'top' ? 0 : undefined, marginBottom: style.verticalAlign === 'bottom' ? 0 : undefined }}>
-        {lines.join('\n')}
+      <div className="w-full shrink-0 my-auto" style={{ marginTop: style.verticalAlign === 'top' ? 0 : undefined, marginBottom: style.verticalAlign === 'bottom' ? 0 : undefined }}>
+        <div style={promotionTextCSS(style, scale)}>{lines[0] || ''}</div>
+        {lines.length > 1 && <div className="mt-2" style={promotionTextCSS({ fontSize: 20, fontWeight: 400, ...subtitleStyle, textAlign: style.textAlign }, scale)}>{lines.slice(1).join('\n')}</div>}
       </div>
     </div>
   )

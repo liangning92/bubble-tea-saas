@@ -6,6 +6,8 @@ import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
+import { CustomerDisplayLogo, CustomerDisplayLogoStyle } from '../../../../shared/components/CustomerDisplayLogo'
+import { customerDisplayMedia } from '../../../../shared/utils/customerDisplayMedia'
 import { PromotionText, PromotionTextStyle } from '../../../../shared/components/PromotionText'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
@@ -294,7 +296,8 @@ const _DualScreenLayoutEditor: React.FC<{
 // DualScreen Preview Component
 const DualScreenPreview: React.FC<{
   dualScreen: any
-}> = React.memo(({ dualScreen }) => {
+  storeLogo?: string
+}> = React.memo(({ dualScreen, storeLogo }) => {
   const { t } = useTranslation()
   const [previewState, setPreviewState] = useState<'idle' | 'ordering' | 'complete'>('idle')
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -313,7 +316,7 @@ const DualScreenPreview: React.FC<{
 
   // Auto-rotate for preview
   useEffect(() => {
-    if (previewState !== 'idle') return
+    if (previewState !== 'idle' || dualScreen.mediaMode === 'single') return
     const mf = mediaFilesRef.current
     const pr = promotionsRef.current
     if (mf.length > 0) {
@@ -327,11 +330,11 @@ const DualScreenPreview: React.FC<{
       }, 2000)
       return () => clearInterval(interval)
     }
-  }, [previewState, mediaFiles.length, promotions.length])
+  }, [previewState, mediaFiles.length, promotions.length, dualScreen.mediaMode])
 
   useEffect(() => { setCurrentIndex(0) }, [mediaFiles.length, promotions.length])
 
-  const currentMedia = mediaFiles[currentIndex % mediaFiles.length]
+  const currentMedia = customerDisplayMedia<MediaFile>(mediaFiles, dualScreen.mediaMode, dualScreen.fixedMediaUrl, currentIndex)
   const currentPromotion = promotions[currentIndex % promotions.length]
 
   // Render column content
@@ -353,7 +356,7 @@ const DualScreenPreview: React.FC<{
       case 'promotions':
         return (
           <div className="w-full h-full bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-            <PromotionText lines={promotions} style={dualScreen.promotionsStyle} scale={0.5} />
+            <PromotionText lines={promotions} style={dualScreen.promotionsStyle} subtitleStyle={dualScreen.promotionsSubtitleStyle} scale={0.5} />
           </div>
         )
       case 'welcome':
@@ -409,11 +412,7 @@ const DualScreenPreview: React.FC<{
           </div>
         )
       case 'logo':
-        return (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <img src="/youme-logo-red.png" alt="YOUME" className="h-20 w-auto object-contain" />
-          </div>
-        )
+        return <CustomerDisplayLogo src={receiptMediaUrl(storeLogo)} fallback="/youme-logo-red.png" style={dualScreen.logoStyle} />
       default:
         return null
     }
@@ -745,6 +744,18 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   const updatePromotionStyle = (updates: Partial<PromotionTextStyle>, save = false) => {
     const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, promotionsStyle: { ...hardwareSettings.dualScreen?.promotionsStyle, ...updates } } }
+    setHardwareSettings(next)
+    if (save) handleSave('hardwareSettings', next)
+  }
+
+  const updatePromotionSubtitleStyle = (updates: Partial<PromotionTextStyle>, save = false) => {
+    const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, promotionsSubtitleStyle: { ...hardwareSettings.dualScreen?.promotionsSubtitleStyle, ...updates } } }
+    setHardwareSettings(next)
+    if (save) handleSave('hardwareSettings', next)
+  }
+
+  const updateLogoStyle = (updates: Partial<CustomerDisplayLogoStyle>, save = false) => {
+    const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, logoStyle: { ...hardwareSettings.dualScreen?.logoStyle, ...updates } } }
     setHardwareSettings(next)
     if (save) handleSave('hardwareSettings', next)
   }
@@ -1768,6 +1779,33 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                   />
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="text-sm font-medium">{t('posSettings.mediaMode')}
+                    <select className="input mt-1" value={hardwareSettings.dualScreen.mediaMode || 'rotate'} onChange={e => {
+                      const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, mediaMode: e.target.value } }
+                      setHardwareSettings(next)
+                      handleSave('hardwareSettings', next)
+                    }}>
+                      <option value="rotate">{t('posSettings.mediaRotate')}</option>
+                      <option value="single">{t('posSettings.mediaSingle')}</option>
+                    </select>
+                  </label>
+                  {hardwareSettings.dualScreen.mediaMode === 'single' && (
+                    <label className="text-sm font-medium">{t('posSettings.fixedMedia')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.fixedMediaUrl || ''} onChange={e => {
+                        const next = { ...hardwareSettings, dualScreen: { ...hardwareSettings.dualScreen, fixedMediaUrl: e.target.value } }
+                        setHardwareSettings(next)
+                        handleSave('hardwareSettings', next)
+                      }}>
+                        <option value="">{t('posSettings.firstMedia')}</option>
+                        {(hardwareSettings.dualScreen.mediaFiles || []).map((file: MediaFile, index: number) => (
+                          <option key={file.url} value={file.url}>{index + 1}. {file.filename} {file.isVideo ? '(Video)' : ''}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
+
                 {/* Promotions */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenPromotions')}</label>
@@ -1811,6 +1849,28 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 </div>
 
                 <div className="p-3 bg-gray-50 rounded-lg space-y-3">
+                  <h4 className="text-sm font-medium">{t('posSettings.promotionSubtitleStyle')}</h4>
+                  <p className="text-xs text-gray-500">{t('posSettings.promotionSubtitleHint')}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <label className="text-sm">{t('posSettings.promotionFontSize')}
+                      <input type="number" min={12} max={96} step={1} className="input mt-1" value={hardwareSettings.dualScreen.promotionsSubtitleStyle?.fontSize ?? 20}
+                        onChange={e => updatePromotionSubtitleStyle({ fontSize: Number(e.target.value) })}
+                        onBlur={() => updatePromotionSubtitleStyle({ fontSize: Math.min(96, Math.max(12, hardwareSettings.dualScreen.promotionsSubtitleStyle?.fontSize || 20)) }, true)} />
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionFontWeight')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.promotionsSubtitleStyle?.fontWeight ?? 400} onChange={e => updatePromotionSubtitleStyle({ fontWeight: Number(e.target.value) as 400 | 500 | 700 }, true)}>
+                        <option value={400}>{t('posSettings.textNormal')}</option><option value={500}>{t('posSettings.textMedium')}</option><option value={700}>{t('posSettings.textBold')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionLineHeight')}
+                      <input type="number" min={1} max={3} step={0.1} className="input mt-1" value={hardwareSettings.dualScreen.promotionsSubtitleStyle?.lineHeight ?? 1.5}
+                        onChange={e => updatePromotionSubtitleStyle({ lineHeight: Number(e.target.value) })}
+                        onBlur={() => updatePromotionSubtitleStyle({ lineHeight: Math.min(3, Math.max(1, hardwareSettings.dualScreen.promotionsSubtitleStyle?.lineHeight || 1.5)) }, true)} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-lg space-y-3">
                   <h4 className="text-sm font-medium">{t('posSettings.welcomeTextStyle')}</h4>
                   <p className="text-xs text-gray-500">{t('posSettings.welcomeTextHint')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -1838,6 +1898,26 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                       <input type="number" min={1} max={3} step={0.1} className="input mt-1" value={hardwareSettings.dualScreen.welcomeStyle?.lineHeight ?? 1.5}
                         onChange={e => updateWelcomeStyle({ lineHeight: Number(e.target.value) })}
                         onBlur={() => updateWelcomeStyle({ lineHeight: Math.min(3, Math.max(1, hardwareSettings.dualScreen.welcomeStyle?.lineHeight || 1.5)) }, true)} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-lg space-y-3">
+                  <h4 className="text-sm font-medium">{t('posSettings.logoStyle')}</h4>
+                  <p className="text-xs text-gray-500">{t('posSettings.logoStyleHint')}</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <label className="text-sm">{t('posSettings.promotionTextAlign')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.logoStyle?.horizontalAlign ?? 'center'} onChange={e => updateLogoStyle({ horizontalAlign: e.target.value as CustomerDisplayLogoStyle['horizontalAlign'] }, true)}>
+                        <option value="left">{t('posSettings.textLeft')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="right">{t('posSettings.textRight')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionVerticalAlign')}
+                      <select className="input mt-1" value={hardwareSettings.dualScreen.logoStyle?.verticalAlign ?? 'center'} onChange={e => updateLogoStyle({ verticalAlign: e.target.value as CustomerDisplayLogoStyle['verticalAlign'] }, true)}>
+                        <option value="top">{t('posSettings.textTop')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="bottom">{t('posSettings.textBottom')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.logoSize')}
+                      <input type="number" min={10} max={100} step={1} className="input mt-1" value={hardwareSettings.dualScreen.logoStyle?.sizePercent ?? 70} onChange={e => updateLogoStyle({ sizePercent: Number(e.target.value) })} onBlur={() => updateLogoStyle({ sizePercent: Math.min(100, Math.max(10, hardwareSettings.dualScreen.logoStyle?.sizePercent || 70)) }, true)} />
                     </label>
                   </div>
                 </div>
@@ -1929,7 +2009,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 </div>
 
                 {/* Preview */}
-                <DualScreenPreview dualScreen={hardwareSettings.dualScreen} />
+                <DualScreenPreview dualScreen={hardwareSettings.dualScreen} storeLogo={_posReceipt.storeLogo} />
               </div>
             )}
           </div>

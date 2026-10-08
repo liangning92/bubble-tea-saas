@@ -1,3 +1,5 @@
+import { CustomerDisplayLogo, CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
+import { customerDisplayMedia } from '../../../shared/utils/customerDisplayMedia'
 import { PromotionText, PromotionTextStyle } from '../../../shared/components/PromotionText'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -48,8 +50,12 @@ interface DualScreenConfig {
   orderingLayout: Layout
   welcomeText: string
   mediaFiles: MediaFile[]
+  mediaMode?: 'rotate' | 'single'
+  fixedMediaUrl?: string
   promotions: string[]
   promotionsStyle?: PromotionTextStyle
+  promotionsSubtitleStyle?: PromotionTextStyle
+  logoStyle?: CustomerDisplayLogoStyle
   welcomeStyle?: PromotionTextStyle
   showPromotionDetail?: boolean
   showUpsellHint?: boolean
@@ -156,7 +162,7 @@ export function CustomerDisplayPage() {
 
   // Auto-rotate media (images or promotions)
   useEffect(() => {
-    if (displayState !== 'idle') return
+    if (displayState !== 'idle' || dualScreenConfig.mediaMode === 'single') return
 
     const mf = mediaFilesRef.current
     const pr = promotionsRef.current
@@ -173,17 +179,17 @@ export function CustomerDisplayPage() {
       setCurrentPromotion(p => (p + 1) % pr.length)
     }, 5000)
     return () => clearInterval(interval)
-  }, [displayState])
+  }, [displayState, mediaFiles.length, promotions.length, dualScreenConfig.mediaMode])
 
   // Auto-play video when it's the current media
   useEffect(() => {
     if (displayState === 'idle' && mediaFiles.length > 0 && videoRef.current) {
-      const currentMedia = mediaFiles[currentMediaIndex]
+      const currentMedia = customerDisplayMedia(mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl, currentMediaIndex)
       if (currentMedia?.isVideo) {
         videoRef.current.play().catch(() => {})
       }
     }
-  }, [currentMediaIndex, displayState, mediaFiles])
+  }, [currentMediaIndex, displayState, mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl])
 
   const [paymentQr, setPaymentQr] = useState<{ qrImage: string; amount: number; orderNumber?: string } | null>(null)
 
@@ -247,14 +253,14 @@ export function CustomerDisplayPage() {
   }, [])
 
   const promotion = promotions[currentPromotion]
-  const currentMedia = mediaFiles[currentMediaIndex]
+  const currentMedia = customerDisplayMedia(mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl, currentMediaIndex)
 
   // Render column content based on type
   const renderColumnContent = (content: ColumnContent, isVideoRef?: React.RefObject<HTMLVideoElement | null>) => {
     switch (content) {
       case 'media':
         if (mediaFiles.length > 0) {
-          const media = mediaFiles[currentMediaIndex]
+          const media = currentMedia
           if (media?.isVideo) {
             return (
               <video
@@ -278,7 +284,7 @@ export function CustomerDisplayPage() {
       case 'promotions':
         return (
           <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 text-white">
-            <PromotionText lines={promotions} style={dualScreenConfig.promotionsStyle} />
+            <PromotionText lines={promotions} style={dualScreenConfig.promotionsStyle} subtitleStyle={dualScreenConfig.promotionsSubtitleStyle} />
           </div>
         )
       case 'welcome':
@@ -362,21 +368,8 @@ export function CustomerDisplayPage() {
           </div>
         )
       case 'logo': {
-        const displayLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
-        return (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100 p-8">
-            <img
-              src={((displayLogo && !displayLogo.startsWith('/youme-logo')) ? displayLogo : '') || YOUME_LOGO_RED}
-              alt="YOUME"
-              onError={(e) => {
-                const target = e.currentTarget as HTMLImageElement
-                target.onerror = null
-                target.src = YOUME_LOGO_RED
-              }}
-              className="max-w-[80%] max-h-48 object-contain"
-            />
-          </div>
-        )
+        const displayLogo = localStorage.getItem('pos_store_logo') || ''
+        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} style={dualScreenConfig.logoStyle} />
       }
       default:
         return null
