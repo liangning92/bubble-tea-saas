@@ -72,6 +72,12 @@ jobs:
       - name: Install Chromium for workflow regression tests
         run: npx playwright install --with-deps chromium
 
+      - name: Verify shift summaries and date selectors with isolated business records
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_PROVIDER=sqlite node tests/stoploss/shift-review-http-check.cjs
+          INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_PROVIDER=postgresql SHIFT_REVIEW_UI=1 node tests/stoploss/shift-review-http-check.cjs
+
       - name: Verify route chunks, authentication and offline desktop assets
         run: node tests/stoploss/route-splitting-page-check.cjs
 

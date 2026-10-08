@@ -2,8 +2,22 @@ import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as FinanceService from '../services/FinanceService'
 import * as ProductManagementService from '../services/ProductManagementService'
+import { prisma } from '../config/database'
+import { loadShiftReview, ShiftReviewInputError } from '../services/ShiftReviewService'
 
 const router = Router()
+
+router.get('/shift-sessions', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    if (!req.user!.storeId) return res.status(400).json({ code: 400, message: 'STORE_REQUIRED' })
+    const data = await prisma.$transaction(tx => loadShiftReview(tx, req.user!.storeId, req.query.startDate, req.query.endDate))
+    return res.json({ code: 200, data })
+  } catch (error) {
+    if (error instanceof ShiftReviewInputError) return res.status(400).json({ code: 400, message: error.message })
+    console.error('Shift review error:', error)
+    return res.status(500).json({ code: 500, message: 'SHIFT_REVIEW_FAILED' })
+  }
+})
 
 function parseReportDate(value: unknown, fallback: Date, endOfDay = false): Date {
   const dayOnly = value && /^\d{4}-\d{2}-\d{2}$/.test(String(value))
