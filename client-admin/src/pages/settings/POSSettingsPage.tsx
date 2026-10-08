@@ -149,6 +149,46 @@ interface Layout {
   columns: LayoutColumn[]
 }
 
+const LayoutWidthInput: React.FC<{ value: number; label: string; onChange: (value: number) => void }> = ({ value, label, onChange }) => {
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => setDraft(String(value)), [value])
+
+  const commit = () => {
+    const parsed = Number(draft)
+    if (!draft.trim() || !Number.isFinite(parsed)) {
+      setDraft(String(value))
+      return
+    }
+    const width = Math.min(100, Math.max(1, Math.round(parsed)))
+    setDraft(String(width))
+    if (width !== value) onChange(width)
+  }
+
+  return (
+    <label className="flex items-center gap-1 w-28 shrink-0">
+      <span className="sr-only">{label}</span>
+      <input
+        type="number"
+        min="1"
+        max="100"
+        step="1"
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
+        className="input w-20 text-sm"
+      />
+      <span className="text-sm text-gray-500">%</span>
+    </label>
+  )
+}
+
 // DualScreen Layout Editor Component
 const _DualScreenLayoutEditor: React.FC<{
   layout: Layout
@@ -196,18 +236,11 @@ const _DualScreenLayoutEditor: React.FC<{
       <div className="space-y-3">
         {layout.columns.map((col, index) => (
           <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-            {/* Width slider */}
-            <div className="flex items-center gap-2 w-32">
-              <input
-                type="range"
-                min="10"
-                max="80"
-                value={col.width}
-                onChange={(e) => updateColumn(index, { width: parseInt(e.target.value) })}
-                className="w-20"
-              />
-              <span className="text-xs w-8">{col.width}%</span>
-            </div>
+            <LayoutWidthInput
+              value={col.width}
+              label={`${title} — ${index + 1} (%)`}
+              onChange={(width) => updateColumn(index, { width })}
+            />
 
             {/* Content type */}
             <select
