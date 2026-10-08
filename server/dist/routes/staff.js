@@ -784,6 +784,166 @@ router.get('/attendance/history', auth_1.authenticate, async (req, res) => {
         res.status(500).json({ code: 500, message: 'Failed to get attendance history' });
     }
 });
+// GET /api/staff/overview/monthly - 员工端首页本月个人资料概览（考勤健康度、奖惩积分、排班、待办与公告）
+router.get('/overview/monthly', auth_1.authenticate, async (req, res) => {
+    try {
+        const staff = await database_1.default.staff.findFirst({
+            where: { userId: req.user.id },
+            include: { store: { select: { id: true, name: true } } }
+        });
+        if (!staff) {
+            return res.status(404).json({ code: 404, message: 'Staff profile not found' });
+        }
+        const now = new Date();
+        const targetMonth = req.query.month ? parseInt(req.query.month) : now.getMonth() + 1;
+        const targetYear = req.query.year ? parseInt(req.query.year) : now.getFullYear();
+        const monthStart = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0);
+        const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+        // 1. 本月考勤数据
+        const attendances = await database_1.default.attendance.findMany({
+            where: {
+                staffId: staff.id,
+                checkInTime: { gte: monthStart, lte: monthEnd }
+            },
+            orderBy: { checkInTime: 'desc' }
+        });
+        const presentDays = attendances.length;
+        const lateCount = attendances.filter(a => a.status === 'late').length;
+        const earlyLeaveCount = attendances.filter(a => a.status === 'early').length;
+        // 今日打卡
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const todayAttendance = attendances.find(a => new Date(a.checkInTime) >= todayStart) || null;
+        // 2. 本月请假天数
+        const leaves = await database_1.default.leave.findMany({
+            where: {
+                staffId: staff.id,
+                status: 'approved',
+                startDate: { lte: monthEnd },
+                endDate: { gte: monthStart }
+            }
+        });
+        const totalLeaveDays = leaves.reduce((sum, l) => sum + l.totalDays, 0);
+        // 3. 奖惩与积分变动（本月积分记录与累计积分）
+        const pointBalance = await database_1.default.staffPoint.findUnique({
+            where: { staffId: staff.id }
+        });
+        const monthlyPointLogs = await database_1.default.staffPointLog.findMany({
+            where: {
+                staffId: staff.id,
+                createdAt: { gte: monthStart, lte: monthEnd }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        const monthlyEarnedPoints = monthlyPointLogs
+            .filter(l => l.points > 0)
+            .reduce((sum, l) => sum + l.points, 0);
+        const monthlyDeductedPoints = monthlyPointLogs
+            .filter(l => l.points < 0)
+            .reduce((sum, l) => sum + Math.abs(l.points), 0);
+        // 奖惩事件 (Discipline)
+        const disciplines = await database_1.default.discipline.findMany({
+            where: {
+                staffId: staff.id,
+                incidentDate: { gte: monthStart, lte: monthEnd }
+            },
+            orderBy: { incidentDate: 'desc' }
+        });
+        const rewardsCount = disciplines.filter(d => ['bonus', 'award'].includes(d.type)).length + monthlyPointLogs.filter(l => l.points > 0).length;
+        const penaltiesCount = disciplines.filter(d => ['warning', 'deduction', 'suspension'].includes(d.type)).length + monthlyPointLogs.filter(l => l.points < 0).length;
+        // 4. 本周排班与今日班次
+        const dayOfWeek = now.getDay(); // 0 is Sunday
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - dayOfWeek);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
+        const weekSchedules = await database_1.default.schedule.findMany({
+            where: {
+                staffId: staff.id,
+                date: { gte: weekStart, lte: weekEnd }
+            },
+            orderBy: { date: 'asc' }
+        });
+        const shifts = await database_1.default.shift.findMany({
+            where: { storeId: staff.storeId }
+        });
+        const shiftMap = new Map(shifts.map(s => [s.key, s]));
+        const todayDateString = now.toISOString().slice(0, 10);
+        const todayScheduleRecord = weekSchedules.find(s => s.date.toISOString().slice(0, 10) === todayDateString);
+        // 5. 待办卫生任务统计
+        const pendingTasks = await database_1.default.hygieneTask.count({
+            where: {
+                storeId: staff.storeId,
+                status: 'pending',
+                OR: [
+                    { staffId: staff.id },
+                    { staffId: null }
+                ]
+            }
+        });
+        // 6. 门店最新置顶公告
+        const activeAnnouncements = await database_1.default.announcement.findMany({
+            where: {
+                storeId: staff.storeId,
+                isActive: true
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 2
+        });
+        res.json({
+            code: 200,
+            data: {
+                staff: {
+                    id: staff.id,
+                    name: staff.name,
+                    employeeNumber: staff.employeeNumber,
+                    position: staff.position,
+                    storeName: staff.store?.name || ''
+                },
+                month: `${targetYear}-${String(targetMonth).padStart(2, '0')}`,
+                attendance: {
+                    presentDays,
+                    lateCount,
+                    earlyLeaveCount,
+                    leaveDays: totalLeaveDays,
+                    todayAttendance
+                },
+                pointsAndDiscipline: {
+                    currentPoints: pointBalance?.balance || 0,
+                    monthlyEarnedPoints,
+                    monthlyDeductedPoints,
+                    rewardsCount,
+                    penaltiesCount,
+                    recentLogs: monthlyPointLogs.slice(0, 5),
+                    recentDisciplines: disciplines.slice(0, 5)
+                },
+                schedule: {
+                    todayShift: todayScheduleRecord ? {
+                        shiftKey: todayScheduleRecord.shift,
+                        shiftName: shiftMap.get(todayScheduleRecord.shift)?.name || todayScheduleRecord.shift,
+                        startTime: shiftMap.get(todayScheduleRecord.shift)?.startTime,
+                        endTime: shiftMap.get(todayScheduleRecord.shift)?.endTime,
+                        color: shiftMap.get(todayScheduleRecord.shift)?.color
+                    } : null,
+                    weeklyList: weekSchedules.map(s => ({
+                        date: s.date.toISOString().slice(0, 10),
+                        shift: s.shift,
+                        shiftName: shiftMap.get(s.shift)?.name || s.shift,
+                        color: shiftMap.get(s.shift)?.color
+                    }))
+                },
+                pendingHygieneTasks: pendingTasks,
+                announcements: activeAnnouncements
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Get monthly overview error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get monthly overview' });
+    }
+});
 // GET /api/staff/salary/my - Get current staff's salary
 router.get('/salary/my', auth_1.authenticate, async (req, res) => {
     try {

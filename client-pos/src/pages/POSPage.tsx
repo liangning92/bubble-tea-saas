@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { posApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
+import { posApi, tvScreenApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
 import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
 import { db, syncManager, productCache, LocalProduct, getLockScreenPin, saveLockScreenPin } from '../db/offline'
@@ -2982,6 +2982,12 @@ export function POSPage() {
       printCupStickers(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
       electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
+      // 若金额达标，联动电视大屏触发幸运大转盘抽奖
+      tvScreenApi.triggerLottery({
+        storeId: user?.storeId || undefined,
+        orderNumber: finalPickupNum || orderNum,
+        orderAmount: serverGrandTotal
+      }).catch(tvErr => console.warn('[POS] TV lottery trigger failed (non-critical):', tvErr))
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart()

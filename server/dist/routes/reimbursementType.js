@@ -25,10 +25,36 @@ const updateReimbursementTypeSchema = createReimbursementTypeSchema.partial();
 router.get('/', auth_1.authenticate, async (req, res) => {
     try {
         const storeId = req.user.storeId;
-        const reimbursementTypes = await database_1.default.reimbursementType.findMany({
+        let reimbursementTypes = await database_1.default.reimbursementType.findMany({
             where: { storeId, isActive: true },
             orderBy: { sortOrder: 'asc' }
         });
+        if (reimbursementTypes.length === 0) {
+            const defaultTypes = [
+                { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: 1000000, requiresReceipt: true, sortOrder: 1 },
+                { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: 500000, requiresReceipt: true, sortOrder: 2 },
+                { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: 300000, requiresReceipt: false, sortOrder: 3 },
+                { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: 2000000, requiresReceipt: true, sortOrder: 4 },
+                { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: 500000, requiresReceipt: true, sortOrder: 5 },
+                { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: 1000000, requiresReceipt: true, sortOrder: 6 }
+            ];
+            for (const item of defaultTypes) {
+                try {
+                    await database_1.default.reimbursementType.upsert({
+                        where: { storeId_code: { storeId, code: item.code } },
+                        update: { isActive: true },
+                        create: { ...item, storeId, isActive: true }
+                    });
+                }
+                catch {
+                    // ignore
+                }
+            }
+            reimbursementTypes = await database_1.default.reimbursementType.findMany({
+                where: { storeId, isActive: true },
+                orderBy: { sortOrder: 'asc' }
+            });
+        }
         res.json({
             code: 200,
             data: reimbursementTypes,

@@ -5,6 +5,7 @@ import { OrderHistoryPage } from './pages/OrderHistoryPage'
 import { CashManagementPage } from './pages/CashManagementPage'
 import { DiagnosticsPage } from './pages/DiagnosticsPage'
 import { CustomerDisplayPage } from './pages/CustomerDisplayPage'
+import { TvDisplayPage } from './pages/TvDisplayPage'
 import { RegisterMemberPage } from './pages/RegisterMemberPage'
 import { ScanPage } from './pages/ScanPage'
 import { HygieneTasksPage } from './pages/HygieneTasksPage'
@@ -29,6 +30,7 @@ function App() {
       <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
+      <Route path="/tv-display" element={<TvDisplayPage />} />
       <Route path="/register-member" element={<RegisterMemberPage />} />
       <Route path="/scan" element={
         <ProtectedRoute>

@@ -97,6 +97,7 @@ import { MessageStatsPage } from './pages/marketing/MessageStatsPage'
 import { CouponReportPage } from './pages/marketing/CouponReportPage'
 import { CampaignReportPage } from './pages/marketing/CampaignReportPage'
 import { ReferralFunnelPage } from './pages/marketing/ReferralFunnelPage'
+import { TvScreenConfigPage } from './pages/marketing/TvScreenConfigPage'
 import { ProductAnalysisPage } from './pages/product-analysis/ProductAnalysisPage'
 import { AddonListPage } from './pages/addons/AddonListPage'
 import { CategoryListPage } from './pages/categories/CategoryListPage'
@@ -292,6 +293,9 @@ function App() {
             <Route path="analytics/campaigns" element={<CampaignReportPage />} />
             <Route path="analytics/referral" element={<ReferralFunnelPage />} />
           </Route>
+
+          {/* 电视大屏互动 */}
+          <Route path="tv-screen" element={<TvScreenConfigPage />} />
         </Route>
 
         {/* 卫生管理 */}

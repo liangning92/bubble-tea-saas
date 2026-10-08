@@ -221,3 +221,10 @@ export const posApi = {
 export const shiftApi = {
   list: (storeId?: string) => api.get('/shifts', { params: storeId ? { storeId } : undefined }),
 }
+
+// TV Screen Marketing API
+export const tvScreenApi = {
+  getConfig: (storeId?: string) => api.get('/marketing/tv-screen/config', { params: storeId ? { storeId } : undefined }),
+  triggerLottery: (data: { storeId?: string; orderNumber?: string; orderAmount?: number }) =>
+    api.post('/marketing/tv-screen/trigger-lottery', data),
+}
