@@ -145,7 +145,8 @@ module.exports = async function staffWorkflows({ prisma, check, call, provider }
   await prisma.attendance.create({data:{staffId:staff.id,checkInTime:new Date('2026-09-02T01:30:00Z'),checkOutTime:new Date('2026-09-02T08:00:00Z'),status:'late'}});
   await prisma.schedule.create({data:{staffId:staff.id,date:new Date('2026-09-03T00:00:00Z'),shift:'morning'}});
   await check('PUT','/api/leave/balance/'+staff.id,{year:2026,annualLeave:12,sickLeave:12});
-  const sick=await check('POST','/api/leave/apply',{leaveType:'sick',startDate:'2026-09-04',endDate:'2026-09-04',totalDays:1},201,employeeToken);await check('PUT','/api/leave/approve/'+sick.id,{});
+  await check('POST','/api/leave/apply',{leaveType:'sick',startDate:'2026-09-04',endDate:'2026-09-04',totalDays:1},400,employeeToken);
+  const sick=await check('POST','/api/leave/apply',{leaveType:'sick',startDate:'2026-09-04',endDate:'2026-09-04',totalDays:1,attachmentUrl:'/uploads/workflow-sick-proof.pdf'},201,employeeToken);await check('PUT','/api/leave/approve/'+sick.id,{});
   await prisma.schedule.create({data:{staffId:staff.id,date:new Date('2026-09-04T00:00:00Z'),shift:'morning'}});
   const past=await check('GET',`/api/staff-salary/calculate/${staff.id}?month=9&year=2026`);assert.equal(past.latePenalty,5000);assert.equal(past.earlyLeaveDays,1);assert.equal(past.absentDays,1);assert.equal(past.sickDays,1);assert.equal(past.deductions,85000);
   await check('PUT','/api/attendance-rules/'+configuredAttendance.id,{earlyLeaveDeductionType:'none',absenceDeductionType:'none',sickLeaveDeductionType:'none'});await check('PUT','/api/staff/'+staff.id,{baseSalary:4000000});
