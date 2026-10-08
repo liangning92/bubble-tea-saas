@@ -30,12 +30,12 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 
     if (reimbursementTypes.length === 0) {
       const defaultTypes = [
-        { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: 1000000, requiresReceipt: true, sortOrder: 1 },
-        { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: 500000, requiresReceipt: true, sortOrder: 2 },
-        { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: 300000, requiresReceipt: false, sortOrder: 3 },
-        { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: 2000000, requiresReceipt: true, sortOrder: 4 },
-        { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: 500000, requiresReceipt: true, sortOrder: 5 },
-        { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: 1000000, requiresReceipt: true, sortOrder: 6 }
+        { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: null, requiresReceipt: false, sortOrder: 1 },
+        { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: null, requiresReceipt: false, sortOrder: 2 },
+        { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: null, requiresReceipt: false, sortOrder: 3 },
+        { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: null, requiresReceipt: false, sortOrder: 4 },
+        { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: null, requiresReceipt: false, sortOrder: 5 },
+        { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: null, requiresReceipt: false, sortOrder: 6 }
       ]
 
       for (const item of defaultTypes) {
@@ -170,12 +170,12 @@ router.post('/seed', authenticate, authorize('admin', 'manager'), async (req: Au
     const storeId = req.user!.storeId
 
     const defaultTypes = [
-      { code: 'transportation', name: 'Transportasi', color: '#3B82F6', maxAmount: 500000, requiresReceipt: true, sortOrder: 1 },
-      { code: 'meals', name: 'Makan', color: '#F59E0B', maxAmount: 150000, requiresReceipt: true, sortOrder: 2 },
-      { code: 'communication', name: 'Komunikasi', color: '#8B5CF6', maxAmount: 200000, requiresReceipt: false, sortOrder: 3 },
-      { code: 'medical', name: 'Medis', color: '#EF4444', maxAmount: null, requiresReceipt: true, sortOrder: 4 },
-      { code: 'office', name: 'Perlengkapan Kantor', color: '#10B981', maxAmount: 300000, requiresReceipt: true, sortOrder: 5 },
-      { code: 'other', name: 'Lainnya', color: '#6B7280', maxAmount: null, requiresReceipt: true, sortOrder: 6 }
+      { code: 'transportation', name: 'Transportasi', color: '#3B82F6', maxAmount: null, requiresReceipt: false, sortOrder: 1 },
+      { code: 'meals', name: 'Makan', color: '#F59E0B', maxAmount: null, requiresReceipt: false, sortOrder: 2 },
+      { code: 'communication', name: 'Komunikasi', color: '#8B5CF6', maxAmount: null, requiresReceipt: false, sortOrder: 3 },
+      { code: 'medical', name: 'Medis', color: '#EF4444', maxAmount: null, requiresReceipt: false, sortOrder: 4 },
+      { code: 'office', name: 'Perlengkapan Kantor', color: '#10B981', maxAmount: null, requiresReceipt: false, sortOrder: 5 },
+      { code: 'other', name: 'Lainnya', color: '#6B7280', maxAmount: null, requiresReceipt: false, sortOrder: 6 }
     ]
 
     const created = []

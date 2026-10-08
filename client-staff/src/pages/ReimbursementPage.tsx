@@ -33,12 +33,12 @@ interface ReimbursementType {
 }
 
 const DEFAULT_REIMBURSEMENT_TYPES: ReimbursementType[] = [
-  { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: 1000000, requiresReceipt: true },
-  { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: 500000, requiresReceipt: true },
-  { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: 300000, requiresReceipt: false },
-  { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: 2000000, requiresReceipt: true },
-  { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: 500000, requiresReceipt: true },
-  { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: 1000000, requiresReceipt: true }
+  { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: null, requiresReceipt: false },
+  { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: null, requiresReceipt: false },
+  { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: null, requiresReceipt: false },
+  { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: null, requiresReceipt: false },
+  { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: null, requiresReceipt: false },
+  { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: null, requiresReceipt: false }
 ]
 
 export function ReimbursementPage() {
