@@ -25,6 +25,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   await context.addInitScript(({scenario})=>{
    localStorage.setItem('pos-api-url','http://127.0.0.1:6204/api');localStorage.setItem('pos_lang','en');localStorage.setItem('pos_language','en');
    sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:'http://127.0.0.1:6204/api',user:{id:'cashier',role:'cashier',storeId:'synthetic-store'}},version:0}));
+   if(scenario==='display-states') localStorage.setItem('dualScreenConfig',JSON.stringify({enabled:true,autoSyncPromotions:false,idleLayout:{columns:[{width:50,content:'promotions'},{width:50,content:'welcome'}]},orderingLayout:{columns:[{width:40,content:'promotions'},{width:60,content:'order'}]},stateAppearance:{idle:{promotions:['Idle title','Idle subtitle'],promotionsStyle:{fontSize:48},welcomeText:'Idle welcome',backgroundColor:'#EC6D88'},ordering:{promotions:['Order title','Order subtitle'],promotionsStyle:{fontSize:24},orderHeaderColor:'#112233',orderBackgroundColor:'#FFFFFF',backgroundColor:'#EC6D88'},complete:{backgroundColor:'#123456'}}}));
    window.handlers={};window.listenerRemovals=0;window.trackRefs=[];
    const subscribe=channel=>callback=>{window.handlers[channel]=callback;return()=>{delete window.handlers[channel];window.listenerRemovals++;};};
    window.electronAPI={getAppVersion:async()=> '2026.10.311',onOrderUpdate:subscribe('update'),onOrderComplete:subscribe('complete'),onOrderClear:subscribe('clear'),onPaymentQr:subscribe('qr'),onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{}};
@@ -48,6 +49,14 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   assert.ok((await page.locator('img').evaluateAll(imgs=>imgs.map(i=>i.src))).some(src=>src.startsWith('data:image/png;base64,iVBORw0KGgo=')));
   await page.evaluate(()=>{window.handlers.complete('ORDER-E');window.handlers.clear();});await expect(page.getByText('ORDER-E')).toHaveCount(0);
   await page.evaluate(()=>location.hash='/login');await expect.poll(()=>page.evaluate(()=>Object.keys(window.handlers).length)).toBe(0);await page.clock.fastForward(6000);assert.deepEqual(errors,[]);await context.close();console.log('PASS customer display: new order/payment cancels old timer, repeated completion resets timer, clear and unmount clean subscriptions');
+ }
+ {
+  const {context,page,errors}=await make('display-states');await page.goto('http://127.0.0.1:6204/#/customer-display');await expect(page.getByText('Idle title',{exact:true})).toBeVisible();await expect(page.getByText('Idle subtitle',{exact:true})).toBeVisible();await expect(page.getByText('Idle title',{exact:true})).toHaveCSS('font-size','48px');
+  await expect(page.getByText('Idle welcome',{exact:true})).toBeVisible();
+  await page.evaluate(()=>window.handlers.update({items:[{id:'p',productName:'State Tea',specName:'Regular',quantity:1,unitPrice:12000,addons:[]}],subtotal:12000,total:12000,ppn:0,discount:0}));
+  await expect(page.getByText('Order title',{exact:true})).toHaveCSS('font-size','24px');await expect(page.getByText('Order subtitle',{exact:true})).toBeVisible();await expect(page.getByText('Idle welcome',{exact:true})).toHaveCount(0);await expect(page.locator('div.py-3.px-4.text-center.font-bold')).toHaveCSS('background-color','rgb(17, 34, 51)');
+  await page.evaluate(()=>window.handlers.complete('COLOR'));await expect(page.getByText('COLOR',{exact:false})).toBeVisible();await expect(page.locator('.min-h-screen')).toHaveCSS('background-color','rgb(18, 52, 86)');
+  assert.deepEqual(errors,[]);await page.screenshot({path:path.join(output,'customer-independent-states.png')});await context.close();console.log('PASS independent idle, ordering and completed colors, title/subtitle and typography');
  }
  for(const scenario of ['storage-ok','storage-failure','storage-read-failure','storage-delete-failure','server-down','server-unknown']){
   const {context,page,errors}=await make(scenario);await page.goto('http://127.0.0.1:6204/#/diagnostics');

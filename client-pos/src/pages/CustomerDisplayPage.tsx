@@ -1,3 +1,4 @@
+import React from 'react'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import { CustomerDisplayLayout, CustomerLayoutColumn, customerBackground, customerTextColor } from '../../../shared/components/CustomerDisplayLayout'
 import { CustomerDisplayLogo, CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'

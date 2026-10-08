@@ -1,3 +1,4 @@
+import React from 'react'
 export interface CustomerDisplayLogoStyle {
   horizontalAlign?: 'left' | 'center' | 'right'
   verticalAlign?: 'top' | 'center' | 'bottom'

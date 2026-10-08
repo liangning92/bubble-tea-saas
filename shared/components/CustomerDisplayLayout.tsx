@@ -1,3 +1,4 @@
+import React from 'react'
 import type { ReactNode } from 'react'
 
 export type CustomerContent = 'media' | 'promotions' | 'welcome' | 'order' | 'logo'
