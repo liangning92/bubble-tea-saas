@@ -138,9 +138,7 @@ def drive_installer(exe):
             if next_button:
                 if 'finish' in next_button[2].lower():
                     finish_seen = True
-                    for control, _, text in controls:
-                        if ('run' in text.lower() or 'launch' in text.lower()) and user.SendMessageW(control, 0xF0, 0, 0) == 1:
-                            user.PostMessageW(control, 0xF5, 0, 0)
+                    # Keep the ordinary Run checkbox selected to verify restart.
                 user.PostMessageW(next_button[0], 0xF5, 0, 0)
         time.sleep(.5)
     if process.poll() is None:
@@ -148,6 +146,25 @@ def drive_installer(exe):
         raise RuntimeError('Owned interactive installer did not finish within timeout; page states: ' + str(sorted(observed)))
     assert process.returncode == 0 and visited_confirmation and finish_seen, ('NSIS UI', process.returncode, visited_confirmation, finish_seen)
 
+
+def verify_started_runtime(expected_version):
+    env = dict(os.environ, BTPS_OWNED_RUNTIME=str(APP / 'BTPS.exe'))
+    query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
+    launched = []
+    deadline = time.monotonic() + 60
+    try:
+        while time.monotonic() < deadline:
+            raw = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', query], env=env, text=True).strip()
+            launched = json.loads(raw or '[]')
+            log = DATA / 'logs/main.log'
+            if launched and log.is_file() and ('App version: ' + expected_version) in log.read_text(errors='replace'):
+                return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True}
+            time.sleep(1)
+        raise RuntimeError('Installed POS did not start with expected runtime version')
+    finally:
+        # Only processes whose executable is inside this test-owned fixture.
+        for row in launched:
+            subprocess.run(['taskkill', '/PID', str(row['ProcessId']), '/T', '/F'], check=False, capture_output=True)
 
 try:
     fixture()
@@ -200,12 +217,13 @@ try:
     expected_version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8-sig'))['version']
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
     assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
+    restarted_runtime = verify_started_runtime(expected_version)
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
     report = {'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],
-              'onlineInteractiveInstallerVerified': True}
+              'onlineInteractiveInstallerVerified': True, 'restartedRuntime': restarted_runtime}
     (ROOT / 'desktop-manual-upgrade-report.json').write_text(json.dumps(report, indent=2))
     manifest_path = ROOT / 'desktop-template-manifest.json'
     manifest = json.loads(manifest_path.read_text())
