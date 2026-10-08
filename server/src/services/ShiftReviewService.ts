@@ -52,6 +52,8 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
   for (const e of quantities) assign(e.createdAt)?.expenses.push(e)
   for (const w of warnings) assign(w.createdAt)?.warnings.push(w)
   const serialize = (b: typeof buckets[number] | typeof outside) => {
+    // Orders and shift cash use whole IDR; Expense.amount uses hundredths.
+    // Return display amounts without changing any stored accounting values.
     const participants = new Map<string, ReturnType<typeof person> & { orders: number; expenses: number; warnings: number; roles: string[] }>()
     const add = (id: string, role: string, metric?: 'orders' | 'expenses' | 'warnings') => {
       const p = person(id), row = participants.get(p.id) || { ...p, orders: 0, expenses: 0, warnings: 0, roles: [] }
@@ -66,8 +68,8 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
     const completed = b.orders.filter(o => o.status === 'completed')
     const overlap = b.session ? buckets.some(other => other.id !== b.id && other.windowStart < b.windowEnd && other.windowEnd > b.windowStart) : false
     return { ...b, attribution: 'recorded_time_window', overlapping: overlap,
-      summary: { revenue: completed.reduce((sum, o) => sum + o.finalAmount, 0) / 100, completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0) / 100, expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
-      orders: b.orders.map(o => ({ ...o, amount: o.finalAmount / 100, staffName: person(o.staffId).name })),
+      summary: { revenue: completed.reduce((sum, o) => sum + o.finalAmount, 0), completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
+      orders: b.orders.map(o => ({ ...o, amount: o.finalAmount, staffName: person(o.staffId).name })),
       expenses: b.expenses.map(e => ({ id: e.id, category: e.category, amount: e.amount / 100, quantity: e.quantity ?? null, description: e.description, createdAt: e.createdAt, staffName: e.referenceId ? person(e.referenceId.split(':')[0]).name : null })),
       employees: [...participants.values()] }
   }
