@@ -25,12 +25,18 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(template)) as c, c:
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB, pickupNumber TEXT, requestFingerprint TEXT, requestReceipt TEXT, checkoutTaxAmount INTEGER)')
         with closing(sqlite3.connect(template)) as c, c:
+            c.execute('CREATE TABLE Leave (id TEXT PRIMARY KEY, totalDays REAL NOT NULL)')
+            c.execute('CREATE TABLE LeaveBalance (id TEXT PRIMARY KEY, usedLeave REAL NOT NULL, usedSick REAL NOT NULL)')
             for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest']:
                 fields=', '.join(U.quote(name)+' '+declaration for t,name,declaration in U.COLUMN_ADDITIONS if t==table)
                 c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY, '+fields+')')
             c.execute('CREATE TABLE PaymentEvidence (id TEXT PRIMARY KEY, orderId TEXT, image BLOB)')
         self.catalog = U.catalog_from_empty(template, 'a' * 40)
         with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('CREATE TABLE Leave (id TEXT PRIMARY KEY, totalDays INTEGER NOT NULL)')
+            c.execute('INSERT INTO Leave VALUES (?, ?)', ('old-leave', 2))
+            c.execute('CREATE TABLE LeaveBalance (id TEXT PRIMARY KEY, usedLeave INTEGER NOT NULL, usedSick INTEGER NOT NULL)')
+            c.execute('INSERT INTO LeaveBalance VALUES (?, ?, ?)', ('old-balance', 3, 4))
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB)')
             c.execute('INSERT INTO "Order" VALUES (?, ?, ?)', ('historical', 123.45, b'\x00\xff'))
             for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest']:
@@ -63,6 +69,34 @@ class UpgradeTests(unittest.TestCase):
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
         with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT pickupNumber FROM "Order"').fetchone()[0], 'P-001')
+
+    def test_historical_integer_leave_columns_preserve_schema_and_values(self):
+        with closing(sqlite3.connect(self.db)) as c:
+            before = {table: c.execute('SELECT sql FROM sqlite_master WHERE name=?', (table,)).fetchone()[0] for table in ('Leave', 'LeaveBalance')}
+        receipt = self.prepare()
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        with closing(sqlite3.connect(self.db)) as c, c:
+            self.assertEqual(c.execute('SELECT totalDays,typeof(totalDays) FROM Leave').fetchone(), (2, 'integer'))
+            self.assertEqual(c.execute('SELECT usedLeave,usedSick FROM LeaveBalance').fetchone(), (3, 4))
+            for table, ddl in before.items():
+                self.assertEqual(c.execute('SELECT sql FROM sqlite_master WHERE name=?', (table,)).fetchone()[0], ddl)
+            c.execute('UPDATE Leave SET totalDays=2.5')
+            c.execute('UPDATE LeaveBalance SET usedLeave=3.5,usedSick=4.5')
+            self.assertEqual(c.execute('SELECT totalDays FROM Leave').fetchone()[0], 2.5)
+            self.assertEqual(c.execute('SELECT usedLeave,usedSick FROM LeaveBalance').fetchone(), (3.5, 4.5))
+
+    def test_unapproved_type_and_constraint_drift_still_block_with_field_diagnostics(self):
+        for declaration in ('TEXT NOT NULL', 'INTEGER'):
+            with closing(sqlite3.connect(self.db)) as c, c:
+                c.execute('DROP TABLE Leave')
+                c.execute('CREATE TABLE Leave (id TEXT PRIMARY KEY, totalDays '+declaration+')')
+            before = U.digest(self.db)
+            with self.assertRaises(U.SchemaCompatibilityError) as result:
+                self.prepare()
+            self.assertEqual(result.exception.details['table'], 'Leave')
+            self.assertEqual(result.exception.details['column'], 'totalDays')
+            self.assertEqual(U.digest(self.db), before)
+            self.assertFalse((self.db.parent / 'upgrade-backups').exists())
 
     def test_partial_old_schema_preserves_existing_receipt_values(self):
         with closing(sqlite3.connect(self.db)) as c, c:
