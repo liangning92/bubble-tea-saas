@@ -231,7 +231,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 费用记录状态
   const [todayExpenses, setTodayExpenses] = useState<any[]>([])
-  const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string }[]>([])
+  const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string }[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseQuantity, setExpenseQuantity] = useState('1')
@@ -1825,12 +1825,21 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     ])
   }
 
+  const expenseCategoryLabel = (category: {key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string}) => {
+    const language = i18n.resolvedLanguage || i18n.language
+    const localized = language.startsWith('zh') ? category.labelZh : language.startsWith('en') ? category.labelEn : category.labelId
+    const defaults: Record<string, string> = {supplies: 'expenseSupplies', utilities: 'expenseUtilities', rent: 'expenseRent', other: 'expenseOther'}
+    return localized?.trim() || category.label?.trim() || (defaults[category.key] ? t('pos.' + defaults[category.key]) : category.labelEn?.trim() || category.labelZh?.trim() || category.key)
+  }
+
   // 加载今日费用数据
   const fetchTodayExpenses = async () => {
     if (!user?.storeId) return
     try {
       const categories = await posApi.getExpenseCategories()
-      setExpenseCategories(categories.data?.data?.list || [])
+      const available = categories.data?.data?.list || []
+      setExpenseCategories(available)
+      setExpenseCategory(current => available.some((category: {key: string}) => category.key === current) ? current : '')
       const res = await posApi.getMyPosExpenses()
       setTodayExpenses(res.data?.data?.list || [])
     } catch (e) {
@@ -1892,6 +1901,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 快捷键支持
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (showExpenseModal) {
+        if (e.key === 'Escape') setShowExpenseModal(false)
+        return
+      }
+      const editingInput = e.target instanceof Element && !!e.target.closest('input, textarea, select, [contenteditable="true"]')
+      if (editingInput && e.key !== 'Escape' && !(e.key === 'Enter' && showPaymentModal)) return
       if (showScanModal) {
         if (e.key === 'Escape') { e.preventDefault(); closeScan() }
         return
@@ -1941,7 +1956,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [availableChannels, products, filter, showAddonModal, showPaymentModal, showMemberModal, showDiscountModal, showSuspendModal, showShiftModal, showHistoryModal, showScanModal, showCashModal, showLogoutModal])
+  }, [availableChannels, products, filter, showAddonModal, showPaymentModal, showMemberModal, showDiscountModal, showSuspendModal, showShiftModal, showHistoryModal, showScanModal, showCashModal, showLogoutModal, showExpenseModal])
 
   const productStore = useProductStore()
   const categories = productStore.categories()
@@ -5047,7 +5062,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   {todayExpenses.map((expense: any) => (
                     <div key={expense.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
                       <div>
-                        <p className="font-medium">{expenseCategories.find(c => c.key === expense.category)?.label || expense.category}</p>
+                        <p className="font-medium">{expenseCategoryLabel(expenseCategories.find(c => c.key === expense.category) || {key: expense.category, label: expense.category})}</p>
                         <p className="text-gray-500 text-xs">{t('pos.purchaseQuantity')}: {expense.quantity ?? '-'} · {expense.description || '-'}</p>
                       </div>
                       <p className="font-medium text-red-500">-{formatCurrency(expense.amount)}</p>
@@ -5069,7 +5084,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     className="w-full px-3 py-2 border rounded-xl"
                   >
                     <option value="">{t('pos.selectCategory')}</option>
-                    {expenseCategories.map(category => <option key={category.key} value={category.key}>{category.label}</option>)}
+                    {expenseCategories.map(category => <option key={category.key} value={category.key}>{expenseCategoryLabel(category)}</option>)}
                   </select>
                 </div>
 

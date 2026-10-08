@@ -75,6 +75,9 @@ jobs:
       - name: Verify route chunks, authentication and offline desktop assets
         run: node tests/stoploss/route-splitting-page-check.cjs
 
+      - name: Verify POS expense keyboard entry and category labels in three languages
+        run: node tests/stoploss/pos-expense-page-check.cjs
+
       - name: Verify built admin and staff workflows against isolated PostgreSQL
         run: |
           export PATH="$(pg_config --bindir):$PATH"
