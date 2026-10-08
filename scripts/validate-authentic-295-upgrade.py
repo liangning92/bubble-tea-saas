@@ -85,6 +85,13 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
                 return self.returncode
             def terminate(self):
                 kernel.TerminateProcess(self.handle,73)
+            def wait(self, timeout=30):
+                deadline=time.monotonic()+timeout
+                while self.poll() is None and time.monotonic()<deadline:
+                    time.sleep(.1)
+                if self.returncode is None:
+                    raise subprocess.TimeoutExpired(installer_path, timeout)
+                return self.returncode
         process=None
         deadline=time.monotonic()+45
         env=dict(os.environ,BTPS_OWNED_INSTALLER=installer_path)
@@ -95,7 +102,13 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
             else:
                 time.sleep(.5)
         assert process, 'Original 295 updater did not launch candidate installer'
-        drive(candidate, process=process)
+        try:
+            drive(candidate, process=process)
+        except Exception:
+            diagnostic = data / 'logs/upgrade-check.json'
+            if diagnostic.is_file():
+                print('Original 295 online upgrade diagnostic: ' + diagnostic.read_text(errors='replace'), flush=True)
+            raise
         runtime=verify_started(version)
         assert historic()==before
         return {'originalVersion':'2026.10.295','originalInstallerSha256':OLD_HASH,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'restartedRuntime':runtime}
