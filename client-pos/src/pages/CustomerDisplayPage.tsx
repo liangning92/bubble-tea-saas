@@ -1,3 +1,4 @@
+import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import { CustomerDisplayLayout, CustomerLayoutColumn, customerBackground, customerTextColor } from '../../../shared/components/CustomerDisplayLayout'
 import { CustomerDisplayLogo, CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import { customerDisplayMedia } from '../../../shared/utils/customerDisplayMedia'
@@ -48,6 +49,7 @@ interface DualScreenConfig {
   orderingLayout: Layout
   welcomeText: string
   mediaFiles: MediaFile[]
+  stateAppearance?: Partial<Record<CustomerDisplayState, CustomerDisplayAppearance>>
   backgroundColor?: string
   mediaFit?: 'cover' | 'contain'
   mediaMode?: 'rotate' | 'single'
@@ -143,7 +145,8 @@ export function CustomerDisplayPage() {
   }, [])
 
   const mediaFiles = dualScreenConfig.mediaFiles || []
-  const background = customerBackground(dualScreenConfig.backgroundColor)
+  const appearance = customerDisplayAppearance(dualScreenConfig, displayState === 'idle' ? 'idle' : displayState === 'complete' ? 'complete' : 'ordering')
+  const background = appearance.backgroundColor
   const textColor = customerTextColor(background)
   const promotions = (dualScreenConfig.autoSyncPromotions !== false && activePromotions.length > 0)
     ? activePromotions
@@ -164,7 +167,7 @@ export function CustomerDisplayPage() {
 
   // Auto-rotate media (images or promotions)
   useEffect(() => {
-    if (displayState !== 'idle' || dualScreenConfig.mediaMode === 'single') return
+    if (!['idle', 'ordering'].includes(displayState) || dualScreenConfig.mediaMode === 'single') return
 
     const mf = mediaFilesRef.current
     const pr = promotionsRef.current
@@ -185,7 +188,7 @@ export function CustomerDisplayPage() {
 
   // Auto-play video when it's the current media
   useEffect(() => {
-    if (displayState === 'idle' && mediaFiles.length > 0 && videoRef.current) {
+    if (['idle', 'ordering'].includes(displayState) && mediaFiles.length > 0 && videoRef.current) {
       const currentMedia = customerDisplayMedia(mediaFiles, dualScreenConfig.mediaMode, dualScreenConfig.fixedMediaUrl, currentMediaIndex)
       if (currentMedia?.isVideo) {
         videoRef.current.play().catch(() => {})
@@ -259,6 +262,8 @@ export function CustomerDisplayPage() {
 
   // Render column content based on type
   const renderColumnContent = (content: ColumnContent, isVideoRef?: React.RefObject<HTMLVideoElement | null>) => {
+    const regionBackground = customerBackground(appearance.regionBackgrounds?.[content as 'media' | 'promotions' | 'welcome' | 'logo'] || background)
+    const regionTextColor = customerTextColor(regionBackground)
     switch (content) {
       case 'media':
         if (mediaFiles.length > 0) {
@@ -269,7 +274,7 @@ export function CustomerDisplayPage() {
                 ref={isVideoRef as React.RefObject<HTMLVideoElement>}
                 src={media.url}
                 className="w-full h-full"
-                style={{ objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }}
+                style={{ background: regionBackground, objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }}
                 autoPlay
                 loop
                 muted
@@ -277,29 +282,29 @@ export function CustomerDisplayPage() {
               />
             )
           }
-          return <img src={media?.url} alt="" className="w-full h-full" style={{ objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }} />
+          return <img src={media?.url} alt="" className="w-full h-full" style={{ background: regionBackground, objectFit: dualScreenConfig.mediaFit === 'contain' ? 'contain' : 'cover' }} />
         }
         return (
-          <div className="w-full h-full flex items-center justify-center" style={{ background, color: textColor }}>
+          <div className="w-full h-full flex items-center justify-center" style={{ background: regionBackground, color: regionTextColor }}>
             <span className="text-6xl">{promotion}</span>
           </div>
         )
       case 'promotions':
         return (
-          <div className="w-full h-full" style={{ background, color: textColor }}>
-            <PromotionText lines={promotions} style={dualScreenConfig.promotionsStyle} subtitleStyle={dualScreenConfig.promotionsSubtitleStyle} />
+          <div className="w-full h-full" style={{ background: regionBackground, color: regionTextColor }}>
+            <PromotionText lines={promotions} style={appearance.promotionsStyle} subtitleStyle={appearance.promotionsSubtitleStyle} />
           </div>
         )
       case 'welcome':
         return (
-          <div className="w-full h-full" style={{ background, color: textColor }}>
+          <div className="w-full h-full" style={{ background: regionBackground, color: regionTextColor }}>
             <PromotionText lines={[dualScreenConfig.welcomeText ?? '']} style={dualScreenConfig.welcomeStyle} />
           </div>
         )
       case 'order':
         return (
-          <div className="w-full h-full flex flex-col bg-gray-50">
-            <div className="bg-primary text-white py-3 px-4 text-center font-bold">{t('pos.cart', 'Your Order')}</div>
+          <div className="w-full h-full flex flex-col" style={{ background: appearance.orderBackgroundColor }}>
+            <div className="py-3 px-4 text-center font-bold" style={{ background: appearance.orderHeaderColor, color: customerTextColor(appearance.orderHeaderColor) }}>{t('pos.cart', 'Your Order')}</div>
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
               {orderData?.items.map((item) => (
                 <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
@@ -372,7 +377,7 @@ export function CustomerDisplayPage() {
         )
       case 'logo': {
         const displayLogo = localStorage.getItem('pos_store_logo') || ''
-        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={dualScreenConfig.logoStyle} background={background} />
+        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={dualScreenConfig.logoStyle} background={regionBackground} />
       }
       default:
         return null
@@ -408,7 +413,7 @@ export function CustomerDisplayPage() {
   // Order complete state - show thank you message (always full screen)
   if (displayState === 'complete') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-500 to-green-600 flex flex-col items-center justify-center text-white">
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background, color: textColor }}>
         <div className="text-8xl mb-6">✓</div>
         <h1 className="text-5xl font-bold mb-2">{t('customerDisplay.thankYou')}</h1>
         <p className="text-2xl opacity-90">

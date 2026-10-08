@@ -1,3 +1,4 @@
+import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
 import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
@@ -154,6 +155,7 @@ interface DualScreenConfig {
   autoSyncPromotions?: boolean
   showPromotionDetail?: boolean
   showUpsellHint?: boolean
+  stateAppearance?: Partial<Record<CustomerDisplayState, CustomerDisplayAppearance>>
   backgroundColor?: string
   mediaFit?: 'cover' | 'contain'
   mediaMode?: 'rotate' | 'single'
@@ -1128,6 +1130,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             mediaFiles: hw.dualScreen.mediaFiles || [],
             mediaMode: hw.dualScreen.mediaMode || 'rotate',
             backgroundColor: hw.dualScreen.backgroundColor,
+            stateAppearance: hw.dualScreen.stateAppearance,
             mediaFit: hw.dualScreen.mediaFit || 'cover',
             fixedMediaUrl: hw.dualScreen.fixedMediaUrl || '',
             idleLayout: hw.dualScreen.idleLayout || { columns: [{ width: 100, content: 'media' }] },
