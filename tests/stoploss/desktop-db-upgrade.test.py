@@ -54,6 +54,10 @@ class UpgradeTests(unittest.TestCase):
 
     def test_success_preserves_every_old_value_and_verified_backups(self):
         receipt = self.prepare()
+        self.assertEqual(pathlib.Path(receipt['appBackup']), U.application_backup_path(self.app, receipt['nonce']))
+        # A 224-character installed file path remains below MAX_PATH after
+        # replacing the four-character BTPS directory with this backup name.
+        self.assertLessEqual(len(pathlib.Path(receipt['appBackup']).name) - len(self.app.name), 15)
         self.assertTrue(receipt['columnAdded'])
         self.assertEqual(receipt['columnsAdded'], [t+'.'+n for t,n,_ in U.COLUMN_ADDITIONS])
         self.assertTrue(receipt['indexAdded'])
@@ -137,7 +141,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
 
     def test_windows_copy_failure_identifies_file_and_stage_without_modifying_database(self):
-        problem = shutil.Error([(str(self.app / 'BTPS.exe'), str(self.app.parent / '.BTPS-upgrade-test' / 'BTPS.exe'), '[WinError 5] Access is denied')])
+        problem = shutil.Error([(str(self.app / 'BTPS.exe'), str(self.app.parent / 'B-test' / 'BTPS.exe'), '[WinError 5] Access is denied')])
         with mock.patch.object(U.shutil, 'copytree', side_effect=problem):
             with self.assertRaises(shutil.Error) as result:
                 self.prepare()

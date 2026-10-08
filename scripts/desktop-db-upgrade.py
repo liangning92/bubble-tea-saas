@@ -168,6 +168,13 @@ def tree_manifest(root):
     return files
 
 
+def application_backup_path(old_app, nonce):
+    # Keep the backup beside the installed app for atomic rollback. The old
+    # descriptive name pushed Prisma cache paths past Windows MAX_PATH on
+    # machines where LongPathsEnabled is disabled.
+    return old_app.parent / ('B-' + uuid.UUID(nonce).hex[:16])
+
+
 def durable_json(path, data):
     path = pathlib.Path(path)
     with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as stream:
@@ -350,7 +357,7 @@ def prepare(db, old_app, catalog, processes, registry=None):
                 fail('SNAPSHOT_HISTORY_MISMATCH')
         upgrade_stage('application-manifest')
         app_files = tree_manifest(old_app)
-        app_backup = old_app.parent / ('.BTPS-upgrade-' + nonce)
+        app_backup = application_backup_path(old_app, nonce)
         upgrade_stage('application-backup')
         shutil.copytree(old_app, app_backup, copy_function=shutil.copy2)
         if tree_manifest(app_backup) != app_files or tree_manifest(old_app) != app_files:
@@ -410,7 +417,7 @@ def verify_receipt(receipt, catalog, processes):
     db, old_app = regular(receipt['database']), regular(receipt['oldApp'])
     nonce = str(uuid.UUID(receipt['nonce']))
     expected_db_backup = db.parent / 'upgrade-backups' / nonce / 'before.db'
-    expected_app_backup = old_app.parent / ('.BTPS-upgrade-' + nonce)
+    expected_app_backup = application_backup_path(old_app, nonce)
     if pathlib.Path(receipt['databaseBackup']) != expected_db_backup or pathlib.Path(receipt['appBackup']) != expected_app_backup:
         fail('BACKUP_PATH_MISMATCH')
     regular(expected_db_backup)
