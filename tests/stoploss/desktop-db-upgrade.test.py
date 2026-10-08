@@ -67,6 +67,24 @@ class UpgradeTests(unittest.TestCase):
             self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
 
+    def test_deep_prisma_asset_stays_below_windows_backup_path_limit(self):
+        folder = self.app / 'resources' / 'app.asar.unpacked' / 'server' / 'node_modules' / '.prisma' / 'client'
+        leaf_length = 224 - len(str(folder)) - 1
+        self.assertGreater(leaf_length, 0)
+        asset = folder / ('x' * leaf_length)
+        folder.mkdir(parents=True)
+        asset.write_bytes(b'old-prisma-cache')
+        self.app_before = U.tree_manifest(self.app)
+
+        receipt = self.prepare()
+        relative = asset.relative_to(self.app)
+        previous_backup = self.app.parent / ('.BTPS-upgrade-' + receipt['nonce']) / relative
+        current_backup = pathlib.Path(receipt['appBackup']) / relative
+        self.assertGreaterEqual(len(str(previous_backup)), 260)
+        self.assertLess(len(str(current_backup)), 260)
+        self.assertEqual(current_backup.read_bytes(), b'old-prisma-cache')
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+
     def test_repeat_is_idempotent_and_preserves_existing_pickup_values(self):
         self.prepare()
         with closing(sqlite3.connect(self.db)) as c, c:
