@@ -117,7 +117,7 @@ export default api
 
 export const posApi = {
   // Products (cached for offline)
-  getActivityPrices: () => api.get('/marketing/activity-prices'),
+  getActivityPrices: () => api.get('/marketing/activity-prices', {timeout:5000}),
   getProducts: (storeId: string) => api.get(`/products?storeId=${storeId}&status=active`),
   getProductsForPOS: (storeId: string) => api.get(`/products/pos?storeId=${storeId}`),
   getProductsVersion: (storeId: string) => api.get(`/products/pos/version?storeId=${storeId}`),

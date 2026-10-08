@@ -129,6 +129,7 @@ interface CartItem {
   iceLevel?: string
   iceLevelName?: string
   unitPrice: number
+  baseUnitPrice?: number
   quantity: number
   addons: { id: string; name: string; price: number; qty: number }[]
 }
@@ -346,7 +347,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if (showPaymentModal || isCheckingOut) return
     setCart(previous => {
       let changed = false
-      const next = previous.map(item => { const base = products.find(p => p.id === item.productId)?.specs.find(s => s.id === item.specId)?.price; if (base === undefined) return item; const price = getActivityPrice(item.productId, base); if (price === item.unitPrice) return item; changed = true; return {...item, unitPrice: price} })
+      const next = previous.map(item => { const base = item.baseUnitPrice ?? item.unitPrice; if (base === undefined) return item; const price = getActivityPrice(item.productId, base); if (price === item.unitPrice) return item; changed = true; return {...item, unitPrice: price} })
       return changed ? next : previous
     })
   }, [activityRules, activityClock, selectedChannel?.code, products, showPaymentModal, isCheckingOut])
@@ -2195,13 +2196,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       iceLevel: selectedIce,
       iceLevelName: iceObj ? t(iceObj.nameKey) : t('pos.normalIce'),
       unitPrice: getActivityPrice(selectedProduct.id, selectedSpec.price),
+      baseUnitPrice: selectedSpec.price,
       quantity: addonQty,
       addons
     }
 
     setCart(prev => {
       const existIdx = prev.findIndex(
-        i => i.productId === newItem.productId && i.specId === newItem.specId && i.unitPrice === newItem.unitPrice &&
+        i => i.productId === newItem.productId && i.specId === newItem.specId && i.unitPrice === newItem.unitPrice && (i.baseUnitPrice ?? i.unitPrice) === newItem.baseUnitPrice &&
         i.sugarLevel === newItem.sugarLevel && i.iceLevel === newItem.iceLevel &&
         JSON.stringify(i.addons.map(a => [a.id, a.price, a.qty]).sort()) === JSON.stringify(addons.map(a => [a.id, a.price, a.qty]).sort())
       )
@@ -2829,7 +2831,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       const freshRules = Array.isArray(rulesResponse.data?.data) ? rulesResponse.data.data : []
       const now = new Date()
       setActivityRules(freshRules); setActivityClock(now)
-      setCart(previous => previous.map(item => { const base = products.find(p => p.id === item.productId)?.specs.find(s => s.id === item.specId)?.price; return base === undefined ? item : {...item, unitPrice: activityPrice(freshRules,item.productId,base,selectedChannel?.code || 'DINE_IN',now)} }))
+      setCart(previous => previous.map(item => { const base = item.baseUnitPrice ?? item.unitPrice; return base === undefined ? item : {...item, unitPrice: activityPrice(freshRules,item.productId,base,selectedChannel?.code || 'DINE_IN',now)} }))
       setPaymentModalOrderNum(getNextPickupNumber(selectedChannel?.code))
       setShowPaymentModal(true)
     } catch (error: any) {
