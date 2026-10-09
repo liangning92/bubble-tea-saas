@@ -1,3 +1,5 @@
+import { readPOSFailure } from '../utils/posMonitorFailure'
+import { formatCurrency } from '../utils/helpers'
 import { useMemo, useEffect } from 'react'
 import { useDashboardContext, requireRead, finiteNumber, businessDay } from '../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../components/DashboardReadState'
@@ -57,6 +59,16 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   member_remove: <User size={14} />,
   shift_open: <Clock size={14} />,
   shift_close: <Clock size={14} />,
+}
+
+function POSFailureDetails({ metadata }: { metadata: unknown }) {
+  const { t } = useTranslation()
+  const failure = readPOSFailure(metadata)
+  return <div className="mt-2 rounded-lg bg-red-50 border border-red-100 p-3 text-sm" data-testid="pos-failure-reason">
+    <p className="text-red-800"><span className="font-semibold">{t('posMonitor.failureReason')}: </span>{t(`posMonitor.${failure.reasonKey}`)}</p>
+    {failure.code && <p className="mt-1 text-xs text-red-700 break-words">{t('posMonitor.failureCode')}: <code>{failure.code}</code>{failure.httpStatus ? ` · HTTP ${failure.httpStatus}` : ''}</p>}
+    {failure.needsReview && <p className="mt-1 text-xs text-red-700">{t('posMonitor.failureNeedsReview')}</p>}
+  </div>
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -263,13 +275,14 @@ export function POSMonitorPage() {
           </div>
           <div className="space-y-2">
             {activeSessions.map((session: any) => (
-              <div key={session.sessionId} className="flex items-center justify-between p-3 bg-white rounded-lg border border-orange-200">
+              <div key={session.sessionId} className="p-4 bg-white rounded-lg border border-orange-200" data-testid="unpaid-cart">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <User size={16} className="text-gray-400" />
                   <div>
                     <p className="font-medium">{session.staffName}</p>
                     <p className="text-xs text-gray-500">
-                      {t('posMonitor.lastAction')}: {session.lastAction} · {formatTime(session.lastActionAt)}
+                      {t('posMonitor.lastAction')}: {ACTION_KEY_MAP[session.lastAction] ? t(`posMonitor.${ACTION_KEY_MAP[session.lastAction]}`) : session.lastAction} · {formatTime(session.lastActionAt)}
                     </p>
                   </div>
                 </div>
@@ -279,6 +292,33 @@ export function POSMonitorPage() {
                   </span>
                   <SeverityBadge severity="warning" />
                 </div>
+                </div>
+                <p className="mt-3 text-sm text-orange-700"><span className="font-medium">{t('posMonitor.alertReason')}: </span>{t('posMonitor.unpaidReason')}</p>
+                {session.lastCheckoutFailure && <POSFailureDetails metadata={{ failureCode: session.lastCheckoutFailure.code, httpStatus: session.lastCheckoutFailure.httpStatus, outcome: session.lastCheckoutFailure.outcome }} />}
+                {Array.isArray(session.items) && session.items.length > 0 ? <>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm" aria-label={t('posMonitor.cartDetails')}>
+                      <thead className="text-left text-gray-500 border-b"><tr>
+                        <th className="py-2 pr-4">{t('posMonitor.cartProduct')}</th>
+                        <th className="py-2 px-3 text-right">{t('posMonitor.cartQuantity')}</th>
+                        <th className="py-2 px-3 text-right">{t('posMonitor.cartUnitPrice')}</th>
+                        <th className="py-2 pl-3 text-right">{t('posMonitor.cartLineTotal')}</th>
+                      </tr></thead>
+                      <tbody>{session.items.map((item: any, index: number) => <tr key={`${item.id}-${index}`} className="border-b border-gray-100">
+                        <td className="py-3 pr-4"><p className="font-medium">{item.productName}</p>
+                          {item.specName && <p className="text-xs text-gray-500 mt-1">{item.specName}{item.options ? ` · ${item.options}` : ''}</p>}
+                          {Array.isArray(item.addons) && item.addons.length > 0 && <p className="text-xs text-gray-500 mt-1">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}
+                        </td>
+                        <td className="py-3 px-3 text-right whitespace-nowrap">{item.quantity}</td>
+                        <td className="py-3 px-3 text-right whitespace-nowrap">{typeof item.unitPrice === 'number' ? formatCurrency(item.unitPrice) : '—'}</td>
+                        <td className="py-3 pl-3 text-right whitespace-nowrap">{typeof item.lineTotal === 'number' ? formatCurrency(item.lineTotal) : '—'}</td>
+                      </tr>)}</tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3 flex flex-wrap justify-between gap-2"><span className="text-sm text-gray-600">{t(session.detailSource === 'snapshot' ? 'posMonitor.cartSubtotal' : 'posMonitor.cartEstimatedSubtotal')}</span><strong className="text-orange-700">{typeof session.subtotal === 'number' ? formatCurrency(session.subtotal) : t('posMonitor.cartAmountUnavailable')}</strong></div>
+                  <p className="text-xs text-gray-500 mt-2">{t(session.detailSource === 'snapshot' ? 'posMonitor.cartPriceHint' : 'posMonitor.cartLegacyHint')}</p>
+                  {session.detailsComplete === false && <p className="mt-2 text-xs text-orange-700">{t('posMonitor.cartDetailsUnavailable')}</p>}
+                </> : <p className="mt-3 text-sm text-gray-500">{t('posMonitor.cartDetailsUnavailable')}</p>}
               </div>
             ))}
           </div>
@@ -377,11 +417,8 @@ export function POSMonitorPage() {
                     <SeverityBadge severity={log.severity} />
                   </div>
                   <p className="text-sm text-gray-500 mt-0.5">{log.description}</p>
-                  {log.metadata && log.severity !== 'info' && (
-                    <p className="text-xs text-gray-400 mt-1 font-mono">
-                      {JSON.stringify(log.metadata)}
-                    </p>
-                  )}
+                  {log.action === 'checkout_failed' && <POSFailureDetails metadata={log.metadata} />}
+                  {log.metadata && log.severity !== 'info' && <details className="mt-2 text-xs text-gray-500"><summary className="cursor-pointer">{t('posMonitor.rawRecord')}</summary><pre className="mt-1 whitespace-pre-wrap break-words">{typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata, null, 2)}</pre></details>}
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-xs text-gray-500">{formatDate(log.createdAt)}</p>
