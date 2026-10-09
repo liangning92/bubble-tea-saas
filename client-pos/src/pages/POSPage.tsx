@@ -4761,6 +4761,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           shift: selectedShiftType
                         })
                         showToast(t('pos.shiftOpened'), 'success')
+                        setShowShiftModal(false)
                         fetchShiftData()
                       } catch (e) {
                         showToast(t('pos.shiftOpenFailed'), 'error')
@@ -5387,7 +5388,23 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               <p className="text-center text-gray-600">{t('pos.logoutConfirm')}</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowLogoutModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback">{t('common.cancel')}</button>
-                <button onClick={() => { setShowLogoutModal(false); setIsLocked(false); logout() }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
+                <button onClick={async () => {
+                  try {
+                    const response = await posApi.getCurrentShift()
+                    const current = response.data?.data
+                    if (typeof current?.hasOpenShift !== 'boolean') throw Error('SHIFT_STATUS_UNKNOWN')
+                    setShiftData(current)
+                    setShowLogoutModal(false)
+                    setIsLocked(false)
+                    if (current.hasOpenShift) {
+                      setShowShiftModal(true)
+                    } else {
+                      logout()
+                    }
+                  } catch {
+                    showToast(t('pos.shiftStatusFailed'), 'error')
+                  }
+                }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
                            </div>
             </div>
           </div>
