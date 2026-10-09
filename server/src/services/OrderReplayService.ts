@@ -30,9 +30,11 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
     purchaseOrderNo: data.purchaseOrderNo ?? null, socialRef: data.socialRef ?? null, note: data.note ?? null,
     ...(data.qrisExternalId !== undefined ? {qrisExternalId:data.qrisExternalId} : {}),
     ...(data.paymentEvidenceId !== undefined ? {paymentEvidenceId:data.paymentEvidenceId} : {}),
+    ...(data.activityOfflineToken?{activityOfflineToken:data.activityOfflineToken,activityOccurredAt:data.activityOccurredAt,activityChannelCode:data.activityChannelCode}:{}),
+    ...(data.activityQuoteSignature ? {activityQuoteSignature:data.activityQuoteSignature,activityCouponId:data.activityCouponId,activityPointsRequested:data.activityPointsRequested,activityGroupId:data.activityGroupId,activityGiftSelections:data.activityGiftSelections} : {}),
     items: data.items.map(item => ({ productId: item.productId, productName: item.productName,
       specId: item.specId, specName: item.specName, quantity: item.quantity, unitPrice: item.unitPrice,
-      addons: (item.addons ?? []).map(addon => ({ name: addon.name, price: addon.price })) }))
+      addons: (item.addons ?? []).map(addon => ({ name: addon.name, price: addon.price,...(addon.qty!==undefined?{qty:addon.qty}:{}) })) }))
   }
   return 'v1:' + createHash('sha256').update(canonical(request)).digest('hex')
 }

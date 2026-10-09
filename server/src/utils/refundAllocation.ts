@@ -1,12 +1,19 @@
-export type RefundLine = {id:string; quantity:number; unitPrice:number}
+export type RefundLine = {id:string; quantity:number; unitPrice:number;addons?:unknown}
 export type RefundSelection = {itemId:string; quantity:number}
 export type RefundOrder = {items:RefundLine[];totalAmount:number;finalAmount:number;checkoutTaxAmount:number|null;requestFingerprint:string|null}
 const integer=(n:number)=>Number.isSafeInteger(n)&&n>=0
 export function allocateRefundTotal(order:RefundOrder,total:number):Map<string,number>{
  const lines=[...order.items].sort((a,b)=>a.id.localeCompare(b.id))
- if(!integer(total)||!integer(order.totalAmount)||order.totalAmount<=0||!lines.length||lines.some(i=>!Number.isSafeInteger(i.quantity)||i.quantity<=0||!integer(i.unitPrice)||!integer(i.quantity*i.unitPrice))||lines.reduce((s,i)=>s+i.quantity*i.unitPrice,0)!==order.totalAmount)throw Error('REFUND_ALLOCATION_EVIDENCE_REQUIRED')
+ if(!integer(total)||!integer(order.totalAmount)||order.totalAmount<=0||!lines.length||lines.some(i=>!Number.isSafeInteger(i.quantity)||i.quantity<=0||!integer(i.unitPrice)||!integer(i.quantity*i.unitPrice)))throw Error('REFUND_ALLOCATION_EVIDENCE_REQUIRED')
+ const baseTotal=lines.reduce((s,i)=>s+i.quantity*i.unitPrice,0)
+ const lineAmount=(i:RefundLine)=>{if(baseTotal===order.totalAmount)return i.quantity*i.unitPrice
+   let addons:any=i.addons||[];if(typeof addons==='string'){try{addons=JSON.parse(addons)}catch{throw Error('REFUND_ALLOCATION_EVIDENCE_REQUIRED')}}
+   if(!Array.isArray(addons)||addons.some(a=>!integer(a.price)||!Number.isSafeInteger(a.qty??1)||(a.qty??1)<1))throw Error('REFUND_ALLOCATION_EVIDENCE_REQUIRED')
+   return i.quantity*(i.unitPrice+addons.reduce((s,a)=>s+a.price*(a.qty??1),0))
+ }
+ if(lines.reduce((s,i)=>s+lineAmount(i),0)!==order.totalAmount)throw Error('REFUND_ALLOCATION_EVIDENCE_REQUIRED')
  const denominator=BigInt(order.totalAmount)
- const parts=lines.map(i=>{const n=BigInt(total)*BigInt(i.quantity)*BigInt(i.unitPrice);return {id:i.id,amount:Number(n/denominator),remainder:n%denominator}})
+ const parts=lines.map(i=>{const n=BigInt(total)*BigInt(lineAmount(i));return {id:i.id,amount:Number(n/denominator),remainder:n%denominator}})
  let remaining=total-parts.reduce((s,p)=>s+p.amount,0)
  for(const part of [...parts].sort((a,b)=>a.remainder===b.remainder?a.id.localeCompare(b.id):a.remainder>b.remainder?-1:1)){if(remaining--<=0)break;part.amount++}
  return new Map(parts.map(p=>[p.id,p.amount]))

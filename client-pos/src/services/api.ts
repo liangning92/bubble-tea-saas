@@ -279,3 +279,16 @@ export const tvScreenApi = {
   triggerLottery: (data: { orderId: string }) =>
     api.post('/marketing/tv-screen/trigger-lottery', data),
 }
+
+export const activitiesApi={
+ heartbeat:(terminalId:string,version:number)=>api.post('/marketing/activities/heartbeat',{terminalId,version}),
+ claim:(activityId:string,memberId:string,requestId:string)=>api.post('/marketing/activities/claim',{activityId,memberId,requestId}),referral:(memberId:string,inviterCode:string)=>api.post('/marketing/activities/referral',{memberId,inviterCode}),
+ offlineSnapshot:()=>api.get('/marketing/activities/offline-snapshot',{timeout:5000}),
+ list:()=>api.get('/marketing/activities',{timeout:5000}),quote:(data:any)=>api.post('/marketing/activities/quote',data,{timeout:10000}),
+ entitlements:(orderId?:string)=>api.get('/marketing/activities/entitlements/list',{params:{orderId}}),fulfil:(id:string)=>api.post(`/marketing/activities/entitlements/${id}/fulfil`),
+ groups:()=>api.get('/marketing/activities/groups/list'),createGroup:(activityId:string,memberIds:string[])=>api.post('/marketing/activities/groups',{activityId,memberIds}),joinGroup:(id:string,memberId:string)=>api.post(`/marketing/activities/groups/${id}/join`,{memberId}),
+}
+export const tvEventsApi={
+ events:(storeId:string,displayToken:string,terminalId:string)=>axios.get(`${getApiUrl()}/marketing/tv-screen/events`,{params:{storeId,terminalId},headers:{'X-TV-Display-Token':displayToken},timeout:5000}),
+ heartbeat:(storeId:string,displayToken:string,data:any)=>axios.post(`${getApiUrl()}/marketing/tv-screen/heartbeat`,data,{params:{storeId},headers:{'X-TV-Display-Token':displayToken},timeout:5000})
+}

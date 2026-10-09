@@ -1,3 +1,4 @@
+import { bestActivityPrice } from '../../../shared/utils/activities'
 import { paymentProblem } from './paymentValidation'
 import { db, type LocalOrder } from '../db/offline'
 import { backendIdentity, currentBackendIdentity, readBackendAuth } from './backendIdentity'
@@ -5,7 +6,7 @@ import { readCheckoutGeneration, readCheckoutRecovery } from './checkoutIntent'
 import { posOrderNumber } from './orderNumber'
 
 const cacheKey = (backend: string, storeId: string, path: string) => `offline.snapshot:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${path}`
-const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices']
+const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices', '/marketing/activities/offline-snapshot']
 export function snapshotPath(url: string): string | null {
   const path = url.split('?')[0]
   return allowed.includes(path) ? path : null
@@ -59,7 +60,7 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
   const backendUrl = localIdentity(request.storeId)
   const auth = readBackendAuth() as ReturnType<typeof readBackendAuth> & {user?:{id?:string;staff?:{id?:string}}}
   if (!auth.user?.id || auth.user.staff?.id !== request.staffId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
-  if (!['cash','qris'].includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || request.pointsRedeemed || request.memberId || request.discountAmount) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+  if (!['cash','qris'].includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || request.pointsRedeemed || request.memberId || (request.discountAmount&&!request.activityOfflineToken)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
   const localId = `LOCAL-${crypto.randomUUID()}`
   const occurredAt = new Date()
   const original = JSON.parse(JSON.stringify({...request,orderNumber:posOrderNumber(localId, occurredAt)}))
@@ -79,6 +80,12 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
       if (cashTender.receivedCash-cashTender.changeGiven!==totals.finalAmount || paymentProblem({ready:true,enabled:true,method:request.paymentMethod,total:totals.finalAmount,paid:String(cashTender.receivedCash),minAmount:policy.minAmount || 0,maxCashAmount:policy.maxCashAmount || 0,changeEnabled:policy.changeEnabled !== false})) throw new Error('PAYMENT_TENDER_INVALID')
     }
     if (!original.items?.length || original.items.some((i:{productId:string;specId:string;quantity:number})=>!products.data!.list!.some(p=>p.id===i.productId&&p.specs?.some(s=>s.id===i.specId)) || !Number.isSafeInteger(i.quantity)||i.quantity<1)) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+    if(request.activityOfflineToken){const cached=await readSnapshot('/marketing/activities/offline-snapshot',request.storeId) as any;const snapshot=cached.data
+      if(!snapshot||snapshot.token!==request.activityOfflineToken||new Date(request.activityOccurredAt).getTime()>Date.parse(snapshot.expiresAt))throw Error('ACTIVITY_OFFLINE_CACHE_EXPIRED')
+      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(request.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod})
+      const tax=request.taxEnabled===false?0:Math.round(price.finalAmount*snapshot.taxRate)
+      if(price.discount!==request.discountAmount||price.subtotal!==totals.subtotal||tax!==totals.ppn||price.finalAmount+tax!==totals.finalAmount)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
+    }
     const catalog = await db.config.get(cacheKey(backendUrl,request.storeId,'/products'))
     if (!catalog?.value.version) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
     original.shiftSessionId = current.data.shift.id

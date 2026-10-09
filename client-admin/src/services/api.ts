@@ -834,3 +834,11 @@ export const queueApi = {
 }
 
 export const batchImportApi={run:(data:any)=>api.post('/import',data)}
+
+export const activitiesApi = {
+ list:()=>api.get('/marketing/activities'),resources:()=>api.get('/marketing/activities/resources'),
+ save:(data:any,id?:string)=>id?api.put(`/marketing/activities/${id}`,data):api.post('/marketing/activities',data),
+ end:(id:string)=>api.delete(`/marketing/activities/${id}`),
+ migration:(apply=false)=>api.post(`/marketing/activities/migration/${apply?'apply':'preview'}`),
+ entitlements:()=>api.get('/marketing/activities/entitlements/list'),fulfil:(id:string)=>api.post(`/marketing/activities/entitlements/${id}/fulfil`),terminals:()=>api.get('/marketing/activities/terminals/list')
+}

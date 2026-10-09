@@ -1,3 +1,4 @@
+import { TvScreenConfigPage } from './marketing/TvScreenConfigPage'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -16,7 +17,7 @@ export function SettingsPage() {
   const { user } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
-  const activeTab = location.pathname === '/settings/permissions' ? 'permissions' : location.pathname === '/settings/ai' ? 'ai' : location.pathname === '/settings/pos' ? 'pos' : 'store'
+  const activeTab = location.pathname === '/settings/tv-screen' ? 'tvScreen' : location.pathname === '/settings/permissions' ? 'permissions' : location.pathname === '/settings/ai' ? 'ai' : location.pathname === '/settings/pos' ? 'pos' : 'store'
   const [showSuccess, setShowSuccess] = useState(false)
 
   // 店铺信息状态
@@ -113,6 +114,7 @@ export function SettingsPage() {
           <Smartphone size={18} />
           {t('settings.pos')}
         </button>
+        <button className={activeTab === 'tvScreen' ? 'btn-primary' : 'btn-ghost'} onClick={()=>navigate('/settings/tv-screen')}>{t('settings.tvScreen','电视大屏终端')}</button>
         {user?.role === 'admin' && <button
           onClick={() => navigate('/settings/permissions')}
           aria-current={activeTab === 'permissions' ? 'page' : undefined}
@@ -131,6 +133,7 @@ export function SettingsPage() {
         </button>}
       </div>
 
+      {activeTab === 'tvScreen' && <TvScreenConfigPage />}
       {/* 店铺设置 Tab */}
       {activeTab === 'store' && (
         <div className="card max-w-4xl">

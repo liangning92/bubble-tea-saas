@@ -1,3 +1,5 @@
+import { tvEventsApi } from '../services/api'
+import { activityEligible } from '../../../shared/utils/activities'
 import { DEFAULT_TV_CONFIG as DEFAULT_CONFIG, normalizeTvConfig, TvScreenConfig as TVScreenConfig } from '../../../shared/utils/tvScreenConfig'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -30,9 +32,11 @@ interface LotteryPrize {
 const DAYS_NAME = ['Minggu (Sunday)', 'Senin (Monday)', 'Selasa (Tuesday)', 'Rabu (Wednesday)', 'Kamis (Thursday)', 'Jumat (Friday)', 'Sabtu (Saturday)']
 
 export function TvDisplayPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams,setSearchParams] = useSearchParams()
   const storeId = searchParams.get('storeId') || localStorage.getItem('tv_store_id') || ''
-  const displayToken = searchParams.get('displayToken') || ''
+  const displayToken = searchParams.get('displayToken') || localStorage.getItem('tv_display_token_'+storeId) || ''
+  const [authorizationExpired,setAuthorizationExpired]=useState(false)
+  useEffect(()=>{const token=searchParams.get('displayToken');if(token&&storeId){localStorage.setItem('tv_display_token_'+storeId,token);setAuthorizationExpired(false);setSearchParams({storeId},{replace:true})}},[storeId,searchParams,setSearchParams])
 
   // TV Configuration & State
   const [config, setConfig] = useState<TVScreenConfig>(() => {
@@ -45,6 +49,13 @@ export function TvDisplayPage() {
     return DEFAULT_CONFIG
   })
 
+  const [terminalId]=useState(()=>{const key='tv_terminal_id_'+storeId;let id=localStorage.getItem(key);if(!id){id=crypto.randomUUID();localStorage.setItem(key,id)}return id})
+  const seenEvents=useRef(new Set<string>())
+  const completedEvents=useRef<string[]>([])
+  const displayEnabled=useRef(false)
+  const remoteSound=useRef<boolean|null>(null)
+  const [wheelPrizes,setWheelPrizes]=useState<any[]>([])
+  const [activityIndex,setActivityIndex]=useState(0)
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -68,6 +79,9 @@ export function TvDisplayPage() {
   const drawHandler = useRef<(data: any) => void>(() => {})
   useEffect(() => () => { lotteryTimers.current.forEach(clearTimeout); pendingDraws.current = [] }, [])
 
+  const configVersion=useRef(0);configVersion.current=config.activityVersion||0
+  const receiveDraw=useRef<(data:any)=>void>(()=>{})
+  const refreshRef=useRef<()=>Promise<void>>(async()=>{})
   // Clock interval
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -89,18 +103,23 @@ export function TvDisplayPage() {
         const fetched = res.data.data
         setConfig(normalizeTvConfig(fetched))
         localStorage.setItem(`tv_screen_cache_${storeId}`, JSON.stringify(fetched))
+        displayEnabled.current=fetched.enabled!==false
+        if(remoteSound.current!== (fetched.soundEnabled!==false)){setSoundEnabled(fetched.soundEnabled!==false);remoteSound.current=fetched.soundEnabled!==false}
       }
     } catch (err) {
+      if((err as any)?.response?.status===401)setAuthorizationExpired(true)
       console.warn('[TV Display] Network offline or API unreachable, using local cache:', err)
     }
   }
 
   useEffect(() => {
-    fetchConfig()
-    // Poll every 60 seconds as weak network resilience
-    const pollTimer = setInterval(fetchConfig, 60000)
-    return () => clearInterval(pollTimer)
-  }, [storeId])
+    const refresh=async()=>{await fetchConfig();try{await tvEventsApi.heartbeat(storeId,displayToken,{terminalId,version:configVersion.current,acknowledged:completedEvents.current.slice(-100)});if(!displayEnabled.current)return;const events=await tvEventsApi.events(storeId,displayToken,terminalId);for(const event of events.data.data||[])receiveDraw.current(event)}catch{/* Retry persisted events after reconnection. */}}
+    refreshRef.current=refresh
+    void refresh();const pollTimer=setInterval(refresh,15000)
+    const focus=()=>{if(document.visibilityState==='visible')void refresh()}
+    window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
+    return()=>{clearInterval(pollTimer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)}
+  },[storeId,displayToken,terminalId])
 
   // Hero Banners Carousel
   const activeBanners = useMemo(() => {
@@ -116,19 +135,9 @@ export function TvDisplayPage() {
     return () => clearInterval(interval)
   }, [activeBanners, config.carouselIntervalSeconds])
 
-  // Determine Today's Special Item
-  const todayDayOfWeek = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Jakarta',weekday:'short'}).format(currentTime))
-  const todaySpecial = useMemo(() => {
-    const match = config.dailySpecials?.find(s => s.dayOfWeek === todayDayOfWeek)
-    return match
-  }, [config.dailySpecials, todayDayOfWeek])
-
-  // Tomorrow's preview
-  const tomorrowDayOfWeek = (todayDayOfWeek + 1) % 7
-  const tomorrowSpecial = useMemo(() => {
-    return config.dailySpecials?.find(s => s.dayOfWeek === tomorrowDayOfWeek)
-  }, [config.dailySpecials, tomorrowDayOfWeek])
-
+  const visibleActivities=(config.activePromotions||[]).filter((a:any)=>activityEligible({...a,status:'published',used:0,priority:0,paymentMethods:a.paymentMethods||[],productIds:[],specIds:[],memberLevels:a.memberLevels||[],channels:a.channels||[],weekdays:a.weekdays||[],rule:a.rule||{}},{now:currentTime,channel:''},false))
+  useEffect(()=>{const timer=setInterval(()=>setActivityIndex(n=>n+1),(config.carouselIntervalSeconds||6)*1000);return()=>clearInterval(timer)},[config.carouselIntervalSeconds])
+  const currentActivity=visibleActivities[activityIndex%Math.max(1,visibleActivities.length)]
   // Setup Real-time WebSocket connection to backend
   useEffect(() => {
     const apiUrl = getApiUrl().replace(/\/api$/, '')
@@ -141,6 +150,7 @@ export function TvDisplayPage() {
 
     socket.on('connect', () => {
       setIsConnected(true)
+      void refreshRef.current()
     })
 
     socket.on('disconnect', () => {
@@ -148,25 +158,19 @@ export function TvDisplayPage() {
     })
 
     // Listen to live TV config changes made in Admin marketing page
-    socket.on('tv:config:update', (data: any) => {
-      if (data) {
-        const updated = normalizeTvConfig(data.data || data)
-        setConfig(updated)
-        localStorage.setItem(`tv_screen_cache_${storeId}`, JSON.stringify(updated))
-      }
-    })
+    socket.on('tv:config:update',()=>{void refreshRef.current()})
 
     // Listen to POS checkout lottery trigger
     socket.on('tv:lottery:trigger', (payload: any) => {
       const data = payload?.data || payload
       if (!data) return
-      drawHandler.current(data)
+      receiveDraw.current(data)
     })
 
     return () => {
       socket.disconnect()
     }
-  }, [storeId, config.lottery])
+  }, [storeId, displayToken])
 
   // Trigger Lottery Spin Animation
   const triggerLotteryAnimation = (data: {
@@ -174,11 +178,14 @@ export function TvDisplayPage() {
     prizeName: string
     prizeIndex?: number
     customerPhone?: string
+    eventId?: string
+    prizes?: any[]
   }) => {
-    const prizes = config.lottery?.prizes || DEFAULT_CONFIG.lottery.prizes
+    const prizes = data.prizes || config.lottery?.prizes || DEFAULT_CONFIG.lottery.prizes
     if (!prizes.length || typeof data.prizeIndex !== 'number' || data.prizeIndex < 0 || data.prizeIndex >= prizes.length) return
     if (lotteryBusy.current) { pendingDraws.current.push(data); return }
     lotteryBusy.current = true
+    setWheelPrizes(prizes)
     const targetIndex = data.prizeIndex
 
     setLotteryData({
@@ -223,6 +230,7 @@ export function TvDisplayPage() {
         setLotteryActive(false)
         setShowPrizeCelebration(false)
         setLotteryData(null)
+        if(data.eventId&&!data.eventId.startsWith('test:')){completedEvents.current.push(data.eventId);void tvEventsApi.heartbeat(storeId,displayToken,{terminalId,version:configVersion.current,acknowledged:[data.eventId]}).catch(()=>{})}
         lotteryBusy.current = false
         const next = pendingDraws.current.shift()
         if (next) drawHandler.current(next)
@@ -231,13 +239,15 @@ export function TvDisplayPage() {
   }
 
   drawHandler.current = triggerLotteryAnimation
+  receiveDraw.current=(data:any)=>{if(!data.eventId||seenEvents.current.has(data.eventId))return;seenEvents.current.add(data.eventId);drawHandler.current(data)}
 
   const currentBanner = activeBanners[activeBannerIndex] || activeBanners[0]
   const splitRatio = config.layout?.columns?.[0]?.width || 60
-  const prizes = config.lottery?.prizes || DEFAULT_CONFIG.lottery.prizes
+  const prizes = wheelPrizes.length?wheelPrizes:config.lottery?.prizes || DEFAULT_CONFIG.lottery.prizes
   const numPrizes = prizes.length
   const segmentAngle = 360 / numPrizes
 
+  if(authorizationExpired)return <div className="h-screen flex flex-col gap-3 items-center justify-center bg-slate-950 text-white"><p>授权已到期 / Authorization expired / Otorisasi kedaluwarsa</p><p>请在后台“设置 → 电视大屏”重新打开播放链接。</p></div>
   if (!displayToken || !storeId) return <div className="h-screen flex items-center justify-center bg-slate-950 text-white">Buka tautan layar dari Pengaturan TV di Admin.</div>
   if (!config.enabled) return <div className="h-screen flex items-center justify-center bg-slate-950 text-white">{config.storeName} — Layar dinonaktifkan</div>
   return (
@@ -350,99 +360,23 @@ export function TvDisplayPage() {
           className="relative h-full overflow-hidden p-8 flex flex-col justify-between bg-gradient-to-b from-slate-900 to-slate-950"
           style={{ width: `${100 - splitRatio}%` }}
         >
-          {/* Header of Right Side: Daily Special Card */}
-          <div className="space-y-4 flex-1 flex flex-col justify-center">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
-                <h2 className="text-xl 2xl:text-2xl font-black text-amber-400 tracking-wide uppercase">
-                  ⭐ MENU SPESIAL HARI INI
-                </h2>
-              </div>
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                {DAYS_NAME[todayDayOfWeek]}
-              </span>
-            </div>
-
-            {/* Main Daily Special Spotlight Card */}
-            {todaySpecial ? (
-            <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-red-950/80 via-slate-900 to-red-900/40 border-2 border-red-500/40 p-6 shadow-2xl backdrop-blur-xl flex flex-col space-y-4">
-              {todaySpecial.tag && (
-                <div className="absolute top-4 right-4 bg-gradient-to-r from-red-600 to-amber-600 text-white text-xs font-black px-3 py-1 rounded-full shadow-md uppercase tracking-wider">
-                  🔥 {todaySpecial.tag}
-                </div>
-              )}
-
-              <div className="flex items-center space-x-5">
-                <div className="relative w-36 h-36 2xl:w-44 2xl:h-44 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-400/50 flex-shrink-0 bg-slate-800">
-                  <img
-                    src={todaySpecial.imageUrl || YOUME_LOGO_RED}
-                    alt={todaySpecial.productName}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    onError={(e) => {
-                      e.currentTarget.style.visibility = 'hidden'
-                    }}
-                  />
-                  <div className="absolute bottom-0 inset-x-0 bg-red-600 text-white text-[10px] font-black text-center py-0.5 uppercase tracking-wider">
-                    HEMAT Rp {((todaySpecial.originalPrice - todaySpecial.specialPrice)).toLocaleString('id-ID')}
-                  </div>
-                </div>
-
-                <div className="flex-1 space-y-2">
-                  <h3 className="text-xl 2xl:text-2xl font-black text-white leading-snug">
-                    {todaySpecial.productName}
-                  </h3>
-                  <p className="text-xs 2xl:text-sm text-slate-300 line-clamp-2">
-                    {todaySpecial.description || 'Pilihan terbaik kesegaran teh otentik YOUME'}
-                  </p>
-
-                  <div className="pt-2 flex items-baseline space-x-3">
-                    <span className="text-3xl 2xl:text-4xl font-black text-amber-300 drop-shadow-md">
-                      {formatCurrency(todaySpecial.specialPrice)}
-                    </span>
-                    <span className="text-sm 2xl:text-base text-slate-400 line-through decoration-red-500 font-semibold">
-                      {formatCurrency(todaySpecial.originalPrice)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tomorrow's Sneak Peek Footer */}
-              {tomorrowSpecial && (
-                <div className="pt-3 border-t border-red-800/40 flex items-center justify-between text-xs text-slate-300">
-                  <span className="text-slate-400">👀 Bocoran Besok ({DAYS_NAME[tomorrowDayOfWeek].split(' ')[0]}):</span>
-                  <span className="font-bold text-amber-200">{tomorrowSpecial.productName} ➜ {formatCurrency(tomorrowSpecial.specialPrice)}</span>
-                </div>
-              )}
-            </div>
-            ) : <div className="p-5 text-slate-400">Belum ada promo untuk hari ini.</div>}
-
-            {/* Lucky Wheel Mini Teaser / Participation Banner */}
-            {config.lottery?.enabled && (
-              <div className="rounded-2xl p-5 bg-gradient-to-r from-amber-600/30 via-red-900/40 to-amber-900/30 border border-amber-500/30 shadow-lg flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-red-500 flex items-center justify-center shadow-lg text-slate-950 font-black">
-                    <Trophy className="w-6 h-6 text-slate-950" />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-black text-amber-300 uppercase tracking-wide">
-                      {config.lottery.title}
-                    </h4>
-                    <p className="text-xs text-slate-200 font-medium">
-                      {config.lottery.subtitle}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-slate-950 shadow-md">
-                    MIN {formatCurrency(config.lottery.triggerMinOrderAmount)}
-                  </span>
-                </div>
-              </div>
-            )}
+          <div className="h-full flex flex-col justify-center p-8 gap-6 overflow-hidden">
+            {currentActivity?<>
+              <span className="text-amber-300 font-bold text-2xl">PROMO AKTIF</span>
+              <h2 className="text-4xl font-black">{currentActivity.name}</h2>
+              {(currentActivity.imageUrl||currentActivity.products?.[0]?.image)&&<img className="max-h-64 object-contain rounded-2xl" src={mediaUrl(currentActivity.imageUrl||currentActivity.products[0].image)} alt={currentActivity.name}/>}
+              <p className="text-2xl text-amber-200">{currentActivity.summary}</p>
+              <p className="text-xl">{currentActivity.description}</p>
+              {currentActivity.products?.map((p:any)=><div key={p.id}><p className="font-bold">{p.name}</p>{p.specs.map((spec:any)=><span className="mr-3" key={spec.id}>{spec.name}: {formatCurrency(['special_price','member_price','birthday','welcome','group'].includes(currentActivity.type)?Math.min(spec.price,currentActivity.rule.price??spec.price):spec.price)}</span>)}</div>)}
+              {currentActivity.rule.minAmount>0&&<p>Min. {formatCurrency(currentActivity.rule.minAmount)}</p>}
+              {currentActivity.memberOnly&&<p>Khusus member {currentActivity.memberLevels?.join(', ')}</p>}
+              {currentActivity.channels?.length>0&&<p>{currentActivity.channels.join(' · ')}</p>}
+              {currentActivity.paymentMethods?.length>0&&<p>{currentActivity.paymentMethods.join(' · ')}</p>}
+              {currentActivity.dailyStart&&<p>{currentActivity.dailyStart}–{currentActivity.dailyEnd} · {currentActivity.timezone}</p>}
+              {currentActivity.endsAt&&<p>Hingga {new Date(currentActivity.endsAt).toLocaleString('id-ID',{timeZone:currentActivity.timezone})}</p>}
+            </>:<><h2 className="text-3xl font-bold">{config.welcomeText}</h2><p className="text-slate-300">Belum ada promo aktif</p></>}
           </div>
-        </section>
+</section>
       </main>
 
       {/* Bottom Marquee Ticker */}

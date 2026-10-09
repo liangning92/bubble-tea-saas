@@ -1,3 +1,7 @@
+import { cachedActivityQuote } from '../utils/activityOfflineQuote'
+import { ActivityPanel } from '../components/ActivityPanel'
+import { activitiesApi } from '../services/api'
+import { io as connectActivitySocket } from 'socket.io-client'
 import { cartAuditSnapshot } from '../utils/cartAudit'
 import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
@@ -39,7 +43,7 @@ import {
   CheckSquare, ClipboardList, Lock, Settings, RotateCcw,
   Receipt, PlusCircle, XCircle, Sparkles, Gift, Ticket
 } from 'lucide-react'
-import { evaluateBestPromotion, AppliedPromotion, getPromotionUpsellHint, getActivePromotionsSummary } from '../utils/promotionEngine'
+import { AppliedPromotion, getActivePromotionsSummary } from '../utils/promotionEngine'
 
 // Electron API
 const electronAPI = (window as any).electronAPI
@@ -330,8 +334,20 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [offlineSaveFailed, setOfflineSaveFailed] = useState(false)
 
   // 本地状态
+  const [unifiedActivities,setUnifiedActivities]=useState<any[]>([])
+  const [unifiedQuote,setUnifiedQuote]=useState<any>(null)
+  const [activityPriceNeedsConfirmation,setActivityPriceNeedsConfirmation]=useState(false)
+  const checkoutValidation=useRef(false)
+  const latestActivityOrder=useRef<string|null>(null)
+  const pendingActivityOrders=useRef(new Set<string>())
+  const notifiedDraws=useRef(new Set<string>())
+  const lastActivityPrice=useRef<{inputKey:string;amount:number}|null>(null)
+  const [quoteLoading,setQuoteLoading]=useState(false)
+  const [quoteError,setQuoteError]=useState('')
+  const [giftSelections,setGiftSelections]=useState<Record<string,string>>({})
+  const [activityGroupId,setActivityGroupId]=useState('')
+  const [activityRevision,setActivityRevision]=useState(0)
   const [discountAmount, setDiscountAmount] = useState(0)
-  const [tempDiscount, setTempDiscount] = useState('')
   const [isManualDiscount, setIsManualDiscount] = useState(false)
   const [activityRules, setActivityRules] = useState<ActivityPriceRule[]>([])
   const [activityClock, setActivityClock] = useState(() => new Date())
@@ -2103,21 +2119,43 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   const cardHeightClass = posLayout.cardSize === 'large' ? 'h-24' : posLayout.cardSize === 'small' ? 'h-16' : 'h-20'
 
-  const subtotal = cart.reduce((sum, item) => {
+  const basketSubtotal = cart.reduce((sum, item) => {
     const addonsTotal = item.addons.reduce((a, addon) => a + addon.price * addon.qty, 0)
     return sum + (item.unitPrice + addonsTotal) * item.quantity
   }, 0)
-  // 税费：根据Admin设置决定是否计算和显示，排除免税商品
-  const taxableSubtotal = cart
-    .filter(item => !taxSettings.exemptItems?.includes(item.productId))
-    .reduce((sum, item) => {
-      const addonsTotal = item.addons.reduce((a, addon) => a + addon.price * addon.qty, 0)
-      return sum + (item.unitPrice + addonsTotal) * item.quantity
-    }, 0)
-  const tax = taxSettings.enabled !== false && posLayout.showTax !== false ? Math.round(taxableSubtotal * taxRate) : 0
-  // 积分抵扣：每100积分抵扣1印尼盾，强制取整避免产生小数零头
-  const pointsDiscount = Math.floor((pointsToRedeem || 0) / 100)
-  const total = Math.max(0, Math.round(subtotal + tax - discountAmount - pointsDiscount))
+  const quoteInput = {
+    items:cart.map(item=>({productId:item.productId,specId:item.specId,quantity:item.quantity,unitPrice:(item as any).baseUnitPrice??item.unitPrice,addons:item.addons.map(a=>({name:a.name,price:a.price,qty:a.qty}))})),
+    channel:selectedChannel?.code||'DINE_IN',channelId:selectedChannel?.id&&selectedChannel.id.length>10?selectedChannel.id:undefined,
+    paymentMethod,memberId:member?.id,couponId:selectedCoupon?.id,pointsRequested:pointsToRedeem||0,groupId:activityGroupId||undefined,giftSelections,taxEnabled:taxSettings.enabled!==false
+  }
+  const quoteInputKey=JSON.stringify(quoteInput)
+  const currentQuote=unifiedQuote?.inputKey===quoteInputKey?unifiedQuote:null
+  const subtotal=currentQuote?.subtotal??basketSubtotal
+  const tax=currentQuote?.tax??(taxSettings.enabled!==false?Math.round(Math.max(0,subtotal-discountAmount)*taxRate):0)
+  const pointsDiscount=currentQuote?Math.floor(currentQuote.pointsRedeemed/100):0
+  const total=currentQuote?.grandTotal??Math.max(0,subtotal+tax-discountAmount)
+  useEffect(()=>{
+    let live=true
+    if(!cart.length){lastActivityPrice.current=null;setActivityPriceNeedsConfirmation(false);setUnifiedQuote(null);setDiscountAmount(0);setAppliedPromotion(null);setGiftSelections({});setActivityGroupId('');return}
+    setQuoteLoading(true);setQuoteError('')
+    const timer=setTimeout(()=>{
+      const apply=(value:any)=>{if(!live)return;const q={...value,inputKey:quoteInputKey};if(showPaymentModal&&lastActivityPrice.current?.inputKey===quoteInputKey&&lastActivityPrice.current.amount!==q.grandTotal){setActivityPriceNeedsConfirmation(true);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>setActivityPriceNeedsConfirmation(false)})}lastActivityPrice.current={inputKey:quoteInputKey,amount:q.grandTotal};setUnifiedQuote(q);setDiscountAmount(q.discount-Math.floor(q.pointsRedeemed/100));setAppliedPromotion(q.applied?{id:q.applied.id,name:q.applied.name,amount:q.discount,type:q.applied.kind,description:q.applied.name}:null);setIsManualDiscount(false)}
+      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(e.response)throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(cachedActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.response?.data?.message||error.message)}}}).finally(()=>{if(live)setQuoteLoading(false)})
+    },200)
+    return()=>{live=false;clearTimeout(timer)}
+  },[quoteInputKey,activityRevision])
+  useEffect(()=>{
+    let live=true
+    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
+    void refresh();const timer=setInterval(refresh,15000)
+    const focus=()=>{if(document.visibilityState==='visible')void refresh()}
+    window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
+    const socket=connectActivitySocket(getApiUrl().replace(/\/api$/,''),{auth:{token:useAuthStore.getState().token},transports:['websocket','polling']})
+    const readResults=async()=>{for(const orderId of pendingActivityOrders.current){try{const res=await activitiesApi.entitlements(orderId);for(const g of res.data.data||[]){if(g.prize&&!notifiedDraws.current.has(g.id)){notifiedDraws.current.add(g.id);showToast(`${g.orderNumber} · ${g.name}: ${g.prize.name}`,'success')}}if(!(res.data.data||[]).some((g:any)=>g.status==='pending'))pendingActivityOrders.current.delete(orderId)}catch{}}}
+    const rightsTimer=setInterval(readResults,15000)
+    socket.on('connect',()=>{void refresh();void readResults()});socket.on('marketing:activities:updated',refresh);socket.on('marketing:entitlements:updated',readResults)
+    return()=>{live=false;clearInterval(timer);clearInterval(rightsTimer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);socket.disconnect()}
+  },[user?.storeId])
   useEffect(() => { setQrisData({status:'idle'});setExternalPaymentConfirmed(false) }, [showPaymentModal,paymentMethod,total])
 
   const change = paidAmount ? Math.max(0, (parseInt(paidAmount) || 0) - total) : 0
@@ -2143,7 +2181,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if (cart.length === 0) {
       api.sendOrderClear?.()
     } else {
-      const upsell = getPromotionUpsellHint(cart, subtotal, selectedChannel?.code, activeDiscountRules)
       api.sendOrderUpdate?.({
         items: cart.map(item => ({
           id: item.id,
@@ -2159,53 +2196,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         total,
         promotionName: appliedPromotion?.name || (isManualDiscount && discountAmount > 0 ? t('pos.manualDiscount', '手动折扣') : ''),
         discountNote: appliedPromotion ? appliedPromotion.description : (isManualDiscount ? t('pos.manualDiscount', '手动折扣') : ''),
-        upsellHint: upsell?.hint || ''
+        upsellHint: ''
       })
     }
   }, [cart, subtotal, tax, discountAmount, total, appliedPromotion, isManualDiscount, selectedChannel?.code, activeDiscountRules])
-
-  // Auto-apply coupon discount when selected coupon changes
-  useEffect(() => {
-    if (selectedCoupon?.coupon) {
-      const coupon = selectedCoupon.coupon
-      if (coupon.type === 'discount_fixed') {
-        setDiscountAmount(Math.min(coupon.value, subtotal + tax))
-      } else if (coupon.type === 'discount_percent') {
-        const discount = Math.round((subtotal + tax) * (coupon.value / 100))
-        const maxDiscount = coupon.maxDiscount || Infinity
-        setDiscountAmount(Math.min(discount, maxDiscount, subtotal + tax))
-      }
-    }
-  }, [selectedCoupon, subtotal, tax])
-
-  // 自动营销促销计算引擎（第二杯半价、买一送一、满减、满折）
-  useEffect(() => {
-    // 优先使用会员手动选择的特定优惠券
-    if (selectedCoupon?.coupon) {
-      setAppliedPromotion(null)
-      return
-    }
-
-    // 若收银员已手动输入折扣，保持收银员的手动设置
-    if (isManualDiscount) {
-      return
-    }
-
-    if (cart.length === 0 || !activeDiscountRules || activeDiscountRules.length === 0) {
-      setAppliedPromotion(null)
-      setDiscountAmount(0)
-      return
-    }
-
-    const promo = evaluateBestPromotion(cart, subtotal, selectedChannel?.code, activeDiscountRules)
-    if (promo) {
-      setAppliedPromotion(promo)
-      setDiscountAmount(promo.amount)
-    } else {
-      setAppliedPromotion(null)
-      setDiscountAmount(0)
-    }
-  }, [cart, subtotal, selectedChannel?.code, activeDiscountRules, isManualDiscount, selectedCoupon])
 
   // 最大可用积分（不能超过总价）
   const maxRedeemablePoints = member ? Math.min(member.points || 0, Math.floor(total * 100)) : 0
@@ -2882,10 +2876,19 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 结账
   const handleCheckout = async () => {
+    if(checkoutValidation.current)return
+    checkoutValidation.current=true
+    try { await handleCheckoutAttempt() } finally { checkoutValidation.current=false }
+  }
+  const handleCheckoutAttempt = async () => {
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate) return
 
     if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
+
+    if(activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
+    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>cachedActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
+    if(!verifiedQuote||verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
 
     if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
 
@@ -2933,13 +2936,16 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         specId: item.specId,
         specName: item.specName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,  // 原始单价，不含税
-        addons: item.addons.map(a => ({ name: a.name, price: a.price }))
+        unitPrice: currentQuote?.items.find((i:any)=>i.productId===item.productId&&i.specId===item.specId)?.unitPrice??item.unitPrice,  // 服务端或签名缓存报价中的基础单价
+        addons: item.addons.map(a => ({ name: a.name, price: a.price, qty:a.qty }))
       })),
+      activityQuoteSignature:currentQuote?.offline?undefined:currentQuote?.signature,
+      activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
+      activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
       paymentEvidenceId: paymentMethod === 'qris' ? manualProof?.id : undefined,
       discountAmount,              // 折扣金额（客户端计算）
-      pointsRedeemed: pointsToRedeem,  // 积分抵扣（客户端计算）
+      pointsRedeemed: currentQuote?.pointsRedeemed||0,  // 仅扣减最终择优方案使用的积分
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
       pickupNumber: paymentModalOrderNum || getNextPickupNumber(selectedChannel?.code)
     }
@@ -2971,9 +2977,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       // Both recovery writes must commit before an HTTP request can leave this browser.
       if (qrisData.status === 'manual') orderData.note = [orderData.note,t('offlineSale.qrisPending')].filter(Boolean).join(' ')
-      if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || discountAmount || selectedCoupon)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+      if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
-      if ((paymentMethod === 'cash' || qrisData.status === 'manual') && !member && !pointsToRedeem && !discountAmount && !selectedCoupon) {
+      if ((paymentMethod === 'cash' || qrisData.status === 'manual') && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
         const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,qrisData.status === 'manual',paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
         accepted = true
         settledCartRef.current = cart
@@ -2997,7 +3003,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       const finalPickupNum = response.pickupNumber || orderData.pickupNumber
       setOfflineSaveFailed(false)
       // 使用服务端计算的权威金额（包含税费、折扣、积分）
-      const serverGrandTotal = res.data?.data?.grandTotal || total
+      latestActivityOrder.current=res.data?.data?.id||null
+      if(latestActivityOrder.current)pendingActivityOrders.current.add(latestActivityOrder.current)
+      if(latestActivityOrder.current)void activitiesApi.entitlements(latestActivityOrder.current).then(r=>{for(const g of r.data.data||[]){if(g.prize&&!notifiedDraws.current.has(g.id)){notifiedDraws.current.add(g.id);showToast(`${g.orderNumber} · ${g.name}: ${g.prize.name}`,'success')}}}).catch(()=>{})
+      const serverGrandTotal = res.data?.data?.grandTotal ?? total
       setOrderSuccess(`${finalPickupNum} (${orderNum})`)
       playSoundWithSettings('orderComplete', soundSettings.orderComplete)
 
@@ -3017,15 +3026,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         severity: 'info',
       })
 
-      // 核销会员优惠券
-      if (selectedCoupon?.id) {
-        try {
-          await posApi.redeemCoupon(selectedCoupon.id, orderNum)
-        } catch (couponErr) {
-          console.error('Failed to redeem coupon:', couponErr)
-        }
-      }
-
+      // Coupon consumption is atomic with the server order transaction.
       // 清空已使用的优惠券
       setSelectedCoupon(null)
       setMemberCoupons(prev => prev.filter(c => c.id !== selectedCoupon?.id))
@@ -3069,7 +3070,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 通知副屏结账完成
       electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
       // Display animation is ancillary; only the server verifies completed order eligibility.
-      if (response.id) tvScreenApi.triggerLottery({ orderId: response.id }).catch(error => console.warn('[POS] TV display unavailable:', error?.response?.status))
+      // Rewards and draws are durable server jobs, independent of TV connectivity.
       // 现金销售事件由服务端 OrderService 在创建订单时统一创建（保证原子性）
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
@@ -3840,6 +3841,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <span>{formatCurrency(tax)}</span>
               </div>
             )}
+            <ActivityPanel activities={unifiedActivities} quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} memberId={member?.id} groupId={activityGroupId} onGroupChange={setActivityGroupId} />
+            {quoteLoading&&<p className="text-sm text-gray-500">{t('activityPricing.loading','正在计算活动价格…')}</p>}
+            {quoteError&&<p role="alert" className="text-sm text-red-600">{quoteError}</p>}
             {discountAmount > 0 && (
               <div className="flex justify-between items-center text-emerald-600 font-medium">
                 <span className="flex items-center gap-1.5 truncate max-w-[70%]">
@@ -4207,6 +4211,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   disabled={
                     isCheckingOut || !recovery || recovery.blocked || recovery.confirmed.length > 0 ||
                     Boolean(paymentIssue) ||
+                    activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length ||
                     (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total))
                   }
                   className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"
@@ -4236,154 +4241,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         </div>
       )}
 
-      {/* 折扣弹窗 */}
-      {showDiscountModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDiscountModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 flex justify-between items-center border-b">
-              <h3 className="font-bold">{t('pos.discount')}</h3>
-              <button onClick={() => setShowDiscountModal(false)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-4">
-              {/* 自动促销提示或手动提示 */}
-              {appliedPromotion && !isManualDiscount && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3 text-xs text-emerald-800">
-                  <div className="font-semibold flex items-center justify-between mb-1">
-                    <span className="flex items-center gap-1.5">
-                      <span>🎉</span>
-                      <span>{t('pos.autoPromoApplied')}: {appliedPromotion.name}</span>
-                    </span>
-                    <span className="font-bold text-sm text-emerald-700">-{formatCurrency(appliedPromotion.amount)}</span>
-                  </div>
-                  {appliedPromotion.description && (
-                    <div className="text-[11px] text-emerald-600">{appliedPromotion.description}</div>
-                  )}
-                  <p className="text-[11px] text-emerald-600/80 mt-1">如需改用特殊自定义折扣，可在下方输入金额覆盖。</p>
-                </div>
-              )}
-
-              {isManualDiscount && (
-                <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-amber-800">
-                  <span>⚠️ 当前为收银员手动输入折扣</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsManualDiscount(false)
-                      setTempDiscount('')
-                      setShowDiscountModal(false)
-                    }}
-                    className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg font-bold transition-colors"
-                  >
-                    恢复自动营销
-                  </button>
-                </div>
-              )}
-
-              {/* 优惠券快捷入口 */}
-              <div className="mb-4 p-3 bg-pink-50 border border-pink-200 rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Ticket size={18} className="text-primary" />
-                  <div>
-                    <p className="text-xs font-bold text-gray-800">
-                      {selectedCoupon ? `已用卡券: ${selectedCoupon.coupon?.code}` : '使用优惠券/扫码验券'}
-                    </p>
-                    <p className="text-[11px] text-gray-500">
-                      {memberCoupons.length > 0 ? `当前会员有 ${memberCoupons.length} 张可用券` : '支持扫码枪录入或输入券码'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDiscountModal(false)
-                    setShowCouponModal(true)
-                  }}
-                  className="px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-hover touch-feedback"
-                >
-                  {selectedCoupon ? '修改卡券' : '选择/扫码 >'}
-                </button>
-              </div>
-
-              {/* 金额显示 */}
-              <div className="bg-gray-100 rounded-xl p-4 mb-4 text-right">
-                <span className="text-3xl font-bold text-primary">{formatCurrency(parseInt(tempDiscount) || 0)}</span>
-              </div>
-              {/* 数字键盘 */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setTempDiscount(prev => {
-                    if (prev === '0') return String(n)
-                    return prev + String(n)
-                  })}
-                  className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light"
-                >
-                  {n}
-                </button>
-              ))}
-              <button
-                onClick={() => setTempDiscount('')}
-                className="h-12 bg-red-50 border rounded-xl text-base font-bold text-red-500 hover:bg-red-100"
-              >
-                C
-              </button>
-              <button
-                onClick={() => setTempDiscount(prev => {
-                  if (prev === '0') return '0'
-                  return prev + '0'
-                })}
-                className="h-12 bg-white border rounded-xl text-lg font-bold hover:bg-primary-light active:bg-primary-light"
-              >
-                0
-              </button>
-              <button
-                onClick={() => setTempDiscount(prev => prev.slice(0, -1))}
-                className="h-12 bg-gray-100 border rounded-xl text-base font-bold hover:bg-gray-200"
-              >
-                ←
-              </button>
-            </div>
-            {/* 快捷金额 */}
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {[1000, 3000, 5000].map(amount => (
-                <button key={amount} onClick={() => setTempDiscount(String(amount))} className="py-2 border rounded-lg text-xs hover:bg-primary-light touch-feedback">
-                  {formatCurrency(amount)}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsManualDiscount(true)
-                  setDiscountAmount(0)
-                  setTempDiscount('0')
-                  setShowDiscountModal(false)
-                }}
-                className="px-4 py-3 border border-red-200 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-50 touch-feedback"
-              >
-                {t('pos.clearDiscount', '清空')}
-              </button>
-              <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback text-sm font-medium">{t('common.cancel')}</button>
-              <button
-                onClick={() => {
-                  const val = Math.min(parseInt(tempDiscount) || 0, subtotal + tax)
-                  setIsManualDiscount(true)
-                  setDiscountAmount(val)
-                  setShowDiscountModal(false)
-                }}
-                className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback text-sm font-bold"
-              >
-                {t('common.confirm')}
-              </button>
-            </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Price rules are managed in Activities; cashiers can select a coupon for whole-order comparison. */}
+      {showDiscountModal && <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={()=>setShowDiscountModal(false)}><div className="bg-white rounded-2xl p-5 max-w-lg w-full space-y-4" onClick={e=>e.stopPropagation()}><h3 className="font-bold">{t('pos.discount')}</h3><p>{t('activityPricing.bestOnly','系统自动比较活动、优惠券和积分，选择最低应付金额。')}</p>{currentQuote?.applied&&<p className="text-green-700">{currentQuote.applied.name} · −{formatCurrency(currentQuote.discount)}</p>}<button className="w-full py-3 bg-primary text-white rounded-xl" onClick={()=>{setShowDiscountModal(false);setShowCouponModal(true)}}>{t('pos.selectCoupon','选择优惠券')}</button><button className="w-full py-2 border rounded-xl" onClick={()=>setShowDiscountModal(false)}>{t('common.close','关闭')}</button></div></div>}
 
       {/* 会员弹窗 */}
 

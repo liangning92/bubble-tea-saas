@@ -1,3 +1,6 @@
+import { legacyActivitiesRouter } from './routes/legacyActivities'
+import { activitiesRouter } from './routes/activities'
+import { startActivityWorker } from './services/ActivityService'
 import { staffPermissionsRouter } from './routes/staffPermissions'
 import {startRecurringExpenseScheduler} from './services/RecurringExpenseService'
 import {batchImportRouter} from './routes/batchImport'
@@ -230,6 +233,8 @@ app.use('/api/pos-action-logs', posActionLogRouter)
 app.use('/api/reports', reportRouter)
 app.use('/api/suppliers', supplierRouter)
 app.use('/api/purchase-orders', purchaseOrderRouter)
+app.use('/api/marketing/activities', activitiesRouter)
+app.use('/api/marketing', legacyActivitiesRouter)
 app.use('/api/marketing', marketingRouter)
 app.use('/api/finance', financeRouter)
 app.use('/api/finance/accounts', financeAccountRouter)
@@ -324,6 +329,7 @@ if (process.env.NODE_ENV !== 'test') {
   // 启动营销自动化调度器
   console.log('[Server] Starting marketing scheduler...')
   startMarketingScheduler()
+  startActivityWorker()
   console.log('[Server] Marketing scheduler started')
   })
   }).catch(async error => {

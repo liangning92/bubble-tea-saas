@@ -1,3 +1,4 @@
+import { reverseActivityGrants } from './ActivityService'
 import {createHash} from 'crypto'
 import prisma from '../config/database'
 import {canonical} from '../utils/orderSnapshot'
@@ -106,6 +107,10 @@ export async function approveItemRefund(requestId:string,actor:{storeId:string;i
   if(o.paymentMethod==='cash'&&request.amount>0)await tx.cashEvent.create({data:{storeId:o.storeId,staffId:actor.id,type:'cash_out',amount:request.amount,paymentMethod:'cash',orderId:o.orderNumber,note:`Item refund ${request.id}`}})
   const changed=await tx.refundRequest.updateMany({where:{id:request.id,status:'pending'},data:{status:'approved',approvedBy:actor.id,approvedAt:new Date(),note}})
   if(changed.count!==1)throw Error('REFUND_REQUEST_ALREADY_PROCESSED')
+  const netAllocations=allocateRefundTotal(o,Math.max(0,o.finalAmount-(o.checkoutTaxAmount||0)))
+  const remainingItems=o.items.map((i:any)=>({...i,quantity:i.quantity-(state.used.get(i.id)||0)-(stored.items.find(s=>s.itemId===i.id)?.quantity||0),addons:JSON.parse(i.addons||'[]')})).filter((i:any)=>i.quantity>0)
+  const remainingPaid=o.items.reduce((sum:number,i:any)=>{const used=(state.used.get(i.id)||0)+(stored.items.find(s=>s.itemId===i.id)?.quantity||0);return sum+unitRangeAmount(netAllocations.get(i.id)!,i.quantity,used,i.quantity-used)},0)
+  await reverseActivityGrants(tx,o.storeId,o.id,remainingPaid,remainingItems)
   return tx.refundRequest.findUniqueOrThrow({where:{id:request.id}})
  })
 }
