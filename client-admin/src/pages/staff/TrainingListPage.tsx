@@ -22,6 +22,7 @@ import {
   CheckSquare
 } from 'lucide-react'
 import { TrainingFormModal } from './TrainingFormModal'
+import { CourseEditModal } from './CourseEditModal'
 import {
   TRAINING_MODULES,
   CHECKLISTS,
@@ -73,6 +74,12 @@ export function TrainingListPage() {
   const [categories, setCategories] = useState<TrainingCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  // Courses state (dynamic & editable)
+  const [courses, setCourses] = useState<TrainingModule[]>(TRAINING_MODULES)
+  const [editingCourse, setEditingCourse] = useState<TrainingModule | null>(null)
+  const [showCourseEditModal, setShowCourseEditModal] = useState(false)
+  const [loadingCourses, setLoadingCourses] = useState(false)
+
   // Filters
   const [search, setSearch] = useState('')
   const [filterStaff, setFilterStaff] = useState('')
@@ -85,6 +92,62 @@ export function TrainingListPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [categoryForm, setCategoryForm] = useState<TrainingCategory[]>([])
   const [selectedCourse, setSelectedCourse] = useState<TrainingModule | null>(null)
+
+  const loadCourses = async () => {
+    setLoadingCourses(true)
+    try {
+      const response = await trainingApi.getCourses()
+      if (response.data?.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+        setCourses(response.data.data)
+      }
+    } catch (error) {
+      console.error('Failed to load courses from server, using local fallback:', error)
+    } finally {
+      setLoadingCourses(false)
+    }
+  }
+
+  const handleCreateCourse = () => {
+    setEditingCourse(null)
+    setShowCourseEditModal(true)
+  }
+
+  const handleEditCourse = (mod: TrainingModule) => {
+    setEditingCourse(mod)
+    setShowCourseEditModal(true)
+  }
+
+  const handleSaveCourse = async (courseToSave: TrainingModule) => {
+    if (editingCourse) {
+      await trainingApi.updateCourse(editingCourse.key, courseToSave)
+    } else {
+      await trainingApi.createCourse(courseToSave)
+    }
+    await loadCourses()
+  }
+
+  const handleDeleteCourse = async (mod: TrainingModule) => {
+    if (!confirm(`确定要删除课程【${tr(mod.title, i18n.language)}】吗？此操作无法撤销。`)) return
+    try {
+      await trainingApi.deleteCourse(mod.key)
+      await loadCourses()
+    } catch (error) {
+      console.error('Failed to delete course:', error)
+      alert(t('common.error'))
+    }
+  }
+
+  const handleResetCourses = async () => {
+    if (!confirm('确定要恢复为官方最新标准教程体系吗？当前所有自定义修改将被重置。')) return
+    try {
+      await trainingApi.resetCourses()
+      await loadCourses()
+      alert('已成功恢复为官方标准中印双语配方与实操教程！')
+    } catch (error) {
+      console.error('Failed to reset courses:', error)
+      alert(t('common.error'))
+    }
+  }
 
   const loadCategories = async () => {
     try {
@@ -108,7 +171,7 @@ export function TrainingListPage() {
 
       const staffData = staffResponse.data?.data?.list || staffResponse.data?.data || []
       setStaffList(staffData)
-      await loadCategories()
+      await Promise.all([loadCategories(), loadCourses()])
 
       const allRecords: TrainingRecord[] = Array.isArray(trainingResponse.data?.data) ? trainingResponse.data.data : []
       allRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -528,39 +591,81 @@ export function TrainingListPage() {
       {/* Tab 2: Standard Course Library */}
       {activeTab === 'courses' && (
         <div className="space-y-4">
-          <div className="bg-blue-50/70 border border-blue-200/60 rounded-xl p-4 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
             <div className="flex items-center gap-3">
-              <BookOpen className="text-blue-600 shrink-0" size={20} />
-              <div className="text-xs text-blue-900">
-                <span className="font-bold mr-1">门店标准化操作指南（SOP）：</span>
-                本体系供员工移动端培训自主修读，涵盖服务礼仪、制作配方、食品安全、设备保养及应急安全。
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <BookOpen size={20} />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>门店标准化操作指南（SOP）与中印双语配方课程体系</span>
+                  <span className="text-[11px] font-semibold text-blue-700 bg-white/80 border border-blue-200 px-2 py-0.5 rounded-full">
+                    共 {courses.length} 门核心必修课
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  所有课程均已打通云端同步，支持随时在线编辑修改配方、章节流程、红线禁令与测验题；员工移动端实时同步最新标准。
+                </p>
               </div>
             </div>
-            <span className="text-xs font-semibold text-blue-700 bg-white px-2.5 py-1 rounded-md shadow-xs shrink-0">
-              共 {TRAINING_MODULES.length} 门核心必修课
-            </span>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleResetCourses}
+                className="px-3.5 py-2 bg-white text-gray-700 border border-gray-200 rounded-xl text-xs font-semibold hover:bg-gray-50 flex items-center gap-1.5 shadow-xs transition-colors"
+                title="一键恢复为官方最新标准教程体系"
+              >
+                <RefreshCw size={14} className={loadingCourses ? 'animate-spin' : ''} />
+                <span>恢复官方标准</span>
+              </button>
+
+              <button
+                onClick={handleCreateCourse}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-semibold hover:bg-primary/90 flex items-center gap-1.5 shadow-xs transition-all"
+              >
+                <Plus size={15} />
+                <span>新建培训课程</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {TRAINING_MODULES.map((mod) => (
+            {courses.map((mod) => (
               <div
                 key={mod.key}
-                className="card bg-white hover:shadow-md transition-all border border-gray-200 flex flex-col justify-between overflow-hidden group"
+                className="card bg-white hover:shadow-md transition-all border border-gray-200 flex flex-col justify-between overflow-hidden group relative"
               >
                 <div>
                   <div className="flex items-start justify-between mb-3">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl bg-gradient-to-br ${mod.color} text-white shadow-xs`}>
                       {mod.icon}
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                      ⏱️ {mod.minutes} {t('training.minutes', '分钟')}
-                    </span>
+
+                    <div className="flex items-center gap-1">
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
+                        ⏱️ {mod.minutes} {t('training.minutes', '分钟')}
+                      </span>
+                      <button
+                        onClick={() => handleEditCourse(mod)}
+                        className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        title="编辑此课程"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCourse(mod)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="删除此课程"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
 
-                  <h3 className="font-bold text-gray-900 text-base mb-1 group-hover:text-primary transition-colors">
+                  <h3 className="font-bold text-gray-900 text-base mb-1 group-hover:text-primary transition-colors line-clamp-1">
                     {tr(mod.title, i18n.language)}
                   </h3>
-                  <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-4">
+                  <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-4 min-h-[2rem]">
                     {tr(mod.subtitle, i18n.language)}
                   </p>
                 </div>
@@ -570,13 +675,22 @@ export function TrainingListPage() {
                     <span>📖 {mod.sections.length} 个章节</span>
                     <span>✍️ {mod.quiz.length} 道测验题</span>
                   </div>
-                  <button
-                    onClick={() => setSelectedCourse(mod)}
-                    className="text-primary font-semibold hover:underline flex items-center gap-1"
-                  >
-                    <Eye size={14} />
-                    查看大纲
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleEditCourse(mod)}
+                      className="text-gray-600 hover:text-primary font-medium flex items-center gap-0.5"
+                    >
+                      <Edit2 size={13} />
+                      编辑
+                    </button>
+                    <button
+                      onClick={() => setSelectedCourse(mod)}
+                      className="text-primary font-semibold hover:underline flex items-center gap-0.5"
+                    >
+                      <Eye size={14} />
+                      查看大纲
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -727,8 +841,21 @@ export function TrainingListPage() {
               </div>
             </div>
 
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end shrink-0">
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
               <button
+                type="button"
+                onClick={() => {
+                  const courseToEdit = selectedCourse
+                  setSelectedCourse(null)
+                  handleEditCourse(courseToEdit)
+                }}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-xs font-semibold hover:bg-primary/90 flex items-center gap-1.5 transition-colors shadow-xs"
+              >
+                <Edit2 size={14} />
+                编辑本课程
+              </button>
+              <button
+                type="button"
                 onClick={() => setSelectedCourse(null)}
                 className="btn-secondary px-5 py-2 text-xs font-semibold"
               >
@@ -837,6 +964,16 @@ export function TrainingListPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Course Edit Modal */}
+      {showCourseEditModal && (
+        <CourseEditModal
+          isOpen={showCourseEditModal}
+          course={editingCourse}
+          onClose={() => setShowCourseEditModal(false)}
+          onSave={handleSaveCourse}
+        />
       )}
     </div>
   )

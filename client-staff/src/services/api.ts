@@ -489,5 +489,14 @@ export const staffApi = {
       headers: getAuthHeader()
     })
     return response.data
+  },
+
+  // Training Courses (dynamically configured in admin)
+  getTrainingCourses: async () => {
+    const response = await axios.get(`${API_BASE}/training/courses`, {
+      headers: getAuthHeader()
+    })
+    return response.data
   }
 }
+

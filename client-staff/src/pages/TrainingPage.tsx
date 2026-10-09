@@ -66,6 +66,7 @@ export function TrainingPage() {
   // Records state
   const [trainings, setTrainings] = useState<Training[]>([])
   const [categories, setCategories] = useState<TrainingCategory[]>([])
+  const [courses, setCourses] = useState<TrainingModule[]>(TRAINING_MODULES)
   const [isLoading, setIsLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('')
 
@@ -123,13 +124,18 @@ export function TrainingPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [trainingRes, categoryRes] = await Promise.all([
+      const [trainingRes, categoryRes, courseRes] = await Promise.all([
         staffApi.getMyTraining(),
-        staffApi.getTrainingCategories()
+        staffApi.getTrainingCategories(),
+        staffApi.getTrainingCourses().catch(() => null)
       ])
-      setTrainings(trainingRes.data?.data || [])
-      if (categoryRes.data?.data) {
+      setTrainings(trainingRes?.data?.data || trainingRes?.data || [])
+      if (categoryRes?.data?.data) {
         setCategories(categoryRes.data.data)
+      }
+      const loadedCourses = courseRes?.data?.data || courseRes?.data
+      if (Array.isArray(loadedCourses) && loadedCourses.length > 0) {
+        setCourses(loadedCourses)
       }
     } catch (error) {
       console.error('Failed to load training:', error)
@@ -217,7 +223,7 @@ export function TrainingPage() {
   }
 
   const completedCount = Object.keys(completedModules).length
-  const totalCourses = TRAINING_MODULES.length
+  const totalCourses = courses.length
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -323,7 +329,7 @@ export function TrainingPage() {
             <span>{completedCount}/{totalCourses} {t('training.completed', '已完成')}</span>
           </div>
 
-          {TRAINING_MODULES.map((mod) => {
+          {courses.map((mod) => {
             const isCompleted = !!completedModules[mod.key]
             return (
               <div

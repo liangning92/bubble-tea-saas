@@ -1517,3 +1517,4 @@ export const CHECKLISTS: { key: string; title: LText; items: LText[] }[] = [
   }
 ]
 
+export const DEFAULT_TRAINING_MODULES: TrainingModule[] = TRAINING_MODULES

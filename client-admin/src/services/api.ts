@@ -749,7 +749,14 @@ export const trainingApi = {
   getCategories: () => api.get('/training/categories'),
   saveCategories: (data: any) => api.post('/training/categories', data),
   getAll: () => api.get('/staff-management/training/all'),
-  delete: (id: string) => api.delete('/staff-management/training/' + id)
+  delete: (id: string) => api.delete('/staff-management/training/' + id),
+  // 培训课程库管理 API（可编辑）
+  getCourses: () => api.get('/training/courses'),
+  saveCourses: (courses: any[]) => api.post('/training/courses', { courses }),
+  createCourse: (course: any) => api.post('/training/courses/item', course),
+  updateCourse: (key: string, data: any) => api.put(`/training/courses/${key}`, data),
+  deleteCourse: (key: string) => api.delete(`/training/courses/${key}`),
+  resetCourses: () => api.post('/training/courses/reset')
 }
 
 export const receiptTemplateApi = {
