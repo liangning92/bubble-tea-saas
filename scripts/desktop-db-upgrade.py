@@ -17,6 +17,7 @@ import traceback
 import urllib.parse
 import uuid
 import zipfile
+import base64
 
 LOCAL_COLUMNS = ('pickupNumber', 'requestFingerprint', 'requestReceipt')
 COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
@@ -173,6 +174,29 @@ def application_backup_path(old_app, nonce):
     # A single short archive avoids copying, opening and fsyncing thousands of
     # deep Prisma assets at the old application's full path.
     return old_app.parent / ('B-' + uuid.UUID(nonce).hex[:16] + '.zip')
+
+
+def database_file_state(db):
+    result = {}
+    for suffix in ('', '-wal', '-shm'):
+        candidate = pathlib.Path(str(db) + suffix)
+        if candidate.exists():
+            stat = regular(candidate).stat()
+            result[suffix] = [stat.st_size, stat.st_mtime_ns]
+    return result
+
+
+def file_state(path):
+    stat = regular(path).stat()
+    return [stat.st_size, stat.st_mtime_ns]
+
+
+def installer_sha512(path):
+    h = hashlib.sha512()
+    with open(regular(path), 'rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            h.update(chunk)
+    return base64.b64encode(h.digest()).decode('ascii')
 
 
 def application_archive_name(name):
@@ -406,7 +430,115 @@ def registry_snapshot():
     return result
 
 
-def prepare(db, old_app, catalog, processes, registry=None):
+def stage_backup(db, old_app, installer, registry=None):
+    """Do the expensive backup while POS is still open, before NSIS starts."""
+    db, old_app, installer = regular(db), regular(old_app), regular(installer)
+    if not db.is_file() or not old_app.is_dir() or not installer.is_file():
+        fail('STAGE_INPUT_MISSING')
+    if db.is_relative_to(old_app) or old_app.is_relative_to(db.parent):
+        fail('APPLICATION_DATABASE_PATHS_OVERLAP')
+    nonce = str(uuid.uuid4())
+    backup_root = db.parent / 'upgrade-backups' / nonce
+    regular(backup_root.parent)
+    backup_root.mkdir(parents=True, exist_ok=False)
+    app_backup = application_backup_path(old_app, nonce)
+    upgrade_stage('background-application-backup')
+    app_files = create_application_archive(old_app, app_backup)
+    upgrade_stage('background-application-verification')
+    if archive_manifest(app_backup) != app_files:
+        fail('APPLICATION_BACKUP_VERIFICATION_FAILED')
+    app_sha = digest(app_backup)
+    upgrade_stage('background-database-backup')
+    before_db = backup_root / 'before.db'
+    with closing(connection(db, writable=True)) as current:
+        integrity(current)
+        columns = column_map(current)
+        history = fingerprints(current, columns)
+        current.execute('VACUUM INTO ?', (str(before_db),))
+        if fingerprints(current, columns) != history:
+            fail('DATABASE_CHANGED_DURING_STAGE')
+    with open(before_db, 'r+b') as stream:
+        os.fsync(stream.fileno())
+    with closing(connection(before_db)) as snapshot:
+        integrity(snapshot)
+        if fingerprints(snapshot, columns) != history:
+            fail('SNAPSHOT_HISTORY_MISMATCH')
+    receipt = {'format': 3, 'status': 'staged', 'nonce': nonce,
+               'database': str(db), 'databaseState': database_file_state(db),
+               'databaseBackup': str(before_db), 'databaseBackupSha256': digest(before_db),
+               'oldApp': str(old_app), 'appBackup': str(app_backup),
+               'appBackupState': file_state(app_backup), 'appBackupSha256': app_sha,
+               'appFiles': app_files, 'columnsBefore': columns, 'historyBefore': history,
+               'registry': registry or [], 'installerSha512': installer_sha512(installer),
+               'receiptPath': str(backup_root / 'receipt.json')}
+    durable_json(backup_root / 'receipt.json', receipt)
+    return receipt
+
+
+def staged_receipt(pointer, installer, db, old_app):
+    pointer = regular(pointer)
+    selected = json.loads(pointer.read_text(encoding='utf-8'))
+    if selected.get('format') != 1 or selected.get('installerSha512') != installer_sha512(installer):
+        fail('STAGED_INSTALLER_MISMATCH')
+    expected = db.parent / 'upgrade-backups' / str(uuid.UUID(selected['nonce'])) / 'receipt.json'
+    if pathlib.Path(selected.get('receiptPath', '')) != expected:
+        fail('STAGED_RECEIPT_PATH_MISMATCH')
+    receipt = json.loads(regular(expected).read_text(encoding='utf-8'))
+    if receipt.get('format') != 3 or receipt.get('status') != 'staged' or receipt.get('installerSha512') != selected['installerSha512']:
+        fail('UNVERIFIED_STAGED_RECEIPT')
+    if pathlib.Path(receipt['database']) != db or pathlib.Path(receipt['oldApp']) != old_app:
+        fail('STAGED_PROFILE_OR_PROGRAM_MISMATCH')
+    if pathlib.Path(receipt['databaseBackup']) != expected.parent / 'before.db' or pathlib.Path(receipt['appBackup']) != application_backup_path(old_app, receipt['nonce']):
+        fail('STAGED_BACKUP_PATH_MISMATCH')
+    if file_state(receipt['appBackup']) != receipt['appBackupState']:
+        fail('STAGED_APPLICATION_BACKUP_CHANGED')
+    if database_file_state(db) != receipt['databaseState']:
+        fail('DATABASE_CHANGED_AFTER_STAGE')
+    if digest(receipt['databaseBackup']) != receipt['databaseBackupSha256']:
+        fail('STAGED_DATABASE_BACKUP_CHANGED')
+    return receipt
+
+
+def refresh_stage_database(pointer, installer, db, old_app):
+    """Refresh only mutable business data after the local API has stopped."""
+    pointer = regular(pointer)
+    selected = json.loads(pointer.read_text(encoding='utf-8'))
+    expected = db.parent / 'upgrade-backups' / str(uuid.UUID(selected['nonce'])) / 'receipt.json'
+    receipt = json.loads(regular(expected).read_text(encoding='utf-8'))
+    if selected.get('format') != 1 or selected.get('receiptPath') != str(expected) or selected.get('installerSha512') != installer_sha512(installer):
+        fail('STAGED_INSTALLER_MISMATCH')
+    if receipt.get('format') != 3 or receipt.get('status') != 'staged' or receipt.get('installerSha512') != selected['installerSha512']:
+        fail('UNVERIFIED_STAGED_RECEIPT')
+    if pathlib.Path(receipt['database']) != db or pathlib.Path(receipt['oldApp']) != old_app:
+        fail('STAGED_PROFILE_OR_PROGRAM_MISMATCH')
+    if pathlib.Path(receipt['appBackup']) != application_backup_path(old_app, receipt['nonce']) or file_state(receipt['appBackup']) != receipt['appBackupState']:
+        fail('STAGED_APPLICATION_BACKUP_CHANGED')
+    temporary = expected.parent / 'before-refresh.db'
+    if temporary.exists():
+        temporary.unlink()
+    upgrade_stage('background-database-refresh')
+    with closing(connection(db, writable=True)) as current:
+        integrity(current)
+        columns = column_map(current)
+        history = fingerprints(current, columns)
+        current.execute('VACUUM INTO ?', (str(temporary),))
+        if fingerprints(current, columns) != history:
+            fail('DATABASE_CHANGED_DURING_STAGE')
+    with open(temporary, 'r+b') as stream:
+        os.fsync(stream.fileno())
+    with closing(connection(temporary)) as snapshot:
+        integrity(snapshot)
+        if fingerprints(snapshot, columns) != history:
+            fail('SNAPSHOT_HISTORY_MISMATCH')
+    os.replace(temporary, receipt['databaseBackup'])
+    receipt.update(databaseBackupSha256=digest(receipt['databaseBackup']),
+                   databaseState=database_file_state(db),
+                   columnsBefore=columns, historyBefore=history)
+    durable_json(expected, receipt)
+    return receipt
+
+
+def prepare(db, old_app, catalog, processes, registry=None, staged=None):
     upgrade_stage('stop-check')
     require_stopped(processes)
     db, old_app = regular(db), regular(old_app)
@@ -422,30 +554,43 @@ def prepare(db, old_app, catalog, processes, registry=None):
         columns = column_map(c)
         upgrade_stage('database-history-snapshot')
         history = fingerprints(c, columns)
-        nonce = str(uuid.uuid4())
-        backup_root = db.parent / 'upgrade-backups' / nonce
-        regular(backup_root.parent)
-        backup_root.mkdir(parents=True, exist_ok=False)
-        before_db = backup_root / 'before.db'
-        upgrade_stage('database-backup')
-        c.execute('VACUUM INTO ?', (str(before_db),))
-        with open(before_db, 'r+b') as stream:
-            os.fsync(stream.fileno())
-        with closing(connection(before_db)) as snapshot:
-            integrity(snapshot)
-            if fingerprints(snapshot, columns) != history:
-                fail('SNAPSHOT_HISTORY_MISMATCH')
-        app_backup = application_backup_path(old_app, nonce)
-        upgrade_stage('application-backup')
-        app_files = create_application_archive(old_app, app_backup)
-        upgrade_stage('application-backup-verification')
-        if archive_manifest(app_backup) != app_files:
-            fail('APPLICATION_BACKUP_VERIFICATION_FAILED')
-        app_backup_sha256 = digest(app_backup)
+        if staged is not None:
+            if staged['columnsBefore'] != columns or staged['historyBefore'] != history:
+                fail('DATABASE_CHANGED_AFTER_STAGE')
+            nonce = staged['nonce']
+            backup_root = db.parent / 'upgrade-backups' / nonce
+            before_db = regular(staged['databaseBackup'])
+            app_backup = regular(staged['appBackup'])
+            app_files = staged['appFiles']
+            app_backup_sha256 = staged['appBackupSha256']
+        else:
+            nonce = str(uuid.uuid4())
+            backup_root = db.parent / 'upgrade-backups' / nonce
+            regular(backup_root.parent)
+            backup_root.mkdir(parents=True, exist_ok=False)
+            before_db = backup_root / 'before.db'
+            upgrade_stage('database-backup')
+            c.execute('VACUUM INTO ?', (str(before_db),))
+            with open(before_db, 'r+b') as stream:
+                os.fsync(stream.fileno())
+            with closing(connection(before_db)) as snapshot:
+                integrity(snapshot)
+                if fingerprints(snapshot, columns) != history:
+                    fail('SNAPSHOT_HISTORY_MISMATCH')
+            app_backup = application_backup_path(old_app, nonce)
+            upgrade_stage('application-backup')
+            app_files = create_application_archive(old_app, app_backup)
+            upgrade_stage('application-backup-verification')
+            if archive_manifest(app_backup) != app_files:
+                fail('APPLICATION_BACKUP_VERIFICATION_FAILED')
+            app_backup_sha256 = digest(app_backup)
         receipt_path = backup_root / 'receipt.json'
         receipt = {'format': 2, 'sourceSha': catalog['sourceSha'], 'changes': CHANGES, 'nonce': nonce,
                    'database': str(db), 'databaseBackup': str(before_db), 'databaseBackupSha256': digest(before_db),
                    'oldApp': str(old_app), 'appBackup': str(app_backup), 'appBackupSha256': app_backup_sha256, 'appFiles': app_files,
+                   'preverifiedBackup': staged is not None,
+                   'appBackupState': file_state(app_backup) if staged is not None else None,
+                   'databaseState': database_file_state(db) if staged is not None else None,
                    'columnsBefore': columns, 'historyBefore': history, 'registry': registry or [],
                    'receiptPath': str(receipt_path), 'status': 'backups-verified'}
         durable_json(receipt_path, receipt)
@@ -499,7 +644,12 @@ def verify_receipt(receipt, catalog, processes):
         fail('BACKUP_PATH_MISMATCH')
     regular(expected_db_backup)
     regular(expected_app_backup)
-    if digest(expected_db_backup) != receipt['databaseBackupSha256'] or digest(expected_app_backup) != receipt['appBackupSha256']:
+    if digest(expected_db_backup) != receipt['databaseBackupSha256']:
+        fail('BACKUP_BYTES_CHANGED')
+    if receipt.get('preverifiedBackup'):
+        if file_state(expected_app_backup) != receipt['appBackupState']:
+            fail('BACKUP_BYTES_CHANGED')
+    elif digest(expected_app_backup) != receipt['appBackupSha256']:
         fail('BACKUP_BYTES_CHANGED')
     with closing(connection(expected_db_backup)) as backup:
         integrity(backup)
@@ -517,6 +667,8 @@ def restore_application(receipt, catalog, processes):
     # Never restores or overwrites the database. Additive committed schema remains.
     verify_receipt(receipt, catalog, processes)
     old_app, app_backup = regular(receipt['oldApp']), regular(receipt['appBackup'])
+    if digest(app_backup) != receipt['appBackupSha256']:
+        fail('BACKUP_BYTES_CHANGED')
     # Keep the temporary extraction name shorter than BTPS itself so even the
     # deepest installed asset never gains path length during rollback.
     extracted = old_app.parent / ('R' + uuid.UUID(receipt['nonce']).hex[:2])
@@ -577,6 +729,18 @@ def main():
     plan.add_argument('--result', required=True)
     plan.add_argument('--operator-confirmed', action='store_true', required=True)
     plan.add_argument('--diagnostic')
+    plan.add_argument('--installer')
+    plan.add_argument('--staged-pointer')
+    stage = sub.add_parser('stage')
+    stage.add_argument('--old-app', required=True)
+    stage.add_argument('--installer', required=True)
+    stage.add_argument('--result', required=True)
+    stage.add_argument('--diagnostic')
+    refresh = sub.add_parser('refresh-stage')
+    refresh.add_argument('--old-app', required=True)
+    refresh.add_argument('--installer', required=True)
+    refresh.add_argument('--staged-pointer', required=True)
+    refresh.add_argument('--diagnostic')
     for name in ('verify', 'restore'):
         p = sub.add_parser(name)
         p.add_argument('--receipt', required=True)
@@ -594,6 +758,33 @@ def main():
     if args.command == 'check-stopped':
         require_stopped(windows_processes)
         print(json.dumps({'status': 'stopped'}))
+    elif args.command == 'stage':
+        if args.diagnostic:
+            diagnostic = regular(args.diagnostic)
+            diagnostic.parent.mkdir(parents=True, exist_ok=True)
+        db = profile_database()
+        if db is None:
+            fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
+        receipt = stage_backup(db, args.old_app, args.installer, registry_snapshot())
+        pointer = regular(args.result)
+        pointer.parent.mkdir(parents=True, exist_ok=True)
+        durable_json(pointer, {'format': 1, 'nonce': receipt['nonce'],
+                              'receiptPath': receipt['receiptPath'],
+                              'installerSha512': receipt['installerSha512']})
+        if args.diagnostic:
+            durable_json(diagnostic, {'status': 'staged', 'reason': None})
+        print(json.dumps({'status': 'staged', 'receiptPath': receipt['receiptPath']}))
+    elif args.command == 'refresh-stage':
+        if args.diagnostic:
+            diagnostic = regular(args.diagnostic)
+            diagnostic.parent.mkdir(parents=True, exist_ok=True)
+        db = profile_database()
+        if db is None:
+            fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
+        receipt = refresh_stage_database(args.staged_pointer, args.installer, db, regular(args.old_app))
+        if args.diagnostic:
+            durable_json(diagnostic, {'status': 'staged', 'reason': None})
+        print(json.dumps({'status': 'staged', 'receiptPath': receipt['receiptPath']}))
     elif args.command == 'prepare':
         if args.diagnostic:
             diagnostic = regular(args.diagnostic)
@@ -602,7 +793,13 @@ def main():
         db = profile_database()
         if db is None:
             fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
-        receipt = prepare(db, args.old_app, catalog, windows_processes, registry_snapshot())
+        old_app = regular(args.old_app)
+        staged = None
+        if args.staged_pointer and pathlib.Path(args.staged_pointer).exists():
+            if not args.installer:
+                fail('STAGED_INSTALLER_REQUIRED')
+            staged = staged_receipt(args.staged_pointer, args.installer, db, old_app)
+        receipt = prepare(db, old_app, catalog, windows_processes, registry_snapshot(), staged)
         durable_json(args.result, receipt)
         # The new Electron process must reopen exactly the database verified
         # above even when another old profile remains on disk.

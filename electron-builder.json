@@ -33,6 +33,10 @@
   ],
   "extraResources": [
     {
+      "from": "build/upgrade-helper/btps-db-upgrade.exe",
+      "to": "upgrade-helper/btps-db-upgrade.exe"
+    },
+    {
       "from": "server/dist",
       "to": "app.asar.unpacked/server/dist",
       "filter": [

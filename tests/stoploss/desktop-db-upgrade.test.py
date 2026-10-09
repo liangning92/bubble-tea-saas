@@ -50,6 +50,8 @@ class UpgradeTests(unittest.TestCase):
                 c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY)')
         self.before = U.digest(self.db)
         self.app_before = U.tree_manifest(self.app)
+        self.installer = self.root / 'candidate.exe'
+        self.installer.write_bytes(b'owned-candidate-installer')
 
     def prepare(self, processes=lambda: []):
         return U.prepare(self.db, self.app, self.catalog, processes)
@@ -233,6 +235,36 @@ class UpgradeTests(unittest.TestCase):
         pathlib.Path(receipt['databaseBackup']).write_bytes(b'corrupt-backup')
         with self.assertRaisesRegex(RuntimeError, 'BACKUP_BYTES_CHANGED'):
             U.verify_receipt(receipt, self.catalog, lambda: [])
+
+    def test_background_stage_reuses_verified_backup_without_copying_in_installer(self):
+        staged = U.stage_backup(self.db, self.app, self.installer)
+        pointer = self.root / 'upgrade-stage.json'
+        U.durable_json(pointer, {'format': 1, 'nonce': staged['nonce'],
+                                  'receiptPath': staged['receiptPath'],
+                                  'installerSha512': staged['installerSha512']})
+        selected = U.staged_receipt(pointer, self.installer, self.db, self.app)
+        with mock.patch.object(U, 'create_application_archive', side_effect=AssertionError('must not copy during install')):
+            receipt = U.prepare(self.db, self.app, self.catalog, lambda: [], staged=selected)
+        self.assertEqual(receipt['nonce'], staged['nonce'])
+        self.assertTrue(receipt['preverifiedBackup'])
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+
+    def test_new_sale_requires_background_refresh_before_install(self):
+        staged = U.stage_backup(self.db, self.app, self.installer)
+        pointer = self.root / 'upgrade-stage.json'
+        U.durable_json(pointer, {'format': 1, 'nonce': staged['nonce'],
+                                  'receiptPath': staged['receiptPath'],
+                                  'installerSha512': staged['installerSha512']})
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('INSERT INTO "Order" (id,total,evidence) VALUES (?, ?, ?)', ('later-sale', 10, b''))
+        with self.assertRaisesRegex(RuntimeError, 'DATABASE_CHANGED_AFTER_STAGE'):
+            U.staged_receipt(pointer, self.installer, self.db, self.app)
+        U.refresh_stage_database(pointer, self.installer, self.db, self.app)
+        refreshed = U.staged_receipt(pointer, self.installer, self.db, self.app)
+        receipt = U.prepare(self.db, self.app, self.catalog, lambda: [], staged=refreshed)
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        with closing(sqlite3.connect(receipt['databaseBackup'])) as backup:
+            self.assertEqual(backup.execute('SELECT count(*) FROM "Order"').fetchone()[0], 2)
 
 
 if __name__ == '__main__':
