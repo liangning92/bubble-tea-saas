@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { RefreshCw, CalendarDays, AlertTriangle } from 'lucide-react'
+import { RefreshCw, CalendarDays, AlertTriangle, ArrowLeft } from 'lucide-react'
 import api, { financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
@@ -70,6 +70,7 @@ export function ShiftReviewPage() {
   const rows = selected && tab !== 'overview' ? selected[tab] : []
   const paged = rows.slice((page - 1) * 20, page * 20)
   return <div className="space-y-5" data-testid="shift-review-page">
+    <Link to="/dashboard" className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft size={16} />{t('dashboard.title')}</Link>
     <header className="flex flex-wrap justify-between items-center gap-3"><h1 className="text-2xl font-bold">{t('shiftReview.title')}</h1><button className="btn-secondary flex items-center gap-2" disabled={query.isFetching || !valid} onClick={() => void query.refetch()}><RefreshCw size={16} />{t('common.refresh')}</button></header>
     <section className="bg-white border rounded-xl p-4 flex flex-wrap items-end gap-3" aria-label={t('shiftReview.dateRange')}>
       <CalendarDays size={20} className="mb-3 text-primary" /><label className="text-sm text-gray-600">{t('shiftReview.start')}<input aria-label={t('shiftReview.start')} type="date" value={range.startDate} max={range.endDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, startDate: e.target.value }))} /></label>

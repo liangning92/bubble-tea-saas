@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
@@ -115,7 +115,7 @@ const QueueDisplayPage = lazy(() => import('./pages/queue/QueueDisplayPage').the
 const RevenuePage = lazy(() => import('./pages/finance/RevenuePage').then(module => ({ default: module.RevenuePage })))
 const FinanceReportsPage = lazy(() => import('./pages/finance/FinanceReportsPage').then(module => ({ default: module.FinanceReportsPage })))
 const FinanceIndexPage = lazy(() => import('./pages/finance/FinanceIndexPage').then(module => ({ default: module.FinanceIndexPage })))
-const ShiftReviewPage = lazy(() => import('./pages/finance/ShiftReviewPage').then(module => ({ default: module.ShiftReviewPage })))
+const ShiftReviewPage = lazy(() => import('./pages/dashboard/ShiftReviewPage').then(module => ({ default: module.ShiftReviewPage })))
 const FixedAssetsPage = lazy(() => import('./pages/finance/FixedAssetsPage').then(module => ({ default: module.FixedAssetsPage })))
 const TaxReportsPage = lazy(() => import('./pages/finance/TaxReportsPage').then(module => ({ default: module.TaxReportsPage })))
 const AccountsPage = lazy(() => import('./pages/finance/AccountsPage').then(module => ({ default: module.AccountsPage })))
@@ -139,6 +139,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 const TvScreenConfigPage = lazy(() => import('./pages/marketing/TvScreenConfigPage').then(module => ({ default: module.TvScreenConfigPage })))
 
+function LegacyShiftRedirect() {
+  const { search, hash } = useLocation()
+  return <Navigate to={`/dashboard/shifts${search}${hash}`} replace />
+}
+
 function App() {
   return (
     <Suspense fallback={<RouteLoading />}><Routes>
@@ -154,6 +159,8 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="dashboard/shifts" element={<ShiftReviewPage />} />
+        <Route path="finance/shifts" element={<LegacyShiftRedirect />} />
         <Route path="pos-monitor" element={<POSMonitorPage />} />
 
         {/* 1. 产品管理 */}
@@ -332,7 +339,6 @@ function App() {
         <Route path="finance" element={<FinanceIndexPage />}>
           <Route index element={<Navigate to="/finance/revenue" replace />} />
           <Route path="revenue" element={<RevenuePage />} />
-          <Route path="shifts" element={<ShiftReviewPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="budgets" element={<BudgetPage />} />
           <Route path="orders" element={<OrderListPage />} />

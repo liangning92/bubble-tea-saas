@@ -1,5 +1,6 @@
 import prisma from '../config/database'
 import { socketManager } from '../socket'
+import { projectCartState } from '../utils/posCartState'
 
 export type POSAction =
   | 'login'
@@ -114,61 +115,41 @@ export async function getPOSActionLogs(storeId: string, options?: {
 }
 
 export async function getActiveSessions(storeId: string) {
-  // Get sessions from last 30 minutes that have cart_add but no checkout_complete
-  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
-
   const sessions = await prisma.pOSActionLog.groupBy({
     by: ['sessionId', 'staffId', 'staffName'],
-    where: {
-      storeId,
-      createdAt: { gte: thirtyMinutesAgo },
-    },
+    where: { storeId, createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) } },
     _count: { id: true },
   })
-
-  const activeSessions: Array<{
-    sessionId: string
-    staffId: string
-    staffName: string
-    lastAction: string
-    lastActionAt: Date
-    hasCheckoutComplete: boolean
-    itemCount: number
-  }> = []
-
+  const activeSessions = []
+  const seen = new Set<string>()
   for (const session of sessions) {
+    const identity = JSON.stringify([session.staffId, session.sessionId])
+    if (seen.has(identity)) continue
+    seen.add(identity)
     const actions = await prisma.pOSActionLog.findMany({
-      where: { sessionId: session.sessionId },
-      orderBy: { createdAt: 'desc' },
-      take: 1,
+      where: { storeId, staffId: session.staffId, sessionId: session.sessionId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { action: true, entityId: true, metadata: true, createdAt: true, staffName: true },
     })
-
-    const hasCheckout = await prisma.pOSActionLog.findFirst({
-      where: { sessionId: session.sessionId, action: 'checkout_complete' },
-    })
-
-    // Count cart_add actions
-    const cartAdds = await prisma.pOSActionLog.count({
-      where: { sessionId: session.sessionId, action: 'cart_add' },
-    })
-
-    // Count cart_clear actions (if clears > adds, suspicious)
-    const cartClears = await prisma.pOSActionLog.count({
-      where: { sessionId: session.sessionId, action: 'cart_clear' },
-    })
-
-    activeSessions.push({
-      sessionId: session.sessionId,
-      staffId: session.staffId,
-      staffName: session.staffName,
-      lastAction: actions[0]?.action || 'unknown',
-      lastActionAt: actions[0]?.createdAt || new Date(),
-      hasCheckoutComplete: !!hasCheckout,
-      itemCount: cartAdds - cartClears, // net items added
+    const state = projectCartState(actions)
+    let lastCheckoutFailure: { code: string; httpStatus: number | null; outcome: string; at: Date } | null = null
+    for (const action of actions) {
+      let meta: any = {}
+      try { const parsed = JSON.parse(action.metadata || '{}'); meta = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {} } catch { /* Missing legacy details stay unknown. */ }
+      if (['checkout_complete', 'cart_clear', 'suspend'].includes(action.action) || (meta.cartSnapshot?.version === 1 && Array.isArray(meta.cartSnapshot.items) && meta.cartSnapshot.items.length === 0)) lastCheckoutFailure = null
+      if (action.action === 'checkout_failed') lastCheckoutFailure = {
+        code: typeof meta.failureCode === 'string' ? meta.failureCode.slice(0, 160) : '',
+        httpStatus: Number.isInteger(meta.httpStatus) ? meta.httpStatus : null,
+        outcome: ['review', 'rejected'].includes(meta.outcome) ? meta.outcome : '', at: action.createdAt,
+      }
+    }
+    if (state.itemCount > 0) activeSessions.push({
+      sessionId: session.sessionId, staffId: session.staffId, staffName: actions.at(-1)?.staffName || session.staffName,
+      lastAction: actions.at(-1)?.action || 'unknown', lastActionAt: actions.at(-1)?.createdAt,
+      hasCheckoutComplete: false, ...state, lastCheckoutFailure,
     })
   }
-
-  return activeSessions.filter(s => s.itemCount > 0 && !s.hasCheckoutComplete)
+  return activeSessions
 }
 
 export async function getAlertStats(storeId: string, startDate?: string, endDate?: string) {

@@ -1,3 +1,4 @@
+import { cartAuditSnapshot } from '../utils/cartAudit'
 import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
@@ -674,6 +675,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     return `${prefix}${String(currentSeq).padStart(2, '0')}`
   }
 
+  const auditQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const hasCartAudit = useRef(false)
+
   // POS 操作日志辅助函数
   const logPOSAction = useCallback((params: {
     action: string
@@ -683,11 +687,28 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     severity?: 'info' | 'warning' | 'critical'
   }) => {
     const storeId = user?.storeId || 'default'
-    posApi.logPOSAction({
-      ...params,
-      sessionId: posSessionId,
+    // Preserve mutation order even when requests have different network latency.
+    auditQueue.current = auditQueue.current.then(() => {
+      const actor = useAuthStore.getState().user
+      if (actor?.id !== user?.id || actor?.storeId !== storeId) return
+      return posApi.logPOSAction({ ...params, sessionId: posSessionId })
     }).catch((err: any) => console.warn('[POS Action Log]', err))
-  }, [user?.storeId, posSessionId])
+  }, [user?.id, user?.storeId, posSessionId])
+
+  useEffect(() => {
+    if (!user?.storeId || (!cart.length && !hasCartAudit.current)) return
+    hasCartAudit.current = true
+    const report = () => {
+      try {
+        const snapshot = cartAuditSnapshot(cart)
+        logPOSAction({ action: 'cart_update', description: 'Cart state updated', metadata: { cartSnapshot: snapshot }, severity: 'info' })
+      } catch (error) { console.warn('[POS Cart Audit]', error) }
+    }
+    report()
+    window.addEventListener('online', report)
+    return () => window.removeEventListener('online', report)
+  }, [cart, user?.storeId, logPOSAction])
+
 
   // 税费设置（包含免税商品ID列表）
   const [taxSettings, setTaxSettings] = useState({

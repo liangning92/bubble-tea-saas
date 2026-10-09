@@ -113,7 +113,7 @@ export function MainLayout() {
         } bg-white border-r border-border transition-all duration-300 flex flex-col`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-border">
+        <div className={`h-20 flex items-center justify-between gap-3 ${sidebarOpen ? 'px-6' : 'px-4'} border-b border-border`}>
           {sidebarOpen && (
             <div className="flex items-center gap-2">
               <img
@@ -124,13 +124,13 @@ export function MainLayout() {
                   target.onerror = null
                   target.src = YOUME_LOGO_RED
                 }}
-                className="h-10 w-auto object-contain"
+                className="h-6 w-28 object-contain"
               />
             </div>
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100"
+            className="shrink-0 p-2 rounded-lg hover:bg-gray-100"
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>

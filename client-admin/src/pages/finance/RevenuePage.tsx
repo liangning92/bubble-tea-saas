@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { revenueApi, configApi } from '../../services/api'
@@ -35,12 +36,16 @@ export function RevenuePage() {
   const user=useAuthStore(state=>state.user)
   const storeId=user?.storeId
   const canRead=user?.role==='admin'||user?.role==='manager'
-  const [period,setPeriod]=useState<Period>('today')
+  const [searchParams]=useSearchParams()
+  const requestedPeriod=searchParams.get('period')
+  const navigationPeriod=requestedPeriod && ['today','week','month'].includes(requestedPeriod) ? requestedPeriod as Period : undefined
+  const [period,setPeriod]=useState<Period>(navigationPeriod || 'today')
   const [customDateRange,setCustomDateRange]=useState({start:'',end:''})
   const manualSelection=useRef(0)
   const [preferenceError,setPreferenceError]=useState(false)
 
   useEffect(()=>{
+    if (navigationPeriod) { setPeriod(navigationPeriod); return }
     if (!storeId || !canRead) return
     setPreferenceError(false)
     let active=true
@@ -52,7 +57,7 @@ export function RevenuePage() {
       if (active && version===manualSelection.current && ['today','week','month'].includes(preference)) setPeriod(preference)
     }).catch(()=>{})
     return ()=>{active=false}
-  },[storeId,canRead])
+  },[storeId,canRead,navigationPeriod])
 
   const handlePeriodChange = async (value:Period) => {
     manualSelection.current+=1

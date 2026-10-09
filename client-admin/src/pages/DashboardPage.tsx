@@ -3,7 +3,7 @@ import { DashboardReadFailure } from '../components/DashboardReadState'
 import { useDashboardContext, dashboardLink, businessDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { reportApi, posActionLogApi } from '../services/api'
 import { formatCurrency } from '../utils/helpers'
 import {
@@ -14,7 +14,8 @@ import {
   Users,
   AlertTriangle,
   Loader2,
-  Target,
+  CalendarDays,
+  ArrowRight,
   UserPlus,
   Award,
   Clock,
@@ -27,7 +28,8 @@ function StatCard({
   icon: Icon,
   color,
   trend,
-  trendKey
+  trendKey,
+  to
 }: {
   title: string
   value: string | number
@@ -36,10 +38,11 @@ function StatCard({
   color: string
   trend?: number
   trendKey?: string
+  to: string
 }) {
   const { t } = useTranslation()
   return (
-    <div className="card">
+    <Link to={to} aria-label={title} className="card block hover:shadow-md hover:ring-1 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-shadow">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500">{title}</p>
@@ -58,7 +61,8 @@ function StatCard({
           <Icon size={24} className="text-white" />
         </div>
       </div>
-    </div>
+      <p className="text-xs text-primary mt-3 flex items-center gap-1">{t('dashboard.viewDetails')} <ArrowRight size={12} /></p>
+    </Link>
   )
 }
 
@@ -173,6 +177,12 @@ export function DashboardPage() {
   const storeId=context.storeId!
   const asOf=dashboard.timestamp
   const currentContext={storeId,asOf,range:'current'}
+  const todayContext={storeId,asOf,...businessDay(asOf)}
+  const calendar = new Date(Date.parse(asOf) + 7 * 3600000)
+  const monthContext={storeId,asOf,
+    startDate:new Date(Date.UTC(calendar.getUTCFullYear(),calendar.getUTCMonth(),1)-7*3600000).toISOString(),
+    endDate:new Date(Date.UTC(calendar.getUTCFullYear(),calendar.getUTCMonth()+1,1)-7*3600000-1).toISOString()}
+  const cardClass="card block hover:shadow-md hover:ring-1 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-shadow"
 
   return (
     <div>
@@ -183,6 +193,7 @@ export function DashboardPage() {
       {/* ========== 今日核心数据 ========== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
+          to={dashboardLink('/finance/orders',todayContext)}
           title={t('dashboard.todayOrders')}
           value={dashboard?.today?.orders || 0}
           subtitle={t('dashboard.orders')}
@@ -192,6 +203,7 @@ export function DashboardPage() {
           trendKey="dashboard.vsYesterday"
         />
         <StatCard
+          to={dashboardLink('/finance/revenue',{storeId,period:'today'})}
           title={t('dashboard.todayRevenue')}
           value={formatCurrency(dashboard?.today?.revenue || 0)}
           subtitle={`${t('dashboard.avg')} ${formatCurrency(dashboard?.today?.averageOrder || 0)}`}
@@ -201,6 +213,7 @@ export function DashboardPage() {
           trendKey="dashboard.vsYesterday"
         />
         <StatCard
+          to={dashboardLink('/finance/revenue',{storeId,period:'today'})}
           title={t('dashboard.todayProfit')}
           value={formatCurrency(dashboard?.today?.profit || 0)}
           subtitle={`${t('dashboard.cost')}: ${formatCurrency(dashboard?.today?.cost || 0)}`}
@@ -208,6 +221,7 @@ export function DashboardPage() {
           color="bg-info"
         />
         <StatCard
+          to={dashboardLink('/marketing/members',{storeId})}
           title={t('dashboard.todayNewMembers')}
           value={dashboard?.member?.newMembers || 0}
           subtitle={`${dashboard?.member?.ratio || 0} ${t('dashboard.memberOrdersRatio')}`}
@@ -216,9 +230,9 @@ export function DashboardPage() {
         />
       </div>
 
-      {/* ========== 本月累计 + 目标进度 ========== */}
+      {/* ========== 本月累计 + 班次详情 ========== */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="card">
+        <Link to={dashboardLink('/finance/revenue',{storeId,period:'month'})} aria-label={t('dashboard.monthRevenue')} className={cardClass}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-primary/10">
               <DollarSign size={24} className="text-primary" />
@@ -231,9 +245,9 @@ export function DashboardPage() {
               </p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="card">
+        <Link to={dashboardLink('/finance/orders',monthContext)} aria-label={t('dashboard.monthOrders')} className={cardClass}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-success/10">
               <TrendingUp size={24} className="text-success" />
@@ -244,27 +258,20 @@ export function DashboardPage() {
               <p className="text-xs text-gray-400">{t('dashboard.thisMonth')}</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="card">
+        <Link to="/dashboard/shifts" aria-label={t('shiftReview.title')} className={cardClass}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-warning/10">
-              <Target size={24} className="text-warning" />
+              <CalendarDays size={24} className="text-warning" />
             </div>
             <div className="flex-1">
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-gray-500">{t('dashboard.goalProgress')}</p>
-                <p className="text-sm font-bold text-warning">{dashboard?.thisMonth?.goalProgress || 0}%</p>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div
-                  className="bg-warning h-2 rounded-full transition-all"
-                  style={{ width: `${dashboard?.thisMonth?.goalProgress || 0}%` }}
-                />
-              </div>
+              <p className="text-lg font-semibold">{t('shiftReview.title')}</p>
+              <p className="text-xs text-gray-500 mt-1">{t('dashboard.shiftDetailsHint')}</p>
+              <p className="text-sm text-primary mt-2 flex items-center gap-1">{t('dashboard.viewDetails')} <ArrowRight size={14} /></p>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* ========== 左侧：热销产品 + 库存预警 ========== */}
