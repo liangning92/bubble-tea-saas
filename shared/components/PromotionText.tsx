@@ -11,9 +11,9 @@ export interface PromotionTextStyle {
 const bounded = (value: number | undefined, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
-export function promotionTextCSS(style: PromotionTextStyle = {}, scale = 1): React.CSSProperties {
+export function promotionTextCSS(style: PromotionTextStyle = {}): React.CSSProperties {
   return {
-    fontSize: bounded(style.fontSize, 32, 12, 96) * scale,
+    fontSize: bounded(style.fontSize, 32, 12, 96),
     fontWeight: [400, 500, 700].includes(style.fontWeight || 0) ? style.fontWeight : 700,
     textAlign: ['left', 'center', 'right'].includes(style.textAlign || '') ? style.textAlign : 'center',
     lineHeight: bounded(style.lineHeight, 1.5, 1, 3),
@@ -22,18 +22,17 @@ export function promotionTextCSS(style: PromotionTextStyle = {}, scale = 1): Rea
   }
 }
 
-export function PromotionText({ lines, style = {}, subtitleStyle, scale = 1 }: {
+export function PromotionText({ lines, style = {}, subtitleStyle }: {
   lines: string[]
   style?: PromotionTextStyle
   subtitleStyle?: PromotionTextStyle
-  scale?: number
 }) {
   const justifyContent = style.verticalAlign === 'top' ? 'flex-start' : style.verticalAlign === 'bottom' ? 'flex-end' : 'center'
   return (
     <div className="w-full h-full flex flex-col overflow-y-auto p-4" style={{ justifyContent }}>
       <div className="w-full shrink-0 my-auto" style={{ marginTop: style.verticalAlign === 'top' ? 0 : undefined, marginBottom: style.verticalAlign === 'bottom' ? 0 : undefined }}>
-        <div style={promotionTextCSS(style, scale)}>{lines[0] || ''}</div>
-        {lines.length > 1 && <div className="mt-2" style={promotionTextCSS({ fontSize: 20, fontWeight: 400, ...subtitleStyle, textAlign: style.textAlign }, scale)}>{lines.slice(1).join('\n')}</div>}
+        <div data-promotion-title style={promotionTextCSS(style)}>{lines[0] || ''}</div>
+        {lines.length > 1 && <div data-promotion-subtitle className="mt-2" style={promotionTextCSS({ fontSize: 20, fontWeight: 400, ...subtitleStyle, textAlign: subtitleStyle?.textAlign ?? style.textAlign })}>{lines.slice(1).join('\n')}</div>}
       </div>
     </div>
   )

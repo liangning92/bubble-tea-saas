@@ -1,3 +1,4 @@
+import { CustomerDisplayCanvas } from '../../../../shared/components/CustomerDisplayCanvas'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../../shared/utils/customerDisplayAppearance'
 import { CustomerDisplayLayout, CustomerLayoutColumn, CustomerLayoutRow, customerRows, equalPercents, customerBackground, customerTextColor } from '../../../../shared/components/CustomerDisplayLayout'
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
@@ -319,7 +320,7 @@ const _DualScreenLayoutEditor: React.FC<{
 }
 
 // DualScreen Preview Component
-const DualScreenPreview: React.FC<{
+export const DualScreenPreview: React.FC<{
   dualScreen: any
   storeLogo?: string
   editingState?: CustomerDisplayState
@@ -382,37 +383,37 @@ const DualScreenPreview: React.FC<{
         }
         return (
           <div className="w-full h-full flex items-center justify-center" style={{ background: regionBackground, color: regionTextColor }}>
-            <span className="text-4xl">{currentPromotion}</span>
+            <span className="text-6xl">{currentPromotion}</span>
           </div>
         )
       case 'promotions':
         return (
           <div className="w-full h-full" style={{ background: regionBackground, color: regionTextColor }}>
-            <PromotionText lines={promotions} style={appearance.promotionsStyle} subtitleStyle={appearance.promotionsSubtitleStyle} scale={0.5} />
+            <PromotionText lines={promotions} style={appearance.promotionsStyle} subtitleStyle={appearance.promotionsSubtitleStyle} />
           </div>
         )
       case 'welcome':
         return (
           <div className="w-full h-full" style={{ background: regionBackground, color: regionTextColor }}>
-            <PromotionText lines={[appearance.welcomeText ?? '']} style={appearance.welcomeStyle} scale={0.5} />
+            <PromotionText lines={[appearance.welcomeText ?? '']} style={appearance.welcomeStyle} />
           </div>
         )
       case 'order':
         return (
           <div className="w-full h-full flex flex-col" style={{ background: appearance.orderBackgroundColor }}>
-            <div className="py-2 px-4 text-center text-sm font-bold" style={{ background: appearance.orderHeaderColor, color: customerTextColor(appearance.orderHeaderColor) }}>{t('posSettings.yourOrder')}</div>
-            <div className="flex-1 p-2 space-y-2 overflow-y-auto">
-              <div className="flex justify-between items-center bg-white p-2 rounded text-xs">
-                <div className="flex items-center gap-2">
-                  <span>✨</span>
+            <div className="py-3 px-4 text-center font-bold" style={{ background: appearance.orderHeaderColor, color: customerTextColor(appearance.orderHeaderColor) }}>{t('posSettings.yourOrder')}</div>
+            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+              <div className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✨</span>
                   <div>
-                    <div className="font-medium">{t('posSettings.sampleProductName')}</div>
-                    <div className="text-gray-500">{t('posSettings.sampleSize')}</div>
+                    <div className="font-bold">{t('posSettings.sampleProductName')}</div>
+                    <div className="text-gray-500 text-sm">{t('posSettings.sampleSize')}</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-medium">{t('posSettings.samplePrice')}</div>
-                  <div className="text-gray-500">{t('posSettings.sampleQuantity')}</div>
+                  <div className="font-bold">{t('posSettings.samplePrice')}</div>
+                  <div className="text-gray-500 text-sm">{t('posSettings.sampleQuantity')}</div>
                 </div>
               </div>
 
@@ -426,7 +427,7 @@ const DualScreenPreview: React.FC<{
                 </div>
               )}
             </div>
-            <div className="bg-white border-t p-2 space-y-1">
+            <div className="bg-white border-t p-4 space-y-1">
               {dualScreen?.showPromotionDetail !== false && (
                 <div className="flex justify-between items-center text-xs text-green-600 font-medium">
                   <div className="flex items-center gap-1">
@@ -436,7 +437,7 @@ const DualScreenPreview: React.FC<{
                   <span>-Rp 10.000</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm pt-1 border-t">
+              <div className="flex justify-between font-bold text-xl pt-2 border-t">
                 <span>{t('common.total')}</span>
                 <span className="font-bold text-primary">{t('posSettings.samplePrice')}</span>
               </div>
@@ -469,15 +470,17 @@ const DualScreenPreview: React.FC<{
 
       {/* Preview Screen with dynamic columns */}
       <div className="relative bg-gray-900 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9', background }}>
+        <CustomerDisplayCanvas background={background}>
         {previewState === 'complete' ? (
           <div className="w-full h-full flex flex-col items-center justify-center" style={{ background, color: textColor }}>
-            <div className="text-4xl mb-2">{t('posSettings.checkmark')}</div>
-            <div className="text-lg font-bold">{t('posSettings.thankYou')}</div>
-            <div className="text-sm opacity-80">{t('posSettings.orderNumber')}</div>
+            <div className="text-8xl mb-6">{t('posSettings.checkmark')}</div>
+            <div className="text-5xl font-bold mb-2">{t('posSettings.thankYou')}</div>
+            <div className="text-2xl opacity-90">{t('posSettings.orderNumber')}</div>
           </div>
         ) : (
           <CustomerDisplayLayout columns={currentLayout.columns} renderContent={renderColumnContent} background={background} />
         )}
+        </CustomerDisplayCanvas>
       </div>
     </div>
   )
@@ -765,7 +768,10 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   type PrinterType = 'receipt' | 'kitchen' | 'label' | 'kds'
 
   const [appearanceState, setAppearanceState] = useState<CustomerDisplayState>('idle')
+  // A save-triggered refetch must not overwrite text the user is still editing.
+  const appearanceDraftRef = useRef(false)
   const updateAppearance = (updates: Partial<CustomerDisplayAppearance>, save = false) => {
+    appearanceDraftRef.current = true
     const ds = hardwareSettings.dualScreen || {}
     const next = { ...hardwareSettings, dualScreen: { ...ds, stateAppearance: { ...ds.stateAppearance, [appearanceState]: { ...ds.stateAppearance?.[appearanceState], ...updates } } } }
     setHardwareSettings(next)
@@ -985,7 +991,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
         setPosReceipt(prev => ({ ...prev, ...receiptConfig }))
       }
       // Load hardware settings
-      if (configs.hardwareSettings) {
+      if (configs.hardwareSettings && !appearanceDraftRef.current) {
         console.log('[Admin] Loading hw:', configs.hardwareSettings)
         const migrated = migratePrinterConfig(configs.hardwareSettings)
         console.log('[Admin] Migrated:', migrated)
@@ -1845,18 +1851,12 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                   {appearanceState !== 'complete' && selectedContents.has('promotions') && <details key={`promotions-${appearanceState}`} className="p-4 border rounded-lg">
                     <summary className="font-medium cursor-pointer">{t('posSettings.statePromotions')}</summary>
                     <div className="space-y-4 mt-4">
-                {/* Promotions */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.dualScreenPromotions')}</label>
-                  <textarea value={(editedAppearance.promotions || []).join('\n')} onChange={(e) => {
-                    const promotions = e.target.value.split('\n').filter(line => line.trim())
-                    updateAppearance({ promotions })
-                  }} onBlur={() => handleSave('hardwareSettings', hardwareSettings)} className="input min-h-[80px]" placeholder={t('posSettings.promotionsPlaceholder')} />
-                </div>
-
                 <div className="space-y-3">
                 <div className="p-3 bg-gray-50 rounded-lg space-y-3">
-                  <h4 className="text-sm font-medium">{t('posSettings.promotionTextStyle')}</h4>
+                  <label htmlFor="promotion-main-title" className="block text-sm font-medium">{t('posSettings.promotionTextStyle')}</label>
+                  <textarea id="promotion-main-title" className="input min-h-[80px]" value={editedAppearance.promotions?.[0] ?? ''}
+                    onChange={e => updateAppearance({ promotions: [e.target.value, (editedAppearance.promotions || []).slice(1).join('\n')] })}
+                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)} />
                   <p className="text-xs text-gray-500">{t('posSettings.promotionTextHint')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <label className="text-sm">{t('posSettings.promotionFontSize')}
@@ -1888,7 +1888,10 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 </div>
 
                 <div className="p-3 bg-gray-50 rounded-lg space-y-3">
-                  <h4 className="text-sm font-medium">{t('posSettings.promotionSubtitleStyle')}</h4>
+                  <label htmlFor="promotion-subtitle" className="block text-sm font-medium">{t('posSettings.promotionSubtitleStyle')}</label>
+                  <textarea id="promotion-subtitle" className="input min-h-[80px]" value={(editedAppearance.promotions || []).slice(1).join('\n')}
+                    onChange={e => updateAppearance({ promotions: [editedAppearance.promotions?.[0] ?? '', e.target.value] })}
+                    onBlur={() => handleSave('hardwareSettings', hardwareSettings)} />
                   <p className="text-xs text-gray-500">{t('posSettings.promotionSubtitleHint')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <label className="text-sm">{t('posSettings.promotionFontSize')}
@@ -1899,6 +1902,11 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                     <label className="text-sm">{t('posSettings.promotionFontWeight')}
                       <select className="input mt-1" value={editedAppearance.promotionsSubtitleStyle?.fontWeight ?? 400} onChange={e => updatePromotionSubtitleStyle({ fontWeight: Number(e.target.value) as 400 | 500 | 700 }, true)}>
                         <option value={400}>{t('posSettings.textNormal')}</option><option value={500}>{t('posSettings.textMedium')}</option><option value={700}>{t('posSettings.textBold')}</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">{t('posSettings.promotionTextAlign')}
+                      <select className="input mt-1" value={editedAppearance.promotionsSubtitleStyle?.textAlign ?? editedAppearance.promotionsStyle?.textAlign ?? 'center'} onChange={e => updatePromotionSubtitleStyle({ textAlign: e.target.value as PromotionTextStyle['textAlign'] }, true)}>
+                        <option value="left">{t('posSettings.textLeft')}</option><option value="center">{t('posSettings.textCenter')}</option><option value="right">{t('posSettings.textRight')}</option>
                       </select>
                     </label>
                     <label className="text-sm">{t('posSettings.promotionLineHeight')}

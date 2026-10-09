@@ -55,7 +55,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   await expect(page.getByText('Idle welcome',{exact:true})).toBeVisible();
   await page.evaluate(()=>window.handlers.update({items:[{id:'p',productName:'State Tea',specName:'Regular',quantity:1,unitPrice:12000,addons:[]}],subtotal:12000,total:12000,ppn:0,discount:0}));
   await expect(page.getByText('Order title',{exact:true})).toHaveCSS('font-size','24px');await expect(page.getByText('Order subtitle',{exact:true})).toBeVisible();await expect(page.getByText('Idle welcome',{exact:true})).toHaveCount(0);await expect(page.locator('div.py-3.px-4.text-center.font-bold')).toHaveCSS('background-color','rgb(17, 34, 51)');
-  await page.evaluate(()=>window.handlers.complete('COLOR'));await expect(page.getByText('COLOR',{exact:false})).toBeVisible();await expect(page.locator('.min-h-screen')).toHaveCSS('background-color','rgb(18, 52, 86)');
+  await page.evaluate(()=>window.handlers.complete('COLOR'));await expect(page.getByText('COLOR',{exact:false})).toBeVisible();await expect(page.locator('[data-customer-display-canvas] > div')).toHaveCSS('background-color','rgb(18, 52, 86)');
   assert.deepEqual(errors,[]);await page.screenshot({path:path.join(output,'customer-independent-states.png')});await context.close();console.log('PASS independent idle, ordering and completed colors, title/subtitle and typography');
  }
  for(const scenario of ['storage-ok','storage-failure','storage-read-failure','storage-delete-failure','server-down','server-unknown']){
