@@ -76,4 +76,6 @@ node tests/stoploss/unified-activity-integration.cjs
 ACTIVITY_ADMIN_BUILD=/path/to/admin/dist ACTIVITY_POS_BUILD=/path/to/pos/dist node tests/stoploss/unified-activity-page-check.cjs
 ```
 
-本次完成本地迁移演练与三端自动化验证，未连接/迁移生产数据库，也未部署到真实电视或收银设备。生产 PostgreSQL 的并发负载与设备开机启动设置，仍需在部署环境执行以上验收。
+2026-10-09 已部署生产 API、后台与网页收银/电视。API 源码为 `9b5ebc9576cd3c390a37037a3b4e12e3e77d7b4e`，后台与 POS 网页源码为 `de5c134187ea03c32229751d6a0e10881ef05b00`；后续修改仅涉及 API 授权和测试。生产两个门店共迁移 4 条活动，无冲突；迁移演练比较 107 张表，105 张历史业务表完全不变，另外仅改活动配置和旧 Campaign 的迁移状态。数据库与上传媒体已备份并校验，恢复库及临时凭证已清理。公网三站 200、API/数据库/Redis 健康，活动报价、电视专用授权、门店隔离与真实浏览器记住授权验证通过，未创建生产测试交易。备份与回滚 Compose、镜像来源及验收证据存放在主机的 `deployment-unified-backups` 私有目录。
+
+此次交付为网页版本；Windows POS 安装包和真实电视设备的开机自动进入设置尚未发布/执行，不应将网页部署视为安装版升级完成。
