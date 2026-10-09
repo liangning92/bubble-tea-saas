@@ -23,7 +23,7 @@ let verifiedInstaller: {path:string; size:number; mtimeMs:number} | null = null
 let installationHooks: {prepare:()=>Promise<void>;resume:()=>void}
 
 function upgradeHelper() {
-  return path.join(process.resourcesPath, 'upgrade-helper', 'btps-db-upgrade.exe')
+  return process.resourcesPath ? path.join(process.resourcesPath, 'upgrade-helper', 'btps-db-upgrade.exe') : ''
 }
 
 function stagePointer() {
