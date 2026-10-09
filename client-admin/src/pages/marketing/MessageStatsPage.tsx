@@ -1,9 +1,10 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, MessageSquare, TrendingUp, Clock, BarChart3 } from 'lucide-react'
+import { Loader2, MessageSquare, TrendingUp, Clock } from 'lucide-react'
 
 interface MessageStats {
   totalSent: number
@@ -40,12 +41,12 @@ export function MessageStatsPage() {
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week')
 
   // Fetch message stats
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['message-stats', storeId, period],
     queryFn: () => marketingApi.messageStats(storeId, period)
   })
 
-  const stats: MessageStats = data?.data || {
+  const stats: MessageStats = data?.data?.data || {
     totalSent: 0,
     totalDelivered: 0,
     totalFailed: 0,
@@ -65,13 +66,12 @@ export function MessageStatsPage() {
     }
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <BarChart3 size={24} className="text-primary" />
-          <h1 className="text-xl font-semibold">{t('marketing.messageStats')}</h1>
-        </div>
+      <div className="marketing-toolbar mb-5">
+
 
         {/* Period Filter */}
         <div className="flex gap-2">

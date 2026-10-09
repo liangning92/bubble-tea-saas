@@ -1,3 +1,4 @@
+import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -32,18 +33,19 @@ interface ReferralFunnel {
 
 export function ReferralFunnelPage() {
   const { t } = useTranslation()
+  const l=useMarketingCopy()
   const { user } = useAuthStore()
   const storeId = user?.storeId || 'default'
 
   const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('month')
 
   // Fetch referral funnel data
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['referral-funnel', storeId, period],
     queryFn: () => marketingApi.referralFunnel(storeId, period)
   })
 
-  const funnel: ReferralFunnel = data?.data || {
+  const funnel: ReferralFunnel = data?.data?.data || {
     codesGenerated: 0,
     codesUsed: 0,
     newRegistrations: 0,
@@ -76,13 +78,13 @@ export function ReferralFunnelPage() {
     { key: 'repeatPurchase', label: t('marketing.repeatPurchase'), value: funnel.repeatPurchase, color: 'bg-green-500' }
   ]
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <TrendingUp size={24} className="text-primary" />
-          <h1 className="text-xl font-semibold">{t('marketing.referralFunnel')}</h1>
-        </div>
+      <p className="text-sm text-gray-500 mb-4">{l('这里统计历史邀请计划。新邀请活动的成交与权益请在“活动效果”查看。','Historical records only. Review new unified activities in Activity performance.','Hanya catatan lama. Tinjau aktivitas terpadu baru di Kinerja aktivitas.')}</p>
+      <div className="marketing-toolbar mb-5">
+
 
         {/* Period Filter */}
         <div className="flex gap-2">

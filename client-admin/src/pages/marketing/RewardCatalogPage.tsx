@@ -1,12 +1,17 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
+import { ResourcePicker } from '../../components/marketing/ResourcePicker'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { rewardApi } from '../../services/api'
+import { activitiesApi, rewardApi } from '../../services/api'
 import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useAuthStore } from '../../stores/auth'
 import { Loader2, Plus, Edit2, Trash2, X, Gift } from 'lucide-react'
 
 interface Reward {
+  productId?: string
+  addonId?: string
   id: string
   name: string
   description?: string
@@ -27,6 +32,8 @@ const REWARD_TYPES = [
 ]
 
 const DEFAULT_FORM = {
+  productId: '',
+  addonId: '',
   name: '',
   description: '',
   type: 'product',
@@ -40,6 +47,9 @@ const DEFAULT_FORM = {
 
 export function RewardCatalogPage() {
   const { t } = useTranslation()
+  const l = useMarketingCopy()
+  const [error,setError] = useState('')
+  const [search,setSearch] = useState('')
   const { user } = useAuthStore()
   const storeId = user?.storeId
   const queryClient = useQueryClient()
@@ -49,25 +59,29 @@ export function RewardCatalogPage() {
   const [form, setForm] = useState(DEFAULT_FORM)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  const { data: rewardsData, isLoading } = useQuery({
+  const { data: rewardsData, isLoading, isError, refetch } = useQuery({
     queryKey: ['rewards'],
-    queryFn: () => rewardApi.list({ active: true })
+    queryFn: () => rewardApi.list()
   })
 
+  const resources = useQuery({queryKey:['activity-resources'],queryFn:()=>activitiesApi.resources().then(response=>response.data.data),enabled:showModal})
+  const onError=(error:any)=>setError(error.response?.data?.message||error.message)
   const createMutation = useMutation({
-    mutationFn: (payload: typeof DEFAULT_FORM) => rewardApi.create(payload),
+    mutationFn: (payload: any) => rewardApi.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rewards'] })
       closeModal()
-    }
+      queryClient.invalidateQueries({queryKey:['activity-resources']})
+    }, onError
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: typeof DEFAULT_FORM }) => rewardApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => rewardApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rewards'] })
       closeModal()
-    }
+      queryClient.invalidateQueries({queryKey:['activity-resources']})
+    }, onError
   })
 
   const deleteMutation = useMutation({
@@ -75,20 +89,25 @@ export function RewardCatalogPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rewards'] })
       setDeleteId(null)
-    }
+      queryClient.invalidateQueries({queryKey:['activity-resources']})
+    }, onError
   })
 
-  const rewards: Reward[] = rewardsData?.data?.data?.list || []
+  const rewards: Reward[] = (rewardsData?.data?.data?.list || []).filter((reward:Reward)=>reward.name.toLowerCase().includes(search.toLowerCase()))
 
   const closeModal = () => {
+    setError('')
     setShowModal(false)
     setEditingReward(null)
     setForm(DEFAULT_FORM)
   }
 
   const openEdit = (reward: Reward) => {
+    setError('')
     setEditingReward(reward)
     setForm({
+      productId: reward.productId||'',
+      addonId: reward.addonId||'',
       name: reward.name,
       description: reward.description || '',
       type: reward.type,
@@ -104,7 +123,8 @@ export function RewardCatalogPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = { ...form, storeId }
+    if(form.type==='product'&&!form.productId||form.type==='addon'&&!form.addonId){setError(l('请选择关联商品或小料','Select the linked product or topping','Pilih produk atau topping terkait'));return}
+    const payload = { ...form, storeId,productId:form.type==='product'?form.productId:null,addonId:form.type==='addon'?form.addonId:null }
     if (editingReward) {
       updateMutation.mutate({ id: editingReward.id, data: payload })
     } else {
@@ -116,21 +136,25 @@ export function RewardCatalogPage() {
     return d ? new Date(d).toLocaleDateString('id-ID') : '-'
   }
 
+  if(isError) return <MarketingError retry={()=>refetch()}/>
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
+      <div className="marketing-toolbar mb-4">
+        <button onClick={() => {setError('');setShowModal(true)}} className="btn-primary flex items-center gap-2">
           <Plus size={20} /> {t('marketing.addReward')}
         </button>
       </div>
 
+      {error&&<div role="alert" className="rounded-lg bg-red-50 text-red-700 p-3 mb-4 text-sm">{error}</div>}
+      <p className="text-sm text-gray-500 mb-4">{l('兑换目录同时提供活动赠品。关联商品或小料后，兑现时可核对库存。','This catalog also supplies activity gifts. Link products or toppings for inventory checks at fulfilment.','Katalog ini juga menyediakan hadiah aktivitas. Tautkan produk atau topping untuk pemeriksaan stok saat penyerahan.')}</p>
+      <input className="input mb-4 sm:max-w-sm" aria-label={l('搜索赠品','Search rewards','Cari hadiah')} value={search} onChange={event=>setSearch(event.target.value)} placeholder={l('搜索赠品名称','Search reward names','Cari nama hadiah')}/>
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
       ) : rewards.length === 0 ? (
         <div className="card text-center py-12">
           <Gift size={48} className="mx-auto mb-4 text-gray-400" />
           <p className="text-gray-500 mb-4">{t('common.noData')}</p>
-          <button onClick={() => setShowModal(true)} className="btn-primary">
+          <button onClick={() => {setError('');setShowModal(true)}} className="btn-primary">
             {t('marketing.addReward')}
           </button>
         </div>
@@ -186,8 +210,8 @@ export function RewardCatalogPage() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
+        <MarketingDialog onClose={closeModal}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
                 {editingReward ? t('marketing.editReward') : t('marketing.addReward')}
@@ -217,6 +241,10 @@ export function RewardCatalogPage() {
                   ))}
                 </select>
               </div>
+              {form.type==='product'&&<ResourcePicker single label={l('关联商品','Linked product','Produk terkait')} options={(resources.data?.products||[]).map((p:any)=>({id:p.id,name:p.name,subtitle:p.code,group:p.category?.name}))} value={form.productId?[form.productId]:[]} onChange={ids=>setForm(f=>({...f,productId:ids[0]||''}))}/>}
+              {form.type==='addon'&&<ResourcePicker single label={l('关联小料','Linked topping','Topping terkait')} options={Array.from(new Map((resources.data?.products||[]).flatMap((p:any)=>(p.addons||[]).map((a:any)=>[a.addon.id,{id:a.addon.id,name:a.addon.name}] as const))).values()) as {id:string;name:string}[]} value={form.addonId?[form.addonId]:[]} onChange={ids=>setForm(f=>({...f,addonId:ids[0]||''}))}/>}
+              {resources.isError&&<MarketingError retry={()=>resources.refetch()}/>}
+              {error&&<p role="alert" className="text-sm text-red-600">{error}</p>}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.pointsCost')} *</label>
@@ -225,7 +253,7 @@ export function RewardCatalogPage() {
                     value={form.pointsCost}
                     onChange={e => setForm(f => ({ ...f, pointsCost: Number(e.target.value) }))}
                     className="input"
-                    min={1}
+                    min={0}
                     required
                   />
                 </div>
@@ -284,11 +312,11 @@ export function RewardCatalogPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {deleteId && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={()=>setDeleteId(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
             <p className="text-gray-600 mb-6">{t('marketing.deleteRewardConfirm')}</p>
@@ -306,7 +334,7 @@ export function RewardCatalogPage() {
               </button>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
     </div>
   )

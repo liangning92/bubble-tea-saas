@@ -71,6 +71,61 @@ body {
   .badge-info {
     @apply bg-blue-100 text-blue-800;
   }
+
+  .marketing-primary-nav {
+    @apply flex flex-wrap gap-1 bg-white p-1 rounded-lg border border-border shadow-sm;
+  }
+  .marketing-primary-link {
+    @apply px-4 py-2 rounded-md text-sm font-medium transition-colors;
+  }
+  .marketing-section-nav {
+    @apply flex flex-wrap gap-x-5 gap-y-1 border-b border-border;
+  }
+  .marketing-section-link {
+    @apply py-3 border-b-2 text-sm font-medium transition-colors;
+  }
+  .marketing-workspace .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 bg-white border border-border text-gray-700 px-3 py-2 rounded-btn text-sm font-medium hover:bg-gray-50 transition-colors;
+  }
+  .marketing-workspace button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+  .marketing-workspace input[type='checkbox'], .marketing-workspace input[type='radio'] {
+    @apply accent-primary shrink-0;
+  }
+  .marketing-workspace .badge-gray {
+    @apply bg-gray-100 text-gray-700;
+  }
+  .marketing-workspace .badge-primary {
+    @apply bg-primary-light text-primary-hover;
+  }
+  .marketing-workspace th {
+    @apply text-left text-xs font-medium text-gray-500 px-3 py-3 bg-gray-50;
+  }
+  .marketing-workspace td {
+    @apply px-3 py-3 text-sm align-top;
+  }
+  .marketing-workspace table {
+    @apply w-full;
+  }
+  .marketing-workspace .input {
+    @apply bg-white text-sm;
+  }
+  .marketing-workspace label:has(> .input) {
+    @apply text-sm font-medium text-gray-700;
+  }
+  .marketing-workspace label > .input {
+    @apply mt-1 font-normal;
+  }
+  .marketing-workspace .marketing-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-3;
+  }
+  .activity-form-section {
+    @apply rounded-lg border border-border bg-white p-5 space-y-4;
+  }
+  .activity-form-section > legend {
+    @apply px-2 text-base font-semibold text-gray-900;
+  }
 }
 
 /* Custom scrollbar */

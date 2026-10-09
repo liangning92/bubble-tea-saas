@@ -1,3 +1,5 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -29,13 +31,13 @@ export function AutomationRulePage() {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
 
   // Fetch automation rules (campaigns with triggerType='automatic' or 'scheduled')
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['automation-rules', storeId],
     queryFn: () => marketingApi.automationRules(storeId)
   })
 
   // Handle different API response structures
-  const rawData = data?.data
+  const rawData = data?.data?.data
   let rules: AutomationRule[] = []
   if (Array.isArray(rawData)) {
     rules = rawData
@@ -112,13 +114,12 @@ export function AutomationRulePage() {
     }
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Zap size={24} className="text-primary" />
-          <h1 className="text-xl font-semibold">{t('marketing.automationRules')}</h1>
-        </div>
+      <div className="marketing-toolbar mb-5">
+
         <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
           <Plus size={20} />
           {t('marketing.addAutomationRule')}
@@ -266,9 +267,9 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+    <MarketingDialog onClose={onClose}>
       <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+        <div className="marketing-toolbar mb-4">
           <h3 className="text-lg font-semibold">{rule ? tk('marketing.editAutomationRule') : tk('marketing.addAutomationRule')}</h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X size={20} />
@@ -358,6 +359,6 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
           </div>
         </form>
       </div>
-    </div>
+    </MarketingDialog>
   )
 }

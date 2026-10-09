@@ -2,7 +2,7 @@
 export const ACTIVITY_TYPES = ['special_price','percent','nth_cup','buy_get','fixed','tiered','bundle','addon','upgrade','gift','member_price','birthday','welcome','coupon','points','stamps','lottery','referral','group'] as const
 export type ActivityType = typeof ACTIVITY_TYPES[number]
 export interface Activity {
-  id: string; storeId: string; version: number; name: string; description: string; theme?: string
+  id: string; storeId: string; version: number; name: string; description: string; theme?: string; categoryId?: string
   type: ActivityType; status: 'draft'|'published'|'paused'|'ended'; priority: number
   startsAt?: string; endsAt?: string; timezone: string; weekdays: number[]; dailyStart?: string; dailyEnd?: string
   channels: string[]; paymentMethods: string[]; excludedProductIds?:string[]; productIds: string[]; specIds: string[]; memberOnly: boolean; memberLevels: string[]

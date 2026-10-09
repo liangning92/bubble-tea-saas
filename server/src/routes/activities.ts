@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import prisma from '../config/database'
 import { ACTIVITY_PREFIX, ensureMigrated, listActivities, saveActivity, quoteActivities, migrateActivities, publicActivities, records, putRecord, createActivityGroup, joinActivityGroup, fulfilActivityGrant, notifyActivities, claimActivityCoupon, linkActivityReferral } from '../services/ActivityService'
+import { summarizeActivityPerformance } from '../utils/activityPerformance'
 import { activityState } from '../utils/activities'
 
 const router=Router()
@@ -11,9 +12,17 @@ router.use(authenticate,authorize('admin','manager','cashier'))
 router.use(async(req:AuthRequest,res,next)=>{try{if(!req.user?.storeId)return res.status(403).json({code:403,message:'Store is required'});if(req.query.storeId&&req.query.storeId!==req.user.storeId)return res.status(403).json({code:403,message:'Store access denied'});if(!req.path.startsWith('/migration'))await ensureMigrated(req.user.storeId);next()}catch(error:any){res.status(409).json({code:409,message:error.message})}})
 const run=(fn:(req:AuthRequest)=>Promise<any>)=>async(req:AuthRequest,res:any)=>{try{res.json({code:200,data:await fn(req)})}catch(error:any){res.status(error instanceof z.ZodError?400:409).json({code:error instanceof z.ZodError?400:409,message:error.message})}}
 router.get('/',run(async req=>(await listActivities(req.user!.storeId)).map(a=>({...a,state:activityState(a)}))))
+router.get('/performance',authorize('admin','manager'),run(async req=>{
+ const storeId=req.user!.storeId,days=z.coerce.number().int().min(1).max(365).default(30).parse(req.query.days)
+ const since=new Date(Date.now()-days*86400000),until=new Date()
+ const [activities,rows,grants]=await Promise.all([listActivities(storeId),prisma.config.findMany({where:{storeId,key:{startsWith:ACTIVITY_PREFIX+'order.'}},select:{key:true,value:true}}),records<any>(prisma,storeId,'grant.')])
+ const snapshots=rows.map(row=>({...JSON.parse(row.value),orderId:row.key.slice((ACTIVITY_PREFIX+'order.').length)}))
+ const orders=await prisma.order.findMany({where:{storeId,id:{in:snapshots.map(row=>row.orderId)},status:{in:['completed','refunded']},createdAt:{gte:since,lte:until}},select:{id:true,status:true,finalAmount:true,refundRequests:{select:{amount:true,status:true}}}})
+ return {...summarizeActivityPerformance(activities,snapshots,orders,grants),period:{since:since.toISOString(),until:until.toISOString()}}
+}))
 router.get('/offline-snapshot',run(req=>activityOfflineSnapshot(req.user!.storeId)))
 router.get('/display',run(req=>publicActivities(req.user!.storeId)))
-router.get('/resources',run(async req=>{const storeId=req.user!.storeId;const [products,rewards,coupons]=await Promise.all([prisma.product.findMany({where:{storeId,status:'active'},include:{specs:true,addons:{include:{addon:true}}}}),prisma.rewardCatalog.findMany({where:{storeId,isActive:true}}),prisma.coupon.findMany({where:{storeId,status:'active'}})]);return {products,rewards,coupons}}))
+router.get('/resources',run(async req=>{const storeId=req.user!.storeId;const [products,rewards,coupons,categories]=await Promise.all([prisma.product.findMany({where:{storeId,status:'active'},include:{category:true,specs:true,addons:{include:{addon:true}}}}),prisma.rewardCatalog.findMany({where:{storeId,isActive:true}}),prisma.coupon.findMany({where:{storeId,status:'active'}}),prisma.campaignCategory.findMany({where:{storeId},orderBy:{sortOrder:'asc'}})]);return {products,rewards,coupons,categories}}))
 const quoteSchema=z.object({items:z.array(z.object({productId:z.string(),specId:z.string(),quantity:z.number().int().min(1).max(500),unitPrice:z.number().int().min(0),addons:z.array(z.object({name:z.string(),price:z.number().int().min(0),qty:z.number().int().min(1).max(100).optional()})).optional()})).min(1).max(100).refine(items=>items.reduce((sum,i)=>sum+i.quantity,0)<=5000,'Maximum 5000 cups'),channel:z.string().optional(),channelId:z.string().optional(),paymentMethod:z.string().optional(),memberId:z.string().optional(),couponId:z.string().optional(),pointsRequested:z.number().int().min(0).optional(),groupId:z.string().optional(),giftSelections:z.record(z.string()).optional(),taxEnabled:z.boolean().optional()})
 router.post('/claim',run(req=>{const p=z.object({activityId:z.string(),memberId:z.string(),requestId:z.string().uuid()}).parse(req.body);return claimActivityCoupon(req.user!.storeId,p.activityId,p.memberId,p.requestId)}))
 router.post('/referral',run(req=>{const p=z.object({memberId:z.string(),inviterCode:z.string().min(1).max(100)}).parse(req.body);return linkActivityReferral(req.user!.storeId,p.memberId,p.inviterCode)}))

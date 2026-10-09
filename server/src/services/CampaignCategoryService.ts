@@ -1,17 +1,20 @@
 import prisma from '../config/database'
+import { listActivities } from './ActivityService'
 
 // Get all categories for a store
 export async function getCampaignCategories(storeId: string) {
-  return prisma.campaignCategory.findMany({
+  const categories = await prisma.campaignCategory.findMany({
     where: { storeId },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }]
   })
+  const activities = await listActivities(storeId)
+  return categories.map(category => ({ ...category, activityCount: activities.filter(activity => activity.categoryId === category.id).length }))
 }
 
 // Get single category
-export async function getCampaignCategory(id: string) {
-  return prisma.campaignCategory.findUnique({
-    where: { id }
+export async function getCampaignCategory(id: string, storeId: string) {
+  return prisma.campaignCategory.findFirst({
+    where: { id, storeId }
   })
 }
 
@@ -41,7 +44,8 @@ export async function updateCampaignCategory(id: string, data: {
   icon?: string
   color?: string
   sortOrder?: number
-}) {
+}, storeId: string) {
+  if (!await getCampaignCategory(id, storeId)) throw new Error('Category not found')
   const updateData: any = {}
   if (data.name !== undefined) updateData.name = data.name
   if (data.icon !== undefined) updateData.icon = data.icon
@@ -55,31 +59,17 @@ export async function updateCampaignCategory(id: string, data: {
 }
 
 // Delete category (only if not built-in)
-export async function deleteCampaignCategory(id: string) {
-  const category = await prisma.campaignCategory.findUnique({
-    where: { id }
-  })
-
-  if (!category) {
-    throw new Error('Category not found')
-  }
-
-  if (category.isBuiltIn) {
-    throw new Error('Cannot delete built-in category')
-  }
-
-  // Check if any campaigns use this category
-  const campaignCount = await prisma.campaign.count({
-    where: { categoryId: id }
-  })
-
-  if (campaignCount > 0) {
-    throw new Error('Cannot delete category that is used by campaigns')
-  }
-
-  return prisma.campaignCategory.delete({
-    where: { id }
-  })
+export async function deleteCampaignCategory(id: string, storeId: string) {
+  return prisma.$transaction(async tx => {
+    const category = await tx.campaignCategory.findFirst({ where: { id, storeId } })
+    if (!category) throw new Error('Category not found')
+    if (category.isBuiltIn) throw new Error('Cannot delete built-in category')
+    const campaignCount = await tx.campaign.count({ where: { categoryId: id, storeId } })
+    if (campaignCount > 0 || (await listActivities(storeId, tx)).some(activity => activity.categoryId === id)) {
+      throw new Error('Cannot delete category that is used by campaigns')
+    }
+    return tx.campaignCategory.delete({ where: { id } })
+  }, { isolationLevel: 'Serializable' })
 }
 
 // Seed default categories for a store
@@ -90,7 +80,10 @@ export async function seedDefaultCategories(storeId: string) {
     { name: 'loyalty', icon: '⭐', color: '#FFE66D', isBuiltIn: true, sortOrder: 3 },
     { name: 'seasonal', icon: '🌙', color: '#95E1D3', isBuiltIn: true, sortOrder: 4 },
     { name: 'welcome', icon: '🎉', color: '#F38181', isBuiltIn: true, sortOrder: 5 },
-    { name: 'points_expiring', icon: '⏰', color: '#AA96DA', isBuiltIn: true, sortOrder: 6 }
+    { name: 'points_expiring', icon: '⏰', color: '#AA96DA', isBuiltIn: true, sortOrder: 6 },
+    { name: 'opening', icon: '🎊', color: '#EC6D88', isBuiltIn: true, sortOrder: 7 },
+    { name: 'new_product', icon: '🥤', color: '#10B981', isBuiltIn: true, sortOrder: 8 },
+    { name: 'repurchase', icon: '🛍️', color: '#3B82F6', isBuiltIn: true, sortOrder: 9 }
   ]
 
   const created = []

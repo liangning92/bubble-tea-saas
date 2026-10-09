@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -27,15 +28,15 @@ export function CouponEditPage() {
     storeId: user?.storeId || ''
   })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['coupon', id],
     queryFn: () => marketingApi.getCoupon(id!),
     enabled: !!id
   })
 
   useEffect(() => {
-    if (data?.data) {
-      const c = data.data as any
+    if (data?.data?.data) {
+      const c = data.data.data as any
       setForm({
         code: c.code || '',
         type: c.type || 'discount_percent',
@@ -58,7 +59,7 @@ export function CouponEditPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['coupons'] })
-      navigate('/marketing/coupons')
+      navigate('/marketing/promotions/coupons')
     }
   })
 
@@ -69,6 +70,7 @@ export function CouponEditPage() {
     saveMutation.mutate(dataToSave)
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
   if (isEdit && isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -80,7 +82,7 @@ export function CouponEditPage() {
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/marketing/coupons')} className="btn-ghost">
+        <button onClick={() => navigate('/marketing/promotions/coupons')} className="btn-ghost">
           <ArrowLeft size={20} />
        </button>
         <h1 className="text-2xl font-bold">{isEdit ? t('common.edit') : t('marketing.createCoupon')}</h1>
@@ -145,7 +147,7 @@ export function CouponEditPage() {
             {saveMutation.isPending && <Loader2 size={16} className="animate-spin" />}
             {t('common.save')}
           </button>
-          <button onClick={() => navigate('/marketing/coupons')} className="btn-secondary">{t('common.cancel')}</button>
+          <button onClick={() => navigate('/marketing/promotions/coupons')} className="btn-secondary">{t('common.cancel')}</button>
         </div>
       </div>
     </div>

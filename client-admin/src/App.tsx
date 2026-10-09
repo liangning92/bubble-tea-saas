@@ -5,6 +5,8 @@ import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 
+const MessageLogPage = lazy(() => import('./pages/marketing/MessageLogPage').then(module => ({default:module.MessageLogPage})))
+const MarketingOverviewPage = lazy(() => import('./pages/marketing/MarketingOverviewPage').then(module => ({ default: module.MarketingOverviewPage })))
 const ActivitiesPage = lazy(() => import('./pages/marketing/ActivitiesPage').then(module => ({ default: module.ActivitiesPage })))
 const StaffAdjustmentsPage = lazy(() => import('./pages/staff/StaffAdjustmentsPage').then(module => ({ default: module.StaffAdjustmentsPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
@@ -252,7 +254,8 @@ function App() {
 
         {/* 营销管理 */}
         <Route path="marketing" element={<MarketingIndexPage />}>
-          <Route index element={<Navigate to="/marketing/promotions" replace />} />
+          <Route index element={<Navigate to="/marketing/overview" replace />} />
+          <Route path="overview" element={<MarketingOverviewPage />} />
 
           {/* 促销 */}
           <Route path="promotions" element={<PromotionsIndexPage />}>
@@ -299,6 +302,7 @@ function App() {
             <Route path="channels" element={<MarketingChannelsPage />} />
             <Route path="settings" element={<MessageSettingsPage />} />
             <Route path="stats" element={<MessageStatsPage />} />
+            <Route path="logs" element={<MessageLogPage />} />
           </Route>
 
           {/* 运营 */}

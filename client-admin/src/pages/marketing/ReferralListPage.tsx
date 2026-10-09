@@ -1,6 +1,9 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useMarketingCopy } from '../../components/marketing/MarketingLayout'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
@@ -40,6 +43,8 @@ const defaultForm = {
 export function ReferralListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const l = useMarketingCopy()
+  const [search,setSearch] = useState('')
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const storeId = user?.storeId || undefined
@@ -57,7 +62,7 @@ export function ReferralListPage() {
   })
   const coupons = couponsData?.data?.data?.list || []
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['referrals'],
     queryFn: () => marketingApi.referrals(storeId)
   })
@@ -95,7 +100,7 @@ export function ReferralListPage() {
     }
   })
 
-  const referrals: Referral[] = data?.data?.data?.list || []
+  const referrals: Referral[] = (data?.data?.data?.list || []).filter((referral:Referral)=>(referral.name+' '+referral.referralCode).toLowerCase().includes(search.toLowerCase()))
 
   const closeModal = () => {
     setShowCreate(false)
@@ -170,14 +175,18 @@ export function ReferralListPage() {
     return `${r.value} pts`
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="marketing-toolbar mb-4">
         <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
           <Plus size={20} /> {t('marketing.createReferral')}
         </button>
       </div>
 
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 mb-4 text-sm"><p>{l('历史邀请计划保留在这里。新活动的邀请奖励通过统一活动配置，并查看同一份权益记录。','Historical referral plans remain here. Configure new referral rewards in unified Activities and review their reward records.','Program undangan lama tetap di sini. Atur hadiah undangan baru dalam Aktivitas terpadu dan tinjau catatan hadiahnya.')}</p><Link className="inline-block text-primary mt-2" to="/marketing/promotions/activities?create=1&type=referral">{l('创建邀请奖励活动','Create referral activity','Buat aktivitas undangan')}</Link></div>
+      <input className="input mb-4 sm:max-w-sm" aria-label={l('搜索邀请计划','Search referral plans','Cari program undangan')} value={search} onChange={event=>setSearch(event.target.value)} placeholder={l('搜索名称或邀请码','Search name or referral code','Cari nama atau kode undangan')}/>
       <div className="card">
         {isLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
@@ -235,7 +244,7 @@ export function ReferralListPage() {
                       <td className="py-3">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => navigate(`/marketing/referrals/${r.id}`)}
+                            onClick={() => navigate(`/marketing/promotions/referrals/${r.id}`)}
                             className="text-primary hover:text-primary/80 text-sm font-medium"
                           >
                             {t('common.view')}
@@ -259,9 +268,9 @@ export function ReferralListPage() {
 
       {/* Create/Edit Modal */}
       {(showCreate || showEdit) && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={closeModal}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="marketing-toolbar mb-4">
               <h3 className="text-lg font-semibold">
                 {showEdit ? t('marketing.editReferral') : t('marketing.createReferral')}
               </h3>
@@ -390,12 +399,12 @@ export function ReferralListPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={()=>setDeleteConfirm(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
             <p className="text-gray-600 mb-6">{t('marketing.deleteReferralConfirm')}</p>
@@ -407,7 +416,7 @@ export function ReferralListPage() {
               <button onClick={() => setDeleteConfirm(null)} className="btn-secondary">{t('common.cancel')}</button>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
     </div>
   )

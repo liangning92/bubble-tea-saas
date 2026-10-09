@@ -3,9 +3,9 @@ import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { validateBody } from '../utils/validation'
 import * as CampaignCategoryService from '../services/CampaignCategoryService'
-import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
+router.use(authenticate, (req:AuthRequest,res,next)=>{if(req.query.storeId&&req.query.storeId!==req.user!.storeId||req.body?.storeId&&req.body.storeId!==req.user!.storeId)return res.status(403).json({code:403,message:'Store access denied'});next()})
 
 const createCategorySchema = z.object({
   storeId: z.string(),
@@ -25,7 +25,7 @@ const updateCategorySchema = z.object({
 // GET /api/marketing/campaign-categories
 router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = getStoreId(req)
+    const storeId = req.user!.storeId
     const categories = await CampaignCategoryService.getCampaignCategories(storeId)
     res.json({ code: 200, data: { list: categories }, timestamp: new Date().toISOString() })
   } catch (error) {
@@ -37,7 +37,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 // GET /api/marketing/campaign-categories/:id
 router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const category = await CampaignCategoryService.getCampaignCategory(req.params.id)
+    const category = await CampaignCategoryService.getCampaignCategory(req.params.id, req.user!.storeId)
     if (!category) {
       return res.status(404).json({ code: 404, message: 'Category not found' })
     }
@@ -49,9 +49,9 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 })
 
 // POST /api/marketing/campaign-categories
-router.post('/', authenticate, authorize('admin'), validateBody(createCategorySchema), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createCategorySchema), async (req: AuthRequest, res) => {
   try {
-    const category = await CampaignCategoryService.createCampaignCategory(req.body)
+    const category = await CampaignCategoryService.createCampaignCategory({ ...req.body, storeId: req.user!.storeId })
     res.status(201).json({ code: 201, message: 'Category created', data: category, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Create campaign category error:', error)
@@ -63,13 +63,13 @@ router.post('/', authenticate, authorize('admin'), validateBody(createCategorySc
 })
 
 // PUT /api/marketing/campaign-categories/:id
-router.put('/:id', authenticate, authorize('admin'), validateBody(updateCategorySchema), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(updateCategorySchema), async (req: AuthRequest, res) => {
   try {
-    const category = await CampaignCategoryService.updateCampaignCategory(req.params.id, req.body)
+    const category = await CampaignCategoryService.updateCampaignCategory(req.params.id, req.body, req.user!.storeId)
     res.json({ code: 200, message: 'Category updated', data: category, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Update campaign category error:', error)
-    if (error.code === 'P2025') {
+    if (error.code === 'P2025' || error.message === 'Category not found') {
       return res.status(404).json({ code: 404, message: 'Category not found' })
     }
     res.status(500).json({ code: 500, message: error.message || 'Failed to update campaign category' })
@@ -77,9 +77,9 @@ router.put('/:id', authenticate, authorize('admin'), validateBody(updateCategory
 })
 
 // DELETE /api/marketing/campaign-categories/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    await CampaignCategoryService.deleteCampaignCategory(req.params.id)
+    await CampaignCategoryService.deleteCampaignCategory(req.params.id, req.user!.storeId)
     res.json({ code: 200, message: 'Category deleted', timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Delete campaign category error:', error)
@@ -97,10 +97,9 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
 })
 
 // POST /api/marketing/campaign-categories/seed - Seed default categories
-router.post('/seed', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.post('/seed', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const userRole = req.user?.role || ''
-    const storeId = (['admin', 'super_admin'].includes(userRole) && req.body.storeId) ? req.body.storeId : (req.user?.storeId || '')
+    const storeId = req.user!.storeId
     const created = await CampaignCategoryService.seedDefaultCategories(storeId)
     res.json({ code: 200, message: 'Default categories seeded', data: { created }, timestamp: new Date().toISOString() })
   } catch (error: any) {

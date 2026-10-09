@@ -1,37 +1,10 @@
-import { useTranslation } from 'react-i18next'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { MarketingModule, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 
 export function MembersIndexPage() {
-  const { t } = useTranslation()
-  const location = useLocation()
-
-  const tabs = [
-    { key: 'members', label: t('marketing.members'), path: '/marketing/members' },
-    { key: 'tier-benefits', label: t('marketing.tierBenefits'), path: '/marketing/members/tier-benefits' },
-  ]
-
-  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'members'
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap mb-4">
-        {tabs.map(tab => (
-          <Link
-            key={tab.key}
-            to={tab.path}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              currentTab === tab.key
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-      <div className="flex-1 overflow-auto">
-        <Outlet />
-      </div>
-    </div>
-  )
+  const l = useMarketingCopy()
+  return <MarketingModule items={[
+    { path: '/marketing/members', label: l('会员列表','Members','Member') },
+    { path: '/marketing/members/tier-benefits', label: l('等级权益','Tier benefits','Manfaat level') },
+    { path: '/marketing/members/balance', label: l('会员储值','Member balance','Saldo member') }
+  ]} description={l('查看会员，维护等级权益与储值记录，为会员活动提供基础信息。','Manage members, tier benefits and balances for member activities.','Kelola member, manfaat level, dan saldo untuk aktivitas member.')} />
 }

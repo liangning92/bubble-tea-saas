@@ -1,3 +1,7 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { MarketingError } from '../../components/marketing/MarketingLayout'
+import { Link } from 'react-router-dom'
+import { categoryDisplayName, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +16,7 @@ interface Category {
   color?: string
   isBuiltIn: boolean
   sortOrder: number
+  activityCount?: number
   storeId?: string
 }
 
@@ -23,6 +28,7 @@ const DEFAULT_FORM = {
 
 export function CampaignCategoryListPage() {
   const { t } = useTranslation()
+  const l = useMarketingCopy()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const storeId = user?.storeId || ''
@@ -33,7 +39,7 @@ export function CampaignCategoryListPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   // Fetch categories
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['campaign-categories'],
     queryFn: () => marketingApi.campaignCategories()
   })
@@ -45,6 +51,7 @@ export function CampaignCategoryListPage() {
     mutationFn: (data: any) => marketingApi.createCampaignCategory(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-categories'] })
+      queryClient.invalidateQueries({ queryKey: ['activity-resources'] })
       closeModal()
     },
     onError: (error: any) => {
@@ -57,6 +64,7 @@ export function CampaignCategoryListPage() {
     mutationFn: ({ id, data }: { id: string; data: any }) => marketingApi.updateCampaignCategory(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-categories'] })
+      queryClient.invalidateQueries({ queryKey: ['activity-resources'] })
       closeModal()
     },
     onError: (error: any) => {
@@ -69,6 +77,7 @@ export function CampaignCategoryListPage() {
     mutationFn: (id: string) => marketingApi.deleteCampaignCategory(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-categories'] })
+      queryClient.invalidateQueries({ queryKey: ['activity-resources'] })
       setDeleteId(null)
     },
     onError: (error: any) => {
@@ -81,6 +90,7 @@ export function CampaignCategoryListPage() {
     mutationFn: () => marketingApi.seedCampaignCategories(storeId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-categories'] })
+      queryClient.invalidateQueries({ queryKey: ['activity-resources'] })
     }
   })
 
@@ -116,9 +126,12 @@ export function CampaignCategoryListPage() {
   const EMOJI_OPTIONS = ['🎂', '🔄', '⭐', '🌙', '🎉', '⏰', '🎁', '💎', '🔥', '💫', '🌟', '🎊', '💝', '🎈', '🛍️', '📢']
   const COLOR_OPTIONS = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181', '#AA96DA', '#3B82F6', '#10B981', '#F59E0B', '#EF4444']
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <p className="text-sm text-gray-500 mb-4">{l('类别用于运营归档，创建活动时直接选择这里维护的类别。优惠计算由活动形式和规则决定。','Categories organize activities and are selected when creating an activity. Offer types and rules determine pricing.','Kategori mengelompokkan aktivitas dan dipilih saat pembuatan. Jenis promo dan aturan menentukan harga.')}</p>
+      <div className="marketing-toolbar mb-4">
         <div />
         <div className="flex gap-2">
           <button
@@ -160,22 +173,26 @@ export function CampaignCategoryListPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{cat.icon || '📁'}</span>
                   <div>
-                    <h3 className="font-semibold text-gray-900">{cat.name}</h3>
+                    <h3 className="font-semibold text-gray-900">{categoryDisplayName(cat.name,l)}</h3>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${cat.isBuiltIn ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
                       {cat.isBuiltIn ? t('common.builtIn') : t('common.custom')}
                     </span>
                   </div>
                 </div>
-                {!cat.isBuiltIn && (
+                {(
                   <div className="flex gap-1">
                     <button
                       onClick={() => openEdit(cat)}
+                      aria-label={l('编辑类别','Edit category','Edit kategori') + ': ' + categoryDisplayName(cat.name,l)}
                       className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
                     >
                       <Edit2 size={14} />
                     </button>
                     <button
                       onClick={() => setDeleteId(cat.id)}
+                      aria-label={l('删除类别','Delete category','Hapus kategori') + ': ' + categoryDisplayName(cat.name,l)}
+                      disabled={cat.isBuiltIn || !!cat.activityCount}
+                      title={cat.activityCount ? l('请先调整关联活动的类别','Reassign linked activities first','Ubah kategori aktivitas terkait dahulu') : t('common.delete')}
                       className="p-1.5 rounded hover:bg-red-50 text-red-500"
                     >
                       <Trash2 size={14} />
@@ -186,6 +203,10 @@ export function CampaignCategoryListPage() {
                   <Lock size={14} className="text-gray-400" />
                 )}
               </div>
+              <div className="mt-4 pt-3 border-t border-border flex flex-wrap gap-3 text-sm">
+                <Link className="text-primary hover:underline" to={'/marketing/promotions/activities?category='+encodeURIComponent(cat.id)}>{l('查看活动','View activities','Lihat aktivitas')} ({cat.activityCount||0})</Link>
+                <Link className="text-gray-600 hover:text-primary" to={'/marketing/promotions/activities?create=1&category='+encodeURIComponent(cat.id)}>{l('创建此类活动','Create in category','Buat dalam kategori')}</Link>
+              </div>
             </div>
           ))}
         </div>
@@ -193,8 +214,8 @@ export function CampaignCategoryListPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
+        <MarketingDialog onClose={closeModal}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">
               {editingCategory ? t('common.edit') : t('common.add')} {t('marketing.category')}
             </h3>
@@ -257,12 +278,12 @@ export function CampaignCategoryListPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Delete Confirmation */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={()=>setDeleteId(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
             <p className="text-gray-600 mb-6">{t('marketing.deleteCategoryConfirm')}</p>
@@ -280,7 +301,7 @@ export function CampaignCategoryListPage() {
               </button>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
     </div>
   )

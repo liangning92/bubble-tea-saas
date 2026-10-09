@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -31,7 +32,7 @@ export function NotificationHistoryPage() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [searchKeyword, setSearchKeyword] = useState('')
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => marketingApi.notifications({ storeId, limit: 100 })
   })
@@ -46,7 +47,7 @@ export function NotificationHistoryPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] })
   })
 
-  const notifications = data?.data?.list || []
+  const notifications = data?.data?.data?.list || []
 
   // Filter notifications
   const filteredNotifications = notifications.filter((n: any) => {
@@ -83,9 +84,11 @@ export function NotificationHistoryPage() {
     })
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="marketing-toolbar mb-4">
         <div>
           {unreadCount > 0 && (
             <p className="text-sm text-gray-500">
@@ -142,7 +145,7 @@ export function NotificationHistoryPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="card p-4 text-center">
           <div className="text-2xl font-bold text-gray-900">{notifications.length}</div>
           <div className="text-sm text-gray-500">{t('marketing.totalNotifications')}</div>

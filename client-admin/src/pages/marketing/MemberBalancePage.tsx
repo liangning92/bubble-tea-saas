@@ -1,9 +1,10 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Wallet, ArrowUpCircle, ArrowDownCircle, History, Search } from 'lucide-react'
+import { Loader2, ArrowUpCircle, ArrowDownCircle, History, Search } from 'lucide-react'
 
 interface BalanceLog {
   id: string
@@ -41,8 +42,8 @@ export function MemberBalancePage() {
   const searchMutation = useMutation({
     mutationFn: (phone: string) => marketingApi.searchMember(phone),
     onSuccess: (data) => {
-      if (data?.data) {
-        setSelectedMember(data.data)
+      if (data?.data?.data) {
+        setSelectedMember(data.data.data)
       }
     }
   })
@@ -117,10 +118,7 @@ export function MemberBalancePage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Wallet size={24} className="text-primary" />
-        <h1 className="text-xl font-semibold">{t('marketing.memberBalance')}</h1>
-      </div>
+
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
@@ -169,14 +167,14 @@ export function MemberBalancePage() {
           {/* Member Info */}
           {selectedMember && (
             <div className="card">
-              <div className="flex items-center justify-between mb-4">
+              <div className="marketing-toolbar mb-4">
                 <div>
                   <h3 className="font-semibold text-lg">{selectedMember.memberName}</h3>
                   <p className="text-gray-500">{selectedMember.phone}</p>
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-gray-500">{t('marketing.currentBalance')}</div>
-                  <div className="text-2xl font-bold text-primary">{formatCurrency(selectedMember.balance)}</div>
+                  <div className="text-2xl font-bold text-primary">{formatCurrency(balanceData?.data?.data?.balance ?? selectedMember.balance)}</div>
                 </div>
               </div>
 
@@ -201,11 +199,11 @@ export function MemberBalancePage() {
               {/* Recent Transactions */}
               {balanceLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-              ) : balanceData?.data?.logs?.length > 0 ? (
+              ) : balanceData?.data?.data?.logs?.length > 0 ? (
                 <div className="mt-6">
                   <h4 className="font-medium mb-3">{t('marketing.recentTransactions')}</h4>
                   <div className="space-y-2">
-                    {balanceData?.data?.logs?.map((log: BalanceLog) => (
+                    {balanceData?.data?.data?.logs?.map((log: BalanceLog) => (
                       <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div className={`w-2 h-2 rounded-full ${getTypeColor(log.type).replace('text-', 'bg-')}`} />
@@ -237,9 +235,9 @@ export function MemberBalancePage() {
         <div className="card">
           {logsLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-          ) : logsData?.data?.length > 0 ? (
+          ) : logsData?.data?.data?.length > 0 ? (
             <div className="space-y-2">
-              {logsData?.data?.map((log: BalanceLog) => (
+              {logsData?.data?.data?.map((log: BalanceLog) => (
                 <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${getTypeColor(log.type).replace('text-', 'bg-')}`} />
@@ -267,8 +265,8 @@ export function MemberBalancePage() {
 
       {/* Topup Modal */}
       {showTopup && selectedMember && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
+        <MarketingDialog onClose={()=>setShowTopup(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">{t('marketing.topup')}</h3>
             <div className="space-y-4">
               <div>
@@ -304,13 +302,13 @@ export function MemberBalancePage() {
               </div>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Deduct Modal */}
       {showDeduct && selectedMember && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
+        <MarketingDialog onClose={()=>setShowDeduct(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">{t('marketing.deduct')}</h3>
             <div className="space-y-4">
               <div>
@@ -346,7 +344,7 @@ export function MemberBalancePage() {
               </div>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
     </div>
   )

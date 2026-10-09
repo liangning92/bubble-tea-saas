@@ -23,7 +23,7 @@ const ruleSchema=z.object({
  prizes:z.array(z.object({id:z.string().min(1),name:z.string().min(1).max(100),code:z.string().max(100).default(''),color:z.string().regex(/^#[0-9a-f]{6}$/i),weight:z.number().int().min(0).max(1000000),remaining:number.optional(),rewardId:z.string().optional(),couponId:z.string().optional()})).max(30).optional()
 }).strict()
 export const activitySchema=z.object({
- name:z.string().trim().min(1).max(150),description:z.string().max(1000).default(''),theme:z.string().max(100).optional(),type:z.enum(ACTIVITY_TYPES),status:z.enum(['draft','published','paused','ended']).default('draft'),priority:z.number().int().min(0).max(1000).default(0),
+ name:z.string().trim().min(1).max(150),description:z.string().max(1000).default(''),theme:z.string().max(100).optional(),categoryId:z.string().min(1).max(100).optional(),type:z.enum(ACTIVITY_TYPES),status:z.enum(['draft','published','paused','ended']).default('draft'),priority:z.number().int().min(0).max(1000).default(0),
  startsAt:z.string().datetime({offset:true}).optional(),endsAt:z.string().datetime({offset:true}).optional(),timezone:z.string().default('Asia/Jakarta').refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true}catch{return false}},'Invalid time zone'),
  weekdays:z.array(z.number().int().min(0).max(6)).max(7).default([]),dailyStart:time.optional(),dailyEnd:time.optional(),channels:ids.default([]),paymentMethods:ids.default([]),productIds:ids.default([]),excludedProductIds:ids.default([]),specIds:ids.default([]),memberOnly:z.boolean().default(false),memberLevels:ids.default([]),showOnTv:z.boolean().default(true),
  imageUrl:z.string().max(2048).refine(v=>!v||/^https?:\/\//.test(v)||v.startsWith('/uploads/'),'Invalid image URL').optional(),limit:z.number().int().min(1).max(1000000000).optional(),rule:ruleSchema
@@ -61,6 +61,7 @@ export const displayPrizes=(prizes:any[]|undefined)=>(prizes||[]).map(({id,name,
 export function notifyActivities(storeId:string){socketManager.emitToStore(storeId,'marketing:activities:updated',{refresh:true});socketManager.emitTVConfigUpdate(storeId,{refresh:true})}
 export async function listActivities(storeId:string,db:any=prisma):Promise<Activity[]>{return records<Activity>(db,storeId,'activity.')}
 async function validateReferences(storeId:string,a:any,db:any=prisma){
+ if(a.categoryId&&!await db.campaignCategory.findFirst({where:{id:a.categoryId,storeId}}))throw Error('ACTIVITY_CATEGORY_STORE_MISMATCH')
  const products=[...new Set([...a.productIds,...(a.excludedProductIds||[]),...(a.rule.components||[]).map((c:any)=>c.productId)])]
  if(products.length&&(await db.product.count({where:{storeId,id:{in:products}}}))!==products.length)throw Error('ACTIVITY_PRODUCT_STORE_MISMATCH')
  const specs=[...new Set([...a.specIds,...(a.rule.components||[]).map((c:any)=>c.specId).filter(Boolean)])]
@@ -73,6 +74,7 @@ async function validateReferences(storeId:string,a:any,db:any=prisma){
 export async function saveActivity(storeId:string,input:unknown,id?:string,expectedVersion?:number){
  const data=activitySchema.parse(input);await validateReferences(storeId,data)
  const activity=await prisma.$transaction(async tx=>{
+ if(data.categoryId&&!await tx.campaignCategory.findFirst({where:{id:data.categoryId,storeId}}))throw Error('ACTIVITY_CATEGORY_STORE_MISMATCH')
  const row=id?await tx.config.findUnique({where:{storeId_key:{storeId,key:activityKey(id)}}}):null
  if(id&&!row)throw Error('ACTIVITY_NOT_FOUND')
  const old=row?decode<Activity>(row.value):undefined
@@ -81,7 +83,7 @@ export async function saveActivity(storeId:string,input:unknown,id?:string,expec
  if(row)await casRecord(tx,row,value);else await putRecord(tx,storeId,activityKey(value.id),value)
  if(value.type==='lottery')await putRecord(tx,storeId,ACTIVITY_PREFIX+`prizes.${value.id}.${value.version}`,{prizes:value.rule.prizes})
  return value
- });notifyActivities(storeId);return {...activity,state:activityState(activity)}
+ },data.categoryId?{isolationLevel:'Serializable'}:undefined);notifyActivities(storeId);return {...activity,state:activityState(activity)}
 }
 const arr=(value:any):any[]=>{if(Array.isArray(value))return value;try{const x=JSON.parse(value||'[]');return Array.isArray(x)?x:[]}catch{return []}}
 export async function migrateActivities(storeId:string,dryRun=true){
@@ -97,7 +99,7 @@ export async function migrateActivities(storeId:string,dryRun=true){
  for(const [n,s] of (cfg.dailySpecials||[]).entries())candidates.push({...defaults,id:`legacy-tv-special-${n}`,source:`tv-special:${n}`,name:s.productName||'Daily special',type:'special_price',status:s.productId&&s.autoPrice?'published':'draft',conflict:s.productId&&s.autoPrice?undefined:'Link a store product and confirm its promotion price',productIds:s.productId?[s.productId]:[],weekdays:[s.dayOfWeek],channels:s.applicableChannels?.length?s.applicableChannels:['DINE_IN','TAKEAWAY'],rule:{price:s.specialPrice}})
  if(cfg.lottery?.enabled)candidates.push({...defaults,id:'legacy-tv-lottery',source:'tv-lottery',name:cfg.lottery.title||'Lucky draw',description:cfg.lottery.subtitle||'',type:'lottery',status:'published',rule:{minAmount:cfg.lottery.triggerMinOrderAmount,prizes:cfg.lottery.prizes}})
  for(const c of campaigns){let actions:any={};try{actions=JSON.parse(c.actions||'{}')}catch{}
- candidates.push({...defaults,id:`legacy-campaign-${c.id}`,source:`campaign:${c.id}`,name:c.name,description:c.description||'',type:c.type==='birthday'?'birthday':c.type==='welcome'?'welcome':'coupon',status:c.status==='active'?'published':'paused',memberOnly:true,startsAt:c.startDate.toISOString(),endsAt:c.endDate?.toISOString(),rule:{couponId:actions.couponId,perMemberLimit:1}})
+ candidates.push({...defaults,id:`legacy-campaign-${c.id}`,source:`campaign:${c.id}`,categoryId:c.categoryId||undefined,name:c.name,description:c.description||'',type:c.type==='birthday'?'birthday':c.type==='welcome'?'welcome':'coupon',status:c.status==='active'?'published':'paused',memberOnly:true,startsAt:c.startDate.toISOString(),endsAt:c.endDate?.toISOString(),rule:{couponId:actions.couponId,perMemberLimit:1}})
  }
  const planned:Activity[]=[];const skipped:string[]=[]
  for(const a of candidates){if(existing.some(e=>e.source===a.source)){skipped.push(a.source!);continue}

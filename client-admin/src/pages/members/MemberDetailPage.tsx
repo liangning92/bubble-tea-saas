@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { memberApi } from '../../services/api'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import { ArrowLeft, Gift, History, Award, Filter } from 'lucide-react'
@@ -24,7 +25,7 @@ export function MemberDetailPage() {
   const [filterType, setFilterType] = useState<string>('')
   const [ordersPage, setOrdersPage] = useState(1)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['member', id, filterType, ordersPage],
     queryFn: () => memberApi.get(id!, { ...(filterType ? { type: filterType } : {}), ordersPage }),
     enabled: !!id
@@ -41,6 +42,7 @@ export function MemberDetailPage() {
 
   const member = data?.data?.data
 
+  if (isError) return <MarketingError retry={() => refetch()} />
   if (isLoading) return <div className="text-center py-8">{t('common.loading')}</div>
   if (!member) return <div className="text-center py-8">{t('common.noData')}</div>
 

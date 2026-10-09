@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { memberApi } from '../../services/api'
 import { Search, Star, Loader2, Users, Crown, Medal, Gem, Circle, ChevronRight } from 'lucide-react'
 
 export function MemberListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchName, setSearchName] = useState('')
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['members'],
     queryFn: () => memberApi.list({ pageSize: 100 })
   })
@@ -68,7 +70,7 @@ export function MemberListPage() {
 
       {/* Member List */}
       <div className="card">
-        {isLoading ? (
+        {isError ? <MarketingError retry={() => refetch()} /> : isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
@@ -83,7 +85,7 @@ export function MemberListPage() {
               <div
                 key={member.id}
                 className="p-4 hover:bg-gray-50 cursor-pointer flex items-center gap-4"
-                onClick={() => navigate(`/members/${member.id}`)}
+                onClick={() => navigate(`${location.pathname.startsWith('/marketing/') ? '/marketing/members' : '/members'}/${member.id}`)}
               >
                 {/* Avatar & Basic Info */}
                 <div className="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center">

@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -34,14 +35,14 @@ export function PointsRuleConfigPage() {
   })
 
   // Fetch current rule
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['points-rule'],
     queryFn: () => pointsRuleApi.get()
   })
 
   useEffect(() => {
-    if (data?.data) {
-      const rule = data.data
+    if (data?.data?.data) {
+      const rule = data.data.data
       setForm({
         pointsPerRupiah: rule.pointsPerRupiah,
         minPurchase: rule.minPurchase,
@@ -77,6 +78,8 @@ export function PointsRuleConfigPage() {
   const updateTierMultiplier = (tier: string, value: number) => {
     setTierMultiplier(prev => ({ ...prev, [tier]: value }))
   }
+
+  if (isError) return <MarketingError retry={() => refetch()} />
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
@@ -160,7 +163,7 @@ export function PointsRuleConfigPage() {
             <label className="block text-sm font-medium mb-2">
               {t('marketing.tierMultiplierLabel')}
             </label>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {Object.entries(tierMultiplier).map(([tier, multiplier]) => (
                 <div key={tier} className="flex items-center gap-2">
                   <span className={`badge ${

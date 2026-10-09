@@ -1,9 +1,10 @@
+import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Zap, TrendingUp, Calendar } from 'lucide-react'
+import { Loader2, Zap, Calendar } from 'lucide-react'
 
 interface CampaignReport {
   campaignId: string
@@ -21,18 +22,19 @@ interface CampaignReport {
 
 export function CampaignReportPage() {
   const { t } = useTranslation()
+  const l=useMarketingCopy()
   const { user } = useAuthStore()
   const storeId = user?.storeId || 'default'
 
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all')
 
   // Fetch campaign reports
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['campaign-reports', storeId],
     queryFn: () => marketingApi.campaignReports(storeId)
   })
 
-  const reports: CampaignReport[] = data?.data || []
+  const reports: CampaignReport[] = data?.data?.data || []
 
   const filteredReports = reports.filter(r => {
     if (filter === 'all') return true
@@ -74,13 +76,13 @@ export function CampaignReportPage() {
     }
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <TrendingUp size={24} className="text-primary" />
-          <h1 className="text-xl font-semibold">{t('marketing.campaignReport')}</h1>
-        </div>
+      <p className="text-sm text-gray-500 mb-4">{l('历史活动报表不含新建统一活动。统一活动请在“活动效果”中查看。','Historical records only. Review new unified activities in Activity performance.','Hanya catatan lama. Tinjau aktivitas terpadu baru di Kinerja aktivitas.')}</p>
+      <div className="marketing-toolbar mb-5">
+
 
         {/* Filter */}
         <div className="flex gap-2">

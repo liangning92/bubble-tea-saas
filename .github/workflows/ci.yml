@@ -79,6 +79,11 @@ jobs:
           ACTIVITY_POS_BUILD: ${{ github.workspace }}/client-pos/dist
         run: node tests/stoploss/unified-activity-page-check.cjs
 
+      - name: Verify the complete marketing operator workflow
+        env:
+          MARKETING_ADMIN_BUILD: ${{ github.workspace }}/client-admin/dist
+        run: node tests/stoploss/marketing-operations-page-check.cjs
+
       - name: Verify shift summaries and date selectors with isolated business records
         run: |
           export PATH="$(pg_config --bindir):$PATH"

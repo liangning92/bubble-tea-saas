@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +18,7 @@ interface Automation {
 
 export function AutomationPage() {
   const { t } = useTranslation()
+  const l=useMarketingCopy()
   const { user } = useAuthStore()
   const storeId = user?.storeId || undefined
 
@@ -135,6 +138,7 @@ export function AutomationPage() {
 
   return (
     <div>
+      <div className="card mb-5 space-y-3"><h2 className="font-semibold">{l('活动权益自动执行','Automatic activity rewards','Hadiah aktivitas otomatis')}</h2><p className="text-sm text-gray-500">{l('统一活动在支付成功后自动发放权益，无需逐项点击运行。可在权益记录中查看待兑现、资源不足和退款处理情况。','Unified activity rewards are processed automatically after payment. Review fulfilment, resource shortages and refunds in Rewards.','Hadiah aktivitas terpadu diproses otomatis setelah pembayaran. Tinjau penyerahan, sumber tidak tersedia, dan pengembalian di Hadiah.')}</p><Link className="text-primary text-sm" to="/marketing/promotions/activities?tab=grants">{l('查看权益执行记录','View reward execution','Lihat eksekusi hadiah')}</Link></div>
       <p className="text-gray-600 mb-4">
         {t('marketing.automationDescription')}
       </p>

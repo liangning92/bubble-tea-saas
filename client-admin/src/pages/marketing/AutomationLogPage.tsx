@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -29,12 +30,12 @@ export function AutomationLogPage() {
   const [filterType, setFilterType] = useState<string>('all')
 
   // Fetch automation logs
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['automation-logs', storeId],
     queryFn: () => marketingApi.automationLogs(storeId)
   })
 
-  const logs: AutomationLog[] = data?.data || []
+  const logs: AutomationLog[] = data?.data?.data || []
 
   const triggerTypes = [
     { value: 'all', label: t('common.all') },
@@ -82,12 +83,11 @@ export function AutomationLogPage() {
     return `${(diff / 1000).toFixed(1)}s`
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Calendar size={24} className="text-primary" />
-        <h1 className="text-xl font-semibold">{t('marketing.automationLogs')}</h1>
-      </div>
+
 
       {/* Filters */}
       <div className="flex gap-4 mb-6">
@@ -164,7 +164,7 @@ export function AutomationLogPage() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-4 mt-3 pt-3 border-t border-gray-200">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3 pt-3 border-t border-gray-200">
                   <div className="text-center">
                     <div className="text-lg font-bold text-primary">{log.matchedCount}</div>
                     <div className="text-xs text-gray-500">{t('marketing.matched')}</div>

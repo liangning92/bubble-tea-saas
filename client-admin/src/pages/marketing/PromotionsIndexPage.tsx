@@ -1,39 +1,11 @@
-import { useTranslation } from 'react-i18next'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { MarketingModule, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 
 export function PromotionsIndexPage() {
-  const { t } = useTranslation()
-  const location = useLocation()
-
-  const tabs = [
-    { key: 'activities', label: t('marketing.campaigns'), path: '/marketing/promotions/activities' },
-    { key: 'coupons', label: t('marketing.coupons', '优惠券'), path: '/marketing/promotions/coupons' },
-    { key: 'referrals', label: t('marketing.referrals', '邀请裂变'), path: '/marketing/promotions/referrals' },
-    { key: 'campaign-categories', label: t('marketing.campaignCategories', '活动分类'), path: '/marketing/promotions/campaign-categories' },
-  ]
-
-  const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'activities'
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap mb-4">
-        {tabs.map(tab => (
-          <Link
-            key={tab.key}
-            to={tab.path}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              currentTab === tab.key
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-      <div className="flex-1 overflow-auto">
-        <Outlet />
-      </div>
-    </div>
-  )
+  const l = useMarketingCopy()
+  return <MarketingModule items={[
+    { path: '/marketing/promotions/activities', label: l('活动','Activities','Aktivitas') },
+    { path: '/marketing/promotions/coupons', label: l('优惠券模板','Coupon templates','Template kupon') },
+    { path: '/marketing/promotions/referrals', label: l('邀请计划','Referral plans','Program undangan') },
+    { path: '/marketing/promotions/campaign-categories', label: l('活动类别','Activity categories','Kategori aktivitas') }
+  ]} description={l('管理活动规则、适用范围与宣传，券模板和类别作为活动资源。','Manage offers, eligibility and publicity. Coupons and categories are shared resources.','Kelola aturan, peserta, dan publikasi. Kupon dan kategori adalah sumber aktivitas.')} />
 }

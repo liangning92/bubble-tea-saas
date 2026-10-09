@@ -1,9 +1,10 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Ticket, BarChart3 } from 'lucide-react'
+import { Loader2, Ticket } from 'lucide-react'
 
 interface CouponReport {
   couponId: string
@@ -29,12 +30,12 @@ export function CouponReportPage() {
   const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('month')
 
   // Fetch coupon reports
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['coupon-reports', storeId, period],
     queryFn: () => marketingApi.couponReports(storeId, period)
   })
 
-  const reports: CouponReport[] = data?.data || []
+  const reports: CouponReport[] = data?.data?.data || []
 
   // Calculate summary
   const summary = reports.reduce((acc, r) => ({
@@ -66,13 +67,12 @@ export function CouponReportPage() {
     }
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <BarChart3 size={24} className="text-primary" />
-          <h1 className="text-xl font-semibold">{t('marketing.couponReport')}</h1>
-        </div>
+      <div className="marketing-toolbar mb-5">
+
 
         {/* Period Filter */}
         <div className="flex gap-2">

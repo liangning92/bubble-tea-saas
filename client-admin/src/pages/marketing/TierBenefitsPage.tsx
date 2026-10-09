@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -30,7 +31,7 @@ export function TierBenefitsPage() {
 
   const [benefits, setBenefits] = useState(DEFAULT_BENEFITS)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['tier-benefits'],
     queryFn: () => marketingApi.tierBenefits()
   })
@@ -79,6 +80,8 @@ export function TierBenefitsPage() {
       [level]: { ...prev[level], [field]: value }
     }))
   }
+
+  if (isError) return <MarketingError retry={() => refetch()} />
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>

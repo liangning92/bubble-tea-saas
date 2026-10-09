@@ -1,3 +1,5 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -55,14 +57,14 @@ export function MessageSettingsPage() {
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
 
   // Fetch channels
-  const { data: channelsData, isLoading: channelsLoading } = useQuery({
+  const { data: channelsData, isLoading: channelsLoading, isError: channelsError, refetch: reloadChannels } = useQuery({
     queryKey: ['message-channels'],
     queryFn: () => messageApi.channels()
   })
   const channels = channelsData?.data?.data?.list || []
 
   // Fetch templates
-  const { data: templatesData, isLoading: templatesLoading } = useQuery({
+  const { data: templatesData, isLoading: templatesLoading, isError: templatesError, refetch: reloadTemplates } = useQuery({
     queryKey: ['message-templates'],
     queryFn: () => messageApi.templates()
   })
@@ -73,14 +75,14 @@ export function MessageSettingsPage() {
     queryKey: ['message-stats'],
     queryFn: () => messageApi.stats()
   })
-  const stats = statsData?.data
+  const stats = statsData?.data?.data
 
   // Fetch variables
   const { data: variablesData } = useQuery({
     queryKey: ['message-variables'],
     queryFn: () => messageApi.variables()
   })
-  const variables = variablesData?.data?.variables || []
+  const variables = variablesData?.data?.data?.variables || []
 
   // Create channel mutation
   const createChannelMutation = useMutation({
@@ -141,6 +143,8 @@ export function MessageSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['message-templates'] })
     }
   })
+
+  if (channelsError || templatesError) return <MarketingError retry={() => { reloadChannels(); reloadTemplates() }} />
 
   const tabs = [
     { key: 'channels', label: t('marketing.channels'), icon: Settings },
@@ -446,7 +450,7 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+    <MarketingDialog onClose={onClose}>
       <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">
@@ -618,7 +622,7 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
           </div>
         </form>
       </div>
-    </div>
+    </MarketingDialog>
   )
 }
 
@@ -654,7 +658,7 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+    <MarketingDialog onClose={onClose}>
       <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">
@@ -666,7 +670,7 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.type')}</label>
               <select
@@ -781,6 +785,6 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
           </div>
         </form>
       </div>
-    </div>
+    </MarketingDialog>
   )
 }

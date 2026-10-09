@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -9,13 +10,13 @@ export function CouponDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['coupon', id],
     queryFn: () => marketingApi.getCoupon(id!),
     enabled: !!id
   })
 
-  const coupon = data?.data
+  const coupon = data?.data?.data
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -47,6 +48,8 @@ export function CouponDetailPage() {
     return new Date(date).toLocaleString('id-ID')
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -64,7 +67,7 @@ export function CouponDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/marketing/coupons')} className="btn-ghost">
+        <button onClick={() => navigate('/marketing/promotions/coupons')} className="btn-ghost">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-2xl font-bold font-mono">{coupon.code}</h1>
@@ -110,7 +113,7 @@ export function CouponDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-6">
-            <button onClick={() => navigate(`/marketing/coupons/${id}/edit`)} className="btn-secondary flex items-center gap-2">
+            <button onClick={() => navigate(`/marketing/promotions/coupons/${id}/edit`)} className="btn-secondary flex items-center gap-2">
               <Edit size={16} /> {t('common.edit')}
             </button>
           </div>
