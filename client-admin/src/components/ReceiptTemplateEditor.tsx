@@ -424,11 +424,11 @@ const LivePreview: React.FC<{
               <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
                 {block.config.showMethod && (
                   <div className={`flex justify-between ${boldClass}`}>
-                    <span>{t('posSettings.blockPaymentInfo')}</span>
+                    <span>{t('posSettings.receiptMethod')}</span>
                     <span>{t('posSettings.receiptCash')}</span>
                   </div>
                 )}
-                {block.config.showReceived && (<div className={`flex justify-between ${boldClass}`}><span>{t('posSettings.blockShowReceived')}</span><span>50,000</span></div>)}
+                {block.config.showReceived && (<div className={`flex justify-between ${boldClass}`}><span>{t('posSettings.receiptReceived')}</span><span>50,000</span></div>)}
                 {block.config.showChange && (
                   <div className="flex justify-between text-gray-500">
                     <span>{t('posSettings.receiptChange')}</span>
