@@ -103,6 +103,7 @@ const resources = {
         "refresh": "Muat ulang",
         "status": "Status"
       },
+      manualReceipts: {"title": "Penerimaan yang dilaporkan saat serah terima", "hint": "Diisi manual dalam Rp. Bukan konfirmasi bank; tidak ditambahkan lagi ke pendapatan pesanan. Uang tunai diterima berbeda dari uang fisik di laci.", "cash": "Penerimaan tunai (Rp)", "qris": "Penerimaan QRIS (Rp)", "shopeefood": "Penerimaan ShopeeFood (Rp)", "gofood": "Penerimaan GoFood (Rp)", "required": "Isi keempat jumlah penerimaan dengan rupiah bulat, termasuk 0 jika tidak ada.", "missing": "Belum dilaporkan", "empty": "Tidak ada laporan serah terima dalam periode ini.", "failed": "Laporan serah terima gagal dimuat.", "closed": "Waktu serah terima", "shift": "Shift"},
       "pos": {
         "selectCoupon": "Pilih kupon",
         "handoverReceipt": "Struk serah terima", "reprint": "Cetak ulang",
@@ -884,6 +885,7 @@ const resources = {
         "refresh": "Refresh",
         "status": "Status"
       },
+      manualReceipts: {"title": "Receipts declared at handover", "hint": "Manually entered in Rp. These are not bank confirmations and are not added again to order revenue. Cash receipts differ from physical cash in the drawer.", "cash": "Cash receipts (Rp)", "qris": "QRIS receipts (Rp)", "shopeefood": "ShopeeFood receipts (Rp)", "gofood": "GoFood receipts (Rp)", "required": "Enter all four receipt amounts in whole rupiah; enter 0 if none.", "missing": "Not reported", "empty": "No handover declarations in this period.", "failed": "Could not load handover declarations.", "closed": "Handover time", "shift": "Shift"},
       "pos": {
         "selectCoupon": "Select coupon",
         "handoverReceipt": "Handover receipt", "reprint": "Reprint",
@@ -1622,6 +1624,7 @@ const resources = {
         "syncedData": "已同步数据",
         "startUsing": "开始使用 POS"
       },
+      manualReceipts: {"title": "交班人工申报收款", "hint": "手动填写 Rp 金额，尚未经银行核验，不重复加到系统订单营收。现金收款金额与钱箱实际清点现金不同。", "cash": "现金收款金额（Rp）", "qris": "QRIS 收款金额（Rp）", "shopeefood": "ShopeeFood 收款金额（Rp）", "gofood": "GoFood 收款金额（Rp）", "required": "请填写四项收款金额，使用整数 Rp；没有收款请填 0。", "missing": "未申报", "empty": "所选期间没有交班申报记录。", "failed": "交班申报记录读取失败。", "closed": "交班时间", "shift": "班次"},
       "pos": {
         "selectCoupon": "选择优惠券",
         "handoverReceipt": "交班小票", "reprint": "补打",

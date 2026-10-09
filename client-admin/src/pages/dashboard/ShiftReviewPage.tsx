@@ -1,3 +1,4 @@
+import { ManualReceipts, ManualReceiptAmounts } from '../../components/ManualReceipts'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -10,7 +11,7 @@ import { formatCurrency } from '../../utils/helpers'
 type Summary = { revenue: number; orders: number; completedOrders: number; refundedOrders: number; refundedAmount: number; expenses: number; expenseAmount: number; warnings: number; employees: number }
 type Employee = { id: string; name: string; employeeNumber: string | null; position: string | null; orders: number; expenses: number; warnings: number; roles: string[] }
 type Review = {
-  id: string; windowStart: string; windowEnd: string; overlapping: boolean; summary: Summary
+  manualReceipts: ManualReceiptAmounts | null; id: string; windowStart: string; windowEnd: string; overlapping: boolean; summary: Summary
   session: null | { shift: string; status: string; openedAt: string; closedAt: string | null; openFloat: number; actualCash: number | null; expectedCash: number; cashDifference: number | null; closeNote: string | null; opener: { name: string }; nextStaff: { name: string } | null; definition: { name: string; nameZh: string | null; nameId: string | null } | null }
   orders: { id: string; orderNumber: string; pickupNumber: string | null; staffName: string; status: string; amount: number; paymentMethod: string; createdAt: string }[]
   expenses: { id: string; category: string; amount: number; quantity: number | null; description: string; createdAt: string; staffName: string | null }[]
@@ -88,6 +89,7 @@ export function ShiftReviewPage() {
         <p className="text-sm text-gray-500">{t('shiftReview.attribution')}</p>
         {selected.overlapping && <p role="alert" className="text-amber-700">{t('shiftReview.overlap')}</p>}
         <nav className="flex flex-wrap gap-1 border-b" aria-label={t('shiftReview.details')}>{(['overview', 'orders', 'warnings', 'expenses', 'employees'] as Tab[]).map(key => <button key={key} aria-pressed={tab === key} className={`px-4 py-3 font-medium ${tab === key ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setTab(key)}>{t(`shiftReview.${key}`)}{key !== 'overview' && ` (${selected[key].length})`}</button>)}</nav>
+        {selected.session && <ManualReceipts amounts={selected.manualReceipts || null} />}
         {tab === 'overview' ? <div className="bg-white rounded-xl border p-5 grid md:grid-cols-2 gap-4">
           {selected.session && <><div><span className="text-gray-500">{t('shiftReview.opener')}</span><p className="font-semibold">{selected.session.opener.name}</p></div><div><span className="text-gray-500">{t('shiftReview.handover')}</span><p className="font-semibold">{selected.session.nextStaff?.name || '—'}</p></div><div><span className="text-gray-500">{t('shiftReview.float')}</span><p className="font-semibold">{money(selected.session.openFloat)}</p></div><div><span className="text-gray-500">{t('shiftReview.counted')}</span><p className="font-semibold">{money(selected.session.actualCash)}</p></div><div><span className="text-gray-500">{t('shiftReview.difference')}</span><p className="font-semibold">{money(selected.session.cashDifference)}</p></div><div><span className="text-gray-500">{t('shiftReview.closeNote')}</span><p>{selected.session.closeNote || '—'}</p></div></>}
           <div><span className="text-gray-500">{t('shiftReview.completedOrders')}</span><p className="font-semibold">{selected.summary.completedOrders}</p></div><div><span className="text-gray-500">{t('shiftReview.refunded')}</span><p className="font-semibold">{selected.summary.refundedOrders} · {money(selected.summary.refundedAmount)}</p></div>

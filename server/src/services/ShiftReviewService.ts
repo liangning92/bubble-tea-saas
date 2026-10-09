@@ -1,3 +1,4 @@
+import { loadManualReceipts } from './ShiftManualReceipts'
 import { PrismaClient } from '@prisma/client'
 import { parseBusinessDate } from '../utils/businessDate'
 import { formatDate } from '../utils/dateUtils'
@@ -21,6 +22,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
   const range = shiftReviewRange(start, end, now)
   const sessions = await db.shiftSession.findMany({ where: { storeId, openedAt: { lt: range.endDate, lte: now }, OR: [{ closedAt: null }, { closedAt: { gt: range.startDate } }] }, orderBy: { openedAt: 'asc' } })
   if (sessions.length > 500) throw new ShiftReviewInputError('SHIFT_RANGE_TOO_LARGE')
+  const manualReceipts = await loadManualReceipts(db, storeId, sessions.map(s => s.id))
   const ends = sessions.map(s => s.closedAt && s.closedAt < now ? s.closedAt : now)
   const from = new Date(Math.min(range.startDate.getTime(), ...sessions.map(s => s.openedAt.getTime())))
   const until = new Date(Math.min(now.getTime(), Math.max(range.endDate.getTime(), ...ends.map(d => d.getTime()))))
@@ -67,7 +69,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
     for (const w of b.warnings) add(w.staffId, 'operator', 'warnings')
     const completed = b.orders.filter(o => o.status === 'completed')
     const overlap = b.session ? buckets.some(other => other.id !== b.id && other.windowStart < b.windowEnd && other.windowEnd > b.windowStart) : false
-    return { ...b, attribution: 'recorded_time_window', overlapping: overlap,
+    return { ...b, manualReceipts: manualReceipts.get(b.id) || null, attribution: 'recorded_time_window', overlapping: overlap,
       summary: { revenue: completed.reduce((sum, o) => sum + o.finalAmount, 0), completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
       orders: b.orders.map(o => ({ ...o, amount: o.finalAmount, staffName: person(o.staffId).name })),
       expenses: b.expenses.map(e => ({ id: e.id, category: e.category, amount: e.amount / 100, quantity: e.quantity ?? null, description: e.description, createdAt: e.createdAt, staffName: e.referenceId ? person(e.referenceId.split(':')[0]).name : null })),
