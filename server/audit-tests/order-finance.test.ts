@@ -3,7 +3,7 @@ import { orderRequestFingerprint } from '../src/utils/orderRequestFingerprint'
 import { beforeEach, expect, jest, test } from '@jest/globals'
 jest.mock('../src/config/database',()=>({__esModule:true,default:{
  product:{findMany:jest.fn()},productChannelPrice:{findUnique:jest.fn(async()=>null)},member:{findUnique:jest.fn(),update:jest.fn(),updateMany:jest.fn()},
- channel:{findUnique:jest.fn(),findFirst:jest.fn()},bOMItem:{findMany:jest.fn()},config:{findFirst:jest.fn()},inventory:{findMany:jest.fn()},shiftSession:{findMany:jest.fn()},order:{create:jest.fn(),update:jest.fn(),findUnique:jest.fn()},qrisPayment:{findUnique:jest.fn(),updateMany:jest.fn()},cashEvent:{create:jest.fn()},pointLog:{create:jest.fn()},$transaction:jest.fn()
+ shiftSession:{findMany:jest.fn()},channel:{findUnique:jest.fn(),findFirst:jest.fn()},bOMItem:{findMany:jest.fn()},config:{findFirst:jest.fn()},inventory:{findMany:jest.fn()},order:{create:jest.fn(),update:jest.fn(),findUnique:jest.fn()},qrisPayment:{findUnique:jest.fn(),updateMany:jest.fn()},cashEvent:{create:jest.fn()},pointLog:{create:jest.fn()},$transaction:jest.fn()
 }}))
 jest.mock('../src/config/env',()=>({config:{indonesia:{ppnRate:0.11}}}))
 jest.mock('../src/services/ReferralService',()=>({processOrderReferralRewards:jest.fn(async()=>undefined)}))
