@@ -2,6 +2,7 @@ import { paymentProblem } from './paymentValidation'
 import { db, type LocalOrder } from '../db/offline'
 import { backendIdentity, currentBackendIdentity, readBackendAuth } from './backendIdentity'
 import { readCheckoutGeneration, readCheckoutRecovery } from './checkoutIntent'
+import { posOrderNumber } from './orderNumber'
 
 const cacheKey = (backend: string, storeId: string, path: string) => `offline.snapshot:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${path}`
 const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices']
@@ -60,7 +61,8 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
   if (!auth.user?.id || auth.user.staff?.id !== request.staffId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
   if (!['cash','qris'].includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || request.pointsRedeemed || request.memberId || request.discountAmount) throw new Error('OFFLINE_POLICY_UNRESOLVED')
   const localId = `LOCAL-${crypto.randomUUID()}`
-  const original = JSON.parse(JSON.stringify({...request,orderNumber:`OFFLINE-${localId.slice(6)}`}))
+  const occurredAt = new Date()
+  const original = JSON.parse(JSON.stringify({...request,orderNumber:posOrderNumber(localId, occurredAt)}))
   return db.transaction('rw',db.config,db.orders,async()=> {
     if (localIdentity(request.storeId) !== backendUrl) throw new Error('CHECKOUT_BACKEND_CHANGED')
     if (await readCheckoutGeneration(request.storeId) !== generation) throw new Error('CHECKOUT_BASKET_STALE')
@@ -80,7 +82,6 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
     const catalog = await db.config.get(cacheKey(backendUrl,request.storeId,'/products'))
     if (!catalog?.value.version) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
     original.shiftSessionId = current.data.shift.id
-    const occurredAt = new Date()
     const activityCache = await db.config.get(cacheKey(backendUrl, request.storeId, '/marketing/activity-prices'))
     const row: LocalOrder = {localId,backendUrl,cashTender,cacheEvidence:{activityRules:activityCache?.value?.data?.data,activityVersion:activityCache?.value?.version,activityFetchedAt:activityCache?.updatedAt,backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
       ...(manualQris?{manualPayment:{kind:'qris_manual' as const,actorId:auth.user!.id!,at:occurredAt,evidence:'customer_success_photo' as const,bankConfirmed:false as const}}:{})}

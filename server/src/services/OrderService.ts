@@ -834,11 +834,14 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
 
     // 自动创建现金销售事件（仅完成的现金支付，跳过挂单）- 移入transaction保证一致性
     if (data.paymentMethod === 'cash' && data.status !== 'suspended') {
+      const saleSessions = await tx.shiftSession.findMany({where:{storeId:data.storeId,...(data.shiftSessionId ? {id:data.shiftSessionId} : {status:'open'})},select:{shift:true},take:2})
+      const cashShift = saleSessions.length === 1 ? saleSessions[0].shift : null
       await tx.cashEvent.create({
         data: {
           storeId: data.storeId,
           staffId: data.staffId,
           type: 'cash_sale',
+          shift: cashShift,
           amount: grandTotal,
           paymentMethod: 'cash',
           orderId: newOrder.orderNumber,

@@ -1989,208 +1989,84 @@ ipcMain.handle('print-cup-stickers', async (_event, data) => {
  * 生成交接班对账单文本
  */
 function generateShiftReportText(data: any): string {
-  if (data.reportKind === 'handover') {
-    const zh = data.language === 'zh', en = data.language === 'en'
-    const label = (a: string, b: string, c: string) => zh ? a : en ? b : c
-    const purchases = data.purchaseExpenses
-    const lines = [data.storeName || 'YOUME', label('交接班记录', 'SHIFT HANDOVER', 'SERAH TERIMA SHIFT'), label('收银员', 'Cashier', 'Kasir') + ': ' + (data.cashierName || ''), label('班次', 'Shift', 'Shift') + ': ' + (data.shiftType || ''), label('开班', 'Opened', 'Mulai') + ': ' + (data.openedAt ? new Date(data.openedAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-'), label('交班', 'Closed', 'Selesai') + ': ' + (data.closedAt ? new Date(data.closedAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-'), label('实点现金', 'Counted cash', 'Kas dihitung') + ': ' + formatRp(data.actualCash || 0), '--------------------------------', label('本班采购报销', 'Shift purchase expenses', 'Belanja shift')]
-    if (purchases && Number.isFinite(purchases.total) && Array.isArray(purchases.items)) {
-      for (const item of purchases.items) {
-        lines.push(String(item.category) + ' x' + (item.quantity ?? '-') + '  ' + formatRp(item.amount))
-        if (item.description) lines.push(String(item.description))
-      }
-      lines.push(label('合计', 'Total', 'Total') + ': ' + formatRp(purchases.total))
-    } else lines.push(label('费用未读取，待核对', 'Expenses unavailable; review required', 'Biaya belum terbaca; perlu diperiksa'))
-    lines.push('--------------------------------', label('采购记账，不等于钱箱已付款', 'Expense recorded; cash payout separate', 'Biaya dicatat; pembayaran kas terpisah'), label('销售与上传记录仍需核对', 'Sales and uploads require reconciliation', 'Penjualan dan unggahan perlu rekonsiliasi'))
-    const limit = data.paperSize === '80mm' ? 48 : 32
-    const wrapped = lines.flatMap(line => { const parts: string[] = []; let part = '', width = 0; for (const ch of line) { const size = ch.codePointAt(0)! > 255 ? 2 : 1; if (width + size > limit) { parts.push(part); part = ''; width = 0 } part += ch; width += size } parts.push(part); return parts })
-    return wrapped.join('\n') + '\n\n\n'
-  }
-
-  const lines: string[] = []
-  const is80mm = data.paperSize === '80mm'
-  const width = is80mm ? 48 : 32
+  const width = data.paperSize === '80mm' ? 48 : 32
   const lang = (data.language || 'id').toLowerCase()
-
-  const shiftI18n: Record<string, Record<string, string>> = {
-    zh: {
-      title: '=== 交接班对账单 (Z-REPORT) ===',
-      store: '门店',
-      cashier: '收银员',
-      shift: '班次',
-      openedAt: '开班时间',
-      closedAt: '交班时间',
-      printTime: '打印时间',
-      secSales: '--- 营业额汇总 ---',
-      openFloat: '开班备用金',
-      cashSales: '现金实收',
-      qrisSales: 'QRIS/扫码销售',
-      gofoodSales: 'GoFood 销售',
-      grabSales: 'Grab 销售',
-      shopeeSales: 'Shopee 销售',
-      expenses: '营业支出(备用金支取)',
-      secReconcile: '--- 现金盘点对账 ---',
-      expectedCash: '钱箱应有现金',
-      actualCash: '实际盘点现金',
-      difference: '现金差额(长/短款)',
-      secStats: '--- 单据统计 ---',
-      totalOrders: '总订单数',
-      totalCups: '总制作杯数',
-      secDiscount: '--- 折扣与让利稽核 ---',
-      autoPromo: '营销自动优惠',
-      manualDisc: '收银手动折扣',
-      totalDisc: '总让利金额',
-      signCashier: '收银员签字: ________________',
-      signManager: '店长/主管签字: ______________'
-    },
-    en: {
-      title: '=== SHIFT REPORT (Z-REPORT) ===',
-      store: 'Store',
-      cashier: 'Cashier',
-      shift: 'Shift',
-      openedAt: 'Opened At',
-      closedAt: 'Closed At',
-      printTime: 'Printed At',
-      secSales: '--- SALES SUMMARY ---',
-      openFloat: 'Opening Float',
-      cashSales: 'Cash Sales',
-      qrisSales: 'QRIS Sales',
-      gofoodSales: 'GoFood Sales',
-      grabSales: 'Grab Sales',
-      shopeeSales: 'Shopee Sales',
-      expenses: 'Expenses / Payout',
-      secReconcile: '--- CASH RECONCILIATION ---',
-      expectedCash: 'Expected Cash',
-      actualCash: 'Counted Cash',
-      difference: 'Variance (Over/Short)',
-      secStats: '--- TRANSACTION STATS ---',
-      totalOrders: 'Total Orders',
-      totalCups: 'Total Cups',
-      secDiscount: '--- DISCOUNT AUDIT ---',
-      autoPromo: 'Auto Promo Discount',
-      manualDisc: 'Manual Cashier Discount',
-      totalDisc: 'Total Discount Amount',
-      signCashier: 'Cashier Sign: __________________',
-      signManager: 'Manager Sign: __________________'
-    },
-    id: {
-      title: '=== LAPORAN SHIFT (Z-REPORT) ===',
-      store: 'Toko',
-      cashier: 'Kasir',
-      shift: 'Shift',
-      openedAt: 'Waktu Buka',
-      closedAt: 'Waktu Tutup',
-      printTime: 'Dicetak',
-      secSales: '--- RINGKASAN PENJUALAN ---',
-      openFloat: 'Kas Awal / Float',
-      cashSales: 'Penjualan Tunai',
-      qrisSales: 'Penjualan QRIS',
-      gofoodSales: 'Penjualan GoFood',
-      grabSales: 'Penjualan Grab',
-      shopeeSales: 'Penjualan Shopee',
-      expenses: 'Pengeluaran Kas',
-      secReconcile: '--- REKONSILIASI KAS ---',
-      expectedCash: 'Kas Seharusnya',
-      actualCash: 'Kas Dihitung',
-      difference: 'Selisih (Lebih/Kurang)',
-      secStats: '--- STATISTIK TRANSAKSI ---',
-      totalOrders: 'Total Transaksi',
-      totalCups: 'Total Cup / Minuman',
-      secDiscount: '--- AUDIT DISKON ---',
-      autoPromo: 'Diskon Promo Otomatis',
-      manualDisc: 'Diskon Manual Kasir',
-      totalDisc: 'Total Potongan Diskon',
-      signCashier: 'Ttd Kasir: __________________',
-      signManager: 'Ttd Supervisor: _____________'
+  const label = (zh: string, en: string, id: string) => lang === 'zh' ? zh : lang === 'en' ? en : id
+  const unknown = label('待核对', 'Unverified', 'Perlu diperiksa')
+  const lines: string[] = []
+  const number = (value: unknown): value is number => Number.isSafeInteger(value)
+  const wrap = (text: string) => {
+    let row = ''
+    for (const ch of text) {
+      if (getVisualWidth(row + ch) > width) { lines.push(row); row = '' }
+      row += ch
     }
+    lines.push(row)
   }
-  const L = shiftI18n[lang] || shiftI18n.id
-
-  const storeName = data.storeName || 'YOUME'
-  lines.push(centerText(L.title, width))
-  lines.push(centerText(storeName, width))
-  lines.push(repeatChar('=', width))
-
-  const colWidth = is80mm ? 22 : 14
-  lines.push(`${L.cashier.padEnd(colWidth)}: ${data.cashierName || 'Kasir'}`)
-  lines.push(`${L.shift.padEnd(colWidth)}: ${data.shiftType || 'Regular'}`)
-  if (data.openedAt) lines.push(`${L.openedAt.padEnd(colWidth)}: ${data.openedAt}`)
-  lines.push(`${L.closedAt.padEnd(colWidth)}: ${data.closedAt || formatDateTime()}`)
-  lines.push(`${L.printTime.padEnd(colWidth)}: ${formatDateTime()}`)
-
-  lines.push(repeatChar('-', width))
-  lines.push(centerText(L.secSales, width))
-
-  const addRow = (label: string, amount: number) => {
-    const valStr = formatRp(amount || 0)
-    const spaces = Math.max(1, width - label.length - valStr.length)
-    lines.push(`${label}${' '.repeat(spaces)}${valStr}`)
+  const row = (name: string, value: string) => {
+    const gap = width - getVisualWidth(name) - getVisualWidth(value)
+    if (gap < 1) { wrap(name); if (getVisualWidth(value) > width) wrap(value); else lines.push(padStartVisual(value, width)) }
+    else lines.push(name + ' '.repeat(gap) + value)
   }
-
+  const money = (name: string, value: unknown) => row(name, number(value) ? formatRp(value) : unknown)
+  const time = (name: string, value: unknown) => {
+    wrap(name)
+    const date = value instanceof Date ? value : typeof value === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? new Date(value) : null
+    if (!date || !Number.isFinite(date.getTime())) { wrap(unknown); return }
+    const local = new Date(date.getTime() + 7 * 3600000).toISOString()
+    row(`${local.slice(8,10)}/${local.slice(5,7)}/${local.slice(0,4)}`, local.slice(11,19))
+  }
+  const separator = () => lines.push(repeatChar('-', width))
+  wrap(data.storeName || 'YOUME')
+  wrap(label('交接班记录', 'SHIFT HANDOVER', 'SERAH TERIMA SHIFT'))
+  if (data.sessionId) { wrap(label('班次凭据', 'Session reference', 'Referensi shift')); wrap(String(data.sessionId)) }
+  separator()
+  row(label('交班员工', 'Cashier', 'Kasir'), data.cashierName || unknown)
+  const names = data.shiftNames || {}
+  const shiftName = (lang === 'zh' ? names.nameZh : lang === 'id' ? names.nameId : names.name) || names.name
+  const fallback: Record<string,string> = {morning:label('早班','Morning','Pagi'),afternoon:label('午班','Afternoon','Siang'),evening:label('晚班','Evening','Sore'),night:label('夜班','Night','Malam')}
+  row(label('班次', 'Shift', 'Shift'), shiftName || fallback[data.shiftType] || data.shiftType || unknown)
+  time(label('开班时间', 'Opened', 'Mulai'), data.openedAt)
+  time(label('交班时间', 'Closed', 'Selesai'), data.closedAt)
+  time(label('打印时间', 'Printed', 'Dicetak'), new Date())
+  separator()
+  const evidence = data.summaryEvidence || {}
+  const verified = evidence.verified === true
+  wrap(label('销售及现金记录', 'SALES / CASH RECORDS', 'CATATAN PENJUALAN / KAS'))
+  if (!verified) wrap(label('按开班至交班时间统计，待核对', 'Opening-to-close records; unverified', 'Catatan waktu shift; perlu diperiksa'))
   const si = data.summaryItems || {}
-  if (si.openFloat !== false) addRow(L.openFloat, data.openFloat || 0)
-  if (si.cashSales !== false) addRow(L.cashSales, data.cashSales || 0)
-  if (si.qrisSales !== false && (data.qrisSales !== undefined || si.qrisSales === true)) addRow(L.qrisSales, data.qrisSales || 0)
-  if (si.gofoodCount !== false && data.gofoodSales) addRow(L.gofoodSales, data.gofoodSales)
-  if (si.grabCount !== false && data.grabSales) addRow(L.grabSales, data.grabSales)
-  if (si.shopeeCount !== false && data.shopeeSales) addRow(L.shopeeSales, data.shopeeSales)
-  if (si.cashIn !== false && data.cashIn) addRow('Kas Masuk / Cash In', data.cashIn)
-  if (si.cashOut !== false && data.cashOut) addRow('Kas Keluar / Cash Out', data.cashOut)
-  if (si.expenses !== false && data.expenses) addRow(L.expenses, data.expenses)
-
-  // 折扣与让利稽核 (防飞单)
-  if ((data.totalDiscount || 0) > 0 || (data.autoPromotionDiscount || 0) > 0 || (data.manualDiscount || 0) > 0) {
-    lines.push(repeatChar('-', width))
-    lines.push(centerText(L.secDiscount, width))
-    if (data.autoPromotionDiscount) {
-      const promoText = `${L.autoPromo} (${data.promotionOrderCount || 0})`
-      addRow(promoText, data.autoPromotionDiscount)
-    }
-    if (data.manualDiscount) {
-      const manualText = `* ${L.manualDisc} (${data.manualDiscountOrderCount || 0})`
-      addRow(manualText, data.manualDiscount)
-    }
-    addRow(L.totalDisc, data.totalDiscount || ((data.autoPromotionDiscount || 0) + (data.manualDiscount || 0)))
+  if (si.openFloat !== false) money(label('开班备用金', 'Opening float', 'Kas awal'), data.openFloat)
+  if (si.cashSales !== false) money(label('现金销售记录', 'Recorded cash sales', 'Penjualan tunai'), evidence.cashSales)
+  if (si.qrisSales !== false) money(label('QRIS销售记录', 'Recorded QRIS', 'Penjualan QRIS'), evidence.qrisReceipts)
+  if (si.cashIn !== false) money(label('现金存入记录', 'Recorded cash in', 'Kas masuk'), evidence.cashIns)
+  if (si.cashOut !== false) money(label('现金支出记录', 'Recorded cash out', 'Kas keluar'), evidence.cashOuts)
+  const amounts = [data.openFloat,evidence.cashSales,evidence.cashIns,evidence.cashOuts]
+  const recordedBalance = amounts.every(number) ? data.openFloat + evidence.cashSales + evidence.cashIns - evidence.cashOuts : null
+  money(label('记录推算现金', 'Recorded cash balance', 'Saldo kas tercatat'), recordedBalance)
+  if (si.closeCash !== false) money(label('实际盘点现金', 'Counted cash', 'Kas dihitung'), data.actualCash)
+  const expected = verified && number(data.expectedCash) && data.expectedCash === recordedBalance ? data.expectedCash : null
+  money(label('钱箱应有现金', 'Expected cash', 'Kas seharusnya'), expected)
+  money(label('现金差额', 'Variance', 'Selisih'), number(expected) && number(data.actualCash) ? data.actualCash - expected : null)
+  separator()
+  if (si.orderCount !== false) row(label('完成订单记录', 'Completed orders', 'Pesanan selesai'), number(evidence.orderCount) ? String(evidence.orderCount) : unknown)
+  row(label('商品杯数记录', 'Item quantity', 'Jumlah minuman'), number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
+  if (si.expenses !== false) {
+    separator()
+    wrap(label('本班采购报销', 'SHIFT PURCHASE EXPENSES', 'BELANJA SHIFT'))
+    const purchases = data.purchaseExpenses
+    if (purchases && number(purchases.total) && Array.isArray(purchases.items)) {
+      for (const item of purchases.items) { money(`${item.category} x${item.quantity ?? '-'}`, item.amount); if (item.description) wrap(String(item.description)) }
+      money(label('采购合计', 'Purchase total', 'Total belanja'), purchases.total)
+    } else wrap(unknown)
+    wrap(label('采购记账，不等于钱箱已付款', 'Expense recorded; cash payout separate', 'Biaya dicatat; kas dibayar terpisah'))
   }
-
-  lines.push(repeatChar('-', width))
-  lines.push(centerText(L.secReconcile, width))
-
-  const expected = data.expectedCash || 0
-  const actual = data.actualCash || 0
-  const diff = actual - expected
-
-  addRow(L.expectedCash, expected)
-  if (si.closeCash !== false) {
-    addRow(L.actualCash, actual)
-  }
-
-  const diffStr = (diff >= 0 ? '+' : '') + formatRp(diff)
-  const diffLabel = L.difference
-  const diffSpaces = Math.max(1, width - diffLabel.length - diffStr.length)
-  lines.push(`${diffLabel}${' '.repeat(diffSpaces)}${diffStr}`)
-
-  lines.push(repeatChar('-', width))
-  lines.push(centerText(L.secStats, width))
-  if (si.orderCount !== false) {
-    lines.push(`${L.totalOrders.padEnd(colWidth)}: ${data.totalOrders ?? 0}`)
-  }
-  if (data.totalCups !== undefined) {
-    lines.push(`${L.totalCups.padEnd(colWidth)}: ${data.totalCups}`)
-  }
-  if (si.customerCount !== false && data.customerCount !== undefined) {
-    lines.push(`${padEndVisual('Pelanggan / Cust', colWidth)}: ${data.customerCount}`)
-  }
-
-  lines.push(repeatChar('-', width))
-  lines.push('')
-  lines.push(L.signCashier)
-  lines.push('')
-  lines.push(L.signManager)
-  lines.push('')
-  lines.push(repeatChar('=', width))
-
-  return lines.join('\n') + '\n\n\n\n'
+  if (!verified) { separator(); wrap(label('销售归属、离线上传及退款需核对', 'Review sales attribution, uploads and refunds', 'Periksa penjualan, unggahan dan refund')) }
+  separator()
+  wrap(label('收银员签字:', 'Cashier sign:', 'Ttd Kasir:'))
+  lines.push('________________________', '')
+  wrap(label('主管签字:', 'Supervisor sign:', 'Ttd Supervisor:'))
+  lines.push('________________________')
+  return lines.join('\n') + '\n\n\n'
 }
 
 /**
@@ -2509,19 +2385,19 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
   const lang = (data.language || 'id').toLowerCase()
   const i18nMap: Record<string, Record<string, string>> = {
     zh: {
-      orderNo: '订单号', queueNo: '取餐号', date: '日期', time: '时间', channel: '渠道', table: '桌号', cashier: '收银员',
+      orderNo: 'NO.', queueNo: '取餐号', date: '日期', time: '时间', channel: '渠道', table: '桌号', cashier: '收银员',
       customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
       tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
       member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
     },
     en: {
-      orderNo: 'Order No', queueNo: 'QUEUE NO', date: 'Date', time: 'Time', channel: 'Channel', table: 'Table', cashier: 'Cashier',
+      orderNo: 'NO.', queueNo: 'QUEUE NO', date: 'Date', time: 'Time', channel: 'Channel', table: 'Table', cashier: 'Cashier',
       customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
       tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
       member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
     },
     id: {
-      orderNo: 'No. Pesanan', queueNo: 'NO. ANTREAN', date: 'Tgl', time: 'Jam', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
+      orderNo: 'NO.', queueNo: 'NO. ANTREAN', date: 'Tgl', time: 'Jam', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
       customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
       tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
       member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
@@ -2570,6 +2446,13 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
     return Buffer.concat(lineChunks)
   }
 
+  function formatAmountLine(label: string, value: string, style: any): Buffer {
+    const columns = style.fontSize === 'large' ? width / 2 : style.fontSize === 'small' ? (is80mm ? 64 : 42) : width
+    const gap = columns - getVisualWidth(label) - getVisualWidth(value)
+    if (gap < 1) return Buffer.concat([formatStyledLine(label, style), formatStyledLine(value, {...style, align:'right'})])
+    return formatStyledLine(`${label}${' '.repeat(gap)}${value}`, style)
+  }
+
   const rawBlocks = Array.isArray(data.blocks) ? data.blocks : (data.template?.blocks || null)
   const chunks: Buffer[] = []
 
@@ -2589,13 +2472,13 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
     for (const block of enabledBlocks) {
       const cfg = block.config || {}
-      const st = block.style || {}
+      const st = {align:'center',fontSize:'normal',bold:false,...block.style}
 
       switch (block.type) {
         case 'logo': {
           let logoBuf: Buffer | null = null
           const logoSource = cfg.url || data.storeLogo || ''
-          if (logoSource && data.showLogo !== false) {
+          if (logoSource) {
             const rawImg = await loadLogoBuffer(logoSource)
             if (rawImg) {
               const customWidth = cfg.width ? Math.min(targetDots, cfg.width * 2) : targetDots
@@ -2604,7 +2487,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           }
           if (logoBuf) {
             chunks.push(logoBuf)
-          } else if (logoSource && data.showLogo !== false) {
+          } else if (logoSource) {
             data.printWarnings?.push('LOGO_UNAVAILABLE')
           }
 
@@ -2612,11 +2495,11 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'header': {
-          const headerText = cfg.text || data.header || data.storeName || 'YOUME'
+          const headerText = typeof cfg.text === 'string' ? cfg.text : data.header || data.storeName || 'YOUME'
           if (headerText) {
             chunks.push(formatStyledLine(headerText, {
               align: st.align || 'center',
-              bold: st.bold !== false,
+              bold: st.bold,
               fontSize: st.fontSize || 'large'
             }))
           }
@@ -2626,10 +2509,10 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         case 'storeInfo': {
           const phone = cfg.phone || data.storePhone
           const address = cfg.address || data.storeAddress
-          if (cfg.showPhone !== false && phone) {
+          if (cfg.showPhone === true && phone) {
             chunks.push(formatStyledLine(`Tel: ${phone}`, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }))
           }
-          if (cfg.showAddress !== false && address) {
+          if (cfg.showAddress === true && address) {
             chunks.push(formatStyledLine(address, { align: st.align || 'center', bold: st.bold, fontSize: st.fontSize }))
           }
           break
@@ -2657,21 +2540,21 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           const infoLines: string[] = []
           // 仅在未显式禁用单号时才输出单号
           if (cfg.showOrderNo !== false && data.orderNum) {
-            infoLines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum}`)
+            infoLines.push(`NO. ${data.orderNum}`)
           }
-          const showDate = cfg.showDate !== false
-          const showTime = cfg.showTime !== false
+          const showDate = cfg.showDate === true
+          const showTime = cfg.showTime === true
           if (showDate) infoLines.push(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, false)}`)
           if (showTime) infoLines.push(`${padEndVisual(L.time, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, false, true)}`)
           if (cfg.showChannel && data.channelName) {
             const tableText = data.tableNumber ? ` (${L.table} ${data.tableNumber})` : ''
             infoLines.push(`${padEndVisual(L.channel, is80mm ? 10 : 7)}: ${data.channelName}${tableText}`)
           }
-          const showCashier = cfg.showCashier !== undefined ? cfg.showCashier : (data.showStaffName !== false)
+          const showCashier = cfg.showCashier === true
           if (showCashier && data.cashierName) {
             infoLines.push(`${padEndVisual(L.cashier, is80mm ? 10 : 7)}: ${data.cashierName}`)
           }
-          const showCustomer = cfg.showCustomer !== undefined ? cfg.showCustomer : data.showCustomerName
+          const showCustomer = cfg.showCustomer === true
           if (showCustomer && data.customerName) {
             infoLines.push(`${padEndVisual(L.customer, is80mm ? 10 : 7)}: ${data.customerName}`)
           }
@@ -2682,17 +2565,19 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         }
 
         case 'items': {
+          const width = st.fontSize === 'large' ? (is80mm ? 24 : 16) : st.fontSize === 'small' ? (is80mm ? 64 : 42) : (is80mm ? 48 : 32)
+          const nameWidth = Math.floor(width * 0.5), qtyWidth = Math.floor(width * 0.125), priceWidth = width - nameWidth - qtyWidth
           const isCompact = (cfg.itemFormat || data.itemDetailFormat) === 'compact'
           const isSimple = cfg.itemFormat === 'simple' || (!is80mm && !cfg.showQtyPriceHeader)
 
           // 仅在明确开启三列表头时才打印表头，且强制使用标准正常小字，绝不使用突兀大字
           if (cfg.showQtyPriceHeader === true) {
             const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`
-            chunks.push(formatStyledLine(tableHeader, { bold: true, fontSize: 'normal' }))
+            chunks.push(formatStyledLine(tableHeader, st))
             chunks.push(formatStyledLine(repeatChar('-', Math.max(20, width - 2)), { align: 'center' }))
           } else if (cfg.showHeader !== false) {
             // 默认打印纯净商品标题行（与设计器保持 100% 一致）
-            chunks.push(formatStyledLine(L.item, { bold: true, fontSize: st.fontSize }))
+            chunks.push(formatStyledLine(L.item, st))
           }
 
           if (data.items && data.items.length > 0) {
@@ -2726,127 +2611,66 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
               if (isCompact) {
                 const parts: string[] = []
-                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                if (cfg.showSugarIce === true && (item.sugarLevelName || item.iceLevelName)) {
                   const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ')
                   if (mods) parts.push(`[${mods}]`)
                 }
-                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                if (cfg.showAddon === true && item.addons && item.addons.length > 0) {
                   const addonNames = item.addons.map((a: any) => a.name || a).join(', ')
                   if (addonNames) parts.push(`+${addonNames}`)
                 }
                 if (parts.length > 0) {
-                  chunks.push(formatStyledLine(`  ${truncate(parts.join(' '), width - 2)}`, { fontSize: 'small' }))
+                  chunks.push(formatStyledLine(`  ${truncate(parts.join(' '), width - 2)}`, st))
                 }
               } else {
-                if (cfg.showAddon !== false && item.addons && item.addons.length > 0) {
+                if (cfg.showAddon === true && item.addons && item.addons.length > 0) {
                   item.addons.forEach((addon: any) => {
-                    chunks.push(formatStyledLine(`  + ${truncate(addon.name || addon, width - 4)}`, { fontSize: 'small' }))
+                    chunks.push(formatStyledLine(`  + ${truncate(addon.name || addon, width - 4)}`, st))
                   })
                 }
-                if (cfg.showSugarIce !== false && (item.sugarLevelName || item.iceLevelName)) {
+                if (cfg.showSugarIce === true && (item.sugarLevelName || item.iceLevelName)) {
                   const mods = [item.sugarLevelName, item.iceLevelName].filter(Boolean).join(', ')
-                  chunks.push(formatStyledLine(`  [${mods}]`, { fontSize: 'small' }))
+                  chunks.push(formatStyledLine(`  [${mods}]`, st))
                 }
               }
+              if (cfg.showNote && item.note) chunks.push(formatStyledLine(`  ${item.note}`, st))
             })
           }
           break
         }
 
         case 'subtotal': {
-          const safeW = Math.max(20, width - 2)
-          chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
-          const subtotalLabel = padEndVisual(cfg.subtotalLabel || L.subtotal, labelWidth)
-          const subtotalVal = padStartVisual(formatRp(data.subtotal || 0), valWidth)
-          chunks.push(formatStyledLine(`${subtotalLabel}${subtotalVal}`, st))
+          chunks.push(formatAmountLine(cfg.subtotalLabel || L.subtotal, formatRp(data.subtotal || 0), st))
           break
         }
 
         case 'tax': {
-          const taxName = cfg.label || (cfg.rate ? `${L.tax} (${cfg.rate}%)` : L.tax)
-          const taxLabel = padEndVisual(taxName, labelWidth)
-          const taxVal = padStartVisual(formatRp(data.tax || 0), valWidth)
-          chunks.push(formatStyledLine(`${taxLabel}${taxVal}`, st))
+          const taxName = cfg.label || (cfg.rate && cfg.showRate !== false ? `${L.tax} (${cfg.rate}%)` : L.tax)
+          chunks.push(formatAmountLine(taxName, formatRp(data.tax || 0), st))
           break
         }
 
         case 'total': {
           if (data.discount && data.discount > 0) {
             const promoName = data.promotionName || data.discountNote || ''
-            const showDetail = cfg.showDiscountDetail !== false && data.showPromotionDetail !== false
-            const baseDiscLabel = cfg.discountLabel || L.discount
-
-            if (showDetail && promoName) {
-              const fullDiscLabel = `${baseDiscLabel} (${promoName})`
-              if (fullDiscLabel.length + 12 <= width) {
-                const discLabel = padEndVisual(fullDiscLabel, labelWidth)
-                const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
-                chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
-              } else {
-                const discLabel = padEndVisual(baseDiscLabel, labelWidth)
-                const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
-                chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
-                chunks.push(formatStyledLine(`  [${promoName}]`, { fontSize: 'small', bold: true }))
-              }
-            } else {
-              const discLabel = padEndVisual(baseDiscLabel, labelWidth)
-              const discVal = padStartVisual(`-${formatRp(data.discount)}`, valWidth)
-              chunks.push(formatStyledLine(`${discLabel}${discVal}`, { bold: true }))
-            }
+            chunks.push(formatAmountLine(cfg.discountLabel || L.discount, `-${formatRp(data.discount)}`, st))
+            if (cfg.showDiscountDetail !== false && promoName) chunks.push(formatStyledLine(`  [${promoName}]`, st))
           }
-
-          const rawTotalLabel = cfg.totalLabel || L.total
-          const rawTotalVal = formatRp(data.total || 0)
-
-          // 58mm 热敏纸大字（倍宽倍高）物理单行仅有 16 字符极限，防止任何截断换行
-          if (!is80mm && st.fontSize === 'large') {
-            const combinedLen = rawTotalLabel.length + rawTotalVal.length + 1
-            if (combinedLen > 16) {
-              chunks.push(formatStyledLine(rawTotalLabel, { ...st, align: st.align || 'left' }))
-              chunks.push(formatStyledLine(rawTotalVal, { ...st, align: 'right' }))
-            } else {
-              // 安全在 16 字符内，精准定宽输出大字
-              const spaces = Math.max(1, 16 - (rawTotalLabel.length + rawTotalVal.length))
-              const safeLine = `${rawTotalLabel}${' '.repeat(spaces)}${rawTotalVal}`
-              chunks.push(formatStyledLine(safeLine, {
-                bold: st.bold,
-                fontSize: 'large',
-                align: st.align
-              }))
-            }
-          } else {
-            const effLabelW = st.fontSize === 'large' ? (is80mm ? 14 : 9) : labelWidth
-            const effValW = st.fontSize === 'large' ? (is80mm ? 10 : 7) : valWidth
-            const totalLabel = padEndVisual(rawTotalLabel, effLabelW)
-            const totalVal = padStartVisual(rawTotalVal, effValW)
-            chunks.push(formatStyledLine(`${totalLabel}${totalVal}`, {
-              bold: st.bold !== false,
-              fontSize: st.fontSize,
-              align: st.align
-            }))
-          }
+          chunks.push(formatAmountLine(cfg.totalLabel || L.total, formatRp(data.total || 0), st))
           break
         }
 
         case 'paymentInfo': {
-          const safeW = Math.max(20, width - 2)
-          chunks.push(formatStyledLine(repeatChar('-', safeW), { align: 'center' }))
-          if (cfg.showMethod !== false) {
-            chunks.push(formatStyledLine(`${padEndVisual('Metode:', labelWidth)}${padStartVisual(data.paymentMethod || 'Cash', valWidth)}`, st))
-          }
-          if (cfg.showReceived !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`, st))
-          }
-          if (cfg.showChange !== false && (data.paidAmount !== undefined && data.paidAmount > 0)) {
-            chunks.push(formatStyledLine(`${padEndVisual(L.change, labelWidth)}${padStartVisual(formatRp(data.change || 0), valWidth)}`, st))
-          }
+          if (cfg.showMethod === true) chunks.push(formatAmountLine('Metode:', data.paymentMethod || 'Cash', st))
+          if (cfg.showReceived === true && data.paidAmount > 0) chunks.push(formatAmountLine(L.pay, formatRp(data.paidAmount), st))
+          if (cfg.showChange === true && data.paidAmount > 0) chunks.push(formatAmountLine(L.change, formatRp(data.change || 0), st))
           break
         }
 
         case 'barcode': {
-          // 严格尊重条码禁用：只要数据标记关闭，即使模板有该块也绝不打印
-          if (data.showBarcode !== false && data.orderNum) {
-            chunks.push(buildEscPosBarcode(String(data.orderNum)))
+          // Enabled template blocks are authoritative; legacy POS switches apply only without a template.
+          if (data.orderNum) {
+            chunks.push(buildEscPosBarcode(String(data.orderNum), cfg.height ? cfg.height * 2 : 80, st.align, cfg.barcodeType))
             hasBarcodeRendered = true
           }
           break
@@ -2854,9 +2678,9 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
 
         case 'qrCode': {
           const qrUrl = cfg.url || cfg.qrContent || data.qrCodeUrl || ''
-          if (qrUrl && data.showQR !== false) {
+          if (qrUrl) {
             const modSize = cfg.size ? Math.max(3, Math.min(8, Math.round(cfg.size / 20))) : (is80mm ? 6 : 4)
-            chunks.push(buildEscPosQRCode(String(qrUrl), modSize))
+            chunks.push(buildEscPosQRCode(String(qrUrl), modSize, st.align))
             hasQrRendered = true
           }
           break
@@ -2866,7 +2690,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           if (cfg.showDivider) {
             chunks.push(formatStyledLine(repeatChar('-', width)))
           }
-          const footerMsg = cfg.footerText || data.footer
+          const footerMsg = typeof cfg.footerText === 'string' ? cfg.footerText : data.footer
           if (footerMsg) {
             chunks.push(formatStyledLine(footerMsg, {
               align: st.align || 'center',
@@ -2910,7 +2734,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
       chunks.push(CMD_CRLF)
     }
 
-    chunks.push(formatStyledLine(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum || ''}`))
+    chunks.push(formatStyledLine(`NO. ${data.orderNum || ''}`))
     if (data.orderDate || data.createdAt) {
       chunks.push(formatStyledLine(`${padEndVisual(L.date, is80mm ? 10 : 7)}: ${formatDateTime(data.orderDate || data.createdAt, true, true)}`))
     }
@@ -2923,7 +2747,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
     chunks.push(formatStyledLine(repeatChar('-', width)))
 
     const tableHeader = `${padEndVisual(L.item, nameWidth)}${padStartVisual(L.qty, qtyWidth)}${padStartVisual(L.price, priceWidth)}`
-    chunks.push(formatStyledLine(tableHeader, { bold: true }))
+    chunks.push(formatStyledLine(tableHeader, {bold:true}))
     chunks.push(formatStyledLine(repeatChar('-', width)))
     if (data.items && data.items.length > 0) {
       data.items.forEach((item: any) => {
@@ -2934,7 +2758,7 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
         chunks.push(formatStyledLine(`${name}${qty}${price}`))
         if (item.addons && item.addons.length > 0) {
           item.addons.forEach((a: any) => {
-            chunks.push(formatStyledLine(`  + ${truncate(a.name || a, width - 4)}`, { fontSize: 'small' }))
+            chunks.push(formatStyledLine(`  + ${truncate(a.name || a, width - 4)}`, {fontSize:'small'}))
           })
         }
       })
@@ -2945,9 +2769,9 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
       chunks.push(formatStyledLine(`${padEndVisual(L.tax, labelWidth)}${padStartVisual(formatRp(data.tax), valWidth)}`))
     }
     if (data.discount) {
-      chunks.push(formatStyledLine(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`, { bold: true }))
+      chunks.push(formatStyledLine(`${padEndVisual(L.discount, labelWidth)}-${padStartVisual(formatRp(data.discount), valWidth)}`, {bold:true}))
     }
-    chunks.push(formatStyledLine(`${padEndVisual(L.total, labelWidth)}${padStartVisual(formatRp(data.total || 0), valWidth)}`, { bold: true }))
+    chunks.push(formatStyledLine(`${padEndVisual(L.total, labelWidth)}${padStartVisual(formatRp(data.total || 0), valWidth)}`, {bold:true}))
     if (data.paidAmount) {
       chunks.push(formatStyledLine(repeatChar('-', width)))
       chunks.push(formatStyledLine(`${padEndVisual(L.pay, labelWidth)}${padStartVisual(formatRp(data.paidAmount), valWidth)}`))
@@ -2971,7 +2795,9 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
     chunks.push(Buffer.from([0x0A, 0x0A]))
     return Buffer.concat(chunks)
   } catch (renderErr: any) {
-    writeCrash(`[BUILD ESCPOS ERROR] Error in buildReceiptEscPosBuffer: ${renderErr?.message}, falling back to plain text`)
+    writeCrash(`[BUILD ESCPOS ERROR] Error in buildReceiptEscPosBuffer: ${renderErr?.message}`)
+    // A text fallback would silently discard the selected template's logo and typography.
+    if (Array.isArray(data.blocks) || Array.isArray(data.template?.blocks)) throw renderErr
     try {
       const text = generateReceiptText(data)
       return Buffer.concat([encodeEscPosText(text), Buffer.from([0x0A, 0x0A])])
@@ -2988,7 +2814,7 @@ function generateReceiptText(data: any): string {
   const lang = (data.language || 'id').toLowerCase()
   const i18nMap: Record<string, Record<string, string>> = {
     zh: {
-      orderNo: '单号',
+      orderNo: 'NO.',
       date: '日期',
       channel: '渠道',
       table: '桌号',
@@ -3008,7 +2834,7 @@ function generateReceiptText(data: any): string {
       thanks: '=== 谢谢惠顾 欢迎光临 ==='
     },
     en: {
-      orderNo: 'Order No',
+      orderNo: 'NO.',
       date: 'Date',
       channel: 'Channel',
       table: 'Table',
@@ -3028,7 +2854,7 @@ function generateReceiptText(data: any): string {
       thanks: '=== THANK YOU ==='
     },
     id: {
-      orderNo: 'No Order',
+      orderNo: 'NO.',
       date: 'Tgl',
       channel: 'Kanal',
       table: 'Meja',
@@ -3098,7 +2924,7 @@ function generateReceiptText(data: any): string {
           if (cfg.showPickupNumber !== false && data.pickupNumber) {
             lines.push(centerText(`*** ${L.queueNo}: ${data.pickupNumber} ***`, width))
           }
-          if (cfg.showOrderNo !== false && data.orderNum) lines.push(`${padEndVisual(L.orderNo, is80mm ? 10 : 7)}: ${data.orderNum}`)
+          if (cfg.showOrderNo !== false && data.orderNum) lines.push(`NO. ${data.orderNum}`)
           const showDate = cfg.showDate !== false
           const showTime = cfg.showTime !== false
           if (showDate || showTime) {
@@ -3261,7 +3087,7 @@ function generateReceiptText(data: any): string {
   lines.push(repeatChar('=', width))
 
   // 2. Order Metadata
-  lines.push(`${L.orderNo.padEnd(is80mm ? 10 : 7)}: ${data.orderNum || ''}`)
+  lines.push(`NO. ${data.orderNum || ''}`)
   lines.push(`${L.date.padEnd(is80mm ? 10 : 7)}: ${formatDateTime()}`)
 
   if (data.channelName) {
@@ -3368,7 +3194,7 @@ function generateReceiptText(data: any): string {
 /**
  * 构建 ESC/POS 2D 二维码原生指令 (Model 2, 支持 58mm / 80mm 热敏小票机)
  */
-function buildEscPosQRCode(content: string, moduleSize = 5): Buffer {
+function buildEscPosQRCode(content: string, moduleSize = 5, align = 'center'): Buffer {
   if (!content) return Buffer.alloc(0)
   const dataBytes = Buffer.from(content, 'utf8')
   const pL = (dataBytes.length + 3) & 0xff
@@ -3376,7 +3202,7 @@ function buildEscPosQRCode(content: string, moduleSize = 5): Buffer {
 
   return Buffer.concat([
     // 居中对齐 ESC a 1
-    Buffer.from([0x1B, 0x61, 0x01]),
+    Buffer.from([0x1B, 0x61, align === 'left' ? 0 : align === 'right' ? 2 : 1]),
     // GS ( k: Model 2 (4, 0, 49, 65, 50, 0)
     Buffer.from([0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]),
     // GS ( k: 设置块大小 (3, 0, 49, 67, moduleSize)
@@ -3397,24 +3223,25 @@ function buildEscPosQRCode(content: string, moduleSize = 5): Buffer {
  * 构建 ESC/POS 订单条形码 (CODE128 格式，方便扫码枪秒级反扫退单或查单)
  * 标准 ESC/POS CODE128 (GS k 73) 必须带有 Code Set B ({B 即 0x7B, 0x42) 前缀
  */
-function buildEscPosBarcode(content: string): Buffer {
+function buildEscPosBarcode(content: string, height = 50, align = 'center', type = 'code128'): Buffer {
   if (!content) return Buffer.alloc(0)
   const clean = content.replace(/[^A-Za-z0-9\-]/g, '')
+  const isCode39 = type === 'code39'
   if (!clean) return Buffer.alloc(0)
-  const dataBytes = Buffer.from(clean, 'ascii')
+  const dataBytes = Buffer.from(isCode39 ? clean.toUpperCase() : clean, 'ascii')
   // CODE128 Code Set B 前缀: {B (0x7B, 0x42)
-  const payload = Buffer.concat([Buffer.from([0x7B, 0x42]), dataBytes])
+  const payload = isCode39 ? dataBytes : Buffer.concat([Buffer.from([0x7B, 0x42]), dataBytes])
   return Buffer.concat([
     // 居中对齐 ESC a 1
-    Buffer.from([0x1B, 0x61, 0x01]),
+    Buffer.from([0x1B, 0x61, align === 'left' ? 0 : align === 'right' ? 2 : 1]),
     // 设置条码高度 50 dots
-    Buffer.from([0x1D, 0x68, 0x32]),
+    Buffer.from([0x1D, 0x68, Math.max(1, Math.min(255, Math.round(height)))]),
     // 设置条码宽度 2 dots
     Buffer.from([0x1D, 0x77, 0x02]),
     // 设置数字显示在条码下方 (HRI below: 0x02)
     Buffer.from([0x1D, 0x48, 0x02]),
     // CODE128 打印指令: GS k 73 <length> <data>
-    Buffer.from([0x1D, 0x6B, 0x49, payload.length]),
+    Buffer.from([0x1D, 0x6B, isCode39 ? 0x45 : 0x49, payload.length]),
     payload,
     // 换行并重置为左对齐 ESC a 0
     Buffer.from([0x0A, 0x0A, 0x1B, 0x61, 0x00])

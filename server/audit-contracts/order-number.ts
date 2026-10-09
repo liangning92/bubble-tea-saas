@@ -6,7 +6,7 @@ export function orderNumberContract(db:any){
  async function fixture(){const key=randomUUID(),tenant=await db.tenant.create({data:{name:'Synthetic numbering'}}),store=await db.store.create({data:{tenantId:tenant.id,name:'Synthetic'}}),cat=await db.category.create({data:{storeId:store.id,name:'Tea'}}),product=await db.product.create({data:{storeId:store.id,categoryId:cat.id,code:key,name:'Tea'}}),spec=await db.spec.create({data:{productId:product.id,name:'Regular',price:100}});return {storeId:store.id,staffId:'synthetic',paymentMethod:'cash',taxEnabled:false,items:[{productId:product.id,productName:'Tea',specId:spec.id,specName:'Regular',quantity:1,unitPrice:100}]}}
  test('same-day first orders from separate stores get globally unique generated numbers and short pickup numbers',async()=>{
   const a=await fixture(),b=await fixture(),one=await createOrder(a),two=await createOrder(b)
-  expect(one.orderNumber).not.toBe(two.orderNumber);expect(one.orderNumber).toMatch(/^ORD\d{8}-[0-9A-V]{10}$/);expect(one.pickupNumber).toMatch(/^A\d{2}$/);expect(two.pickupNumber).toMatch(/^A\d{2}$/)
+  expect(one.orderNumber).not.toBe(two.orderNumber);expect(one.orderNumber).toMatch(/^[0-9A-V]{10}$/);expect(one.pickupNumber).toMatch(/^A\d{2}$/);expect(two.pickupNumber).toMatch(/^A\d{2}$/)
  })
  test('concurrent generated orders are unique and stable request replay does not double-book',async()=>{
   const input=await fixture();const sales=await Promise.all([createOrder(input),createOrder(input)])
@@ -24,7 +24,7 @@ export function orderNumberContract(db:any){
  test('generator persists separate day counters across WIB midnight without changing old numbers',async()=>{
   const input=await fixture()
   const a=await generateOrderNumber(input.storeId,'ORD',new Date('2026-01-01T16:59:59Z')),b=await generateOrderNumber(input.storeId,'ORD',new Date('2026-01-01T17:00:00Z'))
-  expect(a).toMatch(/^ORD20260101-/);expect(b).toMatch(/^ORD20260102-/)
+  expect(a).toMatch(/^[0-9A-V]{10}$/);expect(b).toMatch(/^[0-9A-V]{10}$/)
   const counters=await db.orderCounter.findMany({where:{storeId:input.storeId},orderBy:{date:'asc'}})
   expect(counters.map((c:any)=>[c.date,c.counter])).toEqual([['20260101',1],['20260102',1]])
  })

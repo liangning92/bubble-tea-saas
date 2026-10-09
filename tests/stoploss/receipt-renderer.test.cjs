@@ -1,13 +1,13 @@
 const test=process.env.RECEIPT_NATIVE_ONLY ? ()=>{} : require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),http=require('node:http'),path=require('node:path'),ts=require('typescript');
 const source=fs.readFileSync('client-pos/electron/main.ts','utf8'),tree=ts.createSourceFile('main.ts',source,ts.ScriptTarget.Latest,true);
-const names=['loadLogoBuffer','imageBufferToEscPosRaster','buildReceiptEscPosBuffer','generateReceiptText','getVisualWidth','padEndVisual','padStartVisual','centerText','repeatChar','truncate','formatRp','formatDateTime','buildEscPosBarcode','buildEscPosQRCode'];
+const names=['generateShiftReportText','loadLogoBuffer','imageBufferToEscPosRaster','buildReceiptEscPosBuffer','generateReceiptText','getVisualWidth','padEndVisual','padStartVisual','centerText','repeatChar','truncate','formatRp','formatDateTime','buildEscPosBarcode','buildEscPosQRCode'];
 const functions=tree.statements.filter(n=>ts.isFunctionDeclaration(n)&&names.includes(n.name?.text)).map(n=>n.getText(tree)).join('\n');
 const moduleSource=ts.transpileModule(fs.readFileSync('client-pos/electron/receiptLogo.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText;
 const exportsObject={};vm.runInNewContext(moduleSource,{exports:exportsObject,require,Buffer,URL,setTimeout,clearTimeout});
 const fixturePng=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]);
 function renderer(imageApi){
  const context={Buffer,Math,Date,Set,URL,fs,path,require,setTimeout,clearTimeout,fetchReceiptLogo:exportsObject.fetchReceiptLogo,logoMemoryCache:new Map(),writeCrash:()=>{},getResourcePath:()=>'/tmp/receipt-nonexistent',app:{getAppPath:()=>'/tmp/receipt-nonexistent'},encodeEscPosText:s=>Buffer.from(s,'utf8'),nativeImage:imageApi||{createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:8,height:8}),resize:({width,height})=>({toBitmap:()=>Buffer.alloc(width*height*4,0xff)})})}};
- vm.runInNewContext(ts.transpileModule(functions+'\nglobalThis.render=buildReceiptEscPosBuffer;globalThis.load=loadLogoBuffer;',{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);return context;
+ vm.runInNewContext(ts.transpileModule(functions+'\nglobalThis.render=buildReceiptEscPosBuffer;globalThis.shift=generateShiftReportText;globalThis.load=loadLogoBuffer;',{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);return context;
 }
 function block(type,config={},style={},order=0,enabled=true){return {type,config,style,order,enabled};}
 async function server(fn){const s=http.createServer(fn);await new Promise(r=>s.listen(0,'127.0.0.1',r));return {url:'http://127.0.0.1:'+s.address().port,close:()=>new Promise(r=>{s.closeAllConnections();s.close(r)})};}
@@ -27,3 +27,19 @@ test('template style controls pickup number and narrow large total without forci
 test('empty explicit template never prints the hardcoded legacy receipt',async()=>{const bytes=await renderer().render({blocks:[],storeName:'NO LEGACY',total:16000});assert.ok(!bytes.includes(Buffer.from('NO LEGACY')));assert.equal(bytes.toString(),'\n\n');});
 test('date and time use separate template rows and item alignment honors its style',async()=>{const ctx=renderer(),bytes=await ctx.render({language:'en',orderDate:'2026-10-07T11:00:00Z',items:[{productName:'Tea',quantity:1,unitPrice:10000}],blocks:[block('orderInfo',{showOrderNo:false,showDate:true,showTime:true},{bold:false}),block('items',{showHeader:false},{align:'right',bold:false},1)]});assert.ok(bytes.includes(Buffer.from('Date')));assert.ok(bytes.includes(Buffer.from('Time')));const item=bytes.indexOf(Buffer.from('Tea'));assert.ok(item>0);assert.ok(bytes.subarray(0,item).includes(Buffer.from([0x1b,0x61,2])));});
 module.exports={renderer,fixturePng,block};
+test('template typography applies to item headings, modifiers, discounts and payment without injected rules',async()=>{
+ const style={align:'right',fontSize:'normal',bold:false};
+ const data={language:'id',orderNum:'7K3M9Q2R5A',showStaffName:true,cashierName:'HIDDEN CASHIER',items:[{productName:'Tea',quantity:1,unitPrice:10000,sugarLevelName:'Normal',addons:[{name:'Pearl'}],note:'Less sweet'}],subtotal:10000,discount:1000,promotionName:'Offer',total:9000,paidAmount:10000,change:1000,paymentMethod:'Cash',blocks:[block('orderInfo',{showOrderNo:true},style),block('items',{showNote:true,showSugarIce:true,showAddon:true},style,1),block('subtotal',{},style,2),block('total',{},style,3),block('paymentInfo',{showMethod:true,showReceived:true,showChange:true},style,4)]};
+ const bytes=await renderer().render(data),text=bytes.toString();
+ assert.ok(text.includes('NO. 7K3M9Q2R5A'));assert.ok(!text.includes('Pesanan'));assert.ok(!text.includes('HIDDEN CASHIER'));
+ for(const content of ['ITEM','Normal','Pearl','Less sweet','Offer','Metode:'])assert.ok(text.includes(content),content);
+ assert.ok(!bytes.includes(Buffer.from([0x1b,0x45,1])),'no forced bold');assert.ok(!bytes.includes(Buffer.from([0x1b,0x4d,1])),'no forced small modifiers');assert.ok(!text.includes('---'),'only explicit divider blocks print rules');
+});
+test('template barcode height, symbology and code alignment are retained',async()=>{
+ const bytes=await renderer().render({orderNum:'7K3M9Q2R5A',showBarcode:false,showQR:false,blocks:[block('barcode',{height:30,barcodeType:'code39'},{align:'right'}),block('qrCode',{qrContent:'https://example.com',size:80},{align:'left'},1)]});
+ assert.ok(bytes.includes(Buffer.from([0x1b,0x61,2,0x1d,0x68,60])));assert.ok(bytes.includes(Buffer.from([0x1d,0x6b,0x45,10])));assert.ok(bytes.includes(Buffer.from([0x1b,0x61,0,0x1d,0x28,0x6b])));
+});
+test('unconfigured legacy receipts still render without a template scope error',async()=>{
+ const bytes=await renderer().render({orderNum:'7K3M9Q2R5A',items:[{productName:'Tea',quantity:1,unitPrice:10000}],total:10000,showBarcode:true});
+ assert.ok(bytes.includes(Buffer.from('NO. 7K3M9Q2R5A')));assert.ok(bytes.includes(Buffer.from([0x1d,0x6b,0x49])));
+});

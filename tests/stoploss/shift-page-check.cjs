@@ -33,8 +33,8 @@ async function evidence(scenario){
    });
    await context.addInitScript(()=>{
     localStorage.setItem('pos-api-url','http://127.0.0.1:6198/api');localStorage.setItem('pos_lang','en');localStorage.setItem('pos_language','en');
-    sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',user:{id:'synthetic',role:'cashier',storeId:'synthetic-store',staff:{id:'staff',name:'Synthetic'}}},version:0}));
-    window.shiftPrints=[];window.electronAPI={sendPrintShiftReport:async x=>window.shiftPrints.push(x),onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{}};
+    sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:'http://127.0.0.1:6198/api',user:{id:'synthetic',role:'cashier',storeId:'synthetic-store',staff:{id:'staff',name:'Synthetic'}}},version:0}));
+    window.shiftPrints=[];window.electronAPI={getAppVersion:async()=> '2026.10.309',checkForUpdates:async()=>({success:true}),sendPrintShiftReport:async x=>window.shiftPrints.push(x),onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{}};
    });
    const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6198/#/'+(scenario==='cash-page'?'cash':'pos'));
    if(scenario!=='cash-page'){

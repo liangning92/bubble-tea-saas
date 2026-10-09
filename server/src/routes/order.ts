@@ -140,7 +140,7 @@ router.get('/:id/refund-quote',authenticate,async(req:AuthRequest,res)=>{
 // GET /api/orders/:id
 // Receipt evidence is accepted independently of mutable payment, shift and inventory policy.
 router.post('/received-receipts', authenticate, authorize('admin', 'manager', 'cashier'), async (req:AuthRequest,res)=>{
-  const parsed = z.object({orderNumber:z.string().regex(/^OFFLINE-[0-9a-f-]{36}$/i),occurredAt:z.string().datetime(),grandTotal:z.number().int().nonnegative().safe(),cashTender:z.object({receivedCash:z.number().int().nonnegative().safe(),changeGiven:z.number().int().nonnegative().safe()}).optional(),request:createOrderSchema}).safeParse(req.body)
+  const parsed = z.object({orderNumber:z.string().regex(/^(?:[0-9A-V]{10}|ORD\d{8}-[0-9A-V]{10}|OFFLINE-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i),occurredAt:z.string().datetime(),grandTotal:z.number().int().nonnegative().safe(),cashTender:z.object({receivedCash:z.number().int().nonnegative().safe(),changeGiven:z.number().int().nonnegative().safe()}).optional(),request:createOrderSchema}).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({code:400,message:'RECEIVED_RECEIPT_INVALID'})
   const receipt = parsed.data
   if (!req.user!.storeId || receipt.request.storeId!==req.user!.storeId || receipt.orderNumber!==receipt.request.orderNumber) return res.status(403).json({code:403,message:'Store or staff access denied'})
