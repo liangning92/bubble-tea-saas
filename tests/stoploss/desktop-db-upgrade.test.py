@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+import zipfile
 from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location('upgrade', pathlib.Path(__file__).parents[2] / 'scripts/desktop-db-upgrade.py')
@@ -26,6 +27,7 @@ class UpgradeTests(unittest.TestCase):
         self.app.mkdir(parents=True)
         (self.app / 'BTPS.exe').write_bytes(b'owned-old-program')
         (self.app / 'history-file').write_bytes(b'preserve-me')
+        (self.app / 'empty-uploads').mkdir()
         template = self.root / 'empty.db'
         with closing(sqlite3.connect(template)) as c, c:
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB, pickupNumber TEXT, requestFingerprint TEXT, requestReceipt TEXT, checkoutTaxAmount INTEGER)')
@@ -55,14 +57,14 @@ class UpgradeTests(unittest.TestCase):
     def test_success_preserves_every_old_value_and_verified_backups(self):
         receipt = self.prepare()
         self.assertEqual(pathlib.Path(receipt['appBackup']), U.application_backup_path(self.app, receipt['nonce']))
-        # A 224-character installed file path remains below MAX_PATH after
-        # replacing the four-character BTPS directory with this backup name.
-        self.assertLessEqual(len(pathlib.Path(receipt['appBackup']).name) - len(self.app.name), 15)
+        self.assertTrue(pathlib.Path(receipt['appBackup']).is_file())
+        self.assertEqual(U.archive_manifest(receipt['appBackup']), self.app_before)
         self.assertTrue(receipt['columnAdded'])
         self.assertEqual(receipt['columnsAdded'], [t+'.'+n for t,n,_ in U.COLUMN_ADDITIONS])
         self.assertTrue(receipt['indexAdded'])
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
+        self.assertTrue((self.app / 'empty-uploads').is_dir())
         with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
@@ -79,11 +81,15 @@ class UpgradeTests(unittest.TestCase):
         receipt = self.prepare()
         relative = asset.relative_to(self.app)
         previous_backup = self.app.parent / ('.BTPS-upgrade-' + receipt['nonce']) / relative
-        current_backup = pathlib.Path(receipt['appBackup']) / relative
+        current_backup = pathlib.Path(receipt['appBackup'])
         self.assertGreaterEqual(len(str(previous_backup)), 260)
         self.assertLess(len(str(current_backup)), 260)
-        self.assertEqual(current_backup.read_bytes(), b'old-prisma-cache')
+        with zipfile.ZipFile(current_backup) as backup:
+            self.assertEqual(backup.read(relative.as_posix()), b'old-prisma-cache')
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        (self.app / 'BTPS.exe').write_bytes(b'partially-installed-new')
+        U.restore_application(receipt, self.catalog, lambda: [])
+        self.assertEqual((self.app / relative).read_bytes(), b'old-prisma-cache')
 
     def test_repeat_is_idempotent_and_preserves_existing_pickup_values(self):
         self.prepare()
@@ -158,16 +164,15 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(U.digest(self.db), self.before)
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
 
-    def test_windows_copy_failure_identifies_file_and_stage_without_modifying_database(self):
-        problem = shutil.Error([(str(self.app / 'BTPS.exe'), str(self.app.parent / 'B-test' / 'BTPS.exe'), '[WinError 5] Access is denied')])
-        with mock.patch.object(U.shutil, 'copytree', side_effect=problem):
-            with self.assertRaises(shutil.Error) as result:
+    def test_archive_failure_preserves_original_database_and_program(self):
+        problem = OSError(5, 'Access is denied', str(self.app / 'BTPS.exe'))
+        with mock.patch.object(U, 'create_application_archive', side_effect=problem):
+            with self.assertRaises(OSError) as result:
                 self.prepare()
         report = U.failure_report(result.exception)
         self.assertEqual(report['stage'], 'application-backup')
-        self.assertEqual(report['reason'], 'APPLICATION_BACKUP_COPY_FAILED')
-        self.assertEqual(report['problemCount'], 1)
-        self.assertIn('Access is denied', report['details'][0]['error'])
+        self.assertEqual(report['reason'], 'OSError')
+        self.assertIn('Access is denied', report['message'])
         self.assertEqual(U.digest(self.db), self.before)
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
 
@@ -190,8 +195,22 @@ class UpgradeTests(unittest.TestCase):
         self.assertFalse(outcome['databaseRestored'])
         self.assertEqual(U.digest(self.db), committed)
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
+        self.assertTrue((self.app / 'empty-uploads').is_dir())
         self.assertEqual(len(list(self.app.parent.glob('.BTPS-failed-new-*'))), 1)
         self.assertTrue(pathlib.Path(receipt['databaseBackup']).is_file())
+
+    def test_corrupt_archive_refuses_rollback_before_moving_current_program(self):
+        receipt = self.prepare()
+        (self.app / 'BTPS.exe').write_bytes(b'partially-installed-new')
+        current = U.tree_manifest(self.app)
+        archive = pathlib.Path(receipt['appBackup'])
+        with open(archive, 'r+b') as stream:
+            stream.seek(0)
+            stream.write(b'corrupt archive header')
+        with self.assertRaisesRegex(RuntimeError, 'BACKUP_BYTES_CHANGED'):
+            U.restore_application(receipt, self.catalog, lambda: [])
+        self.assertEqual(U.tree_manifest(self.app), current)
+        self.assertFalse(list(self.app.parent.glob('.BTPS-failed-new-*')))
 
     def test_schema_drift_refuses_before_backup(self):
         with closing(sqlite3.connect(self.db)) as c, c:

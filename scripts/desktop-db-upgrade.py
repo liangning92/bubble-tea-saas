@@ -16,6 +16,7 @@ import tempfile
 import traceback
 import urllib.parse
 import uuid
+import zipfile
 
 LOCAL_COLUMNS = ('pickupNumber', 'requestFingerprint', 'requestReceipt')
 COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
@@ -169,10 +170,86 @@ def tree_manifest(root):
 
 
 def application_backup_path(old_app, nonce):
-    # Keep the backup beside the installed app for atomic rollback. The old
-    # descriptive name pushed Prisma cache paths past Windows MAX_PATH on
-    # machines where LongPathsEnabled is disabled.
-    return old_app.parent / ('B-' + uuid.UUID(nonce).hex[:16])
+    # A single short archive avoids copying, opening and fsyncing thousands of
+    # deep Prisma assets at the old application's full path.
+    return old_app.parent / ('B-' + uuid.UUID(nonce).hex[:16] + '.zip')
+
+
+def application_archive_name(name):
+    if not name or '\\' in name or ':' in name or name.startswith('/'):
+        fail('UNSAFE_APPLICATION_ARCHIVE_PATH')
+    parts = pathlib.PurePosixPath(name.rstrip('/')).parts
+    if not parts or any(part in ('.', '..') for part in parts):
+        fail('UNSAFE_APPLICATION_ARCHIVE_PATH')
+    return parts
+
+
+def create_application_archive(root, archive):
+    root = regular(root)
+    files = {}
+    with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_STORED, allowZip64=True) as backup:
+        def visit(folder):
+            for child in sorted(folder.iterdir()):
+                regular(child)
+                relative = child.relative_to(root).as_posix()
+                application_archive_name(relative)
+                if child.is_dir():
+                    backup.write(child, relative + '/')
+                    visit(child)
+                elif child.is_file():
+                    before = child.stat()
+                    info = zipfile.ZipInfo.from_file(child, relative)
+                    info.compress_type = zipfile.ZIP_STORED
+                    h = hashlib.sha256()
+                    with open(child, 'rb') as source, backup.open(info, 'w', force_zip64=True) as target:
+                        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                            target.write(chunk)
+                            h.update(chunk)
+                        after = os.fstat(source.fileno())
+                    final = child.stat()
+                    if any(getattr(before, key) != getattr(after, key) or getattr(before, key) != getattr(final, key)
+                           for key in ('st_size', 'st_mtime_ns', 'st_ctime_ns', 'st_ino')):
+                        fail('APPLICATION_CHANGED_DURING_BACKUP')
+                    files[relative] = h.hexdigest()
+                else:
+                    fail('UNSUPPORTED_APPLICATION_FILE')
+        visit(root)
+    if 'BTPS.exe' not in files:
+        fail('OLD_APPLICATION_EXECUTABLE_MISSING')
+    with open(archive, 'r+b') as stream:
+        os.fsync(stream.fileno())
+    return files
+
+
+def archive_manifest(archive):
+    files = {}
+    with zipfile.ZipFile(regular(archive)) as backup:
+        for info in backup.infolist():
+            application_archive_name(info.filename)
+            if info.is_dir():
+                continue
+            if info.filename in files:
+                fail('DUPLICATE_APPLICATION_ARCHIVE_FILE')
+            h = hashlib.sha256()
+            with backup.open(info) as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                    h.update(chunk)
+            files[info.filename] = h.hexdigest()
+    return files
+
+
+def extract_application_archive(archive, destination):
+    destination.mkdir(parents=False, exist_ok=False)
+    with zipfile.ZipFile(regular(archive)) as backup:
+        for info in backup.infolist():
+            parts = application_archive_name(info.filename)
+            target = destination.joinpath(*parts)
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with backup.open(info) as source, open(target, 'xb') as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
 
 
 def durable_json(path, data):
@@ -355,20 +432,17 @@ def prepare(db, old_app, catalog, processes, registry=None):
             integrity(snapshot)
             if fingerprints(snapshot, columns) != history:
                 fail('SNAPSHOT_HISTORY_MISMATCH')
-        upgrade_stage('application-manifest')
-        app_files = tree_manifest(old_app)
         app_backup = application_backup_path(old_app, nonce)
         upgrade_stage('application-backup')
-        shutil.copytree(old_app, app_backup, copy_function=shutil.copy2)
-        if tree_manifest(app_backup) != app_files or tree_manifest(old_app) != app_files:
+        app_files = create_application_archive(old_app, app_backup)
+        upgrade_stage('application-backup-verification')
+        if archive_manifest(app_backup) != app_files:
             fail('APPLICATION_BACKUP_VERIFICATION_FAILED')
-        for relative in app_files:
-            with open(app_backup / relative, 'r+b') as stream:
-                os.fsync(stream.fileno())
+        app_backup_sha256 = digest(app_backup)
         receipt_path = backup_root / 'receipt.json'
-        receipt = {'format': 1, 'sourceSha': catalog['sourceSha'], 'changes': CHANGES, 'nonce': nonce,
+        receipt = {'format': 2, 'sourceSha': catalog['sourceSha'], 'changes': CHANGES, 'nonce': nonce,
                    'database': str(db), 'databaseBackup': str(before_db), 'databaseBackupSha256': digest(before_db),
-                   'oldApp': str(old_app), 'appBackup': str(app_backup), 'appFiles': app_files,
+                   'oldApp': str(old_app), 'appBackup': str(app_backup), 'appBackupSha256': app_backup_sha256, 'appFiles': app_files,
                    'columnsBefore': columns, 'historyBefore': history, 'registry': registry or [],
                    'receiptPath': str(receipt_path), 'status': 'backups-verified'}
         durable_json(receipt_path, receipt)
@@ -412,7 +486,7 @@ def prepare(db, old_app, catalog, processes, registry=None):
 
 def verify_receipt(receipt, catalog, processes):
     require_stopped(processes)
-    if receipt.get('format') != 1 or receipt.get('sourceSha') != catalog['sourceSha'] or receipt.get('changes') != CHANGES or receipt.get('status') != 'prepared':
+    if receipt.get('format') != 2 or receipt.get('sourceSha') != catalog['sourceSha'] or receipt.get('changes') != CHANGES or receipt.get('status') != 'prepared':
         fail('UNVERIFIED_UPGRADE_RECEIPT')
     db, old_app = regular(receipt['database']), regular(receipt['oldApp'])
     nonce = str(uuid.UUID(receipt['nonce']))
@@ -422,7 +496,7 @@ def verify_receipt(receipt, catalog, processes):
         fail('BACKUP_PATH_MISMATCH')
     regular(expected_db_backup)
     regular(expected_app_backup)
-    if digest(expected_db_backup) != receipt['databaseBackupSha256'] or tree_manifest(expected_app_backup) != receipt['appFiles']:
+    if digest(expected_db_backup) != receipt['databaseBackupSha256'] or digest(expected_app_backup) != receipt['appBackupSha256']:
         fail('BACKUP_BYTES_CHANGED')
     with closing(connection(expected_db_backup)) as backup:
         integrity(backup)
@@ -440,12 +514,22 @@ def restore_application(receipt, catalog, processes):
     # Never restores or overwrites the database. Additive committed schema remains.
     verify_receipt(receipt, catalog, processes)
     old_app, app_backup = regular(receipt['oldApp']), regular(receipt['appBackup'])
+    # Keep the temporary extraction name shorter than BTPS itself so even the
+    # deepest installed asset never gains path length during rollback.
+    extracted = old_app.parent / ('R' + uuid.UUID(receipt['nonce']).hex[:2])
+    extract_application_archive(app_backup, extracted)
+    if tree_manifest(extracted) != receipt['appFiles']:
+        fail('APPLICATION_ROLLBACK_VERIFICATION_FAILED')
+    failed_new = None
     if old_app.exists():
         failed_new = old_app.parent / ('.BTPS-failed-new-' + str(uuid.uuid4()))
         os.rename(old_app, failed_new)
-    os.rename(app_backup, old_app)  # Same-volume atomic rollback; no extra disk space.
-    if tree_manifest(old_app) != receipt['appFiles']:
-        fail('APPLICATION_ROLLBACK_VERIFICATION_FAILED')
+    try:
+        os.rename(extracted, old_app)
+    except Exception:
+        if failed_new is not None:
+            os.rename(failed_new, old_app)
+        raise
     if sys.platform == 'win32':
         import winreg
         for item in receipt['registry']:
