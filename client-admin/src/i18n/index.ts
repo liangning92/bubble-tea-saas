@@ -463,6 +463,7 @@ const resources = {
         }
       },
       "dashboard": {
+        "shiftDetailsHint": "Lihat pesanan, pendapatan, peringatan, dan pengeluaran per shift",
         "title": "Dashboard",
         "todayOrders": "Pesanan Hari Ini",
         "todayRevenue": "Pendapatan Hari Ini",
@@ -4745,6 +4746,7 @@ const resources = {
         }
       },
       "dashboard": {
+        "shiftDetailsHint": "View orders, revenue, alerts, and expenses by shift",
         "title": "Dashboard",
         "todayOrders": "Today's Orders",
         "todayRevenue": "Today's Revenue",
@@ -8384,6 +8386,7 @@ const resources = {
         "support": "在线支持"
       },
       "dashboard": {
+        "shiftDetailsHint": "查看班次订单、营收、预警和费用",
         "title": "仪表盘",
         "cost": "成本",
         "todayOrders": "今日订单",

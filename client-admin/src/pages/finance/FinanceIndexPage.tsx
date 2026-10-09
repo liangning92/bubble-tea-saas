@@ -73,7 +73,6 @@ export function FinanceIndexPage() {
   // Build tabs based on settings
   const tabs = [
     { key: 'revenue', label: t('finance.revenue'), path: 'revenue', show: true },
-    { key: 'shifts', label: t('shiftReview.title'), path: 'shifts', show: true },
     { key: 'accounts', label: t('finance.chartOfAccounts'), path: 'accounts', show: settings?.enableAccounts ?? true },
     { key: 'budgets', label: t('finance.budget'), path: 'budgets', show: settings?.enableBudget ?? true },
     { key: 'orders', label: t('finance.orders'), path: 'orders', show: true },

@@ -35,7 +35,7 @@ export const finiteNumber = (value: unknown) => typeof value === 'number' && Num
 export function validDashboard(value: any): boolean {
   return !!value && validInstant(value.timestamp) &&
     ['orders','revenue','averageOrder','cost','profit'].every(k=>finiteNumber(value.today?.[k])) &&
-    ['orders','revenue','cost','profit','goalProgress'].every(k=>finiteNumber(value.thisMonth?.[k])) &&
+    ['orders','revenue','cost','profit'].every(k=>finiteNumber(value.thisMonth?.[k])) &&
     ['newMembers','ratio'].every(k=>finiteNumber(value.member?.[k])) &&
     ['checkedIn','total','pendingLeave'].every(k=>finiteNumber(value.staff?.[k])) &&
     Array.isArray(value.topProducts) && value.topProducts.every((row:any)=>typeof row?.id==='string' && typeof row.name==='string' && finiteNumber(row.quantity)) &&
