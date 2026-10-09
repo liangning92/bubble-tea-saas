@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (空=自动日期, 例: 2024.07.14)'
+        description: 'Version (空=自动生成，例: 2026.10.293)'
         required: false
         default: ''
 
@@ -46,12 +46,19 @@ jobs:
 
       - name: Set version
         id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           $year = Get-Date -Format 'yyyy'
           $month = [int](Get-Date -Format 'MM')
           $day = Get-Date -Format 'dd'
           $runNum = $env:GITHUB_RUN_NUMBER
           $version = "$year.$month.$runNum"
+          $requestedVersion = $env:REQUESTED_VERSION
+          if ($requestedVersion) {
+            if ($requestedVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be major.minor.patch" }
+            $version = $requestedVersion
+          }
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
           echo "VERSION_STR=$year.$month.$day.$runNum" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
 
@@ -75,6 +82,14 @@ jobs:
           cd server
           npm install --prefer-offline=false
           Set-Location ..
+
+      - name: Configure desktop SQLite database
+        run: |
+          $schemaPath = 'server/prisma/schema.prisma'
+          $schema = Get-Content $schemaPath -Raw
+          if ($schema -notmatch 'provider\s*=\s*"postgresql"') { throw "Expected PostgreSQL source schema" }
+          $schema = $schema -replace 'provider\s*=\s*"postgresql"', 'provider = "sqlite"'
+          Set-Content $schemaPath $schema -Encoding utf8
 
       - name: Generate Prisma client
         run: |
@@ -120,6 +135,43 @@ jobs:
           DEBUG: electron-builder
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
 
+      - name: Smoke test packaged local API
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $appPath = (Resolve-Path 'release/win-unpacked/BTPS.exe').Path
+          $resources = (Resolve-Path 'release/win-unpacked/resources/app.asar.unpacked').Path
+          $dbPath = Join-Path $env:RUNNER_TEMP 'pos-smoke.db'
+          Copy-Item (Join-Path $resources 'server/prisma/seed.db') $dbPath
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          $env:NODE_ENV = 'production'
+          $env:JWT_SECRET = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+          $env:DATABASE_URL = "file:$($dbPath.Replace('\', '/'))"
+          $env:PORT = '17072'
+          $env:CORS_ORIGIN = 'null,http://localhost:6063'
+          $env:NODE_PATH = "$(Join-Path $resources 'server/node_modules');$(Join-Path $resources 'node_modules')"
+          $entry = Join-Path $resources 'server/dist/index.js'
+          $stdout = Join-Path $env:RUNNER_TEMP 'pos-api-smoke.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'pos-api-smoke-error.log'
+          $api = Start-Process $appPath -ArgumentList "`"$entry`"" -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $healthy = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 2
+              if ($api.HasExited) { break }
+              try {
+                $health = Invoke-RestMethod 'http://127.0.0.1:17072/health' -TimeoutSec 2
+                if ($health.status -eq 'ok') { $healthy = $true; break }
+              } catch { }
+            }
+            if (!$healthy) {
+              Get-Content $stdout, $stderr -ErrorAction SilentlyContinue
+              throw 'Packaged POS API failed startup validation'
+            }
+            Write-Host 'Packaged POS API startup passed'
+          } finally {
+            if (!$api.HasExited) { Stop-Process -Id $api.Id -Force }
+          }
+
       - name: List ASAR contents (debug)
         run: |
           $asar = Get-ChildItem -Path release -Filter "*.asar" -Recurse | Select-Object -First 1
@@ -150,70 +202,34 @@ jobs:
           name: BTPS-build-dist
           path: release/
 
-      - name: Download latest tag info
-        id: latest_tag
-        run: |
-          $version = "${{ needs.build.outputs.version }}"
-          echo "TAG=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-
-      - name: Create GitHub Release
+      - name: Validate and publish complete update
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          $version = "${{ needs.build.outputs.version }}"
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_VERSION
           $tag = "v$version"
-          
-          # Delete existing release for this tag if it exists
-          $existing = gh release view "$tag" --repo "$env:GITHUB_REPOSITORY" 2>$null
-          if ($existing) {
-            Write-Host "Deleting existing release $tag"
-            gh release delete "$tag" --yes --repo "$env:GITHUB_REPOSITORY" 2>$null
-          }
-          
-          # Create release
-          gh release create "$tag" `
-            --title "BTPS $version" `
-            --notes "BTPS Version $version" `
-            --repo "$env:GITHUB_REPOSITORY"
-
-      - name: Upload exe asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $version = "${{ needs.build.outputs.version }}"
           $exePath = "release/BTPS-$version-Windows-x64.exe"
-          $tag = "v$version"
-          
-          Write-Host "Uploading $exePath to release $tag"
-          gh release upload "$tag" "$exePath" `
-            --repo "$env:GITHUB_REPOSITORY" `
-            --clobber
-
-      - name: Upload blockmap asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $version = "${{ needs.build.outputs.version }}"
-          $blockmapPath = "release/BTPS-$version-Windows-x64.exe.blockmap"
-          $tag = "v$version"
-          
-          Write-Host "Uploading $blockmapPath to release $tag"
-          if (Test-Path "$blockmapPath") {
-            gh release upload "$tag" "$blockmapPath" `
-              --repo "$env:GITHUB_REPOSITORY" `
-              --clobber
-          }
-
-      - name: Upload latest.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tag = "v${{ needs.build.outputs.version }}"
+          $blockmapPath = "$exePath.blockmap"
           $latestYml = "release/latest.yml"
-          
-          Write-Host "Uploading $latestYml to release $tag"
-          if (Test-Path "$latestYml") {
-            gh release upload "$tag" "$latestYml" `
-              --repo "$env:GITHUB_REPOSITORY" `
-              --clobber
+          foreach ($file in @($exePath, $blockmapPath, $latestYml)) {
+            if (!(Test-Path $file) -or (Get-Item $file).Length -eq 0) { throw "Missing update artifact: $file" }
           }
+          $manifest = Get-Content $latestYml -Raw
+          if ($manifest -notmatch "(?m)^version: $([regex]::Escape($version))\s*$") { throw "Update version mismatch" }
+          if (!$manifest.Contains("BTPS-$version-Windows-x64.exe")) { throw "Update installer mismatch" }
+          $actualHash = [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.IO.File]::ReadAllBytes((Resolve-Path $exePath))))
+          if (!$manifest.Contains($actualHash)) { throw "Update installer checksum mismatch" }
+          $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (!(($existing | ConvertFrom-Json).isDraft)) { throw "Published release already exists: $tag" }
+          } else {
+            gh release create $tag --draft --target $env:RELEASE_SHA --title "BTPS $version" --notes "POS source repairs, product analysis and automatic update notifications." --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Release creation failed" }
+          }
+          gh release upload $tag $exePath $blockmapPath $latestYml --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw "Update artifact upload failed" }
+          gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }

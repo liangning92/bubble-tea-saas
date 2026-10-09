@@ -510,4 +510,1024 @@ const SortableBlock: React.FC<{
   onDuplicate: () => void
 }> = ({ block, isSelected, onSelect, onDelete, onDuplicate }) => {
   const { t } = useTranslation()
-  const def = 
+  const def = getBlockDef(t, block.type)
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: block.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 p-3 bg-white border-2 rounded-lg cursor-pointer transition-colors ${
+        isSelected ? 'border-primary shadow-md' : 'border-gray-200 hover:border-gray-300'
+      } ${!block.enabled ? 'opacity-50' : ''}`}
+      onClick={onSelect}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+      >
+        <GripVertical size={16} />
+      </button>
+
+      <span className="text-lg">{def.icon}</span>
+      <span className="flex-1 font-medium text-sm">{def.label}</span>
+
+      {!block.enabled && (
+        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{t('posSettings.blockDisabled')}</span>
+      )}
+
+      <div className="flex items-center gap-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDuplicate()
+          }}
+          className="p-1 text-gray-400 hover:text-gray-600 rounded"
+          title={t('posSettings.blockDuplicate')}
+        >
+          <Copy size={14} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+          className="p-1 text-gray-400 hover:text-red-500 rounded"
+          title={t('posSettings.blockDelete')}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ============ BLOCK PROPERTIES PANEL ============
+
+const BlockPropertiesPanel: React.FC<{
+  block: ReceiptBlock
+  defaultLogo?: string
+  defaultQrCode?: string
+  onUpdate: (block: ReceiptBlock) => void
+  onClose: () => void
+}> = ({ block, defaultLogo, defaultQrCode, onUpdate, onClose }) => {
+  const { t } = useTranslation()
+  const def = getBlockDef(t, block.type)
+
+  const updateConfig = (key: string, value: any) => {
+    onUpdate({
+      ...block,
+      config: { ...block.config, [key]: value },
+    })
+  }
+
+  const updateStyle = (key: string, value: any) => {
+    onUpdate({
+      ...block,
+      style: { ...block.style, [key]: value },
+    })
+  }
+
+  return (
+    <div className="bg-white border rounded-lg p-4 h-fit">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{def.icon}</span>
+          <h3 className="font-semibold">{def.label} {t('posSettings.blockProperties')}</h3>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          ✕
+        </button>
+      </div>
+
+      {/* Common style properties */}
+      <div className="space-y-4 border-b pb-4 mb-4">
+        <h4 className="text-sm font-medium text-gray-700">{t('posSettings.blockStyle')}</h4>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm">{t('posSettings.blockBold')}</span>
+          <button
+            onClick={() => updateStyle('bold', !block.style.bold)}
+            className={`w-10 h-6 rounded-full transition-colors relative ${
+              block.style.bold ? 'bg-primary' : 'bg-gray-300'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                block.style.bold ? 'translate-x-[22px]' : 'translate-x-[2px]'
+              }`}
+            />
+          </button>
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600">{t('posSettings.blockAlignment')}</label>
+          <div className="flex gap-2 mt-1">
+            {(['left', 'center', 'right'] as const).map((align) => (
+              <button
+                key={align}
+                onClick={() => updateStyle('align', align)}
+                className={`flex-1 py-1.5 text-xs rounded border ${
+                  block.style.align === align
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                {align === 'left' ? t('posSettings.blockAlignLeft') : align === 'center' ? t('posSettings.blockAlignCenter') : t('posSettings.blockAlignRight')}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600">{t('posSettings.blockFontSize')}</label>
+          <div className="flex gap-2 mt-1">
+            {(['small', 'normal', 'large'] as const).map((size) => (
+              <button
+                key={size}
+                onClick={() => updateStyle('fontSize', size)}
+                className={`flex-1 py-1.5 text-xs rounded border ${
+                  block.style.fontSize === size
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                {size === 'small' ? t('posSettings.blockFontSmall') : size === 'normal' ? t('posSettings.blockFontNormal') : t('posSettings.blockFontLarge')}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Block-specific properties */}
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium text-gray-700">{t('posSettings.blockSettings')}</h4>
+
+        {/* Header */}
+        {block.type === 'header' && (
+          <div>
+            <label className="text-sm text-gray-600">{t('posSettings.blockText')}</label>
+            <input
+              type="text"
+              value={block.config.text || ''}
+              onChange={(e) => updateConfig('text', e.target.value)}
+              className="input mt-1 w-full"
+              placeholder={t('posSettings.receiptStoreNamePlaceholder')}
+            />
+          </div>
+        )}
+
+        {/* Logo */}
+        {block.type === 'logo' && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockWidthPx', '宽度 (px)')}</label>
+              <input
+                type="number"
+                value={block.config.width || 120}
+                onChange={(e) => updateConfig('width', parseInt(e.target.value) || 120)}
+                className="input mt-1 w-full"
+              />
+            </div>
+
+            {/* 单一权威源提示与当前生效图片展示 */}
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
+                <CheckCircle size={13} className="text-blue-600" />
+                <span>{t('posSettings.usingGlobalLogo', '已自动引用全局小票 Logo')}</span>
+              </div>
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                {t('posSettings.receiptLogoSingleSourceNotice', '模板自动继承小票设置中上传的店铺 Logo。如需更换或上传新图片，请统一在小票设置主页面中维护。')}
+              </p>
+              {(block.config.url || defaultLogo) ? (
+                <div className="flex items-center gap-2.5 p-2 bg-white rounded border border-blue-200">
+                  <div className="w-12 h-10 bg-gray-50 rounded border flex items-center justify-center p-1 overflow-hidden shrink-0">
+                    <img
+                      src={block.config.url || defaultLogo}
+                      alt="Current Logo"
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => { (e.target as any).style.display = 'none' }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-mono text-gray-600 truncate">{block.config.url || defaultLogo}</p>
+                    <span className="text-[10px] text-emerald-600 font-medium">✓ {t('posSettings.logoInUse', '当前使用中')}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-700">
+                  {t('posSettings.noGlobalLogoConfigured', '小票设置中尚未配置 Logo，打印时将使用店铺名称文字。')}
+                </div>
+              )}
+            </div>
+
+            {/* 自定义 URL（可选覆盖） */}
+            <div>
+              <label className="text-xs text-gray-500">{t('posSettings.customLogoUrlOverride', '自定义图片 URL')}</label>
+              <input
+                type="text"
+                value={block.config.url || ''}
+                onChange={(e) => updateConfig('url', e.target.value)}
+                placeholder={defaultLogo || 'https://...'}
+                className="input mt-1 w-full text-xs"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Store Info */}
+        {block.type === 'storeInfo' && (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">{t('posSettings.blockShowPhone')}</span>
+              <button
+                onClick={() => updateConfig('showPhone', !block.config.showPhone)}
+                className={`w-10 h-6 rounded-full transition-colors relative ${
+                  block.config.showPhone ? 'bg-primary' : 'bg-gray-300'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                    block.config.showPhone ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">{t('posSettings.blockShowAddress')}</span>
+              <button
+                onClick={() => updateConfig('showAddress', !block.config.showAddress)}
+                className={`w-10 h-6 rounded-full transition-colors relative ${
+                  block.config.showAddress ? 'bg-primary' : 'bg-gray-300'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                    block.config.showAddress ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                  }`}
+                />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Order Info */}
+        {block.type === 'orderInfo' && (
+          <>
+            {(['showPickupNumber', 'showOrderNo', 'showDate', 'showTime', 'showCashier', 'showCustomer', 'showChannel'] as const).map((key) => {
+              const labels: Record<string, string> = {
+                showPickupNumber: t('posSettings.blockShowPickupNumber', '显示取餐号 (突出)'),
+                showOrderNo: t('posSettings.blockShowOrderNo', '显示订单号'),
+                showDate: t('posSettings.blockShowDate', '显示日期'),
+                showTime: t('posSettings.blockShowTime', '显示时间'),
+                showCashier: t('posSettings.blockShowCashier', '显示收银员'),
+                showCustomer: t('posSettings.blockShowCustomer', '显示顾客'),
+                showChannel: t('posSettings.blockShowChannel', '显示渠道'),
+              }
+              const isEnabled = block.config[key] !== undefined
+                ? !!block.config[key]
+                : (key === 'showPickupNumber' || key === 'showOrderNo' ? true : !!block.config[key])
+              return (
+              <div key={key} className="flex items-center justify-between">
+                <span className="text-sm">{labels[key]}</span>
+                <button
+                  onClick={() => updateConfig(key, !isEnabled)}
+                  className={`w-10 h-6 rounded-full transition-colors relative ${
+                    isEnabled ? 'bg-primary' : 'bg-gray-300'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                      isEnabled ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                    }`}
+                  />
+                </button>
+              </div>
+            )})}
+          </>
+        )}
+
+        {/* Items */}
+        {block.type === 'items' && (
+          <>
+            {(['showAddon', 'showNote', 'showSugarIce'] as const).map((key) => {
+              const labels: Record<string, string> = {
+                showAddon: t('posSettings.receiptSampleAddon'),
+                showNote: t('posSettings.blockNote') || 'Note',
+                showSugarIce: t('posSettings.blockSugarIce') || 'Sugar/Ice',
+              }
+              return (
+              <div key={key} className="flex items-center justify-between">
+                <span className="text-sm">{labels[key]}</span>
+                <button
+                  onClick={() => updateConfig(key, !block.config[key])}
+                  className={`w-10 h-6 rounded-full transition-colors relative ${
+                    block.config[key] ? 'bg-primary' : 'bg-gray-300'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                      block.config[key] ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                    }`}
+                  />
+                </button>
+              </div>
+            )})}
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockItemFormat')}</label>
+              <select
+                value={block.config.itemFormat || 'standard'}
+                onChange={(e) => updateConfig('itemFormat', e.target.value)}
+                className="input mt-1 w-full"
+              >
+                <option value="standard">{t('posSettings.formatStandard')}</option>
+                <option value="compact">{t('posSettings.formatCompact')}</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Tax */}
+        {block.type === 'tax' && (
+          <>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockLabel')}</label>
+              <input
+                type="text"
+                value={block.config.label || ''}
+                onChange={(e) => updateConfig('label', e.target.value)}
+                className="input mt-1 w-full"
+                placeholder={t('posSettings.receiptTaxPlaceholder')}
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockRatePercent')}</label>
+              <input
+                type="number"
+                value={block.config.rate || 11}
+                onChange={(e) => updateConfig('rate', parseFloat(e.target.value))}
+                className="input mt-1 w-full"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Total & Discount */}
+        {block.type === 'total' && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.receiptTotalLabel', '总计标签')}</label>
+              <input
+                type="text"
+                value={block.config.totalLabel || ''}
+                onChange={(e) => updateConfig('totalLabel', e.target.value)}
+                className="input mt-1 w-full"
+                placeholder={t('posSettings.receiptTotal', 'TOTAL')}
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.discountLabel', '优惠折扣自定义标签')}</label>
+              <input
+                type="text"
+                value={block.config.discountLabel || ''}
+                onChange={(e) => updateConfig('discountLabel', e.target.value)}
+                className="input mt-1 w-full"
+                placeholder="Diskon / 优惠"
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div>
+                <span className="text-xs font-semibold text-gray-800 block">
+                  {t('posSettings.showPromotionDetail', '打印营销活动名称与明细')}
+                </span>
+                <span className="text-[11px] text-gray-500">
+                  {t('posSettings.showPromotionDetailHint', '在小票总计上方打印活动名称（如：第二杯半价、买一送一）与减免金额')}
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={block.config.showDiscountDetail !== false}
+                onChange={(e) => updateConfig('showDiscountDetail', e.target.checked)}
+                className="w-4 h-4 rounded text-primary focus:ring-primary"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* QR Code */}
+        {block.type === 'qrCode' && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockSizePx', '尺寸 (px)')}</label>
+              <input
+                type="number"
+                value={block.config.size || 80}
+                onChange={(e) => updateConfig('size', parseInt(e.target.value) || 80)}
+                className="input mt-1 w-full"
+              />
+            </div>
+
+            {/* 单一权威源提示与当前生效二维码展示 */}
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
+                <CheckCircle size={13} className="text-blue-600" />
+                <span>{t('posSettings.usingGlobalQr', '已自动引用全局小票二维码')}</span>
+              </div>
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                {t('posSettings.receiptQrSingleSourceNotice', '模板自动继承小票设置中上传的二维码。如需更换二维码图片，请统一在小票设置主页面中维护。')}
+              </p>
+              {(block.config.url || defaultQrCode) ? (
+                <div className="flex items-center gap-2.5 p-2 bg-white rounded border border-blue-200">
+                  <div className="w-12 h-12 bg-gray-50 rounded border flex items-center justify-center p-1 overflow-hidden shrink-0">
+                    <img
+                      src={block.config.url || defaultQrCode}
+                      alt="Current QR"
+                      className="max-w-full max-h-full object-contain"
+                      onError={(e) => { (e.target as any).style.display = 'none' }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-mono text-gray-600 truncate">{block.config.url || defaultQrCode}</p>
+                    <span className="text-[10px] text-emerald-600 font-medium">✓ {t('posSettings.qrInUse', '当前使用中')}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-700">
+                  {t('posSettings.noGlobalQrConfigured', '小票设置中尚未配置底部二维码。')}
+                </div>
+              )}
+            </div>
+
+            {/* 自定义 URL / 内容输入 */}
+            <div>
+              <label className="text-xs text-gray-500">{t('posSettings.customQrUrlOverride', '自定义二维码图片/链接')}</label>
+              <input
+                type="text"
+                value={block.config.url || ''}
+                onChange={(e) => updateConfig('url', e.target.value)}
+                placeholder={defaultQrCode || 'https://...'}
+                className="input mt-1 w-full text-xs"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Barcode */}
+        {block.type === 'barcode' && (
+          <>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockBarcodeType')}</label>
+              <select
+                value={block.config.barcodeType || 'code128'}
+                onChange={(e) => updateConfig('barcodeType', e.target.value)}
+                className="input mt-1 w-full"
+              >
+                <option value="code128">{t('posSettings.barcodeCode128')}</option>
+                <option value="code39">{t('posSettings.barcodeCode39')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockHeightPx')}</label>
+              <input
+                type="number"
+                value={block.config.height || 40}
+                onChange={(e) => updateConfig('height', parseInt(e.target.value))}
+                className="input mt-1 w-full"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Footer */}
+        {block.type === 'footer' && (
+          <>
+            <div>
+              <label className="text-sm text-gray-600">{t('posSettings.blockFooterText')}</label>
+              <input
+                type="text"
+                value={block.config.footerText || ''}
+                onChange={(e) => updateConfig('footerText', e.target.value)}
+                className="input mt-1 w-full"
+                placeholder={t('posSettings.receiptThankYouPlaceholder')}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">{t('posSettings.blockShowDivider')}</span>
+              <button
+                onClick={() => updateConfig('showDivider', !block.config.showDivider)}
+                className={`w-10 h-6 rounded-full transition-colors relative ${
+                  block.config.showDivider ? 'bg-primary' : 'bg-gray-300'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                    block.config.showDivider ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                  }`}
+                />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Divider */}
+        {block.type === 'divider' && (
+          <div>
+            <label className="text-sm text-gray-600">{t('posSettings.blockStyle')}</label>
+            <select
+              value={block.config.dividerStyle || 'line'}
+              onChange={(e) => updateConfig('dividerStyle', e.target.value)}
+              className="input mt-1 w-full"
+            >
+              <option value="line">{t('posSettings.dividerSolid')}</option>
+              <option value="dashed">{t('posSettings.dividerDashed')}</option>
+              <option value="space">{t('posSettings.dividerSpace')}</option>
+            </select>
+          </div>
+        )}
+
+        {/* Custom Text */}
+        {block.type === 'customText' && (
+          <div>
+            <label className="text-sm text-gray-600">{t('posSettings.blockCustomText')}</label>
+            <textarea
+              value={block.config.customText || ''}
+              onChange={(e) => updateConfig('customText', e.target.value)}
+              className="input mt-1 w-full"
+              rows={3}
+              placeholder={t('posSettings.receiptCustomTextPlaceholder')}
+            />
+          </div>
+        )}
+
+        {/* Enabled toggle */}
+        <div className="flex items-center justify-between pt-2 border-t">
+          <span className="text-sm font-medium">{t('posSettings.blockEnabled')}</span>
+          <button
+            onClick={() => onUpdate({ ...block, enabled: !block.enabled })}
+            className={`w-10 h-6 rounded-full transition-colors relative ${
+              block.enabled ? 'bg-primary' : 'bg-gray-300'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full shadow absolute top-[2px] transition-transform ${
+                block.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============ PALETTE ITEM ============
+
+const PaletteItem: React.FC<{ type: BlockType; onAdd: () => void }> = ({ type, onAdd }) => {
+  const { t } = useTranslation()
+  const def = getBlockDef(t, type)
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
+    id: `palette-${type}`,
+    data: { type: 'palette', blockType: type },
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing hover:bg-gray-50 hover:border-gray-300 transition-colors"
+      onClick={onAdd}
+    >
+      <span className="text-base">{def.icon}</span>
+      <span className="text-xs font-medium">{def.label}</span>
+    </div>
+  )
+}
+
+// ============ MAIN EDITOR ============
+
+interface ReceiptTemplateEditorProps {
+  storeId: string
+  defaultLogo?: string
+  defaultQrCode?: string
+  onSave?: () => void
+}
+
+export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ storeId, defaultLogo, defaultQrCode, onSave }) => {
+  const { t } = useTranslation()
+
+  const [templates, setTemplates] = useState<any[]>([])
+  const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null)
+  const [templateName, setTemplateName] = useState('New Template')
+  const [blocks, setBlocks] = useState<ReceiptBlock[]>([])
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const [paperSize, setPaperSize] = useState<'58mm' | '80mm'>('80mm')
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  // Load templates on mount
+  useEffect(() => {
+    loadTemplates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loadTemplates = async () => {
+    try {
+      setLoading(true)
+      const res = await ReceiptTemplateApi.list(storeId)
+      const data = res.data.data || []
+      setTemplates(data)
+
+      if (data.length > 0) {
+        const defaultTpl = data.find((t: any) => t.isDefault) || data[0]
+        selectTemplate(defaultTpl)
+      } else {
+        // Create default template
+        const defaultTpl = getDefaultTemplate(storeId)
+        setBlocks(defaultTpl.blocks)
+        setTemplateName(defaultTpl.name)
+        setCurrentTemplateId(null)
+      }
+    } catch (err) {
+      console.error('Failed to load templates:', err)
+      const defaultTpl = getDefaultTemplate(storeId)
+      setBlocks(defaultTpl.blocks)
+      setTemplateName(defaultTpl.name)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const selectTemplate = (template: any) => {
+    setCurrentTemplateId(template.id)
+    setTemplateName(template.name)
+    try {
+      const content = JSON.parse(template.content)
+      setBlocks(content.blocks || [])
+      if (content.paperSize === '58mm' || content.paperSize === '80mm') {
+        setPaperSize(content.paperSize)
+      }
+    } catch {
+      setBlocks([])
+    }
+    setSelectedBlockId(null)
+  }
+
+  const handleAddBlock = (type: BlockType) => {
+    const newBlock = createDefaultBlock(type, blocks.length)
+    setBlocks([...blocks, newBlock])
+    setSelectedBlockId(newBlock.id)
+  }
+
+  const handleDeleteBlock = (id: string) => {
+    setBlocks(blocks.filter((b) => b.id !== id))
+    if (selectedBlockId === id) setSelectedBlockId(null)
+  }
+
+  const handleDuplicateBlock = (id: string) => {
+    const block = blocks.find((b) => b.id === id)
+    if (!block) return
+    const newBlock = {
+      ...block,
+      id: nanoid(),
+      order: blocks.length,
+    }
+    setBlocks([...blocks, newBlock])
+  }
+
+  const handleUpdateBlock = (updated: ReceiptBlock) => {
+    setBlocks(blocks.map((b) => (b.id === updated.id ? updated : b)))
+  }
+
+  const handleNewTemplate = () => {
+    const defaultTpl = getDefaultTemplate(storeId)
+    setCurrentTemplateId(null)
+    setTemplateName(`${t('posSettings.blockCustomText', '自定义模板')} ${templates.length + 1}`)
+    setBlocks(defaultTpl.blocks)
+    setSelectedBlockId(null)
+  }
+
+  const handleSave = async (autoSetDefault = true) => {
+    if (!templateName.trim()) {
+      alert(t('posSettings.templateNameRequired'))
+      return
+    }
+
+    setSaving(true)
+    try {
+      const content = JSON.stringify({ version: 1, paperSize, blocks })
+      let targetId = currentTemplateId
+
+      if (currentTemplateId) {
+        await ReceiptTemplateApi.update(currentTemplateId, {
+          name: templateName,
+          content,
+        })
+      } else {
+        const res = await ReceiptTemplateApi.create({
+          storeId,
+          name: templateName,
+          content,
+          isDefault: templates.length === 0,
+        })
+        targetId = res.data.data.id
+        setCurrentTemplateId(targetId)
+      }
+
+      // 若标记为自动生效或这是唯一的模板，自动同步为默认模板
+      if (targetId && (autoSetDefault || templates.length <= 1)) {
+        await ReceiptTemplateApi.setDefault(targetId).catch(() => {})
+      }
+
+      onSave?.()
+      await loadTemplates()
+      alert('✓ 模板保存成功并已同步设为生效模板！')
+    } catch (err: any) {
+      console.error('Failed to save template:', err)
+      const msg = err?.response?.data?.message || err?.message || ''
+      alert(`${t('posSettings.saveTemplateFailed')}${msg ? ': ' + msg : ''}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSetDefault = async () => {
+    if (!currentTemplateId) {
+      await handleSave(true)
+      return
+    }
+
+    try {
+      await ReceiptTemplateApi.setDefault(currentTemplateId)
+      await loadTemplates()
+      onSave?.()
+      alert('✓ 已成功设为默认生效模板！')
+    } catch (err) {
+      console.error('Failed to set default:', err)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!currentTemplateId) return
+    if (!confirm(t('posSettings.templateDeleteConfirm'))) return
+
+    try {
+      await ReceiptTemplateApi.delete(currentTemplateId)
+      setCurrentTemplateId(null)
+      await loadTemplates()
+      onSave?.()
+    } catch (err) {
+      console.error('Failed to delete:', err)
+    }
+  }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+
+    if (!over) return
+
+    const activeData = active.data.current
+
+    // Dropping from palette
+    if (activeData?.type === 'palette') {
+      const blockType = activeData.blockType as BlockType
+      handleAddBlock(blockType)
+      return
+    }
+
+    // Reordering in canvas
+    if (active.id !== over.id) {
+      const oldIndex = blocks.findIndex((b) => b.id === active.id)
+      const newIndex = blocks.findIndex((b) => b.id === over.id)
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newBlocks = arrayMove(blocks, oldIndex, newIndex).map((b, i) => ({
+          ...b,
+          order: i,
+        }))
+        setBlocks(newBlocks)
+      }
+    }
+  }
+
+  const selectedBlock = blocks.find((b) => b.id === selectedBlockId)
+
+  const activeBlock = activeId ? blocks.find((b) => b.id === activeId) : null
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">{t('common.loading')}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">模板切换:</label>
+            <select
+              value={currentTemplateId || ''}
+              onChange={(e) => {
+                const val = e.target.value
+                if (val === '__new__') {
+                  handleNewTemplate()
+                } else {
+                  const found = templates.find((t) => t.id === val)
+                  if (found) selectTemplate(found)
+                }
+              }}
+              className="input text-xs py-1.5 font-medium max-w-[180px]"
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.isDefault ? '(默认)' : ''}
+                </option>
+              ))}
+              <option value="__new__">+ 新建模板...</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleNewTemplate}
+            className="px-2.5 py-1.5 bg-white border border-gray-300 hover:border-primary text-gray-700 hover:text-primary rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+          >
+            <span>+ 新建</span>
+          </button>
+
+          <div className="h-4 w-px bg-gray-300" />
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">名称:</label>
+            <input
+              type="text"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              className="input text-xs py-1.5 w-40 font-bold"
+              placeholder={t('posSettings.receiptTemplateNamePlaceholder')}
+            />
+            {templates.find((t) => t.id === currentTemplateId)?.isDefault && (
+              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">★ 生效中</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleSave(true)} disabled={saving} className="btn-primary flex items-center gap-2">
+            {saving ? t('posSettings.templateSaving') : t('common.save')}
+          </button>
+          <button onClick={handleSetDefault} className="btn-secondary flex items-center gap-2">
+            <Star size={16} />
+            {t('posSettings.templateSetDefault')}
+          </button>
+          {currentTemplateId && (
+            <button onClick={handleDelete} className="btn-secondary text-red-500 flex items-center gap-2">
+              <Trash2 size={16} />
+              {t('common.delete')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main editor */}
+      <div className="grid grid-cols-4 gap-4">
+        {/* Block Palette */}
+        <div className="bg-gray-50 rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Palette size={14} />
+            {t('posSettings.templateBlocks')}
+          </h3>
+          <div className="space-y-1">
+            {BLOCK_TYPES.map((type) => (
+              <PaletteItem key={type} type={type} onAdd={() => handleAddBlock(type)} />
+            ))}
+          </div>
+        </div>
+
+        {/* Canvas */}
+        <div className="col-span-2 bg-gray-50 rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Settings2 size={14} />
+            {t('posSettings.templateCanvas')}
+          </h3>
+
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2 min-h-[200px]">
+                {blocks.length === 0 ? (
+                  <div className="text-center text-gray-400 py-8 text-sm">
+                    {t('posSettings.clickBlockToAdd')}
+                  </div>
+                ) : (
+                  blocks.map((block) => (
+                    <SortableBlock
+                      key={block.id}
+                      block={block}
+                      isSelected={selectedBlockId === block.id}
+                      onSelect={() => setSelectedBlockId(block.id)}
+                      onDelete={() => handleDeleteBlock(block.id)}
+                      onDuplicate={() => handleDuplicateBlock(block.id)}
+                    />
+                  ))
+                )}
+              </div>
+            </SortableContext>
+
+            <DragOverlay>
+              {activeBlock && (
+                <div className="flex items-center gap-2 p-3 bg-white border-2 border-primary rounded-lg shadow-lg opacity-90">
+                  <span className="text-lg">{BLOCK_DEFINITIONS[activeBlock.type].icon}</span>
+                  <span className="font-medium text-sm">{t(`posSettings.${BLOCK_LABEL_KEYS[activeBlock.type]}`)}</span>
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        </div>
+
+        {/* Properties / Preview */}
+        <div className="space-y-4">
+          {selectedBlock ? (
+            <BlockPropertiesPanel
+              block={selectedBlock}
+              defaultLogo={defaultLogo}
+              defaultQrCode={defaultQrCode}
+              onUpdate={handleUpdateBlock}
+              onClose={() => setSelectedBlockId(null)}
+            />
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <Eye size={14} />
+                {t('posSettings.templatePreview')}
+              </h3>
+              <div className="flex justify-center">
+                <LivePreview blocks={blocks} paperSize={paperSize} defaultLogo={defaultLogo} defaultQrCode={defaultQrCode} />
+              </div>
+              <div className="mt-3">
+                <label className="text-xs text-gray-600">{t('posSettings.paperSize')}</label>
+                <div className="flex gap-2 mt-1">
+                  {(['58mm', '80mm'] as const).map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => setPaperSize(size)}
+                      className={`flex-1 py-1 text-xs rounded border ${
+                        paperSize === size
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

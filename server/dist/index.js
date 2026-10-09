@@ -140,8 +140,8 @@ app.use((0, cors_1.default)({
         if (origin === 'null' || origin === 'file://' || origin.startsWith('file:') || origin.startsWith('app:') || origin.startsWith('vscode-file:')) {
             return callback(null, true);
         }
-        // 3. Explicitly allowed web origins or wildcard
-        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        // 3. Explicitly allowed web origins
+        if (allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
         // 4. Local dev servers

@@ -483,10 +483,10 @@ async function getConsumptionAnalysis(filter) {
         where: {
             inventory: { storeId },
             createdAt: {
-                gte: rangeStart,
-                lte: rangeEnd
+                gte: new Date(startDate),
+                lte: new Date(endDate)
             },
-            reason: { in: ['sold', 'adjust', 'loss', 'expired', 'transfer', 'process'] }
+            reason: { in: ['sold', 'adjust'] }
         },
         include: { inventory: true }
     });
@@ -520,10 +520,10 @@ async function getConsumptionAnalysis(filter) {
         // 判断状态
         let varianceStatus = 'normal';
         if (data.theoretical > 0) {
-            if (variancePercent >= varianceCriticalThreshold) {
+            if (variancePercent > varianceThreshold * 2) {
                 varianceStatus = 'critical';
             }
-            else if (variancePercent >= varianceThreshold) {
+            else if (variancePercent > varianceThreshold) {
                 varianceStatus = 'warning';
             }
         }

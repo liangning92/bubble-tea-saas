@@ -24,7 +24,8 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
     if (!electronAPI) return
 
     // Listen for update status changes
-    electronAPI.onUpdateStatus((newStatus: string, info?: any) => {
+    const offStatus = electronAPI.onUpdateStatus((newStatus: string, info?: any) => {
+      if (newStatus === 'checking') return
       setStatus(newStatus)
       setUpdateInfo(info)
       setError(null)
@@ -40,20 +41,22 @@ export function UpdateNotification({ className = '' }: UpdateNotificationProps) 
     })
 
     // Listen for download progress
-    electronAPI.onUpdateProgress((prog: any) => {
+    const offProgress = electronAPI.onUpdateProgress((prog: any) => {
       setProgress(prog.percent || 0)
     })
 
     // Listen for errors
-    electronAPI.onUpdateError((err: string) => {
+    const offError = electronAPI.onUpdateError((err: string) => {
       setStatus('error')
       setError(err)
       setIsVisible(true)
     })
 
-    // Get current version
-    electronAPI.getAppVersion().then((version: string) => {
-    })
+    return () => {
+      offStatus?.()
+      offProgress?.()
+      offError?.()
+    }
   }, [])
 
   const handleCheckUpdate = async () => {

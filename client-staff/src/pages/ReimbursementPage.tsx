@@ -23,6 +23,24 @@ interface Reimbursement {
   createdAt: string
 }
 
+interface ReimbursementType {
+  id?: string
+  code: string
+  name: string
+  color?: string
+  maxAmount?: number | null
+  requiresReceipt?: boolean
+}
+
+const DEFAULT_REIMBURSEMENT_TYPES: ReimbursementType[] = [
+  { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: 1000000, requiresReceipt: true },
+  { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: 500000, requiresReceipt: true },
+  { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: 300000, requiresReceipt: false },
+  { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: 2000000, requiresReceipt: true },
+  { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: 500000, requiresReceipt: true },
+  { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: 1000000, requiresReceipt: true }
+]
+
 export function ReimbursementPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
@@ -35,14 +53,7 @@ export function ReimbursementPage() {
     cancelled: t('reimbursement.statusCancelled')
   }
 
-  const TYPE_LABELS: Record<string, string> = {
-    transportation: t('reimbursement.typeTransportation'),
-    meals: t('reimbursement.typeMeals'),
-    communication: t('reimbursement.typeCommunication'),
-    medical: t('reimbursement.typeMedical'),
-    other: t('reimbursement.typeOther')
-  }
-
+  const [availableTypes, setAvailableTypes] = useState<ReimbursementType[]>(DEFAULT_REIMBURSEMENT_TYPES)
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showApplyModal, setShowApplyModal] = useState(false)
@@ -50,8 +61,20 @@ export function ReimbursementPage() {
   useEffect(() => {
     if (user?.staffId) {
       loadData()
+      loadTypes()
     }
   }, [user])
+
+  const loadTypes = async () => {
+    try {
+      const res = await staffApi.getReimbursementTypes()
+      if (res.data && res.data.length > 0) {
+        setAvailableTypes(res.data)
+      }
+    } catch (e) {
+      console.warn('Failed to load reimbursement types, using fallback:', e)
+    }
+  }
 
   const loadData = async () => {
     setIsLoading(true)
@@ -76,6 +99,20 @@ export function ReimbursementPage() {
     }
   }
 
+  const getTypeLabel = (code: string) => {
+    const found = availableTypes.find(t => t.code === code)
+    if (found) return found.name
+    const fallbackMap: Record<string, string> = {
+      transportation: t('reimbursement.typeTransportation'),
+      meals: t('reimbursement.typeMeals'),
+      communication: t('reimbursement.typeCommunication'),
+      medical: t('reimbursement.typeMedical'),
+      office: 'Perlengkapan',
+      other: t('reimbursement.typeOther')
+    }
+    return fallbackMap[code] || code
+  }
+
   const parseReceiptUrls = (receiptUrls?: string) => {
     if (!receiptUrls) return []
     try {
@@ -91,6 +128,12 @@ export function ReimbursementPage() {
       <header className="bg-primary text-white px-4 py-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.history.back()}
+              className="p-2 bg-white/20 rounded-full hover:bg-white/30"
+            >
+              ✕
+            </button>
             <Receipt size={28} />
             <div>
               <h1 className="text-xl font-bold">{t('reimbursement.title')}</h1>
@@ -124,7 +167,7 @@ export function ReimbursementPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <span className="inline-block px-2 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary">
-                        {TYPE_LABELS[item.type] || item.type}
+                        {getTypeLabel(item.type)}
                       </span>
                     </div>
                     <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[item.status]}`}>
@@ -168,6 +211,7 @@ export function ReimbursementPage() {
       {/* Apply Modal */}
       {showApplyModal && (
         <ApplyReimbursementModal
+          availableTypes={availableTypes}
           onClose={() => setShowApplyModal(false)}
           onSuccess={() => {
             setShowApplyModal(false)
@@ -180,18 +224,21 @@ export function ReimbursementPage() {
 }
 
 interface ApplyReimbursementModalProps {
+  availableTypes: ReimbursementType[]
   onClose: () => void
   onSuccess: () => void
 }
 
-function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModalProps) {
+function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyReimbursementModalProps) {
   const { t } = useTranslation()
-  const [reimbType, setReimbType] = useState('transportation')
+  const [reimbType, setReimbType] = useState(availableTypes[0]?.code || 'transportation')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const selectedTypeConfig = availableTypes.find(t => t.code === reimbType) || availableTypes[0]
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || [])
@@ -208,6 +255,22 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
       return
     }
 
+    const numericAmount = Math.round(parseFloat(amount))
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      alert('Jumlah tidak valid / Invalid amount')
+      return
+    }
+
+    if (selectedTypeConfig?.maxAmount && numericAmount > selectedTypeConfig.maxAmount) {
+      alert(`Maksimal pengajuan ${formatCurrency(selectedTypeConfig.maxAmount)}`)
+      return
+    }
+
+    if (selectedTypeConfig?.requiresReceipt && files.length === 0) {
+      alert(t('reimbursement.receiptRequired') || 'Wajib melampirkan nota/bukti foto untuk jenis ini')
+      return
+    }
+
     setIsSubmitting(true)
     try {
       let receiptUrls: string[] = []
@@ -215,12 +278,12 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
       // Upload files first if any
       if (files.length > 0) {
         const uploadRes = await staffApi.uploadReceipts(files)
-        receiptUrls = uploadRes.data.receiptUrls
+        receiptUrls = uploadRes.data?.receiptUrls || []
       }
 
       await staffApi.applyReimbursement({
         type: reimbType,
-        amount: Math.round(parseFloat(amount) * 100), // Convert to cents
+        amount: numericAmount, // Native currency (IDR)
         description,
         receiptUrls
       })
@@ -232,8 +295,8 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
     }
   }
 
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value) || 0
+  const formatCurrency = (value: string | number) => {
+    const num = typeof value === 'number' ? value : parseFloat(value) || 0
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -253,18 +316,57 @@ function ApplyReimbursementModal({ onClose, onSuccess }: ApplyReimbursementModal
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('reimbursement.typeLabel')}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('reimbursement.typeLabel')}</label>
+            {/* Quick chips */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {availableTypes.map((tItem) => {
+                const isSelected = reimbType === tItem.code
+                return (
+                  <button
+                    key={tItem.code}
+                    type="button"
+                    onClick={() => setReimbType(tItem.code)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      isSelected
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {tItem.name}
+                  </button>
+                )
+              })}
+            </div>
+
             <select
               value={reimbType}
               onChange={(e) => setReimbType(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-xl"
+              className="w-full p-3 border border-gray-200 rounded-xl bg-white"
             >
-              <option value="transportation">{t('reimbursement.typeTransportation')}</option>
-              <option value="meals">{t('reimbursement.typeMeals')}</option>
-              <option value="communication">{t('reimbursement.typeCommunication')}</option>
-              <option value="medical">{t('reimbursement.typeMedical')}</option>
-              <option value="other">{t('reimbursement.typeOther')}</option>
+              {availableTypes.map((tItem) => (
+                <option key={tItem.code} value={tItem.code}>
+                  {tItem.name} {tItem.maxAmount ? `(Max: ${formatCurrency(String(tItem.maxAmount))})` : ''}
+                </option>
+              ))}
             </select>
+
+            {/* Hint badges */}
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              {selectedTypeConfig?.maxAmount && (
+                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-600">
+                  {t('reimbursement.maxLimit') || 'Maksimal'}: {formatCurrency(String(selectedTypeConfig.maxAmount))}
+                </span>
+              )}
+              {selectedTypeConfig?.requiresReceipt ? (
+                <span className="px-2 py-0.5 rounded-md bg-orange-50 text-orange-600">
+                  * {t('reimbursement.receiptRequired') || 'Wajib nota bukti'}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-md bg-green-50 text-green-600">
+                  {t('reimbursement.noReceiptNeeded') || 'Tanpa nota'}
+                </span>
+              )}
+            </div>
           </div>
 
           <div>

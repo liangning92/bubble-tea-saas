@@ -10,6 +10,7 @@ exports.calculateRecipeCost = calculateRecipeCost;
 exports.getProductMixAnalysis = getProductMixAnalysis;
 exports.getABCAnalysis = getABCAnalysis;
 exports.getProductSalesTrend = getProductSalesTrend;
+exports.getMenuEngineeringMatrix = getMenuEngineeringMatrix;
 exports.getProductPerformanceScore = getProductPerformanceScore;
 const database_1 = __importDefault(require("../config/database"));
 // Get all process recipes
@@ -140,7 +141,7 @@ async function getABCAnalysis(storeId, startDate, endDate) {
             createdAt: { gte: startDate, lte: endDate },
             status: { in: ['completed', 'paid'] }
         },
-        include: { items: true }
+        include: { items: { include: { product: true } } }
     });
     // Product sales
     const productSales = {};
@@ -148,7 +149,8 @@ async function getABCAnalysis(storeId, startDate, endDate) {
         for (const item of order.items) {
             if (!productSales[item.productId]) {
                 productSales[item.productId] = {
-                    name: item.productName,
+                    name: item.productName || item.product?.name || 'Unknown',
+                    code: item.product?.code || '',
                     quantity: 0,
                     revenue: 0,
                     cost: 0,
@@ -159,7 +161,7 @@ async function getABCAnalysis(storeId, startDate, endDate) {
             const grossRevenue = item.unitPrice * item.quantity;
             const discount = order.totalAmount > 0 ? Math.max(0, order.discountAmount || 0) * grossRevenue / order.totalAmount : 0;
             productSales[item.productId].revenue += Math.max(0, grossRevenue - discount);
-            productSales[item.productId].cost += (item.bomCost || 0) * item.quantity;
+            productSales[item.productId].cost += (item.bomCost > 0 ? item.bomCost : (item.product?.costPrice || 0)) * item.quantity;
             productSales[item.productId].orderIds.add(order.id);
         }
     }
@@ -179,7 +181,7 @@ async function getABCAnalysis(storeId, startDate, endDate) {
         else
             category = 'C';
         const { orderIds: _orderIds, ...row } = p;
-        return { ...row, productName: p.name, rank: idx + 1, category, class: category, percentage: totalRevenue > 0 ? p.revenue / totalRevenue : 0 };
+        return { ...row, productName: p.name, profit: p.revenue - p.cost, cumulativePercent, rank: idx + 1, category, class: category, percentage: totalRevenue > 0 ? p.revenue / totalRevenue : 0 };
     });
 }
 async function getProductSalesTrend(storeId, startDate, endDate) {
@@ -205,6 +207,79 @@ async function getProductSalesTrend(storeId, startDate, endDate) {
         row.orders += 1;
     }
     return [...daily.values()].map(row => ({ ...row, grossProfit: row.revenue - row.cost, margin: row.revenue > 0 ? Math.round((row.revenue - row.cost) / row.revenue * 100) : 0 }));
+}
+// Get Menu Engineering Matrix (Boston Matrix: Stars, Plowhorses, Puzzles, Dogs)
+async function getMenuEngineeringMatrix(storeId, startDate, endDate) {
+    const abcList = await getABCAnalysis(storeId, startDate, endDate);
+    if (abcList.length === 0) {
+        return {
+            benchmarks: { avgQuantity: 0, avgMargin: 0, totalRevenue: 0, totalQuantity: 0 },
+            counts: { star: 0, plowhorse: 0, puzzle: 0, dog: 0 },
+            products: []
+        };
+    }
+    const totalQuantity = abcList.reduce((sum, p) => sum + p.quantity, 0);
+    const totalRevenue = abcList.reduce((sum, p) => sum + p.revenue, 0);
+    const totalCost = abcList.reduce((sum, p) => sum + p.cost, 0);
+    // Benchmarks
+    const avgQuantity = Math.round(totalQuantity / abcList.length);
+    const avgMargin = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 0;
+    const counts = { star: 0, plowhorse: 0, puzzle: 0, dog: 0 };
+    const products = abcList.map(item => {
+        const isHighVolume = item.quantity >= avgQuantity;
+        const isHighMargin = item.margin >= avgMargin;
+        let matrixType;
+        let actionHint;
+        if (isHighVolume && isHighMargin) {
+            matrixType = 'star';
+            actionHint = 'productAnalysis.starHint'; // 高销高利：招牌主推，保持品质，保证原料充足
+            counts.star++;
+        }
+        else if (isHighVolume && !isHighMargin) {
+            matrixType = 'plowhorse';
+            actionHint = 'productAnalysis.plowhorseHint'; // 高销低利：引流利器，可搭配高毛利加料，或微调成本/提价
+            counts.plowhorse++;
+        }
+        else if (!isHighVolume && isHighMargin) {
+            matrixType = 'puzzle';
+            actionHint = 'productAnalysis.puzzleHint'; // 低销高利：潜力商品，建议增加前台推荐、试饮或套餐组合
+            counts.puzzle++;
+        }
+        else {
+            matrixType = 'dog';
+            actionHint = 'productAnalysis.dogHint'; // 低销低利：瘦狗产品，建议淘汰下架，减少库存损耗
+            counts.dog++;
+        }
+        const avgPrice = item.quantity > 0 ? Math.round(item.revenue / item.quantity) : 0;
+        const avgCost = item.quantity > 0 ? Math.round(item.cost / item.quantity) : 0;
+        return {
+            productId: item.productId,
+            productName: item.productName,
+            code: item.code,
+            quantity: item.quantity,
+            revenue: item.revenue,
+            cost: item.cost,
+            profit: item.profit,
+            margin: item.margin,
+            avgPrice,
+            avgCost,
+            isHighVolume,
+            isHighMargin,
+            matrixType,
+            actionHint
+        };
+    });
+    return {
+        benchmarks: {
+            avgQuantity,
+            avgMargin,
+            totalRevenue,
+            totalQuantity,
+            productCount: abcList.length
+        },
+        counts,
+        products
+    };
 }
 // Get product performance score
 async function getProductPerformanceScore(productId, days = 30) {

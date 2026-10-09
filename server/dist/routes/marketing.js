@@ -43,6 +43,8 @@ const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../utils/validation");
 const MarketingService = __importStar(require("../services/MarketingAutomationService"));
 const MarketingSchedulerService_1 = require("../services/MarketingSchedulerService");
+const database_1 = __importDefault(require("../config/database"));
+const socket_1 = __importDefault(require("../socket"));
 const router = (0, express_1.Router)();
 exports.marketingRouter = router;
 // Validation schemas
@@ -524,7 +526,6 @@ router.put('/automation/time', auth_1.authenticate, (0, auth_1.authorize)('admin
     }
 });
 // ==================== MEMBER BALANCE ====================
-const database_1 = __importDefault(require("../config/database"));
 // GET /api/marketing/members/search - Search member by phone
 router.get('/members/search', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
     try {
@@ -1565,6 +1566,250 @@ router.get('/referral-funnel', auth_1.authenticate, (0, auth_1.authorize)('admin
     catch (error) {
         console.error('Get referral funnel error:', error);
         res.status(500).json({ code: 500, message: 'Failed to get referral funnel' });
+    }
+});
+// ==================== TV INTERACTIVE SCREEN MARKETING ====================
+// Default TV interactive configuration
+const DEFAULT_TV_CONFIG = {
+    enabled: true,
+    storeName: 'YOUME Tea & Boba',
+    welcomeText: 'Welcome to YOUME',
+    // Layout columns (e.g. 60% media banner, 40% daily specials & QR code)
+    layout: {
+        columns: [
+            { width: 60, content: 'media' },
+            { width: 40, content: 'specials' }
+        ]
+    },
+    // Banners & media
+    mediaFiles: [
+        {
+            url: 'https://images.unsplash.com/photo-1558857563-b37fe8466e39?w=1200&q=80',
+            title: 'Brown Sugar Pearl Milk Tea',
+            subtitle: 'Rasakan Manisnya Brown Sugar Asli Taiwan'
+        },
+        {
+            url: 'https://images.unsplash.com/photo-1541658016709-82535e94bc69?w=1200&q=80',
+            title: 'Fresh Fruit Tea Special',
+            subtitle: '100% Buah Segar Pilihan Setiap Hari'
+        }
+    ],
+    carouselIntervalSeconds: 6,
+    // Custom Daily Deals / Specials with product image, price and description
+    dailySpecials: [
+        {
+            dayOfWeek: 1, // Monday
+            productName: 'Signature Brown Sugar Boba',
+            originalPrice: 28000,
+            specialPrice: 19000,
+            tag: 'Senin Hemat (Monday Deal)',
+            imageUrl: 'https://images.unsplash.com/photo-1558857563-b37fe8466e39?w=600&q=80',
+            description: 'Gula aren premium dengan boba kenyal lembut'
+        },
+        {
+            dayOfWeek: 2, // Tuesday
+            productName: 'Taro Milk Tea with Pudding',
+            originalPrice: 26000,
+            specialPrice: 18000,
+            tag: 'Selasa Manis',
+            imageUrl: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=600&q=80',
+            description: 'Rasa taro creamy dengan puding telur lembut'
+        },
+        {
+            dayOfWeek: 3, // Wednesday
+            productName: 'Matcha Red Bean Latte',
+            originalPrice: 30000,
+            specialPrice: 22000,
+            tag: 'Rabu Segar',
+            imageUrl: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=600&q=80',
+            description: 'Matcha Uji Jepang berpadu kacang merah manis'
+        },
+        {
+            dayOfWeek: 4, // Thursday
+            productName: 'Mango Jasmine Green Tea',
+            originalPrice: 25000,
+            specialPrice: 18000,
+            tag: 'Kamis Ceria',
+            imageUrl: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=600&q=80',
+            description: 'Teh melati wangi dengan sari mangga tropis asli'
+        },
+        {
+            dayOfWeek: 5, // Friday
+            productName: 'Brown Sugar Milk Tea (BOGO)',
+            originalPrice: 50000,
+            specialPrice: 30000,
+            tag: 'Beli 1 Gratis 1 (Buy 1 Get 1)',
+            imageUrl: 'https://images.unsplash.com/photo-1558857563-b37fe8466e39?w=600&q=80',
+            description: 'Promo spesial hari Jumat untuk dinikmati bersama teman'
+        },
+        {
+            dayOfWeek: 6, // Saturday
+            productName: 'Cheese Foam Strawberry Slush',
+            originalPrice: 32000,
+            specialPrice: 24000,
+            tag: 'Weekend Special',
+            imageUrl: 'https://images.unsplash.com/photo-1553530666-ba11a7da3888?w=600&q=80',
+            description: 'Strawberry segar asam manis dengan gurihnya cheese foam'
+        },
+        {
+            dayOfWeek: 0, // Sunday
+            productName: 'Family Boba Party Box',
+            originalPrice: 85000,
+            specialPrice: 65000,
+            tag: 'Minggu Bahagia',
+            imageUrl: 'https://images.unsplash.com/photo-1541658016709-82535e94bc69?w=600&q=80',
+            description: '3 Cup Minuman Favorit Pilihan untuk Akhir Pekan'
+        }
+    ],
+    // Lucky wheel lottery settings
+    lottery: {
+        enabled: true,
+        triggerMinOrderAmount: 50000, // Rp 50.000 minimum order
+        title: 'Putar Roda Hoki (Lucky Wheel)',
+        subtitle: 'Belanja Min Rp 50.000 Berkesempatan Menang!',
+        prizes: [
+            { id: '1', name: 'Free Boba Topping', code: 'free_topping', color: '#F59E0B', weight: 40 },
+            { id: '2', name: 'Diskon 10% Next Order', code: 'disc_10', color: '#EC4899', weight: 25 },
+            { id: '3', name: 'Free Up Size', code: 'free_upsize', color: '#3B82F6', weight: 20 },
+            { id: '4', name: 'Voucher Rp 5.000', code: 'voucher_5k', color: '#10B981', weight: 10 },
+            { id: '5', name: 'Gratis 1 Milk Tea (FREE)', code: 'free_drink', color: '#EF4444', weight: 5 }
+        ]
+    },
+    // Ticker marquee settings
+    ticker: {
+        enabled: true,
+        text: 'Selamat Menikmati Minuman Anda di YOUME Tea! Follow Instagram @youmetea.id untuk kejutan promo lainnya!'
+    }
+};
+// GET /api/marketing/tv-screen/config - Publicly or auth accessible by storeId
+router.get('/tv-screen/config', async (req, res) => {
+    try {
+        const storeId = req.query.storeId || '';
+        const configRecord = await database_1.default.config.findUnique({
+            where: { storeId_key: { storeId, key: 'tv_screen_marketing_config' } }
+        });
+        let config = DEFAULT_TV_CONFIG;
+        if (configRecord?.value) {
+            try {
+                config = { ...DEFAULT_TV_CONFIG, ...JSON.parse(configRecord.value) };
+            }
+            catch (e) {
+                console.warn('Failed to parse tv config JSON:', e);
+            }
+        }
+        res.json({
+            code: 200,
+            data: config,
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Get TV screen config error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get TV screen config' });
+    }
+});
+// POST /api/marketing/tv-screen/config - Save TV screen config (Admin / Manager)
+router.post('/tv-screen/config', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const storeId = req.user.storeId;
+        const newConfig = req.body;
+        const saved = await database_1.default.config.upsert({
+            where: { storeId_key: { storeId, key: 'tv_screen_marketing_config' } },
+            create: {
+                storeId,
+                key: 'tv_screen_marketing_config',
+                value: JSON.stringify(newConfig),
+                category: 'marketing'
+            },
+            update: {
+                value: JSON.stringify(newConfig),
+                category: 'marketing'
+            }
+        });
+        // Realtime broadcast to connected TVs
+        socket_1.default.emitTVConfigUpdate(storeId, newConfig);
+        res.json({
+            code: 200,
+            message: 'TV screen marketing configuration saved and broadcasted',
+            data: JSON.parse(saved.value),
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Save TV screen config error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to save TV screen config' });
+    }
+});
+// POST /api/marketing/tv-screen/trigger-lottery - Trigger lottery from POS or Admin test
+router.post('/tv-screen/trigger-lottery', auth_1.authenticate, async (req, res) => {
+    try {
+        const storeId = req.user?.storeId || req.body.storeId;
+        const { orderId, orderNumber, customerPhone, orderAmount } = req.body;
+        // Load active prizes
+        const configRecord = await database_1.default.config.findUnique({
+            where: { storeId_key: { storeId, key: 'tv_screen_marketing_config' } }
+        });
+        let config = DEFAULT_TV_CONFIG;
+        if (configRecord?.value) {
+            try {
+                config = { ...DEFAULT_TV_CONFIG, ...JSON.parse(configRecord.value) };
+            }
+            catch (e) {
+                // fallback
+            }
+        }
+        if (config.lottery?.enabled === false) {
+            return res.json({
+                code: 200,
+                message: 'TV Lottery is disabled in marketing config',
+                data: null
+            });
+        }
+        const minAmount = config.lottery?.triggerMinOrderAmount || 0;
+        if (typeof orderAmount === 'number' && orderAmount < minAmount) {
+            return res.json({
+                code: 200,
+                message: `Order amount ${orderAmount} below trigger threshold ${minAmount}`,
+                data: null
+            });
+        }
+        const prizes = config.lottery?.prizes || DEFAULT_TV_CONFIG.lottery.prizes;
+        // Calculate weighted random
+        const totalWeight = prizes.reduce((sum, p) => sum + (p.weight || 10), 0);
+        let randomNum = Math.random() * totalWeight;
+        let chosenIndex = 0;
+        let chosenPrize = prizes[0];
+        for (let i = 0; i < prizes.length; i++) {
+            randomNum -= (prizes[i].weight || 10);
+            if (randomNum <= 0) {
+                chosenIndex = i;
+                chosenPrize = prizes[i];
+                break;
+            }
+        }
+        // Broadcast lottery event to TV
+        socket_1.default.emitTVLotteryTrigger(storeId, {
+            orderId,
+            orderNumber: orderNumber || '#Lucky',
+            prizeName: chosenPrize.name,
+            prizeCode: chosenPrize.code,
+            prizeIndex: chosenIndex,
+            customerPhone: customerPhone ? `${customerPhone.slice(0, 4)}****${customerPhone.slice(-3)}` : undefined
+        });
+        res.json({
+            code: 200,
+            message: 'Lottery triggered on TV display',
+            data: {
+                prizeName: chosenPrize.name,
+                prizeCode: chosenPrize.code,
+                prizeIndex: chosenIndex
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Trigger TV lottery error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to trigger TV lottery' });
     }
 });
 //# sourceMappingURL=marketing.js.map

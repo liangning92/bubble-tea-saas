@@ -1,18 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone } from 'lucide-react'
+import { CheckCircle, Loader2, MapPin, Phone, Store, Smartphone, Tv } from 'lucide-react'
 import { configApi } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { POSSettingsPage } from './settings/POSSettingsPage'
+import { TvScreenConfigPage } from './marketing/TvScreenConfigPage'
 
-type TabKey = 'store' | 'pos'
+type TabKey = 'store' | 'pos' | 'tvScreen'
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  initialTab?: TabKey
+}
+
+export function SettingsPage({ initialTab = 'store' }: SettingsPageProps = {}) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<TabKey>('store')
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab)
   const [showSuccess, setShowSuccess] = useState(false)
 
   // 店铺信息状态
@@ -105,6 +110,17 @@ export function SettingsPage() {
         >
           <Smartphone size={18} />
           {t('settings.pos')}
+        </button>
+        <button
+          onClick={() => setActiveTab('tvScreen')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'tvScreen'
+              ? 'bg-primary text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Tv size={18} />
+          {t('settings.tvScreen', '电视大屏终端')}
         </button>
       </div>
 
@@ -223,6 +239,11 @@ export function SettingsPage() {
       {/* POS设置 Tab */}
       {activeTab === 'pos' && (
         <POSSettingsPage />
+      )}
+
+      {/* 电视大屏终端 Tab */}
+      {activeTab === 'tvScreen' && (
+        <TvScreenConfigPage />
       )}
     </div>
   )

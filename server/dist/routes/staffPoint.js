@@ -389,4 +389,62 @@ router.get('/rewards/available', auth_1.authenticate, async (req, res) => {
 });
 // ==================== Points Rule Config ====================
 const zod_1 = require("zod");
-const points
+const pointsRuleSchema = zod_1.z.object({
+    perfectAttendancePoints: zod_1.z.number().optional(),
+    goodPerformancePoints: zod_1.z.number().optional(),
+    completedTrainingPoints: zod_1.z.number().optional(),
+    holidayWorkPoints: zod_1.z.number().optional(),
+    overtimePerHourPoints: zod_1.z.number().optional(),
+    isActive: zod_1.z.boolean().optional()
+});
+// GET /api/staff-points/rules - Get store points rule
+router.get('/rules', auth_1.authenticate, async (req, res) => {
+    try {
+        const storeId = req.user.storeId;
+        let rule = await database_1.default.staffPointRule.findUnique({ where: { storeId } });
+        // Create default if not exists
+        if (!rule) {
+            rule = await database_1.default.staffPointRule.create({
+                data: {
+                    storeId,
+                    perfectAttendancePoints: 50,
+                    goodPerformancePoints: 100,
+                    completedTrainingPoints: 30,
+                    holidayWorkPoints: 20,
+                    overtimePerHourPoints: 5,
+                    isActive: true
+                }
+            });
+        }
+        res.json({ code: 200, data: rule, timestamp: new Date().toISOString() });
+    }
+    catch (error) {
+        console.error('Get points rule error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get points rule' });
+    }
+});
+// PUT /api/staff-points/rules - Update store points rule
+router.put('/rules', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const storeId = req.user.storeId;
+        const data = pointsRuleSchema.parse(req.body);
+        let rule = await database_1.default.staffPointRule.findUnique({ where: { storeId } });
+        if (rule) {
+            rule = await database_1.default.staffPointRule.update({
+                where: { storeId },
+                data
+            });
+        }
+        else {
+            rule = await database_1.default.staffPointRule.create({
+                data: { storeId, ...data }
+            });
+        }
+        res.json({ code: 200, message: 'Points rule updated', data: rule, timestamp: new Date().toISOString() });
+    }
+    catch (error) {
+        console.error('Update points rule error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to update points rule' });
+    }
+});
+//# sourceMappingURL=staffPoint.js.map

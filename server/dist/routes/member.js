@@ -422,4 +422,83 @@ router.get('/:id/points-history', auth_1.authenticate, async (req, res) => {
     }
     catch (error) {
         console.error('Get points history error:', error);
-        res.status(500).json({ code: 500, message: 'Failed to g
+        res.status(500).json({ code: 500, message: 'Failed to get points history' });
+    }
+});
+// POST /api/members/:id/adjust-points
+router.post('/:id/adjust-points', auth_1.authenticate, (0, auth_1.authorize)('admin', 'manager'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { points, note } = req.body;
+        const member = await database_1.default.member.findUnique({ where: { id } });
+        if (!member) {
+            return res.status(404).json({ code: 404, message: 'Member not found' });
+        }
+        const newPoints = Math.max(0, member.points + points);
+        await database_1.default.member.update({
+            where: { id },
+            data: { points: newPoints }
+        });
+        await database_1.default.pointLog.create({
+            data: {
+                memberId: id,
+                type: 'adjust',
+                points,
+                note: note || 'Manual adjustment'
+            }
+        });
+        res.json({
+            code: 200,
+            message: 'Points adjusted',
+            data: { newPoints },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Adjust points error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to adjust points' });
+    }
+});
+// GET /api/members/stats/summary
+router.get('/stats/summary', auth_1.authenticate, async (req, res) => {
+    try {
+        const { storeId } = req.query;
+        const where = {};
+        if (storeId)
+            where.storeId = storeId;
+        const [totalMembers, byLevel, recentActivity] = await Promise.all([
+            database_1.default.member.count({ where }),
+            database_1.default.member.groupBy({
+                by: ['level'],
+                where,
+                _count: { id: true }
+            }),
+            database_1.default.member.count({
+                where: {
+                    ...where,
+                    lastVisit: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+                }
+            })
+        ]);
+        res.json({
+            code: 200,
+            data: {
+                totalMembers,
+                activeLast30Days: recentActivity,
+                byLevel: byLevel.map(l => ({ level: l.level, count: l._count.id })),
+                newThisMonth: await database_1.default.member.count({
+                    where: {
+                        ...where,
+                        createdAt: { gte: new Date(new Date().setDate(1)) }
+                    }
+                })
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        console.error('Get member stats error:', error);
+        res.status(500).json({ code: 500, message: 'Failed to get member stats' });
+    }
+});
+//# sourceMappingURL=member.js.map

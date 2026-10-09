@@ -83,15 +83,21 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     },
     // 监听更新状态变化
     onUpdateStatus: (callback) => {
-        electron_1.ipcRenderer.on('update-status', (_event, status, info) => callback(status, info));
+        const listener = (_event, status, info) => callback(status, info);
+        electron_1.ipcRenderer.on('update-status', listener);
+        return () => electron_1.ipcRenderer.removeListener('update-status', listener);
     },
     // 监听更新进度
     onUpdateProgress: (callback) => {
-        electron_1.ipcRenderer.on('update-progress', (_event, progress) => callback(progress));
+        const listener = (_event, progress) => callback(progress);
+        electron_1.ipcRenderer.on('update-progress', listener);
+        return () => electron_1.ipcRenderer.removeListener('update-progress', listener);
     },
     // 监听更新错误
     onUpdateError: (callback) => {
-        electron_1.ipcRenderer.on('update-error', (_event, error) => callback(error));
+        const listener = (_event, error) => callback(error);
+        electron_1.ipcRenderer.on('update-error', listener);
+        return () => electron_1.ipcRenderer.removeListener('update-error', listener);
     },
     // ========== API URL 配置 ==========
     // 获取 API URL（供主进程/升级使用）

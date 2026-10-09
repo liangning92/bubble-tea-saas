@@ -6,10 +6,12 @@ export function PromotionsIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'campaigns', label: t('marketing.campaigns'), path: '/marketing/promotions/campaigns' },
-    { key: 'coupons', label: t('marketing.coupons'), path: '/marketing/promotions/coupons' },
-    { key: 'referrals', label: t('marketing.referrals'), path: '/marketing/promotions/referrals' },
-    { key: 'campaign-categories', label: t('marketing.campaignCategories'), path: '/marketing/promotions/campaign-categories' },
+    { key: 'campaigns', label: t('marketing.campaigns', '营销活动 (Campaigns)'), path: '/marketing/promotions/campaigns' },
+    { key: 'discount-rules', label: t('marketing.discountRules', '促销折扣 (满减/第二杯半价)'), path: '/marketing/promotions/discount-rules' },
+    { key: 'timed-specials', label: t('marketing.timedSpecials', '每日特价/限时特惠'), path: '/marketing/promotions/timed-specials' },
+    { key: 'coupons', label: t('marketing.coupons', '优惠券'), path: '/marketing/promotions/coupons' },
+    { key: 'referrals', label: t('marketing.referrals', '邀请裂变'), path: '/marketing/promotions/referrals' },
+    { key: 'campaign-categories', label: t('marketing.campaignCategories', '活动分类'), path: '/marketing/promotions/campaign-categories' },
   ]
 
   const currentTab = tabs.find(tab => location.pathname === tab.path || location.pathname.startsWith(tab.path + '/'))?.key || 'campaigns'

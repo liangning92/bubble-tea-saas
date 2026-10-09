@@ -4,11 +4,36 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+const crypto_1 = require("crypto");
 const path_1 = __importDefault(require("path"));
 const updater_1 = require("./updater");
 // 彻底禁用并隐藏 Windows / Linux 默认顶部菜单栏（File, Edit, View, Window, Help）
 electron_1.Menu.setApplicationMenu(null);
 const fs_1 = __importDefault(require("fs"));
+function getOrCreateLocalJwtSecret() {
+    if (!electron_1.safeStorage.isEncryptionAvailable()) {
+        throw new Error('OS secure storage is unavailable; cannot start the local API securely');
+    }
+    const secretPath = path_1.default.join(electron_1.app.getPath('userData'), 'jwt-secret.bin');
+    try {
+        return electron_1.safeStorage.decryptString(fs_1.default.readFileSync(secretPath));
+    }
+    catch (error) {
+        if (error?.code !== 'ENOENT')
+            throw error;
+    }
+    const secret = (0, crypto_1.randomBytes)(32).toString('hex');
+    fs_1.default.mkdirSync(path_1.default.dirname(secretPath), { recursive: true });
+    try {
+        fs_1.default.writeFileSync(secretPath, electron_1.safeStorage.encryptString(secret), { flag: 'wx', mode: 0o600 });
+        return secret;
+    }
+    catch (error) {
+        if (error?.code !== 'EEXIST')
+            throw error;
+        return electron_1.safeStorage.decryptString(fs_1.default.readFileSync(secretPath));
+    }
+}
 const child_process_1 = require("child_process");
 const net_1 = __importDefault(require("net"));
 const main_1 = __importDefault(require("electron-log/main"));
@@ -529,6 +554,8 @@ async function startLocalServer() {
             ...process.env,
             NODE_ENV: 'production',
             PORT: '7072',
+            JWT_SECRET: getOrCreateLocalJwtSecret(),
+            ELECTRON_RUN_AS_NODE: '1',
             // 覆盖数据库路径为用户可写目录
             // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
             DATABASE_URL: `file:${userDbPath}`,
@@ -538,7 +565,7 @@ async function startLocalServer() {
             // 需要同时包含 server/node_modules 和根目录的 node_modules（prisma 相关）
             NODE_PATH: nodePath,
             // CORS: 允许所有来源，因为 Electron app 从 file:// 加载
-            CORS_ORIGIN: '*'
+            CORS_ORIGIN: 'null,file://,http://localhost:6063,http://localhost:5173'
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });

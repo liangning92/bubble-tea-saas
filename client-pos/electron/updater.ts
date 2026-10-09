@@ -4,6 +4,20 @@ import { BrowserWindow, ipcMain, app } from 'electron'
 const { autoUpdater } = require('electron-updater')
 
 let mainWindow: BrowserWindow | null = null
+let checkInFlight = false
+let downloadInProgress = false
+let updateDownloaded = false
+let updateTimer: ReturnType<typeof setInterval> | null = null
+
+async function checkForUpdates() {
+  if (!app.isPackaged || checkInFlight || downloadInProgress || updateDownloaded) return
+  checkInFlight = true
+  try {
+    return await autoUpdater.checkForUpdates()
+  } finally {
+    checkInFlight = false
+  }
+}
 
 // Log helper
 function log(level: 'info' | 'warn' | 'error', message: string, ...args: any[]) {
@@ -65,11 +79,14 @@ export function setupUpdater(window: BrowserWindow) {
   })
 
   autoUpdater.on('update-downloaded', (info: any) => {
+    downloadInProgress = false
+    updateDownloaded = true
     log('info', 'Update downloaded:', info.version)
     sendToRenderer('update-status', 'downloaded', { version: info.version })
   })
 
   autoUpdater.on('error', (err: any) => {
+    downloadInProgress = false
     log('error', 'Error:', err.message)
     sendToRenderer('update-error', err.message)
   })
@@ -100,7 +117,7 @@ function setupIpcHandlers() {
 
       // Use electron-updater to check GitHub for updates
       try {
-        await autoUpdater.checkForUpdates()
+        await checkForUpdates()
       } catch (error: any) {
         log('warn', 'Check for updates failed:', error.message)
         // Don't send 'up-to-date' here - the 'error' event already sends update-error
@@ -118,6 +135,7 @@ function setupIpcHandlers() {
   // Download update
   ipcMain.handle('download-update', async () => {
     try {
+      downloadInProgress = true
       log('info', 'Starting download...')
       sendToRenderer('update-status', 'downloading')
       sendToRenderer('update-progress', { percent: 0 })
@@ -126,6 +144,7 @@ function setupIpcHandlers() {
 
       return true
     } catch (error: any) {
+      downloadInProgress = false
       log('error', 'Download failed:', error.message)
       sendToRenderer('update-error', error.message)
       return false
@@ -144,30 +163,20 @@ function setupIpcHandlers() {
  * Check for updates automatically (call on app start in packaged mode)
  */
 export function checkForUpdatesOnStart() {
-  if (!app.isPackaged) {
-    log('info', 'Skipping auto-check in development mode')
-    return
+  if (!app.isPackaged || updateTimer) return
+
+  const check = () => {
+    void checkForUpdates().catch((err: any) => {
+      log('warn', 'Automatic update check failed:', err.message)
+    })
   }
-
-  log('info', 'Checking for updates on startup...')
-
-  // Delay initial check by 5 seconds to let app fully start
-  setTimeout(() => {
-    // 不要在这里发送 'checking' 状态 - autoUpdater.checkForUpdates() 内部会发送
-    // 添加超时处理 - 如果 30 秒后还没返回，认为检查失败
-    const timeout = setTimeout(() => {
-      log('warn', 'Check for updates timeout')
-      sendToRenderer('update-error', 'Check timeout - please try again')
-    }, 30000)
-
-    autoUpdater.checkForUpdates()
-      .catch((err: any) => {
-        log('warn', 'Initial check failed:', err.message)
-      })
-      .finally(() => {
-        clearTimeout(timeout)
-      })
-  }, 5000)
+  const initialTimer = setTimeout(check, 5000)
+  updateTimer = setInterval(check, 15 * 60 * 1000)
+  app.once('before-quit', () => {
+    clearTimeout(initialTimer)
+    if (updateTimer) clearInterval(updateTimer)
+    updateTimer = null
+  })
 }
 
 export default autoUpdater

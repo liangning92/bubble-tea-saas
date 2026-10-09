@@ -626,4 +626,99 @@ export async function getConsumptionAnalysis(filter: ConsumptionAnalysisFilter) 
         existing.theoretical += theoreticalQty
         existing.orderCount += 1
         if (!existing.lastOrderDate || order.createdAt > new Date(existing.lastOrderDate)) {
-   
+          existing.lastOrderDate = order.createdAt.toISOString()
+        }
+
+        consumptionMap.set(invId, existing)
+      }
+    }
+  }
+
+  // 获取实际消耗（从StockOutLog）
+  const stockOutLogs = await prisma.stockOutLog.findMany({
+    where: {
+      inventory: { storeId },
+      createdAt: {
+        gte: new Date(startDate),
+        lte: new Date(endDate)
+      },
+      reason: { in: ['sold', 'adjust'] }
+    },
+    include: { inventory: true }
+  })
+
+  //累加实际消耗
+  for (const log of stockOutLogs) {
+    const existing = consumptionMap.get(log.inventoryId) || {
+      theoretical: 0,
+      actual: 0,
+      orderCount: 0,
+      lastOrderDate: null,
+      inventoryName: log.inventory?.name || 'Unknown',
+      unit: log.inventory?.unit || '',
+      category: log.inventory?.category || ''
+    }
+
+    existing.actual += log.quantity
+    consumptionMap.set(log.inventoryId, existing)
+  }
+
+  // 计算差异并标记状态
+  const analysisResults: ConsumptionAnalysis[] = []
+
+  for (const [inventoryId, data] of consumptionMap) {
+    // 跳过没有实际消耗也没有理论消耗的
+    if (data.theoretical === 0 && data.actual === 0) continue
+
+    // 如果设定了分类过滤，跳过不匹配的
+    if (category && data.category !== category) continue
+
+    const variance = data.actual - data.theoretical
+    const variancePercent = data.theoretical > 0
+      ? (Math.abs(variance) / data.theoretical) * 100
+      : (data.actual > 0 ? 100 : 0)
+
+    // 判断状态
+    let varianceStatus: 'normal' | 'warning' | 'critical' = 'normal'
+    if (data.theoretical > 0) {
+      if (variancePercent > varianceThreshold * 2) {
+        varianceStatus = 'critical'
+      } else if (variancePercent > varianceThreshold) {
+        varianceStatus = 'warning'
+      }
+    } else if (data.actual > 0) {
+      varianceStatus = 'critical'  // 有实际消耗但没有理论消耗（可能BOM未配置）
+    }
+
+    analysisResults.push({
+      inventoryId,
+      inventoryName: data.inventoryName,
+      unit: data.unit,
+      theoreticalConsumption: Math.round(data.theoretical * 100) / 100,
+      actualConsumption: Math.round(data.actual * 100) / 100,
+      variance: Math.round(variance * 100) / 100,
+      variancePercent: Math.round(variancePercent * 10) / 10,
+      varianceStatus,
+      orderCount: data.orderCount,
+      lastOrderDate: data.lastOrderDate
+    })
+  }
+
+  // 按差异百分比降序排列，异常的排在前面
+  return analysisResults.sort((a, b) => b.variancePercent - a.variancePercent)
+}
+
+// 获取异常预警汇总
+export async function getAnomalySummary(filter: ConsumptionAnalysisFilter) {
+  const analysis = await getConsumptionAnalysis(filter)
+
+  const summary = {
+    total: analysis.length,
+    normal: analysis.filter(a => a.varianceStatus === 'normal').length,
+    warning: analysis.filter(a => a.varianceStatus === 'warning').length,
+    critical: analysis.filter(a => a.varianceStatus === 'critical').length,
+    criticalItems: analysis.filter(a => a.varianceStatus === 'critical')
+  }
+
+  return summary
+}

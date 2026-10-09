@@ -68,7 +68,7 @@ export function LoginPage() {
     setIsUpToDate(false)
     setUpdateStatusText(t('pos.checkingUpdate', '正在检查更新...'))
 
-    api.onUpdateStatus?.((status: string, info?: any) => {
+    const offStatus = api.onUpdateStatus?.((status: string, info?: any) => {
       if (status === 'up-to-date' || status === 'not-available') {
         setCheckingUpdate(false)
         setIsUpToDate(true)
@@ -98,6 +98,8 @@ export function LoginPage() {
       setUpdateStatusText(t('pos.updateError', '检查失败'))
       setTimeout(() => setUpdateStatusText(''), 4000)
     }
+
+    offStatus?.()
 
     // 10秒超时防呆保护
     setTimeout(() => {

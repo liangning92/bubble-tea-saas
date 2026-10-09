@@ -111,6 +111,7 @@ export const posApi = {
 
   // Marketing & Discount Rules
   getDiscountRules: (storeId: string) => api.get('/marketing/discount-rules', { params: { storeId, status: 'active' } }),
+  getTimedSpecials: (storeId: string) => api.get('/marketing/timed-specials', { params: { storeId, status: 'active' } }),
 
   // Auth
   login: (phone: string, password: string) =>
@@ -220,4 +221,11 @@ export const posApi = {
 // Shift API - uses admin's /api/shifts endpoint
 export const shiftApi = {
   list: (storeId?: string) => api.get('/shifts', { params: storeId ? { storeId } : undefined }),
+}
+
+// TV Screen Marketing API
+export const tvScreenApi = {
+  getConfig: (storeId?: string) => api.get('/marketing/tv-screen/config', { params: storeId ? { storeId } : undefined }),
+  triggerLottery: (data: { storeId?: string; orderNumber?: string; orderAmount?: number }) =>
+    api.post('/marketing/tv-screen/trigger-lottery', data),
 }

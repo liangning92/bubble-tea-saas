@@ -64,6 +64,15 @@ export const staffApi = {
     return response.data
   },
 
+  // Monthly Overview for Home Page
+  getMonthlyOverview: async (params?: { month?: number; year?: number }) => {
+    const response = await axios.get(`${API_BASE}/staff/overview/monthly`, {
+      params,
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
   getAttendanceHistory: async (staffId: string, month: number, year: number) => {
     const response = await axios.get(`${API_BASE}/staff/attendance/history`, {
       params: { staffId, month, year },
@@ -180,6 +189,13 @@ export const staffApi = {
   },
 
   // Reimbursement
+  getReimbursementTypes: async () => {
+    const response = await axios.get(`${API_BASE}/reimbursement-types`, {
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
   applyReimbursement: async (data: {
     type: string
     amount: number
@@ -396,6 +412,15 @@ export const staffApi = {
     return response.data
   },
 
+  // Recipe book: active products with specs + BOM (ingredients)
+  getRecipes: async () => {
+    const response = await axios.get(`${API_BASE}/products`, {
+      params: { status: 'active' },
+      headers: getAuthHeader()
+    })
+    return response.data
+  },
+
   // Shift Swap
   getMyShiftSwaps: async () => {
     const response = await axios.get(`${API_BASE}/shift-swap/my`, {
@@ -464,5 +489,14 @@ export const staffApi = {
       headers: getAuthHeader()
     })
     return response.data
+  },
+
+  // Training Courses (dynamically configured in admin)
+  getTrainingCourses: async () => {
+    const response = await axios.get(`${API_BASE}/training/courses`, {
+      headers: getAuthHeader()
+    })
+    return response.data
   }
 }
+

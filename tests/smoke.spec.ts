@@ -20,7 +20,7 @@ test.describe('Smoke Tests - Critical User Flows', () => {
     await page.goto('/login')
 
     // Check page loads
-    await expect(page).toHaveTitle(/Bubble/)
+    await expect(page).toHaveTitle(/YOUME POS/)
 
     // Check form elements exist
     await expect(page.locator('input[type="tel"]')).toBeVisible()

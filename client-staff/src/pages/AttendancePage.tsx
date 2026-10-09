@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
+import { QRCameraScannerModal } from '../components/QRCameraScannerModal'
 import {
   Clock,
   MapPin,
@@ -12,8 +13,10 @@ import {
   Loader2,
   Edit3,
   PlusCircle,
-  QrCode,
-  X
+  X,
+  ChevronLeft,
+  Camera,
+  RotateCcw
 } from 'lucide-react'
 
 export function AttendancePage() {
@@ -25,8 +28,8 @@ export function AttendancePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [history, setHistory] = useState<any[]>([])
-  const [showQRModal, setShowQRModal] = useState(false)
-  const [qrInput, setQrInput] = useState('')
+  const [showScanner, setShowScanner] = useState(false)
+  const [scannerDefaultMode, setScannerDefaultMode] = useState<'check_in' | 'check_out'>('check_in')
 
   useEffect(() => {
     if (user?.staffId) {
@@ -58,15 +61,16 @@ export function AttendancePage() {
     }
   }
 
-  const handleQRCheckIn = async (type: 'check_in' | 'check_out') => {
-    if (!qrInput.trim()) return
+  const handleQRCheckIn = async (type: 'check_in' | 'check_out', qrData?: string) => {
+    const rawData = (qrData || '').trim()
+    if (!rawData) return
 
     setIsLoading(true)
     setMessage(null)
 
     try {
       const response = await staffApi.checkInWithQR(
-        qrInput.trim(),
+        rawData,
         type,
         type === 'check_out' ? attendance?.id : undefined
       )
@@ -74,19 +78,26 @@ export function AttendancePage() {
       if (response.code === 200 || response.code === 201) {
         if (type === 'check_in') {
           setAttendance(response.data)
-          setMessage({ type: 'success', text: t('attendance.checkInSuccess') })
+          setMessage({
+            type: 'success',
+            text: `${t('attendance.checkInSuccess', '签到成功！')} ${response.data?.storeName ? `(${response.data.storeName})` : ''}`
+          })
         } else {
           setAttendance({ ...attendance, checkOutTime: response.data?.checkOutTime || new Date().toISOString() })
-          setMessage({ type: 'success', text: t('attendance.checkOutSuccess') })
+          setMessage({
+            type: 'success',
+            text: `${t('attendance.checkOutSuccess', '签退成功！')} ${response.data?.storeName ? `(${response.data.storeName})` : ''}`
+          })
         }
-        setShowQRModal(false)
-        setQrInput('')
+        setShowScanner(false)
+        await loadTodayAttendance()
         loadHistory()
       } else {
         setMessage({ type: 'error', text: response.message || t('attendance.checkInFailed') })
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.message || t('attendance.invalidQR') })
+      throw error
     } finally {
       setIsLoading(false)
     }
@@ -180,17 +191,24 @@ export function AttendancePage() {
     return t('attendance.workingHoursFormat', { hours, minutes })
   }
 
-  const isCheckedIn = attendance?.checkInTime && !attendance?.checkOutTime
+  const isCheckedIn = Boolean(attendance?.checkInTime && !attendance?.checkOutTime)
+  const isShiftFinished = Boolean(attendance?.checkInTime && attendance?.checkOutTime)
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
-      <header className="bg-primary text-white px-4 py-6">
+      <header className="bg-primary text-white px-4 py-6 shadow-md">
         <div className="flex items-center gap-3 mb-4">
-          <Clock size={28} />
+          <button
+            onClick={() => navigate('/')}
+            className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <Clock size={26} />
           <div>
-            <h1 className="text-xl font-bold">{t('attendance.title')}</h1>
-            <p className="text-white/80 text-sm">{new Date().toLocaleDateString('id-ID', {
+            <h1 className="text-xl font-bold">{t('attendance.title', '考勤签到')}</h1>
+            <p className="text-white/80 text-xs">{new Date().toLocaleDateString('id-ID', {
               weekday: 'long',
               year: 'numeric',
               month: 'long',
@@ -201,10 +219,11 @@ export function AttendancePage() {
 
         {/* Message */}
         {message && (
-          <div className={`mt-4 p-3 rounded-xl ${
-            message.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          <div className={`mt-2 p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${
+            message.type === 'success' ? 'bg-emerald-600/90 text-white' : 'bg-red-600/90 text-white'
           }`}>
-            {message.text}
+            {message.type === 'success' ? <CheckCircle size={18} /> : <X size={18} />}
+            <span>{message.text}</span>
           </div>
         )}
       </header>
@@ -212,49 +231,61 @@ export function AttendancePage() {
       {/* Main Content */}
       <div className="p-4">
         {/* Check In/Out Card */}
-        <div className={`bg-white rounded-2xl shadow-lg p-6 mb-6 ${
-          isCheckedIn ? 'border-2 border-green-500' : ''
+        <div className={`bg-white rounded-2xl shadow-sm border p-6 mb-6 ${
+          isCheckedIn ? 'border-emerald-500/50 bg-gradient-to-b from-emerald-50/20 to-white' : isShiftFinished ? 'border-blue-400/50 bg-gradient-to-b from-blue-50/20 to-white' : 'border-gray-100'
         }`}>
           <div className="text-center mb-6">
-            <div className={`w-24 h-24 rounded-full mx-auto flex items-center justify-center ${
-              isCheckedIn ? 'bg-green-100' : 'bg-gray-100'
+            <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center transition-all ${
+              isCheckedIn ? 'bg-emerald-100 text-emerald-600' : isShiftFinished ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-primary'
             }`}>
               {isCheckedIn ? (
-                <CheckCircle className="text-green-500" size={48} />
+                <CheckCircle size={42} />
+              ) : isShiftFinished ? (
+                <CheckCircle size={42} />
               ) : (
-                <Clock className="text-gray-400" size={48} />
+                <Clock size={42} />
               )}
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mt-4">
-              {isCheckedIn ? t('attendance.statusWorking') : t('attendance.statusNotCheckedIn')}
-            </h2>
-            <p className="text-gray-500">
+            <h2 className="text-lg font-bold text-gray-900 mt-3">
               {isCheckedIn
-                ? t('attendance.workingSince', { time: new Date(attendance.checkInTime).toLocaleTimeString('id-ID', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })})
-                : t('attendance.pressButtonToStart')}
+                ? t('attendance.statusWorking', '工作中')
+                : isShiftFinished
+                ? t('attendance.todayShiftCompleted', '今日出勤已完成')
+                : t('attendance.statusNotCheckedIn', '未签到')}
+            </h2>
+            <p className="text-gray-500 text-xs mt-1">
+              {isCheckedIn
+                ? t('attendance.workingSince', {
+                    time: new Date(attendance.checkInTime).toLocaleTimeString('id-ID', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  })
+                : isShiftFinished
+                ? `${t('attendance.checkInLabel', '上班')}: ${new Date(attendance.checkInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${t('attendance.checkOutLabel', '下班')}: ${new Date(attendance.checkOutTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+                : t('attendance.scanQRDesc', '请用手机扫描收银机上的动态考勤码签到')}
             </p>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-3 gap-3 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
             <div className="text-center">
-              <p className="text-2xl font-bold text-primary">{getWorkingHours().split(' ')[0]}</p>
-              <p className="text-sm text-gray-500">{t('attendance.workHours')}</p>
+              <p className="text-lg font-bold text-primary">{getWorkingHours().split(' ')[0]}</p>
+              <p className="text-[11px] text-gray-400">{t('attendance.workHours', '工时')}</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">
-                {new Date(attendance?.checkInTime || Date.now()).toLocaleTimeString('id-ID', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+              <p className="text-lg font-bold text-blue-600">
+                {attendance?.checkInTime
+                  ? new Date(attendance.checkInTime).toLocaleTimeString('id-ID', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  : '--:--'}
               </p>
-              <p className="text-sm text-gray-500">{t('attendance.checkInLabel')}</p>
+              <p className="text-[11px] text-gray-400">{t('attendance.checkInLabel', '上班')}</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-orange-600">
+              <p className="text-lg font-bold text-amber-600">
                 {attendance?.checkOutTime
                   ? new Date(attendance.checkOutTime).toLocaleTimeString('id-ID', {
                       hour: '2-digit',
@@ -262,109 +293,90 @@ export function AttendancePage() {
                     })
                   : '--:--'}
               </p>
-              <p className="text-sm text-gray-500">{t('attendance.checkOutLabel')}</p>
+              <p className="text-[11px] text-gray-400">{t('attendance.checkOutLabel', '下班')}</p>
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="space-y-3">
             {isCheckedIn ? (
-              <div className="grid grid-cols-2 gap-3">
+              <>
+                <button
+                  onClick={() => {
+                    setScannerDefaultMode('check_out')
+                    setShowScanner(true)
+                  }}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-amber-500 text-white rounded-2xl font-bold text-base hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-98 transition-all"
+                >
+                  <Camera size={22} />
+                  {t('attendance.scanPosQrCheckOut', '扫码下班打卡')}
+                </button>
                 <button
                   onClick={handleCheckOut}
                   disabled={isLoading}
-                  className="w-full py-4 bg-orange-500 text-white rounded-xl font-bold text-base hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  {isLoading ? (
-                    <Loader2 className="animate-spin" size={20} />
-                  ) : (
-                    <>
-                      <LogOut size={20} />
-                      {t('attendance.checkOut')}
-                    </>
-                  )}
+                  {isLoading ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                  {t('attendance.checkOut', '直接签退 (备用)')}
+                </button>
+              </>
+            ) : isShiftFinished ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setScannerDefaultMode('check_in')
+                    setShowScanner(true)
+                  }}
+                  disabled={isLoading}
+                  className="flex-1 py-3.5 bg-primary text-white rounded-2xl font-bold text-sm hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all"
+                >
+                  <RotateCcw size={18} />
+                  {t('attendance.scanAgain', '再次扫码打卡')}
                 </button>
                 <button
-                  onClick={() => setShowQRModal(true)}
-                  disabled={isLoading}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-base hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  onClick={() => navigate('/attendance/overtime')}
+                  className="py-3.5 px-4 bg-gray-100 text-gray-700 rounded-2xl font-medium text-xs hover:bg-gray-200"
                 >
-                  <QrCode size={20} />
-                  {t('attendance.scanQR')}
+                  {t('attendance.requestOvertime', '申请加班')}
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <>
                 <button
-                  onClick={() => setShowQRModal(true)}
+                  onClick={() => {
+                    setScannerDefaultMode('check_in')
+                    setShowScanner(true)
+                  }}
                   disabled={isLoading}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-100"
+                  className="w-full py-4 bg-primary text-white rounded-2xl font-bold text-base hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-primary/25 active:scale-98 transition-all"
                 >
-                  <QrCode size={24} />
-                  {t('attendance.scanQR')}
+                  <Camera size={22} />
+                  {t('attendance.scanPosQrCheckIn', '扫码上班签到')}
                 </button>
                 <button
                   onClick={handleCheckIn}
                   disabled={isLoading}
-                  className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  {isLoading ? (
-                    <Loader2 className="animate-spin" size={18} />
-                  ) : (
-                    <>
-                      <MapPin size={18} />
-                      {t('attendance.gpsCheckIn')}
-                    </>
-                  )}
+                  {isLoading ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
+                  {t('attendance.gpsCheckIn', 'GPS打卡 (备用)')}
                 </button>
-              </div>
+              </>
             )}
           </div>
         </div>
 
-        {/* QR Code Verification Modal */}
-        {showQRModal && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2 font-bold text-gray-900 text-lg">
-                  <QrCode className="text-indigo-600" size={24} />
-                  {t('attendance.qrModalTitle')}
-                </div>
-                <button
-                  onClick={() => { setShowQRModal(false); setQrInput(''); }}
-                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <p className="text-sm text-gray-500 mb-4">{t('attendance.scanQRDesc')}</p>
-              <textarea
-                value={qrInput}
-                onChange={(e) => setQrInput(e.target.value)}
-                placeholder={t('attendance.qrInputPlaceholder')}
-                className="w-full h-28 p-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono"
-              />
-              <div className="flex gap-3 mt-4">
-                <button
-                  type="button"
-                  onClick={() => { setShowQRModal(false); setQrInput(''); }}
-                  className="flex-1 py-3 text-gray-600 font-medium text-sm rounded-xl border border-gray-200 hover:bg-gray-50"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQRCheckIn(isCheckedIn ? 'check_out' : 'check_in')}
-                  disabled={isLoading || !qrInput.trim()}
-                  className="flex-1 py-3 bg-indigo-600 text-white font-bold text-sm rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : t('attendance.qrSubmit')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 动态二维码相机扫码弹窗 */}
+        <QRCameraScannerModal
+          isOpen={showScanner}
+          onClose={() => setShowScanner(false)}
+          onScan={async (qrData, mode) => {
+            await handleQRCheckIn(mode, qrData)
+          }}
+          defaultMode={scannerDefaultMode}
+          isLoading={isLoading}
+        />
 
         {/* Location Info */}
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 flex items-center gap-3">

@@ -27,10 +27,40 @@ const updateLeaveTypeSchema = createLeaveTypeSchema.partial();
 router.get('/', auth_1.authenticate, async (req, res) => {
     try {
         const storeId = req.user.storeId;
-        const leaveTypes = await database_1.default.leaveType.findMany({
+        let leaveTypes = await database_1.default.leaveType.findMany({
             where: { storeId, isActive: true },
             orderBy: { sortOrder: 'asc' }
         });
+        if (leaveTypes.length === 0) {
+            const defaultTypes = [
+                { code: 'annual', name: 'Cuti Tahunan (年假)', color: '#10B981', deductBalance: true, requiresProof: false, paidLeave: true, sortOrder: 1 },
+                { code: 'sick', name: 'Cuti Sakit (病假)', color: '#F59E0B', deductBalance: true, requiresProof: true, paidLeave: true, sortOrder: 2 },
+                { code: 'unpaid', name: 'Cuti Tanpa Gaji (事假/无薪假)', color: '#6B7280', deductBalance: false, requiresProof: false, paidLeave: false, sortOrder: 3 },
+                { code: 'maternity', name: 'Cuti Melahirkan (产假)', color: '#EC4899', deductBalance: false, requiresProof: true, paidLeave: true, sortOrder: 4 },
+                { code: 'paternity', name: 'Cuti Ayah (陪产假)', color: '#8B5CF6', deductBalance: false, requiresProof: true, paidLeave: true, sortOrder: 5 },
+                { code: 'bereavement', name: 'Cuti Duka (丧假)', color: '#374151', deductBalance: false, requiresProof: false, paidLeave: true, sortOrder: 6 },
+                { code: 'other', name: 'Lainnya (其他)', color: '#3B82F6', deductBalance: false, requiresProof: false, paidLeave: false, sortOrder: 7 }
+            ];
+            for (const item of defaultTypes) {
+                try {
+                    await database_1.default.leaveType.upsert({
+                        where: { storeId_code: { storeId, code: item.code } },
+                        update: { isActive: true },
+                        create: { ...item, storeId, isActive: true }
+                    });
+                }
+                catch {
+                    // ignore
+                }
+            }
+            leaveTypes = await database_1.default.leaveType.findMany({
+                where: { storeId, isActive: true },
+                orderBy: { sortOrder: 'asc' }
+            });
+            if (leaveTypes.length === 0) {
+                leaveTypes = defaultTypes.map((t, idx) => ({ id: `default-${idx}`, ...t, storeId, isActive: true }));
+            }
+        }
         res.json({
             code: 200,
             data: leaveTypes,

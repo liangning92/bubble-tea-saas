@@ -102,17 +102,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 监听更新状态变化
   onUpdateStatus: (callback: (status: string, info?: any) => void) => {
-    ipcRenderer.on('update-status', (_event, status, info) => callback(status, info))
+    const listener = (_event: Electron.IpcRendererEvent, status: any, info: any) => callback(status, info)
+    ipcRenderer.on('update-status', listener)
+    return () => ipcRenderer.removeListener('update-status', listener)
   },
 
   // 监听更新进度
   onUpdateProgress: (callback: (progress: any) => void) => {
-    ipcRenderer.on('update-progress', (_event, progress) => callback(progress))
+    const listener = (_event: Electron.IpcRendererEvent, progress: any) => callback(progress)
+    ipcRenderer.on('update-progress', listener)
+    return () => ipcRenderer.removeListener('update-progress', listener)
   },
 
   // 监听更新错误
   onUpdateError: (callback: (error: string) => void) => {
-    ipcRenderer.on('update-error', (_event, error) => callback(error))
+    const listener = (_event: Electron.IpcRendererEvent, error: any) => callback(error)
+    ipcRenderer.on('update-error', listener)
+    return () => ipcRenderer.removeListener('update-error', listener)
   },
 
   // ========== API URL 配置 ==========

@@ -27,9 +27,24 @@ class SocketManager {
       }
     })
 
-    // Authentication middleware
+    // Authentication middleware - supports staff token or store TV device connection
     this.io.use(async (socket, next) => {
       const token = socket.handshake.auth.token
+      const storeIdParam = socket.handshake.auth.storeId || socket.handshake.query.storeId
+      const clientType = socket.handshake.auth.clientType || socket.handshake.query.clientType
+
+      // Special allowance for Store TV / Public Customer Display
+      if (clientType === 'tv' || clientType === 'customer_display') {
+        if (storeIdParam && typeof storeIdParam === 'string') {
+          socket.data.user = {
+            id: `device-tv-${socket.id}`,
+            role: 'display',
+            storeId: storeIdParam,
+            staffId: ''
+          }
+          return next()
+        }
+      }
 
       if (typeof token !== 'string' || !token) {
         return next(new Error('Authentication required'))
@@ -247,6 +262,28 @@ class SocketManager {
       this.io.to(`store:${storeId}`).emit('hygiene:completed', {
         type: 'hygiene:completed',
         data: task,
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+
+  // Emit TV lottery spin animation trigger
+  emitTVLotteryTrigger(storeId: string, data: { orderId?: string; orderNumber?: string; prizeName: string; prizeCode?: string; prizeIndex?: number; customerPhone?: string }) {
+    if (this.io) {
+      this.io.to(`store:${storeId}`).emit('tv:lottery:trigger', {
+        type: 'tv:lottery:trigger',
+        data,
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+
+  // Emit TV configuration update (when admin saves TV display settings)
+  emitTVConfigUpdate(storeId: string, config: any) {
+    if (this.io) {
+      this.io.to(`store:${storeId}`).emit('tv:config:update', {
+        type: 'tv:config:update',
+        data: config,
         timestamp: new Date().toISOString()
       })
     }
