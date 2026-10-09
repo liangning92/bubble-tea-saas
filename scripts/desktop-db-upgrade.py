@@ -1,8 +1,9 @@
-"""Installer-only narrow upgrade. Production CLI runs only on Windows/current profile.
+"""Windows POS background backup and narrow installer upgrade helper.
 No server startup migration, arbitrary SQL, database restore, or test fault flags.
 """
 from contextlib import closing
 import argparse
+import base64
 import ctypes
 import hashlib
 import json
@@ -17,7 +18,6 @@ import traceback
 import urllib.parse
 import uuid
 import zipfile
-import base64
 
 LOCAL_COLUMNS = ('pickupNumber', 'requestFingerprint', 'requestReceipt')
 COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [

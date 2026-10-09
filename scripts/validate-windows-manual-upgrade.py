@@ -254,6 +254,7 @@ try:
         assert c.execute('SELECT pickupNumber,requestFingerprint,requestReceipt FROM "Order"').fetchone() == (None,None,None)
     assert (APP / 'BTPS.exe').read_bytes()[:2] == b'MZ'
     assert (APP / 'resources/app.asar').is_file()
+    assert (APP / 'resources/upgrade-helper/btps-db-upgrade.exe').is_file(), 'Installed POS must contain its next-update background helper'
     # Confirm the installed payload carries the advertised runtime version.
     expected_version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8-sig'))['version']
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
