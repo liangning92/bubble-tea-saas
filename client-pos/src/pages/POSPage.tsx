@@ -2,6 +2,7 @@ import { cachedActivityQuote } from '../utils/activityOfflineQuote'
 import { ActivityPanel } from '../components/ActivityPanel'
 import { activitiesApi } from '../services/api'
 import { io as connectActivitySocket } from 'socket.io-client'
+import { expenseCategoryName, visibleInPos } from '../../../shared/utils/expenseCategories'
 import { cartAuditSnapshot } from '../utils/cartAudit'
 import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
@@ -239,6 +240,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [shiftStatusLoaded, setShiftStatusLoaded] = useState(false)
   const [selectedShiftType, setSelectedShiftType] = useState<string>('')
   const [shiftActualCash, setShiftActualCash] = useState('')
+  const [manualReceipts, setManualReceipts] = useState({cash:'',qris:'',shopeefood:'',gofood:''})
+  const [shiftClosing, setShiftClosing] = useState(false)
   const [shiftSupervisorPin, setShiftSupervisorPin] = useState('')
   const [shiftInputTarget, setShiftInputTarget] = useState<'actualCash' | 'supervisorPin' | null>(null)
   // 锁屏状态
@@ -256,7 +259,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 费用记录状态
   const [todayExpenses, setTodayExpenses] = useState<any[]>([])
-  const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string }[]>([])
+  const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string; posVisible?: boolean }[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseQuantity, setExpenseQuantity] = useState('1')
@@ -1934,12 +1937,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     ])
   }
 
-  const expenseCategoryLabel = (category: {key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string}) => {
-    const language = i18n.resolvedLanguage || i18n.language
-    const localized = language.startsWith('zh') ? category.labelZh : language.startsWith('en') ? category.labelEn : category.labelId
-    const defaults: Record<string, string> = {supplies: 'expenseSupplies', utilities: 'expenseUtilities', rent: 'expenseRent', other: 'expenseOther'}
-    return localized?.trim() || category.label?.trim() || (defaults[category.key] ? t('pos.' + defaults[category.key]) : category.labelEn?.trim() || category.labelZh?.trim() || category.key)
-  }
+  const expenseCategoryLabel = (category: {key: string; label?: string; labelZh?: string; labelEn?: string; labelId?: string}) => expenseCategoryName(category, i18n.resolvedLanguage || i18n.language)
 
   // 加载今日费用数据
   const fetchTodayExpenses = async () => {
@@ -1948,7 +1946,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       const categories = await posApi.getExpenseCategories()
       const available = categories.data?.data?.list || []
       setExpenseCategories(available)
-      setExpenseCategory(current => available.some((category: {key: string}) => category.key === current) ? current : '')
+      setExpenseCategory(current => available.some((category: {key: string; posVisible?: boolean}) => category.key === current && visibleInPos(category)) ? current : '')
       const res = await posApi.getMyPosExpenses()
       setTodayExpenses(res.data?.data?.list || [])
     } catch (e) {
@@ -4707,6 +4705,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
+                  <section className="mb-4 rounded-xl border p-3" data-testid="manual-receipts-input">
+                    <h3 className="font-semibold">{t('manualReceipts.title')}</h3><p className="my-2 text-xs text-gray-500">{t('manualReceipts.hint')}</p>
+                    <div className="grid grid-cols-2 gap-3">{(['cash','qris','shopeefood','gofood'] as const).map(key => <label key={key} className="text-sm">{t('manualReceipts.'+key)}<input type="text" inputMode="numeric" pattern="[0-9]*" aria-label={t('manualReceipts.'+key)} value={manualReceipts[key]} onChange={e => {if (/^\d*$/.test(e.target.value)) setManualReceipts(previous => ({...previous,[key]:e.target.value}))}} className="mt-1 w-full rounded-lg border p-3 text-lg" placeholder="0" /></label>)}</div>
+                  </section>
                   {/* 主管确认 */}
                   {shiftSettings.requireSupervisorConfirm && (
                     <div className="mb-4">
@@ -4740,10 +4742,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           showToast(t('shiftEvidence.enterCount'), 'error')
                           return
                         }
+                        if (shiftClosing) return
+                        if (Object.values(manualReceipts).some(value => value.trim() === '' || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 2147483647)) { showToast(t('manualReceipts.required'), 'error'); return }
+                        setShiftClosing(true)
                         const actualCash = Number(shiftActualCash)
                         try {
                           const closeResult = await posApi.closeShift({
                             actualCash,
+                            manualReceipts: {cash:Number(manualReceipts.cash),qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)},
                             closeNote: ''
                           })
                           try {
@@ -4756,13 +4762,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           clearCart()
                           setShowShiftModal(false)
                           setShiftActualCash('')
+                          setManualReceipts({cash:'',qris:'',shopeefood:'',gofood:''})
                           setShiftSupervisorPin('')
                           logout()
                         } catch (e) {
                           showToast(t('pos.shiftCloseFailed'), 'error')
-                        }
+                        } finally { setShiftClosing(false) }
                       }}
-                      className="flex-1 py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
+                      disabled={shiftClosing}
+                      className="flex-1 py-3 bg-primary text-white rounded-xl font-bold touch-feedback disabled:opacity-50"
                     >
                       {t('pos.shiftConfirm')}
                     </button>
@@ -5044,7 +5052,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     className="w-full px-3 py-2 border rounded-xl"
                   >
                     <option value="">{t('pos.selectCategory')}</option>
-                    {expenseCategories.map(category => <option key={category.key} value={category.key}>{expenseCategoryLabel(category)}</option>)}
+                    {expenseCategories.filter(visibleInPos).map(category => <option key={category.key} value={category.key}>{expenseCategoryLabel(category)}</option>)}
                   </select>
                 </div>
 

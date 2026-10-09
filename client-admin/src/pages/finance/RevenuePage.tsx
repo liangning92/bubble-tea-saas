@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { revenueApi, configApi } from '../../services/api'
+import { ManualReceipts, ManualReceiptAmounts } from '../../components/ManualReceipts'
+import api, { revenueApi, configApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
 import { finiteNumber, requireRead, validInstant } from '../../utils/dashboardNavigation'
@@ -80,6 +81,9 @@ export function RevenuePage() {
       return {channels:readChannels(channels.data?.data),summary:readSummary(summary.data?.data)}
     },
   })
+  const handovers=useQuery({queryKey:['revenue-handovers',storeId,user?.role,params],enabled:!!storeId && canRead && validSelection,
+    queryFn:async()=>{const data=(await api.get('/revenue/handover-receipts',{params})).data?.data; if(!Array.isArray(data?.list)||!data?.totals) throw Error('INVALID_HANDOVER_RECEIPTS'); return data as {totals:ManualReceiptAmounts;list:{id:string;shift:string;closedAt:string;manualReceipts:ManualReceiptAmounts|null}[]} }
+  })
   const purchases=useQuery({
     queryKey:['revenue-purchase-hours',storeId,user?.role,params],
     enabled:!!storeId && canRead && validSelection,
@@ -120,7 +124,12 @@ export function RevenuePage() {
           <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('finance.avgOrderValue')}</p><p data-testid="revenue-average-value" className="mt-5 text-xl xl:text-2xl font-bold tabular-nums break-words text-gray-900">{formatCurrency(summary.current.avgOrderValue)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
         </div>
         {summary.comparisonRange?.adjusted&&<PageHelp><p data-testid="revenue-comparison-adjusted">{t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {time(summary.comparisonRange.startDate)} — {time(summary.comparisonRange.endDate)} (WIB)</p></PageHelp>}
-        {purchases.isError ? <div data-testid="purchase-analysis-error"><DashboardReadFailure retry={()=>purchases.refetch()}/></div> : purchases.isPending ? <p role="status">{t('common.loading')}</p> : <PurchaseHoursAnalysis key={`${storeId}:${period}:${purchases.data.startDate}:${purchases.data.endDate}`} data={purchases.data}/>}
+        {validSelection && <div className="space-y-3">{handovers.isPending ? <p role="status">{t('common.loading')}</p> : handovers.isError ? <p role="alert">{t('manualReceipts.failed')}</p> : handovers.data && <>
+      <ManualReceipts amounts={handovers.data.list.some(row=>row.manualReceipts) ? handovers.data.totals : null} />
+      <p className="text-xs text-gray-500">{t('manualReceipts.closed')} · WIB · {label}</p>
+      {handovers.data.list.length === 0 ? <p className="text-sm text-gray-500">{t('manualReceipts.empty')}</p> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead><tr><th className="p-3 text-left">{t('manualReceipts.closed')}</th><th className="p-3 text-left">{t('manualReceipts.shift')}</th>{(['cash','qris','shopeefood','gofood'] as const).map(key=><th key={key} className="p-3 text-right">{t('manualReceipts.'+key)}</th>)}</tr></thead><tbody>{handovers.data.list.map(row=><tr key={row.id} className="border-t"><td className="p-3 whitespace-nowrap">{time(row.closedAt)}</td><td className="p-3">{row.shift}</td>{(['cash','qris','shopeefood','gofood'] as const).map(key=><td key={key} className="p-3 text-right whitespace-nowrap">{row.manualReceipts ? formatCurrency(row.manualReceipts[key]) : t('manualReceipts.missing')}</td>)}</tr>)}</tbody></table></div>}
+    </>}</div>}
+    {purchases.isError ? <div data-testid="purchase-analysis-error"><DashboardReadFailure retry={()=>purchases.refetch()}/></div> : purchases.isPending ? <p role="status">{t('common.loading')}</p> : <PurchaseHoursAnalysis key={`${storeId}:${period}:${purchases.data.startDate}:${purchases.data.endDate}`} data={purchases.data}/>}
         {channels.length===0?<p className="card text-gray-500">{t('common.noData')}</p>:<>
           <section className="rounded-2xl bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between"><h2 className="text-lg font-semibold">{t('revenueLayout.channelDetails')}</h2><span className="text-xs text-gray-400">{label}</span></div><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="revenue-selected-table">
             <thead className="bg-gray-50 text-gray-500"><tr><th className="px-6 py-3 text-left font-medium">{t('finance.channel')}</th><th className="px-6 py-3 text-right font-medium">{t('revenueLayout.netRevenue')}</th><th className="px-6 py-3 text-right font-medium">{t('common.orders')}</th><th className="px-6 py-3 text-right font-medium">{t('finance.avgOrderValue')}</th></tr></thead>

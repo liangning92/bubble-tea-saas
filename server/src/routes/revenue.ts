@@ -1,9 +1,16 @@
+import prisma from '../config/database'
+import { getHandoverReceipts } from '../services/ShiftManualReceipts'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as RevenueService from '../services/RevenueService'
 import { RevenueDateError, revenuePeriodRange, revenueDailyRange, revenueComparisonRange } from '../utils/revenueDateRange'
 
 const router = Router()
+
+router.get('/handover-receipts', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res, next) => {
+  try { const {start,end} = revenuePeriodRange(req.query); res.json({code:200,data:await getHandoverReceipts(prisma,req.user!.storeId,start,end)}) }
+  catch (error) { if (error instanceof RevenueDateError) return res.status(400).json({code:400,message:error.message}); next(error) }
+})
 
 router.get('/purchase-hours', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {

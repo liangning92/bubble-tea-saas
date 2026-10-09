@@ -11,7 +11,6 @@ export async function getPosExpenses(actor: Actor) {
 }
 export async function createPosExpense(actor: Actor, body: unknown) {
   const input = posExpenseSchema.parse(body)
-  if (!(await getExpenseCategories(actor.storeId)).some(c => c.key === input.category)) throw Error('POS_EXPENSE_CATEGORY_INVALID')
   const date = normalizeExpenseDate(input.date || new Date())
   const referenceId = actor.id + ':' + input.requestId
   return prisma.$transaction(async tx => {
@@ -23,6 +22,9 @@ export async function createPosExpense(actor: Actor, body: unknown) {
       if (!audit?.newValue || JSON.parse(audit.newValue).quantity !== input.quantity) throw Error('POS_EXPENSE_REQUEST_CONFLICT')
       return { ...saved, amount: saved.amount / 100, quantity: input.quantity }
     }
+    const config = await tx.config.findUnique({where:{storeId_key:{storeId:actor.storeId,key:'expense.categories'}}})
+    const categories = config?.value ? JSON.parse(config.value) : await getExpenseCategories(actor.storeId)
+    if (!categories.some(c => c.key === input.category && c.posVisible !== false)) throw Error('POS_EXPENSE_CATEGORY_INVALID')
     const expense = await tx.expense.create({ data: { storeId: actor.storeId, type: 'operational', category: input.category, amount: input.amount * 100, description: input.description, date, referenceId, referenceType: source } })
     await tx.financeAuditLog.create({ data: { storeId: actor.storeId, userId: actor.id, action: 'create', entityType: 'expense', entityId: expense.id, description: 'POS daily purchase reimbursement', newValue: JSON.stringify({ ...input, source }) } })
     return { ...expense, amount: input.amount, quantity: input.quantity }

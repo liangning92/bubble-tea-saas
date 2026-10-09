@@ -212,7 +212,7 @@ export const posApi = {
   getShiftHandover: (id: string) => api.get('/pos-cash/shifts/' + id + '/handover'),
   getCurrentShift: () => api.get('/pos-cash/shifts/current'),
   openShift: (data: { openFloat: number; shift: string }) => api.post('/pos-cash/shifts/open', data),
-  closeShift: async (data: { actualCash: number; closeNote?: string; nextStaffId?: string }) => {
+  closeShift: async (data: { actualCash: number; manualReceipts?: {cash:number;qris:number;shopeefood:number;gofood:number}; closeNote?: string; nextStaffId?: string }) => {
     const response = await api.post('/pos-cash/shifts/close', data)
     const auth = readBackendAuth()
     if (auth.user?.storeId) await saveSnapshot('/pos-cash/shifts/current', {data:{hasOpenShift:false,shift:null}}, backendIdentity(auth.apiUrl!), auth.user.storeId, true)
