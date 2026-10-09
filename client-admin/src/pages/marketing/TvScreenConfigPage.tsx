@@ -548,6 +548,17 @@ export function TvScreenConfigPage() {
             </button>
           </div>
 
+          {/* 营销管理全链路联动提示 */}
+          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-start gap-2.5">
+            <span className="text-base">💡</span>
+            <div>
+              <span className="font-semibold">{t('marketing.tvSpecialsLinkHintTitle', '已开启营销管理全链路自动联动：')}</span>
+              <span className="text-blue-700">
+                {t('marketing.tvSpecialsLinkHintDesc', '当您在【营销管理 -> 促销折扣 / 每日特价】中配置了定时特价活动时，电视大屏将优先自动拉取当前生效的特价商品并轮播展示，同时收银机将自动以特价进行结算；此处的排期列表可作为日常常驻特价备用。')}
+              </span>
+            </div>
+          </div>
+
           <div className="space-y-4">
             {config.dailySpecials.map((item, idx) => (
               <div key={idx} className="p-4 bg-gray-50 rounded-2xl border border-gray-200/80 space-y-4">
