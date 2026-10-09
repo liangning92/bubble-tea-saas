@@ -1,3 +1,5 @@
+import { reviewCashWarning, CashReviewError } from '../services/ShiftCashReconciliation'
+import { ZodError } from 'zod'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as FinanceService from '../services/FinanceService'
@@ -6,6 +8,11 @@ import { prisma } from '../config/database'
 import { loadShiftReview, ShiftReviewInputError } from '../services/ShiftReviewService'
 
 const router = Router()
+
+router.post('/shift-sessions/:id/cash-warning/review', authenticate, authorize('admin'), async (req: AuthRequest, res, next) => {
+  try { res.json({code:200,data:await reviewCashWarning(prisma,req.user!,req.params.id,req.body.note)}) }
+  catch(error) {if(error instanceof CashReviewError)return res.status(error.status).json({code:error.status,message:error.message});if(error instanceof ZodError)return res.status(400).json({code:400,message:'REVIEW_NOTE_REQUIRED'});next(error)}
+})
 
 router.get('/shift-sessions', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {

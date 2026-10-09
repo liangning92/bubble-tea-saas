@@ -1,4 +1,5 @@
 import { parseDateBoundary } from '../utils/businessDate'
+import { calculateShiftCash, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
 import { manualReceiptsSchema } from '../services/ShiftManualReceipts'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -73,7 +74,8 @@ for (const path of ['/balance', '/shifts/current']) {
     try {
       const data = await loadShiftSummaryEvidence(prisma, req.user!.storeId)
       const purchaseExpenses = data.shift ? await summarizeShiftPurchases(req.user!.storeId, data.shift.openedAt, new Date()) : null
-      res.json({ code: 200, data: { ...data, purchaseExpenses } })
+      const cashReconciliation = data.shift ? await calculateShiftCash(prisma, req.user!.storeId, data.shift, new Date(data.summaryEvidence.windowEnd)) : null
+      res.json({ code: 200, data: { ...data, purchaseExpenses, cashReconciliation } })
     } catch (error) {
       console.error('Get shift evidence error:', error)
       res.status(500).json({ code: 500, message: 'Failed to get shift evidence' })
@@ -216,23 +218,23 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
       await tx.store.update({ where: { id: storeId }, data: { updatedAt: new Date() } })
       const captured = await loadShiftSummaryEvidence(tx, storeId, closedAt, currentShift)
       const evidence = captured.summaryEvidence
-      const amounts = [evidence.cashSales,evidence.cashIns,evidence.cashOuts]
-      const recordedBalance = amounts.every(v => typeof v === 'number') ? currentShift.openFloat + evidence.cashSales! + evidence.cashIns! - evidence.cashOuts! : null
-      const expectedCash = evidence.verified ? recordedBalance : null
-      const difference = expectedCash === null ? null : actualCash - expectedCash
-      const differenceLimit = Number(shiftSettings.cashDifferenceLimit) || 0
-      if (differenceLimit > 0 && difference !== null && Math.abs(difference) > differenceLimit) throw Error('SHIFT_CASH_DIFFERENCE_LIMIT_EXCEEDED')
+      const cashReconciliation = await calculateShiftCash(tx, storeId, currentShift, closedAt)
+      const recordedBalance = cashReconciliation.expectedCash
+      const expectedCash = cashReconciliation.expectedCash
+      const cashWarning = cashWarningFor(currentShift.id, actualCash, cashReconciliation, closedAt)
+      const difference = cashWarning?.difference || 0
       const purchaseExpenses = await summarizeShiftPurchases(storeId, currentShift.openedAt, closedAt, tx, categories)
-      // Legacy non-null expectedCash stores only an estimate; report carries explicit verification/nulls.
-      const changed = await tx.shiftSession.updateMany({ where: { id: currentShift.id, status: 'open' }, data: { status: 'closed', actualCash, ...(recordedBalance === null ? {} : {expectedCash:recordedBalance}), cashDifference: difference, closeNote, nextStaffId, closedAt } })
+      // The recorded formula is frozen in the report; cash discrepancy is informational and never blocks closing.
+      const changed = await tx.shiftSession.updateMany({ where: { id: currentShift.id, status: 'open' }, data: { status: 'closed', actualCash, ...(Number.isSafeInteger(recordedBalance) && recordedBalance >= -2147483648 && recordedBalance <= 2147483647 ? {expectedCash:recordedBalance} : {}), cashDifference: Number.isSafeInteger(difference) && difference >= -2147483648 && difference <= 2147483647 ? difference : null, closeNote, nextStaffId, closedAt } })
       if (changed.count !== 1) throw Error('SHIFT_ALREADY_CLOSED')
       const session = await tx.shiftSession.findUniqueOrThrow({ where: { id: currentShift.id } })
       await tx.cashEvent.create({ data: { storeId, staffId, type: 'close_shift', amount: actualCash, shift: currentShift.shift, note: `交班 - 差异: ${difference !== null ? difference : 'N/A'}` } })
       await tx.config.create({ data: { storeId, key: 'pos.shift.purchase:' + session.id, category: 'shift_report', value: JSON.stringify(purchaseExpenses) } })
       const [cashier,shift] = await Promise.all([tx.staff.findFirst({where:{id:staffId,storeId},select:{name:true}}),tx.shift.findFirst({where:{storeId,key:currentShift.shift},select:{name:true,nameZh:true,nameId:true}})])
-      const report = {version:1,manualReceipts,manualReceiptsSource:manualReceipts ? 'manual_handover' : null,reportedBy:req.user!.id,reportKind:'handover',sessionId:session.id,cashierName:cashier?.name || null,shiftType:session.shift,shiftNames:shift,openedAt:session.openedAt,closedAt:session.closedAt,openFloat:session.openFloat,actualCash,summaryEvidence:evidence,recordedBalance,expectedCash,cashDifference:difference,purchaseExpenses,summaryItems:shiftSettings.summaryItems || {}}
+      const report = {version:1,cashReconciliation,manualReceipts,manualReceiptsSource:manualReceipts ? 'manual_handover' : null,reportedBy:req.user!.id,reportKind:'handover',sessionId:session.id,cashierName:cashier?.name || null,shiftType:session.shift,shiftNames:shift,openedAt:session.openedAt,closedAt:session.closedAt,openFloat:session.openFloat,actualCash,summaryEvidence:evidence,recordedBalance,expectedCash,cashDifference:difference,purchaseExpenses,summaryItems:shiftSettings.summaryItems || {}}
       await tx.config.create({data:{storeId,key:'pos.shift.report:'+session.id,category:'shift_report',value:JSON.stringify(report)}})
-      return { ...session, expectedCash, cashDifference:difference, purchaseExpenses, report }
+      if (cashWarning) await tx.config.create({data:{storeId,key:CASH_WARNING_PREFIX+session.id,category:'shift_report',value:JSON.stringify(cashWarning)}})
+      return { ...session, expectedCash, cashDifference:difference, purchaseExpenses, report, cashWarning }
     })
     res.json({ code: 200, data: result })
   } catch (error) {
