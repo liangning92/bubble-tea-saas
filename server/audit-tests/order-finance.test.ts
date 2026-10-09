@@ -3,7 +3,7 @@ import { orderRequestFingerprint } from '../src/utils/orderRequestFingerprint'
 import { beforeEach, expect, jest, test } from '@jest/globals'
 jest.mock('../src/config/database',()=>({__esModule:true,default:{
  product:{findMany:jest.fn()},productChannelPrice:{findUnique:jest.fn(async()=>null)},member:{findUnique:jest.fn(),update:jest.fn(),updateMany:jest.fn()},
- channel:{findUnique:jest.fn(),findFirst:jest.fn()},bOMItem:{findMany:jest.fn()},config:{findFirst:jest.fn()},inventory:{findMany:jest.fn()},order:{create:jest.fn(),update:jest.fn(),findUnique:jest.fn()},qrisPayment:{findUnique:jest.fn(),updateMany:jest.fn()},cashEvent:{create:jest.fn()},pointLog:{create:jest.fn()},$transaction:jest.fn()
+ channel:{findUnique:jest.fn(),findFirst:jest.fn()},bOMItem:{findMany:jest.fn()},config:{findFirst:jest.fn()},inventory:{findMany:jest.fn()},shiftSession:{findMany:jest.fn()},order:{create:jest.fn(),update:jest.fn(),findUnique:jest.fn()},qrisPayment:{findUnique:jest.fn(),updateMany:jest.fn()},cashEvent:{create:jest.fn()},pointLog:{create:jest.fn()},$transaction:jest.fn()
 }}))
 jest.mock('../src/config/env',()=>({config:{indonesia:{ppnRate:0.11}}}))
 jest.mock('../src/services/ReferralService',()=>({processOrderReferralRewards:jest.fn(async()=>undefined)}))
@@ -17,6 +17,7 @@ beforeEach(()=>{
  db.product.findMany.mockResolvedValue([{id:'p',storeId:'a'}]);db.member.findUnique.mockResolvedValue({id:'m',storeId:'a',points:10000,level:'bronze'})
  db.channel.findUnique.mockResolvedValue(null);db.channel.findFirst.mockResolvedValue(null)
  db.bOMItem.findMany.mockResolvedValue([]);db.config.findFirst.mockResolvedValue(null);db.inventory.findMany.mockResolvedValue([])
+ db.shiftSession.findMany.mockResolvedValue([{shift:'morning'}])
  db.member.updateMany.mockResolvedValue({count:1})
  db.qrisPayment.findUnique.mockResolvedValue({id:'pay',externalId:'QRIS2-test',storeId:'a',amount:200,status:'completed',orderId:null})
  db.qrisPayment.updateMany.mockResolvedValue({count:1});db.order.findUnique.mockResolvedValue(null)
