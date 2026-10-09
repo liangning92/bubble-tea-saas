@@ -135,7 +135,7 @@ export async function getActiveSessions(storeId: string) {
     let lastCheckoutFailure: { code: string; httpStatus: number | null; outcome: string; at: Date } | null = null
     for (const action of actions) {
       let meta: any = {}
-      try { meta = JSON.parse(action.metadata || '{}') } catch { /* Missing legacy details stay unknown. */ }
+      try { const parsed = JSON.parse(action.metadata || '{}'); meta = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {} } catch { /* Missing legacy details stay unknown. */ }
       if (['checkout_complete', 'cart_clear', 'suspend'].includes(action.action) || (meta.cartSnapshot?.version === 1 && Array.isArray(meta.cartSnapshot.items) && meta.cartSnapshot.items.length === 0)) lastCheckoutFailure = null
       if (action.action === 'checkout_failed') lastCheckoutFailure = {
         code: typeof meta.failureCode === 'string' ? meta.failureCode.slice(0, 160) : '',
