@@ -207,8 +207,11 @@ def create_application_archive(root, archive):
                             h.update(chunk)
                         after = os.fstat(source.fileno())
                     final = child.stat()
+                    # Windows path stat and handle fstat do not always report
+                    # identical creation-time/file-index fields. Size and
+                    # modification time are stable across both APIs.
                     if any(getattr(before, key) != getattr(after, key) or getattr(before, key) != getattr(final, key)
-                           for key in ('st_size', 'st_mtime_ns', 'st_ctime_ns', 'st_ino')):
+                           for key in ('st_size', 'st_mtime_ns')):
                         fail('APPLICATION_CHANGED_DURING_BACKUP')
                     files[relative] = h.hexdigest()
                 else:
