@@ -117,7 +117,7 @@ test('off cannot open or create a new sale even when active',async()=>{
 test('historical off session is readable and closable without active configuration',async()=>{
  let updated,events=[];const historic={id:'historic-off',shift:'off',openFloat:100,status:'open',openedAt:new Date()};
  const db={config:{findFirst:async()=>null},shiftSession:{findMany:async()=>[historic],findFirst:async()=>historic,update:async q=>{updated=q;return {...historic,...q.data};}},cashEvent:{findMany:async()=>[],create:async q=>{events.push(q);return {};}},order:{count:async()=>0,aggregate:async()=>({_sum:{}}),groupBy:async()=>[],findMany:async()=>[]},channel:{findMany:async()=>[]}};
- db.store={update:async()=>({})};db.config.create=async()=>({});db.$transaction=async fn=>fn(db);db.shiftSession.updateMany=async q=>{updated=q;return {count:1}};db.shiftSession.findUniqueOrThrow=async()=>({...historic,...updated.data});
+ db.staff={findFirst:async()=>null};db.shift={findFirst:async()=>null};db.store={update:async()=>({})};db.config.create=async()=>({});db.$transaction=async fn=>fn(db);db.shiftSession.updateMany=async q=>{updated=q;return {count:1}};db.shiftSession.findUniqueOrThrow=async()=>({...historic,...updated.data});
  const run=routes('server/src/routes/posCash.ts',db,{'../utils/dateUtils':{startOfTodayJakarta:()=>new Date('2026-10-06T17:00:00Z')}});
  const read=await run('get/shifts/current',{user});assert.equal(read.code,200);assert.equal(read.data.data.shift.shift,'off');assert.equal(read.data.data.hasOpenShift,true);
  const closed=await run('post/shifts/close',{user,body:{actualCash:100}});assert.equal(closed.code,200);assert.equal(updated.where.id,'historic-off');assert.equal(updated.data.status,'closed');assert.equal(events[0].data.shift,'off');

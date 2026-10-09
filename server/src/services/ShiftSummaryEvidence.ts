@@ -3,8 +3,8 @@ import { PrismaClient } from '@prisma/client'
 type EvidenceDB = Pick<PrismaClient, 'shiftSession' | 'cashEvent' | 'order'>
 
 // Read-only window evidence. Insertion time/key never certify session ownership.
-export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, asOf = new Date()) {
-  const sessions = await db.shiftSession.findMany({
+export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, asOf = new Date(), capturedShift?: {id:string;storeId:string;shift:string;openedAt:Date;openFloat:number}) {
+  const sessions = capturedShift ? [capturedShift] : await db.shiftSession.findMany({
     where: { storeId, status: 'open' }, orderBy: { openedAt: 'desc' }
   })
   const shift = sessions.length === 1 ? sessions[0] : null
@@ -13,7 +13,7 @@ export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, 
     windowEnd: asOf.toISOString(), reasonCodes: [] as string[],
     cashSales: null as number | null, cashIns: null as number | null,
     cashOuts: null as number | null, qrisReceipts: null as number | null,
-    orderCount: null as number | null, orderReceipts: null as number | null
+    orderCount: null as number | null, cupCount: null as number | null, orderReceipts: null as number | null
   }
   if (!shift || shift.openedAt >= asOf) {
     empty.reasonCodes = [sessions.length > 1 ? 'OVERLAPPING_SESSIONS' : shift ? 'INVALID_WINDOW' : 'NO_OPEN_SESSION']
@@ -25,7 +25,7 @@ export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, 
   const where = { storeId, createdAt: { gte: shift.openedAt, lt: asOf } }
   const [events, orders] = await Promise.all([
     db.cashEvent.findMany({ where, select: { type: true, amount: true, shift: true } }),
-    db.order.findMany({ where, select: { finalAmount: true, status: true, paymentMethod: true } })
+    db.order.findMany({ where, select: { finalAmount: true, status: true, paymentMethod: true, items: {select:{quantity:true}} } })
   ])
   const reasons = ['SESSION_ATTRIBUTION_NOT_PERSISTED', 'OFFLINE_ORIGIN_NOT_PERSISTED']
   const cashSubtotal = (type: string) => {
@@ -47,6 +47,7 @@ export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, 
     reasonCodes: reasons, cashSales, cashIns, cashOuts,
     qrisReceipts: hasRefund ? null : qris.filter(o => o.status === 'completed').reduce((sum, o) => sum + o.finalAmount, 0),
     orderCount: completed.length,
+    cupCount: completed.every(o => Array.isArray(o.items) && o.items.every(i => Number.isSafeInteger(i.quantity) && i.quantity > 0)) ? completed.reduce((sum,o) => sum + o.items.reduce((cups,i)=>cups+i.quantity,0),0) : null,
     orderReceipts: orders.some(o => o.status === 'refunded') ? null : completed.reduce((sum, o) => sum + o.finalAmount, 0)
   }
   return { hasOpenShift: true, shift, openFloat: shift.openFloat,

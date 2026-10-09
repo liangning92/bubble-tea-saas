@@ -315,7 +315,7 @@ const LivePreview: React.FC<{
           case 'logo': {
             const effectiveLogo = block.config.url || defaultLogo
             return (
-              <div key={block.id} className={`${alignClass} mb-2`}>
+              <div key={block.id} className={`${alignClass}`}>
                 <div className="border rounded p-1 inline-block">
                   {effectiveLogo ? (
                     <img
@@ -338,13 +338,13 @@ const LivePreview: React.FC<{
           }
           case 'header':
             return (
-              <div key={block.id} className={`${alignClass} ${boldClass} border-b pb-2 mb-2`}>
-                <div className={sizeClass}>{block.config.text || 'Store Name'}</div>
+              <div key={block.id} className={`${alignClass} ${boldClass} `}>
+                <div className={sizeClass}>{block.config.text ?? 'Store Name'}</div>
               </div>
             )
           case 'storeInfo':
             return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} text-gray-600 border-b pb-2 mb-2`}>
+              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass} text-gray-600 `}>
                 {block.config.showPhone && <div>Tel: {block.config.phone || t('posSettings.receiptSamplePhone')}</div>}
                 {block.config.showAddress && <div>{block.config.address || t('posSettings.receiptSampleAddress')}</div>}
               </div>
@@ -353,15 +353,15 @@ const LivePreview: React.FC<{
             const showPickup = block.config.showPickupNumber !== false
             const showOrder = block.config.showOrderNo !== false
             return (
-              <div key={block.id} className={`${alignClass} ${boldClass} ${sizeClass} border-b pb-2 mb-2`}>
+              <div key={block.id} className={`${alignClass} ${boldClass} ${sizeClass} `}>
                 {showPickup && (
-                  <div className={`${alignClass} ${boldClass} ${sizeClass} my-1 py-1`}>
+                  <div className={`${alignClass} ${boldClass} ${sizeClass}`}>
                     *** {t('posSettings.receiptQueueNumber', '取餐号')}: A01 ***
                   </div>
                 )}
                 {showOrder && (
                   <div className="font-mono">
-                    {t('posSettings.orderNumber', 'Order number')}: ORD{new Date().toISOString().slice(0, 10).replace(/-/g, '')}-829102
+                    NO. 7K3M9Q2R5A
                   </div>
                 )}
                 {block.config.showDate && <div>{t('posSettings.receiptDate')}: {new Date().toLocaleDateString('id-ID')}</div>}
@@ -374,30 +374,30 @@ const LivePreview: React.FC<{
           }
           case 'items':
             return (
-              <div key={block.id} className={`border-b pb-2 mb-2 ${sizeClass}`}>
-                <div className={`font-bold mb-1 ${alignClass}`}>{t('posSettings.receiptItems')}</div>
-                <div className="flex justify-between">
+              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
+                <div className={`${boldClass} ${alignClass}`}>{t('posSettings.receiptItems')}</div>
+                <div className={`flex justify-between ${boldClass}`}>
                   <span>{t('posSettings.receiptSampleProduct')}</span>
                   <span>15,000</span>
                 </div>
                 {block.config.showSugarIce && (
-                  <div className="pl-2 text-gray-500">{t('posSettings.receiptSampleOption')}</div>
+                  <div className={`pl-2 text-gray-500 ${alignClass}`}>{t('posSettings.receiptSampleOption')}</div>
                 )}
                 {block.config.showAddon && (
-                  <div className="pl-2 text-gray-500">{t('posSettings.receiptSampleAddon')}</div>
+                  <div className={`pl-2 text-gray-500 ${alignClass}`}>{t('posSettings.receiptSampleAddon')}</div>
                 )}
               </div>
             )
           case 'subtotal':
             return (
-              <div key={block.id} className={`flex justify-between ${sizeClass} border-b pb-2 mb-2`}>
+              <div key={block.id} className={`flex justify-between ${sizeClass} ${boldClass} ${alignClass} `}>
                 <span>{block.config.subtotalLabel || t('posSettings.receiptSubtotal')}</span>
                 <span>35,000</span>
               </div>
             )
           case 'tax':
             return (
-              <div key={block.id} className={`flex justify-between ${sizeClass} text-gray-500 border-b pb-2 mb-2`}>
+              <div key={block.id} className={`flex justify-between ${sizeClass} ${boldClass} ${alignClass} text-gray-500 `}>
                 <span>{block.config.label || t('posSettings.blockTax') + ' (' + (block.config.rate || 11) + '%)'}</span>
                 <span>3,850</span>
               </div>
@@ -405,9 +405,9 @@ const LivePreview: React.FC<{
           case 'total': {
             const showDisc = block.config.showDiscountDetail !== false
             return (
-              <div key={block.id} className="border-b pb-2 mb-2 space-y-1">
+              <div key={block.id} className={`${alignClass} ${boldClass}`}>
                 {showDisc && (
-                  <div className={`flex justify-between text-emerald-700 ${sizeClass} font-medium`}>
+                  <div className={`flex justify-between text-emerald-700 ${sizeClass} ${boldClass}`}>
                     <span>{block.config.discountLabel || t('posSettings.receiptDiscount', 'Discount (second drink half price)')}</span>
                     <span>-10,000</span>
                   </div>
@@ -421,13 +421,14 @@ const LivePreview: React.FC<{
           }
           case 'paymentInfo':
             return (
-              <div key={block.id} className={`border-b pb-2 mb-2 ${sizeClass}`}>
+              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
                 {block.config.showMethod && (
-                  <div className="flex justify-between">
+                  <div className={`flex justify-between ${boldClass}`}>
+                    <span>{t('posSettings.blockPaymentInfo')}</span>
                     <span>{t('posSettings.receiptCash')}</span>
-                    <span>50,000</span>
                   </div>
                 )}
+                {block.config.showReceived && (<div className={`flex justify-between ${boldClass}`}><span>{t('posSettings.blockShowReceived')}</span><span>50,000</span></div>)}
                 {block.config.showChange && (
                   <div className="flex justify-between text-gray-500">
                     <span>{t('posSettings.receiptChange')}</span>
@@ -439,18 +440,18 @@ const LivePreview: React.FC<{
           case 'qrCode': {
             const effectiveQr = block.config.url || defaultQrCode
             return (
-              <div key={block.id} className={`${alignClass} border-b pb-2 mb-2`}>
+              <div key={block.id} className={`${alignClass} `}>
                 {effectiveQr ? (
                   <img
                     src={effectiveQr}
                     alt="QR"
                     style={{ width: block.config.size || 80, height: block.config.size || 80 }}
-                    className="mx-auto object-contain inline-block"
+                    className="object-contain inline-block"
                     onError={(e) => { (e.target as any).style.display = 'none' }}
                   />
                 ) : (
                   <div
-                    className="bg-gray-100 mx-auto flex items-center justify-center border border-dashed border-gray-300"
+                    className="bg-gray-100 inline-flex items-center justify-center border border-dashed border-gray-300"
                     style={{ width: block.config.size || 80, height: block.config.size || 80 }}
                   >
                     <span className="text-[9px] text-gray-500 font-bold">QR CODE</span>
@@ -461,9 +462,9 @@ const LivePreview: React.FC<{
           }
           case 'barcode':
             return (
-              <div key={block.id} className={`${alignClass} border-b pb-2 mb-2`}>
+              <div key={block.id} className={`${alignClass} `}>
                 <div
-                  className="bg-black mx-auto"
+                  className="bg-black inline-block"
                   style={{ width: '120px', height: block.config.height || 40 }}
                 />
                 <div className={`${sizeClass} mt-1`}>{t('posSettings.receiptBarcode') || 'BT20260704001'}</div>
@@ -471,9 +472,9 @@ const LivePreview: React.FC<{
             )
           case 'footer':
             return (
-              <div key={block.id} className={`${alignClass} ${sizeClass}`}>
+              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
                 {block.config.showDivider && <div className="border-t border-dashed my-2" />}
-                <div className={boldClass}>{block.config.footerText || 'Thank you!'}</div>
+                <div className={boldClass}>{block.config.footerText ?? 'Thank you!'}</div>
               </div>
             )
           case 'divider':

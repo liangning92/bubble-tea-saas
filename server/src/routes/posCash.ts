@@ -114,7 +114,9 @@ router.get('/shifts/:id/handover', authenticate, authorize('admin', 'manager', '
     const session = await prisma.shiftSession.findFirst({ where: { id: req.params.id, storeId: req.user!.storeId, status: 'closed' } })
     if (!session) return res.status(404).json({ code: 404, message: 'SHIFT_HANDOVER_NOT_FOUND' })
     const snapshot = await prisma.config.findUnique({ where: { storeId_key: { storeId: req.user!.storeId, key: 'pos.shift.purchase:' + session.id } } })
-    res.json({ code: 200, data: { ...session, purchaseExpenses: snapshot ? JSON.parse(snapshot.value) : null } })
+    const reportRow = await prisma.config.findUnique({where:{storeId_key:{storeId:req.user!.storeId,key:'pos.shift.report:'+session.id}}})
+    const report = reportRow ? JSON.parse(reportRow.value) : null
+    res.json({ code: 200, data: { ...session, expectedCash:report?.expectedCash ?? null, cashDifference:report?.cashDifference ?? null, purchaseExpenses: snapshot ? JSON.parse(snapshot.value) : null, report } })
   } catch (e) { next(e) }
 })
 
@@ -179,6 +181,7 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     const storeId = req.user!.storeId
     const staffId = req.user!.staffId || ''
     const { actualCash, closeNote, nextStaffId } = req.body
+    if (!Number.isSafeInteger(actualCash) || actualCash < 0 || actualCash > 2147483647) return res.status(400).json({code:400,message:'SHIFT_RECONCILIATION_REQUIRED'})
 
     const shiftConfig = await prisma.config.findFirst({
       where: { storeId, key: 'shiftSettings' },
@@ -189,54 +192,43 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     if (shiftSettings.requireSupervisorConfirm && !['admin', 'manager'].includes(req.user!.role)) {
       return res.status(403).json({ code: 403, message: 'SUPERVISOR_REQUIRED' })
     }
-    if (shiftSettings.requireReconciliation && (typeof actualCash !== 'number' || !Number.isFinite(actualCash) || actualCash < 0)) {
-      return res.status(400).json({ code: 400, message: 'SHIFT_RECONCILIATION_REQUIRED' })
-    }
 
     // 获取当前打开的班次
-    const currentShift = await prisma.shiftSession.findFirst({
+    const openSessions = await prisma.shiftSession.findMany({
       where: { storeId, status: 'open' }
     })
 
+    if (openSessions.length > 1) return res.status(409).json({code:409,message:'SHIFT_SESSIONS_OVERLAP'})
+    const currentShift = openSessions[0]
     if (!currentShift) {
       return res.status(400).json({ code: 400, message: 'No open shift found' })
     }
 
-    // 计算期望现金
+    // Capture one closing boundary; estimates are never certified reconciliation.
     const closedAt = new Date()
-
-    const shiftEvents = await prisma.cashEvent.findMany({
-      where: {
-        storeId,
-        shift: currentShift.shift,
-        createdAt: { gte: currentShift.openedAt, lt: closedAt }
-      }
-    })
-
-    let expectedCash = currentShift.openFloat
-    shiftEvents.forEach(event => {
-      if (event.type === 'cash_sale') expectedCash += event.amount
-      if (event.type === 'cash_in') expectedCash += event.amount
-      if (event.type === 'cash_out') expectedCash -= event.amount
-    })
-
-    const difference = actualCash !== undefined ? actualCash - expectedCash : null
-
-    const differenceLimit = Number(shiftSettings.cashDifferenceLimit) || 0
-    if (differenceLimit > 0 && difference !== null && Math.abs(difference) > differenceLimit) {
-      return res.status(400).json({ code: 400, message: 'SHIFT_CASH_DIFFERENCE_LIMIT_EXCEEDED' })
-    }
 
     const categories = await getExpenseCategories(storeId)
     const result = await prisma.$transaction(async tx => {
       await tx.store.update({ where: { id: storeId }, data: { updatedAt: new Date() } })
+      const captured = await loadShiftSummaryEvidence(tx, storeId, closedAt, currentShift)
+      const evidence = captured.summaryEvidence
+      const amounts = [evidence.cashSales,evidence.cashIns,evidence.cashOuts]
+      const recordedBalance = amounts.every(v => typeof v === 'number') ? currentShift.openFloat + evidence.cashSales! + evidence.cashIns! - evidence.cashOuts! : null
+      const expectedCash = evidence.verified ? recordedBalance : null
+      const difference = expectedCash === null ? null : actualCash - expectedCash
+      const differenceLimit = Number(shiftSettings.cashDifferenceLimit) || 0
+      if (differenceLimit > 0 && difference !== null && Math.abs(difference) > differenceLimit) throw Error('SHIFT_CASH_DIFFERENCE_LIMIT_EXCEEDED')
       const purchaseExpenses = await summarizeShiftPurchases(storeId, currentShift.openedAt, closedAt, tx, categories)
-      const changed = await tx.shiftSession.updateMany({ where: { id: currentShift.id, status: 'open' }, data: { status: 'closed', actualCash: actualCash !== undefined ? Math.round(actualCash) : null, expectedCash, cashDifference: difference, closeNote, nextStaffId, closedAt } })
+      // Legacy non-null expectedCash stores only an estimate; report carries explicit verification/nulls.
+      const changed = await tx.shiftSession.updateMany({ where: { id: currentShift.id, status: 'open' }, data: { status: 'closed', actualCash, ...(recordedBalance === null ? {} : {expectedCash:recordedBalance}), cashDifference: difference, closeNote, nextStaffId, closedAt } })
       if (changed.count !== 1) throw Error('SHIFT_ALREADY_CLOSED')
       const session = await tx.shiftSession.findUniqueOrThrow({ where: { id: currentShift.id } })
-      await tx.cashEvent.create({ data: { storeId, staffId, type: 'close_shift', amount: actualCash || 0, shift: currentShift.shift, note: `交班 - 差异: ${difference !== null ? difference : 'N/A'}` } })
+      await tx.cashEvent.create({ data: { storeId, staffId, type: 'close_shift', amount: actualCash, shift: currentShift.shift, note: `交班 - 差异: ${difference !== null ? difference : 'N/A'}` } })
       await tx.config.create({ data: { storeId, key: 'pos.shift.purchase:' + session.id, category: 'shift_report', value: JSON.stringify(purchaseExpenses) } })
-      return { ...session, purchaseExpenses }
+      const [cashier,shift] = await Promise.all([tx.staff.findFirst({where:{id:staffId,storeId},select:{name:true}}),tx.shift.findFirst({where:{storeId,key:currentShift.shift},select:{name:true,nameZh:true,nameId:true}})])
+      const report = {version:1,reportKind:'handover',sessionId:session.id,cashierName:cashier?.name || null,shiftType:session.shift,shiftNames:shift,openedAt:session.openedAt,closedAt:session.closedAt,openFloat:session.openFloat,actualCash,summaryEvidence:evidence,recordedBalance,expectedCash,cashDifference:difference,purchaseExpenses,summaryItems:shiftSettings.summaryItems || {}}
+      await tx.config.create({data:{storeId,key:'pos.shift.report:'+session.id,category:'shift_report',value:JSON.stringify(report)}})
+      return { ...session, expectedCash, cashDifference:difference, purchaseExpenses, report }
     })
     res.json({ code: 200, data: result })
   } catch (error) {

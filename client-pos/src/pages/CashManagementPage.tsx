@@ -224,27 +224,27 @@ export function CashManagementPage() {
       const selection = selectPrinter(config.hardwareSettings || {}, 'receipt')
       const api = (window as any).electronAPI
       if (!selection.ok || !api?.sendPrintShiftReport) throw Error('Printer unavailable')
-      const result = await api.sendPrintShiftReport({ ...selection.target, reportKind: 'handover', paperSize: config.posReceipt?.paperSize || '80mm', language: localStorage.getItem('pos_language') || 'id', storeName: config.storeInfo?.storeName || 'YOUME', shiftType: data.shift, openedAt: data.openedAt, closedAt: data.closedAt, actualCash: data.actualCash, purchaseExpenses: data.purchaseExpenses })
+      const result = await api.sendPrintShiftReport({ ...data.report, ...selection.target, reportKind: 'handover', paperSize: config.posReceipt?.paperSize || '80mm', language: localStorage.getItem('pos_language') || 'id', storeName: config.storeInfo?.storeName || 'YOUME', shiftType: data.shift, openedAt: data.openedAt, closedAt: data.closedAt, actualCash: data.actualCash, purchaseExpenses: data.purchaseExpenses })
       if (result?.success === false) throw Error(result.error || 'Print failed')
     } catch (error) { console.warn('Handover reprint failed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
     finally { setPrintingHandover(false) }
   }
 
   const handleCloseShift = async () => {
-    if (closeAmount.trim() === '' || !Number.isFinite(Number(closeAmount)) || Number(closeAmount) < 0) {
+    if (closeAmount.trim() === '' || !Number.isSafeInteger(Number(closeAmount)) || Number(closeAmount) < 0) {
       showToast(t('shiftEvidence.enterCount'), 'error')
       return
     }
     try {
       const response = await posApi.closeShift({
-        actualCash: Math.round(parseFloat(closeAmount || '0')),
+        actualCash: Number(closeAmount),
         closeNote: closeNote
       })
       try {
         const config = (await posApi.getConfigs(user!.storeId!)).data?.data || {}
         const selection = selectPrinter(config.hardwareSettings || {}, 'receipt')
         const api = (window as any).electronAPI
-        if (selection.ok && api?.sendPrintShiftReport) { const printed = await api.sendPrintShiftReport({ ...selection.target, reportKind: 'handover', paperSize: config.posReceipt?.paperSize || '80mm', storeName: config.storeInfo?.storeName || 'YOUME', language: localStorage.getItem('pos_language') || 'id', cashierName: user?.staff?.name || user?.phone || '', shiftType: response.data?.data?.shift, openedAt: response.data?.data?.openedAt, closedAt: response.data?.data?.closedAt, actualCash: Number(closeAmount), purchaseExpenses: response.data?.data?.purchaseExpenses }); if (printed?.success === false) throw Error(printed.error || 'Print failed') }
+        if (selection.ok && api?.sendPrintShiftReport) { const printed = await api.sendPrintShiftReport({ ...response.data?.data?.report, ...selection.target, reportKind: 'handover', paperSize: config.posReceipt?.paperSize || '80mm', storeName: config.storeInfo?.storeName || 'YOUME', language: localStorage.getItem('pos_language') || 'id', cashierName: response.data?.data?.report?.cashierName ?? user?.staff?.name ?? null, shiftType: response.data?.data?.shift, openedAt: response.data?.data?.openedAt, closedAt: response.data?.data?.closedAt, actualCash: Number(closeAmount), purchaseExpenses: response.data?.data?.purchaseExpenses }); if (printed?.success === false) throw Error(printed.error || 'Print failed') }
       } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
       setShowShiftCloseModal(false)
       setCloseAmount('')

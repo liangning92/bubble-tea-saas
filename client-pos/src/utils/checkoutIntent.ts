@@ -1,6 +1,7 @@
 import { assertCheckoutBackend, assertBackendAuth, currentBackendIdentity } from './backendIdentity'
 import { db, type LocalOrder } from '../db/offline'
 import { withCheckoutSyncLock } from './checkoutSyncClaim'
+import { posOrderNumber, matchesCheckoutNumber } from './orderNumber'
 
 export interface CheckoutIntent {
   version: 1
@@ -28,7 +29,7 @@ export async function readCheckoutIntent(storeId: string): Promise<CheckoutInten
   if (!entry) return null
   const value = entry.value as CheckoutIntent
   if (value?.version !== 1 || value.request?.storeId !== storeId || !value.localId?.startsWith('LOCAL-') || !Number.isSafeInteger(value.orderId) || value.orderId < 1 ||
-      value.request.orderNumber !== `OFFLINE-${value.localId.slice(6)}` || !Array.isArray(value.cart) ||
+      !matchesCheckoutNumber(value.request.orderNumber, value.localId, new Date(value.createdAt)) || !Array.isArray(value.cart) ||
       !Array.isArray(value.request.items) || !value.request.items.length || value.request.items.some((item: any) => !item || typeof item !== 'object' || (item.addons !== undefined && (!Array.isArray(item.addons) || item.addons.some((addon: any) => !addon || typeof addon !== 'object')))) ||
       !['prepared', 'sent', 'review'].includes(value.phase)) throw new Error('CHECKOUT_RECOVERY_INVALID')
   return value
@@ -39,12 +40,12 @@ export async function prepareCheckout(request: Record<string, any>, cart: unknow
   const backendUrl = currentBackendIdentity()
   assertBackendAuth(backendUrl, request.storeId)
   const localId = `LOCAL-${crypto.randomUUID()}`
-  const snapshot = JSON.parse(JSON.stringify({ ...request, orderNumber: `OFFLINE-${localId.slice(6)}` }))
+  const createdAt = new Date()
+  const snapshot = JSON.parse(JSON.stringify({ ...request, orderNumber: posOrderNumber(localId, createdAt) }))
   return db.transaction('rw', db.config, db.orders, async () => {
     const recovery = await readCheckoutRecovery(snapshot.storeId)
     if (recovery.generation !== basketGeneration) throw new Error('CHECKOUT_BASKET_STALE')
     if (recovery.blocked || recovery.confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
-    const createdAt = new Date()
     const orderId = await db.orders.add({
       localId, backendUrl, checkoutRequest: snapshot, storeId: snapshot.storeId, staffId: snapshot.staffId,
       memberId: snapshot.memberId, channelId: snapshot.channelId, shiftSessionId: snapshot.shiftSessionId,

@@ -479,12 +479,29 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     autoPrint: true,
   })
 
-  // 预缓存 Logo 为 Base64 Data URL，彻底消除结账打印时的远端 HTTP 下载与挂起死锁
+  // 小票模板（从ReceiptTemplate表加载，支持本地持久化离线容灾）
+  const [receiptTemplate, setReceiptTemplate] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('pos_receipt_template')
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
+
+  // Cache the actual enabled template image, scoped by its absolute source URL.
+  const templateLogo = receiptTemplate?.blocks?.find((b: any) => b.type === 'logo' && b.enabled !== false)?.config?.url
+  const receiptLogoSource = templateLogo || posReceipt.storeLogo || storeInfo.storeLogo || ''
+  const receiptLogoUrl = receiptLogoSource.startsWith('data:image/') || /^https?:\/\//.test(receiptLogoSource)
+    ? receiptLogoSource
+    : receiptLogoSource ? `${getApiUrl().replace(/\/api$/, '')}${receiptLogoSource.startsWith('/') ? '' : '/'}${receiptLogoSource}` : ''
   const cachedLogoBase64Ref = useRef<string>('')
+  const cachedLogoSourceRef = useRef<string>('')
   useEffect(() => {
     cachedLogoBase64Ref.current = ''
+    cachedLogoSourceRef.current = receiptLogoUrl
     let cancelled = false
-    const rawLogo = posReceipt.storeLogo
+    const rawLogo = receiptLogoUrl
     if (!rawLogo) {
       cachedLogoBase64Ref.current = ''
       return
@@ -493,9 +510,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       cachedLogoBase64Ref.current = rawLogo
       return
     }
-    const fullUrl = rawLogo.startsWith('http')
-      ? rawLogo
-      : `${getApiUrl().replace(/\/api$/, '')}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`
+    const fullUrl = rawLogo
+    const cacheKey = `receipt.logo:${fullUrl}`
+    void db.config.get(cacheKey).then(entry => {
+      if (!cancelled && !cachedLogoBase64Ref.current && typeof entry?.value === 'string' && entry.value.startsWith('data:image/png;base64,')) cachedLogoBase64Ref.current = entry.value
+    }).catch(() => {})
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
@@ -506,21 +525,31 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.drawImage(img, 0, 0)
-          if (!cancelled) cachedLogoBase64Ref.current = canvas.toDataURL('image/png')
+          if (!cancelled) {
+            const image = canvas.toDataURL('image/png')
+            cachedLogoBase64Ref.current = image
+            if (image.length <= 2 * 1024 * 1024) void db.config.put({key:cacheKey,value:image,updatedAt:new Date()}).catch(() => {})
+          }
         }
       } catch {}
     }
     img.src = fullUrl
     return () => { cancelled = true; img.onload = null; img.onerror = null }
-  }, [posReceipt.storeLogo, storeInfo.storeLogo])
+  }, [receiptLogoUrl])
 
   const getPrintLogo = useCallback(() => {
-    if (cachedLogoBase64Ref.current) return cachedLogoBase64Ref.current
-    const rawLogo = posReceipt.storeLogo
-    if (!rawLogo) return ''
-    if (rawLogo.startsWith('data:image/') || rawLogo.startsWith('http')) return rawLogo
-    return `${getApiUrl().replace(/\/api$/, '')}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`
-  }, [posReceipt.storeLogo, storeInfo.storeLogo])
+    if (cachedLogoSourceRef.current === receiptLogoUrl && cachedLogoBase64Ref.current) return cachedLogoBase64Ref.current
+    return receiptLogoUrl
+  }, [receiptLogoUrl])
+
+  const getPrintBlocks = () => receiptTemplate?.blocks?.map((block: any) => {
+    if (block.type !== 'logo' || !block.config?.url) return block
+    const source = block.config.url
+    const url = source === receiptLogoSource ? getPrintLogo()
+      : /^https?:\/\//.test(source) || source.startsWith('data:image/') ? source
+      : `${getApiUrl().replace(/\/api$/, '')}${source.startsWith('/') ? '' : '/'}${source}`
+    return {...block, config:{...block.config, url}}
+  }) || null
 
   // 根据 channelSettings 与 posLayout 动态过滤并补齐自定义名称的可用渠道
   const availableChannels = useMemo(() => {
@@ -644,16 +673,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     return `${prefix}${String(currentSeq).padStart(2, '0')}`
   }
-
-  // 小票模板（从ReceiptTemplate表加载，支持本地持久化离线容灾）
-  const [receiptTemplate, setReceiptTemplate] = useState<any>(() => {
-    try {
-      const cached = localStorage.getItem('pos_receipt_template')
-      return cached ? JSON.parse(cached) : null
-    } catch {
-      return null
-    }
-  })
 
   // POS 操作日志辅助函数
   const logPOSAction = useCallback((params: {
@@ -2596,7 +2615,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     try {
       const res = await electronAPI?.sendPrintReceipt?.({
         orderNum: 'TEST-' + Date.now().toString().slice(-4),
-        blocks: receiptTemplate?.blocks || null,
+        blocks: getPrintBlocks(),
         template: receiptTemplate || null,
         header: posReceipt.header || 'YOUME POS',
         footer: posReceipt.footer || 'TEST PRINT',
@@ -3101,7 +3120,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       const printPromise = electronAPI?.sendPrintReceipt({
         orderNum,
         pickupNumber: orderData?.pickupNumber,
-        blocks: receiptTemplate?.blocks || null,
+        blocks: getPrintBlocks(),
         template: receiptTemplate || null,
         header: (() => {
           const tplHeader = receiptTemplate?.blocks?.find((b: any) => b.type === 'header' && b.enabled !== false)?.config?.text
@@ -4761,6 +4780,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           shift: selectedShiftType
                         })
                         showToast(t('pos.shiftOpened'), 'success')
+                        setShowShiftModal(false)
                         fetchShiftData()
                       } catch (e) {
                         showToast(t('pos.shiftOpenFailed'), 'error')
@@ -4836,11 +4856,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                             return
                           }
                         }
-                        if (shiftActualCash.trim() === '' || !Number.isFinite(Number(shiftActualCash)) || Number(shiftActualCash) < 0) {
+                        if (shiftActualCash.trim() === '' || !Number.isSafeInteger(Number(shiftActualCash)) || Number(shiftActualCash) < 0) {
                           showToast(t('shiftEvidence.enterCount'), 'error')
                           return
                         }
-                        const actualCash = parseInt(shiftActualCash) || 0
+                        const actualCash = Number(shiftActualCash)
                         try {
                           const closeResult = await posApi.closeShift({
                             actualCash,
@@ -4849,47 +4869,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           try {
                             const target = printerTarget('receipt')
                             if (target && electronAPI?.sendPrintShiftReport) {
-                              const result = await electronAPI.sendPrintShiftReport({ ...target, reportKind: 'handover', paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: user?.staff?.name || user?.phone || '', shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
+                              const result = await electronAPI.sendPrintShiftReport({ ...closeResult.data?.data?.report, ...target, reportKind: 'handover', paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: closeResult.data?.data?.report?.cashierName ?? user?.staff?.name ?? null, shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
                               if (result?.success === false) throw Error(result.error || 'Print failed')
                             }
                           } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
-                          // Provisional/unavailable evidence must never print a financial Z-report.
-                          if (shiftData?.summaryEvidence?.verified === true) {
-                            try {
-                              const target = printerTarget('receipt')
-                              if (!target) throw new Error('Printer target unavailable')
-
-                              await electronAPI?.sendPrintShiftReport?.({
-                                ...target,
-                                paperSize: posReceipt.paperSize || '80mm',
-                                language: lang || 'id',
-                                storeName: storeInfo.storeName || 'YOUME',
-                                cashierName: user?.staff?.name || (user as any)?.name || user?.phone || 'Kasir',
-                                shiftType: selectedShiftType || shiftData?.shift?.shift || 'Regular',
-                                openedAt: shiftData?.shift?.openedAt ? new Date(shiftData.shift.openedAt).toLocaleString() : '',
-                                closedAt: new Date().toLocaleString(),
-                                openFloat: shiftData?.openFloat || 0,
-                                cashSales: shiftData?.cashSales || 0,
-                                qrisSales: shiftData?.qrisSales || 0,
-                                gofoodSales: shiftData?.gofoodSales || 0,
-                                grabSales: shiftData?.grabSales || 0,
-                                shopeeSales: shiftData?.shopeeSales || 0,
-                                expenses: shiftData?.expenses || 0,
-                                expectedCash: shiftData?.expectedCash || 0,
-                                actualCash,
-                                totalOrders: (shiftData?.dineInCount || 0) + (shiftData?.gofoodCount || 0) + (shiftData?.grabCount || 0) + (shiftData?.shopeeCount || 0),
-                                totalCups: shiftData?.customerCount || 0,
-                                summaryItems: shiftSettings.summaryItems || {},
-                                totalDiscount: shiftData?.totalDiscount || 0,
-                                autoPromotionDiscount: shiftData?.autoPromotionDiscount || 0,
-                                manualDiscount: shiftData?.manualDiscount || 0,
-                                promotionOrderCount: shiftData?.promotionOrderCount || 0,
-                                manualDiscountOrderCount: shiftData?.manualDiscountOrderCount || 0,
-                              })
-                            } catch (reportErr) {
-                              console.warn('[Shift] Failed to print shift report:', reportErr)
-                            }
-                          }
                           clearCart()
                           setShowShiftModal(false)
                           setShiftActualCash('')
@@ -5387,7 +5370,23 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               <p className="text-center text-gray-600">{t('pos.logoutConfirm')}</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowLogoutModal(false)} className="flex-1 py-3 border rounded-xl touch-feedback">{t('common.cancel')}</button>
-                <button onClick={() => { setShowLogoutModal(false); setIsLocked(false); logout() }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
+                <button onClick={async () => {
+                  try {
+                    const response = await posApi.getCurrentShift()
+                    const current = response.data?.data
+                    if (typeof current?.hasOpenShift !== 'boolean') throw Error('SHIFT_STATUS_UNKNOWN')
+                    setShiftData(current)
+                    setShowLogoutModal(false)
+                    setIsLocked(false)
+                    if (current.hasOpenShift) {
+                      setShowShiftModal(true)
+                    } else {
+                      logout()
+                    }
+                  } catch {
+                    showToast(t('pos.shiftStatusFailed'), 'error')
+                  }
+                }} className="flex-1 py-3 bg-primary text-white rounded-xl touch-feedback">{t('toolbar.logout')}</button>
                            </div>
             </div>
           </div>
