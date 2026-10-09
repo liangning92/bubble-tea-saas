@@ -13,7 +13,7 @@ beforeEach(() => {
   db.$transaction.mockImplementation(async (fn:any) => {
     const draft={...state}
     const tx={
-      config:{findUnique:async()=>null},
+      config:{findUnique:async()=>null,findMany:async()=>[]},
       order:{updateMany:async()=>{if(draft.status==='refunded')return {count:0};draft.status='refunded';return {count:1}},findUnique:async()=>({id:'o'}),findUniqueOrThrow:async()=>({id:'o',orderNumber:'ORD1',storeId:'a',staffId:'s',paymentMethod:'cash',finalAmount:100,items:[{productId:'p',quantity:2}]})},
       refundRequest:{findFirst:async()=>null,updateMany:async({data}:any)=>{draft.request='approved';draft.approvedAmount=data.amount;return {count:1}}},
       memberCoupon:{updateMany:async()=>({count:0})},
