@@ -7,7 +7,6 @@ export function MarketingIndexPage() {
 
   const tabs = [
     { key: 'promotions', label: t('marketing.promotions'), path: '/marketing/promotions' },
-    { key: 'tv-screen', label: t('marketing.tvScreen', '电视大屏互动'), path: '/marketing/tv-screen' },
     { key: 'members', label: t('marketing.membersGroup'), path: '/marketing/members' },
     { key: 'points', label: t('marketing.points'), path: '/marketing/points' },
     { key: 'messages', label: t('marketing.messages'), path: '/marketing/messages' },

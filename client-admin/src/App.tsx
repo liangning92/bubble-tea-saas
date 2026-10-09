@@ -97,7 +97,6 @@ import { MessageStatsPage } from './pages/marketing/MessageStatsPage'
 import { CouponReportPage } from './pages/marketing/CouponReportPage'
 import { CampaignReportPage } from './pages/marketing/CampaignReportPage'
 import { ReferralFunnelPage } from './pages/marketing/ReferralFunnelPage'
-import { TvScreenConfigPage } from './pages/marketing/TvScreenConfigPage'
 import { ProductAnalysisPage } from './pages/product-analysis/ProductAnalysisPage'
 import { AddonListPage } from './pages/addons/AddonListPage'
 import { CategoryListPage } from './pages/categories/CategoryListPage'
@@ -294,8 +293,8 @@ function App() {
             <Route path="analytics/referral" element={<ReferralFunnelPage />} />
           </Route>
 
-          {/* 电视大屏互动 */}
-          <Route path="tv-screen" element={<TvScreenConfigPage />} />
+          {/* 电视大屏设置迁移到设置板块（保留旧路径重定向） */}
+          <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
         </Route>
 
         {/* 卫生管理 */}
@@ -334,6 +333,7 @@ function App() {
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<POSSettingsPage />} />
+        <Route path="settings/tv-screen" element={<SettingsPage initialTab="tvScreen" />} />
 
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />

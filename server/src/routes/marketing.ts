@@ -841,6 +841,10 @@ router.post('/discount-rules', authenticate, authorize('admin'), async (req: Aut
       }
     })
 
+    // 实时同步终端：向门店 POS 和电视屏广播营销活动变更
+    socketManager.emitToStore(storeId, 'marketing:rules:updated', { ruleId: rule.id, action: 'create' })
+    socketManager.emitToStore(storeId, 'tv:config:update', { refresh: true })
+
     res.status(201).json({
       code: 201,
       message: 'Discount rule created',
@@ -908,6 +912,10 @@ router.put('/discount-rules/:id', authenticate, authorize('admin'), async (req: 
       }
     })
 
+    // 实时同步终端：向门店 POS 和电视屏广播营销活动变更
+    socketManager.emitToStore(existing.storeId, 'marketing:rules:updated', { ruleId: rule.id, action: 'update' })
+    socketManager.emitToStore(existing.storeId, 'tv:config:update', { refresh: true })
+
     res.json({
       code: 200,
       message: 'Discount rule updated',
@@ -935,6 +943,10 @@ router.delete('/discount-rules/:id', authenticate, authorize('admin'), async (re
     }
 
     await prisma.discountRule.delete({ where: { id } })
+
+    // 实时同步终端：向门店 POS 和电视屏广播营销活动变更
+    socketManager.emitToStore(req.user!.storeId, 'marketing:rules:updated', { ruleId: id, action: 'delete' })
+    socketManager.emitToStore(req.user!.storeId, 'tv:config:update', { refresh: true })
 
     res.json({
       code: 200,
@@ -997,6 +1009,10 @@ router.post('/timed-specials', authenticate, authorize('admin'), async (req: Aut
       }
     })
 
+    // 实时同步终端：向门店 POS 和电视屏广播特价活动变更
+    socketManager.emitToStore(storeId, 'marketing:specials:updated', { specialId: special.id, action: 'create' })
+    socketManager.emitToStore(storeId, 'tv:config:update', { refresh: true })
+
     res.status(201).json({
       code: 201,
       message: 'Timed special created',
@@ -1035,6 +1051,10 @@ router.put('/timed-specials/:id', authenticate, authorize('admin'), async (req: 
       }
     })
 
+    // 实时同步终端：向门店 POS 和电视屏广播特价活动变更
+    socketManager.emitToStore(req.user!.storeId, 'marketing:specials:updated', { specialId: special.id, action: 'update' })
+    socketManager.emitToStore(req.user!.storeId, 'tv:config:update', { refresh: true })
+
     res.json({
       code: 200,
       message: 'Timed special updated',
@@ -1057,6 +1077,10 @@ router.delete('/timed-specials/:id', authenticate, authorize('admin'), async (re
     }
 
     await prisma.timedSpecial.delete({ where: { id } })
+
+    // 实时同步终端：向门店 POS 和电视屏广播特价活动变更
+    socketManager.emitToStore(req.user!.storeId, 'marketing:specials:updated', { specialId: id, action: 'delete' })
+    socketManager.emitToStore(req.user!.storeId, 'tv:config:update', { refresh: true })
 
     res.json({
       code: 200,
@@ -1799,12 +1823,110 @@ router.get('/tv-screen/config', async (req, res) => {
       where: { storeId_key: { storeId, key: 'tv_screen_marketing_config' } }
     })
 
-    let config = DEFAULT_TV_CONFIG
+    let config = JSON.parse(JSON.stringify(DEFAULT_TV_CONFIG))
     if (configRecord?.value) {
       try {
         config = { ...DEFAULT_TV_CONFIG, ...JSON.parse(configRecord.value) }
       } catch (e) {
         console.warn('Failed to parse tv config JSON:', e)
+      }
+    }
+
+    // 核心联动：自动拉取门店后台正在生效的真实特价、促销规则与营销活动
+    if (storeId) {
+      const now = new Date()
+      const [liveTimedSpecials, liveDiscountRules, liveCampaigns] = await Promise.all([
+        prisma.timedSpecial.findMany({
+          where: {
+            storeId,
+            status: 'active',
+            startTime: { lte: now },
+            endTime: { gte: now }
+          },
+          include: {
+            store: { select: { name: true } }
+          }
+        }),
+        prisma.discountRule.findMany({
+          where: {
+            storeId,
+            status: 'active'
+          },
+          orderBy: { priority: 'desc' }
+        }),
+        prisma.campaign.findMany({
+          where: {
+            storeId,
+            status: 'active',
+            startDate: { lte: now }
+          }
+        })
+      ])
+
+      // 1. 若门店在后台“限时特价”中创建了商品特价活动，自动关联真实产品图与价格
+      if (liveTimedSpecials.length > 0) {
+        const productIds = liveTimedSpecials.map(s => s.productId).filter(Boolean)
+        const products = await prisma.product.findMany({
+          where: { id: { in: productIds } },
+          include: { specs: true }
+        })
+        const productMap = new Map(products.map(p => [p.id, p]))
+
+        const mappedSpecials = liveTimedSpecials.map(s => {
+          const product = productMap.get(s.productId)
+          let daysArr: number[] = []
+          try {
+            daysArr = s.daysOfWeek ? JSON.parse(s.daysOfWeek) : []
+          } catch {
+            daysArr = []
+          }
+          const defaultDay = daysArr.length > 0 ? daysArr[0] : now.getDay()
+          const originalPrice = s.originalPrice || (product?.specs?.[0]?.price ? product.specs[0].price : s.specialPrice)
+
+          return {
+            id: s.id,
+            dayOfWeek: defaultDay,
+            productName: s.name || product?.name || 'Menu Spesial',
+            originalPrice,
+            specialPrice: s.specialPrice,
+            tag: s.name ? `PROMO: ${s.name}` : 'Spesial Hari Ini',
+            imageUrl: product?.image || 'https://images.unsplash.com/photo-1558857563-b37fe8466e39?w=600&q=80',
+            description: product?.description || 'Promo Spesial Menu Favorit Hari Ini'
+          }
+        })
+
+        if (mappedSpecials.length > 0) {
+          config.dailySpecials = mappedSpecials
+        }
+      }
+
+      // 2. 将正在生效的满减/满折/第二杯半价/买一送一/大促自动汇入跑马灯及动态活动广播
+      const promoHighlights: string[] = []
+      liveDiscountRules.forEach(r => {
+        if (r.validFrom && new Date(r.validFrom) > now) return
+        if (r.validUntil && new Date(r.validUntil) < now) return
+
+        if (r.discountType === 'second_half') {
+          promoHighlights.push(`🎉 ${r.name || 'Beli 2 Cup Diskon 50% untuk Cup Kedua (第二杯半价)'}`)
+        } else if (r.discountType === 'bogo') {
+          promoHighlights.push(`✨ ${r.name || 'Beli 1 Gratis 1 (Buy 1 Get 1 Free)'}`)
+        } else if (r.discountType === 'percent') {
+          promoHighlights.push(`🔥 Belanja Min Rp ${(r.minOrderAmount || 0).toLocaleString('id-ID')} Diskon ${r.discountValue}%`)
+        } else {
+          promoHighlights.push(`🎁 Belanja Min Rp ${(r.minOrderAmount || 0).toLocaleString('id-ID')} Potongan Rp ${(r.discountValue || 0).toLocaleString('id-ID')}`)
+        }
+      })
+
+      liveCampaigns.forEach(c => {
+        if (c.endDate && new Date(c.endDate) < now) return
+        promoHighlights.push(`🌟 Event: ${c.name} (${c.description || 'Nikmati promo menarik'})`)
+      })
+
+      if (promoHighlights.length > 0) {
+        config.activePromotions = promoHighlights
+        if (config.ticker?.enabled) {
+          config.ticker.text = promoHighlights.join('  ✦  ') + '  ✦  ' + (config.ticker.text || '')
+        }
       }
     }
 

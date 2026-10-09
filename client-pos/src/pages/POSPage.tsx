@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { io, Socket } from 'socket.io-client'
 import { posApi, tvScreenApi, updateApiUrl, fetchApiUrlFromServer } from '../services/api'
 import { getApiUrl, setApiUrl } from '../config'
 import { useAuthStore } from '../stores/auth'
@@ -318,6 +319,7 @@ export function POSPage() {
   const [tempDiscount, setTempDiscount] = useState('')
   const [isManualDiscount, setIsManualDiscount] = useState(false)
   const [activeDiscountRules, setActiveDiscountRules] = useState<any[]>([])
+  const [activeTimedSpecials, setActiveTimedSpecials] = useState<any[]>([])
   const [appliedPromotion, setAppliedPromotion] = useState<AppliedPromotion | null>(null)
   // 优惠券状态
   const [memberCoupons, setMemberCoupons] = useState<any[]>([])
@@ -1371,29 +1373,54 @@ export function POSPage() {
             setActiveDiscountRules(rules)
           })
           .catch(e => console.warn('[POS] Failed to fetch discount rules:', e))
+
+        // 加载限时特价商品活动 (自动识别活动特价)
+        posApi.getTimedSpecials(storeId)
+          .then(r => {
+            const specials = r.data?.data || []
+            setActiveTimedSpecials(specials)
+          })
+          .catch(e => console.warn('[POS] Failed to fetch timed specials:', e))
       })
       .catch(() => {
         showToast(t('common.error') + ' - Config', 'error')
       })
   }, [user?.storeId])
 
-  // 页面可见性或获得焦点时重新加载配置（Admin修改设置后自动秒级同步）
+  // 实时 WebSocket 监听后台营销活动与特价变更，实现操作与数据毫秒级联动
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadConfig()
-      }
-    }
-    const handleFocus = () => {
+    const storeId = user?.storeId || 'default'
+    const apiUrl = getApiUrl().replace(/\/api$/, '')
+    const token = useAuthStore.getState().token
+
+    const socket: Socket = io(apiUrl, {
+      transports: ['websocket', 'polling'],
+      query: { clientType: 'pos', storeId },
+      auth: { token, storeId }
+    })
+
+    socket.on('marketing:rules:updated', () => {
+      console.log('[POS] Live marketing rules update received via Socket')
+      posApi.getDiscountRules(storeId)
+        .then(r => setActiveDiscountRules(r.data?.data || []))
+        .catch(e => console.warn('[POS] Failed to reload rules on socket event:', e))
+    })
+
+    socket.on('marketing:specials:updated', () => {
+      console.log('[POS] Live timed specials update received via Socket')
+      posApi.getTimedSpecials(storeId)
+        .then(r => setActiveTimedSpecials(r.data?.data || []))
+        .catch(e => console.warn('[POS] Failed to reload specials on socket event:', e))
+    })
+
+    socket.on('tv:config:update', () => {
       loadConfig()
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('focus', handleFocus)
+    })
+
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleFocus)
+      socket.disconnect()
     }
-  }, [loadConfig])
+  }, [user?.storeId, loadConfig])
 
   // 初始加载配置与获取软件版本
   useEffect(() => {
@@ -2169,6 +2196,32 @@ export function POSPage() {
   // 最大可用积分（不能超过总价）
   const maxRedeemablePoints = member ? Math.min(member.points || 0, Math.floor(total * 100)) : 0
 
+  // 计算商品此时是否处于限时特价活动中
+  const getProductEffectivePrice = useCallback((productId: string, basePrice: number): { price: number; isSpecial: boolean; specialName?: string } => {
+    if (!activeTimedSpecials || activeTimedSpecials.length === 0) {
+      return { price: basePrice, isSpecial: false }
+    }
+    const now = new Date()
+    const currentDay = now.getDay()
+    const match = activeTimedSpecials.find(s => {
+      if (s.productId !== productId || s.status !== 'active') return false
+      if (s.startTime && new Date(s.startTime) > now) return false
+      if (s.endTime && new Date(s.endTime) < now) return false
+      if (s.daysOfWeek && Array.isArray(s.daysOfWeek) && s.daysOfWeek.length > 0) {
+        if (!s.daysOfWeek.includes(currentDay)) return false
+      }
+      if (s.applicableChannels && Array.isArray(s.applicableChannels) && s.applicableChannels.length > 0) {
+        if (!selectedChannel?.code || !s.applicableChannels.includes(selectedChannel.code)) return false
+      }
+      return true
+    })
+
+    if (match && typeof match.specialPrice === 'number' && match.specialPrice > 0) {
+      return { price: match.specialPrice, isSpecial: true, specialName: match.name }
+    }
+    return { price: basePrice, isSpecial: false }
+  }, [activeTimedSpecials, selectedChannel?.code])
+
   // 添加到购物车
   const handleAddToCartWithAddons = () => {
     if (!selectedProduct || !selectedSpec) return
@@ -2180,17 +2233,20 @@ export function POSPage() {
     const sugarObj = SUGAR_LEVELS.find(s => s.id === selectedSugar)
     const iceObj = ICE_LEVELS.find(i => i.id === selectedIce)
 
+    // 核心联动：自动拉取活动特价（若命中活动时间与条件则直接生效特价）
+    const priceInfo = getProductEffectivePrice(selectedProduct.id, selectedSpec.price)
+
     const newItem: CartItem = {
       id: `${selectedProduct.id}-${selectedSpec.id}-${Date.now()}`,
       productId: selectedProduct.id,
-      productName: selectedProduct.name,
+      productName: priceInfo.isSpecial ? `${selectedProduct.name} (特价)` : selectedProduct.name,
       specId: selectedSpec.id,
       specName: selectedSpec.name,
       sugarLevel: selectedSugar,
       sugarLevelName: sugarObj ? t(sugarObj.nameKey) : t('pos.normalSugar'),
       iceLevel: selectedIce,
       iceLevelName: iceObj ? t(iceObj.nameKey) : t('pos.normalIce'),
-      unitPrice: selectedSpec.price,
+      unitPrice: priceInfo.price,
       quantity: addonQty,
       addons
     }
@@ -2210,7 +2266,7 @@ export function POSPage() {
     logPOSAction({
       action: 'cart_add',
       entityId: newItem.id,
-      description: `添加商品: ${newItem.productName} x${addonQty}`,
+      description: `添加商品: ${newItem.productName} x${addonQty}${priceInfo.isSpecial ? ' [活动特价]' : ''}`,
       metadata: {
         productId: newItem.productId,
         productName: newItem.productName,
@@ -2219,6 +2275,7 @@ export function POSPage() {
         quantity: addonQty,
         unitPrice: newItem.unitPrice,
         addons: addons.map(a => a.name),
+        isSpecial: priceInfo.isSpecial
       },
       severity: 'info',
     })
@@ -3547,15 +3604,23 @@ export function POSPage() {
               </div>
             ) : (
             <div className={`grid ${gridColsClass} gap-2`}>
-              {filtered.map(product => (
+              {filtered.map(product => {
+                const basePrice = product.specs?.[0]?.price || 0
+                const priceInfo = getProductEffectivePrice(product.id, basePrice)
+                return (
                 <button
                   key={product.id}
                   onClick={() => {
                     if (product.specs?.length) handleSpecClick(product, product.specs[0])
                   }}
-                  className={`${cardHeightClass} bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary active:scale-95 transition-all overflow-hidden flex flex-col items-center justify-center ${!product.specs?.length ? 'opacity-50' : ''}`}
+                  className={`relative ${cardHeightClass} bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary active:scale-95 transition-all overflow-hidden flex flex-col items-center justify-center ${!product.specs?.length ? 'opacity-50' : ''}`}
                   style={{ minHeight: '110px' }}
                 >
+                  {priceInfo.isSpecial && (
+                    <span className="absolute top-1 right-1 z-10 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
+                      特价
+                    </span>
+                  )}
                   {product.image && (posLayout.productImage as any) !== false && posLayout.productImage !== 'hidden' ? (
                     <div className="w-full h-full flex flex-col items-center justify-between p-1.5">
                       <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden">
@@ -3564,7 +3629,12 @@ export function POSPage() {
                       <div className="flex flex-col items-center justify-center w-full mt-1">
                         <span className="font-semibold text-sm text-gray-900 text-center leading-tight truncate w-full">{product.name}</span>
                         {posLayout.showPrice && (
-                          <span className="text-primary font-bold text-sm mt-0.5">{formatCurrency(product.specs[0]?.price || 0)}</span>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-primary font-bold text-sm">{formatCurrency(priceInfo.price)}</span>
+                            {priceInfo.isSpecial && (
+                              <span className="text-gray-400 text-xs line-through">{formatCurrency(basePrice)}</span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -3572,12 +3642,17 @@ export function POSPage() {
                     <div className="flex flex-col items-center justify-center w-full px-2">
                       <span className="font-bold text-base text-gray-900 text-center leading-tight line-clamp-2 w-full">{product.name}</span>
                       {posLayout.showPrice && (
-                        <span className="text-primary font-bold text-lg mt-1">{formatCurrency(product.specs[0]?.price || 0)}</span>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-primary font-bold text-lg">{formatCurrency(priceInfo.price)}</span>
+                          {priceInfo.isSpecial && (
+                            <span className="text-gray-400 text-xs line-through">{formatCurrency(basePrice)}</span>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
                 </button>
-              ))}
+              )})}
             </div>
             )}
           </div>

@@ -111,6 +111,7 @@ export const posApi = {
 
   // Marketing & Discount Rules
   getDiscountRules: (storeId: string) => api.get('/marketing/discount-rules', { params: { storeId, status: 'active' } }),
+  getTimedSpecials: (storeId: string) => api.get('/marketing/timed-specials', { params: { storeId, status: 'active' } }),
 
   // Auth
   login: (phone: string, password: string) =>

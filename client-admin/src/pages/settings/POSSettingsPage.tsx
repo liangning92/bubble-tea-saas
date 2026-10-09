@@ -4,10 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { configApi, uploadApi, receiptTemplateApi } from '../../services/api'
 import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
-import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
+import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X, Tv } from 'lucide-react'
 import axios from 'axios'
+import { TvScreenConfigPage } from '../marketing/TvScreenConfigPage'
 
-type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
+type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware' | 'tvScreen'
 
 // Toggle Component (shared)
 const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled, onChange }) => (
@@ -906,6 +907,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     { key: 'payment', labelKey: 'posSettings.payment', icon: <Wallet size={18} /> },
     { key: 'receipt', labelKey: 'posSettings.receipt', icon: <Receipt size={18} /> },
     { key: 'hardware', labelKey: 'posSettings.hardware', icon: <Printer size={18} /> },
+    { key: 'tvScreen', labelKey: 'posSettings.tvScreen', icon: <Tv size={18} /> },
   ]
 
   if (isLoading) {
@@ -1798,6 +1800,30 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
                 {/* Preview */}
                 <DualScreenPreview dualScreen={hardwareSettings.dualScreen} />
+
+                {/* 电视大屏互动终端快捷入口 */}
+                <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+                      <Tv size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-purple-900">
+                        {t('posSettings.tvScreenPromoLinkTitle', '门店 42寸电视大屏互动终端')}
+                      </h4>
+                      <p className="text-xs text-purple-700 mt-0.5">
+                        {t('posSettings.tvScreenPromoLinkDesc', '电视大屏已接入营销中心，自动播放生效中的每日特价、满减买赠与幸运大转盘抽奖。')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab('tvScreen')}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 transition-colors shrink-0 shadow-sm"
+                  >
+                    {t('posSettings.configureTvScreen', '配置电视大屏 →')}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2310,6 +2336,13 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
           loadingPrinters={loadingPrinters}
           onRefreshPrinters={fetchDetectedPrinters}
         />
+      )}
+
+      {/* ========== TV SCREEN TERMINAL TAB ========== */}
+      {activeSubTab === 'tvScreen' && (
+        <div className="space-y-6">
+          <TvScreenConfigPage />
+        </div>
       )}
     </div>
   )
