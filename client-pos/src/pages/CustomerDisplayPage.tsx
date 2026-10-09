@@ -1,3 +1,4 @@
+import { CustomerDisplayCanvas } from '../../../shared/components/CustomerDisplayCanvas'
 import React from 'react'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import { CustomerDisplayLayout, CustomerLayoutColumn, customerBackground, customerTextColor } from '../../../shared/components/CustomerDisplayLayout'
@@ -388,7 +389,9 @@ export function CustomerDisplayPage(): React.ReactElement {
   // Paying state - show prominent payment QR code to customer
   if (displayState === 'paying' && paymentQr) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center p-8 text-white">
+      <div style={{ width: '100vw', height: '100vh' }}>
+      <CustomerDisplayCanvas background="#0f172a">
+      <div className="w-full h-full bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center p-8 text-white">
         <div className="bg-white text-gray-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in duration-300">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-2xl">📱</span>
@@ -408,13 +411,17 @@ export function CustomerDisplayPage(): React.ReactElement {
           </div>
         </div>
       </div>
+      </CustomerDisplayCanvas>
+      </div>
     )
   }
 
   // Order complete state - show thank you message (always full screen)
   if (displayState === 'complete') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background, color: textColor }}>
+      <div style={{ width: '100vw', height: '100vh' }}>
+      <CustomerDisplayCanvas background={background}>
+      <div className="w-full h-full flex flex-col items-center justify-center" style={{ background, color: textColor }}>
         <div className="text-8xl mb-6">✓</div>
         <h1 className="text-5xl font-bold mb-2">{t('customerDisplay.thankYou')}</h1>
         <p className="text-2xl opacity-90">
@@ -422,13 +429,17 @@ export function CustomerDisplayPage(): React.ReactElement {
         </p>
         <p className="text-xl mt-8 opacity-80">{t('customerDisplay.pleaseWait')}</p>
       </div>
+      </CustomerDisplayCanvas>
+      </div>
     )
   }
 
   // Render dynamic layout: columns contain independently sized rows.
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background }}>
-      <CustomerDisplayLayout columns={currentLayout?.columns || []} background={background} renderContent={content => renderColumnContent(content, videoRef)} />
+      <CustomerDisplayCanvas background={background}>
+        <CustomerDisplayLayout columns={currentLayout?.columns || []} background={background} renderContent={content => renderColumnContent(content, videoRef)} />
+      </CustomerDisplayCanvas>
     </div>
   )
 }
