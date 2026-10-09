@@ -46,7 +46,7 @@ Var BTPSUpgradeDiagnostic
       SetErrorLevel 73
       Quit
     ${EndIf}
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish all payments and close POS normally before continuing. This manual upgrade backs up local data and the old program, retains your business history, and updates the database. Continue?$\r$\n完成付款并正常关闭收银后再继续。将备份本地数据和旧程序，保留已有经营数据并更新数据库。是否继续？$\r$\nSelesaikan pembayaran dan tutup POS dahulu. Data lokal dan program lama dicadangkan; riwayat bisnis dipertahankan dan basis data diperbarui. Lanjutkan?" IDYES btps_upgrade_confirmed
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish all payments and close POS normally before continuing. If a backup was prepared, it will be reused. Finish payments and close POS before continuing. Continue?$\r$\n完成付款并正常关闭收银后再继续。已准备的备份将直接使用。完成付款并关闭收银后继续。是否继续？$\r$\nSelesaikan pembayaran dan tutup POS dahulu. Cadangan yang telah disiapkan akan digunakan. Selesaikan pembayaran dan tutup POS dahulu. Lanjutkan?" IDYES btps_upgrade_confirmed
     SetErrorLevel 73
     Quit
     btps_upgrade_confirmed:
@@ -54,7 +54,7 @@ Var BTPSUpgradeDiagnostic
     File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     CreateDirectory "$APPDATA\BTPS\logs"
-    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --diagnostic "$BTPSUpgradeDiagnostic"'
+    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --installer "$EXEPATH" --staged-pointer "$APPDATA\BTPS\upgrade-stage.json" --diagnostic "$BTPSUpgradeDiagnostic"'
     Pop $R0
     Pop $R1
     ${If} $R0 != "0"

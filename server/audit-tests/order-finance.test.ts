@@ -14,10 +14,10 @@ const db=prisma as any
 const input=()=>({storeId:'a',staffId:'s',memberId:'m',orderNumber:'ORD-TEST',pickupNumber:'A01',paymentMethod:'cash',items:[{productId:'p',productName:'Tea',specId:'s',specName:'Regular',quantity:2,unitPrice:100}],discountAmount:20,taxEnabled:true})
 beforeEach(()=>{
  jest.clearAllMocks()
- db.shiftSession.findMany.mockResolvedValue([{shift:'morning'}])
  db.product.findMany.mockResolvedValue([{id:'p',storeId:'a'}]);db.member.findUnique.mockResolvedValue({id:'m',storeId:'a',points:10000,level:'bronze'})
  db.channel.findUnique.mockResolvedValue(null);db.channel.findFirst.mockResolvedValue(null)
  db.bOMItem.findMany.mockResolvedValue([]);db.config.findFirst.mockResolvedValue(null);db.inventory.findMany.mockResolvedValue([])
+ db.shiftSession.findMany.mockResolvedValue([{shift:'morning'}])
  db.member.updateMany.mockResolvedValue({count:1})
  db.qrisPayment.findUnique.mockResolvedValue({id:'pay',externalId:'QRIS2-test',storeId:'a',amount:200,status:'completed',orderId:null})
  db.qrisPayment.updateMany.mockResolvedValue({count:1});db.order.findUnique.mockResolvedValue(null)

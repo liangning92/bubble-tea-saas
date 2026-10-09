@@ -82,6 +82,12 @@ def invoke(command, expect=0, receipt=None, diagnostic=False):
         args += ['--old-app', str(APP), '--result', str(TEMP / 'result.json'), '--operator-confirmed']
         if diagnostic:
             args += ['--diagnostic', str(TEMP / 'upgrade-diagnostic.json')]
+    elif command in ('stage', 'refresh-stage'):
+        args += ['--old-app', str(APP), '--installer', str(next(ROOT.glob('release/BTPS-*-Windows-x64.exe')))]
+        if command == 'stage':
+            args += ['--result', str(pathlib.Path(os.environ['APPDATA']) / 'BTPS/upgrade-stage.json')]
+        else:
+            args += ['--staged-pointer', str(pathlib.Path(os.environ['APPDATA']) / 'BTPS/upgrade-stage.json')]
     elif command in ('verify', 'restore'):
         args += ['--receipt', str(receipt or TEMP / 'result.json')]
     result = subprocess.run(args, capture_output=True, text=True, timeout=180)
@@ -234,12 +240,21 @@ try:
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, REG, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
         winreg.SetValueEx(key, 'InstallLocation', 0, winreg.REG_SZ, str(APP))
     installer = next(ROOT.glob('release/BTPS-*-Windows-x64.exe'))
+    stage_pointer = pathlib.Path(os.environ['APPDATA']) / 'BTPS/upgrade-stage.json'
+    staged = invoke('stage')
+    assert staged['status'] == 'staged'
+    invoke('refresh-stage')
     drive_installer(installer)
+    staged_receipt = json.loads(pathlib.Path(staged['receiptPath']).read_text())
+    assert staged_receipt['status'] == 'prepared' and staged_receipt['preverifiedBackup']
+    stage_pointer.unlink()
+    CASES.append('interactive-nsis-reuses-background-verified-backup')
     assert historic() == history
     with closing(sqlite3.connect(DB)) as c, c:
         assert c.execute('SELECT pickupNumber,requestFingerprint,requestReceipt FROM "Order"').fetchone() == (None,None,None)
     assert (APP / 'BTPS.exe').read_bytes()[:2] == b'MZ'
     assert (APP / 'resources/app.asar').is_file()
+    assert (APP / 'resources/upgrade-helper/btps-db-upgrade.exe').is_file(), 'Installed POS must contain its next-update background helper'
     # Confirm the installed payload carries the advertised runtime version.
     expected_version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8-sig'))['version']
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()

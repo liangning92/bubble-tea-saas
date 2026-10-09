@@ -679,7 +679,7 @@ function stopLocalServer(): void {
 }
 
 async function prepareOnlineInstallation(): Promise<void> {
-  mainWindow?.webContents.session.flushStorageData()
+  await mainWindow?.webContents.session.flushStorageData()
   const child = serverProcess
   if (!child || child.exitCode !== null) return
   await new Promise<void>((resolve,reject)=>{

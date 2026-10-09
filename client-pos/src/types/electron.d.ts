@@ -15,7 +15,7 @@ interface UpdateInfo {
   releaseNotes?: string
 }
 
-type UpdateStatus = 'checking' | 'available' | 'up-to-date' | 'downloading' | 'downloaded' | 'error'
+type UpdateStatus = 'checking' | 'available' | 'up-to-date' | 'downloading' | 'preparing' | 'downloaded' | 'error'
 
 interface PrinterListResult {
   printers: string[]
