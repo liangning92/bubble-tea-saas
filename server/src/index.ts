@@ -1,3 +1,4 @@
+import { isDisplayPublicRoute } from './utils/displayPublicRoute'
 import { legacyActivitiesRouter } from './routes/legacyActivities'
 import { activitiesRouter } from './routes/activities'
 import { startActivityWorker } from './services/ActivityService'
@@ -217,7 +218,7 @@ app.use('/api', (req, res, next) => {
     '/sync/connect', '/sync/full', '/sync/status',
     '/payments/qris/webhook', '/health', '/version'
   ])
-  if (publicPaths.has(apiPath)) return next()
+  if (publicPaths.has(apiPath) || isDisplayPublicRoute(req.method, apiPath)) return next()
   return authenticate(req as AuthRequest, res, next)
 })
 app.use('/api/stores', storeRouter)
