@@ -30,6 +30,12 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
     # Original release payload, with no replacements of program/updater code.
     shutil.rmtree(app)
     subprocess.run(['7z', 'x', str(archive / '$PLUGINSDIR/app-64.7z'), '-o' + str(app), '-y'], check=True, stdout=subprocess.DEVNULL)
+    # Recreate the original installed layout, including its original uninstaller.
+    # Omitting it would skip removal of obsolete files during the update.
+    uninstallers = list(archive.rglob('Uninstall BTPS.exe'))
+    assert len(uninstallers) == 1, 'Original release uninstaller missing or ambiguous'
+    shutil.copy2(uninstallers[0], app / 'Uninstall BTPS.exe')
+    assert hashlib.sha256((app / 'Uninstall BTPS.exe').read_bytes()).digest() == hashlib.sha256(uninstallers[0].read_bytes()).digest()
     seed = app / 'resources/app.asar.unpacked/server/prisma/seed.db'
     with closing(sqlite3.connect(seed)) as c:
         ddl = c.execute("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,name").fetchall()
@@ -136,7 +142,7 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
         assert hashlib.sha256(alternate_db.read_bytes()).hexdigest() == alternate_before
         if stale_stage:
             assert all(hashlib.sha256(p.read_bytes()).hexdigest() == value for p, value in stale_evidence.items()), 'Obsolete stage and recovery files must remain untouched'
-        return {'backgroundBackupReused': background_reused, 'downtimeSeconds': round(downtime, 3), 'obsoleteStagePreserved': stale_stage, 'originalVersion':original_version,'originalInstallerSha256':original_hash,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'alternateProfilePreserved':True,'restartedRuntime':runtime}
+        return {'backgroundBackupReused': background_reused, 'downtimeSeconds': round(downtime, 3), 'obsoleteStagePreserved': stale_stage, 'originalVersion':original_version,'originalInstallerSha256':original_hash,'originalUninstallerPresent':True,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'alternateProfilePreserved':True,'restartedRuntime':runtime}
     finally:
         server.shutdown()
         if old_process.poll() is None:

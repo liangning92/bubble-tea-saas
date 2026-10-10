@@ -270,6 +270,7 @@ try:
     assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
     restarted_runtime = verify_started_runtime(expected_version)
     fast_downtime = time.monotonic() - fast_started
+    print(json.dumps({'preparedDowntimeSeconds': round(fast_downtime, 3), 'localApiReady': restarted_runtime['localApiReady']}), flush=True)
     assert fast_downtime <= 90, ('Prepared upgrade exceeded 90 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')

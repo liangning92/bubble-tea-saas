@@ -64,6 +64,7 @@ jobs:
           assert.equal(manual.syntheticOnly,true);
           assert.equal(manual.onlineInteractiveInstallerVerified,true);
           assert.equal(manual.authentic295.originalVersion,'2026.10.295');
+          assert.equal(manual.authentic295.originalUninstallerPresent,true);
           assert.equal(manual.authentic295.originalPayloadUnmodified,true);
           assert.equal(manual.authentic295.originalUpdaterIpcUsed,true);
           assert.equal(manual.authentic295.downloadedCandidateHashMatched,true);
@@ -82,7 +83,7 @@ jobs:
           for (const [key,version] of [['authentic372','2026.10.372'],['authentic384','2026.10.384']]) {
             const run=manual[key];
             assert.equal(run.originalVersion,version);
-            for (const field of ['originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
+            for (const field of ['originalUninstallerPresent','originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
             assert.equal(run.restartedRuntime.version,manual.expectedVersion);
             assert.equal(run.restartedRuntime.localApiReady,true);
             assert.equal(run.restartedRuntime.processStarted,true);
