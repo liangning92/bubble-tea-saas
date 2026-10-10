@@ -25,3 +25,8 @@ No verified backup or integrity check is bypassed to reduce downtime.
 Local checks: 21 helper tests, 4 preflight tests and 224 JavaScript checks pass.
 Native Windows timings and original-version results must be collected by the
 build workflow before this change can be called ready for release.
+
+The first candidate was rejected: prepared install/restart took 139 seconds.
+The build now prunes server development dependencies before packaging, while
+retaining generated Prisma runtime clients. Restart verification additionally
+requires the local API readiness endpoint. The 90 second gate is unchanged.

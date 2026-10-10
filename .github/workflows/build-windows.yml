@@ -140,6 +140,13 @@ jobs:
       - name: Compile Electron
         run: cd client-pos && npm run build:electron:main
 
+      - name: Remove server build and test dependencies from the installer
+        run: |
+          npm prune --prefix server --omit=dev --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime dependency pruning failed' }
+          if (Test-Path 'server/node_modules/typescript') { throw 'Build tools remain in runtime payload' }
+          if (!(Test-Path 'server/node_modules/@prisma/client')) { throw 'Prisma runtime was removed' }
+
       # 只打包，不上传
       - name: Build (no publish)
         env:

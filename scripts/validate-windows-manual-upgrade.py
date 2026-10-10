@@ -14,6 +14,7 @@ import tempfile
 import time
 import winreg
 import runpy
+import urllib.request
 
 assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -180,7 +181,13 @@ def verify_started_runtime(expected_version):
             launched = json.loads(raw or '[]')
             log = DATA / 'logs/main.log'
             if launched and log.is_file() and ('App version: ' + expected_version) in log.read_text(errors='replace') and ('userData: ' + str(DATA)) in log.read_text(errors='replace'):
-                return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'originalProfileUsed': True}
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:7072/health', timeout=2) as response:
+                        ready = json.load(response).get('status') == 'ok'
+                except (OSError, ValueError):
+                    ready = False
+                if ready:
+                    return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
         raise RuntimeError('Installed POS did not start with expected runtime version')
     finally:

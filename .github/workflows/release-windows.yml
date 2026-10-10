@@ -70,6 +70,7 @@ jobs:
           assert.equal(manual.authentic295.historicalRowsPreserved,true);
           assert.equal(manual.authentic295.alternateProfilePreserved,true);
           assert.equal(manual.authentic295.restartedRuntime.version,manual.expectedVersion);
+          assert.equal(manual.restartedRuntime.localApiReady,true);
           assert.equal(manual.restartedRuntime.processStarted,true);
           assert.equal(manual.restartedRuntime.originalProfileUsed,true);
           assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
@@ -83,6 +84,7 @@ jobs:
             assert.equal(run.originalVersion,version);
             for (const field of ['originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
             assert.equal(run.restartedRuntime.version,manual.expectedVersion);
+            assert.equal(run.restartedRuntime.localApiReady,true);
             assert.equal(run.restartedRuntime.processStarted,true);
             assert.equal(run.restartedRuntime.originalProfileUsed,true);
           }
