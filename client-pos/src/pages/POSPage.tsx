@@ -3200,11 +3200,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         memberName: member?.name,
         pointsRedeemed: pointsToRedeem
       })
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) => {
-        timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 10000)
-      })
-      const result = await Promise.race([printPromise, timeoutPromise]).finally(() => { if (timer) clearTimeout(timer) })
+      // Multi-copy printing waits for the employee to tear off each copy.
+      // Do not time out the handover while Electron is still waiting for confirmation.
+      const result = await printPromise
       if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
       return result?.success ?? false
     } catch (err) {

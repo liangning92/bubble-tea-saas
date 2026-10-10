@@ -1487,7 +1487,11 @@ if ($res) {
 /**
  * 打印小票 - 优先使用 winspool.drv RAW 原生打印，支持内嵌弹钱箱脉冲
  */
+let receiptPrintBusy = false
 ipcMain.handle('print-receipt', async (_event, data) => {
+  if (receiptPrintBusy) return { success: false, error: 'Receipt handover is still in progress' }
+  receiptPrintBusy = true
+  let copiesSubmitted = 0
   try {
     const printerName = data.printerHost ? '' : await resolvePrinterName(data.printerName)
     const { printerHost, printerPort, blocks, openCashDrawer: shouldOpenDrawer } = data
@@ -1512,8 +1516,8 @@ ipcMain.handle('print-receipt', async (_event, data) => {
 
     // 生成 ESC/POS 原始打印指令 (支持多联打印 printCopies)
     data.printWarnings = []
-    const printCopies = Math.max(1, Math.min(5, data.printCopies || 1))
-    const rawChunks: Buffer[] = []
+    const requestedCopies = Number(data.printCopies)
+    const printCopies = Number.isFinite(requestedCopies) ? Math.max(1, Math.min(5, Math.floor(requestedCopies))) : 1
     const initCmd = Buffer.from([0x1B, 0x40])  // ESC @ 初始化
     const is80mm = data.paperSize === '80mm'
 
@@ -1524,7 +1528,46 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       ? Buffer.from([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x01])
       : Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A])
 
+    if (!printerHost && !printerName) return { success: false, error: 'No printer available on system' }
+    const lang = (data.language || 'id').toLowerCase()
+    const handover = lang === 'zh' ? {
+      title: '小票交接',
+      message: '请等待出纸，撕下顾客联并交给顾客。',
+      later: '请等待出纸并撕下上一联。',
+      button: '已撕下，打印操作员联',
+      next: '已撕下，打印下一联'
+    } : lang === 'en' ? {
+      title: 'Receipt handover',
+      message: 'Wait for printing, tear off the customer copy and hand it to the customer.',
+      later: 'Wait for printing and tear off the previous copy.',
+      button: 'Torn off — print operator copy',
+      next: 'Torn off — print next copy'
+    } : {
+      title: 'Penyerahan struk',
+      message: 'Tunggu struk keluar, sobek salinan pelanggan dan berikan kepada pelanggan.',
+      later: 'Tunggu struk keluar dan sobek salinan sebelumnya.',
+      button: 'Sudah disobek — cetak salinan operator',
+      next: 'Sudah disobek — cetak salinan berikutnya'
+    }
     for (let c = 0; c < printCopies; c++) {
+      if (c > 0) {
+        const options = {
+          type: 'info' as const,
+          title: handover.title,
+          message: c === 1 ? handover.message : handover.later,
+          detail: `${data.orderNum || ''} · ${c}/${printCopies}`,
+          buttons: [c === 1 ? handover.button : handover.next],
+          defaultId: 0,
+          cancelId: -1,
+          noLink: true
+        }
+        const confirmation = mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showMessageBox(mainWindow, options)
+          : await dialog.showMessageBox(options)
+        if (confirmation.response !== 0) {
+          return { success: false, copiesSubmitted, error: 'Receipt handover interrupted; remaining copies were not sent' }
+        }
+      }
       const copyData = printCopies > 1 ? {
         ...data,
         copyLabel: c === 0 ? '(Customer Copy)' : '(Merchant Copy)'
@@ -1539,55 +1582,29 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       // 只有第一联出纸前触发弹钱箱
       const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0)
       // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出全格式化 ESC/POS 数据，切纸
-      rawChunks.push(Buffer.concat([initCmd, firstDrawerCmd, receiptBuf, cutCmd]))
-    }
-    const rawBytes = Buffer.concat(rawChunks)
-    writeCrash(`[PRINT] printCopies=${printCopies} rawBytes length=${rawBytes.length}`)
-
-    // 1. 网络小票机（优先通过 TCP Socket 发送原生 ESC/POS 数据包）
-    if (printerHost && printerPort) {
-      try {
+      const rawBytes = Buffer.concat([initCmd, firstDrawerCmd, receiptBuf, cutCmd])
+      writeCrash(`[PRINT] copy=${c + 1}/${printCopies} rawBytes length=${rawBytes.length}`)
+      if (printerHost && printerPort) {
         await printViaNetworkRaw(rawBytes, printerHost, printerPort)
-        writeCrash(`[PRINT] printViaNetworkRaw success to ${printerHost}:${printerPort}`)
-        return { success: true, warnings: [...new Set(data.printWarnings)] }
-      } catch (netErr: any) {
-        writeCrash(`[PRINT] printViaNetworkRaw failed: ${netErr.message}`)
-        return { success: false, error: netErr.message }
-      }
-    }
-
-    if (!printerName) {
-      writeCrash('[PRINT] ERROR: No printer available on Windows system')
-      return { success: false, error: 'No printer available on system' }
-    }
-
-    // 1. 如果打印机是 COM 口（虚拟串口）
-    const isComPort = /^COM\d+/i.test(printerName)
-    if (isComPort) {
-      try {
+      } else if (/^COM\d+/i.test(printerName)) {
         await printViaComPort(printerName, rawBytes)
-        writeCrash('[PRINT] printViaComPort success')
-        return { success: true, warnings: [...new Set(data.printWarnings)] }
-      } catch (comErr: any) {
-        writeCrash(`[PRINT] printViaComPort failed: ${comErr.message}`)
-        return { success: false, error: comErr.message }
+      } else {
+        // A transport error may occur after acceptance. Never resend automatically.
+        try {
+          await sendRawBytesToWindowsPrinter(printerName, rawBytes)
+        } catch (error: any) {
+          return { success: false, copiesSubmitted, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + error.message }
+        }
       }
+      copiesSubmitted++
     }
-
-    // A transport exception does not prove that the spooler rejected the job.
-    // Submit once; no automatic protocol retry or additional drawer pulse.
-    try {
-      await sendRawBytesToWindowsPrinter(printerName, rawBytes)
-      writeCrash('[PRINT] sendRawBytesToWindowsPrinter success')
-      return { success: true, warnings: [...new Set(data.printWarnings)] }
-    } catch (winRawErr: any) {
-      writeCrash(`[PRINT] Delivery unconfirmed: ${winRawErr.message}`)
-      return { success: false, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + winRawErr.message }
-    }
+    return { success: true, copiesSubmitted, warnings: [...new Set(data.printWarnings)] }
 
   } catch (error: any) {
     writeCrash(`[PRINT] print-receipt error: ${error.message}`)
-    return { success: false, error: error.message }
+    return { success: false, copiesSubmitted, error: error.message }
+  } finally {
+    receiptPrintBusy = false
   }
 })
 

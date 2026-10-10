@@ -29,7 +29,8 @@ test('bridge name resolution is exact; no fuzzy/system default/first-device; dir
 // Execute the actual IPC handlers with transport stand-ins, not the Electron application's startup.
 const text=fs.readFileSync('client-pos/electron/main.ts','utf8'),ast=ts.createSourceFile('main.ts',text,ts.ScriptTarget.Latest,true);
 const handlers={};for(const stmt of ast.statements){const call=stmt.expression;if(call&&ts.isCallExpression(call)&&call.expression.getText(ast)==='ipcMain.handle'&&ts.isStringLiteral(call.arguments[0]))handlers[call.arguments[0].text]=call.arguments[1].getText(ast);}
-function bridge(name,fail=false){const calls=[];const targetCalls=[];const context={Buffer,Math,writeCrash:()=>{},resolvePrinterName:async n=>{targetCalls.push(n);return exactPrinterName(n,[{name:'Receipt'},{name:'Label'},{name:'Kitchen'}]);},buildReceiptEscPosBuffer:async()=>Buffer.from('synthetic'),generateReceiptText:()=>'',generateKitchenText:()=>'',generateShiftReportText:()=>'',generateCupStickerTspl:()=>'',generateCupStickerEscPos:()=>'',encodeEscPosText:x=>Buffer.from(x),printViaNetwork:async(...args)=>{calls.push(['network',...args]);if(fail)throw Error('offline');},printViaNetworkRaw:async(...args)=>{calls.push(['network',...args]);if(fail)throw Error('offline');},sendRawBytesToWindowsPrinter:async(n)=>{calls.push(['raw',n]);if(fail)throw Error('offline');},printViaComPort:async n=>{calls.push(['com',n]);if(fail)throw Error('accepted then error');},printViaWindowsRaw:async d=>{calls.push(['text',d.printerName]);if(fail===true)throw Error('offline');},PosPrinter:{sendRawCommand:async n=>{calls.push(['pos',n]);if(fail===true)throw Error('offline');},openCashDrawer:async n=>{calls.push(['drawer',n]);if(fail===true)throw Error('offline');}}};
+function bridge(name,fail=false,hooks={}){const calls=[];const targetCalls=[];const context={Buffer,Math,receiptPrintBusy:false,mainWindow:null,dialog:{showMessageBox:async()=>({response:0})},writeCrash:()=>{},resolvePrinterName:async n=>{targetCalls.push(n);return exactPrinterName(n,[{name:'Receipt'},{name:'Label'},{name:'Kitchen'}]);},buildReceiptEscPosBuffer:async()=>Buffer.from('synthetic'),generateReceiptText:()=>'',generateKitchenText:()=>'',generateShiftReportText:()=>'',generateCupStickerTspl:()=>'',generateCupStickerEscPos:()=>'',encodeEscPosText:x=>Buffer.from(x),printViaNetwork:async(...args)=>{calls.push(['network',...args]);if(fail)throw Error('offline');},printViaNetworkRaw:async(...args)=>{calls.push(['network',...args]);if(fail)throw Error('offline');},sendRawBytesToWindowsPrinter:async(n,bytes)=>{calls.push(['raw',n,bytes]);if(fail)throw Error('offline');},printViaComPort:async(n,bytes)=>{calls.push(['com',n,bytes]);if(fail)throw Error('accepted then error');},printViaWindowsRaw:async d=>{calls.push(['text',d.printerName]);if(fail===true)throw Error('offline');},PosPrinter:{sendRawCommand:async n=>{calls.push(['pos',n]);if(fail===true)throw Error('offline');},openCashDrawer:async n=>{calls.push(['drawer',n]);if(fail===true)throw Error('offline');}}};
+ Object.assign(context,hooks);
  vm.runInNewContext(ts.transpileModule('globalThis.run='+handlers[name],{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);return {calls,targetCalls,run:data=>context.run(null,{orderNum:'synthetic',items:[],stickers:[{}],...data})};}
 for(const name of ['print-receipt','open-cash-drawer','send-kitchen-order','print-shift-report','print-cup-stickers']){
  test(name+': missing named device rejected without transport; network failure never sends local',async()=>{
@@ -62,4 +63,30 @@ test('complete legacy initialization preserves explicit exact USB name without m
 for(const name of ['print-receipt','open-cash-drawer','send-kitchen-order','print-shift-report','print-cup-stickers'])test(name+': accepted-then-error submits once, returns unconfirmed, never secondary protocol/pulse',async()=>{
  const b=bridge(name,'accepted');const result=await b.run({printerName:'Receipt',openCashDrawer:true,orderNum:'paid-synthetic'});
  assert.equal(result.success,false);assert.equal(result.deliveryStatus,'unconfirmed');assert.equal(b.calls.length,1);assert.equal(b.calls[0][0],'raw');
+});
+
+for (const target of [{printerName:'Receipt'},{printerName:'COM3'},{printerHost:'127.0.0.1',printerPort:9100}]) {
+ test('two copies wait for tear-off confirmation on '+JSON.stringify(target),async()=>{
+  let confirm,dialogOpened;
+  const opened=new Promise(resolve=>{dialogOpened=resolve});
+  const gate=new Promise(resolve=>{confirm=resolve});
+  const b=bridge('print-receipt',false,{dialog:{showMessageBox:async options=>{assert.match(options.message,/撕下顾客联/);dialogOpened();return gate;}}});
+  const pending=b.run({...target,language:'zh',printCopies:2,openCashDrawer:true});
+  await opened;
+  assert.equal(b.calls.length,1,'operator copy not submitted while employee is tearing off paper');
+  assert.equal((await b.run({...target,printCopies:2})).success,false,'another job cannot interleave the copies');
+  const byteIndex=target.printerHost?1:2;const first=b.calls[0][byteIndex];assert.ok(first.includes(Buffer.from([0x1b,0x70,0])),'drawer opens with customer copy');
+  confirm({response:0});const result=await pending;
+  assert.equal(result.success,true);assert.equal(result.copiesSubmitted,2);assert.equal(b.calls.length,2);
+  assert.ok(!b.calls[1][byteIndex].includes(Buffer.from([0x1b,0x70,0])),'operator copy never pulses drawer');
+ });
+}
+test('first-copy transport failure never prompts or sends a second copy',async()=>{
+ let prompts=0;const b=bridge('print-receipt',true,{dialog:{showMessageBox:async()=>{prompts++;return {response:0}}}});
+ const r=await b.run({printerName:'Receipt',printCopies:2});assert.equal(r.success,false);assert.equal(b.calls.length,1);assert.equal(prompts,0);
+});
+test('interrupted handover retains first submission and releases the printing lock',async()=>{
+ const b=bridge('print-receipt',false,{dialog:{showMessageBox:async()=>({response:-1})}});
+ const r=await b.run({printerName:'Receipt',printCopies:2});assert.equal(r.success,false);assert.equal(r.copiesSubmitted,1);assert.equal(b.calls.length,1);
+ assert.equal((await b.run({printerName:'Receipt',printCopies:1})).success,true);
 });
