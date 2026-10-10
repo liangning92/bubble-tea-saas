@@ -64,17 +64,38 @@ jobs:
           assert.equal(manual.syntheticOnly,true);
           assert.equal(manual.onlineInteractiveInstallerVerified,true);
           assert.equal(manual.authentic295.originalVersion,'2026.10.295');
+          assert.equal(manual.authentic295.originalUninstallerPresent,true);
           assert.equal(manual.authentic295.originalPayloadUnmodified,true);
           assert.equal(manual.authentic295.originalUpdaterIpcUsed,true);
           assert.equal(manual.authentic295.downloadedCandidateHashMatched,true);
           assert.equal(manual.authentic295.historicalRowsPreserved,true);
           assert.equal(manual.authentic295.alternateProfilePreserved,true);
           assert.equal(manual.authentic295.restartedRuntime.version,manual.expectedVersion);
+          assert.equal(manual.restartedRuntime.normalExit,true);
+          assert.equal(manual.restartedRuntime.localApiReady,true);
           assert.equal(manual.restartedRuntime.processStarted,true);
           assert.equal(manual.restartedRuntime.originalProfileUsed,true);
           assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
           assert.deepEqual(manual.onlineInstallerArguments,['--updated','--force-run']);
-          assert.equal(manual.cases.length,9);
+          assert.equal(manual.cases.length,10);
+          assert.ok(manual.cases.includes('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds'));
+          assert.equal(manual.downtimeLimitSeconds,90);
+          assert.ok(Number.isFinite(manual.preparedDowntimeSeconds) && manual.preparedDowntimeSeconds > 0 && manual.preparedDowntimeSeconds <= 90);
+          for (const [key,version] of [['authentic372','2026.10.372'],['authentic384','2026.10.384']]) {
+            const run=manual[key];
+            assert.equal(run.originalVersion,version);
+            for (const field of ['originalUninstallerPresent','originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
+            assert.equal(run.restartedRuntime.version,manual.expectedVersion);
+            assert.equal(run.restartedRuntime.normalExit,true);
+            assert.equal(run.restartedRuntime.localApiReady,true);
+            assert.equal(run.restartedRuntime.processStarted,true);
+            assert.equal(run.restartedRuntime.originalProfileUsed,true);
+          }
+          assert.equal(manual.authentic372.originalInstallerSha256,'3943a394c848f869c8abc12e5706ce3e4bf2c18ff0412d708537ccfb8cd70acc');
+          assert.equal(manual.authentic384.originalInstallerSha256,'3f52f8c7e19a0f497a53015e402a231adf675d4c2e63bec0d0aef899496810e6');
+          assert.equal(manual.authentic372.obsoleteStagePreserved,true);
+          assert.equal(manual.authentic384.backgroundBackupReused,true);
+          assert.ok(Number.isFinite(manual.authentic384.downtimeSeconds) && manual.authentic384.downtimeSeconds > 0 && manual.authentic384.downtimeSeconds <= 90);
           assert.ok(manual.cases.includes('interactive-nsis-reuses-background-verified-backup'));
           assert.ok(manual.cases.includes('compiled-helper-historical-integer-leave-schema-preserved'));
           assert.ok(manual.cases.includes('generated-prisma-half-day-read-write-on-historical-integer-columns'));
@@ -86,23 +107,11 @@ jobs:
           assert.ok(guard.cases.every(row=>row.oldProcessPreserved&&row.installerExitCode===73));
           JS
 
-      - name: Require the matching production backend before enabling installer updates
+      - name: Require matching production backend source or identical backend build inputs
         env:
           RELEASE_SHA: ${{ steps.source.outputs.sha }}
-        run: |
-          node - <<'JS'
-          const assert=require('node:assert/strict');
-          (async()=>{
-            const response=await fetch('https://api.aicube.online/health',{signal:AbortSignal.timeout(8000)});
-            assert.equal(response.status,200);
-            const health=await response.json();
-            assert.equal(health.status,'ok');
-            assert.equal(health.sourceSha,process.env.RELEASE_SHA,'Deploy the matching backend first');
-            assert.equal(health.capabilities.orderReceipt,1);
-            assert.equal(health.capabilities.refundItems,2);
-            assert.equal(health.capabilities.inventoryCount,3);
-          })().catch(error=>{console.error(error);process.exitCode=1});
-          JS
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/check-windows-backend.cjs
 
   publish:
     needs: gate

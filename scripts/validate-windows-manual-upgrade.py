@@ -14,6 +14,7 @@ import tempfile
 import time
 import winreg
 import runpy
+import urllib.request
 
 assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -36,6 +37,7 @@ APP.mkdir()
 DATA.joinpath('data').mkdir(parents=True)
 DB = DATA / 'data/dev.db'
 CASES = []
+COMPLETED = False
 
 
 def sha(path):
@@ -132,6 +134,8 @@ def drive_installer(exe, process=None):
             return True
         user.EnumWindows(enum, 0)
         for hwnd in windows:
+            if finish_seen:
+                continue
             controls = []
             @callback_type
             def child(control, _):
@@ -158,8 +162,15 @@ def drive_installer(exe, process=None):
             next_button = next((c for c in controls if c[1] == 1 and user.IsWindowEnabled(c[0]) and user.IsWindowVisible(c[0])), None)
             if next_button:
                 if 'finish' in next_button[2].lower():
+                    run = next((c for c in controls if c[1] == 1203 and 'run btps' in c[2].lower()), None)
+                    if run:
+                        checked = user.SendMessageW(run[0], 0xF0, 0, 0)
+                        print('Owned NSIS Run checkbox state: ' + str(checked), flush=True)
+                        if checked != 1:
+                            user.PostMessageW(run[0], 0xF5, 0, 0)
+                            continue
                     finish_seen = True
-                    # Keep the ordinary Run checkbox selected to verify restart.
+                    # Select the ordinary Run checkbox before pressing Finish.
                 user.PostMessageW(next_button[0], 0xF5, 0, 0)
         time.sleep(.5)
     if process.poll() is None:
@@ -172,6 +183,7 @@ def verify_started_runtime(expected_version):
     env = dict(os.environ, BTPS_OWNED_RUNTIME=str(APP / 'BTPS.exe'))
     query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
     launched = []
+    verified = False
     deadline = time.monotonic() + 60
     try:
         while time.monotonic() < deadline:
@@ -179,13 +191,49 @@ def verify_started_runtime(expected_version):
             launched = json.loads(raw or '[]')
             log = DATA / 'logs/main.log'
             if launched and log.is_file() and ('App version: ' + expected_version) in log.read_text(errors='replace') and ('userData: ' + str(DATA)) in log.read_text(errors='replace'):
-                return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'originalProfileUsed': True}
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:7072/health', timeout=2) as response:
+                        ready = json.load(response).get('status') == 'ok'
+                except (OSError, ValueError):
+                    ready = False
+                if ready:
+                    verified = True
+                    return {'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
+        print('Owned restart processes: ' + json.dumps(launched), flush=True)
+        log = DATA / 'logs/main.log'
+        if log.is_file():
+            print('Owned runtime log tail: ' + json.dumps(log.read_text(encoding='utf-8', errors='replace')[-12000:]), flush=True)
         raise RuntimeError('Installed POS did not start with expected runtime version')
     finally:
-        # Only processes whose executable is inside this test-owned fixture.
+        # Normal exit flushes Chromium's encryption-key preferences. Killing the
+        # first launch can orphan safeStorage ciphertext before Local State saves.
+        if verified:
+            user = ctypes.windll.user32
+            callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+            user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+            user.IsWindowVisible.argtypes = [wintypes.HWND]
+            user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+            closing_deadline = time.monotonic() + 20
+            while launched and time.monotonic() < closing_deadline:
+                owned = {row['ProcessId'] for row in launched}
+                @callback_type
+                def close_window(hwnd, _):
+                    pid = wintypes.DWORD()
+                    user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if pid.value in owned and user.IsWindowVisible(hwnd):
+                        user.PostMessageW(hwnd, 0x10, 0, 0)  # ordinary WM_CLOSE
+                    return True
+                user.EnumWindows(close_window, 0)
+                time.sleep(.5)
+                raw = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', query], env=env, text=True).strip()
+                launched = json.loads(raw or '[]')
+        # Force termination is only failure cleanup, never a successful upgrade.
         for row in launched:
             subprocess.run(['taskkill', '/PID', str(row['ProcessId']), '/T', '/F'], check=False, capture_output=True)
+        if verified and launched:
+            raise RuntimeError('Owned installed POS did not exit normally')
 
 try:
     fixture()
@@ -244,6 +292,7 @@ try:
     staged = invoke('stage')
     assert staged['status'] == 'staged'
     invoke('refresh-stage')
+    fast_started = time.monotonic()
     drive_installer(installer)
     staged_receipt = json.loads(pathlib.Path(staged['receiptPath']).read_text())
     assert staged_receipt['status'] == 'prepared' and staged_receipt['preverifiedBackup']
@@ -260,8 +309,25 @@ try:
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
     assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
     restarted_runtime = verify_started_runtime(expected_version)
+    fast_downtime = time.monotonic() - fast_started
+    print(json.dumps({'preparedDowntimeSeconds': round(fast_downtime, 3), 'localApiReady': restarted_runtime['localApiReady']}), flush=True)
+    assert fast_downtime <= 90, ('Prepared upgrade exceeded 90 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
+    # Reproduce the employee failure with a valid receipt for another package.
+    obsolete_installer = TEMP / 'obsolete-installer.exe'
+    obsolete_installer.write_bytes(b'owned obsolete installer')
+    subprocess.run([str(HELPER), 'stage', '--old-app', str(APP), '--installer', str(obsolete_installer), '--result', str(stage_pointer)], check=True, timeout=180)
+    obsolete_pointer = stage_pointer.read_bytes()
+    obsolete = json.loads(pathlib.Path(json.loads(obsolete_pointer)['receiptPath']).read_text())
+    old_evidence = {p: sha(p) for p in [pathlib.Path(obsolete['receiptPath']), pathlib.Path(obsolete['databaseBackup']), pathlib.Path(obsolete['appBackup'])]}
+    drive_installer(installer)
+    verify_started_runtime(expected_version)
+    assert historic() == history
+    assert stage_pointer.read_bytes() == obsolete_pointer
+    assert all(sha(p) == value for p, value in old_evidence.items())
+    stage_pointer.unlink()
+    CASES.append('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds')
     # The original 295 package is named bubble-tea-saas. Put owned history in
     # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
     historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
@@ -272,7 +338,13 @@ try:
     DATA = historical_profile
     DB = historical_profile / 'data/dev.db'
     authentic = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate'](ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile)
-    report = {'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
+    authentic_validate = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate']
+    authentic372 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
+        original_version='2026.10.372', original_hash='3943a394c848f869c8abc12e5706ce3e4bf2c18ff0412d708537ccfb8cd70acc', stale_stage=True)
+    authentic384 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
+        original_version='2026.10.384', original_hash='3f52f8c7e19a0f497a53015e402a231adf675d4c2e63bec0d0aef899496810e6')
+    assert authentic384['downtimeSeconds'] <= 90, ('Background online upgrade exceeded release limit', authentic384)
+    report = {'authentic372': authentic372, 'authentic384': authentic384, 'preparedDowntimeSeconds': round(fast_downtime, 3), 'downtimeLimitSeconds': 90, 'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],
@@ -285,10 +357,11 @@ try:
                     requiredExistingDatabaseChanges=report['changes'])
     manifest.pop('existingDatabaseBlocker', None)
     manifest_path.write_text(json.dumps(manifest, indent=2))
+    COMPLETED = True
     print(json.dumps(report))
 finally:
     # Remove only fixture roots created after absence assertions in this script.
     # On failure retain all synthetic artifacts for CI diagnosis.
-    if len(CASES) == 8:
+    if COMPLETED:
         shutil.rmtree(DATA)
         shutil.rmtree(pathlib.Path(os.environ['APPDATA']) / 'BTPS')

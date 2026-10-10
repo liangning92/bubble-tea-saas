@@ -81,7 +81,11 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   if(['same-name','repeat','repriced-repeat','addons'].includes(scenario)){if(scenario==='repriced-repeat')currentPrice=15500;await scan(scenario==='same-name'?'p2':'p1');await add();}
   assert.equal(orders.length,0);assert.deepEqual(await page.evaluate(()=>window.deviceCalls),[]);
   await page.screenshot({path:'/tmp/pos-barcode-page-evidence/'+scenario+'.png'});
-  await page.getByRole('button',{name:/Checkout/}).click();await page.getByRole('button',{name:/Exact/}).click();await page.getByRole('button',{name:/Confirm Payment/}).click();await expect.poll(()=>orders.length).toBe(1);
+  await page.getByRole('button',{name:/Checkout/}).click();
+  // Repricing normalizes both identical specs to the current price. Wait for
+  // that authoritative quote before entering exact cash for the updated total.
+  if(scenario==='repriced-repeat')await expect(page.getByText('Rp 31.000',{exact:true}).first()).toBeVisible();
+  await page.getByRole('button',{name:/Exact/}).click();await page.getByRole('button',{name:/Confirm Payment/}).click();await expect.poll(()=>orders.length).toBe(1);
   const items=orders[0].items;
   if(delayed){assert.equal(items.length,1);assert.equal(items[0].productId,'base');assert.equal(items[0].specId,'base-large');assert.equal(items[0].unitPrice,8000);assert.equal(items[0].quantity,2);assert.equal(items[0].addons[0].name,'Synthetic Boba');assert.equal(items[0].addons[0].price,2000);}
   if(scenario==='single')assert.equal(JSON.stringify(items.map(i=>[i.productId,i.specId,i.unitPrice])),JSON.stringify([['p1','s1',10000]]));

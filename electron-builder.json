@@ -29,7 +29,10 @@
     "shared/**/*",
     "!**/*.map",
     "!**/node_modules/.cache/**/*",
-    "!**/node_modules/**/node-thermal-printer/**/*"
+    "!**/node_modules/**/node-thermal-printer/**/*",
+    "!**/*.d.ts",
+    "!**/*.d.cts",
+    "!**/*.d.mts"
   ],
   "extraResources": [
     {
@@ -47,7 +50,11 @@
       "from": "server/node_modules",
       "to": "app.asar.unpacked/server/node_modules",
       "filter": [
-        "**/*"
+        "**/*",
+        "!**/*.d.ts",
+        "!**/*.d.cts",
+        "!**/*.d.mts",
+        "!**/*.map"
       ]
     },
     {
