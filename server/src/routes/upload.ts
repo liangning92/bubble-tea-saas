@@ -4,13 +4,13 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import { randomUUID as uuidv4 } from 'crypto'
-import { authenticate, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 
 const router = Router()
 
 // Ensure upload directories exist
 const uploadRoot = process.env.UPLOADS_PATH || path.resolve(__dirname, '../../uploads')
-const dirs = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen'].map(dir => path.join(uploadRoot, dir))
+const dirs = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen', 'tvMusic'].map(dir => path.join(uploadRoot, dir))
 dirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
@@ -96,6 +96,25 @@ const uploadDualScreen = multer({
   storage: createStorage('dualScreen'),
   fileFilter: videoFilter,
   limits: { fileSize: 50 * 1024 * 1024, files: 10 } // 50MB max, 10 files
+})
+
+// Store managers upload tracks; unsupported files never enter the playlist.
+const uploadTvMusic = multer({
+  storage: createStorage('tvMusic'),
+  fileFilter: (_req: any, file: any, cb: any) => {
+    const extensions = ['.mp3', '.wav', '.ogg', '.m4a', '.aac']
+    const mimes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/aac']
+    cb(extensions.includes(path.extname(file.originalname).toLowerCase()) && mimes.includes(file.mimetype) ? null : new Error('Use MP3, WAV, OGG, M4A or AAC audio files'), true)
+  },
+  limits: { fileSize: 30 * 1024 * 1024, files: 10 }
+}).array('files', 10)
+router.post('/tvMusic', authenticate, authorize('admin', 'manager'), (req: AuthRequest, res) => {
+  uploadTvMusic(req, res, (error: any) => {
+    if (error) return res.status(400).json({ code: 400, message: error.message })
+    const files = (req.files || []) as any[]
+    if (!files.length) return res.status(400).json({ code: 400, message: 'Select an audio file' })
+    res.json({ code: 200, data: { files: files.map(file => ({ url: '/uploads/tvMusic/' + file.filename, title: file.originalname })) } })
+  })
 })
 
 // POST /api/upload/product - Upload product image
