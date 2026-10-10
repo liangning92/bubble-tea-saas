@@ -155,7 +155,7 @@ def drive_installer(exe, process=None, on_retry=None):
             retry = next((c for c in controls if c[1] == 4 and user.IsWindowEnabled(c[0])), None)
             if retry:
                 assert on_retry is not None and not retry_seen, ('Unexpected shutdown retry', page_state)
-                assert 'still running' in page_state, page_state
+                assert 'shutdown has not completed' in page_state, page_state
                 on_retry()
                 retry_seen = True
                 user.PostMessageW(retry[0], 0xF5, 0, 0)
@@ -365,16 +365,12 @@ try:
     assert all(sha(p) == value for p, value in old_evidence.items())
     stage_pointer.unlink()
     CASES.append('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds')
-    # Reproduce a real open cashier/customer POS, then ordinary close + Retry.
+    # Open a real POS: the installer itself must request normal shutdown.
     subprocess.Popen([str(APP / 'BTPS.exe')])
-    old_program = sha(APP / 'BTPS.exe')
-    def close_pos_after_prompt():
-        assert sha(APP / 'BTPS.exe') == old_program and historic() == history
-        verify_started_runtime(expected_version)  # sends ordinary WM_CLOSE, waits for exit
-    drive_installer(installer, on_retry=close_pos_after_prompt)
+    drive_installer(installer)  # Installer must close the open POS itself; no manual callback.
     verify_started_runtime(expected_version)
     assert historic() == history
-    CASES.append('interactive-nsis-running-pos-normal-close-retry-succeeds')
+    CASES.append('interactive-nsis-running-pos-automatic-close-install-restart-succeeds')
     listener = owned_listener()
     old_program, old_database = sha(APP / 'BTPS.exe'), sha(DB)
     def close_api_after_prompt():

@@ -394,6 +394,54 @@ def wait_stopped(processes, timeout=15):
             time.sleep(min(.25, remaining))
 
 
+def owned_pos_executable(executable, old_app):
+    executable = pathlib.Path(executable)
+    return (executable.name.lower() in ('btps.exe', 'bubbleteapos.exe')
+            and os.path.normcase(str(executable.parent.resolve())) == os.path.normcase(str(regular(old_app))))
+
+
+def request_pos_close(old_app):
+    # Request ordinary window shutdown only in this installation directory.
+    # Never terminate a process or send input to another application/profile.
+    from ctypes import wintypes
+    old_app = regular(old_app)
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user.IsWindowVisible.argtypes = [wintypes.HWND]
+    user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user.PostMessageW.restype = wintypes.BOOL
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    requested = []
+    @callback_type
+    def close(hwnd, _):
+        if not user.IsWindowVisible(hwnd):
+            return True
+        pid = wintypes.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        handle = kernel.OpenProcess(0x1000, False, pid.value)
+        if not handle:
+            return True
+        try:
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(buffer))
+            if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(length)):
+                if owned_pos_executable(buffer.value, old_app) and user.PostMessageW(hwnd, 0x10, 0, 0):
+                    requested.append(pid.value)
+        finally:
+            kernel.CloseHandle(handle)
+        return True
+    if not user.EnumWindows(close, 0):
+        fail('WINDOW_SHUTDOWN_REQUEST_FAILED')
+    return len(requested)
+
+
 def profile_database():
     if sys.platform != 'win32':
         fail('WINDOWS_REQUIRED')
@@ -772,6 +820,9 @@ def main():
     wait = sub.add_parser('wait-stopped')
     wait.add_argument('--timeout', type=float, default=15)
     wait.add_argument('--diagnostic')
+    stop = sub.add_parser('request-stop')
+    stop.add_argument('--old-app', required=True)
+    stop.add_argument('--diagnostic')
     plan = sub.add_parser('prepare')
     plan.add_argument('--old-app', required=True)
     plan.add_argument('--result', required=True)
@@ -803,19 +854,21 @@ def main():
     if sys.platform != 'win32' or not getattr(sys, 'frozen', False):
         fail('NATIVE_WINDOWS_INSTALLER_HELPER_REQUIRED')
     catalog = bundled_catalog()
-    if args.command == 'wait-stopped':
-        if not 0 <= args.timeout <= 30:
+    if args.command in ('wait-stopped', 'request-stop'):
+        timeout = args.timeout if args.command == 'wait-stopped' else 15
+        if not 0 <= timeout <= 30:
             fail('INVALID_STOP_WAIT_TIMEOUT')
-        upgrade_stage('waiting-for-pos-exit')
+        upgrade_stage('automatic-pos-shutdown' if args.command == 'request-stop' else 'waiting-for-pos-exit')
+        requested = request_pos_close(args.old_app) if args.command == 'request-stop' else 0
         try:
-            wait_stopped(windows_processes, args.timeout)
+            wait_stopped(windows_processes, timeout)
         except PosStillRunningError as error:
             report = failure_report(error)
             if LAST_DIAGNOSTIC:
                 durable_json(LAST_DIAGNOSTIC, report)
             print(json.dumps(report))
             sys.exit(74)  # Installer may offer Retry only for this specific condition.
-        print(json.dumps({'status': 'stopped'}))
+        print(json.dumps({'status': 'stopped', 'closeRequestsSent': requested}))
     elif args.command == 'check-stopped':
         require_stopped(windows_processes)
         print(json.dumps({'status': 'stopped'}))

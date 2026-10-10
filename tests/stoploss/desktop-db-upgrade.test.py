@@ -14,6 +14,12 @@ SPEC.loader.exec_module(U)
 
 
 class UpgradeTests(unittest.TestCase):
+    def test_automatic_close_targets_only_the_original_pos_directory(self):
+        root = self.root / 'btps-close-owned'
+        self.assertTrue(U.owned_pos_executable(root / 'BTPS.exe', root))
+        self.assertFalse(U.owned_pos_executable(root / 'node.exe', root))
+        self.assertFalse(U.owned_pos_executable(root.parent / 'other-pos' / 'BTPS.exe', root))
+
     def test_wait_allows_a_pos_that_is_finishing_normal_exit(self):
         with mock.patch.object(U.time, 'sleep') as sleep:
             U.wait_stopped(mock.Mock(side_effect=[['BTPS.exe'], []]), timeout=15)
