@@ -3200,9 +3200,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         memberName: member?.name,
         pointsRedeemed: pointsToRedeem
       })
+      // Multi-copy printing waits for the employee to tear off each copy.
+      // Do not time out the handover while Electron is still waiting for confirmation.
       let timer: ReturnType<typeof setTimeout> | undefined
       const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) => {
-        timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 10000)
+        // A single receipt has no handover prompt; retain its transport timeout.
+        if ((posReceipt.printCopies || 1) <= 1) timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 10000)
       })
       const result = await Promise.race([printPromise, timeoutPromise]).finally(() => { if (timer) clearTimeout(timer) })
       if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
