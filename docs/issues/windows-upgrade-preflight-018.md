@@ -23,8 +23,13 @@ its first bridge upgrade still requires a fresh backup during installation.
 No verified backup or integrity check is bypassed to reduce downtime.
 
 Local checks: 21 helper tests, 4 preflight tests and 224 JavaScript checks pass.
-Native Windows timings and original-version results must be collected by the
-build workflow before this change can be called ready for release.
+Native Windows verification run 38049563798 passed for source
+d83d99cc9a523925574d9c793d1b038c5dfeda7e and installer 2026.10.392:
+prepared install/restart 53.343 seconds; authentic 384 online upgrade 63.078
+seconds; legacy 372 90.078 seconds; legacy 295 104.984 seconds. All ten native
+cases passed, including preserved historical data, obsolete preparation,
+healthy local API restart and normal exit. Legacy timings are recorded without
+applying the prepared-upgrade threshold to their initial bridge installation.
 
 The first candidate was rejected: prepared install/restart took 139 seconds.
 The build now prunes server development dependencies before packaging, while
@@ -33,3 +38,11 @@ requires the local API readiness endpoint. The 90 second gate is unchanged.
 Type declarations and source maps are also excluded from the shipped runtime
 payload; generated Prisma engines and schemas remain included. All 17 local
 barcode browser cases pass after waiting for the repriced quote before exact cash.
+
+Desktop-only publication checks the live backend health/capabilities and either
+the exact source SHA or byte-identical Git trees for the complete `server` Docker
+context, `shared`, and root dependency manifests. The deployed backend must be
+an ancestor of the verified desktop source. Changed or missing inputs block
+publication until backend deployment; an unchanged API does not need a restart.
+Publication still uses the immutable installer from the exact successful native
+verification run, rather than rebuilding it after validation.
