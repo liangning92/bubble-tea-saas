@@ -2,6 +2,7 @@ import { cachedActivityQuote } from '../utils/activityOfflineQuote'
 import { ActivityPanel } from '../components/ActivityPanel'
 import { activitiesApi } from '../services/api'
 import { io as connectActivitySocket } from 'socket.io-client'
+import { ShiftCashCheck } from '../components/ShiftCashCheck'
 import { expenseCategoryName, visibleInPos } from '../../../shared/utils/expenseCategories'
 import { cartAuditSnapshot } from '../utils/cartAudit'
 import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
@@ -4692,8 +4693,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     showValues={shiftSettings.showSummary} visibleFields={{ openingFloat: shiftSettings.summaryItems?.openFloat,
                       cashSales: shiftSettings.summaryItems?.cashSales, cashIn: shiftSettings.summaryItems?.cashIn,
                       cashOut: shiftSettings.summaryItems?.cashOut, qrisReceipts: shiftSettings.summaryItems?.qrisSales,
-                      orders: shiftSettings.summaryItems?.orderCount, expected: shiftSettings.summaryItems?.closeCash }} />
+                      orders: shiftSettings.summaryItems?.orderCount, expected: false }} />
 
+                  <ShiftCashCheck reconciliation={shiftData?.cashReconciliation} actualCash={shiftActualCash} refresh={() => void fetchShiftData()} />
                   {/* 实际现金输入 */}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.actualCash')}</label>
@@ -4759,6 +4761,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                               if (result?.success === false) throw Error(result.error || 'Print failed')
                             }
                           } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
+                          if (closeResult.data?.data?.cashWarning?.status === 'pending') showToast(t('cashReconciliation.warning', {difference:formatCurrency(closeResult.data.data.cashWarning.difference)}), 'warning')
                           clearCart()
                           setShowShiftModal(false)
                           setShiftActualCash('')
