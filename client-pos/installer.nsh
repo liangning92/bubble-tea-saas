@@ -8,6 +8,26 @@ Var BTPSUpgradeDiagnostic
 
 !macro customHeader
   !ifndef BUILD_UNINSTALLER
+    Function BTPSWaitForClosedPOS
+      CreateDirectory "$APPDATA\BTPS\logs"
+      btps_wait_again:
+      ${If} $BTPSOldApp != ""
+        nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" request-stop --old-app "$BTPSOldApp" --diagnostic "$BTPSUpgradeDiagnostic"'
+      ${Else}
+        nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --diagnostic "$BTPSUpgradeDiagnostic"'
+      ${EndIf}
+      Pop $R0
+      Pop $R1
+      ${If} $R0 == "74"
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Automatic POS shutdown has not completed. Resolve any prompt shown by POS, then click Retry to request shutdown again. Your orders and original program are retained. Details: $R1$\r$\n收银程序或本地服务尚未自动退出。请处理收银窗口中的提示，然后点击重试，安装器会再次自动关闭程序。订单和原程序保留。$\r$\nPOS atau layanan lokal belum ditutup otomatis. Selesaikan pesan di POS, lalu klik Retry untuk mencoba penutupan otomatis lagi. Pesanan dan program lama tetap disimpan." /SD IDCANCEL IDRETRY btps_wait_again
+        SetErrorLevel 73
+        Quit
+      ${ElseIf} $R0 != "0"
+        MessageBox MB_OK|MB_ICONSTOP "Unable to verify POS shutdown. No replacement. Details: $R1$\r$\n无法确认收银已退出，未替换程序。$\r$\nTidak dapat memverifikasi POS sudah ditutup; program belum diganti." /SD IDOK
+        SetErrorLevel 73
+        Quit
+      ${EndIf}
+    FunctionEnd
     Function .onInstFailed
       ${If} $BTPSInstallStarted == "1"
       ${AndIf} $BTPSUpgradeReceipt != ""
@@ -46,7 +66,7 @@ Var BTPSUpgradeDiagnostic
       SetErrorLevel 73
       Quit
     ${EndIf}
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish all payments and close POS normally before continuing. If a backup was prepared, it will be reused. Finish payments and close POS before continuing. Continue?$\r$\n完成付款并正常关闭收银后再继续。已准备的备份将直接使用。完成付款并关闭收银后继续。是否继续？$\r$\nSelesaikan pembayaran dan tutup POS dahulu. Cadangan yang telah disiapkan akan digunakan. Selesaikan pembayaran dan tutup POS dahulu. Lanjutkan?" IDYES btps_upgrade_confirmed
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish the current payment before installing. Setup will automatically close this POS, install the update, and restart it. Continue?$\r$\n请先完成当前收款。安装器将自动关闭本机收银程序、安装更新并重新启动。是否继续？$\r$\nSelesaikan pembayaran saat ini. Instalasi akan menutup POS otomatis, memasang pembaruan, dan membuka POS kembali. Lanjutkan?" IDYES btps_upgrade_confirmed
     SetErrorLevel 73
     Quit
     btps_upgrade_confirmed:
@@ -54,6 +74,7 @@ Var BTPSUpgradeDiagnostic
     File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     CreateDirectory "$APPDATA\BTPS\logs"
+    Call BTPSWaitForClosedPOS
     nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --installer "$EXEPATH" --staged-pointer "$APPDATA\BTPS\upgrade-stage.json" --diagnostic "$BTPSUpgradeDiagnostic"'
     Pop $R0
     Pop $R1
@@ -76,6 +97,7 @@ Var BTPSUpgradeDiagnostic
 
 !ifndef BUILD_UNINSTALLER
 !macro customCheckAppRunning
+  Call BTPSWaitForClosedPOS
   ${If} $BTPSUpgradeReceipt != ""
     ${If} $INSTDIR != $BTPSOldApp
       MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK

@@ -14,6 +14,7 @@ import socket
 import sqlite3
 import sys
 import tempfile
+import time
 import traceback
 import urllib.parse
 import uuid
@@ -37,6 +38,12 @@ class SchemaCompatibilityError(RuntimeError):
     def __init__(self, table, column, expected, actual):
         super().__init__('UNSUPPORTED_SCHEMA_COLUMN')
         self.details = {'table': table, 'column': column, 'expected': expected, 'actual': actual}
+
+
+class PosStillRunningError(RuntimeError):
+    def __init__(self, names, local_api):
+        super().__init__('POS_OR_LOCAL_API_STILL_RUNNING')
+        self.details = {'posProcesses': sorted(names), 'localApiPort': 7072 if local_api else None}
 
 
 def compatible_column(table, name, actual, expected):
@@ -298,7 +305,7 @@ def upgrade_stage(name):
 
 def failure_report(error):
     report = {'status': 'blocked', 'stage': LAST_STAGE, 'errorType': type(error).__name__}
-    if isinstance(error, SchemaCompatibilityError):
+    if isinstance(error, (SchemaCompatibilityError, PosStillRunningError)):
         report.update(reason=str(error), details=error.details)
     elif isinstance(error, shutil.Error):
         # copytree aggregates the individual Windows file-copy failures here.
@@ -363,13 +370,78 @@ def require_stopped(processes):
     # The old POS may fork a system node.exe for its local API, but other apps
     # can also run node.exe. Check our listener instead of blocking every Node
     # process on the cashier's machine.
-    if {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe'}:
-        fail('POS_OR_LOCAL_API_STILL_RUNNING')
+    names = {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe'}
+    local_api = False
     if sys.platform == 'win32':
         with socket.socket() as listener:
             listener.settimeout(0.2)
             if listener.connect_ex(('127.0.0.1', 7072)) == 0:
-                fail('POS_OR_LOCAL_API_STILL_RUNNING')
+                local_api = True
+    if names or local_api:
+        raise PosStillRunningError(names, local_api)
+
+
+def wait_stopped(processes, timeout=15, on_running=None):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            require_stopped(processes)
+            return
+        except PosStillRunningError:
+            if on_running:
+                on_running()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(.25, remaining))
+
+
+def owned_pos_executable(executable, old_app):
+    executable = pathlib.Path(executable)
+    return (executable.name.lower() in ('btps.exe', 'bubbleteapos.exe')
+            and os.path.normcase(str(executable.parent.resolve())) == os.path.normcase(str(regular(old_app))))
+
+
+def request_pos_close(old_app):
+    # Request ordinary window shutdown only in this installation directory.
+    # Never terminate a process or send input to another application/profile.
+    from ctypes import wintypes
+    old_app = regular(old_app)
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user.IsWindowVisible.argtypes = [wintypes.HWND]
+    user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user.PostMessageW.restype = wintypes.BOOL
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    requested = []
+    @callback_type
+    def close(hwnd, _):
+        if not user.IsWindowVisible(hwnd):
+            return True
+        pid = wintypes.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        handle = kernel.OpenProcess(0x1000, False, pid.value)
+        if not handle:
+            return True
+        try:
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(buffer))
+            if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(length)):
+                if owned_pos_executable(buffer.value, old_app) and user.PostMessageW(hwnd, 0x10, 0, 0):
+                    requested.append(pid.value)
+        finally:
+            kernel.CloseHandle(handle)
+        return True
+    if not user.EnumWindows(close, 0):
+        fail('WINDOW_SHUTDOWN_REQUEST_FAILED')
+    return len(requested)
 
 
 def profile_database():
@@ -747,6 +819,12 @@ def main():
     build.add_argument('--output', required=True)
     build.add_argument('--source-sha', required=True)
     sub.add_parser('check-stopped')
+    wait = sub.add_parser('wait-stopped')
+    wait.add_argument('--timeout', type=float, default=15)
+    wait.add_argument('--diagnostic')
+    stop = sub.add_parser('request-stop')
+    stop.add_argument('--old-app', required=True)
+    stop.add_argument('--diagnostic')
     plan = sub.add_parser('prepare')
     plan.add_argument('--old-app', required=True)
     plan.add_argument('--result', required=True)
@@ -778,7 +856,26 @@ def main():
     if sys.platform != 'win32' or not getattr(sys, 'frozen', False):
         fail('NATIVE_WINDOWS_INSTALLER_HELPER_REQUIRED')
     catalog = bundled_catalog()
-    if args.command == 'check-stopped':
+    if args.command in ('wait-stopped', 'request-stop'):
+        timeout = args.timeout if args.command == 'wait-stopped' else 15
+        if not 0 <= timeout <= 30:
+            fail('INVALID_STOP_WAIT_TIMEOUT')
+        upgrade_stage('automatic-pos-shutdown' if args.command == 'request-stop' else 'waiting-for-pos-exit')
+        requested = 0
+        def request_once_visible():
+            nonlocal requested
+            if not requested:
+                requested = request_pos_close(args.old_app)
+        try:
+            wait_stopped(windows_processes, timeout, request_once_visible if args.command == 'request-stop' else None)
+        except PosStillRunningError as error:
+            report = failure_report(error)
+            if LAST_DIAGNOSTIC:
+                durable_json(LAST_DIAGNOSTIC, report)
+            print(json.dumps(report))
+            sys.exit(74)  # Installer may offer Retry only for this specific condition.
+        print(json.dumps({'status': 'stopped', 'closeRequestsSent': requested}))
+    elif args.command == 'check-stopped':
         require_stopped(windows_processes)
         print(json.dumps({'status': 'stopped'}))
     elif args.command == 'stage':

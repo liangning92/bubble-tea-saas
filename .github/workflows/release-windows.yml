@@ -77,11 +77,12 @@ jobs:
           assert.equal(manual.restartedRuntime.originalProfileUsed,true);
           assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
           assert.deepEqual(manual.onlineInstallerArguments,['--updated','--force-run']);
-          assert.equal(manual.cases.length,10);
+          assert.equal(manual.cases.length,14);
+          for (const name of ['compiled-helper-waits-for-local-api-normal-exit','compiled-helper-running-local-api-retains-program-and-data','interactive-nsis-running-pos-automatic-close-install-restart-succeeds','interactive-nsis-running-local-api-close-retry-succeeds']) assert.ok(manual.cases.includes(name));
           assert.ok(manual.cases.includes('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds'));
           assert.equal(manual.downtimeLimitSeconds,90);
           assert.ok(Number.isFinite(manual.preparedDowntimeSeconds) && manual.preparedDowntimeSeconds > 0 && manual.preparedDowntimeSeconds <= 90);
-          for (const [key,version] of [['authentic372','2026.10.372'],['authentic384','2026.10.384']]) {
+          for (const [key,version] of [['authentic372','2026.10.372'],['authentic384','2026.10.384'],['authentic392','2026.10.392']]) {
             const run=manual[key];
             assert.equal(run.originalVersion,version);
             for (const field of ['originalUninstallerPresent','originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
@@ -95,6 +96,9 @@ jobs:
           assert.equal(manual.authentic384.originalInstallerSha256,'3f52f8c7e19a0f497a53015e402a231adf675d4c2e63bec0d0aef899496810e6');
           assert.equal(manual.authentic372.obsoleteStagePreserved,true);
           assert.equal(manual.authentic384.backgroundBackupReused,true);
+          assert.equal(manual.authentic392.originalInstallerSha256,'4b3b9d22e71d85e3e949d432d8a4a947ee0346b51505975bd98b63e41f137eff');
+          assert.equal(manual.authentic392.backgroundBackupReused,true);
+          assert.ok(Number.isFinite(manual.authentic392.downtimeSeconds) && manual.authentic392.downtimeSeconds > 0 && manual.authentic392.downtimeSeconds <= 90);
           assert.ok(Number.isFinite(manual.authentic384.downtimeSeconds) && manual.authentic384.downtimeSeconds > 0 && manual.authentic384.downtimeSeconds <= 90);
           assert.ok(manual.cases.includes('interactive-nsis-reuses-background-verified-backup'));
           assert.ok(manual.cases.includes('compiled-helper-historical-integer-leave-schema-preserved'));
