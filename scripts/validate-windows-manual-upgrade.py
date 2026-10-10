@@ -134,6 +134,8 @@ def drive_installer(exe, process=None):
             return True
         user.EnumWindows(enum, 0)
         for hwnd in windows:
+            if finish_seen:
+                continue
             controls = []
             @callback_type
             def child(control, _):
@@ -199,7 +201,7 @@ def verify_started_runtime(expected_version):
         print('Owned restart processes: ' + json.dumps(launched), flush=True)
         log = DATA / 'logs/main.log'
         if log.is_file():
-            print('Owned runtime log tail: ' + log.read_text(errors='replace')[-12000:], flush=True)
+            print('Owned runtime log tail: ' + json.dumps(log.read_text(encoding='utf-8', errors='replace')[-12000:]), flush=True)
         raise RuntimeError('Installed POS did not start with expected runtime version')
     finally:
         # Only processes whose executable is inside this test-owned fixture.
