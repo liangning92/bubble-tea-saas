@@ -183,6 +183,7 @@ def verify_started_runtime(expected_version):
     env = dict(os.environ, BTPS_OWNED_RUNTIME=str(APP / 'BTPS.exe'))
     query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
     launched = []
+    verified = False
     deadline = time.monotonic() + 60
     try:
         while time.monotonic() < deadline:
@@ -196,7 +197,8 @@ def verify_started_runtime(expected_version):
                 except (OSError, ValueError):
                     ready = False
                 if ready:
-                    return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
+                    verified = True
+                    return {'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
         print('Owned restart processes: ' + json.dumps(launched), flush=True)
         log = DATA / 'logs/main.log'
@@ -204,9 +206,34 @@ def verify_started_runtime(expected_version):
             print('Owned runtime log tail: ' + json.dumps(log.read_text(encoding='utf-8', errors='replace')[-12000:]), flush=True)
         raise RuntimeError('Installed POS did not start with expected runtime version')
     finally:
-        # Only processes whose executable is inside this test-owned fixture.
+        # Normal exit flushes Chromium's encryption-key preferences. Killing the
+        # first launch can orphan safeStorage ciphertext before Local State saves.
+        if verified:
+            user = ctypes.windll.user32
+            callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+            user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+            user.IsWindowVisible.argtypes = [wintypes.HWND]
+            user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+            closing_deadline = time.monotonic() + 20
+            while launched and time.monotonic() < closing_deadline:
+                owned = {row['ProcessId'] for row in launched}
+                @callback_type
+                def close_window(hwnd, _):
+                    pid = wintypes.DWORD()
+                    user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if pid.value in owned and user.IsWindowVisible(hwnd):
+                        user.PostMessageW(hwnd, 0x10, 0, 0)  # ordinary WM_CLOSE
+                    return True
+                user.EnumWindows(close_window, 0)
+                time.sleep(.5)
+                raw = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', query], env=env, text=True).strip()
+                launched = json.loads(raw or '[]')
+        # Force termination is only failure cleanup, never a successful upgrade.
         for row in launched:
             subprocess.run(['taskkill', '/PID', str(row['ProcessId']), '/T', '/F'], check=False, capture_output=True)
+        if verified and launched:
+            raise RuntimeError('Owned installed POS did not exit normally')
 
 try:
     fixture()
