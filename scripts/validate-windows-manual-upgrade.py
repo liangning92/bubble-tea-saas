@@ -403,7 +403,10 @@ try:
     authentic384 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
         original_version='2026.10.384', original_hash='3f52f8c7e19a0f497a53015e402a231adf675d4c2e63bec0d0aef899496810e6')
     assert authentic384['downtimeSeconds'] <= 90, ('Background online upgrade exceeded release limit', authentic384)
-    report = {'authentic372': authentic372, 'authentic384': authentic384, 'preparedDowntimeSeconds': round(fast_downtime, 3), 'downtimeLimitSeconds': 90, 'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
+    authentic392 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
+        original_version='2026.10.392', original_hash='4b3b9d22e71d85e3e949d432d8a4a947ee0346b51505975bd98b63e41f137eff')
+    assert authentic392['backgroundBackupReused'] and authentic392['downtimeSeconds'] <= 90
+    report = {'authentic392': authentic392, 'authentic372': authentic372, 'authentic384': authentic384, 'preparedDowntimeSeconds': round(fast_downtime, 3), 'downtimeLimitSeconds': 90, 'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],

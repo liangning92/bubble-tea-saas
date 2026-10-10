@@ -130,7 +130,7 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
                 print('Original 295 online upgrade diagnostic: ' + diagnostic.read_text(errors='replace'), flush=True)
             raise
         background_reused = False
-        if original_version == '2026.10.384':
+        if original_version in ('2026.10.384', '2026.10.392'):
             pointer = pathlib.Path(os.environ['APPDATA']) / 'BTPS/upgrade-stage.json'
             selected = json.loads(pointer.read_text())
             prepared = json.loads(pathlib.Path(selected['receiptPath']).read_text())
