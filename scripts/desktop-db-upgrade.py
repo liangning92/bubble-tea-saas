@@ -381,13 +381,15 @@ def require_stopped(processes):
         raise PosStillRunningError(names, local_api)
 
 
-def wait_stopped(processes, timeout=15):
+def wait_stopped(processes, timeout=15, on_running=None):
     deadline = time.monotonic() + timeout
     while True:
         try:
             require_stopped(processes)
             return
         except PosStillRunningError:
+            if on_running:
+                on_running()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise
@@ -859,9 +861,13 @@ def main():
         if not 0 <= timeout <= 30:
             fail('INVALID_STOP_WAIT_TIMEOUT')
         upgrade_stage('automatic-pos-shutdown' if args.command == 'request-stop' else 'waiting-for-pos-exit')
-        requested = request_pos_close(args.old_app) if args.command == 'request-stop' else 0
+        requested = 0
+        def request_once_visible():
+            nonlocal requested
+            if not requested:
+                requested = request_pos_close(args.old_app)
         try:
-            wait_stopped(windows_processes, timeout)
+            wait_stopped(windows_processes, timeout, request_once_visible if args.command == 'request-stop' else None)
         except PosStillRunningError as error:
             report = failure_report(error)
             if LAST_DIAGNOSTIC:

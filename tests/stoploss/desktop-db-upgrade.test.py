@@ -25,6 +25,12 @@ class UpgradeTests(unittest.TestCase):
             U.wait_stopped(mock.Mock(side_effect=[['BTPS.exe'], []]), timeout=15)
         sleep.assert_called_once()
 
+    def test_wait_requests_shutdown_when_the_pos_is_still_running(self):
+        close = mock.Mock()
+        with mock.patch.object(U.time, 'sleep'):
+            U.wait_stopped(mock.Mock(side_effect=[['BTPS.exe'], []]), on_running=close)
+        close.assert_called_once()
+
     def test_still_running_reports_the_specific_blocker(self):
         with self.assertRaises(U.PosStillRunningError) as caught:
             U.wait_stopped(lambda: ['BTPS.exe'], timeout=0)
