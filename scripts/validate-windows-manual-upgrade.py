@@ -14,6 +14,8 @@ import tempfile
 import time
 import winreg
 import runpy
+import socket
+import threading
 import urllib.request
 
 assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
@@ -102,7 +104,7 @@ def historic():
         return c.execute('SELECT id,totalAmount,finalAmount,paymentMethod FROM "Order"').fetchall()
 
 
-def drive_installer(exe, process=None):
+def drive_installer(exe, process=None, on_retry=None):
     # Click ordinary visible NSIS controls. No test flag or confirmation bypass is shipped.
     user = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -121,6 +123,7 @@ def drive_installer(exe, process=None):
     process = process or subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
     visited_confirmation = False
     finish_seen = False
+    retry_seen = False
     observed = set()
     deadline = time.monotonic() + 300
     while process.poll() is None and time.monotonic() < deadline:
@@ -149,6 +152,14 @@ def drive_installer(exe, process=None):
                 observed.add(page_state)
                 print('Owned NSIS page: ' + page_state, flush=True)
             user.SetForegroundWindow(hwnd)
+            retry = next((c for c in controls if c[1] == 4 and user.IsWindowEnabled(c[0])), None)
+            if retry:
+                assert on_retry is not None and not retry_seen, ('Unexpected shutdown retry', page_state)
+                assert 'still running' in page_state, page_state
+                on_retry()
+                retry_seen = True
+                user.PostMessageW(retry[0], 0xF5, 0, 0)
+                continue
             error_ok = next((c for c in controls if c[2].replace('&', '').strip().lower() == 'ok' and user.IsWindowEnabled(c[0])), None)
             if error_ok:
                 user.PostMessageW(error_ok[0], 0xF5, 0, 0)
@@ -177,6 +188,8 @@ def drive_installer(exe, process=None):
         process.terminate()  # Only the installer this synthetic test owns.
         raise RuntimeError('Owned interactive installer did not finish within timeout; page states: ' + str(sorted(observed)))
     assert process.returncode == 0 and visited_confirmation and finish_seen, ('NSIS UI', process.returncode, visited_confirmation, finish_seen)
+    if on_retry is not None:
+        assert retry_seen, 'Expected ordinary Retry dialog was not exercised'
 
 
 def verify_started_runtime(expected_version):
@@ -288,6 +301,30 @@ try:
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, REG, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
         winreg.SetValueEx(key, 'InstallLocation', 0, winreg.REG_SZ, str(APP))
     installer = next(ROOT.glob('release/BTPS-*-Windows-x64.exe'))
+    # A leftover local service must wait/retry without touching the DB/program.
+    def owned_listener():
+        listener = socket.socket()
+        listener.bind(('127.0.0.1', 7072))
+        listener.listen()
+        return listener
+    before_db, before_app = sha(DB), sha(APP / 'BTPS.exe')
+    listener = owned_listener()
+    timer = threading.Timer(2, listener.close)
+    timer.start()
+    waited = subprocess.run([str(HELPER), 'wait-stopped'], capture_output=True, text=True, timeout=25)
+    timer.join()
+    assert waited.returncode == 0 and json.loads(waited.stdout)['status'] == 'stopped'
+    assert sha(DB) == before_db and sha(APP / 'BTPS.exe') == before_app
+    CASES.append('compiled-helper-waits-for-local-api-normal-exit')
+    listener = owned_listener()
+    try:
+        blocked = subprocess.run([str(HELPER), 'wait-stopped', '--timeout', '.25'], capture_output=True, text=True, timeout=10)
+        assert blocked.returncode == 74
+        assert json.loads(blocked.stdout)['details']['localApiPort'] == 7072
+        assert sha(DB) == before_db and sha(APP / 'BTPS.exe') == before_app
+    finally:
+        listener.close()
+    CASES.append('compiled-helper-running-local-api-retains-program-and-data')
     stage_pointer = pathlib.Path(os.environ['APPDATA']) / 'BTPS/upgrade-stage.json'
     staged = invoke('stage')
     assert staged['status'] == 'staged'
@@ -328,6 +365,28 @@ try:
     assert all(sha(p) == value for p, value in old_evidence.items())
     stage_pointer.unlink()
     CASES.append('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds')
+    # Reproduce a real open cashier/customer POS, then ordinary close + Retry.
+    subprocess.Popen([str(APP / 'BTPS.exe')])
+    old_program = sha(APP / 'BTPS.exe')
+    def close_pos_after_prompt():
+        assert sha(APP / 'BTPS.exe') == old_program and historic() == history
+        verify_started_runtime(expected_version)  # sends ordinary WM_CLOSE, waits for exit
+    drive_installer(installer, on_retry=close_pos_after_prompt)
+    verify_started_runtime(expected_version)
+    assert historic() == history
+    CASES.append('interactive-nsis-running-pos-normal-close-retry-succeeds')
+    listener = owned_listener()
+    old_program, old_database = sha(APP / 'BTPS.exe'), sha(DB)
+    def close_api_after_prompt():
+        assert sha(APP / 'BTPS.exe') == old_program and sha(DB) == old_database
+        listener.close()
+    try:
+        drive_installer(installer, on_retry=close_api_after_prompt)
+    finally:
+        listener.close()
+    verify_started_runtime(expected_version)
+    assert historic() == history
+    CASES.append('interactive-nsis-running-local-api-close-retry-succeeds')
     # The original 295 package is named bubble-tea-saas. Put owned history in
     # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
     historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'

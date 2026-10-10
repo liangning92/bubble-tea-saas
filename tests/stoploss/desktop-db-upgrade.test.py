@@ -14,6 +14,25 @@ SPEC.loader.exec_module(U)
 
 
 class UpgradeTests(unittest.TestCase):
+    def test_wait_allows_a_pos_that_is_finishing_normal_exit(self):
+        with mock.patch.object(U.time, 'sleep') as sleep:
+            U.wait_stopped(mock.Mock(side_effect=[['BTPS.exe'], []]), timeout=15)
+        sleep.assert_called_once()
+
+    def test_still_running_reports_the_specific_blocker(self):
+        with self.assertRaises(U.PosStillRunningError) as caught:
+            U.wait_stopped(lambda: ['BTPS.exe'], timeout=0)
+        report = U.failure_report(caught.exception)
+        self.assertEqual(report['details']['posProcesses'], ['btps.exe'])
+        self.assertEqual(report['reason'], 'POS_OR_LOCAL_API_STILL_RUNNING')
+
+    def test_local_api_is_reported_without_blame_on_unrelated_node(self):
+        with mock.patch.object(U.sys, 'platform', 'win32'), mock.patch.object(U.socket, 'socket') as socket:
+            socket.return_value.__enter__.return_value.connect_ex.return_value = 0
+            with self.assertRaises(U.PosStillRunningError) as caught:
+                U.wait_stopped(lambda: ['node.exe'], timeout=0)
+        self.assertEqual(caught.exception.details, {'posProcesses': [], 'localApiPort': 7072})
+
     def test_unrelated_node_process_does_not_block_pos_upgrade(self):
         self.assertIsNone(U.require_stopped(lambda: ['node.exe']))
 

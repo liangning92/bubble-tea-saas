@@ -8,6 +8,21 @@ Var BTPSUpgradeDiagnostic
 
 !macro customHeader
   !ifndef BUILD_UNINSTALLER
+    Function BTPSWaitForClosedPOS
+      btps_wait_again:
+      nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --diagnostic "$BTPSUpgradeDiagnostic"'
+      Pop $R0
+      Pop $R1
+      ${If} $R0 == "74"
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "POS or its local service is still running. Close the cashier and customer display windows normally, then click Retry. Your orders and original program are retained. Details: $R1$\r$\n收银程序或本地服务仍在运行。请正常关闭收银和顾客显示窗口，然后点击重试。订单和原程序保留。$\r$\nPOS atau layanan lokal masih berjalan. Tutup jendela kasir dan layar pelanggan secara normal, lalu klik Retry. Pesanan dan program lama tetap disimpan." IDRETRY btps_wait_again
+        SetErrorLevel 73
+        Quit
+      ${ElseIf} $R0 != "0"
+        MessageBox MB_OK|MB_ICONSTOP "Unable to verify POS shutdown. No replacement. Details: $R1$\r$\n无法确认收银已退出，未替换程序。$\r$\nTidak dapat memverifikasi POS sudah ditutup; program belum diganti." /SD IDOK
+        SetErrorLevel 73
+        Quit
+      ${EndIf}
+    FunctionEnd
     Function .onInstFailed
       ${If} $BTPSInstallStarted == "1"
       ${AndIf} $BTPSUpgradeReceipt != ""
@@ -54,6 +69,7 @@ Var BTPSUpgradeDiagnostic
     File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     CreateDirectory "$APPDATA\BTPS\logs"
+    Call BTPSWaitForClosedPOS
     nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --installer "$EXEPATH" --staged-pointer "$APPDATA\BTPS\upgrade-stage.json" --diagnostic "$BTPSUpgradeDiagnostic"'
     Pop $R0
     Pop $R1
@@ -76,6 +92,7 @@ Var BTPSUpgradeDiagnostic
 
 !ifndef BUILD_UNINSTALLER
 !macro customCheckAppRunning
+  Call BTPSWaitForClosedPOS
   ${If} $BTPSUpgradeReceipt != ""
     ${If} $INSTDIR != $BTPSOldApp
       MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK

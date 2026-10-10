@@ -77,7 +77,8 @@ jobs:
           assert.equal(manual.restartedRuntime.originalProfileUsed,true);
           assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
           assert.deepEqual(manual.onlineInstallerArguments,['--updated','--force-run']);
-          assert.equal(manual.cases.length,10);
+          assert.equal(manual.cases.length,14);
+          for (const name of ['compiled-helper-waits-for-local-api-normal-exit','compiled-helper-running-local-api-retains-program-and-data','interactive-nsis-running-pos-normal-close-retry-succeeds','interactive-nsis-running-local-api-close-retry-succeeds']) assert.ok(manual.cases.includes(name));
           assert.ok(manual.cases.includes('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds'));
           assert.equal(manual.downtimeLimitSeconds,90);
           assert.ok(Number.isFinite(manual.preparedDowntimeSeconds) && manual.preparedDowntimeSeconds > 0 && manual.preparedDowntimeSeconds <= 90);
