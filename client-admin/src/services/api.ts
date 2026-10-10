@@ -497,6 +497,11 @@ export const uploadApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  uploadTvMusic: (files: File[]) => {
+    const formData = new FormData()
+    files.forEach(file => formData.append('files', file))
+    return api.post('/upload/tvMusic', formData, { timeout: 120000, headers: { 'Content-Type': 'multipart/form-data' } })
+  },
   uploadDualScreen: (files: File[]) => {
     const formData = new FormData()
     files.forEach(file => formData.append('files', file))

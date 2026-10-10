@@ -79,6 +79,13 @@ jobs:
           ACTIVITY_POS_BUILD: ${{ github.workspace }}/client-pos/dist
         run: node tests/stoploss/unified-activity-page-check.cjs
 
+      - name: Verify TV standby photos, music and settings
+        env:
+          TV_STANDBY_ADMIN_BUILD: ${{ github.workspace }}/client-admin/dist
+          TV_STANDBY_POS_BUILD: ${{ github.workspace }}/client-pos/dist
+          TV_STANDBY_EVIDENCE: workflow-evidence/tv-standby
+        run: node tests/stoploss/tv-standby-page-check.cjs
+
       - name: Verify the complete marketing operator workflow
         env:
           MARKETING_ADMIN_BUILD: ${{ github.workspace }}/client-admin/dist
