@@ -160,8 +160,15 @@ def drive_installer(exe, process=None):
             next_button = next((c for c in controls if c[1] == 1 and user.IsWindowEnabled(c[0]) and user.IsWindowVisible(c[0])), None)
             if next_button:
                 if 'finish' in next_button[2].lower():
+                    run = next((c for c in controls if c[1] == 1203 and 'run btps' in c[2].lower()), None)
+                    if run:
+                        checked = user.SendMessageW(run[0], 0xF0, 0, 0)
+                        print('Owned NSIS Run checkbox state: ' + str(checked), flush=True)
+                        if checked != 1:
+                            user.PostMessageW(run[0], 0xF5, 0, 0)
+                            continue
                     finish_seen = True
-                    # Keep the ordinary Run checkbox selected to verify restart.
+                    # Select the ordinary Run checkbox before pressing Finish.
                 user.PostMessageW(next_button[0], 0xF5, 0, 0)
         time.sleep(.5)
     if process.poll() is None:
@@ -189,6 +196,10 @@ def verify_started_runtime(expected_version):
                 if ready:
                     return {'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
+        print('Owned restart processes: ' + json.dumps(launched), flush=True)
+        log = DATA / 'logs/main.log'
+        if log.is_file():
+            print('Owned runtime log tail: ' + log.read_text(errors='replace')[-12000:], flush=True)
         raise RuntimeError('Installed POS did not start with expected runtime version')
     finally:
         # Only processes whose executable is inside this test-owned fixture.
