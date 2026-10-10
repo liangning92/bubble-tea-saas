@@ -5,6 +5,9 @@ import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 
+const MessageLogPage = lazy(() => import('./pages/marketing/MessageLogPage').then(module => ({default:module.MessageLogPage})))
+const MarketingOverviewPage = lazy(() => import('./pages/marketing/MarketingOverviewPage').then(module => ({ default: module.MarketingOverviewPage })))
+const ActivitiesPage = lazy(() => import('./pages/marketing/ActivitiesPage').then(module => ({ default: module.ActivitiesPage })))
 const StaffAdjustmentsPage = lazy(() => import('./pages/staff/StaffAdjustmentsPage').then(module => ({ default: module.StaffAdjustmentsPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
 const ConsumptionAnalysisPage = lazy(() => import('./pages/inventory/ConsumptionAnalysisPage').then(module => ({ default: module.ConsumptionAnalysisPage })))
@@ -78,10 +81,6 @@ const MembersIndexPage = lazy(() => import('./pages/marketing/MembersIndexPage')
 const PointsIndexPage = lazy(() => import('./pages/marketing/PointsIndexPage').then(module => ({ default: module.PointsIndexPage })))
 const MessagesIndexPage = lazy(() => import('./pages/marketing/MessagesIndexPage').then(module => ({ default: module.MessagesIndexPage })))
 const OperationsIndexPage = lazy(() => import('./pages/marketing/OperationsIndexPage').then(module => ({ default: module.OperationsIndexPage })))
-const CampaignListPage = lazy(() => import('./pages/marketing/CampaignListPage').then(module => ({ default: module.CampaignListPage })))
-const CampaignDetailPage = lazy(() => import('./pages/marketing/CampaignDetailPage').then(module => ({ default: module.CampaignDetailPage })))
-const CampaignStatsPage = lazy(() => import('./pages/marketing/CampaignStatsPage').then(module => ({ default: module.CampaignStatsPage })))
-const CampaignEditPage = lazy(() => import('./pages/marketing/CampaignEditPage').then(module => ({ default: module.CampaignEditPage })))
 const CouponListPage = lazy(() => import('./pages/marketing/CouponListPage').then(module => ({ default: module.CouponListPage })))
 const CouponDetailPage = lazy(() => import('./pages/marketing/CouponDetailPage').then(module => ({ default: module.CouponDetailPage })))
 const CouponEditPage = lazy(() => import('./pages/marketing/CouponEditPage').then(module => ({ default: module.CouponEditPage })))
@@ -98,9 +97,6 @@ const MessageSettingsPage = lazy(() => import('./pages/marketing/MessageSettings
 const PointsRuleConfigPage = lazy(() => import('./pages/marketing/PointsRuleConfigPage').then(module => ({ default: module.PointsRuleConfigPage })))
 const RewardCatalogPage = lazy(() => import('./pages/marketing/RewardCatalogPage').then(module => ({ default: module.RewardCatalogPage })))
 const MemberBalancePage = lazy(() => import('./pages/marketing/MemberBalancePage').then(module => ({ default: module.MemberBalancePage })))
-const DiscountRulePage = lazy(() => import('./pages/marketing/DiscountRulePage').then(module => ({ default: module.DiscountRulePage })))
-const TimedSpecialPage = lazy(() => import('./pages/marketing/TimedSpecialPage').then(module => ({ default: module.TimedSpecialPage })))
-const StackingRulePage = lazy(() => import('./pages/marketing/StackingRulePage').then(module => ({ default: module.StackingRulePage })))
 const AutomationRulePage = lazy(() => import('./pages/marketing/AutomationRulePage').then(module => ({ default: module.AutomationRulePage })))
 const AutomationLogPage = lazy(() => import('./pages/marketing/AutomationLogPage').then(module => ({ default: module.AutomationLogPage })))
 const MessageStatsPage = lazy(() => import('./pages/marketing/MessageStatsPage').then(module => ({ default: module.MessageStatsPage })))
@@ -137,7 +133,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-const TvScreenConfigPage = lazy(() => import('./pages/marketing/TvScreenConfigPage').then(module => ({ default: module.TvScreenConfigPage })))
 
 function LegacyShiftRedirect() {
   const { search, hash } = useLocation()
@@ -259,16 +254,18 @@ function App() {
 
         {/* 营销管理 */}
         <Route path="marketing" element={<MarketingIndexPage />}>
-          <Route index element={<Navigate to="/marketing/promotions" replace />} />
+          <Route index element={<Navigate to="/marketing/overview" replace />} />
+          <Route path="overview" element={<MarketingOverviewPage />} />
 
           {/* 促销 */}
           <Route path="promotions" element={<PromotionsIndexPage />}>
-            <Route index element={<CampaignListPage />} />
-            <Route path="campaigns" element={<CampaignListPage />} />
-            <Route path="campaigns/:id" element={<CampaignDetailPage />} />
-            <Route path="campaigns/:id/stats" element={<CampaignStatsPage />} />
-            <Route path="campaigns/new" element={<CampaignEditPage />} />
-            <Route path="campaigns/:id/edit" element={<CampaignEditPage />} />
+            <Route index element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="activities" element={<ActivitiesPage />} />
+            <Route path="campaigns" element={<ActivitiesPage />} />
+            <Route path="campaigns/:id" element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="campaigns/:id/stats" element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="campaigns/new" element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="campaigns/:id/edit" element={<Navigate to="/marketing/promotions/activities" replace />} />
             <Route path="coupons" element={<CouponListPage />} />
             <Route path="coupons/:id" element={<CouponDetailPage />} />
             <Route path="coupons/new" element={<CouponEditPage />} />
@@ -276,9 +273,10 @@ function App() {
             <Route path="referrals" element={<ReferralListPage />} />
             <Route path="referrals/:id" element={<ReferralDetailPage />} />
             <Route path="campaign-categories" element={<CampaignCategoryListPage />} />
-            <Route path="discount-rules" element={<DiscountRulePage />} />
-            <Route path="timed-specials" element={<TimedSpecialPage />} />
-            <Route path="stacking-rules" element={<StackingRulePage />} />
+            <Route path="discount-rules" element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="timed-specials" element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="stacking-rules" element={<Navigate to="/marketing/promotions/activities" replace />} />
+            <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
           </Route>
 
           {/* 会员 */}
@@ -304,6 +302,7 @@ function App() {
             <Route path="channels" element={<MarketingChannelsPage />} />
             <Route path="settings" element={<MessageSettingsPage />} />
             <Route path="stats" element={<MessageStatsPage />} />
+            <Route path="logs" element={<MessageLogPage />} />
           </Route>
 
           {/* 运营 */}
@@ -320,7 +319,7 @@ function App() {
           </Route>
 
           {/* 电视大屏互动 */}
-          <Route path="tv-screen" element={<TvScreenConfigPage />} />
+          <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
         </Route>
 
         {/* 卫生管理 */}
@@ -359,6 +358,7 @@ function App() {
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<SettingsPage />} />
+        <Route path="settings/tv-screen" element={<SettingsPage />} />
         <Route path="settings/ai" element={<SettingsPage />} />
         <Route path="settings/permissions" element={<SettingsPage />} />
 

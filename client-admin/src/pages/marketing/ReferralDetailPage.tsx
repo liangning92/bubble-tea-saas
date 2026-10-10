@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -9,7 +10,7 @@ export function ReferralDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['referral', id],
     queryFn: () => marketingApi.getReferral(id!),
     enabled: !!id
@@ -21,8 +22,10 @@ export function ReferralDetailPage() {
     enabled: !!id
   })
 
-  const referral = data?.data
-  const stats = statsData?.data
+  const referral = data?.data?.data
+  const stats = statsData?.data?.data
+
+  if (isError) return <MarketingError retry={() => refetch()} />
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
@@ -44,7 +47,7 @@ export function ReferralDetailPage() {
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/marketing/referrals')} className="btn-ghost">
+        <button onClick={() => navigate('/marketing/promotions/referrals')} className="btn-ghost">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-2xl font-bold">{referral.name}</h1>
@@ -54,7 +57,7 @@ export function ReferralDetailPage() {
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="card text-center">
           <div className="text-3xl font-bold text-primary">{stats?.totalReferrals || 0}</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.totalReferrals')}</div>

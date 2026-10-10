@@ -1,3 +1,5 @@
+import { ShiftCashReconciliation, ShiftCashWarning, formatShiftCash } from '../../../../shared/utils/shiftCashReconciliation'
+import { ManualReceipts, ManualReceiptAmounts } from '../../components/ManualReceipts'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -5,12 +7,11 @@ import { Link } from 'react-router-dom'
 import { RefreshCw, CalendarDays, AlertTriangle, ArrowLeft } from 'lucide-react'
 import api, { financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { formatCurrency } from '../../utils/helpers'
 
 type Summary = { revenue: number; orders: number; completedOrders: number; refundedOrders: number; refundedAmount: number; expenses: number; expenseAmount: number; warnings: number; employees: number }
 type Employee = { id: string; name: string; employeeNumber: string | null; position: string | null; orders: number; expenses: number; warnings: number; roles: string[] }
 type Review = {
-  id: string; windowStart: string; windowEnd: string; overlapping: boolean; summary: Summary
+  cashReconciliation:ShiftCashReconciliation|null; cashWarning:ShiftCashWarning|null; manualReceipts: ManualReceiptAmounts | null; id: string; windowStart: string; windowEnd: string; overlapping: boolean; summary: Summary
   session: null | { shift: string; status: string; openedAt: string; closedAt: string | null; openFloat: number; actualCash: number | null; expectedCash: number; cashDifference: number | null; closeNote: string | null; opener: { name: string }; nextStaff: { name: string } | null; definition: { name: string; nameZh: string | null; nameId: string | null } | null }
   orders: { id: string; orderNumber: string; pickupNumber: string | null; staffName: string; status: string; amount: number; paymentMethod: string; createdAt: string }[]
   expenses: { id: string; category: string; amount: number; quantity: number | null; description: string; createdAt: string; staffName: string | null }[]
@@ -31,6 +32,9 @@ export function ShiftReviewPage() {
   const [selection, setSelection] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
   const [page, setPage] = useState(1)
+  const [reviewNote,setReviewNote]=useState('')
+  const [reviewSaving,setReviewSaving]=useState(false)
+  const [reviewError,setReviewError]=useState('')
   const days = (Date.parse(range.endDate) - Date.parse(range.startDate)) / 86400000
   const valid = !!range.startDate && !!range.endDate && days >= 0 && days < 31
   const query = useQuery({ queryKey: ['shift-review', user?.storeId, customRole, range], enabled: allowed && valid,
@@ -41,7 +45,7 @@ export function ShiftReviewPage() {
       return result
     } })
   useEffect(() => { setSelection(null); setPage(1); setTab('overview') }, [range.startDate, range.endDate])
-  useEffect(() => { setPage(1) }, [selection, tab])
+  useEffect(() => { setPage(1);setReviewNote('');setReviewError('') }, [selection, tab])
   const data = query.data
   const unmatched = data?.unassigned
   const hasUnmatched = unmatched && (unmatched.summary.orders + unmatched.summary.expenses + unmatched.summary.warnings > 0)
@@ -54,7 +58,7 @@ export function ShiftReviewPage() {
     if (category && (!category.isDefault || !defaults[key])) return (i18n.language.startsWith('zh') ? category.labelZh : i18n.language.startsWith('en') ? category.labelEn : category.labelId) || category.label || key
     return defaults[key] ? t('expense.' + defaults[key]) : category?.label || key
   }
-  const money = (value: number | null | undefined) => value == null ? '—' : formatCurrency(value)
+  const money = (value: number | null | undefined) => value == null ? '—' : formatShiftCash(value)
   const shortcut = (kind: 'today' | 'yesterday' | 'week') => {
     const today = day(), weekday = new Date(today + 'T00:00:00Z').getUTCDay()
     const startDate = kind === 'yesterday' ? shiftDay(today, -1) : kind === 'week' ? shiftDay(today, -((weekday + 6) % 7)) : today
@@ -62,12 +66,13 @@ export function ShiftReviewPage() {
   }
   const cards = (row: Review) => <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
     {(['revenue', 'orders', 'warnings', 'expenseAmount', 'employees'] as const).map(key => <div key={key} className="bg-white rounded-xl border p-4">
-      <p className="text-sm text-gray-500">{t(`shiftReview.${key}`)}</p><p className={`mt-2 text-2xl font-bold ${key === 'revenue' ? 'text-primary' : key === 'warnings' && row.summary.warnings > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{key === 'revenue' || key === 'expenseAmount' ? money(row.summary[key]) : row.summary[key]}</p>
+      <p className="text-sm text-gray-500">{t(`shiftReview.${key}`)}</p><p className={`mt-2 text-2xl font-bold ${key === 'revenue' ? 'text-primary' : key === 'warnings' && (row.summary.warnings > 0 || row.cashWarning?.status === 'pending') ? 'text-amber-700' : 'text-gray-900'}`}>{key === 'revenue' || key === 'expenseAmount' ? money(row.summary[key]) : row.summary[key] + (key === 'warnings' && row.cashWarning?.status === 'pending' ? 1 : 0)}</p>
     </div>)}
   </div>
   if (user?.role !== 'admin' && access.isPending) return <p role="status">{t('common.loading')}</p>
   if (!allowed) return <p role="alert">{t('shiftReview.denied')}</p>
-  const rows = selected && tab !== 'overview' ? selected[tab] : []
+  const warningRows = selected ? [...selected.warnings, ...(selected.cashWarning?.status === 'pending' ? [{id:'cash-warning:'+selected.id,staffName:selected.session?.opener.name || '—',severity:'warning',description:t('cashReconciliation.warning',{difference:money(selected.cashWarning.difference)}),action:'cash_reconciliation',createdAt:selected.session?.closedAt || selected.windowEnd}] : [])] : []
+  const rows = selected && tab !== 'overview' ? tab === 'warnings' ? warningRows : selected[tab] : []
   const paged = rows.slice((page - 1) * 20, page * 20)
   return <div className="space-y-5" data-testid="shift-review-page">
     <Link to="/dashboard" className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft size={16} />{t('dashboard.title')}</Link>
@@ -79,15 +84,28 @@ export function ShiftReviewPage() {
     </section>
     {!valid ? <p role="alert" className="text-red-600">{t('shiftReview.invalidRange')}</p> : query.isPending ? <p role="status">{t('common.loading')}</p> : query.isError ? <p role="alert" className="text-red-600">{t('shiftReview.failed')}</p> : <>
       <div className="bg-white rounded-xl border overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr>{['shift', 'time', 'opener', 'revenue', 'orders', 'warnings', 'expenseAmount', 'status'].map(key => <th key={key} className="p-3 whitespace-nowrap">{t(`shiftReview.${key}`)}</th>)}<th /></tr></thead><tbody>
-        {[...(data?.sessions || []), ...(hasUnmatched ? [unmatched!] : [])].map(row => <tr key={row.id} className={`border-t ${selected?.id === row.id ? 'bg-pink-50' : ''}`}><td className="p-3 font-semibold">{title(row)}</td><td className="p-3 whitespace-nowrap">{instant(row.windowStart)} — {row.session?.status === 'open' ? t('shiftReview.ongoing') : instant(row.windowEnd)}</td><td className="p-3">{row.session?.opener.name || '—'}</td><td className="p-3 font-semibold">{money(row.summary.revenue)}</td><td className="p-3">{row.summary.orders}</td><td className={`p-3 ${row.summary.warnings > 0 ? 'text-amber-700 font-bold' : ''}`}>{row.summary.warnings}</td><td className="p-3">{money(row.summary.expenseAmount)}</td><td className="p-3">{row.session ? t(`shiftReview.${row.session.status}`) : t('shiftReview.reviewNeeded')}</td><td className="p-3"><button className="text-primary font-medium whitespace-nowrap" aria-pressed={selected?.id === row.id} onClick={() => { setSelection(row.id); setTab('overview') }}>{t('shiftReview.details')}</button></td></tr>)}
+        {[...(data?.sessions || []), ...(hasUnmatched ? [unmatched!] : [])].map(row => <tr key={row.id} className={`border-t ${selected?.id === row.id ? 'bg-pink-50' : ''}`}><td className="p-3 font-semibold">{title(row)}</td><td className="p-3 whitespace-nowrap">{instant(row.windowStart)} — {row.session?.status === 'open' ? t('shiftReview.ongoing') : instant(row.windowEnd)}</td><td className="p-3">{row.session?.opener.name || '—'}</td><td className="p-3 font-semibold">{money(row.summary.revenue)}</td><td className="p-3">{row.summary.orders}</td><td className={`p-3 ${(row.summary.warnings > 0 || row.cashWarning?.status === 'pending') ? 'text-amber-700 font-bold' : ''}`}>{row.summary.warnings + (row.cashWarning?.status === 'pending' ? 1 : 0)}{row.cashWarning?.status === 'pending' && <p className="text-xs text-red-600">{t('cashReconciliation.pending')}</p>}</td><td className="p-3">{money(row.summary.expenseAmount)}</td><td className="p-3">{row.session ? t(`shiftReview.${row.session.status}`) : t('shiftReview.reviewNeeded')}</td><td className="p-3"><button className="text-primary font-medium whitespace-nowrap" aria-pressed={selected?.id === row.id} onClick={() => { setSelection(row.id); setTab('overview') }}>{t('shiftReview.details')}</button></td></tr>)}
       </tbody></table>{!data?.sessions.length && !hasUnmatched && <p className="p-6 text-gray-500">{t('shiftReview.empty')}</p>}</div>
       {hasUnmatched && <div role="status" className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3"><AlertTriangle className="text-amber-600 shrink-0" size={20} /><div><p className="font-semibold text-amber-900">{t('shiftReview.unassignedHint')}</p><button className="text-amber-800 underline mt-1" onClick={() => { setSelection('unassigned'); setTab('warnings') }}>{t('shiftReview.viewUnassigned')}</button></div></div>}
       {selected && <section className="space-y-4" data-testid="shift-review-detail">
         <div className="flex flex-wrap justify-between items-end gap-2"><div><h2 className="text-xl font-bold">{title(selected)} · {t('shiftReview.details')}</h2><p className="text-sm text-gray-500 mt-1">{instant(selected.windowStart)} — {instant(selected.windowEnd)} · WIB</p></div><span className="text-sm text-gray-500">{t('shiftReview.updated')} {data && instant(data.asOf)}</span></div>
         {cards(selected)}
+        {selected.cashReconciliation && <section className="rounded-xl border bg-white p-4" data-testid="shift-cash-reconciliation">
+          <h3 className="font-semibold">{t('cashReconciliation.title')}</h3><p className="my-2 text-sm text-gray-500">{t('cashReconciliation.formula')}</p>
+          <dl className="grid grid-cols-2 lg:grid-cols-4 gap-4">{(['revenue','expenses','qris','cashFromRevenue','openFloat','expectedCash'] as const).map(key=><div key={key}><dt className="text-sm text-gray-500">{t('cashReconciliation.'+key)}</dt><dd className="font-semibold">{money(selected.cashReconciliation![key])}</dd></div>)}<div><dt className="text-sm text-gray-500">{t('cashReconciliation.actualCash')}</dt><dd className="font-semibold">{money(selected.session?.actualCash)}</dd></div><div><dt className="text-sm text-gray-500">{t('cashReconciliation.difference')}</dt><dd className="font-semibold">{money(selected.cashWarning?.difference ?? (selected.session?.actualCash == null ? null : selected.session.actualCash-selected.cashReconciliation.expectedCash))}</dd></div></dl>
+        </section>}
+        {selected.cashWarning?.status === 'pending' && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4" data-testid="shift-cash-warning">
+          <h3 className="font-bold text-amber-900">{t('cashReconciliation.pending')}</h3>
+          <p role="alert" className="mt-2 text-sm text-amber-900">{t('cashReconciliation.warning',{difference:money(selected.cashWarning.difference)})}</p>
+          {user?.role === 'admin' && <div className="mt-3 flex flex-wrap items-end gap-3"><label className="flex-1 text-sm">{t('cashReconciliation.note')}<textarea aria-label={t('cashReconciliation.note')} value={reviewNote} maxLength={2000} onChange={e=>setReviewNote(e.target.value)} className="input mt-1 block w-full" /></label><button type="button" disabled={reviewSaving} className="btn-primary" onClick={async()=>{if(!reviewNote.trim()){setReviewError(t('cashReconciliation.required'));return}setReviewSaving(true);setReviewError('');try{await api.post('/finance/shift-sessions/'+selected.id+'/cash-warning/review',{note:reviewNote.trim()});await query.refetch();setReviewNote('')}catch{setReviewError(t('cashReconciliation.reviewFailed'))}finally{setReviewSaving(false)}}}>{t('cashReconciliation.review')}</button></div>}
+          {reviewError && <p role="alert" className="mt-2 text-sm text-red-600">{reviewError}</p>}
+        </section>}
+        {selected.cashWarning?.status === 'reviewed' && <section className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm" data-testid="shift-cash-reviewed"><h3 className="font-semibold">{t('cashReconciliation.reviewed')}</h3><p>{selected.cashWarning.reviewedByName || selected.cashWarning.reviewedBy} · {selected.cashWarning.reviewedAt && instant(selected.cashWarning.reviewedAt)}</p><p className="mt-1 whitespace-pre-wrap">{selected.cashWarning.reviewNote}</p><p className="mt-2 text-gray-500">{t('cashReconciliation.reported')}</p></section>}
+
         <p className="text-sm text-gray-500">{t('shiftReview.attribution')}</p>
         {selected.overlapping && <p role="alert" className="text-amber-700">{t('shiftReview.overlap')}</p>}
-        <nav className="flex flex-wrap gap-1 border-b" aria-label={t('shiftReview.details')}>{(['overview', 'orders', 'warnings', 'expenses', 'employees'] as Tab[]).map(key => <button key={key} aria-pressed={tab === key} className={`px-4 py-3 font-medium ${tab === key ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setTab(key)}>{t(`shiftReview.${key}`)}{key !== 'overview' && ` (${selected[key].length})`}</button>)}</nav>
+        <nav className="flex flex-wrap gap-1 border-b" aria-label={t('shiftReview.details')}>{(['overview', 'orders', 'warnings', 'expenses', 'employees'] as Tab[]).map(key => <button key={key} aria-pressed={tab === key} className={`px-4 py-3 font-medium ${tab === key ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setTab(key)}>{t(`shiftReview.${key}`)}{key !== 'overview' && ` (${key === 'warnings' ? warningRows.length : selected[key].length})`}</button>)}</nav>
+        {selected.session && <ManualReceipts amounts={selected.manualReceipts || null} />}
         {tab === 'overview' ? <div className="bg-white rounded-xl border p-5 grid md:grid-cols-2 gap-4">
           {selected.session && <><div><span className="text-gray-500">{t('shiftReview.opener')}</span><p className="font-semibold">{selected.session.opener.name}</p></div><div><span className="text-gray-500">{t('shiftReview.handover')}</span><p className="font-semibold">{selected.session.nextStaff?.name || '—'}</p></div><div><span className="text-gray-500">{t('shiftReview.float')}</span><p className="font-semibold">{money(selected.session.openFloat)}</p></div><div><span className="text-gray-500">{t('shiftReview.counted')}</span><p className="font-semibold">{money(selected.session.actualCash)}</p></div><div><span className="text-gray-500">{t('shiftReview.difference')}</span><p className="font-semibold">{money(selected.session.cashDifference)}</p></div><div><span className="text-gray-500">{t('shiftReview.closeNote')}</span><p>{selected.session.closeNote || '—'}</p></div></>}
           <div><span className="text-gray-500">{t('shiftReview.completedOrders')}</span><p className="font-semibold">{selected.summary.completedOrders}</p></div><div><span className="text-gray-500">{t('shiftReview.refunded')}</span><p className="font-semibold">{selected.summary.refundedOrders} · {money(selected.summary.refundedAmount)}</p></div>

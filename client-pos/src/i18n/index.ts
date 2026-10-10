@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      "activityPricing": {"changedTitle": "Harga berubah", "changed": "Harga diperbarui. Periksa jumlah sebelum membayar.", "wait": "Tunggu perhitungan harga selesai", "loading": "Menghitung promosi…", "bestOnly": "Diskon terbaik dipilih; diskon harga tidak digabungkan"},
       "diagnosticChecks": {"serverDb": "Database server", "scope": "Database lokal diuji dengan simpan, baca, dan hapus. Status server berasal dari pemeriksaan server; ini tidak membuktikan setiap pesanan sudah diunggah."},
       "cameraScan": {"preview": "Pratinjau kamera", "denied": "Akses kamera ditolak. Izinkan kamera atau gunakan pemindai USB/input manual.", "missing": "Kamera tidak ditemukan. Gunakan pemindai USB/input manual.", "unsupported": "Kamera tidak tersedia pada halaman ini. Buka melalui HTTPS atau gunakan pemindai USB/input manual.", "failed": "Kamera gagal dibuka. Periksa apakah dipakai aplikasi lain, lalu coba lagi.", "retry": "Coba kamera lagi", "scanning": "Arahkan barcode ke kamera. Hasil ditemukan akan ditampilkan untuk konfirmasi."},
 
@@ -102,7 +103,10 @@ const resources = {
         "refresh": "Muat ulang",
         "status": "Status"
       },
+      cashReconciliation: {"title": "Pemeriksaan kas serah terima", "revenue": "Pendapatan shift", "expenses": "Pengeluaran shift", "qris": "Penerimaan QRIS", "cashFromRevenue": "Kas setelah biaya dan QRIS", "openFloat": "Modal kas awal", "expectedCash": "Kas yang seharusnya di laci", "actualCash": "Kas hasil hitung", "difference": "Selisih kas", "formula": "Kas di laci = pendapatan shift − pengeluaran shift − QRIS + modal kas awal. Dihitung dari catatan selama shift ini.", "warning": "Selisih kas {{difference}}. Periksa kembali. Serah terima dan shift berikutnya tetap dapat dilanjutkan; peringatan harus ditinjau administrator.", "pending": "Selisih kas menunggu tinjauan administrator", "reviewed": "Selisih kas ditinjau administrator", "note": "Catatan tinjauan", "review": "Tinjau dan hapus peringatan", "reviewFailed": "Tinjauan gagal. Coba lagi.", "required": "Isi catatan tinjauan.", "unknown": "Perhitungan belum tersedia", "refresh": "Hitung ulang", "reported": "Tinjauan dicatat; selisih asli tetap disimpan."},
+      manualReceipts: {"title": "Penerimaan yang dilaporkan saat serah terima", "hint": "Diisi manual dalam Rp. Bukan konfirmasi bank; tidak ditambahkan lagi ke pendapatan pesanan. Uang tunai diterima berbeda dari uang fisik di laci.", "cash": "Penerimaan tunai (Rp)", "qris": "Penerimaan QRIS (Rp)", "shopeefood": "Penerimaan ShopeeFood (Rp)", "gofood": "Penerimaan GoFood (Rp)", "required": "Isi keempat jumlah penerimaan dengan rupiah bulat, termasuk 0 jika tidak ada.", "missing": "Belum dilaporkan", "empty": "Tidak ada laporan serah terima dalam periode ini.", "failed": "Laporan serah terima gagal dimuat.", "closed": "Waktu serah terima", "shift": "Shift"},
       "pos": {
+        "selectCoupon": "Pilih kupon",
         "handoverReceipt": "Struk serah terima", "reprint": "Cetak ulang",
         "handoverPrintFailed": "Shift tersimpan; cetak gagal. Hubungi supervisor untuk cetak ulang.",
         "purchaseQuantity": "Jumlah",
@@ -783,6 +787,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      "activityPricing": {"changedTitle": "Price changed", "changed": "Prices were updated. Review the amount before payment.", "wait": "Wait for pricing to finish", "loading": "Calculating promotions…", "bestOnly": "Best discount selected; price discounts do not stack"},
       "diagnosticChecks": {"serverDb": "Server Database", "scope": "Local storage is tested by writing, reading and deleting a probe. Server status comes from the server health check; neither proves every order has uploaded."},
       "cameraScan": {"preview": "Camera preview", "denied": "Camera permission denied. Allow access or use a USB scanner/manual input.", "missing": "No camera found. Use a USB scanner/manual input.", "unsupported": "Camera is unavailable on this page. Open over HTTPS or use a USB scanner/manual input.", "failed": "Could not open the camera. Check whether another app is using it, then retry.", "retry": "Retry camera", "scanning": "Point the barcode at the camera. A match will be shown for confirmation."},
 
@@ -881,7 +886,10 @@ const resources = {
         "refresh": "Refresh",
         "status": "Status"
       },
+      cashReconciliation: {"title": "Handover cash check", "revenue": "Shift revenue", "expenses": "Shift expenses", "qris": "QRIS receipts", "cashFromRevenue": "Cash after expenses and QRIS", "openFloat": "Opening float", "expectedCash": "Expected drawer cash", "actualCash": "Counted cash", "difference": "Cash difference", "formula": "Expected drawer cash = shift revenue − shift expenses − QRIS receipts + opening float. Calculated from records during this shift.", "warning": "Counted cash differs by {{difference}}. Please check. Handover and the next shift can continue; an administrator must review the warning.", "pending": "Cash discrepancy awaiting administrator review", "reviewed": "Cash discrepancy reviewed by administrator", "note": "Review note", "review": "Review and clear warning", "reviewFailed": "Review failed. Please retry.", "required": "Enter a review note.", "unknown": "Calculation unavailable", "refresh": "Recalculate", "reported": "Administrator review recorded; the original difference is retained."},
+      manualReceipts: {"title": "Receipts declared at handover", "hint": "Manually entered in Rp. These are not bank confirmations and are not added again to order revenue. Cash receipts differ from physical cash in the drawer.", "cash": "Cash receipts (Rp)", "qris": "QRIS receipts (Rp)", "shopeefood": "ShopeeFood receipts (Rp)", "gofood": "GoFood receipts (Rp)", "required": "Enter all four receipt amounts in whole rupiah; enter 0 if none.", "missing": "Not reported", "empty": "No handover declarations in this period.", "failed": "Could not load handover declarations.", "closed": "Handover time", "shift": "Shift"},
       "pos": {
+        "selectCoupon": "Select coupon",
         "handoverReceipt": "Handover receipt", "reprint": "Reprint",
         "handoverPrintFailed": "Shift saved; receipt printing failed. Contact the manager to reprint.",
         "purchaseQuantity": "Quantity",
@@ -1552,6 +1560,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      "activityPricing": {"changedTitle": "价格已变化", "changed": "价格已更新，请核对金额后支付。", "wait": "请等待价格计算完成", "loading": "正在计算活动价格…", "bestOnly": "自动选择最优惠方案，价格优惠不叠加"},
       "diagnosticChecks": {"serverDb": "服务器数据库", "scope": "本地存储会实际执行写入、读取和删除测试。服务器状态来自服务端健康检查；这些状态不能证明每笔订单均已上传。"},
       "cameraScan": {"preview": "摄像头预览", "denied": "摄像头权限被拒绝，请允许访问，或使用扫码枪／手动输入。", "missing": "未找到摄像头，请使用扫码枪／手动输入。", "unsupported": "当前页面无法使用摄像头，请通过 HTTPS 打开，或使用扫码枪／手动输入。", "failed": "摄像头无法打开，请检查是否被其他应用占用，然后重试。", "retry": "重试摄像头", "scanning": "请将条码对准摄像头，识别后将显示结果供确认。"},
 
@@ -1617,7 +1626,10 @@ const resources = {
         "syncedData": "已同步数据",
         "startUsing": "开始使用 POS"
       },
+      cashReconciliation: {"title": "交班现金核对", "revenue": "本班次营收", "expenses": "本班次支出", "qris": "QRIS 收款", "cashFromRevenue": "营收扣除支出与 QRIS 后的现金", "openFloat": "开班备用金", "expectedCash": "钱箱应有现金", "actualCash": "实际清点现金", "difference": "现金差额", "formula": "钱箱应有现金 = 本班次营收 − 本班次支出 − QRIS 收款 + 开班备用金。按开班至交班期间的系统记录计算。", "warning": "实点现金与系统核算相差 {{difference}}，请核对。可以继续交班及下一次开班；警告保留至管理员审核。", "pending": "现金差额待管理员审核", "reviewed": "现金差额已由管理员审核", "note": "审核说明", "review": "审核并消除警告", "reviewFailed": "审核失败，请重试。", "required": "请填写审核说明。", "unknown": "暂无法核算", "refresh": "重新核算", "reported": "已记录人工审核；原始差额仍保留。"},
+      manualReceipts: {"title": "交班人工申报收款", "hint": "手动填写 Rp 金额，尚未经银行核验，不重复加到系统订单营收。现金收款金额与钱箱实际清点现金不同。", "cash": "现金收款金额（Rp）", "qris": "QRIS 收款金额（Rp）", "shopeefood": "ShopeeFood 收款金额（Rp）", "gofood": "GoFood 收款金额（Rp）", "required": "请填写四项收款金额，使用整数 Rp；没有收款请填 0。", "missing": "未申报", "empty": "所选期间没有交班申报记录。", "failed": "交班申报记录读取失败。", "closed": "交班时间", "shift": "班次"},
       "pos": {
+        "selectCoupon": "选择优惠券",
         "handoverReceipt": "交班小票", "reprint": "补打",
         "handoverPrintFailed": "交班已保存，小票打印失败，请联系店长补打。",
         "purchaseQuantity": "数量",

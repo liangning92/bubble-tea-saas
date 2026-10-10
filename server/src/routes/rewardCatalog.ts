@@ -35,7 +35,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const reward = await getReward(req.params.id)
-    if (!reward) {
+    if (!reward || reward.storeId !== req.user!.storeId) {
       return res.status(404).json({ code: 404, message: 'Reward not found' })
     }
     res.json({ code: 200, data: reward, timestamp: new Date().toISOString() })
@@ -61,7 +61,7 @@ router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res)
 // PUT /api/rewards/:id - Update reward
 router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    const reward = await updateReward(req.params.id, req.body)
+    const reward = await updateReward(req.params.id, req.body, req.user!.storeId)
     res.json({ code: 200, message: 'Reward updated', data: reward, timestamp: new Date().toISOString() })
   } catch (error) {
     console.error('Update reward error:', error)
@@ -73,6 +73,8 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
 // DELETE /api/rewards/:id - Delete reward
 router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
+    const reward=await getReward(req.params.id)
+    if(!reward||reward.storeId!==req.user!.storeId)return res.status(404).json({code:404,message:'Reward not found'})
     await deleteReward(req.params.id)
     res.json({ code: 200, message: 'Reward deleted', timestamp: new Date().toISOString() })
   } catch (error) {

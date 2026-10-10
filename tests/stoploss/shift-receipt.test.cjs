@@ -12,7 +12,7 @@ test('58/80mm and all receipt languages fit physical columns without splitting t
 });
 test('missing financial values never become zero or a staff shortage; deliberate zero count is retained',()=>{
  let text=renderer().shift({paperSize:'58mm',language:'en',actualCash:null,expectedCash:792000,totalCups:19});
- assert.ok(!text.includes('Rp 0'));assert.ok(!text.includes('792.000'));assert.ok(!text.includes('19'));assert.ok(text.includes('Unverified'));
+ assert.ok(!text.includes('Rp 0'));assert.ok(!text.includes('792.000'));assert.match(text,/Item quantity\s+Unverified/);assert.ok(text.includes('Unverified'));
  text=renderer().shift({...report,paperSize:'58mm',language:'en',summaryEvidence:{...report.summaryEvidence,verified:true}});
  assert.ok(text.includes('Rp -792.000'),'only a verified, complete, consistent balance permits a shortage');
  text=renderer().shift({...report,paperSize:'58mm',language:'en',expectedCash:900000,summaryEvidence:{...report.summaryEvidence,verified:true}});

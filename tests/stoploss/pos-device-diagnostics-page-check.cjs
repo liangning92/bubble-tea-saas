@@ -15,7 +15,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
    const u=new URL(route.request().url());if(u.origin!=='http://127.0.0.1:6204')return route.abort();
    if(!u.pathname.startsWith('/api/'))return route.continue();calls.push(u.pathname);let data={},status=200;
    if(u.pathname==='/api/health')return route.fulfill({status:scenario==='server-down'?503:200,contentType:'application/json',body:JSON.stringify({status:scenario==='server-down'?'degraded':'ok',dependencies:scenario==='server-unknown'?{}:{database:scenario==='server-down'?'unavailable':'ok'}})});
-   if(u.pathname==='/api/products')data={list:[]};if(u.pathname==='/api/channels'||u.pathname==='/api/shifts')data=[];
+   if(u.pathname==='/api/products')data={list:[]};if(u.pathname==='/api/channels'||u.pathname==='/api/shifts'||u.pathname==='/api/marketing/activities')data=[];
    if(u.pathname==='/api/config')data={paymentMethods:{cash:true,defaultMethod:'cash'}};
    if(u.pathname==='/api/products/barcode/camera-product')data={id:'camera-product',storeId:'synthetic-store',name:'Camera Tea'};
    if(u.pathname==='/api/products/barcode/member-only'){status=404;data=null;}

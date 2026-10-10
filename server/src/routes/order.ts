@@ -44,9 +44,18 @@ const createOrderSchema = z.object({
     unitPrice: z.number().int().min(0),
     addons: z.array(z.object({
       name: z.string(),
-      price: z.number().int()
+      price: z.number().int(),
+      qty:z.number().int().min(1).max(100).optional()
     })).optional().default([])
   })).min(1),
+  activityOfflineToken: z.string().max(200000).optional(),
+  activityOccurredAt: z.string().datetime().optional(),
+  activityChannelCode: z.string().max(30).optional(),
+  activityQuoteSignature: z.string().length(64).optional(),
+  activityCouponId: z.string().optional(),
+  activityPointsRequested: z.number().int().min(0).optional(),
+  activityGroupId: z.string().optional(),
+  activityGiftSelections: z.record(z.string()).optional(),
   discountAmount: z.number().int().min(0).optional().default(0),
   pointsRedeemed: z.number().int().min(0).optional().default(0),
   qrisExternalId: z.string().max(100).optional(),

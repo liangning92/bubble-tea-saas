@@ -47,10 +47,12 @@ router.get('/categories', authenticate, authorize('admin', 'manager', 'cashier')
 router.put('/categories', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const { categories } = req.body
+    const categories = z.array(z.object({key:z.string().trim().min(1).max(100),label:z.string().max(200).optional(),labelZh:z.string().max(200).optional(),labelEn:z.string().max(200).optional(),labelId:z.string().max(200).optional(),posVisible:z.boolean().optional()}).passthrough()).max(500).parse(req.body.categories)
+    if (new Set(categories.map(c => c.key)).size !== categories.length) return res.status(400).json({code:400,message:'DUPLICATE_EXPENSE_CATEGORY'})
     await ExpenseService.saveExpenseCategories(storeId, categories)
     res.json({ code: 200, message: 'Expense categories updated' })
   } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({code:400,message:'INVALID_EXPENSE_CATEGORIES'})
     console.error('Save expense categories error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to save expense categories' })
   }

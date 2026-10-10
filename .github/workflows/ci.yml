@@ -48,6 +48,7 @@ jobs:
           node --test tests/stoploss/*.test.cjs
           PYTHONDONTWRITEBYTECODE=1 python3 tests/stoploss/desktop-upgrade-preflight.test.py
           PYTHONDONTWRITEBYTECODE=1 python3 tests/stoploss/desktop-db-upgrade.test.py
+          node tests/stoploss/unified-activity-integration.cjs
 
       - name: Verify real HTTP order receipt replay on isolated SQLite and PostgreSQL
         run: |
@@ -71,6 +72,17 @@ jobs:
 
       - name: Install Chromium for workflow regression tests
         run: npx playwright install --with-deps chromium
+
+      - name: Verify unified activity administration, cashier pricing and TV playback
+        env:
+          ACTIVITY_ADMIN_BUILD: ${{ github.workspace }}/client-admin/dist
+          ACTIVITY_POS_BUILD: ${{ github.workspace }}/client-pos/dist
+        run: node tests/stoploss/unified-activity-page-check.cjs
+
+      - name: Verify the complete marketing operator workflow
+        env:
+          MARKETING_ADMIN_BUILD: ${{ github.workspace }}/client-admin/dist
+        run: node tests/stoploss/marketing-operations-page-check.cjs
 
       - name: Verify shift summaries and date selectors with isolated business records
         run: |

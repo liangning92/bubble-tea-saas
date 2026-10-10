@@ -1,5 +1,5 @@
 import prisma from '../config/database'
-import { parseBusinessDate } from '../utils/businessDate'
+import { BusinessInputError, parseBusinessDate } from '../utils/businessDate'
 import { endOfDay } from '../utils/dateUtils'
 const rewardDate = (value: Date | string, until = false) => {
   const date = parseBusinessDate(value)
@@ -37,13 +37,17 @@ export async function getReward(id: string) {
 }
 
 // Create reward
+async function validateRewardLinks(storeId:string,data:{productId?:string|null;addonId?:string|null}) {
+  if(data.productId&&!await prisma.product.findFirst({where:{id:data.productId,storeId}}))throw new BusinessInputError('Reward product does not belong to this store')
+  if(data.addonId&&!await prisma.addon.findFirst({where:{id:data.addonId,storeId}}))throw new BusinessInputError('Reward topping does not belong to this store')
+}
 export async function createReward(data: {
   storeId: string
   name: string
   description?: string
   type: string
-  productId?: string
-  addonId?: string
+  productId?: string | null
+  addonId?: string | null
   pointsCost: number
   value: number
   stock?: number
@@ -51,6 +55,7 @@ export async function createReward(data: {
   validUntil: Date | string
   isActive?: boolean
 }) {
+  await validateRewardLinks(data.storeId,data)
   return prisma.rewardCatalog.create({
     data: {
       storeId: data.storeId,
@@ -74,18 +79,23 @@ export async function updateReward(id: string, data: Partial<{
   name: string
   description: string
   type: string
-  productId: string
-  addonId: string
+  productId: string | null
+  addonId: string | null
   pointsCost: number
   value: number
   stock: number
   validFrom: Date | string
   validUntil: Date | string
   isActive: boolean
-}>) {
+}>, storeId?:string) {
+  const existing=await getReward(id)
+  if(!existing||storeId&&existing.storeId!==storeId)throw new BusinessInputError('Reward not found')
+  await validateRewardLinks(existing.storeId,data)
+  const allowed = ['name','description','type','productId','addonId','pointsCost','value','stock','isActive']
+  const changes = Object.fromEntries(Object.entries(data).filter(([key]) => allowed.includes(key)))
   return prisma.rewardCatalog.update({
     where: { id },
-    data: { ...data, ...(data.validFrom !== undefined && { validFrom: rewardDate(data.validFrom) }), ...(data.validUntil !== undefined && { validUntil: rewardDate(data.validUntil, true) }) }
+    data: { ...changes, ...(data.validFrom !== undefined && { validFrom: rewardDate(data.validFrom) }), ...(data.validUntil !== undefined && { validUntil: rewardDate(data.validUntil, true) }) }
   })
 }
 

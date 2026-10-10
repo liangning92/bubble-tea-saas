@@ -2,6 +2,7 @@ export interface TvBanner { url: string; title?: string; subtitle?: string }
 export interface TvSpecial { productId?: string; autoPrice?: boolean; applicableChannels?: string[]; dayOfWeek: number; productName: string; originalPrice: number; specialPrice: number; tag: string; imageUrl: string; description: string }
 export interface TvPrize { id: string; name: string; code: string; color: string; weight: number }
 export interface TvScreenConfig {
+  soundEnabled?: boolean; activePromotions?: any[]; activityVersion?: number; evaluatedAt?: string
   enabled: boolean; storeName: string; welcomeText: string; carouselIntervalSeconds: number
   layout: { columns: Array<{ width: number; content: string }> }
   mediaFiles: TvBanner[]; dailySpecials: TvSpecial[]

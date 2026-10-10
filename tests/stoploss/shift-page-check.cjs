@@ -24,7 +24,7 @@ async function evidence(scenario){
     let response={},status=200;
     if(url.pathname==='/api/config')response={paymentMethods:{cash:true,defaultMethod:'cash'},shiftSettings:{requireSupervisorConfirm:false}};
     if(url.pathname==='/api/products')response={list:[]};
-    if(url.pathname==='/api/channels'||url.pathname.includes('discount-rules'))response=[];
+    if(url.pathname==='/api/channels'||(url.pathname.includes('discount-rules')||url.pathname==='/api/marketing/activities'))response=[];
     if(url.pathname==='/api/shifts')response=[{key:'evening',name:'Evening',isActive:true}];
     if(url.pathname==='/api/pos-cash/shifts/current'||url.pathname==='/api/pos-cash/balance'){response=data;if(failRead)status=503;}
     if(url.pathname==='/api/pos-cash/events')response={list:[]};
@@ -36,7 +36,7 @@ async function evidence(scenario){
     sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:'http://127.0.0.1:6198/api',user:{id:'synthetic',role:'cashier',storeId:'synthetic-store',staff:{id:'staff',name:'Synthetic'}}},version:0}));
     window.shiftPrints=[];window.electronAPI={getAppVersion:async()=> '2026.10.309',checkForUpdates:async()=>({success:true}),sendPrintShiftReport:async x=>window.shiftPrints.push(x),onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{}};
    });
-   const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6198/#/'+(scenario==='cash-page'?'cash':'pos'));
+   await require('./empty-activity-browser-fixture.cjs').emptyActivityQuotes(context);const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6198/#/'+(scenario==='cash-page'?'cash':'pos'));
    if(scenario!=='cash-page'){
     await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();
     if(['rejected','discarded','quarantined'].includes(scenario))await page.evaluate(async scenario=>{const {db}=await import('/src/db/offline.ts');await db.orders.add({storeId:'synthetic-store',localId:'synthetic-resolved',status:scenario==='quarantined'?'quarantined':'failed',checkoutResolution:scenario==='quarantined'?'review':scenario,syncAttempts:0,createdAt:new Date()});},scenario);

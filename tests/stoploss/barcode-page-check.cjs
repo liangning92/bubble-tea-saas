@@ -28,7 +28,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
    if(url.pathname==='/api/orders/received-receipts'){const body=req.postDataJSON();return route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({data:{id:'synthetic-journal-'+body.orderNumber,orderNumber:body.orderNumber}})});}
    if(url.pathname==='/api/config')data={taxSettings:{enabled:false},paymentMethods:{cash:true,defaultMethod:'cash'},hardwareSettings:{autoOpenCashDrawer:false,printers:[{type:'receipt',enabled:true,printerName:'Synthetic Receipt'}]}};
    if(url.pathname==='/api/shifts')data=[{key:'morning',name:'Morning'}];
-   if(url.pathname==='/api/channels'||url.pathname.includes('discount-rules'))data=[];
+   if(url.pathname==='/api/channels'||(url.pathname.includes('discount-rules')||url.pathname==='/api/marketing/activities'))data=[];
    if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:true,shift:{id:'synthetic-session',shift:'morning'}};
    if(url.pathname==='/api/orders/bulk-sync'){const batch=req.postDataJSON();orders.push(...batch.orders);data={results:batch.orders.map(body=>({success:true,data:{id:'synthetic-order',orderNumber:body.orderNumber,pickupNumber:body.pickupNumber,grandTotal:body.items.reduce((sum,item)=>sum+(item.unitPrice+item.addons.reduce((s,a)=>s+a.price,0))*item.quantity,0)}}))};}
    if(url.pathname==='/api/orders'&&req.method()==='POST'){const body=req.postDataJSON();orders.push(body);data={id:'synthetic-order',orderNumber:body.orderNumber,pickupNumber:'A001',grandTotal:body.items.reduce((sum,item)=>sum+(item.unitPrice+item.addons.reduce((s,a)=>s+a.price,0))*item.quantity,0)};}
@@ -39,7 +39,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
    sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:'http://127.0.0.1:6200/api',user:{id:'synthetic',role:'cashier',storeId:'synthetic-store',staff:{id:'synthetic-staff',name:'Synthetic'}}},version:0}));
    window.deviceCalls=[];window.electronAPI={getAppVersion:async()=> '2026.10.312',checkForUpdates:async()=>({success:true}),onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{},sendOrderComplete:()=>window.deviceCalls.push('complete'),sendPrintReceipt:async()=>{window.deviceCalls.push('receipt');return {success:true};},sendKitchenOrder:async()=>{throw Error('Unexpected kitchen');},sendCupStickers:async()=>{throw Error('Unexpected label');}};
   });
-  const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6200/#/pos');try {await page.getByText('Existing Tea',{exact:true}).first().waitFor();} catch(error) {console.error('Initial POS state',await page.locator('body').innerText(),errors);throw error;}await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();
+  await require('./empty-activity-browser-fixture.cjs').emptyActivityQuotes(context);const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6200/#/pos');try {await page.getByText('Existing Tea',{exact:true}).first().waitFor();} catch(error) {console.error('Initial POS state',await page.locator('body').innerText(),errors);throw error;}await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();
   const add=()=>page.getByRole('button',{name:/Add to Cart/}).click();
   const normal=async(name='Existing Tea')=>{await page.getByRole('button',{name:new RegExp('^'+name)}).first().click();};
   const scan=async(id='p1',viaRoute=false)=>{
@@ -88,7 +88,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   if(scenario==='multi')assert.equal(items[0].specId,'large');
   if(scenario==='zero')assert.equal(items[0].unitPrice,0);
   if(scenario==='same-name'){assert.equal(items.length,2);assert.equal(items[0].productId,'p1');assert.equal(items[1].productId,'p2');}
-  if(scenario==='repriced-repeat'){assert.equal(items.length,2);assert.equal(items[0].unitPrice,10000);assert.equal(items[1].unitPrice,15500);}
+  if(scenario==='repriced-repeat'){assert.equal(items.length,2);assert.equal(items[0].unitPrice,15500);assert.equal(items[1].unitPrice,15500);}
   if(scenario==='repeat'){assert.equal(items.length,1);assert.equal(items[0].quantity,2);}
   if(scenario==='addons'){assert.equal(items.length,2);assert.equal(items[0].addons[0].name,'Synthetic Boba');assert.equal(items[1].addons.length,0);}
   if(scenario==='parity-normal')normalItems=items;

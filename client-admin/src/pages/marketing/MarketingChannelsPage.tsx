@@ -1,3 +1,4 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -90,7 +91,7 @@ export function MarketingChannelsPage() {
     queryFn: () => marketingApi.marketingChannels(storeId),
   })
 
-  const channels: MarketingChannel[] = data?.data?.list || []
+  const channels: MarketingChannel[] = data?.data?.data?.list || []
 
   // 计算哪些预设渠道还未添加
   const availablePresets = useMemo(() => {
@@ -235,9 +236,9 @@ export function MarketingChannelsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="marketing-toolbar mb-4">
         <div />
         <button onClick={() => openCreateModal()} className="btn-primary flex items-center gap-2">
           <Plus size={20} /> {t('marketing.addChannel')}
@@ -454,9 +455,9 @@ export function MarketingChannelsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="marketing-toolbar mb-4">
               <h3 className="text-lg font-semibold">{t('marketing.addChannel')}</h3>
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
                 <X size={20} />
@@ -535,14 +536,14 @@ export function MarketingChannelsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Edit Modal */}
       {showEdit && editingChannel && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="marketing-toolbar mb-4">
               <h3 className="text-lg font-semibold">{t('marketing.editChannel')}</h3>
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
                 <X size={20} />
@@ -633,12 +634,12 @@ export function MarketingChannelsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Delete Confirm Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={()=>setDeleteConfirm(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">{t('common.confirm')}</h2>
             <p className="text-gray-600 mb-4">
@@ -658,7 +659,7 @@ export function MarketingChannelsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
     </div>
   )

@@ -1,3 +1,4 @@
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -19,7 +20,7 @@ export function PointsExpiryConfigPage() {
   })
 
   // Load existing settings
-  const { data: existingData, isLoading } = useQuery({
+  const { data: existingData, isLoading, isError, refetch } = useQuery({
     queryKey: ['points-expiry-rules'],
     queryFn: () => marketingApi.pointsExpiryRules()
   })
@@ -62,6 +63,7 @@ export function PointsExpiryConfigPage() {
     saveMutation.mutate({ storeId, ...form })
   }
 
+  if(isError) return <MarketingError retry={()=>refetch()}/>
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -72,7 +74,7 @@ export function PointsExpiryConfigPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="marketing-toolbar mb-5">
         <div />
         <button onClick={() => processMutation.mutate()} className="btn-secondary flex items-center gap-2">
           <Clock size={16} /> {t('marketing.processNow')}

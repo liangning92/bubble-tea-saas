@@ -65,6 +65,7 @@ export interface ExpenseCategory {
   key: string
   label: string  // 自定义显示名称（留空则用翻译key）
   color: string   // Tailwind颜色class
+  posVisible?: boolean
   isDefault: boolean
 }
 
@@ -127,6 +128,7 @@ export function ExpenseListPage() {
   // Custom expense types
   const [expenseTypes, setExpenseTypes] = useState<ExpenseCategory[]>(DEFAULT_CATEGORY_DEFS)
   const [newTypeName, setNewTypeName] = useState('')
+  const [newTypePosVisible, setNewTypePosVisible] = useState(true)
   const categoryNameRef = useRef<HTMLInputElement>(null)
   const categorySaveLock = useRef(false)
   const [categoryLoadState, setCategoryLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -279,7 +281,7 @@ export function ExpenseListPage() {
     try {
       const res = await expenseApi.getCategories()
       const list = res.data?.data?.list
-      if (list && Array.isArray(list) && list.length > 0) {
+      if (Array.isArray(list)) {
         const defaultBuiltinLabels = [
           'sewa', 'rent', '租金',
           'utilitas', 'utilities', '水电费', '公用事业',
@@ -530,7 +532,7 @@ export function ExpenseListPage() {
       return
     }
     const saved = await saveCustomTypes([...expenseTypes, {
-      key, label: name,
+      key, label: name, posVisible: newTypePosVisible,
       color: DEFAULT_COLORS[expenseTypes.length % DEFAULT_COLORS.length],
       isDefault: false
     }])
@@ -1065,7 +1067,7 @@ export function ExpenseListPage() {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">
                 {selectedExpense ? t('expense.editExpense') : t('expense.addExpense')}
@@ -1304,7 +1306,7 @@ export function ExpenseListPage() {
       {/* Expense Type Management Modal */}
       {showTypeModal && (
         <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">{t('expense.manageTypes')}</h2>
               <button
@@ -1343,11 +1345,14 @@ export function ExpenseListPage() {
               </button>
             </form>
 
+            <label className="mb-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={newTypePosVisible} disabled={isTypeSaving || !canManageCategories} onChange={e => setNewTypePosVisible(e.target.checked)} />{t('expenseVisibility.newPos')}</label>
+            <p className="mb-3 text-sm text-gray-500">{t('expenseVisibility.hint')}</p>
             {/* Type List */}
             <div className="space-y-2">
               {expenseTypes.map((type) => (
                 <div key={type.key} className="flex items-center justify-between bg-gray-50 rounded-xl p-3">
-                  <span className="font-medium">{getCategoryLabel(type.key)}</span>
+                  <span className="font-medium min-w-0 break-words">{getCategoryLabel(type.key)}</span>
+                  <label className="ml-auto mx-3 flex items-center gap-2 text-sm shrink-0"><input type="checkbox" aria-label={`${getCategoryLabel(type.key)}: ${t('expenseVisibility.pos')}`} checked={type.posVisible !== false} disabled={isTypeSaving || !canManageCategories || !canWrite || categoryLoadState !== 'ready'} onChange={e => void saveCustomTypes(expenseTypes.map(c => c.key === type.key ? {...c, posVisible: e.target.checked} : c))} />{t(type.posVisible !== false ? 'expenseVisibility.pos' : 'expenseVisibility.admin')}</label>
                   {!type.isDefault && (
                     <button
                       onClick={() => handleRemoveType(type.key)}

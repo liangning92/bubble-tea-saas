@@ -29,7 +29,7 @@ const assert=require('node:assert/strict');
    if(url.pathname==='/api/pos-cash/shifts/current')data=currentShift;
    if(url.pathname==='/api/pos-cash/shifts/open'&&req.method()==='POST'){shiftPosts.push(req.postDataJSON());status=201;data={};}
    if(url.pathname==='/api/channels')data=[];
-   if(url.pathname.includes('discount-rules'))data=[];
+   if((url.pathname.includes('discount-rules')||url.pathname==='/api/marketing/activities'))data=[];
    if(url.pathname==='/api/orders' && req.method()==='POST'){posts++;await new Promise(r=>setTimeout(r,200));if(scenario==='rejected')status=409;else return route.abort('internetdisconnected');}
    await route.fulfill({status,contentType:'application/json',body:JSON.stringify({success:status===200,data,message:status===409?'PAYMENT_METHOD_DISABLED':undefined})});
   });
@@ -46,7 +46,7 @@ const assert=require('node:assert/strict');
    window.fixtureCalls=[];
    window.electronAPI={onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{},sendPrintReceipt:async()=>{window.fixtureCalls.push('receipt');return {success:true};},sendKitchenOrder:async()=>{window.fixtureCalls.push('kitchen');return {success:true};},sendCupStickers:async()=>{window.fixtureCalls.push('cups');return {success:true};},sendOrderComplete:()=>window.fixtureCalls.push('complete')};
   },{refused:scenario==='refused'});
-  const errors=[];const page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
+  const errors=[];await require('./empty-activity-browser-fixture.cjs').emptyActivityQuotes(context);const page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:6197/#/pos');
   await page.getByText('Synthetic Tea',{exact:true}).first().waitFor({timeout:25000});
   await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();

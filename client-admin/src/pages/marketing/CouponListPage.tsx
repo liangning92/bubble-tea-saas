@@ -1,6 +1,9 @@
+import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useMarketingCopy } from '../../components/marketing/MarketingLayout'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
@@ -43,6 +46,8 @@ const defaultForm: {
 export function CouponListPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const l = useMarketingCopy()
+  const [search,setSearch] = useState('')
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const storeId = user?.storeId || undefined
@@ -54,7 +59,7 @@ export function CouponListPage() {
   const [form, setForm] = useState(defaultForm)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['coupons'],
     queryFn: () => marketingApi.coupons(storeId)
   })
@@ -92,7 +97,7 @@ export function CouponListPage() {
     }
   })
 
-  const coupons: Coupon[] = data?.data?.data?.list || []
+  const coupons: Coupon[] = (data?.data?.data?.list || []).filter((coupon:Coupon)=>coupon.code.toLowerCase().includes(search.toLowerCase()))
 
   const closeModal = () => {
     setShowCreate(false)
@@ -168,14 +173,18 @@ export function CouponListPage() {
     return new Date(date).toLocaleDateString('id-ID')
   }
 
+  if (isError) return <MarketingError retry={() => refetch()} />
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="marketing-toolbar mb-4">
         <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
           <Plus size={20} /> {t('marketing.createCoupon')}
         </button>
       </div>
 
+      <p className="text-sm text-gray-500 mb-4">{l('这里维护券模板；领券和支付后赠券条件在活动中配置。','Maintain coupon templates here; configure claims and after-payment rewards in Activities.','Kelola template kupon di sini; atur klaim dan hadiah setelah pembayaran di Aktivitas.')}</p>
+      <input className="input mb-4 sm:max-w-sm" aria-label={l('搜索优惠券','Search coupons','Cari kupon')} placeholder={l('搜索优惠券编码','Search coupon codes','Cari kode kupon')} value={search} onChange={event=>setSearch(event.target.value)}/>
       <div className="card">
         {isLoading ? (
           <div className="flex justify-center py-12">
@@ -246,9 +255,10 @@ export function CouponListPage() {
                       </span>
                     </td>
                     <td className="py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link className="text-primary text-sm" to={'/marketing/promotions/activities?create=1&type=coupon&coupon='+encodeURIComponent(coupon.id)}>{l('用于活动','Use in activity','Gunakan dalam aktivitas')}</Link>
                         <button
-                          onClick={() => navigate(`/marketing/coupons/${coupon.id}`)}
+                          onClick={() => navigate(`/marketing/promotions/coupons/${coupon.id}`)}
                           className="text-primary hover:text-primary/80 text-sm font-medium"
                         >
                           {t('common.view')}
@@ -271,9 +281,9 @@ export function CouponListPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={closeModal}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="marketing-toolbar mb-4">
               <h3 className="text-lg font-semibold">{t('marketing.createCoupon')}</h3>
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
                 <X size={20} />
@@ -373,14 +383,14 @@ export function CouponListPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Edit Modal */}
       {showEdit && editingCoupon && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={closeModal}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="marketing-toolbar mb-4">
               <h3 className="text-lg font-semibold">{t('marketing.editCoupon')}</h3>
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
                 <X size={20} />
@@ -479,12 +489,12 @@ export function CouponListPage() {
               </div>
             </form>
           </div>
-        </div>
+        </MarketingDialog>
       )}
 
       {/* Delete Confirmation Modal */}
       {showDelete && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <MarketingDialog onClose={()=>setShowDelete(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
             <p className="text-gray-600 mb-6">{t('marketing.deleteCouponConfirm')}</p>
@@ -500,7 +510,7 @@ export function CouponListPage() {
               <button onClick={() => setShowDelete(null)} className="btn-secondary">{t('common.cancel')}</button>
             </div>
           </div>
-        </div>
+        </MarketingDialog>
       )}
     </div>
   )
