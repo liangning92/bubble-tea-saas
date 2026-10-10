@@ -9,12 +9,13 @@ Var BTPSUpgradeDiagnostic
 !macro customHeader
   !ifndef BUILD_UNINSTALLER
     Function BTPSWaitForClosedPOS
+      CreateDirectory "$APPDATA\BTPS\logs"
       btps_wait_again:
       nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --diagnostic "$BTPSUpgradeDiagnostic"'
       Pop $R0
       Pop $R1
       ${If} $R0 == "74"
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "POS or its local service is still running. Close the cashier and customer display windows normally, then click Retry. Your orders and original program are retained. Details: $R1$\r$\n收银程序或本地服务仍在运行。请正常关闭收银和顾客显示窗口，然后点击重试。订单和原程序保留。$\r$\nPOS atau layanan lokal masih berjalan. Tutup jendela kasir dan layar pelanggan secara normal, lalu klik Retry. Pesanan dan program lama tetap disimpan." IDRETRY btps_wait_again
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "POS or its local service is still running. Close the cashier and customer display windows normally, then click Retry. Your orders and original program are retained. Details: $R1$\r$\n收银程序或本地服务仍在运行。请正常关闭收银和顾客显示窗口，然后点击重试。订单和原程序保留。$\r$\nPOS atau layanan lokal masih berjalan. Tutup jendela kasir dan layar pelanggan secara normal, lalu klik Retry. Pesanan dan program lama tetap disimpan." /SD IDCANCEL IDRETRY btps_wait_again
         SetErrorLevel 73
         Quit
       ${ElseIf} $R0 != "0"
