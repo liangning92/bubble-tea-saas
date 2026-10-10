@@ -1,3 +1,4 @@
+import { TvIdleMusic } from '../components/TvIdleMusic'
 import { tvEventsApi } from '../services/api'
 import { activityEligible } from '../../../shared/utils/activities'
 import { DEFAULT_TV_CONFIG as DEFAULT_CONFIG, normalizeTvConfig, TvScreenConfig as TVScreenConfig } from '../../../shared/utils/tvScreenConfig'
@@ -121,11 +122,17 @@ export function TvDisplayPage() {
     return()=>{clearInterval(pollTimer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)}
   },[storeId,displayToken,terminalId])
 
+  const visibleActivities=(config.activePromotions||[]).filter((a:any)=>activityEligible({...a,status:'published',used:0,priority:0,paymentMethods:a.paymentMethods||[],productIds:[],specIds:[],memberLevels:a.memberLevels||[],channels:a.channels||[],weekdays:a.weekdays||[],rule:a.rule||{}},{now:currentTime,channel:''},false))
+  useEffect(()=>{const timer=setInterval(()=>setActivityIndex(n=>n+1),(config.carouselIntervalSeconds||6)*1000);return()=>clearInterval(timer)},[config.carouselIntervalSeconds])
+  const currentActivity=visibleActivities[activityIndex%Math.max(1,visibleActivities.length)]
+  const idleMode=visibleActivities.length===0
+  const idlePhotos=useMemo(()=>config.idleProductsEnabled?(config.idleProducts||[]).map(product=>({url:product.image,title:product.name,subtitle:product.price===undefined?'':formatCurrency(product.price)})):[],[config.idleProductsEnabled,config.idleProducts])
   // Hero Banners Carousel
   const activeBanners = useMemo(() => {
-    return config.mediaFiles || []
-  }, [config.mediaFiles])
+    return idleMode&&idlePhotos.length ? idlePhotos : config.mediaFiles || []
+  }, [config.mediaFiles, idleMode, idlePhotos])
 
+  const carouselKey=JSON.stringify(activeBanners.map(banner=>[banner.url,banner.title,banner.subtitle]))
   useEffect(() => {
     setActiveBannerIndex(0)
     if (activeBanners.length <= 1) return
@@ -133,11 +140,8 @@ export function TvDisplayPage() {
       setActiveBannerIndex(prev => (prev + 1) % activeBanners.length)
     }, (config.carouselIntervalSeconds || 6) * 1000)
     return () => clearInterval(interval)
-  }, [activeBanners, config.carouselIntervalSeconds])
+  }, [carouselKey, config.carouselIntervalSeconds])
 
-  const visibleActivities=(config.activePromotions||[]).filter((a:any)=>activityEligible({...a,status:'published',used:0,priority:0,paymentMethods:a.paymentMethods||[],productIds:[],specIds:[],memberLevels:a.memberLevels||[],channels:a.channels||[],weekdays:a.weekdays||[],rule:a.rule||{}},{now:currentTime,channel:''},false))
-  useEffect(()=>{const timer=setInterval(()=>setActivityIndex(n=>n+1),(config.carouselIntervalSeconds||6)*1000);return()=>clearInterval(timer)},[config.carouselIntervalSeconds])
-  const currentActivity=visibleActivities[activityIndex%Math.max(1,visibleActivities.length)]
   // Setup Real-time WebSocket connection to backend
   useEffect(() => {
     const apiUrl = getApiUrl().replace(/\/api$/, '')
@@ -252,6 +256,7 @@ export function TvDisplayPage() {
   if (!config.enabled) return <div className="h-screen flex items-center justify-center bg-slate-950 text-white">{config.storeName} — Layar dinonaktifkan</div>
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 text-white select-none font-sans">
+      {idleMode&&config.idleMusic.enabled&&<TvIdleMusic tracks={config.idleMusic.tracks} volume={config.idleMusic.volume} active={soundEnabled&&!lotteryActive} resolveUrl={mediaUrl}/>}
       {/* Top TV Header Bar */}
       <header className="h-16 px-8 flex items-center justify-between bg-gradient-to-r from-red-900/90 via-slate-900 to-red-950/90 border-b border-red-800/40 shadow-xl backdrop-blur-md z-10">
         <div className="flex items-center space-x-4">
@@ -302,22 +307,24 @@ export function TvDisplayPage() {
         {/* Left Column: Hero Posters & Brand Promotion */}
         <section
           className="relative h-full overflow-hidden flex flex-col justify-end p-10 border-r border-slate-800 transition-all duration-500"
-          style={{ width: `${splitRatio}%` }}
+          data-testid={idleMode&&idlePhotos.length?'tv-idle-carousel':undefined}
+          style={{ width: `${idleMode&&idlePhotos.length?100:splitRatio}%` }}
         >
           {/* Background Poster Image with Smooth Fade */}
           <div className="absolute inset-0 z-0 bg-slate-900">
             {activeBanners.map((banner, index) => (
               <div
-                key={banner.url}
+                key={banner.url+index}
+                aria-hidden={index!==activeBannerIndex}
                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
                   index === activeBannerIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-105 pointer-events-none'
                 }`}
                 style={{ transition: 'opacity 1s ease-in-out, transform 8s ease' }}
               >
                 <img
-                  src={mediaUrl(banner.url)}
+                  src={index===activeBannerIndex||index===(activeBannerIndex+1)%activeBanners.length?mediaUrl(banner.url):undefined}
                   alt={banner.title}
-                  className="w-full h-full object-cover"
+                  className={'w-full h-full '+(idleMode&&idlePhotos.length?'object-contain':'object-cover')}
                   onError={(e) => {
                     e.currentTarget.style.visibility = 'hidden'
                   }}
@@ -332,7 +339,7 @@ export function TvDisplayPage() {
           <div className="relative z-10 max-w-2xl space-y-4">
             <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-red-600/90 text-white text-sm font-bold tracking-wide shadow-lg border border-red-400/50">
               <Sparkles className="w-4 h-4 mr-2 text-amber-300 animate-spin" />
-              PROMOSI SPESIAL HARI INI
+              {idleMode?'PILIHAN MINUMAN':'PROMOSI SPESIAL HARI INI'}
             </div>
             <h1 className="text-4xl 2xl:text-5xl font-black text-white leading-tight drop-shadow-xl">
               {currentBanner?.title}
@@ -358,7 +365,7 @@ export function TvDisplayPage() {
         {/* Right Column: Daily Special & Lucky Wheel Promotion */}
         <section
           className="relative h-full overflow-hidden p-8 flex flex-col justify-between bg-gradient-to-b from-slate-900 to-slate-950"
-          style={{ width: `${100 - splitRatio}%` }}
+          style={{ width: `${100 - splitRatio}%`,display:idleMode&&idlePhotos.length?'none':undefined }}
         >
           <div className="h-full flex flex-col justify-center p-8 gap-6 overflow-hidden">
             {currentActivity?<>

@@ -175,9 +175,8 @@ assert.deepEqual(results.filter(r=>r.empty||r.errors?.length||r.failed?.length||
 await require('./staff-access-browser-scenarios.cjs')({page,browser,prisma,check,base,output,assertEventually});
 if(process.env.WORKFLOW_ACCESS_ONLY==='1'){await context.close();return}
 if(process.env.WORKFLOW_STAFF_ONLY!=='1'){
-// The preceding collection lifecycle deliberately persisted an empty category list.
-// Seed the category used by duplicate-name checks instead of relying on UI fallback defaults.
-await check('PUT','/api/expenses/categories',{categories:[{key:'utilities',label:'Utilities',isDefault:true}]});
+// An intentionally empty category list remains empty. Seed the duplicate-check fixture explicitly.
+await check('PUT','/api/expenses/categories',{categories:[{key:'utilities',label:'',labelEn:'Utilities',color:'bg-blue-100 text-blue-700',isDefault:true,posVisible:true}]});
 await page.goto('http://127.0.0.1:6311/finance/expenses');await page.getByTitle('Manage Types').click();const modal=page.locator('.fixed.inset-0').last();const input=modal.getByPlaceholder('New type name');const addCategory=modal.getByRole('button',{name:'Add',exact:true});
 await addCategory.click();await modal.getByText('Enter a category name before adding.',{exact:true}).waitFor();assert.equal(categoryPutCount,0);
 await input.fill('Utilities');await addCategory.click();await modal.getByText('Category “Utilities” already exists. Select the existing category.',{exact:true}).waitFor();assert.equal(categoryPutCount,0);
