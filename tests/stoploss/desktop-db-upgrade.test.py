@@ -249,6 +249,43 @@ class UpgradeTests(unittest.TestCase):
         self.assertTrue(receipt['preverifiedBackup'])
         self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
 
+    def stage_pointer(self):
+        staged = U.stage_backup(self.db, self.app, self.installer)
+        pointer = self.root / 'upgrade-stage.json'
+        U.durable_json(pointer, {'format': 1, 'nonce': staged['nonce'],
+                                  'receiptPath': staged['receiptPath'],
+                                  'installerSha512': staged['installerSha512']})
+        return pointer, staged
+
+    def test_old_installer_stage_is_preserved_and_new_installer_gets_fresh_verified_backup(self):
+        pointer, staged = self.stage_pointer()
+        evidence = {path: path.read_bytes() for path in [pointer, pathlib.Path(staged['receiptPath']),
+                    pathlib.Path(staged['databaseBackup']), pathlib.Path(staged['appBackup'])]}
+        self.installer.write_bytes(b'newer-installer')
+        selected = U.installer_stage(pointer, self.installer, self.db, self.app)
+        self.assertIsNone(selected)
+        receipt = U.prepare(self.db, self.app, self.catalog, lambda: [], staged=selected)
+        self.assertNotEqual(receipt['nonce'], staged['nonce'])
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        for path, original in evidence.items():
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_matching_installer_corrupt_backup_still_blocks(self):
+        pointer, staged = self.stage_pointer()
+        pathlib.Path(staged['databaseBackup']).write_bytes(b'corrupted')
+        with self.assertRaisesRegex(RuntimeError, 'STAGED_DATABASE_BACKUP_CHANGED'):
+            U.installer_stage(pointer, self.installer, self.db, self.app)
+        self.assertEqual(U.digest(self.db), self.before)
+        self.assertEqual(U.tree_manifest(self.app), self.app_before)
+
+    def test_invalid_pointer_does_not_fall_back_to_new_backup(self):
+        pointer, staged = self.stage_pointer()
+        U.durable_json(pointer, {'format': 1, 'nonce': staged['nonce'],
+                               'receiptPath': staged['receiptPath'], 'installerSha512': 'invalid'})
+        with self.assertRaisesRegex(RuntimeError, 'UNVERIFIED_STAGED_POINTER'):
+            U.installer_stage(pointer, self.installer, self.db, self.app)
+        self.assertEqual(U.digest(self.db), self.before)
+
     def test_new_sale_requires_background_refresh_before_install(self):
         staged = U.stage_backup(self.db, self.app, self.installer)
         pointer = self.root / 'upgrade-stage.json'

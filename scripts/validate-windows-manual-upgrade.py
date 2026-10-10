@@ -36,6 +36,7 @@ APP.mkdir()
 DATA.joinpath('data').mkdir(parents=True)
 DB = DATA / 'data/dev.db'
 CASES = []
+COMPLETED = False
 
 
 def sha(path):
@@ -244,6 +245,7 @@ try:
     staged = invoke('stage')
     assert staged['status'] == 'staged'
     invoke('refresh-stage')
+    fast_started = time.monotonic()
     drive_installer(installer)
     staged_receipt = json.loads(pathlib.Path(staged['receiptPath']).read_text())
     assert staged_receipt['status'] == 'prepared' and staged_receipt['preverifiedBackup']
@@ -260,8 +262,24 @@ try:
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
     assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
     restarted_runtime = verify_started_runtime(expected_version)
+    fast_downtime = time.monotonic() - fast_started
+    assert fast_downtime <= 90, ('Prepared upgrade exceeded 90 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
+    # Reproduce the employee failure with a valid receipt for another package.
+    obsolete_installer = TEMP / 'obsolete-installer.exe'
+    obsolete_installer.write_bytes(b'owned obsolete installer')
+    subprocess.run([str(HELPER), 'stage', '--old-app', str(APP), '--installer', str(obsolete_installer), '--result', str(stage_pointer)], check=True, timeout=180)
+    obsolete_pointer = stage_pointer.read_bytes()
+    obsolete = json.loads(pathlib.Path(json.loads(obsolete_pointer)['receiptPath']).read_text())
+    old_evidence = {p: sha(p) for p in [pathlib.Path(obsolete['receiptPath']), pathlib.Path(obsolete['databaseBackup']), pathlib.Path(obsolete['appBackup'])]}
+    drive_installer(installer)
+    verify_started_runtime(expected_version)
+    assert historic() == history
+    assert stage_pointer.read_bytes() == obsolete_pointer
+    assert all(sha(p) == value for p, value in old_evidence.items())
+    stage_pointer.unlink()
+    CASES.append('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds')
     # The original 295 package is named bubble-tea-saas. Put owned history in
     # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
     historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
@@ -272,7 +290,13 @@ try:
     DATA = historical_profile
     DB = historical_profile / 'data/dev.db'
     authentic = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate'](ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile)
-    report = {'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
+    authentic_validate = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate']
+    authentic372 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
+        original_version='2026.10.372', original_hash='3943a394c848f869c8abc12e5706ce3e4bf2c18ff0412d708537ccfb8cd70acc', stale_stage=True)
+    authentic384 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
+        original_version='2026.10.384', original_hash='3f52f8c7e19a0f497a53015e402a231adf675d4c2e63bec0d0aef899496810e6')
+    assert authentic384['downtimeSeconds'] <= 90, ('Background online upgrade exceeded release limit', authentic384)
+    report = {'authentic372': authentic372, 'authentic384': authentic384, 'preparedDowntimeSeconds': round(fast_downtime, 3), 'downtimeLimitSeconds': 90, 'authentic295': authentic, 'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version, 'cases': CASES,
               'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],
@@ -285,10 +309,11 @@ try:
                     requiredExistingDatabaseChanges=report['changes'])
     manifest.pop('existingDatabaseBlocker', None)
     manifest_path.write_text(json.dumps(manifest, indent=2))
+    COMPLETED = True
     print(json.dumps(report))
 finally:
     # Remove only fixture roots created after absence assertions in this script.
     # On failure retain all synthetic artifacts for CI diagnosis.
-    if len(CASES) == 8:
+    if COMPLETED:
         shutil.rmtree(DATA)
         shutil.rmtree(pathlib.Path(os.environ['APPDATA']) / 'BTPS')

@@ -499,6 +499,29 @@ def staged_receipt(pointer, installer, db, old_app):
     return receipt
 
 
+def installer_stage(pointer, installer, db, old_app):
+    """A receipt belongs to one installer; an older package is not a failure.
+
+    Keep old recovery evidence untouched and create a fresh verified backup for
+    a different installer. A matching package still uses every strict check.
+    """
+    selected = json.loads(regular(pointer).read_text(encoding='utf-8'))
+    try:
+        valid_hash = len(base64.b64decode(selected.get('installerSha512', ''), validate=True)) == 64
+        valid_nonce = str(uuid.UUID(selected['nonce'])) == selected['nonce']
+    except (ValueError, KeyError, TypeError):
+        valid_hash = valid_nonce = False
+    if selected.get('format') != 1 or not valid_hash or not valid_nonce:
+        fail('UNVERIFIED_STAGED_POINTER')
+    expected = db.parent / 'upgrade-backups' / selected['nonce'] / 'receipt.json'
+    if pathlib.Path(selected.get('receiptPath', '')) != expected:
+        fail('STAGED_RECEIPT_PATH_MISMATCH')
+    if selected['installerSha512'] != installer_sha512(installer):
+        upgrade_stage('fresh-backup-for-new-installer')
+        return None
+    return staged_receipt(pointer, installer, db, old_app)
+
+
 def refresh_stage_database(pointer, installer, db, old_app):
     """Refresh only mutable business data after the local API has stopped."""
     pointer = regular(pointer)
@@ -798,7 +821,7 @@ def main():
         if args.staged_pointer and pathlib.Path(args.staged_pointer).exists():
             if not args.installer:
                 fail('STAGED_INSTALLER_REQUIRED')
-            staged = staged_receipt(args.staged_pointer, args.installer, db, old_app)
+            staged = installer_stage(args.staged_pointer, args.installer, db, old_app)
         receipt = prepare(db, old_app, catalog, windows_processes, registry_snapshot(), staged)
         durable_json(args.result, receipt)
         # The new Electron process must reopen exactly the database verified
