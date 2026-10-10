@@ -30,3 +30,6 @@ The first candidate was rejected: prepared install/restart took 139 seconds.
 The build now prunes server development dependencies before packaging, while
 retaining generated Prisma runtime clients. Restart verification additionally
 requires the local API readiness endpoint. The 90 second gate is unchanged.
+Type declarations and source maps are also excluded from the shipped runtime
+payload; generated Prisma engines and schemas remain included. All 17 local
+barcode browser cases pass after waiting for the repriced quote before exact cash.
