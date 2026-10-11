@@ -3605,7 +3605,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     <button
                       key={cat}
                       onClick={() => setFilter(cat)}
-                      className={`min-h-14 px-5 rounded-xl text-base font-medium whitespace-nowrap flex items-center gap-2 transition-all touch-feedback ${
+                      className={`min-h-14 px-5 rounded-xl text-base font-bold whitespace-nowrap flex items-center gap-2 transition-all touch-feedback ${
                         filter === cat
                           ? 'bg-primary text-white shadow-md'
                           : 'bg-gray-100 text-gray-600 hover:bg-primary-light'
