@@ -1,3 +1,5 @@
+import { businessDate, businessWeekStart } from '../utils/businessDate'
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -24,27 +26,31 @@ export function ShiftSwapPage() {
   const { user } = useAuthStore()
 
   const [requests, setRequests] = useState<ShiftSwapRequest[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
     originalDate: '',
-    originalShift: 'morning',
+    originalShift: '',
     targetDate: '',
-    targetShift: 'morning',
+    targetShift: '',
     reason: ''
   })
+  const [shifts, setShifts] = useState<Array<{ key: string; name: string; startTime: string; endTime: string }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadFailed(false)
     try {
-      const response = await staffApi.getMyShiftSwaps()
+      const [response, schedule] = await Promise.all([staffApi.getMyShiftSwaps(), staffApi.getMySchedule(user!.staffId, businessDate(businessWeekStart(new Date())))])
+      setShifts(schedule.data?.shiftDetails || [])
       if (response.data) {
         setRequests(response.data)
       }
     } catch (error) {
-      console.error('Failed to load shift swaps:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
@@ -55,14 +61,14 @@ export function ShiftSwapPage() {
   }, [user])
 
   const handleSubmit = async () => {
-    if (!formData.originalDate || !formData.targetDate) return
+    if (!formData.originalDate || !formData.targetDate || !formData.originalShift || !formData.targetShift) return
 
     setIsSubmitting(true)
     try {
       const response = await staffApi.createShiftSwap(formData)
       if (response.code === 201 || response.code === 200) {
         setSubmitSuccess(true)
-        setFormData({ originalDate: '', originalShift: 'morning', targetDate: '', targetShift: 'morning', reason: '' })
+        setFormData({ originalDate: '', originalShift: '', targetDate: '', targetShift: '', reason: '' })
         setShowForm(false)
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
@@ -90,6 +96,8 @@ export function ShiftSwapPage() {
       </span>
     )
   }
+
+  if (loadFailed) return <LoadFailure retry={loadData} />
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -145,9 +153,8 @@ export function ShiftSwapPage() {
                     onChange={(e) => setFormData({ ...formData, originalShift: e.target.value })}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   >
-                    <option value="morning">{t('schedule.morning')}</option>
-                    <option value="afternoon">{t('schedule.afternoon')}</option>
-                    <option value="evening">{t('schedule.evening')}</option>
+                    <option value="">{t('shiftSwap.chooseShift')}</option>
+                    {shifts.map(shift => <option key={shift.key} value={shift.key}>{shift.name} · {shift.startTime}–{shift.endTime}</option>)}
                   </select>
                 </div>
               </div>
@@ -173,9 +180,8 @@ export function ShiftSwapPage() {
                     onChange={(e) => setFormData({ ...formData, targetShift: e.target.value })}
                     className="w-full p-3 border border-gray-200 rounded-xl"
                   >
-                    <option value="morning">{t('schedule.morning')}</option>
-                    <option value="afternoon">{t('schedule.afternoon')}</option>
-                    <option value="evening">{t('schedule.evening')}</option>
+                    <option value="">{t('shiftSwap.chooseShift')}</option>
+                    {shifts.map(shift => <option key={shift.key} value={shift.key}>{shift.name} · {shift.startTime}–{shift.endTime}</option>)}
                   </select>
                 </div>
               </div>
@@ -202,7 +208,7 @@ export function ShiftSwapPage() {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || !formData.originalDate || !formData.targetDate}
+                  disabled={isSubmitting || !formData.originalDate || !formData.targetDate || !formData.originalShift || !formData.targetShift}
                   className="flex-1 py-3 bg-primary text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isSubmitting ? (
@@ -242,7 +248,7 @@ export function ShiftSwapPage() {
                     <div>
                       <p className="font-medium">{formatDate(req.originalDate)} → {formatDate(req.targetDate)}</p>
                       <p className="text-xs text-gray-500">
-                        {req.originalShift} → {req.targetShift}
+                        {shifts.find(s => s.key === req.originalShift)?.name || req.originalShift} → {shifts.find(s => s.key === req.targetShift)?.name || req.targetShift}
                       </p>
                     </div>
                     {getStatusBadge(req.status)}

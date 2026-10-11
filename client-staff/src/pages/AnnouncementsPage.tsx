@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +13,7 @@ interface Announcement {
   content: string
   type: 'info' | 'urgent' | 'event'
   isRead: boolean
+  source: 'notification' | 'announcement'
   createdAt: string
 }
 
@@ -23,28 +25,33 @@ export function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  const [loadFailed, setLoadFailed] = useState(false)
+
   useEffect(() => {
     loadAnnouncements()
   }, [user])
 
   const loadAnnouncements = async () => {
     setIsLoading(true)
+    setLoadFailed(false)
     try {
-      const response = await staffApi.getNotifications()
-      if (response.data?.list) {
+      const [response, storeResponse] = await Promise.all([staffApi.getNotifications(), staffApi.getStoreAnnouncements(user!.storeId)])
+      {
         // Map API data to Announcement format
-        const mapped: Announcement[] = response.data.list.map((n: any) => ({
+        const mapped: Announcement[] = (response.data?.list || []).map((n: any) => ({
           id: n.id,
+          source: 'notification',
           title: n.title,
           content: n.message,
           type: mapNotificationType(n.type),
           isRead: n.status === 'read' || !!n.readAt,
           createdAt: n.createdAt
         }))
-        setAnnouncements(mapped)
+        const storeAnnouncements: Announcement[] = (storeResponse.data || []).map((a: any) => ({ ...a, source: 'announcement', isRead: true }))
+        setAnnouncements([...storeAnnouncements, ...mapped])
       }
     } catch (error) {
-      console.error('Failed to load announcements:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
@@ -112,7 +119,7 @@ export function AnnouncementsPage() {
       <div className="p-4 space-y-3">
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
-        ) : announcements.length === 0 ? (
+        ) : loadFailed ? <LoadFailure retry={loadAnnouncements} /> : announcements.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center">
             <Megaphone size={48} className="mx-auto mb-4 text-gray-300" />
             <p className="text-gray-500">{t('announcement.noAnnouncements')}</p>
@@ -138,14 +145,14 @@ export function AnnouncementsPage() {
                 {getTypeBadge(announcement.type)}
               </div>
 
-              <p className="text-sm text-gray-600 mb-3 line-clamp-3">{announcement.content}</p>
+              <p className="text-sm text-gray-600 mb-3 whitespace-pre-wrap break-words">{announcement.content}</p>
 
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <div className="flex items-center gap-1">
                   <Calendar size={12} />
                   <span>{formatDate(announcement.createdAt)}</span>
                 </div>
-                {announcement.isRead && (
+                {announcement.source === 'notification' && announcement.isRead && (
                   <div className="flex items-center gap-1 text-green-600">
                     <CheckCircle size={12} />
                     <span>{t('announcement.read')}</span>

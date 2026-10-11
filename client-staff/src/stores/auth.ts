@@ -7,6 +7,7 @@ interface StaffUser {
   name: string
   role: string
   storeId: string
+  storeName?: string
   staffId: string
   position: string
 }

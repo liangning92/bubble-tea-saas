@@ -32,6 +32,11 @@ export function LoginPage() {
   const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0]
 
   useEffect(() => {
+    const notice = sessionStorage.getItem('staff-login-notice')
+    if (notice) {
+      setError(t(notice === 'passwordChanged' ? 'profile.passwordChangeSuccess' : 'auth.sessionExpired'))
+      sessionStorage.removeItem('staff-login-notice')
+    }
     // Load saved phone number only (never store password)
     const savedPhone = localStorage.getItem('remembered_phone')
     const savedRemember = localStorage.getItem('remember_me')
@@ -50,12 +55,14 @@ export function LoginPage() {
       const response = await staffApi.login(phone, password)
       if (response.code === 200) {
         const rawUser = response.data.user
+        if (!(rawUser.staffId || rawUser.staff?.id)) { setError(t('auth.staffMissing')); return }
         // The API returns the employee profile under `staff`; page requests use
         // a flat `staffId`, so normalize once when establishing the session.
         login(response.data.token, {
           ...rawUser,
           staffId: rawUser.staffId || rawUser.staff?.id || '',
           name: rawUser.name || rawUser.staff?.name || '',
+          storeName: rawUser.store?.name || '',
           position: rawUser.position || rawUser.staff?.position || ''
         })
 
@@ -73,7 +80,7 @@ export function LoginPage() {
         setError(response.message || t('auth.loginFailed'))
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.invalidCredentials'))
+      setError(err.response?.data?.message || t(err.response ? 'auth.invalidCredentials' : 'common.loadFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -189,6 +196,7 @@ export function LoginPage() {
             </label>
             <button
               type="button"
+              onClick={() => setError(t('auth.resetHelp'))}
               className="text-sm text-primary-hover hover:text-primary-hover font-medium transition-colors"
             >
               {t('auth.forgotPassword')}

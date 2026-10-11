@@ -53,16 +53,7 @@ export function InventoryPage() {
   const [stockOutNote, setStockOutNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const categories = [
-    t('inventory.categoryTea'),
-    t('inventory.categoryMilk'),
-    t('inventory.categorySugar'),
-    t('inventory.categoryTopping'),
-    t('inventory.categoryJam'),
-    t('inventory.categorySyrup'),
-    t('inventory.categoryPackaging'),
-    t('inventory.categoryOther')
-  ]
+  const categories = [...new Set(inventory.map(item => item.category).filter(Boolean))]
 
   useEffect(() => {
     loadInventory()

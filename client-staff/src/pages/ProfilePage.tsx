@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
@@ -15,6 +15,18 @@ export function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  useEffect(() => {
+    let active = true
+    staffApi.getMyProfile().then(response => {
+      if (active && response.data) useAuthStore.getState().updateUser({
+        name: response.data.staff?.name || user?.name || '',
+        position: response.data.staff?.position || user?.position || '',
+        storeName: response.data.store?.name || user?.storeName
+      })
+    }).catch(() => { if (active) setMessage({ type: 'error', text: t('common.loadFailed') }) })
+    return () => { active = false }
+  }, [user?.id])
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage(null)
@@ -24,7 +36,7 @@ export function ProfilePage() {
       return
     }
 
-    if (newPassword.length < 6) {
+    if ((new TextEncoder().encode(newPassword).length < 10 || new TextEncoder().encode(newPassword).length > 72)) {
       setMessage({ type: 'error', text: t('profile.passwordMinLength') })
       return
     }
@@ -33,7 +45,8 @@ export function ProfilePage() {
     try {
       const response = await staffApi.changePassword(oldPassword, newPassword)
       if (response.code === 200) {
-        setMessage({ type: 'success', text: t('profile.passwordChangeSuccess') })
+        sessionStorage.setItem('staff-login-notice', 'passwordChanged')
+        logout()
         setOldPassword('')
         setNewPassword('')
         setConfirmPassword('')
@@ -71,6 +84,7 @@ export function ProfilePage() {
 
       {/* Content */}
       <div className="p-4">
+        {message && !showPasswordForm && <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{message.text}</div>}
         {/* Profile Info */}
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
           <h3 className="font-bold text-gray-900 mb-4">{t('profile.title')}</h3>
@@ -89,7 +103,7 @@ export function ProfilePage() {
             </div>
             <div>
               <label className="text-sm text-gray-500">{t('profile.store')}</label>
-              <p className="font-medium text-gray-900">{t('profile.mainStore')}</p>
+              <p className="font-medium text-gray-900">{user?.storeName || '-'}</p>
             </div>
           </div>
         </div>

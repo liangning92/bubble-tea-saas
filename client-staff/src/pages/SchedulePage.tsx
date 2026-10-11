@@ -1,3 +1,7 @@
+import { businessDate, businessWeekStart, businessWeekday } from '../utils/businessDate'
+import { LoadFailure } from '../components/LoadFailure'
+import { RouteLoading } from '../components/RouteLoading'
+import { useRef } from 'react'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -33,42 +37,40 @@ export function SchedulePage() {
 
   const [currentWeek, setCurrentWeek] = useState(new Date())
   const [schedule, setSchedule] = useState<any>(null)
-  const [, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const [loadFailed, setLoadFailed] = useState(false)
+  const requestId = useRef(0)
 
   useEffect(() => {
     if (user?.staffId) {
       loadSchedule()
     }
-  }, [user, currentWeek])
+    return () => { requestId.current++ }
+  }, [user?.staffId, currentWeek])
 
   const loadSchedule = async () => {
+    const id = ++requestId.current
     setIsLoading(true)
+    setLoadFailed(false)
     try {
       const weekStart = getWeekStart(currentWeek)
-      const response = await staffApi.getMySchedule(user!.staffId, weekStart.toISOString().slice(0, 10))
-      if (response.data) {
-        setSchedule(response.data)
-      }
+      const response = await staffApi.getMySchedule(user!.staffId, businessDate(weekStart))
+      if (id === requestId.current) setSchedule(response.data ?? null)
     } catch (error) {
-      console.error('Failed to load schedule:', error)
+      if (id === requestId.current) setLoadFailed(true)
     } finally {
-      setIsLoading(false)
+      if (id === requestId.current) setIsLoading(false)
     }
   }
 
-  const getWeekStart = (date: Date) => {
-    const d = new Date(date)
-    const day = d.getDay()
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-    return new Date(d.setDate(diff))
-  }
+  const getWeekStart = businessWeekStart
 
   const getDaysOfWeek = () => {
     const weekStart = getWeekStart(currentWeek)
     const days = []
     for (let i = 0; i < 7; i++) {
-      const day = new Date(weekStart)
-      day.setDate(weekStart.getDate() + i)
+      const day = new Date(weekStart.getTime() + i * 86400000)
       days.push(day)
     }
     return days
@@ -94,8 +96,7 @@ export function SchedulePage() {
 
   const days = getDaysOfWeek()
   const weekStart = getWeekStart(currentWeek)
-  const weekEnd = new Date(weekStart)
-  weekEnd.setDate(weekStart.getDate() + 6)
+  const weekEnd = new Date(weekStart.getTime() + 6 * 86400000)
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -107,8 +108,8 @@ export function SchedulePage() {
             <div>
               <h1 className="text-xl font-bold">{t('schedule.title')}</h1>
               <p className="text-white/80 text-sm">
-                {weekStart.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - {' '}
-                {weekEnd.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {weekStart.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short' })} - {' '}
+                {weekEnd.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
             </div>
           </div>
@@ -124,7 +125,7 @@ export function SchedulePage() {
           <ChevronLeft size={24} className="text-gray-600" />
         </button>
         <span className="font-bold text-gray-900">
-          {weekStart.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+          {weekStart.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', month: 'long', year: 'numeric' })}
         </span>
         <button
           onClick={goToNextWeek}
@@ -136,11 +137,12 @@ export function SchedulePage() {
 
       {/* Schedule Grid */}
       <div className="p-4">
-        <div className="grid grid-cols-7 gap-2">
+        {isLoading ? <RouteLoading /> : loadFailed ? <LoadFailure retry={loadSchedule} /> : <div className="grid grid-cols-7 gap-2">
           {days.map((day, idx) => {
-            const shift = getShiftForDay(idx)
-            const ShiftIcon = SHIFT_ICONS[shift as keyof typeof SHIFT_ICONS] || X
-            const isToday = day.toDateString() === new Date().toDateString()
+            const shift = getShiftForDay(businessWeekday(day))
+            const detail = schedule?.shiftDetails?.find((item: any) => item.key === shift)
+            const ShiftIcon = SHIFT_ICONS[shift as keyof typeof SHIFT_ICONS] || Calendar
+            const isToday = businessDate(day) === businessDate()
 
             return (
               <div
@@ -152,12 +154,12 @@ export function SchedulePage() {
                 <p className={`text-xs font-medium mb-1 ${
                   isToday ? 'text-white/80' : 'text-gray-500'
                 }`}>
-                  {day.toLocaleDateString('id-ID', { weekday: 'short' })}
+                  {day.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'short' })}
                 </p>
                 <p className={`text-lg font-bold mb-2 ${
                   isToday ? 'text-white' : 'text-gray-900'
                 }`}>
-                  {day.getDate()}
+                  {Number(businessDate(day).slice(-2))}
                 </p>
                 <div className={`w-full h-8 rounded-lg flex items-center justify-center ${
                   isToday
@@ -166,10 +168,12 @@ export function SchedulePage() {
                 }`}>
                   <ShiftIcon size={16} />
                 </div>
+                <p className="mt-1 text-xs break-words">{detail?.name || t(SHIFT_LABELS_KEYS[shift as keyof typeof SHIFT_LABELS_KEYS] || shift)}
+                  {detail && <span className="block mt-1">{detail.startTime}–{detail.endTime}</span>}</p>
               </div>
             )
           })}
-        </div>
+        </div>}
 
         {/* Shift Swap Button */}
         <button
@@ -184,17 +188,13 @@ export function SchedulePage() {
         <div className="mt-4 bg-white rounded-2xl shadow-sm p-4">
           <h3 className="font-bold text-gray-900 mb-3">{t('schedule.shiftLegend')}</h3>
           <div className="space-y-3">
-            {(['morning', 'afternoon', 'evening', 'off'] as const).map((shift) => {
-              const Icon = SHIFT_ICONS[shift]
-              return (
-                <div key={shift} className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${SHIFT_COLORS[shift]}`}>
-                    <Icon size={20} />
-                  </div>
-                  <span className="text-gray-700">{t(SHIFT_LABELS_KEYS[shift])}</span>
-                </div>
-              )
-            })}
+            {(schedule?.shiftDetails || []).map((shift: any) => (
+              <div key={shift.key} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: shift.color || '#F2498C' }} />
+                <span className="text-gray-700">{shift.name} · {shift.startTime}–{shift.endTime}</span>
+              </div>
+            ))}
+            <p className="text-gray-500 text-sm">{t('schedule.off')}</p>
           </div>
         </div>
 

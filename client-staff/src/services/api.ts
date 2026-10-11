@@ -8,24 +8,34 @@ function getApiBase(): string {
 
 const API_BASE = getApiBase()
 
+const http = axios.create({ timeout: 15000 })
+http.interceptors.response.use(response => response, error => {
+  const token = useAuthStore.getState().token
+  if (error.response?.status === 401 && token && error.config?.headers?.Authorization === `Bearer ${token}`) {
+    sessionStorage.setItem('staff-login-notice', 'expired')
+    useAuthStore.getState().logout()
+  }
+  return Promise.reject(error)
+})
+
 const getAuthHeader = () => {
   const token = useAuthStore.getState().token
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 export const staffApi = {
-  getInventoryCounts:async()=> (await axios.get(`${API_BASE}/inventory-counts`,{headers:getAuthHeader()})).data,
-  recordInventoryCount:async(countId:string,itemId:string,data:any)=>(await axios.put(`${API_BASE}/inventory-counts/${countId}/item/${itemId}`,data,{headers:getAuthHeader()})).data,
+  getInventoryCounts:async()=> (await http.get(`${API_BASE}/inventory-counts`,{headers:getAuthHeader()})).data,
+  recordInventoryCount:async(countId:string,itemId:string,data:any)=>(await http.put(`${API_BASE}/inventory-counts/${countId}/item/${itemId}`,data,{headers:getAuthHeader()})).data,
 
   // Auth
   login: async (phone: string, password: string) => {
-    const response = await axios.post(`${API_BASE}/auth/login`, { phone, password })
+    const response = await http.post(`${API_BASE}/auth/login`, { phone, password })
     return response.data
   },
 
   // Attendance -统一使用 /staff/attendance (type字段区分check_in/check_out)
   checkIn: async (data: { storeId: string; date: string; checkInTime: string; location?: string }) => {
-    const response = await axios.post(`${API_BASE}/staff/attendance`, {
+    const response = await http.post(`${API_BASE}/staff/attendance`, {
       type: 'check_in',
       gpsLocation: data.location,
       date: data.date
@@ -37,7 +47,7 @@ export const staffApi = {
 
   // QR Attendance - 扫描前台POS动态防伪码打卡
   checkInWithQR: async (qrData: string, type: 'check_in' | 'check_out' = 'check_in', attendanceId?: string) => {
-    const response = await axios.post(`${API_BASE}/attendance-qr/verify`, {
+    const response = await http.post(`${API_BASE}/attendance-qr/verify`, {
       qrData,
       type,
       attendanceId
@@ -49,7 +59,7 @@ export const staffApi = {
 
   checkOut: async (attendanceId: string, data: { checkOutTime: string; location?: string }) => {
     // 服务端通过同一个endpoint处理check_out，使用type字段
-    const response = await axios.post(`${API_BASE}/staff/attendance`, {
+    const response = await http.post(`${API_BASE}/staff/attendance`, {
       type: 'check_out',
       attendanceId,
       gpsLocation: data.location
@@ -60,7 +70,7 @@ export const staffApi = {
   },
 
   getTodayAttendance: async (staffId: string) => {
-    const response = await axios.get(`${API_BASE}/staff/attendance/today`, {
+    const response = await http.get(`${API_BASE}/staff/attendance/today`, {
       params: { staffId },
       headers: getAuthHeader()
     })
@@ -69,7 +79,7 @@ export const staffApi = {
 
   // Monthly Overview for Home Page
   getMonthlyOverview: async (params?: { month?: number; year?: number }) => {
-    const response = await axios.get(`${API_BASE}/staff/overview/monthly`, {
+    const response = await http.get(`${API_BASE}/staff/overview/monthly`, {
       params,
       headers: getAuthHeader()
     })
@@ -77,7 +87,7 @@ export const staffApi = {
   },
 
   getAttendanceHistory: async (staffId: string, month: number, year: number) => {
-    const response = await axios.get(`${API_BASE}/staff/attendance/history`, {
+    const response = await http.get(`${API_BASE}/staff/attendance/history`, {
       params: { staffId, month, year },
       headers: getAuthHeader()
     })
@@ -86,7 +96,7 @@ export const staffApi = {
 
   // Schedule
   getMySchedule: async (staffId: string, weekStart: string) => {
-    const response = await axios.get(`${API_BASE}/staff/schedule/my`, {
+    const response = await http.get(`${API_BASE}/staff/schedule/my`, {
       params: { staffId, weekStart },
       headers: getAuthHeader()
     })
@@ -95,7 +105,7 @@ export const staffApi = {
 
   // Attendance Rules
   getAttendanceRules: async () => {
-    const response = await axios.get(`${API_BASE}/attendance-rules`, {
+    const response = await http.get(`${API_BASE}/attendance-rules`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -103,7 +113,7 @@ export const staffApi = {
 
   // Salary
   getMySalary: async (staffId: string, month: number, year: number) => {
-    const response = await axios.get(`${API_BASE}/staff/salary/my`, {
+    const response = await http.get(`${API_BASE}/staff/salary/my`, {
       params: { staffId, month, year },
       headers: getAuthHeader()
     })
@@ -112,14 +122,14 @@ export const staffApi = {
 
   // Profile
   getMyProfile: async () => {
-    const response = await axios.get(`${API_BASE}/auth/me`, {
+    const response = await http.get(`${API_BASE}/auth/me`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   changePassword: async (oldPassword: string, newPassword: string) => {
-    const response = await axios.put(`${API_BASE}/auth/password`, {
+    const response = await http.put(`${API_BASE}/auth/password`, {
       oldPassword,
       newPassword
     }, {
@@ -130,14 +140,14 @@ export const staffApi = {
 
   // Notifications
   getNotifications: async () => {
-    const response = await axios.get(`${API_BASE}/notifications`, {
+    const response = await http.get(`${API_BASE}/notifications`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   markNotificationRead: async (id: string) => {
-    const response = await axios.put(`${API_BASE}/notifications/${id}/read`, {}, {
+    const response = await http.put(`${API_BASE}/notifications/${id}/read`, {}, {
       headers: getAuthHeader()
     })
     return response.data
@@ -145,7 +155,7 @@ export const staffApi = {
 
   // Leave Types
   getLeaveTypes: async () => {
-    const response = await axios.get(`${API_BASE}/leave-types`, {
+    const response = await http.get(`${API_BASE}/leave-types`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -162,14 +172,14 @@ export const staffApi = {
     contactPhone?: string
     attachmentUrl?: string
   }) => {
-    const response = await axios.post(`${API_BASE}/leave/apply`, data, {
+    const response = await http.post(`${API_BASE}/leave/apply`, data, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   getMyLeaves: async (params?: { status?: string; startDate?: string; endDate?: string }) => {
-    const response = await axios.get(`${API_BASE}/leave/my`, {
+    const response = await http.get(`${API_BASE}/leave/my`, {
       params,
       headers: getAuthHeader()
     })
@@ -177,7 +187,7 @@ export const staffApi = {
   },
 
   getMyLeaveBalance: async (year?: number) => {
-    const response = await axios.get(`${API_BASE}/leave/balance`, {
+    const response = await http.get(`${API_BASE}/leave/balance`, {
       params: { year },
       headers: getAuthHeader()
     })
@@ -185,7 +195,7 @@ export const staffApi = {
   },
 
   cancelLeave: async (leaveId: string) => {
-    const response = await axios.put(`${API_BASE}/leave/cancel/${leaveId}`, {}, {
+    const response = await http.put(`${API_BASE}/leave/cancel/${leaveId}`, {}, {
       headers: getAuthHeader()
     })
     return response.data
@@ -193,7 +203,7 @@ export const staffApi = {
 
   // Reimbursement
   getReimbursementTypes: async () => {
-    const response = await axios.get(`${API_BASE}/reimbursement-types`, {
+    const response = await http.get(`${API_BASE}/reimbursement-types`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -205,14 +215,14 @@ export const staffApi = {
     description: string
     receiptUrls?: string[]
   }) => {
-    const response = await axios.post(`${API_BASE}/reimbursement/apply`, data, {
+    const response = await http.post(`${API_BASE}/reimbursement/apply`, data, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   getMyReimbursements: async (params?: { status?: string; startDate?: string; endDate?: string }) => {
-    const response = await axios.get(`${API_BASE}/reimbursement/my`, {
+    const response = await http.get(`${API_BASE}/reimbursement/my`, {
       params,
       headers: getAuthHeader()
     })
@@ -220,7 +230,7 @@ export const staffApi = {
   },
 
   cancelReimbursement: async (reimbursementId: string) => {
-    const response = await axios.put(`${API_BASE}/reimbursement/cancel/${reimbursementId}`, {}, {
+    const response = await http.put(`${API_BASE}/reimbursement/cancel/${reimbursementId}`, {}, {
       headers: getAuthHeader()
     })
     return response.data
@@ -229,7 +239,7 @@ export const staffApi = {
   uploadReceipts: async (files: File[]) => {
     const formData = new FormData()
     files.forEach(file => formData.append('receipts', file))
-    const response = await axios.post(`${API_BASE}/reimbursement/upload`, formData, {
+    const response = await http.post(`${API_BASE}/reimbursement/upload`, formData, {
       headers: {
         ...getAuthHeader(),
         'Content-Type': 'multipart/form-data'
@@ -241,7 +251,7 @@ export const staffApi = {
   uploadAttachment: async (file: File) => {
     const formData = new FormData()
     formData.append('files', file)
-    const response = await axios.post(`${API_BASE}/upload/attachment`, formData, {
+    const response = await http.post(`${API_BASE}/upload/attachment`, formData, {
       headers: {
         ...getAuthHeader(),
         'Content-Type': 'multipart/form-data'
@@ -250,9 +260,12 @@ export const staffApi = {
     return response.data
   },
 
+  getStoreAnnouncements: async (storeId: string) => (await http.get(`${API_BASE}/announcement/active`, { params: { storeId }, headers: getAuthHeader() })).data,
+  startTask: async (taskId: string) => (await http.put(`${API_BASE}/hygiene/tasks/${taskId}/start`, {}, { headers: getAuthHeader() })).data,
+
   // Hygiene Tasks
   getMyTasks: async (date?: string) => {
-    const response = await axios.get(`${API_BASE}/hygiene/tasks/my`, {
+    const response = await http.get(`${API_BASE}/hygiene/tasks/my`, {
       params: { date },
       headers: getAuthHeader()
     })
@@ -260,28 +273,28 @@ export const staffApi = {
   },
 
   getMyPendingTasks: async () => {
-    const response = await axios.get(`${API_BASE}/hygiene/tasks/my/pending`, {
+    const response = await http.get(`${API_BASE}/hygiene/tasks/my/pending`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   getPendingTasks: async () => {
-    const response = await axios.get(`${API_BASE}/hygiene/tasks/pending`, {
+    const response = await http.get(`${API_BASE}/hygiene/tasks/pending`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   completeTask: async (taskId: string, data: { photoUrl?: string; note?: string }) => {
-    const response = await axios.put(`${API_BASE}/hygiene/tasks/${taskId}/complete`, data, {
+    const response = await http.put(`${API_BASE}/hygiene/tasks/${taskId}/complete`, data, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   skipTask: async (taskId: string, note: string) => {
-    const response = await axios.put(`${API_BASE}/hygiene/tasks/${taskId}/skip`, { note }, {
+    const response = await http.put(`${API_BASE}/hygiene/tasks/${taskId}/skip`, { note }, {
       headers: getAuthHeader()
     })
     return response.data
@@ -289,7 +302,7 @@ export const staffApi = {
 
   // Inventory Management
   getInventoryList: async (params?: { storeId?: string; search?: string; category?: string; lowStock?: boolean }) => {
-    const response = await axios.get(`${API_BASE}/inventory`, {
+    const response = await http.get(`${API_BASE}/inventory`, {
       params,
       headers: getAuthHeader()
     })
@@ -297,21 +310,21 @@ export const staffApi = {
   },
 
   getInventoryDetail: async (inventoryId: string) => {
-    const response = await axios.get(`${API_BASE}/inventory/${inventoryId}`, {
+    const response = await http.get(`${API_BASE}/inventory/${inventoryId}`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   stockIn: async (data: { inventoryId: string; storeId: string; quantity: number; unitCost?: number; note?: string }) => {
-    const response = await axios.post(`${API_BASE}/inventory/stock-in`, data, {
+    const response = await http.post(`${API_BASE}/inventory/stock-in`, data, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   stockOut: async (data: { inventoryId: string; storeId: string; quantity: number; reason: string; note?: string }) => {
-    const response = await axios.post(`${API_BASE}/inventory/stock-out`, data, {
+    const response = await http.post(`${API_BASE}/inventory/stock-out`, data, {
       headers: getAuthHeader()
     })
     return response.data
@@ -320,8 +333,8 @@ export const staffApi = {
   getStockLogs: async (params?: { storeId?: string; inventoryId?: string; type?: 'stock-in' | 'stock-out' }) => {
     try {
       const [stockInRes, stockOutRes] = await Promise.all([
-        axios.get(`${API_BASE}/inventory/logs/stock-in`, { params, headers: getAuthHeader() }),
-        axios.get(`${API_BASE}/inventory/logs/stock-out`, { params, headers: getAuthHeader() })
+        http.get(`${API_BASE}/inventory/logs/stock-in`, { params, headers: getAuthHeader() }),
+        http.get(`${API_BASE}/inventory/logs/stock-out`, { params, headers: getAuthHeader() })
       ])
 
       const stockInLogs = stockInRes.data?.data?.list || []
@@ -344,7 +357,7 @@ export const staffApi = {
 
   getLowStockAlerts: async (storeId: string) => {
     try {
-      const response = await axios.get(`${API_BASE}/inventory/alerts/low-stock`, {
+      const response = await http.get(`${API_BASE}/inventory/alerts/low-stock`, {
         params: { storeId },
         headers: getAuthHeader()
       })
@@ -357,14 +370,14 @@ export const staffApi = {
 
   // Staff Points
   getMyPoints: async () => {
-    const response = await axios.get(`${API_BASE}/staff-points/my`, {
+    const response = await http.get(`${API_BASE}/staff-points/my`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   getMyPointLogs: async (params?: { type?: string; startDate?: string; endDate?: string }) => {
-    const response = await axios.get(`${API_BASE}/staff-points/logs/my`, {
+    const response = await http.get(`${API_BASE}/staff-points/logs/my`, {
       params,
       headers: getAuthHeader()
     })
@@ -372,14 +385,14 @@ export const staffApi = {
   },
 
   getAvailableRewards: async () => {
-    const response = await axios.get(`${API_BASE}/staff-points/rewards/available`, {
+    const response = await http.get(`${API_BASE}/staff-points/rewards/available`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   redeemReward: async (data: { rewardId: string; quantity?: number }) => {
-    const response = await axios.post(`${API_BASE}/staff-points/redeem`, data, {
+    const response = await http.post(`${API_BASE}/staff-points/redeem`, data, {
       headers: getAuthHeader()
     })
     return response.data
@@ -387,21 +400,21 @@ export const staffApi = {
 
   // Staff Deposit
   getMyDeposit: async () => {
-    const response = await axios.get(`${API_BASE}/deposit/staff/my`, {
+    const response = await http.get(`${API_BASE}/deposit/staff/my`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   getMyDepositLogs: async () => {
-    const response = await axios.get(`${API_BASE}/deposit/staff/my/logs`, {
+    const response = await http.get(`${API_BASE}/deposit/staff/my/logs`, {
       headers: getAuthHeader()
     })
     return response.data
   },
 
   getDepositRules: async () => {
-    const response = await axios.get(`${API_BASE}/deposit/rules`, {
+    const response = await http.get(`${API_BASE}/deposit/rules`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -409,7 +422,7 @@ export const staffApi = {
 
   // Training
   getMyTraining: async () => {
-    const response = await axios.get(`${API_BASE}/training/my`, {
+    const response = await http.get(`${API_BASE}/training/my`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -417,7 +430,7 @@ export const staffApi = {
 
   // Recipe book: active products with specs + BOM (ingredients)
   getRecipes: async () => {
-    const response = await axios.get(`${API_BASE}/products`, {
+    const response = await http.get(`${API_BASE}/products`, {
       params: { status: 'active' },
       headers: getAuthHeader()
     })
@@ -426,7 +439,7 @@ export const staffApi = {
 
   // Shift Swap
   getMyShiftSwaps: async () => {
-    const response = await axios.get(`${API_BASE}/shift-swap/my`, {
+    const response = await http.get(`${API_BASE}/shift-swap/my`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -439,7 +452,7 @@ export const staffApi = {
     targetShift: string
     reason?: string
   }) => {
-    const response = await axios.post(`${API_BASE}/shift-swap`, data, {
+    const response = await http.post(`${API_BASE}/shift-swap`, data, {
       headers: getAuthHeader()
     })
     return response.data
@@ -447,7 +460,7 @@ export const staffApi = {
 
   // Overtime Request
   getMyOvertimeRequests: async () => {
-    const response = await axios.get(`${API_BASE}/overtime/my`, {
+    const response = await http.get(`${API_BASE}/overtime/my`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -459,7 +472,7 @@ export const staffApi = {
     endTime: string
     reason?: string
   }) => {
-    const response = await axios.post(`${API_BASE}/overtime`, data, {
+    const response = await http.post(`${API_BASE}/overtime`, data, {
       headers: getAuthHeader()
     })
     return response.data
@@ -467,7 +480,7 @@ export const staffApi = {
 
   // Attendance Correction
   getMyCorrections: async () => {
-    const response = await axios.get(`${API_BASE}/staff-correction/my`, {
+    const response = await http.get(`${API_BASE}/staff-correction/my`, {
       headers: getAuthHeader()
     })
     return response.data
@@ -481,7 +494,7 @@ export const staffApi = {
     correctCheckOut: string
     reason: string
   }) => {
-    const response = await axios.post(`${API_BASE}/staff-correction`, data, {
+    const response = await http.post(`${API_BASE}/staff-correction`, data, {
       headers: getAuthHeader()
     })
     return response.data
@@ -489,7 +502,7 @@ export const staffApi = {
 
   // Training Categories
   getTrainingCategories: async () => {
-    const response = await axios.get(`${API_BASE}/training/categories`, {
+    const response = await http.get(`${API_BASE}/training/categories`, {
       headers: getAuthHeader()
     })
     return response.data

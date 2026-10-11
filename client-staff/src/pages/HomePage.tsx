@@ -1,3 +1,7 @@
+import { EmployeeActions } from '../components/EmployeeActions'
+import { LoadFailure } from '../components/LoadFailure'
+import { RouteLoading } from '../components/RouteLoading'
+import { businessDate } from '../utils/businessDate'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -8,20 +12,15 @@ import {
   Calendar,
   LogOut,
   Bell,
-  CalendarDays,
-  Receipt,
   ShieldCheck,
-  Package,
   Star,
-  Wallet as WalletIcon,
   BookOpen,
   Globe,
   ChevronDown,
   AlertTriangle,
   Award,
   ChevronRight,
-  Sparkles,
-  Lock
+  Sparkles
 } from 'lucide-react'
 
 const LANGUAGES = [
@@ -77,7 +76,8 @@ export function HomePage() {
   const [overview, setOverview] = useState<MonthlyOverviewData | null>(null)
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
   const [pendingTasksCount, setPendingTasksCount] = useState(0)
-  const [, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [showLangMenu, setShowLangMenu] = useState(false)
 
   // Load saved language preference
@@ -92,33 +92,26 @@ export function HomePage() {
     if (user?.staffId) {
       loadData()
     }
-  }, [user])
+  }, [user?.staffId])
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadFailed(false)
     try {
       // 1. Load comprehensive monthly dashboard data
       const [overviewRes, todayAttRes, pendingTasksRes] = await Promise.all([
-        staffApi.getMonthlyOverview().catch(() => null),
-        staffApi.getTodayAttendance(user!.staffId).catch(() => null),
-        staffApi.getMyPendingTasks().catch(() => null)
+        staffApi.getMonthlyOverview(),
+        staffApi.getTodayAttendance(user!.staffId),
+        staffApi.getMyPendingTasks()
       ])
 
-      if (overviewRes?.data) {
-        setOverview(overviewRes.data)
-      }
-      if (todayAttRes?.data) {
-        setTodayAttendance(todayAttRes.data)
-      } else if (overviewRes?.data?.attendance?.todayAttendance) {
-        setTodayAttendance(overviewRes.data.attendance.todayAttendance)
-      }
-      if (pendingTasksRes?.data?.count !== undefined) {
-        setPendingTasksCount(pendingTasksRes.data.count)
-      } else if (overviewRes?.data?.pendingHygieneTasks !== undefined) {
-        setPendingTasksCount(overviewRes.data.pendingHygieneTasks)
-      }
+      if (!overviewRes?.data) throw new Error('Missing overview')
+      setOverview(overviewRes.data)
+      useAuthStore.getState().updateUser({ storeName: overviewRes.data.staff?.storeName })
+      setTodayAttendance(todayAttRes.data ?? null)
+      setPendingTasksCount(pendingTasksRes.data?.count ?? overviewRes.data.pendingHygieneTasks ?? 0)
     } catch (error) {
-      console.error('Failed to load home page data:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
@@ -148,6 +141,12 @@ export function HomePage() {
   }
 
   const todayShift = overview?.schedule?.todayShift
+
+  if (isLoading || loadFailed) return <main className="p-4 space-y-4">
+    <h1 className="text-xl font-bold">{t('nav.home')}</h1>
+    <EmployeeActions />
+    {isLoading ? <RouteLoading /> : <LoadFailure retry={loadData} />}
+  </main>
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -225,7 +224,7 @@ export function HomePage() {
               <div>
                 <p className="text-white/80 text-xs">{t('home.todayScheduleTitle')}</p>
                 <p className="font-bold text-sm text-white">
-                  {todayShift ? `${todayShift.shiftName} (${todayShift.startTime || '08:00'} - ${todayShift.endTime || '16:00'})` : t('home.noShiftToday')}
+                  {todayShift ? `${todayShift.shiftName}${todayShift.startTime && todayShift.endTime ? ` (${todayShift.startTime} - ${todayShift.endTime})` : ''}` : t('home.noShiftToday')}
                 </p>
               </div>
             </div>
@@ -236,10 +235,10 @@ export function HomePage() {
                   <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                     todayAttendance.checkOutTime ? 'bg-white/20 text-white' : 'bg-emerald-400 text-emerald-950'
                   }`}>
-                    {todayAttendance.checkOutTime ? t('home.checkedIn') : t('home.working')}
+                    {todayAttendance.checkOutTime ? t('attendance.checkOut') : t('home.working')}
                   </span>
                   <p className="text-white/70 text-xs mt-1">
-                    {new Date(todayAttendance.checkInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(todayAttendance.checkInTime).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               ) : (
@@ -286,6 +285,8 @@ export function HomePage() {
             {todayAttendance?.checkInTime && !todayAttendance?.checkOutTime ? t('attendance.checkOut') : t('attendance.checkIn')}
           </button>
         </div>
+
+        <EmployeeActions />
 
         {/* 2. Urgent / Active Announcement Bar (if any) */}
         {overview?.announcements && overview.announcements.length > 0 && (
@@ -349,7 +350,7 @@ export function HomePage() {
               <h2 className="font-bold text-gray-900 text-sm">{t('home.monthlyProfile')}</h2>
             </div>
             <span className="text-xs font-medium text-gray-400">
-              {overview?.month || new Date().toISOString().slice(0, 7)}
+              {overview?.month || businessDate().slice(0, 7)}
             </span>
           </div>
 
@@ -429,110 +430,9 @@ export function HomePage() {
             </div>
           </div>
 
-          {/* Confidential Notice (Compliance requirement) */}
-          <div className="mt-3 bg-gray-50/80 rounded-xl p-2.5 flex items-center gap-2 border border-gray-200/60 text-gray-500 text-xs">
-            <Lock size={14} className="text-gray-400 shrink-0" />
-            <p className="text-[11px] leading-tight">
-              {t('home.confidentialNotice')}
-            </p>
-          </div>
-        </div>
-
-        {/* 5. Quick Navigation Grid (All Tools & Sub-modules) */}
-        <div>
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
-            {t('home.quickActions')}
-          </h2>
-
-          <div className="grid grid-cols-4 gap-3">
-            {/* Shift Schedule */}
-            <button
-              onClick={() => navigate('/schedule')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-1.5">
-                <Calendar size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('home.schedule')}</span>
-            </button>
-
-            {/* Attendance Rules */}
-            <button
-              onClick={() => navigate('/attendance/rules')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-1.5">
-                <ShieldCheck size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('attendance.rules')}</span>
-            </button>
-
-            {/* Leave Application */}
-            <button
-              onClick={() => navigate('/leave')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-1.5">
-                <CalendarDays size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('home.leave')}</span>
-            </button>
-
-            {/* Reimbursement */}
-            <button
-              onClick={() => navigate('/reimbursement')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-1.5">
-                <Receipt size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('home.reimbursement')}</span>
-            </button>
-
-            {/* Inventory In/Out */}
-            <button
-              onClick={() => navigate('/inventory')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-1.5">
-                <Package size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('inventory.title')}</span>
-            </button>
-
-            {/* Points & Rewards */}
-            <button
-              onClick={() => navigate('/points')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-1.5">
-                <Star size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('home.points')}</span>
-            </button>
-
-            {/* Deposit */}
-            <button
-              onClick={() => navigate('/deposit')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-1.5">
-                <WalletIcon size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('home.deposit')}</span>
-            </button>
-
-            {/* Training Academy */}
-            <button
-              onClick={() => navigate('/training')}
-              className="bg-white p-3 rounded-2xl shadow-xs border border-gray-100 flex flex-col items-center text-center active:scale-95 transition-transform"
-            >
-              <div className="w-11 h-11 bg-pink-50 text-pink-600 rounded-xl flex items-center justify-center mb-1.5">
-                <BookOpen size={22} />
-              </div>
-              <span className="text-xs font-semibold text-gray-800">{t('home.training')}</span>
-            </button>
-          </div>
+          <button onClick={() => navigate('/salary')} className="mt-3 w-full rounded-xl bg-primary/10 p-3 text-primary font-semibold flex items-center justify-between">
+            <span>{t('salary.title')}</span><ChevronRight size={18} />
+          </button>
         </div>
 
         {/* Training Academy Banner CTA */}

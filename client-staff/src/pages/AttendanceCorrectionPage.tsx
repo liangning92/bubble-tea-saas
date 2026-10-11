@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -25,6 +26,7 @@ export function AttendanceCorrectionPage() {
   const { user } = useAuthStore()
 
   const [requests, setRequests] = useState<CorrectionRequest[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
@@ -40,13 +42,14 @@ export function AttendanceCorrectionPage() {
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadFailed(false)
     try {
       const response = await staffApi.getMyCorrections()
       if (response.data) {
         setRequests(response.data)
       }
     } catch (error) {
-      console.error('Failed to load corrections:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
@@ -92,6 +95,8 @@ export function AttendanceCorrectionPage() {
       </span>
     )
   }
+
+  if (loadFailed) return <LoadFailure retry={loadData} />
 
   return (
     <div className="min-h-screen bg-gray-50">

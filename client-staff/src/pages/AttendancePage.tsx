@@ -1,3 +1,6 @@
+import { LoadFailure } from '../components/LoadFailure'
+import { RouteLoading } from '../components/RouteLoading'
+import { businessDate } from '../utils/businessDate'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -31,35 +34,26 @@ export function AttendancePage() {
   const [showScanner, setShowScanner] = useState(false)
   const [scannerDefaultMode, setScannerDefaultMode] = useState<'check_in' | 'check_out'>('check_in')
 
-  useEffect(() => {
-    if (user?.staffId) {
-      loadTodayAttendance()
-      loadHistory()
-    }
-  }, [user])
+  const [dataLoading, setDataLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const loadTodayAttendance = async () => {
-    try {
-      const response = await staffApi.getTodayAttendance(user!.staffId)
-      if (response.data) {
-        setAttendance(response.data)
-      }
-    } catch (error) {
-      console.error('Failed to load attendance:', error)
-    }
+    const response = await staffApi.getTodayAttendance(user!.staffId)
+    setAttendance(response.data ?? null)
   }
-
   const loadHistory = async () => {
-    try {
-      const now = new Date()
-      const response = await staffApi.getAttendanceHistory(user!.staffId, now.getMonth() + 1, now.getFullYear())
-      if (response.data) {
-        setHistory(response.data)
-      }
-    } catch (error) {
-      console.error('Failed to load history:', error)
-    }
+    const [year, month] = businessDate().split('-').map(Number)
+    const response = await staffApi.getAttendanceHistory(user!.staffId, month, year)
+    setHistory(response.data ?? [])
   }
+  const refresh = async () => {
+    setDataLoading(true)
+    setLoadFailed(false)
+    try { await Promise.all([loadTodayAttendance(), loadHistory()]) }
+    catch { setLoadFailed(true) }
+    finally { setDataLoading(false) }
+  }
+  useEffect(() => { if (user?.staffId) refresh() }, [user?.staffId])
 
   const handleQRCheckIn = async (type: 'check_in' | 'check_out', qrData?: string) => {
     const rawData = (qrData || '').trim()
@@ -83,15 +77,14 @@ export function AttendancePage() {
             text: `${t('attendance.checkInSuccess', '签到成功！')} ${response.data?.storeName ? `(${response.data.storeName})` : ''}`
           })
         } else {
-          setAttendance({ ...attendance, checkOutTime: response.data?.checkOutTime || new Date().toISOString() })
+          setAttendance(response.data ?? attendance)
           setMessage({
             type: 'success',
             text: `${t('attendance.checkOutSuccess', '签退成功！')} ${response.data?.storeName ? `(${response.data.storeName})` : ''}`
           })
         }
         setShowScanner(false)
-        await loadTodayAttendance()
-        loadHistory()
+        await refresh()
       } else {
         setMessage({ type: 'error', text: response.message || t('attendance.checkInFailed') })
       }
@@ -124,7 +117,7 @@ export function AttendancePage() {
     try {
       const response = await staffApi.checkIn({
         storeId: user!.storeId,
-        date: new Date().toISOString().slice(0, 10),
+        date: businessDate(),
         checkInTime: new Date().toISOString(),
         location: locationStr
       })
@@ -132,7 +125,7 @@ export function AttendancePage() {
       if (response.code === 201) {
         setAttendance(response.data)
         setMessage({ type: 'success', text: t('attendance.checkInSuccess') })
-        loadHistory()
+        await refresh()
       } else {
         setMessage({ type: 'error', text: response.message || t('attendance.checkInFailed') })
       }
@@ -172,7 +165,7 @@ export function AttendancePage() {
       if (response.data) {
         setAttendance({ ...attendance, checkOutTime: response.data.checkOutTime })
         setMessage({ type: 'success', text: t('attendance.checkOutSuccess') })
-        loadHistory()
+        await refresh()
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.message || t('attendance.errorOccurred') })
@@ -193,6 +186,9 @@ export function AttendancePage() {
 
   const isCheckedIn = Boolean(attendance?.checkInTime && !attendance?.checkOutTime)
   const isShiftFinished = Boolean(attendance?.checkInTime && attendance?.checkOutTime)
+
+  if (dataLoading) return <RouteLoading />
+  if (loadFailed) return <LoadFailure retry={refresh} />
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">

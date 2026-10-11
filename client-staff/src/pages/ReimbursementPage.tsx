@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -32,15 +33,6 @@ interface ReimbursementType {
   requiresReceipt?: boolean
 }
 
-const DEFAULT_REIMBURSEMENT_TYPES: ReimbursementType[] = [
-  { code: 'transportation', name: 'Transportasi (交通报销)', color: '#3B82F6', maxAmount: null, requiresReceipt: false },
-  { code: 'meals', name: 'Makan (餐饮招待)', color: '#F59E0B', maxAmount: null, requiresReceipt: false },
-  { code: 'communication', name: 'Komunikasi (通讯话费)', color: '#8B5CF6', maxAmount: null, requiresReceipt: false },
-  { code: 'medical', name: 'Medis (医疗药品)', color: '#EF4444', maxAmount: null, requiresReceipt: false },
-  { code: 'office', name: 'Perlengkapan (办公杂支)', color: '#10B981', maxAmount: null, requiresReceipt: false },
-  { code: 'other', name: 'Lainnya (其他杂费)', color: '#6B7280', maxAmount: null, requiresReceipt: false }
-]
-
 export function ReimbursementPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
@@ -53,36 +45,27 @@ export function ReimbursementPage() {
     cancelled: t('reimbursement.statusCancelled')
   }
 
-  const [availableTypes, setAvailableTypes] = useState<ReimbursementType[]>(DEFAULT_REIMBURSEMENT_TYPES)
+  const [availableTypes, setAvailableTypes] = useState<ReimbursementType[]>([])
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showApplyModal, setShowApplyModal] = useState(false)
 
   useEffect(() => {
     if (user?.staffId) {
       loadData()
-      loadTypes()
     }
   }, [user])
 
-  const loadTypes = async () => {
-    try {
-      const res = await staffApi.getReimbursementTypes()
-      if (res.data && res.data.length > 0) {
-        setAvailableTypes(res.data)
-      }
-    } catch (e) {
-      console.warn('Failed to load reimbursement types, using fallback:', e)
-    }
-  }
-
   const loadData = async () => {
     setIsLoading(true)
+    setLoadFailed(false)
     try {
-      const response = await staffApi.getMyReimbursements()
+      const [response, types] = await Promise.all([staffApi.getMyReimbursements(), staffApi.getReimbursementTypes()])
+      setAvailableTypes(types.data || [])
       setReimbursements(response.data || [])
     } catch (error) {
-      console.error('Failed to load reimbursements:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
@@ -122,6 +105,8 @@ export function ReimbursementPage() {
     }
   }
 
+  if (loadFailed) return <LoadFailure retry={loadData} />
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
@@ -141,6 +126,8 @@ export function ReimbursementPage() {
             </div>
           </div>
           <button
+            disabled={isLoading || !availableTypes.length}
+            aria-label={t('reimbursement.title')}
             onClick={() => setShowApplyModal(true)}
             className="bg-white text-primary p-2 rounded-full"
           >
@@ -231,7 +218,7 @@ interface ApplyReimbursementModalProps {
 
 function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyReimbursementModalProps) {
   const { t } = useTranslation()
-  const [reimbType, setReimbType] = useState(availableTypes[0]?.code || 'transportation')
+  const [reimbType, setReimbType] = useState(availableTypes[0]?.code || '')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<File[]>([])

@@ -1,6 +1,6 @@
 import { updateStaffSystemRole } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
-import { formatDate } from '../utils/dateUtils'
+import { formatDate, startOfDay as wibDayStart, endOfDay as wibDayEnd, startOfWeek as wibWeekStart } from '../utils/dateUtils'
 import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -547,14 +547,14 @@ router.get('/attendance/today', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ code: 404, message: 'Staff profile not found' })
     }
 
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
+    const startOfDay = wibDayStart(new Date())
 
     const attendance = await prisma.attendance.findFirst({
       where: {
         staffId: staff.id,
-        checkInTime: { gte: startOfDay }
-      }
+        checkInTime: { gte: startOfDay, lte: wibDayEnd(startOfDay) }
+      },
+      orderBy: { checkInTime: 'desc' }
     })
 
     res.json({
@@ -779,9 +779,11 @@ router.get('/schedule/my', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ code: 404, message: 'Staff profile not found' })
     }
 
-    const startOfWeek = weekStart ? new Date(weekStart as string) : new Date()
-    const endOfWeek = new Date(startOfWeek)
-    endOfWeek.setDate(startOfWeek.getDate() + 6)
+    let startOfWeek: Date
+    try { startOfWeek = weekStart ? parseDateBoundary(weekStart as string) : wibWeekStart(new Date()) }
+    catch { return res.status(400).json({ code: 400, message: 'Invalid weekStart' }) }
+    if (!startOfWeek || isNaN(startOfWeek.getTime())) return res.status(400).json({ code: 400, message: 'Invalid weekStart' })
+    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 86400000 - 1)
 
     const schedules = await prisma.schedule.findMany({
       where: {
@@ -804,9 +806,11 @@ router.get('/schedule/my', authenticate, async (req: AuthRequest, res) => {
 
     const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
     schedules.forEach(s => {
-      const dayIndex = new Date(s.date).getDay()
+      const dayIndex = new Date(`${formatDate(s.date)}T12:00:00+07:00`).getUTCDay()
       weeklySchedule[dayKeys[dayIndex]] = s.shift
     })
+
+    weeklySchedule.shiftDetails = await prisma.shift.findMany({ where: { storeId: staff.storeId }, select: { key: true, name: true, startTime: true, endTime: true, color: true } })
 
     res.json({
       code: 200,
@@ -833,11 +837,11 @@ router.get('/attendance/history', authenticate, async (req: AuthRequest, res) =>
     }
 
     const now = new Date()
-    const targetMonth = month ? parseInt(month as string) : now.getMonth() + 1
-    const targetYear = year ? parseInt(year as string) : now.getFullYear()
+    const targetMonth = month ? parseInt(month as string) : Number(formatDate(now).slice(5, 7))
+    const targetYear = year ? parseInt(year as string) : Number(formatDate(now).slice(0, 4))
 
-    const startDate = new Date(targetYear, targetMonth - 1, 1)
-    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59)
+    const startDate = new Date(Date.UTC(targetYear, targetMonth - 1, 1) - 7 * 3600000)
+    const endDate = new Date(Date.UTC(targetYear, targetMonth, 1) - 7 * 3600000 - 1)
 
     const attendances = await prisma.attendance.findMany({
       where: {
@@ -871,11 +875,11 @@ router.get('/overview/monthly', authenticate, async (req: AuthRequest, res) => {
     }
 
     const now = new Date()
-    const targetMonth = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1
-    const targetYear = req.query.year ? parseInt(req.query.year as string) : now.getFullYear()
+    const targetMonth = req.query.month ? parseInt(req.query.month as string) : Number(formatDate(now).slice(5, 7))
+    const targetYear = req.query.year ? parseInt(req.query.year as string) : Number(formatDate(now).slice(0, 4))
 
-    const monthStart = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0)
-    const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999)
+    const monthStart = new Date(Date.UTC(targetYear, targetMonth - 1, 1) - 7 * 3600000)
+    const monthEnd = new Date(Date.UTC(targetYear, targetMonth, 1) - 7 * 3600000 - 1)
 
     // 1. 本月考勤数据
     const attendances = await prisma.attendance.findMany({
@@ -886,12 +890,12 @@ router.get('/overview/monthly', authenticate, async (req: AuthRequest, res) => {
       orderBy: { checkInTime: 'desc' }
     })
 
-    const presentDays = attendances.length
+    const presentDays = new Set(attendances.map(a => formatDate(a.checkInTime))).size
     const lateCount = attendances.filter(a => a.status === 'late').length
     const earlyLeaveCount = attendances.filter(a => a.status === 'early').length
 
     // 今日打卡
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+    const todayStart = wibDayStart(now)
     const todayAttendance = attendances.find(a => new Date(a.checkInTime) >= todayStart) || null
 
     // 2. 本月请假天数
@@ -939,14 +943,8 @@ router.get('/overview/monthly', authenticate, async (req: AuthRequest, res) => {
     const penaltiesCount = disciplines.filter(d => ['warning', 'deduction', 'suspension'].includes(d.type)).length + monthlyPointLogs.filter(l => l.points < 0).length
 
     // 4. 本周排班与今日班次
-    const dayOfWeek = now.getDay() // 0 is Sunday
-    const weekStart = new Date(now)
-    weekStart.setDate(now.getDate() - dayOfWeek)
-    weekStart.setHours(0, 0, 0, 0)
-
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
-    weekEnd.setHours(23, 59, 59, 999)
+    const weekStart = wibWeekStart(now)
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86400000 - 1)
 
     const weekSchedules = await prisma.schedule.findMany({
       where: {
@@ -961,8 +959,8 @@ router.get('/overview/monthly', authenticate, async (req: AuthRequest, res) => {
     })
     const shiftMap = new Map(shifts.map(s => [s.key, s]))
 
-    const todayDateString = now.toISOString().slice(0, 10)
-    const todayScheduleRecord = weekSchedules.find(s => s.date.toISOString().slice(0, 10) === todayDateString)
+    const todayDateString = formatDate(now)
+    const todayScheduleRecord = weekSchedules.find(s => formatDate(s.date) === todayDateString)
 
     // 5. 待办卫生任务统计
     const pendingTasks = await prisma.hygieneTask.count({
@@ -980,9 +978,10 @@ router.get('/overview/monthly', authenticate, async (req: AuthRequest, res) => {
     const activeAnnouncements = await prisma.announcement.findMany({
       where: {
         storeId: staff.storeId,
-        isActive: true
+        isActive: true,
+        AND: [{ OR: [{ startAt: null }, { startAt: { lte: now } }] }, { OR: [{ endAt: null }, { endAt: { gte: now } }] }]
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { priority: 'desc' },
       take: 2
     })
 
@@ -1022,7 +1021,7 @@ router.get('/overview/monthly', authenticate, async (req: AuthRequest, res) => {
             color: shiftMap.get(todayScheduleRecord.shift)?.color
           } : null,
           weeklyList: weekSchedules.map(s => ({
-            date: s.date.toISOString().slice(0, 10),
+            date: formatDate(s.date),
             shift: s.shift,
             shiftName: shiftMap.get(s.shift)?.name || s.shift,
             color: shiftMap.get(s.shift)?.color
