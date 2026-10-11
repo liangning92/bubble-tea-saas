@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { shiftHandoverFinancials } from '../services/ShiftHandoverFinancials'
 import { parseDateBoundary } from '../utils/businessDate'
 import { calculateShiftCash, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
@@ -11,6 +12,7 @@ import { loadShiftSummaryEvidence } from '../services/ShiftSummaryEvidence'
 import { startOfTodayJakarta } from '../utils/dateUtils'
 
 const router = Router()
+const reviewedSnapshotSchema = z.object({sessionId:z.string().min(1),updatedAt:z.string().datetime(),openFloat:z.number().int().min(0),revenue:z.number().finite(),expenses:z.number().finite(),qris:z.number().finite()}).strict()
 
 // ==================== CASH EVENTS ====================
 
@@ -185,6 +187,8 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     const storeId = req.user!.storeId
     const staffId = req.user!.staffId || ''
     const { actualCash, closeNote, nextStaffId } = req.body
+    const reviewed = req.body.reviewedSnapshot === undefined ? null : reviewedSnapshotSchema.safeParse(req.body.reviewedSnapshot)
+    if (reviewed && !reviewed.success) return res.status(400).json({code:400,message:'SHIFT_PREVIEW_INVALID'})
     const parsedReceipts = req.body.manualReceipts === undefined ? null : manualReceiptsSchema.safeParse(req.body.manualReceipts)
     if (parsedReceipts && !parsedReceipts.success) return res.status(400).json({code:400,message:'SHIFT_MANUAL_RECEIPTS_INVALID'})
     const manualReceipts = parsedReceipts?.success ? parsedReceipts.data : null
@@ -221,6 +225,11 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
       const captured = await loadShiftSummaryEvidence(tx, storeId, closedAt, currentShift)
       const evidence = captured.summaryEvidence
       const cashReconciliation = await calculateShiftCash(tx, storeId, currentShift, closedAt)
+      if (reviewed?.success) {
+        const latest = await tx.shiftSession.findUniqueOrThrow({where:{id:currentShift.id}})
+        const snapshot = reviewed.data
+        if (latest.status !== 'open' || snapshot.sessionId !== latest.id || snapshot.updatedAt !== latest.updatedAt.toISOString() || snapshot.openFloat !== latest.openFloat || snapshot.revenue !== cashReconciliation.revenue || snapshot.expenses !== cashReconciliation.expenses || snapshot.qris !== cashReconciliation.qris) throw Error('SHIFT_PREVIEW_CHANGED')
+      }
       const recordedBalance = cashReconciliation.expectedCash
       const expectedCash = cashReconciliation.expectedCash
       const cashWarning = cashWarningFor(currentShift.id, actualCash, cashReconciliation, closedAt)
@@ -241,6 +250,7 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     })
     res.json({ code: 200, data: result })
   } catch (error) {
+    if (error instanceof Error && error.message === 'SHIFT_PREVIEW_CHANGED') return res.status(409).json({code:409,message:error.message})
     console.error('Close shift error:', error)
     res.status(500).json({ code: 500, message: 'Failed to close shift' })
   }

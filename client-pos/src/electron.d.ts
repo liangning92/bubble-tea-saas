@@ -9,6 +9,9 @@ declare global {
       openCashDrawer: (data?: { printerName?: string }) => Promise<{ success: boolean; error?: string }>
       listPrinters: () => Promise<{ printers: string[] }>
 
+  onReceiptHandover: (callback: (prompt: { requestId:string; title:string; message:string; button:string; orderNum:string; copiesSubmitted:number; printCopies:number }) => void) => () => void
+  confirmReceiptHandover: (requestId:string, confirmed:boolean) => void
+
       // Config
       setApiUrl: (url: string) => Promise<{ success: boolean; error?: string }>
       getApiUrl: () => Promise<{ url: string }>

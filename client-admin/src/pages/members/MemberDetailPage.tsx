@@ -1,3 +1,4 @@
+import { OrderItemRows } from '../../components/OrderItemsTable'
 import { useState } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -110,9 +111,9 @@ export function MemberDetailPage() {
             {member.orders?.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">{t('orders.orderNumber')}</th><th>{t('orders.date')}</th><th>{t('orders.status')}</th><th className="text-right">{t('orders.amount')}</th></tr></thead>
+                  <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">{t('shiftHandover.products')}</th><th className="px-4 text-right">{t('shiftReview.quantity')}</th><th>{t('orders.date')}</th><th>{t('orders.status')}</th><th className="text-right">{t('orders.amount')}</th></tr></thead>
                   <tbody>{member.orders.map((order: any) => (
-                    <tr key={order.id} className="border-b last:border-0"><td className="py-2 font-mono">{order.orderNumber}</td><td>{formatDateTime(order.createdAt)}</td><td>{order.status}</td><td className="text-right">{formatCurrency(order.finalAmount ?? order.totalAmount)}</td></tr>
+                    <OrderItemRows key={order.id} items={order.items} trailing={rowSpan => <><td rowSpan={rowSpan}>{formatDateTime(order.createdAt)}</td><td rowSpan={rowSpan}>{order.status}</td><td rowSpan={rowSpan} className="text-right">{formatCurrency(order.finalAmount ?? order.totalAmount)}</td></>} />
                   ))}</tbody>
                 </table>
               </div>

@@ -75,6 +75,11 @@ jobs:
       - name: Install Chromium for workflow regression tests
         run: npx playwright install --with-deps chromium
 
+      - name: Verify receipt layout and styled copy handover without physical printing
+        run: |
+          node --test tests/stoploss/receipt-layout-page-check.cjs
+          node tests/stoploss/receipt-handover-ui-check.cjs
+
       - name: Verify unified activity administration, cashier pricing and TV playback
         env:
           ACTIVITY_ADMIN_BUILD: ${{ github.workspace }}/client-admin/dist
@@ -98,6 +103,8 @@ jobs:
           export PATH="$(pg_config --bindir):$PATH"
           INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_PROVIDER=sqlite node tests/stoploss/shift-review-http-check.cjs
           INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_PROVIDER=postgresql SHIFT_REVIEW_UI=1 node tests/stoploss/shift-review-http-check.cjs
+          INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=sqlite node tests/stoploss/shift-correction-http-check.cjs
+          INTENT_RUNTIME="$RECEIPT_RUNTIME" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=postgresql node tests/stoploss/shift-correction-http-check.cjs
 
       - name: Verify route chunks, authentication and offline desktop assets
         run: node tests/stoploss/route-splitting-page-check.cjs

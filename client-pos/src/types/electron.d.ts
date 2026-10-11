@@ -61,6 +61,9 @@ interface ElectronAPI {
   openCashDrawer: (data?: { printerName?: string }) => Promise<CashDrawerResult>
   listPrinters: () => Promise<PrinterListResult>
 
+  onReceiptHandover: (callback: (prompt: { requestId:string; title:string; message:string; button:string; orderNum:string; copiesSubmitted:number; printCopies:number }) => void) => () => void
+  confirmReceiptHandover: (requestId:string, confirmed:boolean) => void
+
   // Config
   setApiUrl: (url: string) => Promise<{ success: boolean }>
   getApiUrl: () => Promise<{ url: string }>

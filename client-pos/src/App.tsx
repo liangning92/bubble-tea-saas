@@ -1,3 +1,4 @@
+import { ReceiptHandoverModal } from './components/ReceiptHandoverModal'
 import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
@@ -33,6 +34,7 @@ function App() {
   return (
     <>
       <UpdateNotification />
+      <ReceiptHandoverModal />
       <div style={installing?{pointerEvents:'none'}:undefined} onKeyDownCapture={event=>{if(installing){event.preventDefault();event.stopPropagation()}}}>
       <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />

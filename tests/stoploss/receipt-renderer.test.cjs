@@ -6,8 +6,8 @@ const moduleSource=ts.transpileModule(fs.readFileSync('client-pos/electron/recei
 const exportsObject={};vm.runInNewContext(moduleSource,{exports:exportsObject,require,Buffer,URL,setTimeout,clearTimeout});
 const fixturePng=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]);
 function renderer(imageApi){
- const context={Buffer,Math,Date,Set,URL,fs,path,require,setTimeout,clearTimeout,fetchReceiptLogo:exportsObject.fetchReceiptLogo,logoMemoryCache:new Map(),writeCrash:()=>{},getResourcePath:()=>'/tmp/receipt-nonexistent',app:{getAppPath:()=>'/tmp/receipt-nonexistent'},encodeEscPosText:s=>Buffer.from(s,'utf8'),nativeImage:imageApi||{createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:8,height:8}),resize:({width,height})=>({toBitmap:()=>Buffer.alloc(width*height*4,0xff)})})}};
- vm.runInNewContext(ts.transpileModule(functions+'\nglobalThis.render=buildReceiptEscPosBuffer;globalThis.shift=generateShiftReportText;globalThis.load=loadLogoBuffer;',{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);return context;
+ const context={Buffer,Math,Date,Set,URL,fs,path,require,setTimeout,clearTimeout,fetchReceiptLogo:exportsObject.fetchReceiptLogo,createHash:require('node:crypto').createHash,logoRasterCache:new Map(),logoMemoryCache:new Map(),logoPendingLoads:new Map(),logoRetryAfter:new Map(),writeCrash:()=>{},getResourcePath:()=>'/tmp/receipt-nonexistent',app:{getAppPath:()=>'/tmp/receipt-nonexistent'},encodeEscPosText:s=>Buffer.from(s,'utf8'),nativeImage:imageApi||{createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:8,height:8}),resize:({width,height})=>({toBitmap:()=>Buffer.alloc(width*height*4,0xff)})})}};
+ vm.runInNewContext(ts.transpileModule(functions+'\nglobalThis.render=buildReceiptEscPosBuffer;globalThis.shift=generateShiftReportText;globalThis.load=loadLogoBuffer;globalThis.imageBufferToEscPosRaster=imageBufferToEscPosRaster;',{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);return context;
 }
 function block(type,config={},style={},order=0,enabled=true){return {type,config,style,order,enabled};}
 async function server(fn){const s=http.createServer(fn);await new Promise(r=>s.listen(0,'127.0.0.1',r));return {url:'http://127.0.0.1:'+s.address().port,close:()=>new Promise(r=>{s.closeAllConnections();s.close(r)})};}
@@ -42,4 +42,14 @@ test('template barcode height, symbology and code alignment are retained',async(
 test('unconfigured legacy receipts still render without a template scope error',async()=>{
  const bytes=await renderer().render({orderNum:'7K3M9Q2R5A',items:[{productName:'Tea',quantity:1,unitPrice:10000}],total:10000,showBarcode:true});
  assert.ok(bytes.includes(Buffer.from('NO. 7K3M9Q2R5A')));assert.ok(bytes.includes(Buffer.from([0x1d,0x6b,0x49])));
+});
+
+test('concurrent logo requests share one download and failed logos do not delay every following receipt',async()=>{
+ let hits=0;const s=await server((req,res)=>{hits++;setTimeout(()=>{res.writeHead(404);res.end()},30)});
+ try{const ctx=renderer();const results=await Promise.all([ctx.load(s.url+'/missing.png'),ctx.load(s.url+'/missing.png')]);assert.deepEqual(results,[null,null]);assert.equal(hits,1);assert.equal(await ctx.load(s.url+'/missing.png'),null);assert.equal(hits,1)}finally{await s.close()}
+});
+
+test('logo raster cache reuses the same pixels while paper width and alignment remain distinct',()=>{
+ let conversions=0;const ctx=renderer({createFromBuffer:()=>{conversions++;return {isEmpty:()=>false,getSize:()=>({width:8,height:8}),resize:({width,height})=>({toBitmap:()=>Buffer.alloc(width*height*4,0xff)})}}});
+ const first=ctx.imageBufferToEscPosRaster(fixturePng,384,'center');assert.ok(first);assert.equal(ctx.imageBufferToEscPosRaster(fixturePng,384,'center'),first);assert.equal(conversions,1);ctx.imageBufferToEscPosRaster(fixturePng,576,'center');ctx.imageBufferToEscPosRaster(fixturePng,384,'left');assert.equal(conversions,3);
 });
