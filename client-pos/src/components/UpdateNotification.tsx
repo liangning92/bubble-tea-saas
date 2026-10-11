@@ -18,10 +18,12 @@ export function UpdateNotification({className = ''}: {className?: string}) {
   useEffect(() => {
     const api = window.electronAPI
     if (!api) return
+    const manualCheck = () => { manual.current = true; setError(null); setStatus('checking'); setVisible(true) }
+    window.addEventListener('pos-update-check-requested', manualCheck)
     let disposed = false
     void api.getAppVersion().then(version => {if (!disposed) {current.current = version; setCurrentVersion(version)}}).catch(() => {})
     const offStatus = api.onUpdateStatus((next: string, value?: any) => {
-      if (next === 'checking') return
+      if (next === 'checking') {if (manual.current) {setStatus(next); setVisible(true)}; return}
       const installed = value?.currentVersion || current.current
       if (next === 'available' || next === 'downloaded') {
         if (!isNewerUpdate(value?.version, installed)) return
@@ -41,7 +43,7 @@ export function UpdateNotification({className = ''}: {className?: string}) {
       if (manual.current) setVisible(true)
       manual.current = false
     })
-    return () => {disposed = true; offStatus?.(); offProgress?.(); offError?.()}
+    return () => {window.removeEventListener('pos-update-check-requested', manualCheck); disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
   const run = async (action: 'check'|'download'|'show'|'install') => {
     const api = window.electronAPI
