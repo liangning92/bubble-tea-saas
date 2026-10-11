@@ -390,7 +390,7 @@ export function CustomerDisplayPage(): React.ReactElement {
   if (displayState === 'paying' && paymentQr) {
     return (
       <div style={{ width: '100vw', height: '100vh' }}>
-      <CustomerDisplayCanvas background="#0f172a">
+      <CustomerDisplayCanvas fit="fill" background="#0f172a">
       <div className="w-full h-full bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center p-8 text-white">
         <div className="bg-white text-gray-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in duration-300">
           <div className="flex items-center gap-2 mb-3">
@@ -420,7 +420,7 @@ export function CustomerDisplayPage(): React.ReactElement {
   if (displayState === 'complete') {
     return (
       <div style={{ width: '100vw', height: '100vh' }}>
-      <CustomerDisplayCanvas background={background}>
+      <CustomerDisplayCanvas fit="fill" background={background}>
       <div className="w-full h-full flex flex-col items-center justify-center" style={{ background, color: textColor }}>
         <div className="text-8xl mb-6">✓</div>
         <h1 className="text-5xl font-bold mb-2">{t('customerDisplay.thankYou')}</h1>
@@ -437,7 +437,7 @@ export function CustomerDisplayPage(): React.ReactElement {
   // Render dynamic layout: columns contain independently sized rows.
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background }}>
-      <CustomerDisplayCanvas background={background}>
+      <CustomerDisplayCanvas fit="fill" background={background}>
         <CustomerDisplayLayout columns={currentLayout?.columns || []} background={background} renderContent={content => renderColumnContent(content, videoRef)} />
       </CustomerDisplayCanvas>
     </div>

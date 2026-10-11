@@ -4,9 +4,10 @@ import React, { useLayoutEffect, useRef, useState } from 'react'
 export const CUSTOMER_CANVAS_WIDTH = 1280
 export const CUSTOMER_CANVAS_HEIGHT = 720
 
-export function CustomerDisplayCanvas({ children, background }: {
+export function CustomerDisplayCanvas({ children, background, fit = 'contain' }: {
   children: React.ReactNode
   background: string
+  fit?: 'contain' | 'fill'
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -20,12 +21,15 @@ export function CustomerDisplayCanvas({ children, background }: {
     return () => observer.disconnect()
   }, [])
   const scale = Math.min(size.width / CUSTOMER_CANVAS_WIDTH, size.height / CUSTOMER_CANVAS_HEIGHT)
+  // Keep uniform scaling while letting the physical display use its full aspect ratio.
+  const width = fit === 'fill' && scale > 0 ? size.width / scale : CUSTOMER_CANVAS_WIDTH
+  const height = fit === 'fill' && scale > 0 ? size.height / scale : CUSTOMER_CANVAS_HEIGHT
   return (
     <div ref={host} data-customer-display-viewport style={{ position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', background }}>
       <div data-customer-display-canvas style={{
-        position: 'absolute', width: CUSTOMER_CANVAS_WIDTH, height: CUSTOMER_CANVAS_HEIGHT,
-        left: (size.width - CUSTOMER_CANVAS_WIDTH * scale) / 2,
-        top: (size.height - CUSTOMER_CANVAS_HEIGHT * scale) / 2,
+        position: 'absolute', width, height,
+        left: (size.width - width * scale) / 2,
+        top: (size.height - height * scale) / 2,
         transform: `scale(${scale})`, transformOrigin: 'top left',
         visibility: scale > 0 ? 'visible' : 'hidden', overflow: 'hidden', background,
         fontFamily: 'Arial, "Noto Sans", sans-serif', fontSize: 16, lineHeight: 1.5,
