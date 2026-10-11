@@ -1,3 +1,4 @@
+import { TrainingSectionExtras, TrainingModuleExtras } from '../../../shared/components/TrainingExtras'
 import { businessDate } from '../utils/businessDate'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -25,12 +26,10 @@ import {
   Sparkles
 } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
-import {
-  TRAINING_MODULES,
-  CHECKLISTS,
-  TrainingModule,
-  tr
-} from '../data/trainingContent'
+import { useTrainingCatalogue, TrainingModule, tr } from '../../../shared/hooks/useTrainingCatalogue'
+import { trainingCopy } from '../../../shared/utils/trainingCopy'
+import { TrainingDocument } from '../components/TrainingDocument'
+import { TrainingVideo } from '../components/TrainingVideo'
 
 interface Training {
   id: string
@@ -59,7 +58,10 @@ interface TrainingCategory {
 export function TrainingPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
+  const catalogue = useTrainingCatalogue(token, user?.storeId)
+  const w = trainingCopy(i18n.language)
+  const progressScope = `${user?.storeId}:${user?.staffId}:${catalogue.revision}`
 
   // Tab: 'courses' | 'checklists' | 'records'
   const [activeTab, setActiveTab] = useState<'courses' | 'checklists' | 'records'>('courses')
@@ -86,20 +88,22 @@ export function TrainingPage() {
 
   // Load completed modules and checklist state from localStorage
   useEffect(() => {
+    setCompletedModules({});setCheckedItems({});setSelectedModule(null)
+    if (!catalogue.revision) return
     try {
-      const savedModules = localStorage.getItem(`btps_completed_training_modules_${user?.staffId}`)
+      const savedModules = localStorage.getItem(`btps_completed_training_modules_${progressScope}`)
       if (savedModules) {
         setCompletedModules(JSON.parse(savedModules))
       }
       const today = businessDate()
-      const savedChecks = localStorage.getItem(`btps_training_checklist_${user?.staffId}_${today}`)
+      const savedChecks = localStorage.getItem(`btps_training_checklist_${progressScope}_${today}`)
       if (savedChecks) {
         setCheckedItems(JSON.parse(savedChecks))
       }
     } catch (e) {
       console.warn('Failed to load local training state:', e)
     }
-  }, [user?.staffId])
+  }, [progressScope])
 
   const STATUS_ICONS: Record<string, JSX.Element> = {
     scheduled: <Clock className="text-blue-500" size={18} />,
@@ -181,7 +185,7 @@ export function TrainingPage() {
 
   // Submit Quiz
   const handleSubmitQuiz = () => {
-    if (!selectedModule) return
+    if (!selectedModule || !selectedModule.quiz.length) return
     let correctCount = 0
     selectedModule.quiz.forEach((q, idx) => {
       if (selectedAnswers[idx] === q.answer) {
@@ -198,7 +202,7 @@ export function TrainingPage() {
       const updated = { ...completedModules, [selectedModule.key]: true }
       setCompletedModules(updated)
       try {
-        localStorage.setItem(`btps_completed_training_modules_${user?.staffId}`, JSON.stringify(updated))
+        localStorage.setItem(`btps_completed_training_modules_${progressScope}`, JSON.stringify(updated))
       } catch {}
     }
   }
@@ -209,7 +213,7 @@ export function TrainingPage() {
     const updated = { ...checkedItems, [key]: !checkedItems[key] }
     setCheckedItems(updated)
     try {
-      localStorage.setItem(`btps_training_checklist_${user?.staffId}_${today}`, JSON.stringify(updated))
+      localStorage.setItem(`btps_training_checklist_${progressScope}_${today}`, JSON.stringify(updated))
     } catch {}
   }
 
@@ -217,12 +221,12 @@ export function TrainingPage() {
     const today = businessDate()
     setCheckedItems({})
     try {
-      localStorage.removeItem(`btps_training_checklist_${user?.staffId}_${today}`)
+      localStorage.removeItem(`btps_training_checklist_${progressScope}_${today}`)
     } catch {}
   }
 
   const completedCount = Object.keys(completedModules).length
-  const totalCourses = TRAINING_MODULES.length
+  const totalCourses = catalogue.modules.length
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -245,7 +249,7 @@ export function TrainingPage() {
             </div>
           </div>
           <button
-            onClick={loadData}
+            onClick={() => {void loadData();catalogue.refresh()}}
             className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
             title="Refresh"
           >
@@ -283,7 +287,7 @@ export function TrainingPage() {
               <BookOpen size={16} />
               {t('training.coursesTab', '课程学习')}
             </span>
-            {activeTab === 'courses' && (
+            {activeTab === 'courses' && !catalogue.loading && !catalogue.error && (
               <span className="absolute bottom-0 left-4 right-4 h-0.5 bg-primary rounded-full" />
             )}
           </button>
@@ -298,7 +302,7 @@ export function TrainingPage() {
               <CheckSquare size={16} />
               {t('training.checklistsTab', '开闭店规范')}
             </span>
-            {activeTab === 'checklists' && (
+            {activeTab === 'checklists' && !catalogue.loading && !catalogue.error && (
               <span className="absolute bottom-0 left-4 right-4 h-0.5 bg-primary rounded-full" />
             )}
           </button>
@@ -320,15 +324,18 @@ export function TrainingPage() {
         </div>
       </div>
 
+      {activeTab !== 'records' && catalogue.loading && <p role="status" className="p-4 text-sm">{w.loading}</p>}
+      {activeTab !== 'records' && catalogue.error && <div role="alert" className="p-4 text-red-700">{w.loadFailed} <button className="underline" onClick={catalogue.refresh}>{w.retry}</button></div>}
       {/* Tab 1: Course Modules */}
-      {activeTab === 'courses' && (
+      {activeTab === 'courses' && !catalogue.loading && !catalogue.error && (
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between text-xs text-gray-500 px-1">
             <span>{t('training.coursesTab', '标准 SOP 培训体系')}</span>
             <span>{completedCount}/{totalCourses} {t('training.completed', '已完成')}</span>
           </div>
 
-          {TRAINING_MODULES.map((mod) => {
+          {catalogue.modules.length === 0 && <p className="text-sm text-gray-500">{w.emptyCourses}</p>}
+          {catalogue.modules.map((mod) => {
             const isCompleted = !!completedModules[mod.key]
             return (
               <div
@@ -380,7 +387,7 @@ export function TrainingPage() {
       )}
 
       {/* Tab 2: Checklists */}
-      {activeTab === 'checklists' && (
+      {activeTab === 'checklists' && !catalogue.loading && !catalogue.error && (
         <div className="p-4 space-y-5">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs text-gray-500">
@@ -395,7 +402,8 @@ export function TrainingPage() {
             </button>
           </div>
 
-          {CHECKLISTS.map((list) => {
+          {catalogue.checklists.length === 0 && <p className="text-sm text-gray-500">{w.emptyChecklists}</p>}
+          {catalogue.checklists.map((list) => {
             const checkedCount = list.items.filter((_, idx) => checkedItems[`${list.key}_${idx}`]).length
             const isAllDone = checkedCount === list.items.length
 
@@ -636,6 +644,8 @@ export function TrainingPage() {
                       </div>
 
                       {/* Points */}
+                      {sec.documentId && <TrainingDocument id={sec.documentId} token={token} />}
+                      {sec.videoId && <TrainingVideo id={sec.videoId} token={token} />}
                       <ul className="space-y-2 text-xs text-gray-700">
                         {sec.points.map((pt, ptIdx) => (
                           <li key={ptIdx} className="flex items-start gap-2 leading-relaxed">
@@ -645,6 +655,7 @@ export function TrainingPage() {
                         ))}
                       </ul>
 
+                      <TrainingSectionExtras section={sec} language={i18n.language} />
                       {/* Key Tip */}
                       {sec.tip && (
                         <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">
@@ -668,6 +679,7 @@ export function TrainingPage() {
                       )}
                     </div>
                   ))}
+                  <TrainingModuleExtras module={selectedModule} language={i18n.language} />
                 </>
               ) : (
                 /* Quiz View */
@@ -764,13 +776,13 @@ export function TrainingPage() {
                   >
                     {t('training.close', '关闭')}
                   </button>
-                  <button
+                  {selectedModule.quiz.length > 0 && <button
                     onClick={() => setShowQuiz(true)}
                     className="flex-1 py-3 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-hover flex items-center justify-center gap-1.5 transition-colors shadow-xs"
                   >
                     <Play size={14} />
                     {t('training.takeQuiz', '开始随堂测验')}
-                  </button>
+                  </button>}
                 </>
               ) : (
                 <>
