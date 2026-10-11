@@ -105,6 +105,22 @@ async function navigate(page, kind, route) {
       console.log(`PASS ${kind}: login isolation, auth redirect, delayed route and navigation, direct refresh`);
     } finally {await auth.context.close();}
     if (kind === 'admin') {
+      const recovered = await setup(kind);
+      try {
+        let attempts = 0, reloads = 0;
+        recovered.page.on('request', request => {
+          if (request.isNavigationRequest() && new URL(request.url()).pathname === '/register') reloads++;
+        });
+        await recovered.page.goto(url('/login'));
+        await expect(recovered.page.locator('input[type="password"]')).toBeVisible();
+        await recovered.page.route('**/RegisterPage-*.js', route => ++attempts === 1 ? route.abort() : route.continue());
+        await navigate(recovered.page, kind, '/register');
+        await expect(recovered.page.locator('input[name="password"]')).toBeVisible();
+        assert.equal(attempts, 2, 'the refreshed document retries the missing route chunk');
+        assert.equal(reloads, 1, 'a single fresh document recovers the route');
+        assert(!recovered.page.url().includes('__btps_reload'));
+        console.log('PASS stale route chunk recovers after one fresh document load');
+      } finally {await recovered.context.close();}
       const failure = await setup(kind);
       try {
         let recoveryLoads = 0;
