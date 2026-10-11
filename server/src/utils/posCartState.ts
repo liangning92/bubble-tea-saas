@@ -20,7 +20,9 @@ export function projectCartState(logs: Log[]) {
   let unknownCount = 0
   for (const log of logs) {
     const meta = metadata(log)
-    if (Object.prototype.hasOwnProperty.call(meta, 'cartSnapshot')) {
+    if (['checkout_complete', 'suspend', 'cart_clear'].includes(log.action)) {
+      items = []; unknownCount = 0; detailSource = 'legacy'
+    } else if (Object.prototype.hasOwnProperty.call(meta, 'cartSnapshot')) {
       const parsed = snapshot(meta.cartSnapshot)
       const previousCount = items.reduce((sum, item) => sum + item.quantity, 0) + unknownCount
       items = parsed || []
@@ -43,4 +45,16 @@ export function projectCartState(logs: Log[]) {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0) + unknownCount
   const completePrices = !unknownCount && items.every(item => item.lineTotal !== null && (detailSource === 'snapshot' || item.addons.length === 0))
   return { items, itemCount, detailSource, detailsComplete: unknownCount === 0 && detailSource !== 'unavailable', subtotal: completePrices ? items.reduce((sum, item) => sum + item.lineTotal!, 0) : null }
+}
+
+/** A clear warning describes the cart BEFORE the terminal action. */
+export function projectClearedCart(log: Log, preceding: Log[] = []) {
+  const meta = metadata(log)
+  const recorded = Object.prototype.hasOwnProperty.call(meta, 'cartSnapshot')
+  const state = projectCartState(recorded ? [{ ...log, action: 'cart_update' }] : preceding)
+  // Legacy itemCount counted rows rather than quantities. Do not present a mismatched history as the cleared cart.
+  const matchesCount = recorded || (quantity(meta.itemCount) && (state.items.length === meta.itemCount || state.itemCount === meta.itemCount))
+  const usable = matchesCount && state.detailsComplete && state.items.length > 0
+  return { ...state, items: usable ? state.items : [], detailsComplete: usable, subtotal: usable ? state.subtotal : null,
+    historical: !recorded, clearedAt: log.createdAt, totalAmount: amount(meta.totalAmount) ? meta.totalAmount : null }
 }

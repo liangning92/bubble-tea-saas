@@ -71,6 +71,29 @@ function POSFailureDetails({ metadata }: { metadata: unknown }) {
   </div>
 }
 
+function ClearedCartDetails({ log }: { log: any }) {
+  const { t } = useTranslation()
+  const cart = log.clearedCart
+  const items = Array.isArray(cart?.items) ? cart.items : []
+  const time = new Date(cart?.clearedAt || log.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+  return <details className="mt-2 rounded-lg border border-orange-200 bg-white p-3" data-testid="cleared-cart-details">
+    <summary className="cursor-pointer text-sm font-medium text-orange-800">{t('posMonitor.cartDetails')}</summary>
+    <p className="mt-3 text-xs text-gray-600">{t('posMonitor.cartClearedAt')}: {time}</p>
+    {items.length > 0 ? <>
+      <div className="mt-2 overflow-x-auto"><table className="w-full text-sm">
+        <thead><tr className="text-gray-500 border-b"><th className="py-2 text-left">{t('posMonitor.cartProduct')}</th><th className="px-3 text-right">{t('posMonitor.cartQuantity')}</th><th className="px-3 text-right">{t('posMonitor.cartUnitPrice')}</th><th className="text-right">{t('posMonitor.cartLineTotal')}</th></tr></thead>
+        <tbody>{items.map((item: any, index: number) => <tr key={`${item.id}-${index}`} className="border-b last:border-0">
+          <td className="py-3"><p className="font-medium">{item.productName}</p><p className="text-xs text-gray-500">{[item.specName, item.options].filter(Boolean).join(' · ')}</p>{item.addons?.length > 0 && <p className="text-xs text-gray-500">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}</td>
+          <td className="px-3 text-right">{item.quantity}</td><td className="px-3 text-right whitespace-nowrap">{typeof item.unitPrice === 'number' ? formatCurrency(item.unitPrice) : '—'}</td><td className="text-right whitespace-nowrap">{typeof item.lineTotal === 'number' ? formatCurrency(item.lineTotal) : '—'}</td>
+        </tr>)}</tbody>
+      </table></div>
+      <p className="mt-2 text-sm">{t('posMonitor.cartSubtotal')}: <strong>{typeof cart.subtotal === 'number' ? formatCurrency(cart.subtotal) : t('posMonitor.cartAmountUnavailable')}</strong></p>
+      <p className="mt-2 text-xs text-gray-500">{t(cart.historical ? 'posMonitor.cartLegacyHint' : 'posMonitor.cartPriceHint')}</p>
+    </> : <p className="mt-3 text-sm text-gray-500">{t('posMonitor.cartWarningUnavailable')}</p>}
+    {typeof cart?.totalAmount === 'number' && <p className="mt-2 text-sm">{t('posMonitor.cartAlertAmount')}: <strong>{formatCurrency(cart.totalAmount)}</strong></p>}
+  </details>
+}
+
 function SeverityBadge({ severity }: { severity: string }) {
   const { t } = useTranslation()
   const severityKey = severity === 'critical' ? 'severityCritical'
@@ -418,6 +441,7 @@ export function POSMonitorPage() {
                   </div>
                   <p className="text-sm text-gray-500 mt-0.5">{log.description}</p>
                   {log.action === 'checkout_failed' && <POSFailureDetails metadata={log.metadata} />}
+                  {log.action === 'cart_clear' && log.severity !== 'info' && <ClearedCartDetails log={log} />}
                   {log.metadata && log.severity !== 'info' && <details className="mt-2 text-xs text-gray-500"><summary className="cursor-pointer">{t('posMonitor.rawRecord')}</summary><pre className="mt-1 whitespace-pre-wrap break-words">{typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata, null, 2)}</pre></details>}
                 </div>
                 <div className="text-right flex-shrink-0">

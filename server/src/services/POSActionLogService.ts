@@ -1,6 +1,6 @@
 import prisma from '../config/database'
 import { socketManager } from '../socket'
-import { projectCartState } from '../utils/posCartState'
+import { projectCartState, projectClearedCart } from '../utils/posCartState'
 
 export type POSAction =
   | 'login'
@@ -105,8 +105,22 @@ export async function getPOSActionLogs(storeId: string, options?: {
     prisma.pOSActionLog.count({ where }),
   ])
 
+  const detailedLogs = await Promise.all(logs.map(async log => {
+    if (log.action !== 'cart_clear' || log.severity === 'info') return log
+    let meta: any = {}
+    try { meta = JSON.parse(log.metadata || '{}') || {} } catch { /* Legacy malformed metadata. */ }
+    const timeline = Object.prototype.hasOwnProperty.call(meta, 'cartSnapshot') ? [] : await prisma.pOSActionLog.findMany({
+      where: { storeId, staffId: log.staffId, sessionId: log.sessionId, createdAt: { lte: log.createdAt } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    })
+    const index = timeline.findIndex(item => item.id === log.id)
+    // Without the event boundary we cannot safely attribute historical contents.
+    const preceding = index >= 0 ? timeline.slice(0, index) : []
+    return { ...log, clearedCart: projectClearedCart(log, preceding) }
+  }))
+
   return {
-    logs,
+    logs: detailedLogs,
     total,
     page,
     limit,
