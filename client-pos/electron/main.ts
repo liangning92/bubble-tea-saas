@@ -1,7 +1,10 @@
+import { requestReceiptHandover } from './receiptHandover'
+import { renderTemplateReceipt } from './receiptRaster'
+import { WindowsRawPrinter } from './windowsRawPrinter'
 import { fetchReceiptLogo } from './receiptLogo'
 import { exactPrinterName } from './printerTarget'
 import { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog, Menu, nativeImage, safeStorage } from 'electron'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 import path from 'path'
 import { setupUpdater, checkForUpdatesOnStart } from './updater'
 
@@ -1304,6 +1307,10 @@ ipcMain.on('payment-qr', (_event, qrData) => {
 })
 
 /** Resolve the exact configured device; no system/fuzzy/default fallback. */
+const windowsPrinter = new WindowsRawPrinter()
+let printerInventoryCache: {at:number;printers:Electron.PrinterInfo[]} | null = null
+let printerInventoryPending: Promise<Electron.PrinterInfo[]> | null = null
+
 async function resolvePrinterName(providedName?: string): Promise<string> {
   const direct = (providedName || '').trim()
   if (!direct) throw new Error('No printer target configured')
@@ -1314,7 +1321,12 @@ async function resolvePrinterName(providedName?: string): Promise<string> {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error('Printer inventory timeout')), 1500)
     })
-    const installed = await Promise.race([mainWindow.webContents.getPrintersAsync(), timeout])
+    if (printerInventoryCache && Date.now()-printerInventoryCache.at < 10000) return exactPrinterName(direct,printerInventoryCache.printers)
+    if (!printerInventoryPending) {
+      const window = mainWindow
+      printerInventoryPending = window.webContents.getPrintersAsync().then(printers=>{printerInventoryCache={at:Date.now(),printers};return printers}).finally(()=>{printerInventoryPending=null})
+    }
+    const installed = await Promise.race([printerInventoryPending, timeout])
     return exactPrinterName(direct, installed)
   } finally { if (timer) clearTimeout(timer) }
 }
@@ -1356,131 +1368,9 @@ function sendRawBytesToWindowsPrinter(printerName: string, rawBytes: Buffer): Pr
       return
     }
 
-    // Windows P/Invoke 调用 winspool.drv 的 OpenPrinterW + StartDocPrinterW + WritePrinter (Unicode 原生版)
-    const safePrinterName = printerName.replace(/'/g, "''")
-    const safeTempFile = tempFile.replace(/'/g, "''")
+    // Keep one worker alive: PowerShell and WinSpool interop compile once per app session.
+    windowsPrinter.printFile(printerName, tempFile).then(resolve,reject).finally(cleanup)
 
-    const psScript = `
-$code = @'
-using System;
-using System.IO;
-using System.Runtime.InteropServices;
-
-public class WinSpoolRaw {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public class DOCINFOW {
-        [MarshalAs(UnmanagedType.LPWStr)] public string pDocName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile;
-        [MarshalAs(UnmanagedType.LPWStr)] public string pDataType;
-    }
-    [DllImport("winspool.Drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
-    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPWStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
-
-    [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true)]
-    public static extern bool ClosePrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
-    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOW di);
-
-    [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true)]
-    public static extern bool EndDocPrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true)]
-    public static extern bool StartPagePrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true)]
-    public static extern bool EndPagePrinter(IntPtr hPrinter);
-
-    [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true)]
-    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
-
-    public static bool SendFile(string szPrinter, string szFile) {
-        if (!File.Exists(szFile)) return false;
-        byte[] bytes = File.ReadAllBytes(szFile);
-        if (bytes.Length == 0) return false;
-
-        IntPtr hPrinter = IntPtr.Zero;
-        DOCINFOW di = new DOCINFOW();
-        di.pDocName = "POS_RAW_JOB";
-        di.pDataType = "RAW";
-
-        if (!OpenPrinter(szPrinter, out hPrinter, IntPtr.Zero)) {
-            return false;
-        }
-
-        bool ok = false;
-        if (StartDocPrinter(hPrinter, 1, di)) {
-            IntPtr pBuf = Marshal.AllocCoTaskMem(bytes.Length);
-            Marshal.Copy(bytes, 0, pBuf, bytes.Length);
-            Int32 written = 0;
-            bool pageStarted = StartPagePrinter(hPrinter);
-            ok = WritePrinter(hPrinter, pBuf, bytes.Length, out written);
-            if (pageStarted) {
-                EndPagePrinter(hPrinter);
-            }
-            Marshal.FreeCoTaskMem(pBuf);
-            EndDocPrinter(hPrinter);
-        }
-        ClosePrinter(hPrinter);
-        return ok;
-    }
-}
-'@
-
-try {
-    Add-Type -TypeDefinition $code -Language CSharp
-} catch {}
-
-$res = [WinSpoolRaw]::SendFile('${safePrinterName}', '${safeTempFile}')
-if ($res) {
-    Write-Output "SUCCESS"
-    exit 0
-} else {
-    Write-Error "WinSpool OpenPrinter or WritePrinter failed for printer: ${safePrinterName}"
-    exit 1
-}
-`
-    const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], { shell: false })
-    let stderr = ''
-    let stdout = ''
-    let settled = false
-
-    const watchdog = setTimeout(() => {
-      if (!settled) {
-        settled = true
-        try { proc.kill() } catch {}
-        cleanup()
-        writeCrash(`[WIN-RAW] PowerShell timed out (15s) for printer '${printerName}'`)
-        reject(new Error(`PowerShell print timeout for '${printerName}'`))
-      }
-    }, 15000)
-
-    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
-    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
-
-    proc.on('close', (code: number) => {
-      if (settled) return
-      settled = true
-      clearTimeout(watchdog)
-      cleanup()
-      if (code === 0 && stdout.includes('SUCCESS')) {
-        writeCrash(`[WIN-RAW] Successfully sent ${rawBytes.length} bytes to printer '${printerName}'`)
-        resolve()
-      } else {
-        const errMsg = stderr.trim() || `Exit code ${code}`
-        writeCrash(`[WIN-RAW] Failed to send to '${printerName}': ${errMsg}`)
-        reject(new Error(errMsg))
-      }
-    })
-
-    proc.on('error', (err: Error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(watchdog)
-      cleanup()
-      writeCrash(`[WIN-RAW] Spawn error: ${err.message}`)
-      reject(err)
-    })
   })
 }
 
@@ -1493,7 +1383,9 @@ ipcMain.handle('print-receipt', async (_event, data) => {
   receiptPrintBusy = true
   let copiesSubmitted = 0
   try {
+    const printStarted = Date.now()
     const printerName = data.printerHost ? '' : await resolvePrinterName(data.printerName)
+    writeCrash(`[PRINT-TIMING] target_ms=${Date.now()-printStarted}`)
     const { printerHost, printerPort, blocks, openCashDrawer: shouldOpenDrawer } = data
 
     writeCrash(`[PRINT] ====== print-receipt called ======`)
@@ -1551,20 +1443,15 @@ ipcMain.handle('print-receipt', async (_event, data) => {
     }
     for (let c = 0; c < printCopies; c++) {
       if (c > 0) {
-        const options = {
-          type: 'info' as const,
+        const confirmed = await requestReceiptHandover(_event.sender, {
           title: handover.title,
           message: c === 1 ? handover.message : handover.later,
-          detail: `${data.orderNum || ''} · ${c}/${printCopies}`,
-          buttons: [c === 1 ? handover.button : handover.next],
-          defaultId: 0,
-          cancelId: -1,
-          noLink: true
-        }
-        const confirmation = mainWindow && !mainWindow.isDestroyed()
-          ? await dialog.showMessageBox(mainWindow, options)
-          : await dialog.showMessageBox(options)
-        if (confirmation.response !== 0) {
+          button: c === 1 ? handover.button : handover.next,
+          orderNum: String(data.orderNum || ''),
+          copiesSubmitted: c,
+          printCopies
+        })
+        if (!confirmed) {
           return { success: false, copiesSubmitted, error: 'Receipt handover interrupted; remaining copies were not sent' }
         }
       }
@@ -1572,13 +1459,30 @@ ipcMain.handle('print-receipt', async (_event, data) => {
         ...data,
         copyLabel: c === 0 ? '(Customer Copy)' : '(Merchant Copy)'
       } : data
+      const renderStarted = Date.now()
       let receiptBuf: Buffer
       try {
-        receiptBuf = await buildReceiptEscPosBuffer(copyData)
+        const templateBlocks=Array.isArray(copyData.blocks)?copyData.blocks:copyData.template?.blocks
+        if(Array.isArray(templateBlocks)) {
+          const resolvedBlocks=[]
+          for(const block of templateBlocks){
+            const imageSource=block.type==='logo'?(block.config?.url||copyData.storeLogo):block.type==='qrCode'?(block.config?.url||copyData.qrCodeUrl):''
+            if(imageSource&&block.enabled!==false){
+              const bytes=await loadLogoBuffer(imageSource)
+              if(!bytes)copyData.printWarnings?.push('LOGO_UNAVAILABLE')
+              resolvedBlocks.push({...block,config:{...block.config,url:bytes?'data:image/png;base64,'+bytes.toString('base64'):''}})
+            }else resolvedBlocks.push(block)
+          }
+          receiptBuf=await renderTemplateReceipt({...copyData,storeLogo:'',qrCodeUrl:'',blocks:resolvedBlocks})
+        }else receiptBuf=await buildReceiptEscPosBuffer(copyData)
       } catch (err: any) {
         writeCrash(`[PRINT] buildReceiptEscPosBuffer call failed: ${err?.message}`)
+        // A configured template must never silently become a different plain-text receipt.
+        if(Array.isArray(copyData.blocks)||Array.isArray(copyData.template?.blocks))throw err
         receiptBuf = Buffer.concat([encodeEscPosText(generateReceiptText(copyData)), Buffer.from([0x0A, 0x0A])])
       }
+      writeCrash(`[PRINT-TIMING] render_ms=${Date.now()-renderStarted}`)
+      const transportStarted=Date.now()
       // 只有第一联出纸前触发弹钱箱
       const firstDrawerCmd = (c === 0 && shouldOpenDrawer) ? drawerCmd : Buffer.alloc(0)
       // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出全格式化 ESC/POS 数据，切纸
@@ -1596,6 +1500,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
           return { success: false, copiesSubmitted, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + error.message }
         }
       }
+      writeCrash(`[PRINT-TIMING] transport_ms=${Date.now()-transportStarted} total_ms=${Date.now()-printStarted}`)
       copiesSubmitted++
     }
     return { success: true, copiesSubmitted, warnings: [...new Set(data.printWarnings)] }
@@ -2011,7 +1916,7 @@ function generateShiftReportText(data: any): string {
   const label = (zh: string, en: string, id: string) => lang === 'zh' ? zh : lang === 'en' ? en : id
   const unknown = label('待核对', 'Unverified', 'Perlu diperiksa')
   const lines: string[] = []
-  const number = (value: unknown): value is number => Number.isSafeInteger(value)
+  const number = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
   const wrap = (text: string) => {
     let row = ''
     for (const ch of text) {
@@ -2049,9 +1954,13 @@ function generateShiftReportText(data: any): string {
   separator()
   const evidence = data.summaryEvidence || {}
   wrap(label('交班申报金额', 'HANDOVER AMOUNTS', 'JUMLAH SERAH TERIMA'))
+  const financials = data.handoverFinancials || {}
+  money(label('营收', 'Revenue', 'Pendapatan'), financials.totalRevenue)
+  money(label('现金', 'Cash', 'Tunai'), financials.actualCashReceived)
+  money(label('费用', 'Expenses', 'Biaya'), financials.expenses)
   const si = data.summaryItems || {}
-  if (si.openFloat !== false) money(label('开班备用金', 'Opening float', 'Kas awal'), data.openFloat)
-  if (si.closeCash !== false) money(label('钱箱总数', 'Drawer total', 'Total laci'), data.actualCash)
+  money(label('备用金', 'Opening float', 'Kas awal'), data.openFloat)
+  money(label('现金总数', 'Drawer total', 'Total laci'), data.actualCash)
   const receipts = data.manualReceipts || {}
   if (data.manualReceiptsCashBasis !== 'drawer_total') money(label('现金收款', 'Cash receipts', 'Penerimaan tunai'), receipts.cash)
   money(label('QRIS收款', 'QRIS receipts', 'Penerimaan QRIS'), receipts.qris)
@@ -2247,6 +2156,9 @@ function encodeEscPosText(text: string): Buffer {
  * 58mm 热敏纸有效点宽约为 384 dots，80mm 有效点宽约为 576 dots
  */
 const logoMemoryCache = new Map<string, Buffer>()
+const logoRasterCache = new Map<string, Buffer>()
+const logoPendingLoads = new Map<string, Promise<Buffer | null>>()
+const logoRetryAfter = new Map<string, number>()
 
 function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384, align = 'center'): Buffer | null {
   try {
@@ -2263,6 +2175,9 @@ function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384, alig
       return null
     }
 
+    const cacheKey=createHash('sha256').update(imageBuf).digest('hex')+':'+targetWidthDots+':'+align
+    const cached=logoRasterCache.get(cacheKey)
+    if(cached)return cached
     const nImg = nativeImage.createFromBuffer(imageBuf)
     if (nImg.isEmpty()) return null
     const size = nImg.getSize()
@@ -2305,12 +2220,15 @@ function imageBufferToEscPosRaster(imageBuf: Buffer, targetWidthDots = 384, alig
     const yH = (targetH >> 8) & 0xff
 
     // ESC a 1 (居中) + GS v 0 0 xL xH yL yH + rasterData + \n + ESC a 0 (重置居左)
-    return Buffer.concat([
+    const result = Buffer.concat([
       Buffer.from([0x1B, 0x61, align === 'left' ? 0 : align === 'right' ? 2 : 1]),
       Buffer.from([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]),
       rasterData,
       Buffer.from([0x0A, 0x1B, 0x61, 0x00])
     ])
+    if(logoRasterCache.size>=8){const oldest=logoRasterCache.keys().next().value;if(oldest)logoRasterCache.delete(oldest)}
+    logoRasterCache.set(cacheKey,result)
+    return result
   } catch (err: any) {
     writeCrash(`[ESC/POS RASTER] Failed to convert image to raster: ${err?.message}`)
     return null
@@ -2366,7 +2284,17 @@ async function loadLogoBuffer(logoUrlOrPath: string): Promise<Buffer | null> {
     const remote = /^https?:\/\//.test(logoUrlOrPath) ? logoUrlOrPath
       : logoUrlOrPath.startsWith('/') && !logoUrlOrPath.startsWith('//') ? `https://api.aicube.online${logoUrlOrPath}` : ''
     if (remote) {
-      const buffer = await fetchReceiptLogo(remote)
+      if ((logoRetryAfter.get(remote) || 0) > Date.now()) return null
+      let loading = logoPendingLoads.get(remote)
+      if (!loading) {
+        loading = fetchReceiptLogo(remote).then(buffer=>{
+          if (!buffer) logoRetryAfter.set(remote,Date.now()+30000)
+          else logoRetryAfter.delete(remote)
+          return buffer
+        }).finally(()=>logoPendingLoads.delete(remote))
+        logoPendingLoads.set(remote,loading)
+      }
+      const buffer = await loading
       if (buffer) { logoMemoryCache.set(logoUrlOrPath, buffer); return buffer }
     }
   } catch (e: any) {
@@ -3350,6 +3278,7 @@ app.on('second-instance', () => {
 
 // 应用启动
 app.whenReady().then(async () => {
+  if (process.platform === 'win32') void windowsPrinter.warm().catch(error=>writeCrash('[WIN-RAW] Worker warmup failed: '+error.message))
   console.log('[Electron] App ready, starting up...')
 
   // 警告：打印模块加载失败
@@ -3452,5 +3381,6 @@ app.on('activate', () => {
 
 // 确保退出时关闭服务器
 app.on('before-quit', () => {
+  windowsPrinter.dispose()
   stopLocalServer()
 })

@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      shiftCorrection: {"title": "Koreksi jumlah shift", "hint": "Koreksi kas awal dan jumlah serah terima. Alasan, nilai sebelumnya, dan operator disimpan dalam catatan audit.", "reason": "Alasan koreksi (wajib)", "invalid": "Isi jumlah rupiah bulat non-negatif dan alasan koreksi.", "failed": "Koreksi gagal. Muat ulang detail shift lalu coba lagi."},
       shiftReview: {
         "title": "Detail sif",
         "dateRange": "Rentang tanggal",
@@ -4057,6 +4058,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      shiftCorrection: {"title": "Correct shift amounts", "hint": "Correct opening float and handover amounts. The reason, previous values and operator are saved in the audit log.", "reason": "Correction reason (required)", "invalid": "Enter non-negative whole rupiah amounts and a correction reason.", "failed": "Correction failed. Refresh shift details and try again."},
       shiftReview: {
         "title": "Shift details",
         "dateRange": "Date range",
@@ -8047,6 +8049,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      shiftCorrection: {"title": "更正班次金额", "hint": "可更正开班备用金及交班金额。更正原因、修改前后数据和操作人将保存到审计记录。", "reason": "更正原因（必填）", "invalid": "请填写非负整数金额及更正原因。", "failed": "更正失败，请刷新班次详情后重试。"},
       shiftReview: {
         "title": "班次详情",
         "dateRange": "日期范围",

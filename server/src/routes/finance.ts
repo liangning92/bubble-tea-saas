@@ -1,3 +1,4 @@
+import { correctShift } from '../services/ShiftCorrectionService'
 import { reviewCashWarning, CashReviewError } from '../services/ShiftCashReconciliation'
 import { ZodError } from 'zod'
 import { Router } from 'express'
@@ -12,6 +13,11 @@ const router = Router()
 router.post('/shift-sessions/:id/cash-warning/review', authenticate, authorize('admin'), async (req: AuthRequest, res, next) => {
   try { res.json({code:200,data:await reviewCashWarning(prisma,req.user!,req.params.id,req.body.note)}) }
   catch(error) {if(error instanceof CashReviewError)return res.status(error.status).json({code:error.status,message:error.message});if(error instanceof ZodError)return res.status(400).json({code:400,message:'REVIEW_NOTE_REQUIRED'});next(error)}
+})
+
+router.put('/shift-sessions/:id/correction', authenticate, authorize('admin'), async (req: AuthRequest, res, next) => {
+  try { res.json({code:200,data:await correctShift(prisma,req.user!,req.params.id,req.body)}) }
+  catch(error) {if(error instanceof CashReviewError)return res.status(error.status).json({code:error.status,message:error.message});if(error instanceof ZodError)return res.status(400).json({code:400,message:'SHIFT_CORRECTION_INVALID'});next(error)}
 })
 
 router.get('/shift-sessions', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {

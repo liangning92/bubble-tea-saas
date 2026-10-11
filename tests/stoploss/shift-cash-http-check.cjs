@@ -52,7 +52,10 @@ const current=await posSend('GET','/pos-cash/shifts/current');assert.equal(curre
 const amounts={cash:100000,qris:200000,shopeefood:300000,gofood:0};
 assert.equal((await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:{...amounts,qris:-1}})).status,400);
 assert.equal((await prisma.shiftSession.findUnique({where:{id:session.id}})).status,'open');
-const closed=await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:amounts});assert.equal(closed.status,200);const handover=(await closed.json()).data;assert.deepEqual(handover.report.manualReceipts,amounts);assert.equal(handover.actualCash,50000);assert.equal(handover.expectedCash,1426000);assert.equal(handover.cashWarning.difference,-1376000);assert.equal(handover.cashWarning.status,'pending');
+const reviewedSnapshot={sessionId:session.id,updatedAt:session.updatedAt.toISOString(),openFloat:session.openFloat,revenue:calc.revenue,expenses:calc.expenses,qris:calc.qris};
+assert.equal((await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:amounts,reviewedSnapshot:{...reviewedSnapshot,revenue:0}})).status,409,'Changed preview cannot close the shift');
+assert.equal((await prisma.shiftSession.findUnique({where:{id:session.id}})).status,'open');
+const closed=await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:amounts,reviewedSnapshot});assert.equal(closed.status,200);const handover=(await closed.json()).data;assert.deepEqual(handover.report.manualReceipts,amounts);assert.equal(handover.actualCash,50000);assert.equal(handover.expectedCash,1426000);assert.equal(handover.cashWarning.difference,-1376000);assert.equal(handover.cashWarning.status,'pending');
 const report=JSON.parse((await prisma.config.findUnique({where:{storeId_key:{storeId:'store',key:'pos.shift.report:'+session.id}}})).value);assert.deepEqual(report.manualReceipts,amounts);assert.equal(report.reportedBy,'cashier');
 const revenueRead=await fetch(base+'/api/revenue/handover-receipts?period=today',{headers:{Authorization:'Bearer '+ownerToken}});assert.equal(revenueRead.status,200);const receipts=(await revenueRead.json()).data;assert.deepEqual(receipts.totals,amounts);assert.equal(receipts.list[0].id,session.id);
 assert.equal((await posSend('GET','/revenue/handover-receipts?period=today')).status,403);

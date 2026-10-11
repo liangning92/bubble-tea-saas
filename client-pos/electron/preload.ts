@@ -45,6 +45,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('print-receipt', data)
   },
 
+  onReceiptHandover: (callback: (prompt: any) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, prompt: any) => callback(prompt)
+    ipcRenderer.on('receipt-handover-request', listener)
+    return () => ipcRenderer.removeListener('receipt-handover-request', listener)
+  },
+  confirmReceiptHandover: (requestId: string, confirmed: boolean) => {
+    ipcRenderer.send('receipt-handover-response', { requestId, confirmed })
+  },
+
   // 打开钱箱
   openCashDrawer: (data?: any) => {
     return ipcRenderer.invoke('open-cash-drawer', data || {})

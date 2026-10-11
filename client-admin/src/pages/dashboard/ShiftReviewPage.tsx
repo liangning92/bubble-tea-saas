@@ -1,3 +1,4 @@
+import { ShiftCorrection } from '../../components/ShiftCorrection'
 import { ShiftHandoverFinancials } from '../../components/ShiftHandoverFinancials'
 import { ShiftCashReconciliation, ShiftCashWarning, formatShiftCash } from '../../../../shared/utils/shiftCashReconciliation'
 import { ManualReceipts, ManualReceiptAmounts } from '../../components/ManualReceipts'
@@ -13,7 +14,7 @@ type Summary = { revenue: number; orders: number; completedOrders: number; refun
 type Employee = { id: string; name: string; employeeNumber: string | null; position: string | null; orders: number; expenses: number; warnings: number; roles: string[] }
 type Review = {
   manualReceiptsCashBasis?:string; handoverFinancials?: {reported?:boolean;drawerTotal:number|null;openFloat:number;expenses:number;qris:number|null;shopeefood:number;gofood:number;orderRevenue:number;actualCashReceived:number|null;totalRevenue:number}; cashReconciliation:ShiftCashReconciliation|null; cashWarning:ShiftCashWarning|null; manualReceipts: ManualReceiptAmounts | null; id: string; windowStart: string; windowEnd: string; overlapping: boolean; summary: Summary
-  session: null | { shift: string; status: string; openedAt: string; closedAt: string | null; openFloat: number; actualCash: number | null; expectedCash: number; cashDifference: number | null; closeNote: string | null; opener: { name: string }; nextStaff: { name: string } | null; definition: { name: string; nameZh: string | null; nameId: string | null } | null }
+  session: null | { updatedAt:string; shift: string; status: string; openedAt: string; closedAt: string | null; openFloat: number; actualCash: number | null; expectedCash: number; cashDifference: number | null; closeNote: string | null; opener: { name: string }; nextStaff: { name: string } | null; definition: { name: string; nameZh: string | null; nameId: string | null } | null }
   orders: { items:{productName:string;quantity:number}[]; id: string; orderNumber: string; pickupNumber: string | null; staffName: string; status: string; amount: number; paymentMethod: string; createdAt: string }[]
   expenses: { id: string; category: string; amount: number; quantity: number | null; description: string; createdAt: string; staffName: string | null }[]
   warnings: { id: string; staffName: string; severity: string; description: string; action: string; createdAt: string }[]
@@ -91,6 +92,7 @@ export function ShiftReviewPage() {
       {selected && <section className="space-y-4" data-testid="shift-review-detail">
         <div className="flex flex-wrap justify-between items-end gap-2"><div><h2 className="text-xl font-bold">{title(selected)} · {t('shiftReview.details')}</h2><p className="text-sm text-gray-500 mt-1">{instant(selected.windowStart)} — {instant(selected.windowEnd)} · WIB</p></div><span className="text-sm text-gray-500">{t('shiftReview.updated')} {data && instant(data.asOf)}</span></div>
         {cards(selected)}
+        {user?.role === 'admin' && selected.session && <ShiftCorrection key={selected.id+selected.session.updatedAt} id={selected.id} session={selected.session} receipts={selected.manualReceipts} refresh={()=>query.refetch()} />}
         {selected.cashReconciliation && <section className="rounded-xl border bg-white p-4" data-testid="shift-cash-reconciliation">
           <h3 className="font-semibold">{t('cashReconciliation.title')}</h3><p className="my-2 text-sm text-gray-500">{t('cashReconciliation.formula')}</p>
           <dl className="grid grid-cols-2 lg:grid-cols-4 gap-4">{(['revenue','expenses','qris','cashFromRevenue','openFloat','expectedCash'] as const).map(key=><div key={key}><dt className="text-sm text-gray-500">{t('cashReconciliation.'+key)}</dt><dd className="font-semibold">{money(selected.cashReconciliation![key])}</dd></div>)}<div><dt className="text-sm text-gray-500">{t('cashReconciliation.actualCash')}</dt><dd className="font-semibold">{money(selected.session?.actualCash)}</dd></div><div><dt className="text-sm text-gray-500">{t('cashReconciliation.difference')}</dt><dd className="font-semibold">{money(selected.cashWarning?.difference ?? (selected.session?.actualCash == null ? null : selected.session.actualCash-selected.cashReconciliation.expectedCash))}</dd></div></dl>

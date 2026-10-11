@@ -161,6 +161,12 @@ jobs:
           DEBUG: electron-builder
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
 
+      - name: Verify exact packaged receipt renderer without physical printing
+        if: ${{ !inputs.skip_validation }}
+        run: |
+          npx electron scripts/validate-receipt-raster.cjs --resources release/win-unpacked/resources
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged receipt raster validation failed' }
+
       - name: Validate packaged template, clients and synthetic legacy compatibility
         if: ${{ !inputs.skip_validation }}
         run: |

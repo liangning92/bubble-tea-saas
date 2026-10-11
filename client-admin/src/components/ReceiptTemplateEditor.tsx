@@ -1,3 +1,4 @@
+import { receiptHtml, receiptWidth } from '../../../client-pos/electron/receiptLayout'
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -281,224 +282,20 @@ const LivePreview: React.FC<{
   defaultLogo?: string
   defaultQrCode?: string
 }> = ({ blocks, paperSize, defaultLogo, defaultQrCode }) => {
-  const { t } = useTranslation()
-  const width = paperSize === '58mm' ? '200px' : '280px'
-
-  const enabledBlocks = useMemo(
-    () => blocks.filter((b) => b.enabled).sort((a, b) => a.order - b.order),
-    [blocks]
-  )
-
-  const textAlign = (align?: string) => {
-    if (align === 'left') return 'text-left'
-    if (align === 'right') return 'text-right'
-    return 'text-center'
-  }
-
-  const fontSize = (size?: string) => {
-    if (size === 'small') return 'text-[10px]'
-    if (size === 'large') return 'text-base'
-    return 'text-xs'
-  }
-
-  return (
-    <div
-      className="bg-white border rounded-lg p-3 font-mono overflow-hidden"
-      style={{ width, minHeight: '400px' }}
-    >
-      {enabledBlocks.map((block) => {
-        const alignClass = textAlign(block.style.align)
-        const sizeClass = fontSize(block.style.fontSize)
-        const boldClass = block.style.bold ? 'font-bold' : ''
-
-        switch (block.type) {
-          case 'logo': {
-            const effectiveLogo = block.config.url || defaultLogo
-            return (
-              <div key={block.id} className={`${alignClass}`}>
-                <div className="border rounded p-1 inline-block">
-                  {effectiveLogo ? (
-                    <img
-                      src={receiptMediaUrl(effectiveLogo)}
-                      alt="Logo"
-                      style={{ width: block.config.width ? `${block.config.width}px` : '100px' }}
-                      className="max-h-20 object-contain inline-block"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none'
-                      }}
-                    />
-                  ) : (
-                    <div className="w-20 h-12 bg-gray-100 flex items-center justify-center text-gray-400 text-[10px]">
-                      LOGO
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          }
-          case 'header':
-            return (
-              <div key={block.id} className={`${alignClass} ${boldClass} `}>
-                <div className={sizeClass}>{block.config.text ?? 'Store Name'}</div>
-              </div>
-            )
-          case 'storeInfo':
-            return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass} text-gray-600 `}>
-                {block.config.showPhone && <div>Tel: {block.config.phone || t('posSettings.receiptSamplePhone')}</div>}
-                {block.config.showAddress && <div>{block.config.address || t('posSettings.receiptSampleAddress')}</div>}
-              </div>
-            )
-          case 'orderInfo': {
-            const showPickup = block.config.showPickupNumber !== false
-            const showOrder = block.config.showOrderNo !== false
-            return (
-              <div key={block.id} className={`${alignClass} ${boldClass} ${sizeClass} `}>
-                {showPickup && (
-                  <div className={`${alignClass} ${boldClass} ${sizeClass}`}>
-                    *** {t('posSettings.receiptQueueNumber', '取餐号')}: A01 ***
-                  </div>
-                )}
-                {showOrder && (
-                  <div className="font-mono">
-                    NO. 7K3M9Q2R5A
-                  </div>
-                )}
-                {block.config.showDate && <div>{t('posSettings.receiptDate')}: {new Date().toLocaleDateString('id-ID')}</div>}
-                {block.config.showTime && <div>{t('posSettings.receiptTime')}: {new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</div>}
-                {block.config.showCashier && <div>{t('posSettings.receiptCashier')}: {t('posSettings.receiptSampleCashier')}</div>}
-                {block.config.showCustomer && <div>{t('posSettings.receiptCustomer')}: -</div>}
-                {block.config.showChannel && <div>{t('posSettings.receiptChannel')}: POS</div>}
-              </div>
-            )
-          }
-          case 'items':
-            return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
-                <div className={`${boldClass} ${alignClass}`}>{t('posSettings.receiptItems')}</div>
-                <div className={`flex justify-between ${boldClass}`}>
-                  <span>{t('posSettings.receiptSampleProduct')}</span>
-                  <span>15,000</span>
-                </div>
-                {block.config.showSugarIce && (
-                  <div className={`pl-2 text-gray-500 ${alignClass}`}>{t('posSettings.receiptSampleOption')}</div>
-                )}
-                {block.config.showAddon && (
-                  <div className={`pl-2 text-gray-500 ${alignClass}`}>{t('posSettings.receiptSampleAddon')}</div>
-                )}
-              </div>
-            )
-          case 'subtotal':
-            return (
-              <div key={block.id} className={`flex justify-between ${sizeClass} ${boldClass} ${alignClass} `}>
-                <span>{block.config.subtotalLabel || t('posSettings.receiptSubtotal')}</span>
-                <span>35,000</span>
-              </div>
-            )
-          case 'tax':
-            return (
-              <div key={block.id} className={`flex justify-between ${sizeClass} ${boldClass} ${alignClass} text-gray-500 `}>
-                <span>{block.config.label || t('posSettings.blockTax') + ' (' + (block.config.rate || 11) + '%)'}</span>
-                <span>3,850</span>
-              </div>
-            )
-          case 'total': {
-            const showDisc = block.config.showDiscountDetail !== false
-            return (
-              <div key={block.id} className={`${alignClass} ${boldClass}`}>
-                {showDisc && (
-                  <div className={`flex justify-between text-emerald-700 ${sizeClass} ${boldClass}`}>
-                    <span>{block.config.discountLabel || t('posSettings.receiptDiscount', 'Discount (second drink half price)')}</span>
-                    <span>-10,000</span>
-                  </div>
-                )}
-                <div className={`flex justify-between ${boldClass} ${sizeClass}`}>
-                  <span>{block.config.totalLabel || t('posSettings.receiptTotal')}</span>
-                  <span>38,850</span>
-                </div>
-              </div>
-            )
-          }
-          case 'paymentInfo':
-            return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
-                {block.config.showMethod && (
-                  <div className={`flex justify-between ${boldClass}`}>
-                    <span>{t('posSettings.receiptMethod')}</span>
-                    <span>{t('posSettings.receiptCash')}</span>
-                  </div>
-                )}
-                {block.config.showReceived && (<div className={`flex justify-between ${boldClass}`}><span>{t('posSettings.receiptReceived')}</span><span>50,000</span></div>)}
-                {block.config.showChange && (
-                  <div className="flex justify-between text-gray-500">
-                    <span>{t('posSettings.receiptChange')}</span>
-                    <span>11,150</span>
-                  </div>
-                )}
-              </div>
-            )
-          case 'qrCode': {
-            const effectiveQr = block.config.url || defaultQrCode
-            return (
-              <div key={block.id} className={`${alignClass} `}>
-                {effectiveQr ? (
-                  <img
-                    src={effectiveQr}
-                    alt="QR"
-                    style={{ width: block.config.size || 80, height: block.config.size || 80 }}
-                    className="object-contain inline-block"
-                    onError={(e) => { (e.target as any).style.display = 'none' }}
-                  />
-                ) : (
-                  <div
-                    className="bg-gray-100 inline-flex items-center justify-center border border-dashed border-gray-300"
-                    style={{ width: block.config.size || 80, height: block.config.size || 80 }}
-                  >
-                    <span className="text-[9px] text-gray-500 font-bold">QR CODE</span>
-                  </div>
-                )}
-              </div>
-            )
-          }
-          case 'barcode':
-            return (
-              <div key={block.id} className={`${alignClass} `}>
-                <div
-                  className="bg-black inline-block"
-                  style={{ width: '120px', height: block.config.height || 40 }}
-                />
-                <div className={`${sizeClass} mt-1`}>{t('posSettings.receiptBarcode') || 'BT20260704001'}</div>
-              </div>
-            )
-          case 'footer':
-            return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
-                {block.config.showDivider && <div className="border-t border-dashed my-2" />}
-                <div className={boldClass}>{block.config.footerText ?? 'Thank you!'}</div>
-              </div>
-            )
-          case 'divider':
-            if (block.config.dividerStyle === 'space') {
-              return <div key={block.id} className="h-4" />
-            }
-            return (
-              <div
-                key={block.id}
-                className={`border-t ${block.config.dividerStyle === 'dashed' ? 'border-dashed' : ''} my-2`}
-              />
-            )
-          case 'customText':
-            return (
-              <div key={block.id} className={`${alignClass} ${sizeClass} ${boldClass}`}>
-                {block.config.customText}
-              </div>
-            )
-          default:
-            return null
-        }
-      })}
-    </div>
-  )
+  const {t,i18n}=useTranslation()
+  const [height,setHeight]=useState(800)
+  const dots=receiptWidth(paperSize),width=paperSize==='58mm'?200:280,scale=width/dots
+  const html=useMemo(()=>receiptHtml({
+    paperSize,language:i18n.language,
+    blocks:blocks.map(block=>['logo','qrCode'].includes(block.type)?{...block,config:{...block.config,url:receiptMediaUrl(block.config.url||(block.type==='logo'?defaultLogo:defaultQrCode)||'')}}:block),
+    qrCodeUrl:defaultQrCode,orderNum:'7K3M9Q2R5A',pickupNumber:'A01',createdAt:new Date().toISOString(),channelName:'POS',
+    storePhone:t('posSettings.receiptSamplePhone'),storeAddress:t('posSettings.receiptSampleAddress'),cashierName:t('posSettings.receiptSampleCashier'),customerName:'-',
+    items:[{productName:t('posSettings.receiptSampleProduct'),quantity:1,unitPrice:35000,sugarLevelName:t('posSettings.receiptSampleOption'),addons:[{name:t('posSettings.receiptSampleAddon')}]}],
+    subtotal:35000,tax:3850,total:28850,discount:10000,promotionName:t('posSettings.receiptDiscount'),paymentMethod:t('posSettings.receiptCash'),paidAmount:50000,change:21150
+  }),[blocks,paperSize,defaultLogo,defaultQrCode,i18n.language,t])
+  return <div className="bg-white border rounded-lg overflow-hidden" style={{width,height:Math.ceil(height*scale)}}>
+    <iframe title={t('posSettings.preview','小票预览')} srcDoc={html} sandbox="allow-same-origin" scrolling="no" onLoad={e=>{const frame=e.currentTarget;const measured=frame.contentDocument?.body.getBoundingClientRect().height;if(measured)setHeight(measured)}} style={{border:0,width:dots,height,transform:`scale(${scale})`,transformOrigin:'top left',display:'block'}} />
+  </div>
 }
 
 // ============ SORTABLE BLOCK COMPONENT ============
