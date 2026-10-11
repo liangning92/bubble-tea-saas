@@ -1,3 +1,4 @@
+import { snapshotAttendance, reconcileLate } from '../services/EmployeeAttendanceService'
 import { parseBusinessDate, BusinessInputError } from '../utils/businessDate'
 import { formatDate, startOfDay } from '../utils/dateUtils'
 import { requireResourceStore } from '../middlewares/resourceStore'
@@ -139,8 +140,9 @@ router.put('/:id/approve', authenticate, authorize('admin', 'manager'), scope('a
       const scheduledStart = new Date(`${dayText}T${rule?.workStartTime || '09:00'}:00+07:00`)
       const status = checkInTime.getTime() > scheduledStart.getTime() + (rule?.gracePeriod ?? 15) * 60000 ? 'late' : 'normal'
       const attendanceData = { checkInTime, checkOutTime, status }
-      if (existing) await tx.attendance.update({ where: { id: existing.id }, data: attendanceData })
-      else await tx.attendance.create({ data: { staffId: correction.staffId, ...attendanceData } })
+      const corrected = existing ? await tx.attendance.update({ where: { id: existing.id }, data: attendanceData }) : await tx.attendance.create({ data: { staffId: correction.staffId, ...attendanceData } })
+      const snapshot = await snapshotAttendance(corrected, correction.storeId, tx)
+      await reconcileLate(correction.storeId, correction.staffId, snapshot.businessDate.slice(0, 7), tx)
       return tx.attendanceCorrection.findUniqueOrThrow({ where: { id } })
     })
 

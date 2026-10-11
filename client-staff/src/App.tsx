@@ -2,6 +2,10 @@ import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
+import { useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { modulePath } from './components/BottomNav'
+import { EmployeeAppealsPage, EmployeeDocumentsPage } from './pages/EmployeePrivatePages'
 import { BottomNav } from './components/BottomNav'
 
 // Layout with BottomNav
@@ -28,8 +32,10 @@ const TrainingPage = lazy(() => import('./pages/TrainingPage').then(module => ({
 const AttendanceRulesPage = lazy(() => import('./pages/AttendanceRulesPage').then(module => ({ default: module.AttendanceRulesPage })))
 
 function LayoutWithNav({ children }: { children: React.ReactNode }) {
+  const path=useLocation().pathname, parent=modulePath(path), {t}=useTranslation()
   return (
     <div className="min-h-screen bg-gray-50 pb-[calc(4rem+env(safe-area-inset-bottom))]">
+      {path!==parent&&<Link to={parent} className="block p-3 text-primary font-semibold">← {t("common.back")}</Link>}
       <Suspense fallback={<RouteLoading />}>{children}</Suspense>
       <BottomNav />
     </div>
@@ -38,7 +44,8 @@ function LayoutWithNav({ children }: { children: React.ReactNode }) {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, token, user } = useAuthStore()
-  if (!isAuthenticated || !token || !user) return <Navigate to="/login" replace />
+  const location=useLocation()
+  if (!isAuthenticated || !token || !user) { sessionStorage.setItem("employee-return",location.pathname); return <Navigate to="/login" replace /> }
   return <>{children}</>
 }
 
@@ -46,6 +53,8 @@ function App() {
   return (
     <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
+      <Route path="/attendance/appeals" element={<ProtectedRoute><LayoutWithNav><EmployeeAppealsPage /></LayoutWithNav></ProtectedRoute>} />
+      <Route path="/profile/documents" element={<ProtectedRoute><LayoutWithNav><EmployeeDocumentsPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"

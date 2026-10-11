@@ -1,10 +1,9 @@
 import { TrainingSectionExtras, TrainingModuleExtras } from '../../../shared/components/TrainingExtras'
-import { businessDate } from '../utils/businessDate'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { staffApi } from '../services/api'
+import { staffApi, employeeApi } from '../services/api'
 import {
   BookOpen,
   ArrowLeft,
@@ -61,7 +60,8 @@ export function TrainingPage() {
   const { user, token } = useAuthStore()
   const catalogue = useTrainingCatalogue(token, user?.storeId)
   const w = trainingCopy(i18n.language)
-  const progressScope = `${user?.storeId}:${user?.staffId}:${catalogue.revision}`
+  const progressVersion = catalogue.revision || '1'
+  const progressScope = `${user?.storeId}:${user?.staffId}:${progressVersion}`
 
   // Tab: 'courses' | 'checklists' | 'records'
   const [activeTab, setActiveTab] = useState<'courses' | 'checklists' | 'records'>('courses')
@@ -86,24 +86,29 @@ export function TrainingPage() {
   // Checklist state
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({})
 
-  // Load completed modules and checklist state from localStorage
-  useEffect(() => {
-    setCompletedModules({});setCheckedItems({});setSelectedModule(null)
-    if (!catalogue.revision) return
+  const [syncError,setSyncError]=useState('')
+  const [syncBusy,setSyncBusy]=useState(false)
+  async function loadProgress(){try{const [records,checks]=await Promise.all([employeeApi.get('/my/learning'),employeeApi.get('/my/checklist')]);setCompletedModules(Object.fromEntries(records.filter((r:any)=>r.version===progressVersion&&r.completed).map((r:any)=>[r.course,true])));setCheckedItems(checks);setSyncError('')}catch{setSyncError(t('workspace.syncFailed'))}}
+  useEffect(()=>{setCompletedModules({});setCheckedItems({});setSelectedModule(null);if(user?.staffId&&catalogue.revision)void loadProgress()},[user?.staffId,progressScope])
+  async function importLegacy() {
+    if (syncBusy || !catalogue.revision) return
+    setSyncBusy(true)
     try {
-      const savedModules = localStorage.getItem(`btps_completed_training_modules_${progressScope}`)
-      if (savedModules) {
-        setCompletedModules(JSON.parse(savedModules))
+      const sources = [
+        {key: `btps_completed_training_modules_${user?.staffId}`, version: '1'},
+        {key: `btps_completed_training_modules_${progressScope}`, version: progressVersion}
+      ]
+      for (const {key,version} of sources) {
+        const saved = JSON.parse(localStorage.getItem(key) || '{}')
+        for (const [course,completed] of Object.entries(saved)) {
+          if (completed) await employeeApi.put('/my/learning', {course,version,completed:true,source:'legacy_import'})
+        }
+        localStorage.removeItem(key)
       }
-      const today = businessDate()
-      const savedChecks = localStorage.getItem(`btps_training_checklist_${progressScope}_${today}`)
-      if (savedChecks) {
-        setCheckedItems(JSON.parse(savedChecks))
-      }
-    } catch (e) {
-      console.warn('Failed to load local training state:', e)
-    }
-  }, [progressScope])
+      await loadProgress()
+    } catch { setSyncError(t('workspace.syncFailed')) }
+    finally { setSyncBusy(false) }
+  }
 
   const STATUS_ICONS: Record<string, JSX.Element> = {
     scheduled: <Clock className="text-blue-500" size={18} />,
@@ -184,8 +189,8 @@ export function TrainingPage() {
   }
 
   // Submit Quiz
-  const handleSubmitQuiz = () => {
-    if (!selectedModule || !selectedModule.quiz.length) return
+  const handleSubmitQuiz = async () => {
+    if (!selectedModule || syncBusy || !selectedModule.quiz.length) return
     let correctCount = 0
     selectedModule.quiz.forEach((q, idx) => {
       if (selectedAnswers[idx] === q.answer) {
@@ -199,37 +204,23 @@ export function TrainingPage() {
 
     // Pass threshold is 70%
     if (score >= 70) {
-      const updated = { ...completedModules, [selectedModule.key]: true }
-      setCompletedModules(updated)
-      try {
-        localStorage.setItem(`btps_completed_training_modules_${progressScope}`, JSON.stringify(updated))
-      } catch {}
+      setSyncBusy(true)
+      try{await employeeApi.put('/my/learning',{course:selectedModule.key,version:progressVersion,completed:true,source:'self_reported'});await loadProgress()}catch{setSyncError(t('workspace.syncFailed'));setQuizSubmitted(false)}finally{setSyncBusy(false)}
     }
   }
 
-  // Toggle checklist item
-  const handleToggleCheck = (key: string) => {
-    const today = businessDate()
-    const updated = { ...checkedItems, [key]: !checkedItems[key] }
-    setCheckedItems(updated)
-    try {
-      localStorage.setItem(`btps_training_checklist_${progressScope}_${today}`, JSON.stringify(updated))
-    } catch {}
+  const handleToggleCheck = async (key:string) => {
+    if(syncBusy)return;setSyncBusy(true);const scopedKey=`${progressVersion}:${key}`;const updated={...checkedItems,[scopedKey]:!checkedItems[scopedKey]}
+    try{await employeeApi.put('/my/checklist',updated);setCheckedItems(updated);setSyncError('')}catch{setSyncError(t('workspace.syncFailed'))}finally{setSyncBusy(false)}
   }
-
-  const handleResetChecklist = () => {
-    const today = businessDate()
-    setCheckedItems({})
-    try {
-      localStorage.removeItem(`btps_training_checklist_${progressScope}_${today}`)
-    } catch {}
-  }
+  const handleResetChecklist = async () => {if(syncBusy)return;setSyncBusy(true);try{await employeeApi.put('/my/checklist',{});setCheckedItems({});setSyncError('')}catch{setSyncError(t('workspace.syncFailed'))}finally{setSyncBusy(false)}}
 
   const completedCount = Object.keys(completedModules).length
   const totalCourses = catalogue.modules.length
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <section className="p-4 bg-white text-sm"><p>{t('workspace.selfReported')}</p>{syncError&&<p role="alert">{syncError} <button onClick={loadProgress}>{t('common.retry')}</button></p>}<button disabled={syncBusy} className="text-primary p-2" onClick={importLegacy}>{t('workspace.importLegacy')}</button></section>
       {/* Top Header - Consistent with staff app design */}
       <header className="bg-primary text-white px-4 pt-6 pb-5 rounded-b-3xl shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -404,7 +395,7 @@ export function TrainingPage() {
 
           {catalogue.checklists.length === 0 && <p className="text-sm text-gray-500">{w.emptyChecklists}</p>}
           {catalogue.checklists.map((list) => {
-            const checkedCount = list.items.filter((_, idx) => checkedItems[`${list.key}_${idx}`]).length
+            const checkedCount = list.items.filter((_, idx) => checkedItems[`${progressVersion}:${list.key}_${idx}`]).length
             const isAllDone = checkedCount === list.items.length
 
             return (
@@ -425,7 +416,7 @@ export function TrainingPage() {
                 <div className="space-y-2.5">
                   {list.items.map((item, idx) => {
                     const itemKey = `${list.key}_${idx}`
-                    const isChecked = !!checkedItems[itemKey]
+                    const isChecked = !!checkedItems[`${progressVersion}:${itemKey}`]
 
                     return (
                       <div
@@ -786,6 +777,7 @@ export function TrainingPage() {
                 </>
               ) : (
                 <>
+                  {syncError && <p role="alert" className="text-red-600">{syncError}</p>}
                   {!quizSubmitted ? (
                     <>
                       <button
@@ -796,7 +788,7 @@ export function TrainingPage() {
                       </button>
                       <button
                         onClick={handleSubmitQuiz}
-                        disabled={Object.keys(selectedAnswers).length < selectedModule.quiz.length}
+                        disabled={syncBusy || Object.keys(selectedAnswers).length < selectedModule.quiz.length}
                         className="flex-1 py-3 bg-primary disabled:opacity-50 text-white rounded-xl text-xs font-bold hover:bg-primary-hover transition-colors shadow-xs"
                       >
                         {t('common.submit', '提交答案')}

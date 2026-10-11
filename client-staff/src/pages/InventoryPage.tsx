@@ -1,8 +1,9 @@
+import { useSessionDraft } from '../utils/useSessionDraft'
 import {Link} from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { staffApi } from '../services/api'
+import { staffApi, employeeApi } from '../services/api'
 import { Search, Package, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ChevronRight, X } from 'lucide-react'
 
 interface InventoryItem {
@@ -20,6 +21,7 @@ interface StockLog {
   id: string
   inventoryId: string
   quantity: number
+  logType: 'stock-in' | 'stock-out'
   reason: string
   note?: string
   createdAt: string
@@ -30,6 +32,10 @@ export function InventoryPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const storeId = user?.storeId || ''
+  const [access,setAccess]=useState<any>(undefined)
+  useEffect(()=>{employeeApi.permissions().then(setAccess).catch(()=>setAccess(null))},[user?.staffId])
+  const can=(key:string)=>access!==undefined&&access!==null&&(access.role?access.role.permissions.includes(key):key==='inventory.count'||['admin','manager','staff'].includes(user?.role||''))
+  const [feedback,setFeedback]=useState('')
 
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,19 +44,19 @@ export function InventoryPage() {
   const [showLowStockOnly, setShowLowStockOnly] = useState(false)
 
   // Modal states
-  const [showStockInModal, setShowStockInModal] = useState(false)
-  const [showStockOutModal, setShowStockOutModal] = useState(false)
+  const [showStockInModal, setShowStockInModal] = useSessionDraft('inventory.stockInOpen', false)
+  const [showStockOutModal, setShowStockOutModal] = useSessionDraft('inventory.stockOutOpen', false)
   const [showLogsModal, setShowLogsModal] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [selectedItem, setSelectedItem] = useSessionDraft<InventoryItem | null>('inventory.selectedItem', null)
   const [stockLogs, setStockLogs] = useState<StockLog[]>([])
 
   // Form states
-  const [stockInQty, setStockInQty] = useState('')
-  const [stockInCost, setStockInCost] = useState('')
-  const [stockInNote, setStockInNote] = useState('')
-  const [stockOutQty, setStockOutQty] = useState('')
-  const [stockOutReason, setStockOutReason] = useState('adjust')
-  const [stockOutNote, setStockOutNote] = useState('')
+  const [stockInQty, setStockInQty] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInQty`, '')
+  const [stockInCost, setStockInCost] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInCost`, '')
+  const [stockInNote, setStockInNote] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInNote`, '')
+  const [stockOutQty, setStockOutQty] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutQty`, '')
+  const [stockOutReason, setStockOutReason] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutReason`, 'adjust')
+  const [stockOutNote, setStockOutNote] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutNote`, '')
   const [submitting, setSubmitting] = useState(false)
 
   const categories = [...new Set(inventory.map(item => item.category).filter(Boolean))]
@@ -65,10 +71,11 @@ export function InventoryPage() {
       setLoading(true)
       const res = await staffApi.getInventoryList({ storeId })
       if (res.code === 200) {
-        setInventory(res.data.list || [])
+        const items = res.data.list || []; setInventory(items)
+        if(selectedItem){const current=items.find((item:InventoryItem)=>item.id===selectedItem.id);if(current)setSelectedItem(current)}
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.loadFailed'))
+      setFeedback(error.message || t('inventory.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -82,8 +89,8 @@ export function InventoryPage() {
   })
 
   const handleStockIn = async () => {
-    if (!selectedItem || !stockInQty) {
-      alert(t('inventory.enterQuantity'))
+    if (!selectedItem || !Number.isFinite(Number(stockInQty)) || Number(stockInQty)<=0) {
+      setFeedback(t('inventory.enterQuantity'))
       return
     }
     try {
@@ -91,28 +98,28 @@ export function InventoryPage() {
       const res = await staffApi.stockIn({
         inventoryId: selectedItem.id,
         storeId,
-        quantity: parseFloat(stockInQty),
+        quantity: Number(stockInQty),
         unitCost: stockInCost ? parseFloat(stockInCost) : undefined,
         note: stockInNote || undefined
       })
       if (res.code === 201) {
-        alert(t('inventory.stockInSuccess'))
+        setFeedback(t('inventory.stockInSuccess'))
         setShowStockInModal(false)
         resetStockInForm()
-        loadInventory()
+        await loadInventory()
       } else {
-        alert(res.message || t('inventory.stockInFailed'))
+        setFeedback(res.message || t('inventory.stockInFailed'))
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.stockInFailed'))
+      setFeedback(error.message || t('inventory.stockInFailed'))
     } finally {
       setSubmitting(false)
     }
   }
 
   const handleStockOut = async () => {
-    if (!selectedItem || !stockOutQty) {
-      alert(t('inventory.enterQuantity'))
+    if (!selectedItem || !Number.isFinite(Number(stockOutQty)) || Number(stockOutQty)<=0) {
+      setFeedback(t('inventory.enterQuantity'))
       return
     }
     try {
@@ -120,20 +127,20 @@ export function InventoryPage() {
       const res = await staffApi.stockOut({
         inventoryId: selectedItem.id,
         storeId,
-        quantity: parseFloat(stockOutQty),
+        quantity: Number(stockOutQty),
         reason: stockOutReason,
         note: stockOutNote || undefined
       })
       if (res.code === 200) {
-        alert(t('inventory.stockOutSuccess'))
+        setFeedback(t('inventory.stockOutSuccess'))
         setShowStockOutModal(false)
         resetStockOutForm()
-        loadInventory()
+        await loadInventory()
       } else {
-        alert(res.message || t('inventory.stockOutFailed'))
+        setFeedback(res.message || t('inventory.stockOutFailed'))
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.stockOutFailed'))
+      setFeedback(error.message || t('inventory.stockOutFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -142,13 +149,13 @@ export function InventoryPage() {
   const loadStockLogs = async (item: InventoryItem) => {
     setSelectedItem(item)
     try {
-      const res = await staffApi.getStockLogs({ inventoryId: item.id })
+      const res = await staffApi.getStockLogs({ inventoryId: item.id, storeId })
       if (res.code === 200 && res.data) {
         setStockLogs(res.data.list || [])
         setShowLogsModal(true)
       }
     } catch (error: any) {
-      alert(error.message || t('inventory.loadLogsFailed'))
+      setFeedback(error.message || t('inventory.loadLogsFailed'))
     }
   }
 
@@ -181,7 +188,7 @@ export function InventoryPage() {
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1><Link to="/inventory/count" className="text-blue-600">{t('countFlow.title')}</Link>
+          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1>{can('inventory.count')&&<Link to="/inventory/count" className="text-blue-600">{t('countFlow.title')}</Link>}
           <div className="flex gap-2">
             <button
               onClick={() => setShowLowStockOnly(!showLowStockOnly)}
@@ -233,6 +240,7 @@ export function InventoryPage() {
         </div>
       </div>
 
+      <p role="status" className="px-4 text-primary">{feedback}</p>
       {/* Inventory List */}
       <div className="px-4 py-3 space-y-3">
         {loading ? (
@@ -276,14 +284,14 @@ export function InventoryPage() {
               {/* Action Buttons */}
               <div className="border-t border-gray-100 flex">
                 <button
-                  onClick={() => openStockIn(item)}
+                  disabled={!can('inventory.stockIn')} hidden={!can('inventory.stockIn')} onClick={() => openStockIn(item)}
                   className="flex-1 py-3 flex items-center justify-center text-green-600 hover:bg-green-50 active:bg-green-100 transition-colors"
                 >
                   <ArrowDownCircle className="w-4 h-4 mr-1.5" />
                   {t('inventory.stockIn')}
                 </button>
                 <button
-                  onClick={() => openStockOut(item)}
+                  disabled={!can('inventory.stockOut')} hidden={!can('inventory.stockOut')} onClick={() => openStockOut(item)}
                   className="flex-1 py-3 flex items-center justify-center text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors border-l border-gray-100"
                 >
                   <ArrowUpCircle className="w-4 h-4 mr-1.5" />
@@ -454,7 +462,7 @@ export function InventoryPage() {
       {/* Stock Logs Modal */}
       {showLogsModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 max-h-[calc(100dvh-6rem)] overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold">{t('inventory.stockHistory') || 'Stock History'}</h2>
               <button onClick={() => setShowLogsModal(false)} className="p-2">
@@ -480,8 +488,8 @@ export function InventoryPage() {
                   <div key={log.id} className="p-3 border border-gray-100 rounded-lg">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className={`font-medium ${log.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {log.quantity > 0 ? '+' : ''}{log.quantity} {selectedItem?.unit}
+                        <p className={`font-medium ${log.logType === 'stock-out' ? 'text-red-600' : 'text-green-600'}`}>
+                          {log.logType === 'stock-out' ? '-' : '+'}{Math.abs(log.quantity)} {selectedItem?.unit}
                         </p>
                         <p className="text-xs text-gray-500">{log.reason}</p>
                      </div>

@@ -1,3 +1,4 @@
+import { useSessionDraft } from '../utils/useSessionDraft'
 import { businessDate, businessWeekStart } from '../utils/businessDate'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
@@ -29,7 +30,7 @@ export function ShiftSwapPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useSessionDraft('ShiftSwapPage.tsx', {
     originalDate: '',
     originalShift: '',
     targetDate: '',

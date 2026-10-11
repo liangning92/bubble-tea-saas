@@ -2,7 +2,7 @@ import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { staffApi } from '../services/api'
+import { staffApi, employeeApi } from '../services/api'
 import { Clock, Loader2 } from 'lucide-react'
 
 interface AttendanceRule {
@@ -24,6 +24,7 @@ interface AttendanceRule {
 export function AttendanceRulesPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
+  const [lateRule,setLateRule] = useState<any>(null)
   const [rule, setRule] = useState<AttendanceRule | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -36,7 +37,8 @@ export function AttendanceRulesPage() {
     setLoadError(false)
     setLoading(true)
     try {
-      const res = await staffApi.getAttendanceRules()
+      const [res, monthly] = await Promise.all([staffApi.getAttendanceRules(), employeeApi.get('/my/late-rule')])
+      setLateRule(monthly)
       setRule(res.data?.find((item: AttendanceRule) => item.isDefault) || res.data?.[0] || null)
     } catch (error) {
       setLoadError(true)
@@ -66,7 +68,7 @@ export function AttendanceRulesPage() {
         </p>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4"><p className="bg-white p-4 rounded-xl">{t('workspace.attendanceBasis')}</p>
         {rule ? (
           <>
             {/* Work Time */}
@@ -79,27 +81,14 @@ export function AttendanceRulesPage() {
                   <h3 className="font-semibold">{t('attendanceRules.workHours')}</h3>
                 </div>
               </div>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('attendanceRules.workStartTime')}</span>
-                  <span className="font-medium">{rule.workStartTime}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">{t('attendanceRules.workEndTime')}</span>
-                  <span className="font-medium">{rule.workEndTime}</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-gray-600">{t('attendanceRules.gracePeriod')}</span>
-                  <span className="font-medium">{rule.gracePeriod} {t('attendanceRules.minutes')}</span>
-                </div>
-              </div>
+              <p>{t('workspace.attendanceBasis')}</p>
             </div>
 
             {/* Late Deduction */}
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <h3 className="font-semibold mb-4">{t('attendanceRules.lateDeduction')}</h3>
               <div className="space-y-3">
-                {rule.lateDeductionType === 'fixed' ? (
+                {lateRule ? (<div><p>{lateRule.month} · {lateRule.enabled ? t('workspace.recorded') : t('workspace.pendingReview')}</p>{lateRule.enabled && (lateRule.mode === 'tiers' ? lateRule.tiers.map((tier:any)=><p key={tier.minutes}>{tier.minutes} {t('workspace.minutes')} → Rp {tier.amount.toLocaleString('id-ID')}</p>) : <p>{lateRule.intervalMinutes} {t('workspace.minutes')} → Rp {lateRule.intervalAmount.toLocaleString('id-ID')}</p>)}</div>) : rule.lateDeductionType === 'fixed' ? (
                   <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">{t('attendanceRules.fixedDeduction')}</span>
                     <span className="font-medium text-red-600">

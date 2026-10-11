@@ -1,3 +1,4 @@
+import jsQR from 'jsqr'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -32,12 +33,14 @@ export function QRCameraScannerModal({
   const [mode, setMode] = useState<'check_in' | 'check_out'>(defaultMode)
   const [activeTab, setActiveTab] = useState<'camera' | 'manual'>('camera')
   const [manualCode, setManualCode] = useState('')
+  const [scanError, setScanError] = useState('')
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
   const [hasScanned, setHasScanned] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const cameraGeneration = useRef(0)
   const streamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -47,18 +50,12 @@ export function QRCameraScannerModal({
     setMode(defaultMode)
   }, [defaultMode, isOpen])
 
-  // 动态加载 jsQR 库作为非原生 BarcodeDetector 浏览器的通用垫片
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !(window as any).BarcodeDetector && !(window as any).jsQR) {
-      const script = document.createElement('script')
-      script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js'
-      script.async = true
-      document.head.appendChild(script)
-    }
-  }, [])
+  // Bundled decoder works without a runtime CDN download.
+  useEffect(()=>{(window as any).jsQR=jsQR},[])
 
   // 停止摄像头
   const stopCamera = useCallback(() => {
+    cameraGeneration.current++
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current)
       animFrameRef.current = null
@@ -78,6 +75,7 @@ export function QRCameraScannerModal({
     const cleanValue = rawValue.trim()
     if (!cleanValue) return
 
+    setScanError('')
     setHasScanned(true)
 
     // 震动提示
@@ -91,15 +89,16 @@ export function QRCameraScannerModal({
 
     try {
       await onScan(cleanValue, mode)
-    } catch {
-      // 失败后允许重新扫码
-      setHasScanned(false)
+    } catch (error: any) {
+      setScanError(error.response?.data?.message || t('common.loadFailed'))
+      // Pause decoding until the employee explicitly retries.
     }
   }, [hasScanned, isLoading, mode, onScan])
 
   // 启动摄像头与扫描循环
   const startCamera = useCallback(async () => {
     stopCamera()
+    const generation = cameraGeneration.current
     setCameraError(null)
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -118,6 +117,7 @@ export function QRCameraScannerModal({
         audio: false
       })
 
+      if (generation !== cameraGeneration.current) { stream.getTracks().forEach(track => track.stop()); return }
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -130,7 +130,7 @@ export function QRCameraScannerModal({
 
         const video = videoRef.current
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          // 方案 1: 原生 BarcodeDetector (Android Chrome / iOS 17+ Safari)
+          // Use native BarcodeDetector when the browser supports it.
           if ('BarcodeDetector' in window) {
             try {
               const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
@@ -173,15 +173,19 @@ export function QRCameraScannerModal({
 
       animFrameRef.current = requestAnimationFrame(scanFrame)
     } catch (err: any) {
+      if (generation !== cameraGeneration.current) return
       console.warn('Camera stream error:', err)
       setCameraError(t('attendance.cameraPermissionDenied', '无法打开摄像头，请检查浏览器相机权限或切换到手动输入。'))
     }
   }, [facingMode, hasScanned, handleDecodedString, stopCamera, t])
 
-  // 打开/关闭处理
+  useEffect(() => {
+    if (isOpen) { setScanError(''); setHasScanned(false) }
+  }, [isOpen])
+
+  // Camera callback changes must not erase a failed scan or restart decoding.
   useEffect(() => {
     if (isOpen) {
-      setHasScanned(false)
       if (activeTab === 'camera') {
         startCamera()
       }
@@ -243,7 +247,7 @@ export function QRCameraScannerModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 flex flex-col justify-between select-none">
+    <div className="fixed inset-0 z-[80] bg-black/85 flex flex-col justify-between select-none">
       {/* 顶部栏 */}
       <div className="px-4 pt-12 pb-4 flex items-center justify-between text-white bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center gap-2">
@@ -261,6 +265,7 @@ export function QRCameraScannerModal({
         </div>
 
         <button
+          aria-label={t('common.cancel')}
           onClick={onClose}
           className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-transform"
         >
@@ -268,12 +273,13 @@ export function QRCameraScannerModal({
         </button>
       </div>
 
+      {scanError && <div role="alert" className="mx-6 my-2 rounded-xl bg-red-50 text-red-700 p-3"><p>{scanError}</p><button className="mt-2 px-4 py-2 border rounded" onClick={()=>{setScanError('');setHasScanned(false)}}>{t('common.retry')}</button></div>}
       {/* 中部模式切换选择器 (上班签到 / 下班打卡) */}
       <div className="px-6 py-2">
         <div className="bg-white/15 backdrop-blur-md p-1 rounded-2xl flex border border-white/20">
           <button
             type="button"
-            onClick={() => setMode('check_in')}
+            onClick={() => {setScanError('');setHasScanned(false);setMode('check_in')}}
             className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_in'
                 ? 'bg-emerald-500 text-white shadow-md'
@@ -285,7 +291,7 @@ export function QRCameraScannerModal({
           </button>
           <button
             type="button"
-            onClick={() => setMode('check_out')}
+            onClick={() => {setScanError('');setHasScanned(false);setMode('check_out')}}
             className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_out'
                 ? 'bg-amber-500 text-white shadow-md'
@@ -351,7 +357,7 @@ export function QRCameraScannerModal({
                 {/* 识别成功/加载提示遮罩 */}
                 {(hasScanned || isLoading) && (
                   <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center text-white">
-                    {isLoading ? (
+                    {scanError ? <><AlertCircle size={40} className="text-red-400 mb-2" /><p className="text-xs font-bold">{scanError}</p></> : isLoading ? (
                       <>
                         <Loader2 size={36} className="text-primary animate-spin mb-2" />
                         <p className="text-xs font-bold">{t('common.loading', '正在登记考勤...')}</p>

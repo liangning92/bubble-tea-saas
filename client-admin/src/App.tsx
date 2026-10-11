@@ -1,3 +1,4 @@
+import { EmployeeWorkspacePage } from './pages/staff/EmployeeWorkspacePage'
 import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -223,6 +224,7 @@ function App() {
             <Route path="correction" element={<AttendanceCorrectionListPage />} />
             <Route path="shift-swap" element={<ShiftSwapListPage />} />
             <Route path="overtime" element={<OvertimeRequestListPage />} />
+            <Route path="workspace" element={<EmployeeWorkspacePage />} />
             <Route path="rules" element={<AttendanceRulesPage />} />
           </Route>
 

@@ -75,7 +75,7 @@ export function LoginPage() {
           localStorage.removeItem('remember_me')
         }
 
-        navigate('/', { replace: true })
+        navigate(sessionStorage.getItem('employee-return') || '/', { replace: true }); sessionStorage.removeItem('employee-return')
       } else {
         setError(response.message || t('auth.loginFailed'))
       }

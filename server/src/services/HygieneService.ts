@@ -847,34 +847,15 @@ function getExecutionTimes(template: any): string[] {
 /**
  * 开始执行任务
  */
-export async function startTask(taskId: string, staffId: string, storeId: string) {
-  const existingTask = await prisma.hygieneTask.findUnique({
-    where: { id: taskId },
-  })
-
-  if (!existingTask) throw new Error('Task not found')
-
-  // 验证任务属于当前店铺
-  if (existingTask.storeId !== storeId) {
-    throw new Error('Task not found')
-  }
-
-  // 只能对待执行状态的任务开始执行
-  if (existingTask.status !== 'pending') {
-    throw new Error(`Cannot start task: invalid status "${existingTask.status}" (expected "pending")`)
-  }
-
-  const task = await prisma.hygieneTask.update({
-    where: { id: taskId },
-    data: {
-      status: 'in_progress',
-      startedAt: new Date(),
-    },
-  })
-
-  await createTaskLog(task.id, staffId, 'started', null, null, 'Task execution started')
-
-  return task
+export async function startTask(taskId:string,staffId:string,storeId:string){
+ if(!staffId)throw new Error('Staff identity required')
+ const task=await prisma.$transaction(async tx=>{
+  const changed=await tx.hygieneTask.updateMany({where:{id:taskId,storeId,status:{in:['pending','overdue']},OR:[{staffId},{staffId:null}]},data:{status:'in_progress',staffId,startedAt:new Date()}})
+  if(changed.count!==1)throw new Error('Task unavailable or already claimed')
+  return tx.hygieneTask.findUniqueOrThrow({where:{id:taskId}})
+ })
+ await createTaskLog(task.id,staffId,'started',null,null,'Task claimed and execution started')
+ return task
 }
 
 /**
@@ -890,12 +871,13 @@ export async function completeTask(taskId: string, staffId: string, staffName: s
   // 先获取任务和模板信息
   const existingTask = await prisma.hygieneTask.findUnique({
     where: { id: taskId },
-    include: { template: { select: { requiresApproval: true, estimatedMinutes: true } } },
+    include: { template: { select: { requiresApproval: true, estimatedMinutes: true, photoRequired:true } } },
   })
 
   if (!existingTask) throw new Error('Task not found')
 
   // 验证任务属于当前店铺
+  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId)) throw new Error('Task belongs to another employee')
   if (existingTask.storeId !== storeId) {
     throw new Error('Task not found')
   }
@@ -910,6 +892,7 @@ export async function completeTask(taskId: string, staffId: string, staffName: s
     throw new Error('selfRating must be between 1 and 5')
   }
 
+  if (existingTask.template?.photoRequired && !data.photoUrl) throw new Error('Completion photo required')
   const requiresApproval = existingTask.template?.requiresApproval ?? false
   const newStatus = requiresApproval ? 'pending_approval' : 'completed'
 
@@ -1077,6 +1060,7 @@ export async function skipTask(taskId: string, staffId: string, staffName: strin
   if (!existingTask) throw new Error('Task not found')
 
   // 验证任务属于当前店铺
+  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId)) throw new Error('Task belongs to another employee')
   if (existingTask.storeId !== storeId) {
     throw new Error('Task not found')
   }
@@ -1123,6 +1107,7 @@ export async function reportIssue(taskId: string, staffId: string, staffName: st
   if (!existingTask) throw new Error('Task not found')
 
   // 验证任务属于当前店铺
+  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId)) throw new Error('Task belongs to another employee')
   if (existingTask.storeId !== storeId) {
     throw new Error('Task not found')
   }

@@ -1,3 +1,4 @@
+import { readWork, listWork } from './EmployeeWorkspaceStore'
 import { adjustmentPlan } from './SalaryAdjustmentService'
 import { salaryDepositPlan } from './SalaryDepositPlan'
 import { getStaffConfig } from './StaffConfigService'
@@ -260,13 +261,6 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   // Calculate work days
   const workDays = new Set(attendances.map(a => formatDate(a.checkInTime))).size
 
-  // Calculate late days based on workStartTime + gracePeriod
-  const lateDays = new Set(attendances.filter(a => {
-    if (!a.checkInTime) return false
-    const checkIn = new Date(a.checkInTime.getTime()+7*3600000)
-    const [hour,minute]=(rule?.workStartTime || '09:00').split(':').map(Number)
-    return checkIn.getUTCHours()*60+checkIn.getUTCMinutes()>hour*60+minute+gracePeriod
-  }).map(a => formatDate(a.checkInTime))).size
 
   if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
   const baseSalary = staff.baseSalary
@@ -288,7 +282,14 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   const onLeave = (key: string) => leaves.some(leave => key >= formatDate(leave.startDate) && key <= formatDate(leave.endDate))
   const dailySalary = baseSalary / 26
   const penalty = (type: string | undefined, count: number, fixed: number | null | undefined, ratio: number | null | undefined) => type === 'fixed' ? Math.round(count * (fixed || 0) / 100) : type === 'daily_rate' ? Math.round(count * dailySalary * (ratio ?? 1)) : 0
-  const latePenalty = penalty(rule?.lateDeductionType, [...attendanceDays].filter(([key, day]) => !onLeave(key) && day.checkIn.getTime() > new Date(`${key}T${rule?.workStartTime || '09:00'}:00+07:00`).getTime() + gracePeriod * 60000).length, rule?.lateDeductionFixed, rule?.lateDeductionDailyRate)
+  const monthlyLateRule = await readWork(staff.storeId, `rule.${String(year)}-${String(month).padStart(2, '0')}`)
+  const snapshots = await listWork(staff.storeId!, `attendance.${staffId}.`)
+  const lateDates = new Set(attendances.filter(a => {
+    const snapshot = snapshots.find(s => s.attendanceId === a.id)
+    return snapshot ? snapshot.minutes > 0 && !snapshot.exempt && !snapshot.needsReview : a.status === 'late' && schedules.some(s => formatDate(s.date) === formatDate(a.checkInTime))
+  }).map(a => snapshots.find(s => s.attendanceId === a.id)?.businessDate || formatDate(a.checkInTime)).filter(key => !onLeave(key)))
+  const lateDays = lateDates.size
+  const latePenalty = monthlyLateRule ? 0 : penalty(rule?.lateDeductionType, lateDays, rule?.lateDeductionFixed, rule?.lateDeductionDailyRate)
   const earlyLeaveDays = [...attendanceDays].filter(([key, day]) => {
     if (!day.checkOut || onLeave(key)) return false
     let end = new Date(`${key}T${rule?.workEndTime || '18:00'}:00+07:00`)

@@ -56,8 +56,10 @@ jobs:
           export RECEIPT_RUNTIME="$runtime"
           echo "RECEIPT_RUNTIME=$runtime" >> "$GITHUB_ENV"
           export RECEIPT_DEPS="$GITHUB_WORKSPACE/server/node_modules:$GITHUB_WORKSPACE/node_modules"
+          INTENT_RUNTIME="$runtime" node tests/stoploss/employee-workspace-http-check.cjs
           RECEIPT_PROVIDER=sqlite node tests/stoploss/order-receipt-http-check.cjs
           export PATH="$(pg_config --bindir):$PATH"
+          INTENT_RUNTIME="$runtime" INTENT_PROVIDER=postgresql node tests/stoploss/employee-workspace-http-check.cjs
           RECEIPT_PROVIDER=postgresql node tests/stoploss/order-receipt-http-check.cjs
           INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=sqlite node tests/stoploss/expense-save-http-check.cjs
           INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=postgresql node tests/stoploss/expense-save-http-check.cjs

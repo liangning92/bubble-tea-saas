@@ -2,7 +2,7 @@ import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { staffApi } from '../services/api'
+import { staffApi, employeeApi } from '../services/api'
 import { Star, Gift, History, Loader2, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
@@ -26,6 +26,8 @@ interface Reward {
 export function StaffPointsPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
+  const [compensation,setCompensation]=useState<any[]>([])
+  useEffect(()=>{employeeApi.get('/my/compensation').then(setCompensation).catch(()=>{})},[])
   const [currentTab, setCurrentTab] = useState<'history' | 'rewards'>('history')
   const [points, setPoints] = useState<any>(null)
   const [logs, setLogs] = useState<PointLog[]>([])
@@ -87,6 +89,7 @@ export function StaffPointsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <section className="p-4 space-y-2"><h2 className="font-bold">{t('compensation.title')}</h2>{compensation.map(r=><div key={r.id} className="bg-white rounded-xl p-3">{r.month} · {t('compensation.'+r.type)} · Rp {r.amount.toLocaleString()} · {t('compensation.'+r.status)}<p>{r.reason}</p></div>)}</section>
       {/* Header */}
       <header className="bg-primary text-white px-4 py-6 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
