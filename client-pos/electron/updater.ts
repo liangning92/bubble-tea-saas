@@ -10,6 +10,7 @@ import {isNewerUpdate} from '../src/utils/updateVersion'
 const { autoUpdater } = require('electron-updater')
 
 let mainWindow: BrowserWindow | null = null
+let updateState: {status:string; info?:any; progress:number; error?:string} = {status:'idle', progress:0}
 let checkInFlight = false
 let downloadInProgress = false
 let updateDownloaded = false
@@ -191,6 +192,13 @@ export function setupUpdater(window: BrowserWindow, hooks: {prepare:()=>Promise<
  * Send message to renderer process
  */
 function sendToRenderer(channel: string, ...args: any[]) {
+  // Persist state even when the renderer is hidden, reloading or not yet listening.
+  if (channel === 'update-status') {
+    const status = args[0]
+    updateState = {...updateState, status, info:args[1] || updateState.info,
+      error:status === 'error' ? updateState.error : undefined}
+  } else if (channel === 'update-progress') updateState = {...updateState, progress:args[0]?.percent || 0}
+  else if (channel === 'update-error') updateState = {...updateState, status:'error', error:String(args[0])}
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, ...args)
   }
@@ -200,6 +208,7 @@ function sendToRenderer(channel: string, ...args: any[]) {
  * Set up IPC handlers for update operations
  */
 function setupIpcHandlers() {
+  ipcMain.handle('get-update-state', () => ({...updateState, currentVersion:app.getVersion()}))
   ipcMain.handle('show-update-installer', () => {
     const installer = autoUpdater.installerPath
     if (!updateDownloaded || !installer || !existsSync(installer)) {
@@ -251,7 +260,7 @@ function setupIpcHandlers() {
 
       await autoUpdater.downloadUpdate()
 
-      return true
+      return {...updateState, currentVersion:app.getVersion()}
     } catch (error: any) {
       downloadInProgress = false
       log('error', 'Download failed:', error.message)
