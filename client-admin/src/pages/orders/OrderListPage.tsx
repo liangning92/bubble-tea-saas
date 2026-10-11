@@ -200,7 +200,7 @@ export function OrderListPage() {
             <table className="w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
-                  <th className="pb-3 font-medium">{t('orders.orderNumber')}</th>
+                  <th className="pb-3 font-medium">{t('shiftHandover.products')}</th>
                   <th className="pb-3 font-medium">{t('channels.channel') || 'Channel'}</th>
                   <th className="pb-3 font-medium">{t('orders.date')}</th>
                   <th className="pb-3 font-medium">{t('orders.customer')}</th>
@@ -213,13 +213,10 @@ export function OrderListPage() {
                 {orders.map((order: any) => (
                   <tr key={order.id} className="border-b last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId:context.storeId,asOf:context.asOf,startDate:context.startDate,endDate:context.endDate}))}>
                     <td className="py-3">
-                      <div className="flex items-center gap-2">
-                        {order.pickupNumber && (
-                          <span className="px-2 py-0.5 text-xs font-bold font-mono rounded bg-primary/10 text-primary border border-primary/20">
-                            #{order.pickupNumber}
-                          </span>
-                        )}
-                        <span className="font-mono text-sm text-gray-800">{order.orderNumber || order.id}</span>
+                      <div className="space-y-1 text-sm text-gray-800">
+                        {order.items?.length ? order.items.map((item: { productName: string; quantity: number }, index: number) => (
+                          <div key={index}>{item.productName} × {item.quantity}</div>
+                        )) : '-'}
                       </div>
                     </td>
                     <td className="py-3">

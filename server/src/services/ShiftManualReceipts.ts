@@ -11,9 +11,11 @@ export async function loadManualReceipts(db: Pick<PrismaClient, 'config'>, store
   return result
 }
 export async function getHandoverReceipts(db: Pick<PrismaClient, 'config' | 'shiftSession'>, storeId: string, start: Date, end: Date) {
-  const sessions = await db.shiftSession.findMany({where:{storeId,status:'closed',closedAt:{gte:start,lt:end}},select:{id:true,shift:true,closedAt:true},orderBy:{closedAt:'desc'}})
+  const sessions = await db.shiftSession.findMany({where:{storeId,status:'closed',closedAt:{gte:start,lte:end}},select:{id:true,shift:true,closedAt:true},orderBy:{closedAt:'desc'}})
   const receipts = await loadManualReceipts(db, storeId, sessions.map(s=>s.id))
-  const list = sessions.map(s=>({...s,manualReceipts:receipts.get(s.id) || null}))
+  const basisRecords = sessions.length ? await db.config.findMany({where:{storeId,key:{in:sessions.map(s=>'pos.shift.report:'+s.id)}},select:{key:true,value:true}}) : []
+  const bases = new Map(basisRecords.map(r=>[r.key.slice('pos.shift.report:'.length),JSON.parse(r.value).manualReceiptsCashBasis]))
+  const list = sessions.map(s=>({...s,manualReceipts:receipts.get(s.id) || null,manualReceiptsCashBasis:bases.get(s.id) || 'cash_receipts'}))
   const totals = {cash:0,qris:0,shopeefood:0,gofood:0}
   for (const row of list) if (row.manualReceipts) for (const key of ['cash','qris','shopeefood','gofood'] as const) totals[key] += row.manualReceipts[key]
   return {list,totals,reportedShifts:receipts.size,unreportedShifts:sessions.length-receipts.size,source:'manual_handover',dateBasis:'closedAt',timezone:'Asia/Jakarta'}

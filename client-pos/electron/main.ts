@@ -2048,22 +2048,15 @@ function generateShiftReportText(data: any): string {
   time(label('打印时间', 'Printed', 'Dicetak'), new Date())
   separator()
   const evidence = data.summaryEvidence || {}
-  const verified = evidence.verified === true
-  wrap(label('销售及现金记录', 'SALES / CASH RECORDS', 'CATATAN PENJUALAN / KAS'))
-  if (!verified) wrap(label('按开班至交班时间统计，待核对', 'Opening-to-close records; unverified', 'Catatan waktu shift; perlu diperiksa'))
+  wrap(label('交班申报金额', 'HANDOVER AMOUNTS', 'JUMLAH SERAH TERIMA'))
   const si = data.summaryItems || {}
   if (si.openFloat !== false) money(label('开班备用金', 'Opening float', 'Kas awal'), data.openFloat)
-  if (si.cashSales !== false) money(label('现金销售记录', 'Recorded cash sales', 'Penjualan tunai'), evidence.cashSales)
-  if (si.qrisSales !== false) money(label('QRIS销售记录', 'Recorded QRIS', 'Penjualan QRIS'), evidence.qrisReceipts)
-  if (si.cashIn !== false) money(label('现金存入记录', 'Recorded cash in', 'Kas masuk'), evidence.cashIns)
-  if (si.cashOut !== false) money(label('现金支出记录', 'Recorded cash out', 'Kas keluar'), evidence.cashOuts)
-  const amounts = [data.openFloat,evidence.cashSales,evidence.cashIns,evidence.cashOuts]
-  const recordedBalance = amounts.every(number) ? data.openFloat + evidence.cashSales + evidence.cashIns - evidence.cashOuts : null
-  money(label('记录推算现金', 'Recorded cash balance', 'Saldo kas tercatat'), recordedBalance)
-  if (si.closeCash !== false) money(label('实际盘点现金', 'Counted cash', 'Kas dihitung'), data.actualCash)
-  const expected = verified && number(data.expectedCash) && data.expectedCash === recordedBalance ? data.expectedCash : null
-  money(label('钱箱应有现金', 'Expected cash', 'Kas seharusnya'), expected)
-  money(label('现金差额', 'Variance', 'Selisih'), number(expected) && number(data.actualCash) ? data.actualCash - expected : null)
+  if (si.closeCash !== false) money(label('钱箱总数', 'Drawer total', 'Total laci'), data.actualCash)
+  const receipts = data.manualReceipts || {}
+  if (data.manualReceiptsCashBasis !== 'drawer_total') money(label('现金收款', 'Cash receipts', 'Penerimaan tunai'), receipts.cash)
+  money(label('QRIS收款', 'QRIS receipts', 'Penerimaan QRIS'), receipts.qris)
+  money(label('ShopeeFood收款', 'ShopeeFood receipts', 'Penerimaan ShopeeFood'), receipts.shopeefood)
+  money(label('GoFood收款', 'GoFood receipts', 'Penerimaan GoFood'), receipts.gofood)
   separator()
   if (si.orderCount !== false) row(label('完成订单记录', 'Completed orders', 'Pesanan selesai'), number(evidence.orderCount) ? String(evidence.orderCount) : unknown)
   row(label('商品杯数记录', 'Item quantity', 'Jumlah minuman'), number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
@@ -2077,7 +2070,6 @@ function generateShiftReportText(data: any): string {
     } else wrap(unknown)
     wrap(label('采购记账，不等于钱箱已付款', 'Expense recorded; cash payout separate', 'Biaya dicatat; kas dibayar terpisah'))
   }
-  if (!verified) { separator(); wrap(label('销售归属、离线上传及退款需核对', 'Review sales attribution, uploads and refunds', 'Periksa penjualan, unggahan dan refund')) }
   separator()
   wrap(label('收银员签字:', 'Cashier sign:', 'Ttd Kasir:'))
   lines.push('________________________', '')

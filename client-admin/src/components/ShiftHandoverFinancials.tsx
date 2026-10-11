@@ -1,0 +1,6 @@
+import { useTranslation } from 'react-i18next'
+import { formatCurrency } from '../utils/helpers'
+export function ShiftHandoverFinancials({amounts}:{amounts:{reported?:boolean;drawerTotal:number|null;openFloat:number;expenses:number;qris:number|null;shopeefood:number;gofood:number;orderRevenue:number;actualCashReceived:number|null;totalRevenue:number}}) {
+  const {t}=useTranslation()
+  return <section className="rounded-xl border bg-white p-4" data-testid="shift-handover-financials"><h3 className="font-semibold">{t('shiftHandover.title')}</h3><div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-3">{(['drawerTotal','openFloat','expenses','qris','actualCashReceived','orderRevenue','shopeefood','gofood','totalRevenue'] as const).map(key=><div key={key}><p className="text-sm text-gray-500">{t('shiftHandover.'+key)}</p><p className="font-bold mt-1">{amounts[key] === null || (amounts.reported === false && ['shopeefood','gofood'].includes(key)) ? t('manualReceipts.missing') : formatCurrency(amounts[key]!)}</p></div>)}</div><p className="text-xs text-gray-500 mt-3">{t('shiftHandover.cashFormula')}</p><p className="text-xs text-gray-500 mt-1">{t('shiftHandover.revenueFormula')}</p></section>
+}
