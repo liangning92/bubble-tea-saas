@@ -37,6 +37,9 @@ module.exports=async({prisma,check})=>{
  const cashFlow=await check('GET','/api/finance/cash-flow?startDate=2026-10-01&endDate=2026-10-31');
  assert.ok(cashFlow.outflows.staffSalaries>=650000);
  assert.equal(cashFlow.outflows.staffSalaries,await prisma.expense.aggregate({where:{storeId:'store',referenceType:'salary',date:{gte:new Date('2026-10-01T00:00:00+07:00'),lte:new Date('2026-10-31T23:59:59.999+07:00')}},_sum:{amount:true}}).then(x=>(x._sum.amount||0)/100));
+ const cashWorkbook=XLSX.read(await report.generateCashFlowExcel('store',10,2026),{type:'buffer'});
+ const cashRows=XLSX.utils.sheet_to_json(cashWorkbook.Sheets['Arus Kas'],{header:1});
+ assert.equal(cashRows.find(row=>row[1]==='Pembayaran Kas kepada Karyawan')[3],-cashFlow.outflows.staffSalaries);
  const minorExpense=await prisma.expense.create({data:{storeId:'store',type:'operational',category:'supplies',amount:5300000,description:'Payroll finance unit fixture',date:new Date('2026-10-15T00:00:00+07:00')}});
  const profitWithExpense=await check('GET','/api/finance/profit?startDate=2026-10-01&endDate=2026-10-31');
  assert.equal(profitWithExpense.operatingCosts.other-profitAfterPayment.operatingCosts.other,53000);
