@@ -1,3 +1,4 @@
+import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -68,6 +69,7 @@ export function LeavePage() {
 
   const [leaves, setLeaves] = useState<Leave[]>([])
   const [balance, setBalance] = useState<LeaveBalance | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [activeTab, setActiveTab] = useState<'history' | 'balance'>('history')
@@ -80,6 +82,7 @@ export function LeavePage() {
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadFailed(false)
     try {
       const [leavesRes, balanceRes] = await Promise.all([
         staffApi.getMyLeaves(),
@@ -88,7 +91,7 @@ export function LeavePage() {
       setLeaves(leavesRes.data || [])
       setBalance(balanceRes.data)
     } catch (error) {
-      console.error('Failed to load leave data:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
@@ -104,6 +107,8 @@ export function LeavePage() {
       alert(t('leave.cancelLeaveSuccess'))
     }
   }
+
+  if (loadFailed) return <LoadFailure retry={loadData} />
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">

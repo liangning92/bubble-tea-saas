@@ -44,6 +44,9 @@ const resources = {
         reimbursement: 'Pengeluaran'
       },
       auth: {
+        staffMissing: 'Akun belum terhubung ke profil karyawan. Hubungi pengelola.',
+        sessionExpired: 'Sesi berakhir. Silakan masuk lagi.',
+        resetHelp: 'Hubungi pengelola untuk mengatur ulang kata sandi.',
         login: 'Masuk',
         logout: 'Keluar',
         phone: 'Nomor Telepon',
@@ -334,6 +337,7 @@ const resources = {
         submitFailed: 'Pengajuan gagal'
       },
       shiftSwap: {
+        chooseShift: 'Pilih shift',
         title: 'Pertukaran Shift',
         newRequest: 'Pengajuan Pertukaran Baru',
         fillForm: 'Isi Formulier Pertukaran',
@@ -473,12 +477,13 @@ const resources = {
         confirmNewPassword: 'Konfirmasi Password Baru',
         saveNewPassword: 'Simpan Password Baru',
         passwordMismatch: 'Password baru tidak cocok',
-        passwordMinLength: 'Password minimal 6 karakter',
+        passwordMinLength: 'Password harus 10–72 byte (huruf biasa: 10–72 karakter)',
         passwordChangeSuccess: 'Password berhasil diubah!',
         passwordChangeError: 'Gagal mengubah password',
         error: 'Terjadi kesalahan'
       },
       hygiene: {
+        startTask: 'Mulai', state_completed: 'Selesai', state_pending_approval: 'Menunggu persetujuan', state_skipped: 'Dilewati', state_approved: 'Disetujui', state_rejected: 'Perlu diperbaiki',
         title: 'Tugas Kebersihan',
         myTasks: 'Tugas Saya',
         pending: 'Tugas Menunggu',
@@ -581,6 +586,9 @@ const resources = {
         reimbursement: 'Expense'
       },
       auth: {
+        staffMissing: 'This account has no employee profile. Contact your manager.',
+        sessionExpired: 'Session expired. Please sign in again.',
+        resetHelp: 'Contact your manager to reset your password.',
         login: 'Login',
         logout: 'Logout',
         phone: 'Phone Number',
@@ -853,6 +861,7 @@ const resources = {
         submitFailed: 'Failed to submit overtime'
       },
       shiftSwap: {
+        chooseShift: 'Choose a shift',
         title: 'Shift Swap',
         newRequest: 'New Shift Swap Request',
         fillForm: 'Fill Shift Swap Form',
@@ -1010,12 +1019,13 @@ const resources = {
         confirmNewPassword: 'Confirm New Password',
         saveNewPassword: 'Save New Password',
         passwordMismatch: 'New password does not match',
-        passwordMinLength: 'Password must be at least 6 characters',
+        passwordMinLength: 'Password must be 10–72 UTF-8 bytes (10–72 plain letters)',
         passwordChangeSuccess: 'Password changed successfully!',
         passwordChangeError: 'Failed to change password',
         error: 'An error occurred'
       },
       hygiene: {
+        startTask: 'Start', state_completed: 'Completed', state_pending_approval: 'Awaiting approval', state_skipped: 'Skipped', state_approved: 'Approved', state_rejected: 'Needs correction',
         title: 'Hygiene Tasks',
         myTasks: 'My Tasks',
         pending: 'Pending Tasks',
@@ -1114,6 +1124,9 @@ const resources = {
         reimbursement: '报销'
       },
       auth: {
+        staffMissing: '此账号尚未关联员工资料，请联系管理员。',
+        sessionExpired: '登录已过期，请重新登录。',
+        resetHelp: '请联系管理员重置密码。',
         login: '登录',
         logout: '退出',
         phone: '手机号',
@@ -1443,6 +1456,7 @@ const resources = {
         submitFailed: '提交加班失败'
       },
       shiftSwap: {
+        chooseShift: '请选择班次',
         title: '调班申请',
         newRequest: '新调班申请',
         fillForm: '填写调班申请',
@@ -1543,12 +1557,13 @@ const resources = {
         confirmNewPassword: '确认新密码',
         saveNewPassword: '保存新密码',
         passwordMismatch: '新密码不匹配',
-        passwordMinLength: '密码至少6个字符',
+        passwordMinLength: '密码需要10–72个UTF-8字节（英文字符为10–72个）',
         passwordChangeSuccess: '密码修改成功！',
         passwordChangeError: '修改密码失败',
         error: '发生错误'
       },
       hygiene: {
+        startTask: '开始执行', state_completed: '已完成', state_pending_approval: '待审核', state_skipped: '已跳过', state_approved: '已审核', state_rejected: '需整改',
         title: '卫生任务',
         myTasks: '我的任务',
         pending: '待执行任务',

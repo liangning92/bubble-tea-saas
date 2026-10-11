@@ -1,3 +1,4 @@
+import { businessDate } from '../utils/businessDate'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -86,19 +87,19 @@ export function TrainingPage() {
   // Load completed modules and checklist state from localStorage
   useEffect(() => {
     try {
-      const savedModules = localStorage.getItem('btps_completed_training_modules')
+      const savedModules = localStorage.getItem(`btps_completed_training_modules_${user?.staffId}`)
       if (savedModules) {
         setCompletedModules(JSON.parse(savedModules))
       }
-      const today = new Date().toISOString().slice(0, 10)
-      const savedChecks = localStorage.getItem(`btps_training_checklist_${today}`)
+      const today = businessDate()
+      const savedChecks = localStorage.getItem(`btps_training_checklist_${user?.staffId}_${today}`)
       if (savedChecks) {
         setCheckedItems(JSON.parse(savedChecks))
       }
     } catch (e) {
       console.warn('Failed to load local training state:', e)
     }
-  }, [])
+  }, [user?.staffId])
 
   const STATUS_ICONS: Record<string, JSX.Element> = {
     scheduled: <Clock className="text-blue-500" size={18} />,
@@ -197,26 +198,26 @@ export function TrainingPage() {
       const updated = { ...completedModules, [selectedModule.key]: true }
       setCompletedModules(updated)
       try {
-        localStorage.setItem('btps_completed_training_modules', JSON.stringify(updated))
+        localStorage.setItem(`btps_completed_training_modules_${user?.staffId}`, JSON.stringify(updated))
       } catch {}
     }
   }
 
   // Toggle checklist item
   const handleToggleCheck = (key: string) => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessDate()
     const updated = { ...checkedItems, [key]: !checkedItems[key] }
     setCheckedItems(updated)
     try {
-      localStorage.setItem(`btps_training_checklist_${today}`, JSON.stringify(updated))
+      localStorage.setItem(`btps_training_checklist_${user?.staffId}_${today}`, JSON.stringify(updated))
     } catch {}
   }
 
   const handleResetChecklist = () => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessDate()
     setCheckedItems({})
     try {
-      localStorage.removeItem(`btps_training_checklist_${today}`)
+      localStorage.removeItem(`btps_training_checklist_${user?.staffId}_${today}`)
     } catch {}
   }
 

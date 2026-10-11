@@ -176,7 +176,7 @@ router.get('/tasks/my/pending', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
     if (!staffId) return res.status(400).json({ code: 400, message: 'staffId required' })
-    const tasks = await HygieneService.getPendingTasks(req.user!.storeId, { staffId })
+    const tasks = await HygieneService.getPendingTasks(req.user!.storeId, { staffId, includeInProgress: true })
     res.json({ code: 200, data: { count: tasks.length, list: tasks } })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })

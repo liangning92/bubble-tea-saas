@@ -700,9 +700,9 @@ export async function getTasksByStaff(staffId: string, date: string) {
 /**
  * 获取待处理任务
  */
-export async function getPendingTasks(storeId: string, options?: { staffId?: string }) {
+export async function getPendingTasks(storeId: string, options?: { staffId?: string; includeInProgress?: boolean }) {
   const today = formatDate(new Date())
-  const where: any = { storeId, date: today, status: 'pending' }
+  const where: any = { storeId, date: today, status: options?.includeInProgress ? { in: ['pending', 'in_progress'] } : 'pending' }
   if (options?.staffId) where.staffId = options.staffId
 
   return prisma.hygieneTask.findMany({

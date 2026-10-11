@@ -1,3 +1,6 @@
+import { LoadFailure } from '../components/LoadFailure'
+import { RouteLoading } from '../components/RouteLoading'
+import { businessDate } from '../utils/businessDate'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { staffApi } from '../services/api'
@@ -8,16 +11,24 @@ export function HygienePage() {
   const { t } = useTranslation()
   useAuthStore()
   const [tasks, setTasks] = useState<any[]>([])
-  const [, setLoading] = useState(false)
-  const [selectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [loading, setLoading] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [confirmTask, setConfirmTask] = useState<any>(null)
+  const [skipTaskId, setSkipTaskId] = useState<string | null>(null)
+  const [skipNote, setSkipNote] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<Record<string, File>>({})
+  const [selectedDate] = useState(businessDate())
 
   const loadTasks = async () => {
     setLoading(true)
+    setLoadFailed(false)
     try {
       const data = await staffApi.getMyTasks(selectedDate)
       setTasks(data?.data?.list || [])
     } catch (err) {
-      console.error('Failed to load tasks:', err)
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -27,30 +38,44 @@ export function HygienePage() {
     loadTasks()
   }, [selectedDate])
 
-  const handleComplete = async (taskId: string) => {
-    if (!confirm(t('hygiene.confirmComplete'))) return
+  const handleStart = async (taskId: string) => {
+    setBusy(taskId); setActionError('')
+    try { await staffApi.startTask(taskId); await loadTasks() }
+    catch (err: any) { setActionError(err.response?.data?.message || t('common.error')) }
+    finally { setBusy(null) }
+  }
+  const handleComplete = async (task: any) => {
+    if (task.template?.photoRequired && !photos[task.id]) {
+      setActionError(t('hygiene.photoRequired')); return
+    }
+    setBusy(task.id); setActionError('')
     try {
-      await staffApi.completeTask(taskId, {})
-      loadTasks()
-    } catch (err) {
-      console.error('Failed to complete task:', err)
-    }
-  }
-
-  const handleSkip = async (taskId: string) => {
-    const note = prompt(t('hygiene.skipReasonPlaceholder'))
-    if (note) {
-      try {
-        await staffApi.skipTask(taskId, note)
-        loadTasks()
-      } catch (err) {
-        console.error('Failed to skip task:', err)
+      let photoUrl: string | undefined
+      if (photos[task.id]) {
+        const upload = await staffApi.uploadAttachment(photos[task.id])
+        photoUrl = upload.data?.urls?.[0]
+        if (!photoUrl) throw new Error('Upload failed')
       }
-    }
+      await staffApi.completeTask(task.id, { photoUrl })
+      setConfirmTask(null)
+      await loadTasks()
+    } catch (err: any) { setActionError(err.response?.data?.message || t('common.error')) }
+    finally { setBusy(null) }
+  }
+  const handleSkip = async (taskId: string) => {
+    const note = skipNote.trim()
+    if (!note) return
+    setBusy(taskId); setActionError('')
+    try { await staffApi.skipTask(taskId, note); setSkipTaskId(null); setSkipNote(''); await loadTasks() }
+    catch (err: any) { setActionError(err.response?.data?.message || t('common.error')) }
+    finally { setBusy(null) }
   }
 
-  const pendingTasks = tasks.filter(t => t.status === 'pending')
-  const completedTasks = tasks.filter(t => t.status === 'completed')
+  const pendingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress')
+  const completedTasks = tasks.filter(t => ['completed', 'approved', 'pending_approval', 'skipped', 'rejected'].includes(t.status))
+
+  if (loading && !busy) return <RouteLoading />
+  if (loadFailed) return <LoadFailure retry={loadTasks} />
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -62,6 +87,16 @@ export function HygienePage() {
         </p>
       </div>
 
+      {actionError && <div role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-red-700">{actionError}</div>}
+      {(confirmTask || skipTaskId) && <section role="form" aria-label={t('common.confirm')} className="m-4 rounded-xl border border-primary bg-white p-4">
+        <h2 className="font-bold">{confirmTask ? t('hygiene.confirmComplete') : t('hygiene.skipReasonPlaceholder')}</h2>
+        {confirmTask && <p className="my-2">{confirmTask.name}</p>}
+        {skipTaskId && <textarea aria-label={t('hygiene.skipReasonPlaceholder')} value={skipNote} onChange={e => setSkipNote(e.target.value)} className="mt-2 w-full rounded-lg border p-2" />}
+        <div className="mt-3 flex gap-3">
+          <button disabled={!!busy} onClick={() => { setConfirmTask(null); setSkipTaskId(null) }} className="rounded-lg border px-4 py-2">{t('common.cancel')}</button>
+          <button disabled={!!busy || (!!skipTaskId && !skipNote.trim())} onClick={() => confirmTask ? handleComplete(confirmTask) : handleSkip(skipTaskId!)} className="rounded-lg bg-primary px-4 py-2 text-white">{busy ? t('common.submitting') : t('common.submit')}</button>
+        </div>
+      </section>}
       {/* Summary */}
       <div className="p-4 grid grid-cols-3 gap-3">
         <div className="bg-white rounded-lg p-4 text-center">
@@ -73,7 +108,7 @@ export function HygienePage() {
           <div className="text-xs text-gray-500">{t('hygiene.toDo')}</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-green-500">{completedTasks.length}</div>
+          <div className="text-2xl font-bold text-green-500">{completedTasks.filter(task => ['completed', 'approved'].includes(task.status)).length}</div>
           <div className="text-xs text-gray-500">{t('hygiene.done')}</div>
         </div>
       </div>
@@ -92,11 +127,11 @@ export function HygienePage() {
           <div className="space-y-3">
             {pendingTasks.map(task => (
               <div key={task.id} className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="flex items-start gap-3">
+                <div className="flex flex-wrap items-start gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
-                        {t('hygiene.area')}: {task.area}
+                        {t('hygiene.area')}: {task.area || task.areaCode}
                       </span>
                       <span className="text-sm font-medium">{task.name}</span>
                     </div>
@@ -118,15 +153,23 @@ export function HygienePage() {
                       </div>
                     )}
                   </div>
+                  {task.status === 'in_progress' && task.template?.photoRequired && <label className="text-xs text-gray-600">
+                    {t('hygiene.photoRequired')}
+                    <input aria-label={t('hygiene.photoRequired')} type="file" accept="image/*" capture="environment" disabled={!!busy} onChange={e => { const file = e.target.files?.[0]; setPhotos(prev => { const next = { ...prev }; if (file) next[task.id] = file; else delete next[task.id]; return next }) }} className="max-w-40 block" />
+                  </label>}
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleComplete(task.id)}
+                      disabled={!!busy}
+                      aria-label={task.status === 'pending' ? t('hygiene.startTask') : t('hygiene.confirmComplete')}
+                      onClick={() => task.status === 'pending' ? handleStart(task.id) : setConfirmTask(task)}
                       className="p-2 bg-green-500 text-white rounded-lg"
                     >
-                      <CheckCircle size={20} />
+                      {task.status === 'pending' ? <span className="text-xs">{t('hygiene.startTask')}</span> : <CheckCircle size={20} />}
                     </button>
                     <button
-                      onClick={() => handleSkip(task.id)}
+                      disabled={!!busy}
+                      aria-label={t('hygiene.skipReasonPlaceholder')}
+                      onClick={() => { setSkipTaskId(task.id); setSkipNote('') }}
                       className="p-2 bg-yellow-500 text-white rounded-lg"
                     >
                       <SkipForward size={20} />
@@ -150,7 +193,7 @@ export function HygienePage() {
               <div key={task.id} className="bg-gray-100 rounded-lg p-3 flex items-center gap-3">
                 <CheckCircle size={18} className="text-green-500" />
                 <span className="text-sm text-gray-600">
-                  {task.area} - {task.name}
+                  {task.area || task.areaCode} - {task.name} · {t(`hygiene.state_${task.status}`)}
                 </span>
               </div>
             ))}

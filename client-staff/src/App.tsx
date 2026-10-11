@@ -29,7 +29,7 @@ const AttendanceRulesPage = lazy(() => import('./pages/AttendanceRulesPage').the
 
 function LayoutWithNav({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50 pb-16">
+    <div className="min-h-screen bg-gray-50 pb-[calc(4rem+env(safe-area-inset-bottom))]">
       <Suspense fallback={<RouteLoading />}>{children}</Suspense>
       <BottomNav />
     </div>
@@ -37,8 +37,8 @@ function LayoutWithNav({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const { isAuthenticated, token, user } = useAuthStore()
+  if (!isAuthenticated || !token || !user) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
@@ -192,7 +192,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-    </Routes></Suspense>
+    <Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense>
   )
 }
 

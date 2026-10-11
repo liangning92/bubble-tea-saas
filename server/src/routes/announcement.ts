@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import prisma from '../config/database'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, canAccessStore, AuthRequest } from '../middlewares/auth'
 
 const router = Router()
 
@@ -76,6 +76,8 @@ router.get('/active', authenticate, async (req: AuthRequest, res) => {
     if (!storeId) {
       return res.status(400).json({ code: 400, message: 'storeId required' })
     }
+
+    if (typeof storeId !== 'string' || !canAccessStore(req.user!, storeId)) return res.status(403).json({ code: 403, message: 'Store access denied' })
 
     const now = new Date()
     const announcements = await prisma.announcement.findMany({

@@ -31,6 +31,7 @@ export function formatDate(date: Date | string, format: string = 'short'): strin
   switch (format) {
     case 'long':
       return d.toLocaleDateString('id-ID', {
+        timeZone: 'Asia/Jakarta',
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -38,17 +39,19 @@ export function formatDate(date: Date | string, format: string = 'short'): strin
       })
     case 'short':
       return d.toLocaleDateString('id-ID', {
+        timeZone: 'Asia/Jakarta',
         day: 'numeric',
         month: 'short',
         year: 'numeric'
       })
     case 'time':
       return d.toLocaleTimeString('id-ID', {
+        timeZone: 'Asia/Jakarta',
         hour: '2-digit',
         minute: '2-digit'
       })
     default:
-      return d.toLocaleDateString('id-ID')
+      return d.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })
   }
 }
 
