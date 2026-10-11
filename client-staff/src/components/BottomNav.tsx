@@ -40,21 +40,18 @@ export function BottomNav() {
     ["/profile", "workspace.navProfile", User],
   ] as const;
   return (
-    <nav
-      aria-label={t("nav.home")}
-      className="fixed bottom-0 inset-x-0 bg-white border-t grid grid-cols-6 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] z-[60]"
-    >
+    <nav aria-label={t("nav.home")} className="employee-bottom-nav">
       {tabs.map(([path, key, Icon]) => (
         <button
           key={path}
           onClick={() => navigate(path)}
           aria-current={active === path ? "page" : undefined}
-          className={`min-h-12 min-w-0 px-0.5 flex flex-col items-center gap-1 ${active === path ? "text-primary font-bold" : "text-gray-500"}`}
+          className={`employee-nav-item ${active === path ? "active" : ""}`}
         >
-          <Icon size={21} />
-          <span className="text-[10px] leading-3 text-center break-words">
-            {t(key)}
+          <span className="employee-nav-icon">
+            <Icon size={21} strokeWidth={active === path ? 2.2 : 1.8} />
           </span>
+          <span className="employee-nav-label">{t(key)}</span>
         </button>
       ))}
     </nav>

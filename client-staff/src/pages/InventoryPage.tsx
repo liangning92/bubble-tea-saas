@@ -1,205 +1,282 @@
-import { useSessionDraft } from '../utils/useSessionDraft'
-import {Link} from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '../stores/auth'
-import { staffApi, employeeApi } from '../services/api'
-import { Search, Package, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ChevronRight, X } from 'lucide-react'
+import { PageHeader } from "../components/PageHeader";
+import { useSessionDraft } from "../utils/useSessionDraft";
+import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useAuthStore } from "../stores/auth";
+import { staffApi, employeeApi } from "../services/api";
+import {
+  Search,
+  Package,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  AlertTriangle,
+  ChevronRight,
+  X,
+} from "lucide-react";
 
 interface InventoryItem {
-  id: string
-  name: string
-  category: string
-  unit: string
-  currentStock: number
-  avgCost: number
-  safetyStock: number
-  type: string
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  currentStock: number;
+  avgCost: number;
+  safetyStock: number;
+  type: string;
 }
 
 interface StockLog {
-  id: string
-  inventoryId: string
-  quantity: number
-  logType: 'stock-in' | 'stock-out'
-  reason: string
-  note?: string
-  createdAt: string
-  inventory?: { id: string; name: string; unit: string }
+  id: string;
+  inventoryId: string;
+  quantity: number;
+  logType: "stock-in" | "stock-out";
+  reason: string;
+  note?: string;
+  createdAt: string;
+  inventory?: { id: string; name: string; unit: string };
 }
 
 export function InventoryPage() {
-  const { t } = useTranslation()
-  const { user } = useAuthStore()
-  const storeId = user?.storeId || ''
-  const [access,setAccess]=useState<any>(undefined)
-  useEffect(()=>{employeeApi.permissions().then(setAccess).catch(()=>setAccess(null))},[user?.staffId])
-  const can=(key:string)=>access!==undefined&&access!==null&&(access.role?access.role.permissions.includes(key):key==='inventory.count'||['admin','manager','staff'].includes(user?.role||''))
-  const [feedback,setFeedback]=useState('')
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
+  const storeId = user?.storeId || "";
+  const [access, setAccess] = useState<any>(undefined);
+  useEffect(() => {
+    employeeApi
+      .permissions()
+      .then(setAccess)
+      .catch(() => setAccess(null));
+  }, [user?.staffId]);
+  const can = (key: string) =>
+    access !== undefined &&
+    access !== null &&
+    (access.role
+      ? access.role.permissions.includes(key)
+      : key === "inventory.count" ||
+        ["admin", "manager", "staff"].includes(user?.role || ""));
+  const [feedback, setFeedback] = useState("");
 
-  const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string>('')
-  const [showLowStockOnly, setShowLowStockOnly] = useState(false)
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
 
   // Modal states
-  const [showStockInModal, setShowStockInModal] = useSessionDraft('inventory.stockInOpen', false)
-  const [showStockOutModal, setShowStockOutModal] = useSessionDraft('inventory.stockOutOpen', false)
-  const [showLogsModal, setShowLogsModal] = useState(false)
-  const [selectedItem, setSelectedItem] = useSessionDraft<InventoryItem | null>('inventory.selectedItem', null)
-  const [stockLogs, setStockLogs] = useState<StockLog[]>([])
+  const [showStockInModal, setShowStockInModal] = useSessionDraft(
+    "inventory.stockInOpen",
+    false,
+  );
+  const [showStockOutModal, setShowStockOutModal] = useSessionDraft(
+    "inventory.stockOutOpen",
+    false,
+  );
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useSessionDraft<InventoryItem | null>(
+    "inventory.selectedItem",
+    null,
+  );
+  const [stockLogs, setStockLogs] = useState<StockLog[]>([]);
 
   // Form states
-  const [stockInQty, setStockInQty] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInQty`, '')
-  const [stockInCost, setStockInCost] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInCost`, '')
-  const [stockInNote, setStockInNote] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInNote`, '')
-  const [stockOutQty, setStockOutQty] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutQty`, '')
-  const [stockOutReason, setStockOutReason] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutReason`, 'adjust')
-  const [stockOutNote, setStockOutNote] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutNote`, '')
-  const [submitting, setSubmitting] = useState(false)
+  const [stockInQty, setStockInQty] = useSessionDraft(
+    `inventory.${selectedItem?.id || "unselected"}.stockInQty`,
+    "",
+  );
+  const [stockInCost, setStockInCost] = useSessionDraft(
+    `inventory.${selectedItem?.id || "unselected"}.stockInCost`,
+    "",
+  );
+  const [stockInNote, setStockInNote] = useSessionDraft(
+    `inventory.${selectedItem?.id || "unselected"}.stockInNote`,
+    "",
+  );
+  const [stockOutQty, setStockOutQty] = useSessionDraft(
+    `inventory.${selectedItem?.id || "unselected"}.stockOutQty`,
+    "",
+  );
+  const [stockOutReason, setStockOutReason] = useSessionDraft(
+    `inventory.${selectedItem?.id || "unselected"}.stockOutReason`,
+    "adjust",
+  );
+  const [stockOutNote, setStockOutNote] = useSessionDraft(
+    `inventory.${selectedItem?.id || "unselected"}.stockOutNote`,
+    "",
+  );
+  const [submitting, setSubmitting] = useState(false);
 
-  const categories = [...new Set(inventory.map(item => item.category).filter(Boolean))]
+  const categories = [
+    ...new Set(inventory.map((item) => item.category).filter(Boolean)),
+  ];
 
   useEffect(() => {
-    loadInventory()
-  }, [storeId])
+    loadInventory();
+  }, [storeId]);
 
   const loadInventory = async () => {
-    if (!storeId) return
+    if (!storeId) return;
     try {
-      setLoading(true)
-      const res = await staffApi.getInventoryList({ storeId })
+      setLoading(true);
+      const res = await staffApi.getInventoryList({ storeId });
       if (res.code === 200) {
-        const items = res.data.list || []; setInventory(items)
-        if(selectedItem){const current=items.find((item:InventoryItem)=>item.id===selectedItem.id);if(current)setSelectedItem(current)}
+        const items = res.data.list || [];
+        setInventory(items);
+        if (selectedItem) {
+          const current = items.find(
+            (item: InventoryItem) => item.id === selectedItem.id,
+          );
+          if (current) setSelectedItem(current);
+        }
       }
     } catch (error: any) {
-      setFeedback(error.message || t('inventory.loadFailed'))
+      setFeedback(error.message || t("inventory.loadFailed"));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCategory = !selectedCategory || item.category === selectedCategory
-    const matchesLowStock = !showLowStockOnly || item.currentStock <= item.safetyStock
-    return matchesSearch && matchesCategory && matchesLowStock
-  })
+  const filteredInventory = inventory.filter((item) => {
+    const matchesSearch =
+      !searchQuery ||
+      item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory =
+      !selectedCategory || item.category === selectedCategory;
+    const matchesLowStock =
+      !showLowStockOnly || item.currentStock <= item.safetyStock;
+    return matchesSearch && matchesCategory && matchesLowStock;
+  });
 
   const handleStockIn = async () => {
-    if (!selectedItem || !Number.isFinite(Number(stockInQty)) || Number(stockInQty)<=0) {
-      setFeedback(t('inventory.enterQuantity'))
-      return
+    if (
+      !selectedItem ||
+      !Number.isFinite(Number(stockInQty)) ||
+      Number(stockInQty) <= 0
+    ) {
+      setFeedback(t("inventory.enterQuantity"));
+      return;
     }
     try {
-      setSubmitting(true)
+      setSubmitting(true);
       const res = await staffApi.stockIn({
         inventoryId: selectedItem.id,
         storeId,
         quantity: Number(stockInQty),
         unitCost: stockInCost ? parseFloat(stockInCost) : undefined,
-        note: stockInNote || undefined
-      })
+        note: stockInNote || undefined,
+      });
       if (res.code === 201) {
-        setFeedback(t('inventory.stockInSuccess'))
-        setShowStockInModal(false)
-        resetStockInForm()
-        await loadInventory()
+        setFeedback(t("inventory.stockInSuccess"));
+        setShowStockInModal(false);
+        resetStockInForm();
+        await loadInventory();
       } else {
-        setFeedback(res.message || t('inventory.stockInFailed'))
+        setFeedback(res.message || t("inventory.stockInFailed"));
       }
     } catch (error: any) {
-      setFeedback(error.message || t('inventory.stockInFailed'))
+      setFeedback(error.message || t("inventory.stockInFailed"));
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   const handleStockOut = async () => {
-    if (!selectedItem || !Number.isFinite(Number(stockOutQty)) || Number(stockOutQty)<=0) {
-      setFeedback(t('inventory.enterQuantity'))
-      return
+    if (
+      !selectedItem ||
+      !Number.isFinite(Number(stockOutQty)) ||
+      Number(stockOutQty) <= 0
+    ) {
+      setFeedback(t("inventory.enterQuantity"));
+      return;
     }
     try {
-      setSubmitting(true)
+      setSubmitting(true);
       const res = await staffApi.stockOut({
         inventoryId: selectedItem.id,
         storeId,
         quantity: Number(stockOutQty),
         reason: stockOutReason,
-        note: stockOutNote || undefined
-      })
+        note: stockOutNote || undefined,
+      });
       if (res.code === 200) {
-        setFeedback(t('inventory.stockOutSuccess'))
-        setShowStockOutModal(false)
-        resetStockOutForm()
-        await loadInventory()
+        setFeedback(t("inventory.stockOutSuccess"));
+        setShowStockOutModal(false);
+        resetStockOutForm();
+        await loadInventory();
       } else {
-        setFeedback(res.message || t('inventory.stockOutFailed'))
+        setFeedback(res.message || t("inventory.stockOutFailed"));
       }
     } catch (error: any) {
-      setFeedback(error.message || t('inventory.stockOutFailed'))
+      setFeedback(error.message || t("inventory.stockOutFailed"));
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   const loadStockLogs = async (item: InventoryItem) => {
-    setSelectedItem(item)
+    setSelectedItem(item);
     try {
-      const res = await staffApi.getStockLogs({ inventoryId: item.id, storeId })
+      const res = await staffApi.getStockLogs({
+        inventoryId: item.id,
+        storeId,
+      });
       if (res.code === 200 && res.data) {
-        setStockLogs(res.data.list || [])
-        setShowLogsModal(true)
+        setStockLogs(res.data.list || []);
+        setShowLogsModal(true);
       }
     } catch (error: any) {
-      setFeedback(error.message || t('inventory.loadLogsFailed'))
+      setFeedback(error.message || t("inventory.loadLogsFailed"));
     }
-  }
+  };
 
   const resetStockInForm = () => {
-    setStockInQty('')
-    setStockInCost('')
-    setStockInNote('')
-    setSelectedItem(null)
-  }
+    setStockInQty("");
+    setStockInCost("");
+    setStockInNote("");
+    setSelectedItem(null);
+  };
 
   const resetStockOutForm = () => {
-    setStockOutQty('')
-    setStockOutReason('adjust')
-    setStockOutNote('')
-    setSelectedItem(null)
-  }
+    setStockOutQty("");
+    setStockOutReason("adjust");
+    setStockOutNote("");
+    setSelectedItem(null);
+  };
 
   const openStockIn = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setShowStockInModal(true)
-  }
+    setSelectedItem(item);
+    setShowStockInModal(true);
+  };
 
   const openStockOut = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setShowStockOutModal(true)
-  }
+    setSelectedItem(item);
+    setShowStockOutModal(true);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1>{can('inventory.count')&&<Link to="/inventory/count" className="text-blue-600">{t('countFlow.title')}</Link>}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                showLowStockOnly ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4 inline mr-1" />
-              {t('inventory.lowStock')}
-            </button>
-          </div>
+        <PageHeader
+          title={t("inventory.title")}
+          subtitle={t("ui.inventoryHint")}
+          icon={Package}
+          actions={
+            can("inventory.count") && (
+              <Link to="/inventory/count" className="font-semibold">
+                {t("countFlow.title")}
+              </Link>
+            )
+          }
+        />
+        <div className="px-5 pb-3 flex justify-end">
+          <button
+            onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+            className={`px-3 py-2 rounded-xl text-xs font-medium ${showLowStockOnly ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600"}`}
+          >
+            <AlertTriangle className="w-4 h-4 inline mr-1" />
+            {t("inventory.lowStock")}
+          </button>
         </div>
 
         {/* Search */}
@@ -210,8 +287,8 @@ export function InventoryPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('inventory.searchPlaceholder')}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder={t("inventory.searchPlaceholder")}
+              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
         </div>
@@ -219,19 +296,23 @@ export function InventoryPage() {
         {/* Category Filter */}
         <div className="px-4 pb-3 flex gap-2 overflow-x-auto">
           <button
-            onClick={() => setSelectedCategory('')}
+            onClick={() => setSelectedCategory("")}
             className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-              !selectedCategory ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
+              !selectedCategory
+                ? "bg-primary text-white"
+                : "bg-gray-100 text-gray-600"
             }`}
           >
-            {t('inventory.all')}
+            {t("inventory.all")}
           </button>
-          {categories.map(cat => (
+          {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                selectedCategory === cat ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
+                selectedCategory === cat
+                  ? "bg-primary text-white"
+                  : "bg-gray-100 text-gray-600"
               }`}
             >
               {cat}
@@ -240,34 +321,44 @@ export function InventoryPage() {
         </div>
       </div>
 
-      <p role="status" className="px-4 text-primary">{feedback}</p>
+      <p role="status" className="px-4 text-primary">
+        {feedback}
+      </p>
       {/* Inventory List */}
       <div className="px-4 py-3 space-y-3">
         {loading ? (
           <div className="text-center py-8 text-gray-500">
             <div className="animate-spin w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-            {t('common.loading')}
+            {t("common.loading")}
           </div>
         ) : filteredInventory.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-            <p>{t('inventory.noData')}</p>
+            <p>{t("inventory.noData")}</p>
           </div>
         ) : (
-          filteredInventory.map(item => (
-            <div key={item.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+          filteredInventory.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white rounded-xl shadow-sm overflow-hidden"
+            >
               <div className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
-                    <p className="text-sm text-gray-500 mt-0.5">{item.category} · {item.unit}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {item.category} · {item.unit}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className={`text-lg font-semibold ${item.currentStock <= item.safetyStock ? 'text-orange-600' : 'text-gray-900'}`}>
+                    <p
+                      className={`text-lg font-semibold ${item.currentStock <= item.safetyStock ? "text-orange-600" : "text-gray-900"}`}
+                    >
                       {item.currentStock.toLocaleString()}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {t('inventory.safetyStock')}: {item.safetyStock.toLocaleString()}
+                      {t("inventory.safetyStock")}:{" "}
+                      {item.safetyStock.toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -276,7 +367,7 @@ export function InventoryPage() {
                 {item.currentStock <= item.safetyStock && (
                   <div className="mt-2 flex items-center text-orange-600 text-xs">
                     <AlertTriangle className="w-3 h-3 mr-1" />
-                    {t('inventory.lowStockWarning')}
+                    {t("inventory.lowStockWarning")}
                   </div>
                 )}
               </div>
@@ -284,18 +375,22 @@ export function InventoryPage() {
               {/* Action Buttons */}
               <div className="border-t border-gray-100 flex">
                 <button
-                  disabled={!can('inventory.stockIn')} hidden={!can('inventory.stockIn')} onClick={() => openStockIn(item)}
+                  disabled={!can("inventory.stockIn")}
+                  hidden={!can("inventory.stockIn")}
+                  onClick={() => openStockIn(item)}
                   className="flex-1 py-3 flex items-center justify-center text-green-600 hover:bg-green-50 active:bg-green-100 transition-colors"
                 >
                   <ArrowDownCircle className="w-4 h-4 mr-1.5" />
-                  {t('inventory.stockIn')}
+                  {t("inventory.stockIn")}
                 </button>
                 <button
-                  disabled={!can('inventory.stockOut')} hidden={!can('inventory.stockOut')} onClick={() => openStockOut(item)}
+                  disabled={!can("inventory.stockOut")}
+                  hidden={!can("inventory.stockOut")}
+                  onClick={() => openStockOut(item)}
                   className="flex-1 py-3 flex items-center justify-center text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors border-l border-gray-100"
                 >
                   <ArrowUpCircle className="w-4 h-4 mr-1.5" />
-                  {t('inventory.stockOut')}
+                  {t("inventory.stockOut")}
                 </button>
                 <button
                   onClick={() => loadStockLogs(item)}
@@ -314,59 +409,72 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockIn')}</h2>
-              <button onClick={() => { setShowStockInModal(false); resetStockInForm() }} className="p-2">
+              <h2 className="text-lg font-semibold">
+                {t("inventory.stockIn")}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowStockInModal(false);
+                  resetStockInForm();
+                }}
+                className="p-2"
+              >
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
 
             <div className="mb-4 p-3 bg-gray-50 rounded-lg">
               <p className="font-medium">{selectedItem.name}</p>
-              <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
               <p className="text-sm text-gray-500">
-                {t('inventory.currentStock')}: {selectedItem.currentStock.toLocaleString()}
+                {selectedItem.category} · {selectedItem.unit}
+              </p>
+              <p className="text-sm text-gray-500">
+                {t("inventory.currentStock")}:{" "}
+                {selectedItem.currentStock.toLocaleString()}
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.quantity')} *
+                  {t("inventory.quantity")} *
                 </label>
                 <input
                   type="number"
                   value={stockInQty}
                   onChange={(e) => setStockInQty(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('attendance.quantityPlaceholder')}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder={t("attendance.quantityPlaceholder")}
                   min="0"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.unitCost')}
+                  {t("inventory.unitCost")}
                 </label>
                 <input
                   type="number"
                   value={stockInCost}
                   onChange={(e) => setStockInCost(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={selectedItem.avgCost ? selectedItem.avgCost.toString() : '0'}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder={
+                    selectedItem.avgCost ? selectedItem.avgCost.toString() : "0"
+                  }
                   min="0"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.note') || 'Note'}
+                  {t("inventory.note") || "Note"}
                 </label>
                 <input
                   type="text"
                   value={stockInNote}
                   onChange={(e) => setStockInNote(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('inventory.notePlaceholder')}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder={t("inventory.notePlaceholder")}
                 />
               </div>
             </div>
@@ -376,7 +484,9 @@ export function InventoryPage() {
               disabled={submitting || !stockInQty}
               className="w-full mt-6 py-3 bg-green-500 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed active:bg-green-600 transition-colors"
             >
-              {submitting ? t('common.submitting') : t('inventory.confirmStockIn')}
+              {submitting
+                ? t("common.submitting")
+                : t("inventory.confirmStockIn")}
             </button>
           </div>
         </div>
@@ -387,31 +497,42 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockOut')}</h2>
-              <button onClick={() => { setShowStockOutModal(false); resetStockOutForm() }} className="p-2">
+              <h2 className="text-lg font-semibold">
+                {t("inventory.stockOut")}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowStockOutModal(false);
+                  resetStockOutForm();
+                }}
+                className="p-2"
+              >
                 <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
 
             <div className="mb-4 p-3 bg-gray-50 rounded-lg">
               <p className="font-medium">{selectedItem.name}</p>
-              <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
               <p className="text-sm text-gray-500">
-                {t('inventory.currentStock')}: {selectedItem.currentStock.toLocaleString()}
+                {selectedItem.category} · {selectedItem.unit}
+              </p>
+              <p className="text-sm text-gray-500">
+                {t("inventory.currentStock")}:{" "}
+                {selectedItem.currentStock.toLocaleString()}
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.quantity')} *
+                  {t("inventory.quantity")} *
                 </label>
                 <input
                   type="number"
                   value={stockOutQty}
                   onChange={(e) => setStockOutQty(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('attendance.quantityPlaceholder')}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder={t("attendance.quantityPlaceholder")}
                   min="0"
                   max={selectedItem.currentStock}
                 />
@@ -419,31 +540,41 @@ export function InventoryPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.reason') || 'Reason'}
+                  {t("inventory.reason") || "Reason"}
                 </label>
                 <select
                   value={stockOutReason}
                   onChange={(e) => setStockOutReason(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  <option value="adjust">{t('inventory.reasonAdjust') || 'Adjustment'}</option>
-                  <option value="process">{t('inventory.reasonProcess') || 'Processing'}</option>
-                  <option value="expired">{t('inventory.reasonExpired') || 'Expired'}</option>
-                  <option value="damaged">{t('inventory.reasonDamaged') || 'Damaged'}</option>
-                  <option value="waste">{t('inventory.reasonWaste') || 'Waste'}</option>
+                  <option value="adjust">
+                    {t("inventory.reasonAdjust") || "Adjustment"}
+                  </option>
+                  <option value="process">
+                    {t("inventory.reasonProcess") || "Processing"}
+                  </option>
+                  <option value="expired">
+                    {t("inventory.reasonExpired") || "Expired"}
+                  </option>
+                  <option value="damaged">
+                    {t("inventory.reasonDamaged") || "Damaged"}
+                  </option>
+                  <option value="waste">
+                    {t("inventory.reasonWaste") || "Waste"}
+                  </option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.note') || 'Note'}
+                  {t("inventory.note") || "Note"}
                 </label>
                 <input
                   type="text"
                   value={stockOutNote}
                   onChange={(e) => setStockOutNote(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('inventory.notePlaceholder')}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder={t("inventory.notePlaceholder")}
                 />
               </div>
             </div>
@@ -453,7 +584,9 @@ export function InventoryPage() {
               disabled={submitting || !stockOutQty}
               className="w-full mt-6 py-3 bg-red-500 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed active:bg-red-600 transition-colors"
             >
-              {submitting ? t('common.submitting') || 'Submitting...' : t('inventory.confirmStockOut') || 'Confirm Stock Out'}
+              {submitting
+                ? t("common.submitting") || "Submitting..."
+                : t("inventory.confirmStockOut") || "Confirm Stock Out"}
             </button>
           </div>
         </div>
@@ -464,7 +597,9 @@ export function InventoryPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-2xl p-6 max-h-[calc(100dvh-6rem)] overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockHistory') || 'Stock History'}</h2>
+              <h2 className="text-lg font-semibold">
+                {t("inventory.stockHistory") || "Stock History"}
+              </h2>
               <button onClick={() => setShowLogsModal(false)} className="p-2">
                 <X className="w-5 h-5 text-gray-400" />
               </button>
@@ -473,31 +608,41 @@ export function InventoryPage() {
             {selectedItem && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                 <p className="font-medium">{selectedItem.name}</p>
-                <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
+                <p className="text-sm text-gray-500">
+                  {selectedItem.category} · {selectedItem.unit}
+                </p>
               </div>
             )}
 
             {stockLogs.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>{t('inventory.noLogs') || 'No stock history'}</p>
+                <p>{t("inventory.noLogs") || "No stock history"}</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {stockLogs.map(log => (
-                  <div key={log.id} className="p-3 border border-gray-100 rounded-lg">
+                {stockLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-3 border border-gray-100 rounded-lg"
+                  >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className={`font-medium ${log.logType === 'stock-out' ? 'text-red-600' : 'text-green-600'}`}>
-                          {log.logType === 'stock-out' ? '-' : '+'}{Math.abs(log.quantity)} {selectedItem?.unit}
+                        <p
+                          className={`font-medium ${log.logType === "stock-out" ? "text-red-600" : "text-green-600"}`}
+                        >
+                          {log.logType === "stock-out" ? "-" : "+"}
+                          {Math.abs(log.quantity)} {selectedItem?.unit}
                         </p>
                         <p className="text-xs text-gray-500">{log.reason}</p>
-                     </div>
+                      </div>
                       <p className="text-xs text-gray-400">
                         {new Date(log.createdAt).toLocaleString()}
                       </p>
                     </div>
-                    {log.note && <p className="text-sm text-gray-500 mt-1">{log.note}</p>}
+                    {log.note && (
+                      <p className="text-sm text-gray-500 mt-1">{log.note}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -506,5 +651,5 @@ export function InventoryPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

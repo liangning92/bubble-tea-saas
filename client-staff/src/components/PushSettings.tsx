@@ -51,7 +51,10 @@ export function PushSettings() {
   return (
     <section className="p-4 bg-white rounded-xl space-y-2">
       <h2 className="font-bold">{t("workspace.notifications")}</h2>
-      <p className="text-sm text-gray-600">{t("workspace.pushHelp")}</p>
+      <details className="text-xs text-gray-500 leading-relaxed">
+        <summary className="py-2 cursor-pointer">{t("ui.help")}</summary>
+        <p className="pb-3">{t("workspace.pushHelp")}</p>
+      </details>
       <button
         onClick={enable}
         disabled={busy}

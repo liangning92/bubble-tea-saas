@@ -5,25 +5,25 @@ export function EmployeeActions() {
   const navigate = useNavigate(),
     { t } = useTranslation();
   const actions = [
-    ["/inventory", "inventory.title", Package],
-    ["/hygiene", "hygiene.title", ShieldCheck],
-    ["/attendance", "nav.attendance", Clock],
-    ["/training", "home.training", BookOpen],
-    ["/profile", "workspace.navProfile", User],
+    ["/inventory", "inventory.title", "ui.inventoryHint", Package, "amber"],
+    ["/hygiene", "hygiene.title", "ui.hygieneHint", ShieldCheck, "mint"],
+    ["/attendance", "nav.attendance", "ui.attendanceHint", Clock, "rose"],
+    ["/training", "home.training", "ui.trainingHint", BookOpen, "lavender"],
+    ["/profile", "workspace.navProfile", "ui.profileHint", User, "blue"],
   ] as const;
   return (
-    <section
-      aria-label={t("home.quickActions")}
-      className="grid grid-cols-3 gap-2"
-    >
-      {actions.map(([path, key, Icon]) => (
+    <section aria-label={t("home.quickActions")} className="home-actions">
+      {actions.map(([path, key, subtitle, Icon, tone]) => (
         <button
           key={path}
           onClick={() => navigate(path)}
-          className="bg-white p-3 rounded-xl border flex flex-col items-center gap-2"
+          className="home-action"
         >
-          <Icon className="text-primary" size={22} />
-          <span className="text-xs font-semibold">{t(key)}</span>
+          <span className={`workspace-row-icon ${tone}`}>
+            <Icon size={22} />
+          </span>
+          <strong>{t(key)}</strong>
+          <small>{t(subtitle)}</small>
         </button>
       ))}
     </section>
