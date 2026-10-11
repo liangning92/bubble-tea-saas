@@ -12,3 +12,27 @@ test('session reads are scoped to store AND staff, deduplicate renamed staff, an
 test('failure explanations distinguish inventory, uncertain network outcomes and unrecognized errors',()=>{const {readPOSFailure}=load('client-admin/src/utils/posMonitorFailure.ts');assert.equal(readPOSFailure(JSON.stringify({failureCode:'INVENTORY_INSUFFICIENT',httpStatus:409,outcome:'rejected'})).reasonKey,'failureStock');const network=readPOSFailure({failureCode:'ERR_NETWORK',outcome:'review'});assert.equal(network.reasonKey,'failureNetwork');assert.equal(network.needsReview,true);assert.equal(readPOSFailure({failureCode:'UNRECOGNIZED'}).reasonKey,'failureUnknown');assert.equal(readPOSFailure(null).reasonKey,'failureNotRecorded');assert.equal(readPOSFailure('broken').code,'');});
 
 test('null metadata and null snapshot rows remain unknown without crashing the monitor',()=>{for(const metadata of ['null','[]','"legacy"'])assert.doesNotThrow(()=>projection.projectCartState([{action:'cart_add',metadata,createdAt:new Date()}]));assert.doesNotThrow(()=>projection.projectCartState([log('cart_update',{cartSnapshot:{version:1,subtotal:0,items:[null]}})]));});
+
+test('clear warning retains exact products and amounts but ends the active cart',()=>{
+ const snapshot=cartAuditSnapshot([tea,{...tea,id:'coffee',productName:'Coffee',quantity:4,unitPrice:15000,addons:[]}]);
+ const warning=log('cart_clear',{itemCount:6,totalAmount:96800,cartSnapshot:snapshot});
+ const details=projection.projectClearedCart(warning);
+ assert.equal(details.items.length,2);assert.equal(details.itemCount,6);assert.equal(details.subtotal,88000);assert.equal(details.totalAmount,96800);assert.equal(details.historical,false);assert.equal(details.clearedAt,warning.createdAt);
+ assert.equal(projection.projectCartState([log('cart_update',{cartSnapshot:snapshot}),warning]).itemCount,0);
+});
+test('legacy clear uses only attributable history, rejects mismatched and malformed details',()=>{
+ const earlier=log('cart_update',{cartSnapshot:cartAuditSnapshot([tea])});
+ assert.equal(projection.projectClearedCart(log('cart_clear',{itemCount:1,totalAmount:28000}),[earlier]).items.length,1);
+ assert.equal(projection.projectClearedCart(log('cart_clear',{itemCount:6}),[earlier]).items.length,0);
+ assert.equal(projection.projectClearedCart(log('cart_clear',{itemCount:1,cartSnapshot:null}),[earlier]).items.length,0);
+ assert.equal(projection.projectClearedCart(log('cart_clear',{itemCount:1}),[earlier,log('cart_clear')]).items.length,0);
+});
+test('warning list reconstructs same store/staff/session only before the warning even under severity filters',async()=>{
+ const warning={...log('cart_clear',{itemCount:1,totalAmount:28000}),id:'warning',storeId:'owned',staffId:'staff-a',sessionId:'session-a',severity:'warning'};
+ const before={...log('cart_update',{cartSnapshot:cartAuditSnapshot([tea])}),id:'before'};
+ const after={...log('cart_update',{cartSnapshot:cartAuditSnapshot([{...tea,productName:'Later tea'}])}),id:'after'};
+ let reads=0;
+ const db={pOSActionLog:{count:async()=>1,findMany:async q=>{reads++;if(q.take){assert.equal(q.where.severity,'warning');return [warning]}assert.equal(q.where.storeId,'owned');assert.equal(q.where.staffId,'staff-a');assert.equal(q.where.sessionId,'session-a');assert.equal(q.where.createdAt.lte,warning.createdAt);assert.equal(q.where.severity,undefined);return [before,warning,after]}}};
+ const service=load('server/src/services/POSActionLogService.ts',{'../config/database':{__esModule:true,default:db},'../socket':{socketManager:{}},'../utils/posCartState':projection});
+ const result=await service.getPOSActionLogs('owned',{severity:'warning'});assert.equal(reads,2);assert.equal(result.logs[0].clearedCart.items[0].productName,'Milk tea');
+});
