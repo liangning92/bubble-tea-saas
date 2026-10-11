@@ -1,3 +1,5 @@
+import { startEmployeeWorker } from './services/EmployeeReminderService'
+import { employeeWorkspaceRouter } from './routes/employeeWorkspace'
 import { isDisplayPublicRoute } from './utils/displayPublicRoute'
 import { legacyActivitiesRouter } from './routes/legacyActivities'
 import { activitiesRouter } from './routes/activities'
@@ -182,7 +184,7 @@ app.use(express.urlencoded({ extended: true }))
 const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, '../uploads')
 // Protect training-only private storage, including percent-encoded path components.
 app.use('/uploads', (req, res, next) => {
-  try { if (decodeURIComponent(req.path).replace(/\\/g, '/').toLowerCase().split('/').includes('.training-private')) return res.sendStatus(404) }
+  try { if (decodeURIComponent(req.path).replace(/\\/g, '/').toLowerCase().split('/').some(part=>['.training-private','.employee-private'].includes(part))) return res.sendStatus(404) }
   catch { return res.sendStatus(400) }
   next()
 }, express.static(uploadsPath))
@@ -284,6 +286,7 @@ app.use('/api/rewards', rewardCatalogRouter)
 app.use('/api/revenue', revenueRouter)
 app.use('/api/payments', paymentRouter)
 app.use('/api/ai', aiPermissionsRouter)
+app.use('/api/staff-work', employeeWorkspaceRouter)
 app.use('/api/staff-permissions', staffPermissionsRouter)
 app.use('/api/announcement', announcementRouter)
 app.use('/api/hardware', hardwareRouter)
@@ -324,6 +327,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   // 启动卫生任务调度器
   console.log('[Server] Starting hygiene scheduler...')
+  startEmployeeWorker()
   startHygieneScheduler()
   console.log('[Server] Hygiene scheduler started')
 

@@ -47,7 +47,7 @@ test('today attendance reads latest own record within a complete WIB day', async
   jest.useFakeTimers().setSystemTime(new Date('2026-10-10T18:00:00Z'))
   try {
     await call(staffRouter, '/attendance/today')
-    expect(db.attendance.findFirst.mock.calls[0][0]).toEqual({ where: { staffId: 'staff-demo', checkInTime: { gte: new Date('2026-10-10T17:00:00Z'), lte: new Date('2026-10-11T16:59:59.999Z') } }, orderBy: { checkInTime: 'desc' } })
+    expect(db.attendance.findFirst.mock.calls[0][0]).toEqual({ where: { staffId: 'staff-demo', OR: [{checkInTime: { gte: new Date('2026-10-10T17:00:00Z'), lte: new Date('2026-10-11T16:59:59.999Z') }}, {checkOutTime:null,checkInTime:{gte:new Date('2026-10-09T18:00:00Z'),lte:new Date('2026-10-10T18:00:00Z')}}] }, orderBy: { checkInTime: 'desc' } })
   } finally { jest.useRealTimers() }
 })
 test('personal home and announcement reads require personal permissions', () => {

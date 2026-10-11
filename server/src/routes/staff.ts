@@ -1,3 +1,4 @@
+import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { updateStaffSystemRole } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
 import { formatDate, startOfDay as wibDayStart, endOfDay as wibDayEnd, startOfWeek as wibWeekStart } from '../utils/dateUtils'
@@ -386,84 +387,8 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
     const rule = rulesEnabled ? await getAttendanceRuleWithDefaults(storeId) : null
 
     if (type === 'check_in') {
-      // Check if already checked in today
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-      const existing = await prisma.attendance.findFirst({
-        where: {
-          staffId: staff.id,
-          checkInTime: { gte: startOfDay }
-        }
-      })
-
-      if (existing) {
-        return res.status(400).json({ code: 400, message: 'Already checked in today' })
-      }
-
-      // 校验当日排班（优先根据员工排班的实际班次时间判定迟到）
-      const todaySchedule = await prisma.schedule.findFirst({
-        where: {
-          staffId: staff.id,
-          date: { gte: startOfDay, lte: endOfDay }
-        }
-      })
-
-      // Determine if late based on schedule shift, attendance rule, or defaults
-      let status = 'normal'
-      let targetStartTime: string | null = null
-      let gracePeriod = 15
-
-      if (todaySchedule && todaySchedule.shift && todaySchedule.shift !== 'off') {
-        // 查找排班对应的班次设置
-        const shiftRecord = await prisma.shift.findFirst({
-          where: {
-            storeId,
-            OR: [
-              { key: todaySchedule.shift },
-              { name: todaySchedule.shift },
-              { id: todaySchedule.shift }
-            ]
-          }
-        })
-        if (shiftRecord?.startTime) {
-          targetStartTime = shiftRecord.startTime
-        } else {
-          // 内置常见班次备用时间
-          const defaultShiftTimes: Record<string, string> = {
-            morning: '08:00',
-            afternoon: '14:00',
-            evening: '18:00'
-          }
-          if (defaultShiftTimes[todaySchedule.shift]) {
-            targetStartTime = defaultShiftTimes[todaySchedule.shift]
-          }
-        }
-      }
-
-      if (rule) {
-        gracePeriod = rule.gracePeriod ?? 15
-        if (!targetStartTime) {
-          targetStartTime = rule.workStartTime
-        }
-      }
-
-      if (targetStartTime) {
-        const [startHour, startMin] = targetStartTime.split(':').map(Number)
-        const lateThreshold = startHour * 60 + startMin + gracePeriod
-        const currentMinutes = now.getHours() * 60 + now.getMinutes()
-
-        if (currentMinutes > lateThreshold) {
-          status = 'late'
-        }
-      } else {
-        // Default fallback: 9:30 AM (no shift, no rule)
-        const hour = now.getHours()
-        if (hour > 9 || (hour === 9 && now.getMinutes() > 30)) {
-          status = 'late'
-        }
-      }
-
-      const attendance = await prisma.attendance.create({
+      const status = 'normal' // authoritative shift snapshot computed in the transaction
+      const attendance = await createEmployeeAttendance({
         data: {
           staffId: staff.id,
           checkInTime: now,
@@ -471,15 +396,7 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
           gpsLocation,
           note
         }
-      })
-
-      // 更新排班状态为已打卡
-      if (todaySchedule) {
-        await prisma.schedule.update({
-          where: { id: todaySchedule.id },
-          data: { status: 'completed' }
-        })
-      }
+      }.data, storeId)
 
       res.status(201).json({
         code: 201,
@@ -499,7 +416,7 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
         })
       } else {
         // 查找当日的未checkout记录
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        const startOfDay = new Date(now.getTime()-24*3600000)
         attendance = await prisma.attendance.findFirst({
           where: {
             staffId: staff.id,
@@ -513,6 +430,7 @@ router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
         return res.status(400).json({ code: 400, message: 'No check in record found today' })
       }
 
+      if (attendance.checkOutTime) return res.json({code:200,data:attendance,alreadyRecorded:true})
       const updated = await prisma.attendance.update({
         where: { id: attendance.id },
         data: {
@@ -552,7 +470,7 @@ router.get('/attendance/today', authenticate, async (req: AuthRequest, res) => {
     const attendance = await prisma.attendance.findFirst({
       where: {
         staffId: staff.id,
-        checkInTime: { gte: startOfDay, lte: wibDayEnd(startOfDay) }
+        OR: [{checkInTime: {gte: startOfDay, lte:wibDayEnd(startOfDay)}}, {checkOutTime:null,checkInTime:{gte:new Date(Date.now()-24*3600000),lte:new Date()}}]
       },
       orderBy: { checkInTime: 'desc' }
     })
@@ -633,8 +551,11 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
   try {
     const { staffId, startDate, endDate } = req.query
 
-    const where: any = {}
-    if (staffId) where.staffId = staffId as string
+    const where: any = {staff:{storeId:req.user!.storeId}}
+    if (!['admin','manager'].includes(req.user!.role)) {
+      if (staffId && staffId !== req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
+      where.staffId = req.user!.staffId
+    } else if (staffId) where.staffId = staffId as string
     if (startDate || endDate) {
       where.checkInTime = {}
       if (startDate) where.checkInTime.gte = parseDateBoundary(startDate as string)
@@ -727,8 +648,11 @@ router.get('/schedule/list', authenticate, async (req: AuthRequest, res) => {
     const { staffId, month } = req.query
     const storeId = req.user!.storeId
 
-    const where: any = {}
-    if (staffId) where.staffId = staffId as string
+    const where: any = {staff:{storeId:req.user!.storeId}}
+    if (!['admin','manager'].includes(req.user!.role)) {
+      if (staffId && staffId !== req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
+      where.staffId = req.user!.staffId
+    } else if (staffId) where.staffId = staffId as string
     if (month) {
       const [year, m] = (month as string).split('-')
       const startDate = new Date(parseInt(year), parseInt(m) - 1, 1)

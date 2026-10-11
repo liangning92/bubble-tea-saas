@@ -1,3 +1,4 @@
+import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { Router } from 'express'
 import { authenticate, AuthRequest } from '../middlewares/auth'
 import { prisma } from '../config/database'
@@ -143,84 +144,8 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
     const nowDate = new Date()
 
     if (type === 'check_in') {
-      // Check if already checked in today
-      const startOfDay = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), 0, 0, 0, 0)
-      const endOfDay = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), 23, 59, 59, 999)
-      const existing = await prisma.attendance.findFirst({
-        where: {
-          staffId: staff.id,
-          checkInTime: { gte: startOfDay }
-        }
-      })
-
-      if (existing) {
-        return res.status(400).json({ code: 400, message: 'Already checked in today' })
-      }
-
-      // 校验当日排班与迟到判定
-      const todaySchedule = await prisma.schedule.findFirst({
-        where: {
-          staffId: staff.id,
-          date: { gte: startOfDay, lte: endOfDay }
-        }
-      })
-
-      let status = 'normal'
-      let targetStartTime: string | null = null
-      let gracePeriod = 15
-
-      if (todaySchedule && todaySchedule.shift && todaySchedule.shift !== 'off') {
-        const shiftRecord = await prisma.shift.findFirst({
-          where: {
-            storeId,
-            OR: [
-              { key: todaySchedule.shift },
-              { name: todaySchedule.shift },
-              { id: todaySchedule.shift }
-            ]
-          }
-        })
-        if (shiftRecord?.startTime) {
-          targetStartTime = shiftRecord.startTime
-        } else {
-          const defaultShiftTimes: Record<string, string> = {
-            morning: '08:00',
-            afternoon: '14:00',
-            evening: '18:00'
-          }
-          if (defaultShiftTimes[todaySchedule.shift]) {
-            targetStartTime = defaultShiftTimes[todaySchedule.shift]
-          }
-        }
-      }
-
-      const rule = await prisma.attendanceRule.findFirst({
-        where: { storeId, isActive: true, isDefault: true }
-      })
-
-      if (rule) {
-        gracePeriod = rule.gracePeriod ?? 15
-        if (!targetStartTime) {
-          targetStartTime = rule.workStartTime
-        }
-      }
-
-      if (targetStartTime) {
-        const [startHour, startMin] = targetStartTime.split(':').map(Number)
-        const lateThreshold = startHour * 60 + startMin + gracePeriod
-        const currentMinutes = nowDate.getHours() * 60 + nowDate.getMinutes()
-
-        if (currentMinutes > lateThreshold) {
-          status = 'late'
-        }
-      } else {
-        const hour = nowDate.getHours()
-        if (hour > 9 || (hour === 9 && nowDate.getMinutes() > 30)) {
-          status = 'late'
-        }
-      }
-
-      const attendance = await prisma.attendance.create({
+      const status = 'normal' // authoritative shift snapshot computed in the transaction
+      const attendance = await createEmployeeAttendance({
         data: {
           staffId: staff.id,
           checkInTime: nowDate,
@@ -228,7 +153,7 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
           gpsLocation: `POS:${posId}`, // Mark as QR-based check-in with POS ID
           note: `QR Check-in at POS ${posId}`
         }
-      })
+      }.data, storeId)
 
       res.status(201).json({
         code: 201,
@@ -248,8 +173,7 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
       const attendance = await prisma.attendance.findFirst({
         where: {
           id: req.body.attendanceId,
-          staffId: staff.id,
-          checkOutTime: null
+          staffId: staff.id
         }
       })
 
@@ -257,6 +181,7 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
         return res.status(404).json({ code: 404, message: 'No active check-in found' })
       }
 
+      if (attendance.checkOutTime) return res.json({code:200,data:attendance,alreadyRecorded:true})
       const updated = await prisma.attendance.update({
         where: { id: attendance.id },
         data: {

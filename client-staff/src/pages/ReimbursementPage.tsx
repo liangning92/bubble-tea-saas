@@ -1,3 +1,4 @@
+import { useSessionDraft, useMemoryDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -218,11 +219,11 @@ interface ApplyReimbursementModalProps {
 
 function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyReimbursementModalProps) {
   const { t } = useTranslation()
-  const [reimbType, setReimbType] = useState(availableTypes[0]?.code || '')
-  const [amount, setAmount] = useState('')
-  const [description, setDescription] = useState('')
-  const [files, setFiles] = useState<File[]>([])
-  const [previewUrls, setPreviewUrls] = useState<string[]>([])
+  const [reimbType, setReimbType] = useSessionDraft('ReimbursementPage.tsx.reimbType', availableTypes[0]?.code || '')
+  const [amount, setAmount] = useSessionDraft('ReimbursementPage.tsx.amount', '')
+  const [description, setDescription] = useSessionDraft('ReimbursementPage.tsx.description', '')
+  const [files, setFiles] = useMemoryDraft<File[]>('reimbursement.files', [])
+  const [previewUrls, setPreviewUrls] = useMemoryDraft<string[]>('reimbursement.preview', [])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const selectedTypeConfig = availableTypes.find(t => t.code === reimbType) || availableTypes[0]
@@ -274,6 +275,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
         description,
         receiptUrls
       })
+      setAmount(''); setDescription(''); setFiles([]); previewUrls.forEach(url => URL.revokeObjectURL(url)); setPreviewUrls([])
       onSuccess()
     } catch (error: any) {
       alert(error.response?.data?.message || t('reimbursement.submitFailed'))

@@ -1,3 +1,4 @@
+import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -29,7 +30,7 @@ export function AttendanceCorrectionPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useSessionDraft('AttendanceCorrectionPage.tsx', {
     date: '',
     originalCheckIn: '',
     originalCheckOut: '',

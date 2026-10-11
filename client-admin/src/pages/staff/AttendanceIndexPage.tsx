@@ -7,6 +7,7 @@ export function AttendanceIndexPage() {
   const location = useLocation()
 
   const tabs = [
+    {key:'workspace',label:'员工审核与迟到累计',path:'/staff/attendance/workspace',icon:Settings},
     { key: 'dashboard', label: t('staff.attendanceDashboard'), path: '/staff/attendance/dashboard', icon: Calendar },
     { key: 'leave/balance', label: t('staff.leaveBalance'), path: '/staff/attendance/leave/balance', icon: Calendar },
     { key: 'leave', label: t('nav.leave'), path: '/staff/attendance/leave', icon: FileText },

@@ -1,3 +1,4 @@
+import { ModuleLinks } from '../components/ModuleLinks'
 import { LoadFailure } from '../components/LoadFailure'
 import { RouteLoading } from '../components/RouteLoading'
 import { businessDate } from '../utils/businessDate'
@@ -192,6 +193,7 @@ export function AttendancePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <ModuleLinks group="attendance" />
       {/* Header */}
       <header className="bg-primary text-white px-4 py-6 shadow-md">
         <div className="flex items-center gap-3 mb-4">
@@ -331,7 +333,7 @@ export function AttendancePage() {
                   {t('attendance.scanAgain', '再次扫码打卡')}
                 </button>
                 <button
-                  onClick={() => navigate('/attendance/overtime')}
+                  onClick={() => navigate('/overtime')}
                   className="py-3.5 px-4 bg-gray-100 text-gray-700 rounded-2xl font-medium text-xs hover:bg-gray-200"
                 >
                   {t('attendance.requestOvertime', '申请加班')}

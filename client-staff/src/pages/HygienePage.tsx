@@ -1,3 +1,4 @@
+import { useMemoryDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { RouteLoading } from '../components/RouteLoading'
 import { businessDate } from '../utils/businessDate'
@@ -14,11 +15,13 @@ export function HygienePage() {
   const [loading, setLoading] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const [confirmTask, setConfirmTask] = useState<any>(null)
+  const [issueTaskId,setIssueTaskId]=useState<string|null>(null)
+  const [issueDescription,setIssueDescription]=useState('')
   const [skipTaskId, setSkipTaskId] = useState<string | null>(null)
   const [skipNote, setSkipNote] = useState('')
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
-  const [photos, setPhotos] = useState<Record<string, File>>({})
+  const [photos, setPhotos] = useMemoryDraft<Record<string, File>>('hygiene.photos', {})
   const [selectedDate] = useState(businessDate())
 
   const loadTasks = async () => {
@@ -71,7 +74,7 @@ export function HygienePage() {
     finally { setBusy(null) }
   }
 
-  const pendingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress')
+  const pendingTasks = tasks.filter(t => ['pending','in_progress','overdue'].includes(t.status))
   const completedTasks = tasks.filter(t => ['completed', 'approved', 'pending_approval', 'skipped', 'rejected'].includes(t.status))
 
   if (loading && !busy) return <RouteLoading />
@@ -108,11 +111,13 @@ export function HygienePage() {
           <div className="text-xs text-gray-500">{t('hygiene.toDo')}</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-green-500">{completedTasks.filter(task => ['completed', 'approved'].includes(task.status)).length}</div>
+          <div className="text-2xl font-bold text-green-500">{completedTasks.filter(task => ['completed','approved'].includes(task.status)).length}</div>
           <div className="text-xs text-gray-500">{t('hygiene.done')}</div>
         </div>
       </div>
 
+      <p className="px-4 pb-3">{t("workspace.pendingReview")}: {tasks.filter(task=>task.status==='pending_approval').length}</p>
+      {issueTaskId&&<form className="mx-4 p-4 bg-white rounded-xl space-y-2" onSubmit={async e=>{e.preventDefault();setBusy(issueTaskId);try{await staffApi.reportTaskIssue(issueTaskId,issueDescription);setIssueTaskId(null);setIssueDescription('');await loadTasks()}catch(err:any){setActionError(err.response?.data?.message||t('common.error'))}finally{setBusy(null)}}}><h2>{t('workspace.issue')}</h2><textarea required className="w-full border p-2" value={issueDescription} onChange={e=>setIssueDescription(e.target.value)}/><button disabled={!!busy} className="bg-primary text-white p-2 rounded">{t('common.submit')}</button></form>}
       {/* Pending Tasks */}
       <div className="px-4">
         <h2 className="text-sm font-medium text-gray-700 mb-3">
@@ -157,14 +162,14 @@ export function HygienePage() {
                     {t('hygiene.photoRequired')}
                     <input aria-label={t('hygiene.photoRequired')} type="file" accept="image/*" capture="environment" disabled={!!busy} onChange={e => { const file = e.target.files?.[0]; setPhotos(prev => { const next = { ...prev }; if (file) next[task.id] = file; else delete next[task.id]; return next }) }} className="max-w-40 block" />
                   </label>}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2"><button disabled={!!busy} className="p-2 border rounded" onClick={()=>setIssueTaskId(task.id)}>{t("workspace.issue")}</button>
                     <button
                       disabled={!!busy}
-                      aria-label={task.status === 'pending' ? t('hygiene.startTask') : t('hygiene.confirmComplete')}
-                      onClick={() => task.status === 'pending' ? handleStart(task.id) : setConfirmTask(task)}
+                      aria-label={task.status !== 'in_progress' ? t('hygiene.startTask') : t('hygiene.confirmComplete')}
+                      onClick={() => task.status !== 'in_progress' ? handleStart(task.id) : setConfirmTask(task)}
                       className="p-2 bg-green-500 text-white rounded-lg"
                     >
-                      {task.status === 'pending' ? <span className="text-xs">{t('hygiene.startTask')}</span> : <CheckCircle size={20} />}
+                      {task.status !== 'in_progress' ? <span className="text-xs">{t('hygiene.startTask')}</span> : <CheckCircle size={20} />}
                     </button>
                     <button
                       disabled={!!busy}

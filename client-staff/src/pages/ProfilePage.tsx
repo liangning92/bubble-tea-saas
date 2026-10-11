@@ -1,3 +1,5 @@
+import { ModuleLinks } from '../components/ModuleLinks'
+import { PushSettings } from '../components/PushSettings'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -82,6 +84,7 @@ export function ProfilePage() {
         </div>
       </header>
 
+      <ModuleLinks group="profile" /><div className="px-4"><PushSettings /></div>
       {/* Content */}
       <div className="p-4">
         {message && !showPasswordForm && <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-red-700">{message.text}</div>}

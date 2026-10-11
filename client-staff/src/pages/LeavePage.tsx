@@ -1,3 +1,4 @@
+import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -319,14 +320,14 @@ interface ApplyLeaveModalProps {
 
 function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   const { t } = useTranslation()
-  const [leaveType, setLeaveType] = useState('annual')
+  const [leaveType, setLeaveType] = useSessionDraft('LeavePage.tsx.leaveType', 'annual')
   const [leaveTypes, setLeaveTypes] = useState<any[]>(DEFAULT_LEAVE_TYPES)
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [totalDays, setTotalDays] = useState(1)
-  const [reason, setReason] = useState('')
-  const [halfDay, setHalfDay] = useState(false)
-  const [attachmentUrl, setAttachmentUrl] = useState('')
+  const [startDate, setStartDate] = useSessionDraft('LeavePage.tsx.startDate', '')
+  const [endDate, setEndDate] = useSessionDraft('LeavePage.tsx.endDate', '')
+  const [totalDays, setTotalDays] = useSessionDraft('LeavePage.tsx.totalDays', 1)
+  const [reason, setReason] = useSessionDraft('LeavePage.tsx.reason', '')
+  const [halfDay, setHalfDay] = useSessionDraft('LeavePage.tsx.halfDay', false)
+  const [attachmentUrl, setAttachmentUrl] = useSessionDraft('LeavePage.tsx.attachmentUrl', '')
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [, setLoadingTypes] = useState(true)
@@ -404,6 +405,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
         halfDay,
         attachmentUrl: attachmentUrl || undefined
       })
+      setStartDate(''); setEndDate(''); setReason(''); setTotalDays(1); setHalfDay(false); setAttachmentUrl('')
       onSuccess()
     } catch (error: any) {
       alert(error.response?.data?.message || t('leave.submitError'))

@@ -67,6 +67,11 @@ export function defaultStaffPermissions(baseRole: StaffBaseRole): string[] {
 export function staffPermissionForRequest(method: string, originalUrl: string, user?: {role:string;staffId:string;accessRole?:{permissions:string[]}|null}): string | null {
   const path = originalUrl.split('?')[0].replace(/^\/api(?=\/|$)/,'')
   const read = ['GET','HEAD','OPTIONS'].includes(method)
+  if (/^\/staff-work\/admin(?:\/|$)/.test(path)) return '__administrator_only__'
+  if (/^\/staff-work\/my\/compensation/.test(path)) return 'personal.rewards'
+  if (/^\/staff-work\/my\/(attendance|appeals|late-rule)/.test(path)) return 'personal.attendance'
+  if (/^\/staff-work\/my\/(learning|checklist)/.test(path)) return 'personal.training'
+  if (/^\/staff-work(?:\/|$)/.test(path)) return 'personal.profile'
   if (/^\/staff-permissions\/me$/.test(path) || /^\/auth(?:\/|$)/.test(path)) return null
   // Configuration and hardware lists bootstrap POS; existing role checks and
   // secret filtering remain authoritative. Writes are not exempt.

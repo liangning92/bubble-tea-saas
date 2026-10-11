@@ -1,3 +1,4 @@
+import jsQR from 'jsqr'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -38,6 +39,7 @@ export function QRCameraScannerModal({
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const cameraGeneration = useRef(0)
   const streamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -47,18 +49,12 @@ export function QRCameraScannerModal({
     setMode(defaultMode)
   }, [defaultMode, isOpen])
 
-  // 动态加载 jsQR 库作为非原生 BarcodeDetector 浏览器的通用垫片
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !(window as any).BarcodeDetector && !(window as any).jsQR) {
-      const script = document.createElement('script')
-      script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js'
-      script.async = true
-      document.head.appendChild(script)
-    }
-  }, [])
+  // Bundled decoder works without a runtime CDN download.
+  useEffect(()=>{(window as any).jsQR=jsQR},[])
 
   // 停止摄像头
   const stopCamera = useCallback(() => {
+    cameraGeneration.current++
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current)
       animFrameRef.current = null
@@ -100,6 +96,7 @@ export function QRCameraScannerModal({
   // 启动摄像头与扫描循环
   const startCamera = useCallback(async () => {
     stopCamera()
+    const generation = cameraGeneration.current
     setCameraError(null)
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -118,6 +115,7 @@ export function QRCameraScannerModal({
         audio: false
       })
 
+      if (generation !== cameraGeneration.current) { stream.getTracks().forEach(track => track.stop()); return }
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -130,7 +128,7 @@ export function QRCameraScannerModal({
 
         const video = videoRef.current
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          // 方案 1: 原生 BarcodeDetector (Android Chrome / iOS 17+ Safari)
+          // Use native BarcodeDetector when the browser supports it.
           if ('BarcodeDetector' in window) {
             try {
               const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
@@ -173,6 +171,7 @@ export function QRCameraScannerModal({
 
       animFrameRef.current = requestAnimationFrame(scanFrame)
     } catch (err: any) {
+      if (generation !== cameraGeneration.current) return
       console.warn('Camera stream error:', err)
       setCameraError(t('attendance.cameraPermissionDenied', '无法打开摄像头，请检查浏览器相机权限或切换到手动输入。'))
     }
@@ -261,6 +260,7 @@ export function QRCameraScannerModal({
         </div>
 
         <button
+          aria-label={t('common.cancel')}
           onClick={onClose}
           className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition-transform"
         >
