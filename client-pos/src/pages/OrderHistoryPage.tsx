@@ -1,3 +1,4 @@
+import { OrderItemsTable } from '../components/OrderItemsTable'
 import {RefundRequestForm} from '../components/RefundRequestForm'
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -156,7 +157,7 @@ export function OrderHistoryPage() {
           >
             <div className="flex justify-between items-start mb-2">
               <div>
-                <p className="font-bold">{order.orderNumber}</p>
+                <p className="text-xs text-gray-400">{t('pos.orderNo')}: {order.orderNumber}</p>
                 <p className="text-xs text-gray-500">{formatDateTime(order.createdAt)}</p>
               </div>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
@@ -164,10 +165,7 @@ export function OrderHistoryPage() {
               </span>
             </div>
             <div className="text-sm text-gray-600 mb-2">
-              {order.items.slice(0, 3).map((item, i) => (
-                <p key={i}>{item.quantity}x {item.name}</p>
-              ))}
-              {order.items.length > 3 && <p className="text-gray-400">+{order.items.length - 3} {t('orders.more')}</p>}
+              <OrderItemsTable items={order.items} />
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm">{getPaymentLabel(order.paymentMethod)}</span>
@@ -219,14 +217,7 @@ export function OrderHistoryPage() {
               {/* Items List */}
               <div>
                 <h3 className="font-medium mb-2">{t('orders.itemsList')}</h3>
-                <div className="space-y-2">
-                  {selectedOrder.items.map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span>{formatCurrency(item.price * item.quantity)}</span>
-                    </div>
-                  ))}
-                </div>
+                <OrderItemsTable items={selectedOrder.items} amount={(_, index) => formatCurrency(selectedOrder.items[index].price * selectedOrder.items[index].quantity)} />
               </div>
 
               {/* Amount Summary */}

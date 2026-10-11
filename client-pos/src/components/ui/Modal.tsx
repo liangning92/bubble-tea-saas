@@ -11,6 +11,7 @@ interface ModalProps {
   showClose?: boolean;
   closeOnOverlayClick?: boolean;
   className?: string;
+  overlayClassName?: string;
 }
 
 export function Modal({
@@ -23,6 +24,7 @@ export function Modal({
   showClose = true,
   closeOnOverlayClick = true,
   className = '',
+  overlayClassName = '',
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +63,7 @@ export function Modal({
   return (
     <div
       ref={overlayRef}
-      className={`fixed inset-0 bg-black/50 z-50 flex ${position === 'center' ? 'items-center justify-center' : 'items-end justify-center'} p-4`}
+      className={`fixed inset-0 bg-black/50 z-50 flex ${position === 'center' ? 'items-center justify-center' : 'items-end justify-center'} p-4 ${overlayClassName}`}
       onClick={closeOnOverlayClick ? onClose : undefined}
     >
       <div

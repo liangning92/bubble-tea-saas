@@ -28,7 +28,7 @@ export async function listUnpostedReceipts(storeId:string) {
   const matches = (receipt:any) => {const order=orders.get(receipt.orderNumber);return !!order && order.requestFingerprint===orderRequestFingerprint(receipt.request) && order.finalAmount===receipt.grandTotal}
   const resolvedIds = receipts.filter(matches).map(receipt=>receipt.id)
   if (resolvedIds.length) await prisma.config.updateMany({where:{storeId,category:'pos_receipt_pending',id:{in:resolvedIds}},data:{category:'pos_receipt_posted'}})
-  return receipts.filter(receipt=>!matches(receipt)).map(({request,...receipt})=>({...receipt,paymentMethod:request.paymentMethod,staffId:request.staffId}))
+  return receipts.filter(receipt=>!matches(receipt)).map(({request,...receipt})=>({...receipt,paymentMethod:request.paymentMethod,staffId:request.staffId,items:(request.items || []).map((item:any)=>({productName:item.productName,specName:item.specName,quantity:item.quantity}))}))
 }
 
 export async function markReceivedReceiptFailure(storeId:string, orderNumber:string | undefined, reason:string) {

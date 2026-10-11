@@ -1,5 +1,6 @@
+import { OrderItemsTable } from '../../components/OrderItemsTable'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '../../services/api'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
@@ -49,6 +50,8 @@ export function RefundRequestListPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => { void loadRequests() }, [filter])
 
   const handleApprove = async () => {
     if (!selectedRequest) return
@@ -115,7 +118,7 @@ export function RefundRequestListPage() {
           {(['all', 'pending', 'approved', 'rejected'] as const).map(f => (
             <button
               key={f}
-              onClick={() => { setFilter(f); setTimeout(loadRequests, 0) }}
+              onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
                 filter === f ? 'bg-primary text-white' : 'bg-gray-100'
               }`}
@@ -143,7 +146,8 @@ export function RefundRequestListPage() {
             >
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-bold">{req.orderNumber}</p>
+                  <OrderItemsTable items={req.order?.items} />
+                  <p className="text-xs text-gray-400">{t('orders.orderNumber')}: {req.orderNumber}</p>
                   <p className="text-xs text-gray-500">{formatDateTime(req.createdAt)}</p>
                 </div>
                 {getStatusBadge(req.status)}
@@ -198,14 +202,7 @@ export function RefundRequestListPage() {
               {selectedRequest.order?.items && (
                 <div>
                   <p className="text-sm text-gray-500 mb-2">{t('orders.items')}</p>
-                  <div className="space-y-1">
-                    {selectedRequest.order.items.map((item: any, i: number) => (
-                      <div key={i} className="flex justify-between text-sm">
-                        <span>{item.quantity}x {item.productName}</span>
-                        <span>{formatCurrency(item.unitPrice * item.quantity)}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <OrderItemsTable items={selectedRequest.order.items} amount={(_, index) => formatCurrency(selectedRequest.order!.items[index].unitPrice * selectedRequest.order!.items[index].quantity)} />
                 </div>
               )}
 

@@ -1,3 +1,4 @@
+import { OrderItemsTable } from '../../components/OrderItemsTable'
 import { useDashboardContext, requireRead, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
@@ -200,7 +201,8 @@ export function OrderListPage() {
             <table className="w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
-                  <th className="pb-3 font-medium">{t('shiftHandover.products')}</th>
+                  <th className="pb-3 pr-4 font-medium">{t('shiftHandover.products')}</th>
+                  <th className="pb-3 px-4 text-right font-medium whitespace-nowrap">{t('shiftReview.quantity')}</th>
                   <th className="pb-3 font-medium">{t('channels.channel') || 'Channel'}</th>
                   <th className="pb-3 font-medium">{t('orders.date')}</th>
                   <th className="pb-3 font-medium">{t('orders.customer')}</th>
@@ -209,32 +211,42 @@ export function OrderListPage() {
                   <th className="pb-3 font-medium">{t('orders.status')}</th>
                 </tr>
               </thead>
-              <tbody>
-                {orders.map((order: any) => (
-                  <tr key={order.id} className="border-b last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId:context.storeId,asOf:context.asOf,startDate:context.startDate,endDate:context.endDate}))}>
-                    <td className="py-3">
-                      <div className="space-y-1 text-sm text-gray-800">
-                        {order.items?.length ? order.items.map((item: { productName: string; quantity: number }, index: number) => (
-                          <div key={index}>{item.productName} × {item.quantity}</div>
-                        )) : '-'}
-                      </div>
-                    </td>
-                    <td className="py-3">
-                      {order.channel ? (
-                        <span className="flex items-center gap-1">
-                          <span>{order.channel.icon}</span>
-                          <span className="text-sm">{order.channel.name}</span>
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="py-3 text-sm">{formatDateTime(order.createdAt)}</td>
-                    <td className="py-3">{order.member?.name || order.staff?.name || '-'}</td>
-                    <td className="py-3 font-medium">{formatCurrency(order.finalAmount || order.total)}</td>
-                    <td className="py-3 capitalize">{order.paymentMethod}</td>
-                    <td className="py-3"><span className={`badge ${getStatusBadge(order.status)} capitalize`}>{order.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
+              {orders.map((order: any) => {
+                const items: { productName: string; quantity: number | null }[] = order.items?.length
+                  ? order.items
+                  : [{ productName: '-', quantity: null }]
+                return (
+                  <tbody
+                    key={order.id}
+                    className="border-b last:border-0 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, { storeId: context.storeId, asOf: context.asOf, startDate: context.startDate, endDate: context.endDate }))}
+                  >
+                    {items.map((item, index) => (
+                      <tr key={index}>
+                        <td className="py-3 pr-4 text-sm text-gray-800 max-w-sm break-words">{item.productName}</td>
+                        <td className="py-3 px-4 text-right text-sm text-gray-800 tabular-nums whitespace-nowrap">{item.quantity ?? '-'}</td>
+                        {index === 0 && (
+                          <>
+                            <td rowSpan={items.length} className="py-3 pr-4">
+                              {order.channel ? (
+                                <span className="flex items-center gap-1">
+                                  <span>{order.channel.icon}</span>
+                                  <span className="text-sm">{order.channel.name}</span>
+                                </span>
+                              ) : '-'}
+                            </td>
+                            <td rowSpan={items.length} className="py-3 pr-4 text-sm">{formatDateTime(order.createdAt)}</td>
+                            <td rowSpan={items.length} className="py-3 pr-4">{order.member?.name || order.staff?.name || '-'}</td>
+                            <td rowSpan={items.length} className="py-3 pr-4 font-medium">{formatCurrency(order.finalAmount || order.total)}</td>
+                            <td rowSpan={items.length} className="py-3 pr-4 capitalize">{order.paymentMethod}</td>
+                            <td rowSpan={items.length} className="py-3 pr-4"><span className={`badge ${getStatusBadge(order.status)} capitalize`}>{order.status}</span></td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                )
+              })}
             </table>
           </div>
         )}
@@ -254,7 +266,7 @@ export function OrderListPage() {
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-sm text-gray-500 border-b bg-gray-50">
-                    <th className="p-4 font-medium">{t('orders.orderNumber')}</th>
+                    <th className="p-4 font-medium">{t('shiftHandover.products')}</th>
                     <th className="p-4 font-medium">{t('orders.reason')}</th>
                     <th className="p-4 font-medium">{t('orders.requestedBy')}</th>
                     <th className="p-4 font-medium">{t('orders.date')}</th>
@@ -265,7 +277,7 @@ export function OrderListPage() {
                 <tbody>
                   {refundRequests.map((req) => (
                     <tr key={req.id} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="p-4 font-mono text-sm">{req.orderNumber}</td>
+                      <td className="p-4"><OrderItemsTable items={req.order?.items} /><p className="text-xs text-gray-400">{req.orderNumber}</p></td>
                       <td className="p-4 text-sm">{req.reason}</td>
                       <td className="p-4 text-sm">{req.requestedByName || '-'}</td>
                       <td className="p-4 text-sm">{formatDateTime(req.createdAt)}</td>

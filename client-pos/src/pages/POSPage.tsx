@@ -1,3 +1,5 @@
+import { ShiftHandoverPreview } from '../components/ShiftHandoverPreview'
+import { OrderItemsTable } from '../components/OrderItemsTable'
 import { cachedActivityQuote } from '../utils/activityOfflineQuote'
 import { ActivityPanel } from '../components/ActivityPanel'
 import { activitiesApi } from '../services/api'
@@ -239,8 +241,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [shiftStatusLoaded, setShiftStatusLoaded] = useState(false)
   const [selectedShiftType, setSelectedShiftType] = useState<string>('')
   const [shiftActualCash, setShiftActualCash] = useState('')
-  const [manualReceipts, setManualReceipts] = useState({cash:'',qris:'',shopeefood:'',gofood:''})
+  const [manualReceipts, setManualReceipts] = useState({cash:'',qris:'0',shopeefood:'0',gofood:'0'})
   const [shiftClosing, setShiftClosing] = useState(false)
+  const [handoverPreview, setHandoverPreview] = useState<any>(null)
+  const [handoverLoading, setHandoverLoading] = useState(false)
+  const [closedHandover, setClosedHandover] = useState<any>(null)
   const [shiftSupervisorPin, setShiftSupervisorPin] = useState('')
   const [shiftInputTarget, setShiftInputTarget] = useState<'actualCash' | 'supervisorPin' | null>(null)
   // 锁屏状态
@@ -257,7 +262,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [appVersion, setAppVersion] = useState<string>('')
 
   // 费用记录状态
-  const [todayExpenses, setTodayExpenses] = useState<any[]>([])
   const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string; posVisible?: boolean }[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
@@ -336,7 +340,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [offlineSaveFailed, setOfflineSaveFailed] = useState(false)
 
   // 本地状态
-  const [unifiedActivities,setUnifiedActivities]=useState<any[]>([])
+  const [,setUnifiedActivities]=useState<any[]>([])
   const [unifiedQuote,setUnifiedQuote]=useState<any>(null)
   const [activityPriceNeedsConfirmation,setActivityPriceNeedsConfirmation]=useState(false)
   const checkoutValidation=useRef(false)
@@ -1916,6 +1920,16 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
   }
 
+  const finishHandover = () => {
+    clearCart()
+    setShowShiftModal(false)
+    setShiftActualCash('')
+    setManualReceipts({cash:'',qris:'0',shopeefood:'0',gofood:'0'})
+    setShiftSupervisorPin('')
+    setClosedHandover(null)
+    logout()
+  }
+
   // 加载交接班数据
   const fetchShiftData = async () => {
     await Promise.all([
@@ -1938,16 +1952,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   const expenseCategoryLabel = (category: {key: string; label?: string; labelZh?: string; labelEn?: string; labelId?: string}) => expenseCategoryName(category, i18n.resolvedLanguage || i18n.language)
 
-  // 加载今日费用数据
-  const fetchTodayExpenses = async () => {
+  // 加载费用类别
+  const fetchExpenseCategories = async () => {
     if (!user?.storeId) return
     try {
       const categories = await posApi.getExpenseCategories()
       const available = categories.data?.data?.list || []
       setExpenseCategories(available)
       setExpenseCategory(current => available.some((category: {key: string; posVisible?: boolean}) => category.key === current && visibleInPos(category)) ? current : '')
-      const res = await posApi.getMyPosExpenses()
-      setTodayExpenses(res.data?.data?.list || [])
     } catch (e) {
       console.error('Failed to fetch expenses:', e)
     }
@@ -1971,7 +1983,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setExpenseQuantity('1')
       setExpenseDescription('')
       setExpenseRequestId(crypto.randomUUID())
-      fetchTodayExpenses()
     } catch (e: any) {
       showToast(e?.response?.data?.message || t('pos.expenseFailed'), 'error')
     } finally { setExpenseSaving(false) }
@@ -1980,7 +1991,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 打开费用弹窗时加载数据
   useEffect(() => {
     if (showExpenseModal) {
-      fetchTodayExpenses()
+      fetchExpenseCategories()
     }
   }, [showExpenseModal])
 
@@ -2001,6 +2012,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 打开交接班弹窗时加载汇总数据
   useEffect(() => {
+    setHandoverPreview(null)
+    setShiftInputTarget(null)
     if (showShiftModal) fetchShiftData()
   }, [showShiftModal])
 
@@ -2884,6 +2897,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
 
     if(activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
+    const checkoutStarted=performance.now()
+    const checkoutTiming=(phase:string)=>console.info(`[CHECKOUT-TIMING] ${phase}_ms=${Math.round(performance.now()-checkoutStarted)}`)
     const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>cachedActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
     if(!verifiedQuote||verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
 
@@ -2972,6 +2987,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // Refresh server state before recording money or issuing any receipt.
       // The API only falls back to a bound snapshot on a transport outage.
       await requireOpenShift()
+      checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
       if (qrisData.status === 'manual') orderData.note = [orderData.note,t('offlineSale.qrisPending')].filter(Boolean).join(' ')
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
@@ -2985,11 +3001,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       } else {
         intent = await prepareCheckout(orderData,cart,{subtotal,ppn:tax,finalAmount:total},basketGeneration)
         await claimCheckout(intent)
+        checkoutTiming('recovery_saved')
         await reportReceivedPayment(intent,total,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
+        checkoutTiming('payment_recorded')
         sent = true
         res = await posApi.createOrder(intent.request,intent.backendUrl)
         const verified = res.data?.data
         if (!verified?.id || verified.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
+        checkoutTiming('order_saved')
         await finishCheckout(intent,'accepted',verified.id)
         accepted = true
         settledCartRef.current = cart
@@ -3028,6 +3047,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setSelectedCoupon(null)
       setMemberCoupons(prev => prev.filter(c => c.id !== selectedCoupon?.id))
 
+      checkoutTiming('before_output')
       // 现金支付：开钱箱联动控制
       // 若开启了自动打印小票 (posReceipt.autoPrint !== false)，开钱箱指令直接内嵌在小票打印作业首部原子发送，杜绝并发调用造成的端口争用与双击脉冲；
       // 仅当未开启自动打印小票时，才单独下发独立的 openCashDrawer 指令。
@@ -3060,6 +3080,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
         }
       }
+      checkoutTiming('receipt_sent')
       // 打印厨房单
       printKitchenOrder(orderNum, cart, finalPickupNum)
       // 打印茶饮单杯杯贴 (TSPL)
@@ -3316,7 +3337,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
           {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
           <p className="text-sm">{t(recovery?.intent ? 'checkoutIntent.preserve' : 'checkoutIntent.verifyRecords')}</p>
-          {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index}>{item.quantity} × {item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</li>)}</ul></details>}
+          {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index} className="grid grid-cols-[1fr_auto] gap-4"><span>{item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</span><span>{t('pos.quantity')}: {item.quantity}</span></li>)}</ul></details>}
           {recovery?.intent?.phase === 'prepared' && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={async () => {
             try { await discardPreparedCheckout(user!.storeId!); setOfflineSaveFailed(false) }
             catch { showToast(t('checkoutIntent.review'), 'warning') }
@@ -3839,7 +3860,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <span>{formatCurrency(tax)}</span>
               </div>
             )}
-            <ActivityPanel activities={unifiedActivities} quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} memberId={member?.id} groupId={activityGroupId} onGroupChange={setActivityGroupId} />
+            <ActivityPanel quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} />
             {quoteLoading&&<p className="text-sm text-gray-500">{t('activityPricing.loading','正在计算活动价格…')}</p>}
             {quoteError&&<p role="alert" className="text-sm text-red-600">{quoteError}</p>}
             {discountAmount > 0 && (
@@ -4589,11 +4610,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
       {/* 交接班弹窗 */}
       {showShiftModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowShiftModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => {if (!shiftClosing && !handoverLoading) {if(closedHandover) finishHandover(); else setShowShiftModal(false)}}}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
               <h3 className="font-bold">{shiftData?.hasOpenShift ? t('pos.shiftChange') : t('pos.shiftOpen')}</h3>
-              <button onClick={() => setShowShiftModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
+              <button onClick={() => {if (!shiftClosing && !handoverLoading) {if(closedHandover) finishHandover(); else setShowShiftModal(false)}}} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
                 <X size={20} />
               </button>
             </div>
@@ -4688,15 +4709,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
-                  {/* 实际现金输入 */}
+                  {!handoverPreview && <>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('pos.actualCash')}</label>
-                    <div
-                      className="w-full px-4 py-3 border-2 border-primary/30 bg-primary/5 rounded-xl text-lg font-bold text-center cursor-pointer"
-                      onClick={() => setShiftInputTarget('actualCash')}
-                    >
-                      {shiftActualCash !== '' ? formatCurrency(parseInt(shiftActualCash) || 0) : t('shiftEvidence.enterCount')}
+                    <label htmlFor="shift-actual-cash" className="block text-sm font-medium text-gray-700 mb-2">{t('pos.actualCash')}</label>
+                    <div className="flex items-center gap-2 rounded-xl border-2 border-primary bg-white px-4 focus-within:ring-2 focus-within:ring-primary/30">
+                      <span className="text-gray-500">Rp</span>
+                      <input id="shift-actual-cash" type="text" inputMode="numeric" pattern="[0-9]*" value={shiftActualCash} maxLength={10} onChange={e=>{if (/^\d*$/.test(e.target.value)) setShiftActualCash(e.target.value)}} onFocus={()=>setShiftInputTarget('actualCash')} placeholder={t('shiftEvidence.enterCount')} aria-describedby="shift-cash-hint" className="w-full bg-white py-4 text-2xl font-bold outline-none" />
                     </div>
+                    <p id="shift-cash-hint" className="mt-2 text-sm text-gray-600">{t('handoverFlow.cashHint')}</p>
                   </div>
 
                   <section className="mb-4 rounded-xl border p-3" data-testid="manual-receipts-input">
@@ -4716,13 +4736,17 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   )}
 
+                  </>}
+                  {handoverPreview && <ShiftHandoverPreview data={handoverPreview} actualCash={Number(shiftActualCash)} receipts={{qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)}} cashierName={user?.staff?.name || t('pos.cashier')} shiftName={activeShifts.find(s=>s.key===handoverPreview.shift.shift)?.name || handoverPreview.shift.shift} />}
+
                   {/* 交班按钮 */}
                   <div className="flex gap-3">
                     <button
-                      onClick={() => setShowShiftModal(false)}
+                      onClick={() => closedHandover ? finishHandover() : handoverPreview ? setHandoverPreview(null) : setShowShiftModal(false)}
+                      disabled={shiftClosing || handoverLoading}
                       className="flex-1 py-3 border border-gray-300 rounded-xl font-medium touch-feedback"
                     >
-                      {t('common.cancel')}
+                      {closedHandover ? t('handoverFlow.finish') : handoverPreview ? t('handoverFlow.back') : t('common.cancel')}
                     </button>
                     <button
                       onClick={async () => {
@@ -4732,47 +4756,57 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                             return
                           }
                         }
-                        if (shiftActualCash.trim() === '' || !Number.isSafeInteger(Number(shiftActualCash)) || Number(shiftActualCash) < 0) {
+                        if (shiftActualCash.trim() === '' || !Number.isSafeInteger(Number(shiftActualCash)) || Number(shiftActualCash) < 0 || Number(shiftActualCash) > 2147483647) {
                           showToast(t('shiftEvidence.enterCount'), 'error')
                           return
                         }
-                        if (shiftClosing) return
+                        if (shiftClosing || handoverLoading) return
                         if (([manualReceipts.qris,manualReceipts.shopeefood,manualReceipts.gofood]).some(value => value.trim() === '' || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 2147483647)) { showToast(t('manualReceipts.required'), 'error'); return }
+                        if (!handoverPreview) {
+                          setHandoverLoading(true)
+                          try {
+                            const fresh = (await posApi.getCurrentShift()).data?.data
+                            if (!fresh?.hasOpenShift || !fresh.shift?.updatedAt || !fresh.cashReconciliation || fresh.shift.id !== shiftData?.shift?.id) throw Error('SHIFT_PREVIEW_UNAVAILABLE')
+                            setHandoverPreview(fresh)
+                            setShiftInputTarget(null)
+                          } catch { showToast(t('handoverFlow.previewFailed'), 'error') }
+                          finally { setHandoverLoading(false) }
+                          return
+                        }
                         setShiftClosing(true)
                         const actualCash = Number(shiftActualCash)
                         try {
-                          const closeResult = await posApi.closeShift({
+                          const closeResult = closedHandover || await posApi.closeShift({
                             actualCash,
+                            reviewedSnapshot: {sessionId:handoverPreview.shift.id,updatedAt:handoverPreview.shift.updatedAt,openFloat:handoverPreview.shift.openFloat,revenue:handoverPreview.cashReconciliation.revenue,expenses:handoverPreview.cashReconciliation.expenses,qris:handoverPreview.cashReconciliation.qris},
                             manualReceiptsCashBasis:'drawer_total',
                             manualReceipts: {cash:actualCash,qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)},
                             closeNote: ''
                           })
+                          setClosedHandover(closeResult)
                           try {
                             const target = printerTarget('receipt')
+                            if (!target || !electronAPI?.sendPrintShiftReport) throw Error('HANDOVER_PRINTER_UNAVAILABLE')
                             if (target && electronAPI?.sendPrintShiftReport) {
-                              const result = await electronAPI.sendPrintShiftReport({ ...closeResult.data?.data?.report, ...target, reportKind: 'handover', paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: closeResult.data?.data?.report?.cashierName ?? user?.staff?.name ?? null, shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
-                              if (result?.success === false) throw Error(result.error || 'Print failed')
+                              const result = await electronAPI.sendPrintShiftReport({ ...closeResult.data?.data?.report, ...target, printCopies: 1, reportKind: 'handover', paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: closeResult.data?.data?.report?.cashierName ?? user?.staff?.name ?? null, shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
+                              if (result?.success !== true) throw Error(result?.error || 'Print failed')
                             }
-                          } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }
-                          clearCart()
-                          setShowShiftModal(false)
-                          setShiftActualCash('')
-                          setManualReceipts({cash:'',qris:'',shopeefood:'',gofood:''})
-                          setShiftSupervisorPin('')
-                          logout()
-                        } catch (e) {
-                          showToast(t('pos.shiftCloseFailed'), 'error')
+                          } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning'); return }
+                          finishHandover()
+                        } catch (e: any) {
+                          if(e?.response?.data?.message === 'SHIFT_PREVIEW_CHANGED'){setHandoverPreview(null);showToast(t('handoverFlow.changed'),'warning')}
+                          else showToast(t('pos.shiftCloseFailed'), 'error')
                         } finally { setShiftClosing(false) }
                       }}
-                      disabled={shiftClosing}
+                      disabled={shiftClosing || handoverLoading}
                       className="flex-1 py-3 bg-primary text-white rounded-xl font-bold touch-feedback disabled:opacity-50"
                     >
-                      {t('pos.shiftConfirm')}
+                      {closedHandover ? t('handoverFlow.reprint') : handoverPreview ? t('handoverFlow.close') : t('handoverFlow.confirm')}
                     </button>
                   </div>
 
                   {/* 交接班数字键盘 */}
-                  {shiftInputTarget && (
+                  {!handoverPreview && shiftInputTarget && (
                     <div className="mt-4 p-3 bg-gray-100 rounded-xl">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-sm text-gray-500">
@@ -4915,7 +4949,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-bold">#{order.orderNumber || order.id}</p>
+                          <p className="text-xs text-gray-400">{t('pos.orderNo')}: #{order.orderNumber || order.id}</p>
                           <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
                         </div>
                         <div className="text-right">
@@ -4924,9 +4958,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         </div>
                       </div>
                       <div className="mt-2 text-sm text-gray-600">
-                        {order.items?.map((item: any, idx: number) => (
-                          <span key={idx}>{item.quantity}x {item.productName}{idx < order.items.length - 1 ? ', ' : ''}</span>
-                        ))}
+                        <OrderItemsTable items={order.items} />
                       </div>
                     </div>
                   ))}
@@ -4955,7 +4987,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               <div>
                 <label className="block text-sm font-medium">{t('refundPolicy.reason')}<select className="block w-full p-2 border rounded my-2" value={refundReasonCode} onChange={e=>setRefundReasonCode(e.target.value as 'customer_dissatisfied'|'paid_unprepared')}><option value="customer_dissatisfied">{t('refundPolicy.customer_dissatisfied')}</option><option value="paid_unprepared">{t('refundPolicy.paid_unprepared')}</option></select></label>
                 <p className="text-sm text-amber-700 mb-2">{t(refundReasonCode === 'paid_unprepared' ? 'refundPolicy.unpreparedBlocked' : 'refundPolicy.noRestock')}</p>
-                <div className="space-y-1 mb-3">{(deleteModalOrder.items || []).map((item: any)=><label key={item.id} className="flex gap-2 text-sm"><input type="checkbox" checked={refundItemIds.includes(item.id)} onChange={e=>setRefundItemIds(e.target.checked ? [...refundItemIds,item.id] : refundItemIds.filter(id=>id!==item.id))}/>{item.quantity} × {item.productName}</label>)}</div>
+                <div className="space-y-1 mb-3">{(deleteModalOrder.items || []).map((item: any)=><label key={item.id} className="flex gap-2 text-sm"><input type="checkbox" checked={refundItemIds.includes(item.id)} onChange={e=>setRefundItemIds(e.target.checked ? [...refundItemIds,item.id] : refundItemIds.filter(id=>id!==item.id))}/><span className="flex-1">{item.productName}</span><span>{t('pos.quantity')}: {item.quantity}</span></label>)}</div>
                 <label className="block text-sm font-medium mb-2">{t('orders.deleteReason')}</label>
                 <textarea
                   value={deleteReason}
@@ -5010,32 +5042,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               </button>
             </div>
             <div className="p-4 space-y-4">
-              {/* 今日费用汇总 */}
-              <div className="bg-red-50 rounded-xl p-3">
-                <p className="text-sm text-gray-500">{t('pos.myPurchaseRecords')}</p>
-                <p className="font-bold text-red-600 text-xl">
-                  {formatCurrency(todayExpenses.reduce((sum: number, e: any) => sum + e.amount, 0))}
-                </p>
-                <p className="text-xs text-gray-500">{todayExpenses.length} {t('pos.expenseItems')}</p>
-              </div>
-
-              {/* 今日费用列表 */}
-              {todayExpenses.length > 0 && (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {todayExpenses.map((expense: any) => (
-                    <div key={expense.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
-                      <div>
-                        <p className="font-medium">{expenseCategoryLabel(expenseCategories.find(c => c.key === expense.category) || {key: expense.category, label: expense.category})}</p>
-                        <p className="text-gray-500 text-xs">{t('pos.purchaseQuantity')}: {expense.quantity ?? '-'} · {expense.description || '-'}</p>
-                      </div>
-                      <p className="font-medium text-red-500">-{formatCurrency(expense.amount)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {/* 新增费用表单 */}
-              <div className="border-t pt-4">
+              <div>
                 <p className="font-medium mb-3">{t('pos.addExpense')}</p>
 
                 {/* 费用类别 */}
@@ -5065,11 +5073,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   />
                 </div>
 
-                {/* 备注 */}
+                {/* 费用名称 */}
                 <div className="mb-4">
-                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseNote')}</label>
+                  <label className="block text-sm text-gray-500 mb-1">{t('pos.expenseNote')} <span className="text-red-500">*</span></label>
                   <input
                     type="text"
+                    required
+                    maxLength={2000}
                     value={expenseDescription}
                     onChange={(e) => setExpenseDescription(e.target.value)}
                     placeholder={t('pos.expenseNotePlaceholder')}

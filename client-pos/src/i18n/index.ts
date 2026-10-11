@@ -4,6 +4,8 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      handoverFlow: {"finish":"Selesai", "reprint":"Cetak ulang", "cashHint": "Semua uang tunai di laci, termasuk kas awal.", "title": "Periksa rincian shift", "dateShift": "Tanggal / shift", "cashier": "Kasir", "revenue": "Pendapatan", "cash": "Tunai", "openFloat": "Kas awal", "drawerTotal": "Total uang tunai", "expenses": "Biaya", "qris": "QRIS", "shopeefood": "ShopeeFood", "gofood": "GoFood", "back": "Kembali", "confirm": "Konfirmasi", "close": "Serah terima", "previewFailed": "Rincian shift gagal dimuat. Periksa koneksi dan coba lagi.", "changed": "Data shift berubah. Periksa kembali sebelum serah terima."},
+      orderDisplay: {"product": "Nama Produk", "quantity": "Jumlah", "amount": "Jumlah harga"},
       "activityPricing": {"changedTitle": "Harga berubah", "changed": "Harga diperbarui. Periksa jumlah sebelum membayar.", "wait": "Tunggu perhitungan harga selesai", "loading": "Menghitung promosi…", "bestOnly": "Diskon terbaik dipilih; diskon harga tidak digabungkan"},
       "diagnosticChecks": {"serverDb": "Database server", "scope": "Database lokal diuji dengan simpan, baca, dan hapus. Status server berasal dari pemeriksaan server; ini tidak membuktikan setiap pesanan sudah diunggah."},
       "cameraScan": {"preview": "Pratinjau kamera", "denied": "Akses kamera ditolak. Izinkan kamera atau gunakan pemindai USB/input manual.", "missing": "Kamera tidak ditemukan. Gunakan pemindai USB/input manual.", "unsupported": "Kamera tidak tersedia pada halaman ini. Buka melalui HTTPS atau gunakan pemindai USB/input manual.", "failed": "Kamera gagal dibuka. Periksa apakah dipakai aplikasi lain, lalu coba lagi.", "retry": "Coba kamera lagi", "scanning": "Arahkan barcode ke kamera. Hasil ditemukan akan ditampilkan untuk konfirmasi."},
@@ -405,10 +407,10 @@ const resources = {
         "expenseMaintenance": "Perawatan",
         "expenseOther": "Lainnya",
         "expenseAmount": "Jumlah",
-        "expenseNote": "Catatan",
-        "expenseNotePlaceholder": "Catatan opsional",
+        "expenseNote": "Nama",
+        "expenseNotePlaceholder": "Masukkan nama biaya",
         "saveExpense": "Simpan Biaya",
-        "expenseRequired": "Silakan isi kategori dan jumlah",
+        "expenseRequired": "Silakan isi kategori, jumlah, kuantitas, dan nama biaya",
         "expenseCreated": "Biaya berhasil dicatat",
         "expenseFailed": "Gagal mencatat pengeluaran",
         "detectPrinter": "Deteksi Printer",
@@ -787,6 +789,8 @@ const resources = {
   },
   "en": {
     "translation": {
+      handoverFlow: {"finish":"Finish", "reprint":"Print again", "cashHint": "All cash in the drawer, including the opening float.", "title": "Review shift details", "dateShift": "Date / shift", "cashier": "Cashier", "revenue": "Revenue", "cash": "Cash", "openFloat": "Opening float", "drawerTotal": "Total cash", "expenses": "Expenses", "qris": "QRIS", "shopeefood": "ShopeeFood", "gofood": "GoFood", "back": "Back", "confirm": "Confirm", "close": "Handover", "previewFailed": "Could not load shift details. Check the connection and try again.", "changed": "Shift data changed. Review the details again before handover."},
+      orderDisplay: {"product": "Product Name", "quantity": "Quantity", "amount": "Amount"},
       "activityPricing": {"changedTitle": "Price changed", "changed": "Prices were updated. Review the amount before payment.", "wait": "Wait for pricing to finish", "loading": "Calculating promotions…", "bestOnly": "Best discount selected; price discounts do not stack"},
       "diagnosticChecks": {"serverDb": "Server Database", "scope": "Local storage is tested by writing, reading and deleting a probe. Server status comes from the server health check; neither proves every order has uploaded."},
       "cameraScan": {"preview": "Camera preview", "denied": "Camera permission denied. Allow access or use a USB scanner/manual input.", "missing": "No camera found. Use a USB scanner/manual input.", "unsupported": "Camera is unavailable on this page. Open over HTTPS or use a USB scanner/manual input.", "failed": "Could not open the camera. Check whether another app is using it, then retry.", "retry": "Retry camera", "scanning": "Point the barcode at the camera. A match will be shown for confirmation."},
@@ -1181,10 +1185,10 @@ const resources = {
         "expenseMaintenance": "Maintenance",
         "expenseOther": "Other",
         "expenseAmount": "Amount",
-        "expenseNote": "Note",
-        "expenseNotePlaceholder": "Optional note",
+        "expenseNote": "Name",
+        "expenseNotePlaceholder": "Enter expense name",
         "saveExpense": "Record Expense",
-        "expenseRequired": "Please fill in category and amount",
+        "expenseRequired": "Please fill in category, amount, quantity, and expense name",
         "expenseCreated": "Expense recorded successfully",
         "expenseFailed": "Failed to record expense",
         "detectPrinter": "Detect Printer",
@@ -1560,6 +1564,8 @@ const resources = {
   },
   "zh": {
     "translation": {
+      handoverFlow: {"finish":"完成", "reprint":"重新打印", "cashHint": "钱箱里所有现金，包含备用金。", "title": "核对班次明细", "dateShift": "日期 / 班次", "cashier": "收银员", "revenue": "营收", "cash": "现金", "openFloat": "备用金", "drawerTotal": "现金总数", "expenses": "费用", "qris": "QRIS", "shopeefood": "ShopeeFood", "gofood": "GoFood", "back": "返回", "confirm": "确定", "close": "交班", "previewFailed": "无法读取班次明细，请检查连接后重试。", "changed": "班次数据已变化，请重新核对后交班。"},
+      orderDisplay: {"product": "产品名称", "quantity": "数量", "amount": "金额"},
       "activityPricing": {"changedTitle": "价格已变化", "changed": "价格已更新，请核对金额后支付。", "wait": "请等待价格计算完成", "loading": "正在计算活动价格…", "bestOnly": "自动选择最优惠方案，价格优惠不叠加"},
       "diagnosticChecks": {"serverDb": "服务器数据库", "scope": "本地存储会实际执行写入、读取和删除测试。服务器状态来自服务端健康检查；这些状态不能证明每笔订单均已上传。"},
       "cameraScan": {"preview": "摄像头预览", "denied": "摄像头权限被拒绝，请允许访问，或使用扫码枪／手动输入。", "missing": "未找到摄像头，请使用扫码枪／手动输入。", "unsupported": "当前页面无法使用摄像头，请通过 HTTPS 打开，或使用扫码枪／手动输入。", "failed": "摄像头无法打开，请检查是否被其他应用占用，然后重试。", "retry": "重试摄像头", "scanning": "请将条码对准摄像头，识别后将显示结果供确认。"},
@@ -1928,10 +1934,10 @@ const resources = {
         "expenseMaintenance": "设备维护",
         "expenseOther": "其他",
         "expenseAmount": "金额",
-        "expenseNote": "备注",
-        "expenseNotePlaceholder": "可选备注",
+        "expenseNote": "名称",
+        "expenseNotePlaceholder": "请输入费用名称",
         "saveExpense": "记录费用",
-        "expenseRequired": "请填写费用类别和金额",
+        "expenseRequired": "请填写费用类别、金额、数量和名称",
         "expenseCreated": "费用已记录",
         "setting": "设置",
         "customerDisplaySynced": "客显副屏已同步全屏展示",

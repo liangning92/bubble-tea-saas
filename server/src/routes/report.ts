@@ -395,7 +395,8 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
     const recentOrders = await prisma.order.findMany({
       where: { storeId },
       orderBy: { createdAt: 'desc' },
-      take: 10
+      take: 10,
+      include: { items: { select: { productName: true, quantity: true } } }
     })
 
     res.json({
@@ -442,6 +443,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
         recentOrders: recentOrders.map(o => ({
           id: o.id,
           orderNumber: o.orderNumber,
+          items: o.items,
           staffName: '', // 需要关联staff表
           finalAmount: o.finalAmount,
           paymentMethod: o.paymentMethod,
