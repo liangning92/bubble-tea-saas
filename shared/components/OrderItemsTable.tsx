@@ -1,4 +1,4 @@
-import React, { Fragment, type ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export interface OrderItemDisplay {
@@ -31,5 +31,5 @@ export function OrderItemsTable({ items, amount }: { items?: OrderItemDisplay[];
     <th className="pb-2 pr-4 font-medium">{t('orderDisplay.product')}</th>
     <th className="pb-2 px-4 text-right font-medium">{t('orderDisplay.quantity')}</th>
     {amount && <th className="pb-2 text-right font-medium">{t('orderDisplay.amount')}</th>}
-  </tr></thead><tbody>{items?.length ? items.map((item, index) => <Fragment key={index}><OrderItemRows items={[item]} trailing={amount ? () => <td className="py-3 text-right whitespace-nowrap">{amount(item,index)}</td> : undefined} /></Fragment>) : <OrderItemRows />}</tbody></table>
+  </tr></thead><tbody>{items?.length ? items.map((item, index) => <React.Fragment key={index}><OrderItemRows items={[item]} trailing={amount ? () => <td className="py-3 text-right whitespace-nowrap">{amount(item,index)}</td> : undefined} /></React.Fragment>) : <OrderItemRows />}</tbody></table>
 }

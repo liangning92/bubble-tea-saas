@@ -340,7 +340,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [offlineSaveFailed, setOfflineSaveFailed] = useState(false)
 
   // 本地状态
-  const [unifiedActivities,setUnifiedActivities]=useState<any[]>([])
+  const [,setUnifiedActivities]=useState<any[]>([])
   const [unifiedQuote,setUnifiedQuote]=useState<any>(null)
   const [activityPriceNeedsConfirmation,setActivityPriceNeedsConfirmation]=useState(false)
   const checkoutValidation=useRef(false)
@@ -3860,7 +3860,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <span>{formatCurrency(tax)}</span>
               </div>
             )}
-            <ActivityPanel activities={unifiedActivities} quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} memberId={member?.id} groupId={activityGroupId} onGroupChange={setActivityGroupId} />
+            <ActivityPanel quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} />
             {quoteLoading&&<p className="text-sm text-gray-500">{t('activityPricing.loading','正在计算活动价格…')}</p>}
             {quoteError&&<p role="alert" className="text-sm text-red-600">{quoteError}</p>}
             {discountAmount > 0 && (
