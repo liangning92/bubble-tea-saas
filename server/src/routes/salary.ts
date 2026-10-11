@@ -180,7 +180,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(sal
 router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, async (req: AuthRequest, res) => {
   try {
     const salary = await prisma.$transaction(async tx => {
-      const before = await tx.salary.findUniqueOrThrow({where:{id:req.params.id},include:{staff:{select:{storeId:true}}}})
+      const before = await tx.salary.findUniqueOrThrow({where:{id:req.params.id},include:{staff:{select:{storeId:true,name:true}}}})
       await periodLock(tx,before.staff.storeId!,before.staffId,before.month)
       const changed = await tx.salary.updateMany({ where: { id: req.params.id, status: 'pending' }, data: { status: 'paid' } })
       const salary = await tx.salary.findUniqueOrThrow({ where: { id: req.params.id } })
@@ -192,6 +192,15 @@ router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, asyn
         if (!sameDepositPlan(plan, expected)) throw new SalaryConflict('SALARY_DEPOSIT_RECALC_REQUIRED')
         await saveDepositPlan(tx, salary, plan)
         for (const item of plan) await recordDepositDeduction({ staffDepositId: item.staffDepositId, salaryId: salary.id, amount: item.amountMinor, note: `Salary ${salary.month}` }, tx)
+        // Payroll uses whole rupiah while Expense stores hundredths. Record the
+        // actual payment in the same transaction, so a failed ledger write
+        // cannot leave payroll marked paid without a corresponding expense.
+        const amountMinor = salary.finalAmount * 100
+        if (!Number.isSafeInteger(amountMinor) || amountMinor > 2147483647) throw new SalaryConflict('SALARY_EXPENSE_AMOUNT_OUT_OF_RANGE')
+        if (amountMinor > 0) {
+          const expense = await tx.expense.create({data:{storeId:before.staff.storeId!,type:'salary',category:'salary',amount:amountMinor,description:`${before.staff.name} · ${salary.month}`,date:new Date(),referenceType:'salary',referenceId:salary.id}})
+          await tx.financeAuditLog.create({data:{storeId:before.staff.storeId!,userId:req.user!.id,action:'create',entityType:'expense',entityId:expense.id,description:`Payroll paid for ${salary.month}`,newValue:JSON.stringify({salaryId:salary.id,amount:amountMinor})}})
+        }
       }
       return salary
     })

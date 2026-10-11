@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx'
 import prisma from '../config/database'
 import * as FinanceService from './FinanceService'
-import * as FixedAssetService from './FixedAssetService'
+import { startOfMonth, endOfMonth } from '../utils/dateUtils'
 
 // ==================== HELPERS ====================
 
@@ -59,8 +59,9 @@ export async function generateIncomeStatementExcel(storeId: string, month: numbe
   const statement = await FinanceService.getIncomeStatement(storeId, month, year, includeDepreciation)
   const locale = store?.locale || 'id'
 
-  const startDate = new Date(year, month - 1, 1)
-  const endDate = new Date(year, month, 0, 23, 59, 59, 999)
+  const anchor = new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00+07:00`)
+  const startDate = startOfMonth(anchor)
+  const endDate = endOfMonth(anchor)
   const expenses = await prisma.expense.findMany({
     where: { storeId, date: { gte: startDate, lte: endDate } }
   })
@@ -104,9 +105,9 @@ export async function generateIncomeStatementExcel(storeId: string, month: numbe
   // BEBAN USAHA
   wsData.push(['4.', 'BEBAN USAHA', '', ''])
   const opEx = statement.operatingExpenses as any
-  if (expenses.length > 0) {
+  {
     const expenseByType: Record<string, number> = {
-      salary: 0,
+      salary: opEx.salary || 0,
       rent: 0,
       utilities: 0,
       supplies: 0,
@@ -115,16 +116,18 @@ export async function generateIncomeStatementExcel(storeId: string, month: numbe
     }
     let actualSum = 0
     for (const exp of expenses) {
+      if (exp.referenceType === 'salary') continue
       const t = (exp.type || '').toLowerCase()
       const c = exp.category || ''
-      actualSum += exp.amount
-      if (t === 'salary' || c === '工资' || t === 'gaji') expenseByType.salary += exp.amount
-      else if (t === 'rent' || c === '租金' || t === 'sewa') expenseByType.rent += exp.amount
-      else if (t === 'utilities' || c === '水电' || t === 'utilitas') expenseByType.utilities += exp.amount
-      else if (t === 'supplies' || c === '物资' || t === 'perlengkapan') expenseByType.supplies += exp.amount
-      else if (t === 'marketing' || c === '营销' || t === 'pemasaran') expenseByType.marketing += exp.amount
-      else expenseByType.other += exp.amount
+      const rupiah = exp.amount / 100
+      if (t === 'salary' || c === 'salary' || c === 'gaji' || c === '工资' || t === 'gaji') continue // included in opEx.salary
+      else if (t === 'rent' || c === 'rent' || c === '租金' || t === 'sewa') expenseByType.rent += rupiah
+      else if (t === 'utilities' || c === 'utilities' || c === '水电' || t === 'utilitas') expenseByType.utilities += rupiah
+      else if (t === 'supplies' || c === 'supplies' || c === '物资' || t === 'perlengkapan') expenseByType.supplies += rupiah
+      else if (t === 'marketing' || c === 'marketing' || c === '营销' || t === 'pemasaran') expenseByType.marketing += rupiah
+      else expenseByType.other += rupiah
     }
+    actualSum = Object.values(expenseByType).reduce((sum, value) => sum + value, 0)
     wsData.push(['4.1', 'Beban Gaji dan Tunjangan', '', -expenseByType.salary])
     wsData.push(['4.2', 'Beban Sewa', '', -expenseByType.rent])
     wsData.push(['4.3', 'Beban Utilitas', '', -expenseByType.utilities])
@@ -132,21 +135,6 @@ export async function generateIncomeStatementExcel(storeId: string, month: numbe
     wsData.push(['4.5', 'Beban Pemasaran', '', -expenseByType.marketing])
     wsData.push(['4.6', 'Beban Lainnya', '', -expenseByType.other])
     wsData.push(['', 'JUMLAH BEBAN USAHA', '', -actualSum])
-  } else if (opEx.actual) {
-    wsData.push(['4.1', 'Beban Gaji dan Tunjangan', '', -Math.round(opEx.actual * 0.4)])
-    wsData.push(['4.2', 'Beban Sewa', '', -Math.round(opEx.actual * 0.15)])
-    wsData.push(['4.3', 'Beban Utilitas', '', -Math.round(opEx.actual * 0.1)])
-    wsData.push(['4.4', 'Beban Administrasi', '', -Math.round(opEx.actual * 0.15)])
-    wsData.push(['4.5', 'Beban Pemasaran', '', -Math.round(opEx.actual * 0.1)])
-    wsData.push(['4.6', 'Beban Lainnya', '', -Math.round(opEx.actual * 0.1)])
-    wsData.push(['', 'JUMLAH BEBAN USAHA', '', -opEx.actual])
-  } else {
-    if (opEx.staff) wsData.push(['4.1', 'Beban Gaji dan Tunjangan (Estimasi)', '', -opEx.staff])
-    if (opEx.rent) wsData.push(['4.2', 'Beban Sewa (Estimasi)', '', -opEx.rent])
-    if (opEx.utilities) wsData.push(['4.3', 'Beban Utilitas (Estimasi)', '', -opEx.utilities])
-    if (opEx.marketing) wsData.push(['4.4', 'Beban Pemasaran (Estimasi)', '', -opEx.marketing])
-    if (opEx.other) wsData.push(['4.5', 'Beban Lainnya (Estimasi)', '', -opEx.other])
-    wsData.push(['', 'JUMLAH BEBAN USAHA', '', -(opEx.totalOperatingCosts || 0)])
   }
   if (statement.depreciationIncluded && statement.depreciationExpense > 0) {
     wsData.push(['4.7', 'Beban Penyusutan', '', -statement.depreciationExpense])
@@ -173,11 +161,11 @@ export async function generateIncomeStatementExcel(storeId: string, month: numbe
 
   // PAJAK
   wsData.push(['8.', 'BEBAN PAJAK', '', ''])
-  wsData.push(['8.1', 'Pajak Penghasilan Badan (25%)', '', -Math.round(operatingProfit * 0.25)])
+  wsData.push(['8.1', 'Pajak Penghasilan Badan', '', -statement.incomeTaxExpense])
   wsData.push(['', '', '', ''])
 
   // LABA BERSIH
-  const netProfit = Math.round(operatingProfit * 0.75)
+  const netProfit = statement.netIncome
   wsData.push(['9.', 'LABA BERSIH', '', netProfit])
   wsData.push(['9.1', 'Laba yang Dapat Diatribusikan', '', netProfit])
   wsData.push(['9.2', 'Laba yang Dapat Diatribusikan ke Kepentingan Non-Pengendali', '', 0])
@@ -196,8 +184,9 @@ export async function generateIncomeStatementExcel(storeId: string, month: numbe
 
 export async function generateCashFlowExcel(storeId: string, month: number, year: number) {
   const store = await getStoreInfo(storeId)
-  const startDate = new Date(year, month - 1, 1)
-  const endDate = new Date(year, month, 0)
+  const anchor = new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00+07:00`)
+  const startDate = startOfMonth(anchor)
+  const endDate = endOfMonth(anchor)
   const cashFlow = await FinanceService.getCashFlow(storeId, startDate, endDate)
   const locale = store?.locale || 'id'
 
@@ -270,42 +259,20 @@ export async function generateCashFlowExcel(storeId: string, month: number, year
 export async function generateBalanceSheetExcel(storeId: string, month: number, year: number) {
   const store = await getStoreInfo(storeId)
   const locale = store?.locale || 'id'
-  const startDate = new Date(year, month - 1, 1)
-  const endDate = new Date(year, month, 0, 23, 59, 59, 999)
-
-  const [orders, expenses, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
-    prisma.order.findMany({
-      where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid'] } },
-      include: { items: true }
-    }),
-    prisma.expense.findMany({
-      where: { storeId, date: { gte: startDate, lte: endDate } }
-    }),
-    FixedAssetService.getDepreciationSchedule(storeId),
-    prisma.bankAccount.findMany({ where: { storeId } }),
-    prisma.inventory.findMany({ where: { storeId } }),
-    prisma.purchaseOrder.aggregate({
-      where: { storeId, status: { in: ['pending', 'approved'] } },
-      _sum: { totalAmount: true }
-    })
-  ])
-
-  const totalRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0)
-  const totalCost = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0), 0)
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
-  const grossProfit = totalRevenue - totalCost
-  const netProfit = grossProfit - totalExpenses
-
-  const totalBank = bankAccounts.reduce((sum, b) => sum + b.balance, 0)
-  const totalFixedAssets = fixedAssets.reduce((sum, a) => sum + a.currentValue, 0)
-  const totalInventory = inventories.reduce((sum, inv) => sum + Math.max(0, (inv.currentStock || 0) * Number(inv.avgCost || 0)), 0)
+  const statement = await FinanceService.getBalanceSheet(storeId, month, year)
+  const totalRevenue = statement.revenue.totalSales
+  const grossProfit = statement.grossProfit.amount
+  const netProfit = statement.netProfit.amount
+  const totalBank = statement.assets.cash
+  const totalFixedAssets = statement.assets.fixedAssets
+  const totalInventory = statement.assets.inventory
   const totalLancar = totalBank + totalInventory
-  const totalAssets = totalLancar + totalFixedAssets
-
-  const accountsPayable = pendingPOs._sum.totalAmount || 0
-  const taxPayable = Math.max(0, Math.round((totalRevenue * 0.11) - (totalCost * 0.11)))
-  const totalLiabilities = accountsPayable + taxPayable
-  const equity = totalAssets - totalLiabilities
+  const totalAssets = statement.totalAssets
+  const accountsPayable = statement.liabilities.accountsPayable
+  const taxPayable = statement.liabilities.taxPayable
+  const payrollPayable = statement.liabilities.payrollPayable
+  const totalLiabilities = statement.totalLiabilities
+  const equity = statement.equity
 
   const wb = XLSX.utils.book_new()
   const wsData: any[] = []
@@ -355,7 +322,7 @@ export async function generateBalanceSheetExcel(storeId: string, month: number, 
   wsData.push(['B.1', 'KEWAJIBAN LANCAR', '', ''])
   wsData.push(['B.1.1', 'Utang Usaha (PO)', '', accountsPayable])
   wsData.push(['B.1.2', 'Utang Pajak (PPN)', '', taxPayable])
-  wsData.push(['B.1.3', 'Beban yang Masih Harus Dibayar', '', 0])
+  wsData.push(['B.1.3', 'Gaji yang Masih Harus Dibayar', '', payrollPayable])
   wsData.push(['B.1.4', 'Uang Muka dari Pelanggan', '', 0])
   wsData.push(['B.1.5', 'Bagian Lancar dari Utang Jangka Panjang', '', 0])
   wsData.push(['', 'JUMLAH KEWAJIBAN LANCAR', '', totalLiabilities])

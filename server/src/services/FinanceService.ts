@@ -192,58 +192,49 @@ export async function getHourlyRevenueDistribution(storeId: string, date: Date) 
 // ==================== PROFIT ANALYSIS ====================
 
 export async function getProfitAnalysis(storeId: string, startDate: Date, endDate: Date) {
-  const [orders, inventoryCosts, expenses] = await Promise.all([
+  const [orders, expenses, payroll] = await Promise.all([
     prisma.order.findMany({
       where: {
         storeId,
         createdAt: { gte: startDate, lte: endDate },
-        status: { in: ['completed', 'paid'] }
+        status: { in: ['completed', 'paid', 'refunded'] }
       },
       include: { items: true,refundRequests:{where:{status:{in:['approved','paid']}}} }
     }),
-    // Get all inventory cost changes in period (filtered by storeId via relation)
-    prisma.stockInLog.aggregate({
-      where: {
-        createdAt: { gte: startDate, lte: endDate },
-        inventory: { storeId }
-      },
-      _sum: { totalAmount: true }
-    }),
-    // Get actual expenses from Expense table
-    prisma.expense.aggregate({
-      where: {
-        storeId,
-        date: { gte: startDate, lte: endDate }
-      },
-      _sum: { amount: true }
+    prisma.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } }, select: { amount: true, category: true, type: true, referenceType: true } }),
+    prisma.salary.findMany({
+      where: { staff: { storeId }, month: { gte: formatDate(startDate).slice(0, 7), lte: formatDate(endDate).slice(0, 7) } },
+      select: { month: true, finalAmount: true }
     })
   ])
 
   const revenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
   const cogs = orders.reduce((sum, o) =>
-    sum + o.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0), 0)
+    sum + (o.refundRequests.some(r => r.reasonCode === 'paid_unprepared') ? 0 : o.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0)), 0)
 
   const grossProfit = revenue - cogs
   const grossMargin = revenue > 0 ? Math.round(grossProfit / revenue * 100) : 0
 
-  // Operating costs from actual expense data
-  const actualExpenses = expenses._sum.amount || 0
-
-  // Fallback to estimates only if no actual expense data
-  const operatingCosts = actualExpenses > 0
-    ? { actual: actualExpenses, isEstimate: false }
-    : {
-        staff: Math.round(revenue * 0.25),
-        rent: Math.round(revenue * 0.10),
-        utilities: Math.round(revenue * 0.03),
-        marketing: Math.round(revenue * 0.02),
-        other: Math.round(revenue * 0.05),
-        isEstimate: true
-      }
-
-  const totalOperatingCosts = typeof operatingCosts === 'object' && 'actual' in operatingCosts
-    ? operatingCosts.actual
-    : Object.values(operatingCosts as unknown as Record<string, number>).reduce((a, b) => a + b, 0)
+  // Expense ledger amounts are hundredths, while order and salary amounts are
+  // whole rupiah. Linked salary payments are cash events, not a second P&L cost.
+  const postedExpenses = expenses.filter(e => e.referenceType !== 'salary')
+  const isManualSalary = (e: typeof postedExpenses[number]) => e.type === 'salary' || ['salary', 'gaji', '工资'].includes(e.category.toLowerCase())
+  const manualSalary = postedExpenses.filter(isManualSalary).reduce((sum, e) => sum + e.amount / 100, 0)
+  const otherExpenses = postedExpenses.filter(e => !isManualSalary(e)).reduce((sum, e) => sum + e.amount / 100, 0)
+  // Allocate a monthly payroll record across the Jakarta calendar days that
+  // the selected date range actually covers. A full-month statement still
+  // includes the full salary; a seven-day analysis does not charge a month.
+  const salaryAccrual = payroll.reduce((sum, salary) => {
+    const [year, month] = salary.month.split('-').map(Number)
+    const monthStart = Date.UTC(year, month - 1, 1) - 7 * 3600000
+    const firstDay = Math.max(startOfDay(startDate).getTime(), monthStart)
+    const lastDay = Math.min(startOfDay(endDate).getTime(), Date.UTC(year, month, 1) - 7 * 3600000 - 86400000)
+    const coveredDays = Math.max(0, Math.floor((lastDay - firstDay) / 86400000) + 1)
+    const monthDays = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    return sum + Math.round(salary.finalAmount * coveredDays / monthDays)
+  }, 0)
+  const totalOperatingCosts = otherExpenses + manualSalary + salaryAccrual
+  const operatingCosts = { actual: totalOperatingCosts, salary: salaryAccrual + manualSalary, other: otherExpenses, isEstimate: false }
   const netProfit = grossProfit - totalOperatingCosts
   const netMargin = revenue > 0 ? Math.round(netProfit / revenue * 100) : 0
 
@@ -256,8 +247,8 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
     totalOperatingCosts,
     netProfit,
     netMargin,
-    ordersCount: orders.length,
-    isEstimate: typeof operatingCosts === 'object' && 'isEstimate' in operatingCosts ? operatingCosts.isEstimate : false
+    ordersCount: orders.filter(o => o.status !== 'refunded').length,
+    isEstimate: false
   }
 }
 
@@ -275,7 +266,7 @@ export async function getIncomeStatement(storeId: string, month: number, year: n
   let depreciationExpense = 0
   if (includeDepreciation) {
     const schedule = await FixedAssetService.getDepreciationSchedule(storeId)
-    depreciationExpense = schedule.reduce((sum, asset) => sum + asset.monthlyDepreciation, 0)
+    depreciationExpense = schedule.reduce((sum, asset) => sum + asset.monthlyDepreciation / 100, 0)
   }
 
   const operatingExpenses: Record<string, any> = { ...profit.operatingCosts }
@@ -307,7 +298,7 @@ export async function getIncomeStatement(storeId: string, month: number, year: n
 	    netIncome: summary.grossProfit - ((operatingExpenses.actual || operatingExpenses.totalOperatingCosts || profit.totalOperatingCosts || 0) + (includeDepreciation ? depreciationExpense : 0)),
 	    netProfit: {
 	      amount: profit.netProfit - (includeDepreciation ? depreciationExpense : 0),
-	      margin: profit.netMargin
+      margin: summary.totalRevenue ? Math.round((profit.netProfit - (includeDepreciation ? depreciationExpense : 0)) / summary.totalRevenue * 100) : 0
 	    }
 	  }}
 
@@ -317,12 +308,13 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
   const monthAnchor=new Date(`${year}-${String(month).padStart(2,'0')}-01T00:00:00+07:00`)
   const startDate = startOfMonth(monthAnchor)
   const endDate = endOfMonth(monthAnchor)
-  const [orders, expenses, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
+  const [orders, expenses, payroll, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
     prisma.order.findMany({
-      where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid'] } },
+      where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid', 'refunded'] } },
       include: { items: true,refundRequests:{where:{status:{in:['approved','paid']}}} }
     }),
     prisma.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } } }),
+    prisma.salary.findMany({ where: { staff: { storeId }, month: `${year}-${String(month).padStart(2, '0')}` }, select: { finalAmount: true, status: true } }),
     FixedAssetService.getDepreciationSchedule(storeId),
     prisma.bankAccount.findMany({ where: { storeId } }),
     prisma.inventory.findMany({ where: { storeId } }),
@@ -330,15 +322,16 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
   ])
 
   const revenue = orders.reduce((sum, order) => sum + netReceivedAmount(order), 0)
-  const cost = orders.reduce((sum, order) => sum + order.items.reduce((subtotal, item) => subtotal + (item.bomCost || 0) * item.quantity, 0), 0)
-  const expensesTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const cash = bankAccounts.reduce((sum, account) => sum + account.balance, 0)
-  const inventoryValue = inventories.reduce((sum, item) => sum + Math.max(0, item.currentStock * Number(item.avgCost || 0)), 0)
-  const fixedAssetValue = fixedAssets.reduce((sum, asset) => sum + asset.currentValue, 0)
+  const cost = orders.reduce((sum, order) => sum + (order.refundRequests.some(r => r.reasonCode === 'paid_unprepared') ? 0 : order.items.reduce((subtotal, item) => subtotal + (item.bomCost || 0) * item.quantity, 0)), 0)
+  const expensesTotal = expenses.filter(expense => expense.referenceType !== 'salary').reduce((sum, expense) => sum + expense.amount / 100, 0) + payroll.reduce((sum, salary) => sum + salary.finalAmount, 0)
+  const cash = bankAccounts.reduce((sum, account) => sum + account.balance / 100, 0)
+  const inventoryValue = inventories.reduce((sum, item) => sum + Math.max(0, item.currentStock * Number(item.avgCost || 0) / 100), 0)
+  const fixedAssetValue = fixedAssets.reduce((sum, asset) => sum + asset.currentValue / 100, 0)
   const totalAssets = cash + inventoryValue + fixedAssetValue
   const taxPayable = Math.max(0, Math.round((revenue - cost) * 0.11))
-  const accountsPayable = pendingPOs._sum.totalAmount || 0
-  const totalLiabilities = taxPayable + accountsPayable
+  const accountsPayable = (pendingPOs._sum.totalAmount || 0) / 100
+  const payrollPayable = payroll.filter(salary => salary.status === 'pending').reduce((sum, salary) => sum + salary.finalAmount, 0)
+  const totalLiabilities = taxPayable + accountsPayable + payrollPayable
   const grossProfit = revenue - cost
 
   return {
@@ -350,7 +343,7 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
     totalLiabilities,
     equity: totalAssets - totalLiabilities,
     assets: { cash, inventory: inventoryValue, fixedAssets: fixedAssetValue },
-    liabilities: { taxPayable, accountsPayable }
+    liabilities: { taxPayable, accountsPayable, payrollPayable }
   }
 }
 
@@ -377,27 +370,14 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
     _sum: { totalAmount: true }
   })
 
-  // Staff salaries - join through Staff to filter by storeId
-  const salaries = await prisma.salary.aggregate({
-    where: {
-      createdAt: { gte: startDate, lte: endDate },
-      staff: { storeId }
-    },
-    _sum: { finalAmount: true }
-  })
-
-  // Get actual expenses for cash outflows - filtered by storeId
-  const expenseOutflows = await prisma.expense.aggregate({
-    where: {
-      storeId,
-      date: { gte: startDate, lte: endDate }
-    },
-    _sum: { amount: true }
-  })
-
-  const totalOutflows = (inventoryPurchases._sum.totalAmount || 0) +
-    (salaries._sum.finalAmount || 0) +
-    (expenseOutflows._sum.amount || 0)
+  // Salary cash outflow is the linked payment expense. Draft payroll is an
+  // accrual, not cash paid, and recording it by Salary.createdAt was wrong.
+  const expenseOutflows = await prisma.expense.findMany({where:{storeId,date:{gte:startDate,lte:endDate}},select:{amount:true,category:true,type:true,referenceType:true}})
+  const isSalaryPayment = (e: typeof expenseOutflows[number]) => e.referenceType === 'salary' || e.type === 'salary' || ['salary','gaji','工资'].includes(e.category.toLowerCase())
+  const staffSalaries = expenseOutflows.filter(isSalaryPayment).reduce((sum,e) => sum + e.amount / 100, 0)
+  const otherExpenses = expenseOutflows.filter(e => !isSalaryPayment(e)).reduce((sum,e) => sum + e.amount / 100, 0)
+  const inventoryPurchaseAmount = (inventoryPurchases._sum.totalAmount || 0) / 100
+  const totalOutflows = inventoryPurchaseAmount + staffSalaries + otherExpenses
 
   return {
     period: {
@@ -409,9 +389,9 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
       otherSales: 0
     },
     outflows: {
-      inventoryPurchases: inventoryPurchases._sum.totalAmount || 0,
-      staffSalaries: salaries._sum.finalAmount || 0,
-      otherExpenses: expenseOutflows._sum.amount || 0
+      inventoryPurchases: inventoryPurchaseAmount,
+      staffSalaries,
+      otherExpenses
     },
     totalOutflows,
     netCashFlow: (cashSales) - totalOutflows

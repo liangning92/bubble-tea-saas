@@ -231,17 +231,14 @@ export function FinanceReportsPage() {
               <div className="card">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('finance.operatingCosts')}</h3>
                 <div className="space-y-3">
-                  {profit.isEstimate ? <>
-                    {(['staff', 'rent', 'utilities', 'marketing', 'other'] as const).map((key) => (
-                      <div key={key} className="flex justify-between items-center py-2 border-b">
-                        <span className="text-gray-600">{t(`finance.${key}`)}</span>
-                        <span className="font-medium">{formatCurrency(profit.operatingCosts?.[key] || 0)}</span>
-                      </div>
-                    ))}
-                  </> : <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-gray-600">{t('finance.operatingCosts')}</span>
-                    <span className="font-medium">{formatCurrency(profit.operatingCosts?.actual || 0)}</span>
-                  </div>}
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-gray-600">{t('finance.staffSalaries')}</span>
+                    <span className="font-medium">{formatCurrency(profit.operatingCosts?.salary || 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-gray-600">{t('finance.otherExpenses')}</span>
+                    <span className="font-medium">{formatCurrency(profit.operatingCosts?.other || 0)}</span>
+                  </div>
                   <div className="flex justify-between items-center py-2 font-semibold">
                     <span>{t('finance.totalOperatingCosts')}</span>
                     <span>{formatCurrency(profit.totalOperatingCosts || 0)}</span>
@@ -290,7 +287,7 @@ export function FinanceReportsPage() {
                   <label className="text-sm font-medium text-gray-700">{t('finance.selectYear')}:</label>
                   <select
                     value={selectedYear}
-                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    onChange={(e) => { const year = parseInt(e.target.value); setSelectedYear(year); setSelectedMonth(`${year}-${selectedMonth.split('-')[1]}`) }}
                     className="input w-28"
                   >
                     {years.map((y) => (
@@ -353,6 +350,14 @@ export function FinanceReportsPage() {
                 <span className="font-bold text-green-700 text-xl">{formatCurrency(income.grossProfit?.amount || 0)}</span>
               </div>
 
+              <div className="space-y-2 mb-6">
+                <h4 className="font-medium text-gray-700 border-b pb-2">{t('finance.operatingCosts')}</h4>
+                <div className="flex justify-between items-center py-1 pl-4"><span>{t('finance.staffSalaries')}</span><span>{formatCurrency(income.operatingExpenses?.salary || 0)}</span></div>
+                <div className="flex justify-between items-center py-1 pl-4"><span>{t('finance.otherExpenses')}</span><span>{formatCurrency(income.operatingExpenses?.other || 0)}</span></div>
+                {income.depreciationIncluded && <div className="flex justify-between items-center py-1 pl-4"><span>{t('finance.depreciation')}</span><span>{formatCurrency(income.depreciationExpense || 0)}</span></div>}
+                <div className="flex justify-between items-center py-1 pl-4 font-semibold border-t"><span>{t('finance.totalOperatingCosts')}</span><span>{formatCurrency((income.operatingExpenses?.actual || 0) + (income.depreciationExpense || 0))}</span></div>
+              </div>
+
               <div className="flex justify-between items-center py-3 px-4 bg-primary/10 rounded-lg">
                 <div>
                   <span className="font-semibold text-primary">{t('finance.netProfit')}</span>
@@ -407,15 +412,15 @@ export function FinanceReportsPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.cashSales')}</span>
-                    <span className="font-medium text-green-600">{formatCurrency(cashFlow.cashSales || 0)}</span>
+                    <span className="font-medium text-green-600">{formatCurrency(cashFlow.inflows?.cashSales || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.otherSales')}</span>
-                    <span className="font-medium text-green-600">{formatCurrency(cashFlow.otherSales || 0)}</span>
+                    <span className="font-medium text-green-600">{formatCurrency(cashFlow.inflows?.otherSales || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 font-semibold">
                     <span>{t('finance.totalInflows')}</span>
-                    <span className="text-green-600">{formatCurrency(cashFlow.totalInflows || 0)}</span>
+                    <span className="text-green-600">{formatCurrency((cashFlow.inflows?.cashSales || 0) + (cashFlow.inflows?.otherSales || 0))}</span>
                   </div>
                 </div>
               </div>
@@ -425,11 +430,15 @@ export function FinanceReportsPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.inventoryPurchases')}</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.inventoryPurchases || 0)}</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.inventoryPurchases || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.staffSalaries')}</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.staffSalaries || 0)}</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.staffSalaries || 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-gray-600">{t('finance.otherExpenses')}</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.otherExpenses || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 font-semibold">
                     <span>{t('finance.totalOutflows')}</span>
@@ -474,7 +483,7 @@ export function FinanceReportsPage() {
                 <label className="text-sm font-medium text-gray-700">{t('finance.selectYear')}:</label>
                 <select
                   value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  onChange={(e) => { const year = parseInt(e.target.value); setSelectedYear(year); setSelectedMonth(`${year}-${selectedMonth.split('-')[1]}`) }}
                   className="input w-28"
                 >
                   {years.map((y) => (

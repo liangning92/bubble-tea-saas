@@ -85,8 +85,8 @@ router.get('/summary', authenticate, authorize('admin', 'manager'), async (req: 
   try {
     const storeId = req.user!.storeId
     const days = parseInt(req.query.days as string) || 30
-    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-    const endDate = new Date()
+    const startDate = req.query.startDate ? parseDateBoundary(req.query.startDate as string) : new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    const endDate = req.query.endDate ? parseDateBoundary(req.query.endDate as string, true) : new Date()
 
     const summary = await ExpenseService.getExpenseSummary(storeId, startDate, endDate)
     res.json({ code: 200, data: summary })
@@ -123,6 +123,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
   try {
     const oldExpense = await ExpenseService.getExpenseById(req.params.id)
     if (!oldExpense || oldExpense.storeId !== req.user!.storeId) return res.status(404).json({code:404,message:'Expense not found'})
+    if (oldExpense.referenceType === 'salary') return res.status(409).json({code:409,message:'PAYROLL_EXPENSE_MANAGED_BY_SALARY'})
     const expense = await ExpenseService.updateExpense(req.params.id, req.body)
     await FinanceAuditService.createAuditLog({
       storeId: req.user!.storeId,
@@ -218,6 +219,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
   try {
     const expense = await ExpenseService.getExpenseById(req.params.id)
     if (!expense || expense.storeId !== req.user!.storeId) return res.status(404).json({code:404,message:'Expense not found'})
+    if (expense.referenceType === 'salary') return res.status(409).json({code:409,message:'PAYROLL_EXPENSE_MANAGED_BY_SALARY'})
     await ExpenseService.deleteExpense(req.params.id)
     if (expense) {
       await FinanceAuditService.createAuditLog({
