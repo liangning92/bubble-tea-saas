@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      orderDisplay: {"product": "Nama Produk", "quantity": "Jumlah", "amount": "Jumlah harga"},
       shiftReview: {
         "title": "Detail sif",
         "dateRange": "Rentang tanggal",
@@ -4057,6 +4058,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      orderDisplay: {"product": "Product Name", "quantity": "Quantity", "amount": "Amount"},
       shiftReview: {
         "title": "Shift details",
         "dateRange": "Date range",
@@ -8047,6 +8049,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      orderDisplay: {"product": "产品名称", "quantity": "数量", "amount": "金额"},
       shiftReview: {
         "title": "班次详情",
         "dateRange": "日期范围",

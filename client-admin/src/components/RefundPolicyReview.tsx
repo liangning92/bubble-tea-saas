@@ -1,3 +1,4 @@
+import { OrderItemsTable } from './OrderItemsTable'
 import { useTranslation } from 'react-i18next'
 import {PageHelp} from './PageHelp'
 interface RequestPolicy {reasonCode?:string;selectedItemIds?:string;amount?:number;order?:{items:any[]}}
@@ -13,5 +14,5 @@ export function confirmPreparedRefund(request:RequestPolicy,t:(key:string)=>stri
 }
 export function RefundPolicyReview({request}:{request:RequestPolicy}){
  const {t}=useTranslation();const {rows}=selected(request)
- return <div className="my-3 p-3 border rounded text-sm space-y-1"><p>{t(`refundPolicy.${request.reasonCode||'legacy'}`)}</p><p>{t('refundPolicy.selected')}: {rows.map(row=>`${row.quantity} × ${request.order?.items.find(i=>i.id===row.itemId)?.productName||row.itemId}${row.amount===undefined?'':` (Rp ${row.amount})`}`).join(', ')||'—'}</p><p>{t('orders.refundAmount')}: Rp {request.amount??'—'}</p><PageHelp><p>{t('itemRefund.manual')}</p><p>{t(request.reasonCode==='paid_unprepared'?'refundPolicy.unpreparedBlocked':'refundPolicy.noRestock')}</p></PageHelp></div>
+ return <div className="my-3 p-3 border rounded text-sm space-y-1"><p>{t(`refundPolicy.${request.reasonCode||'legacy'}`)}</p><p>{t('refundPolicy.selected')}</p><OrderItemsTable items={rows.map(row=>({productName:request.order?.items.find(i=>i.id===row.itemId)?.productName || '—',quantity:row.quantity}))} amount={(_,index)=>rows[index].amount===undefined?'—':`Rp ${rows[index].amount}`} /><p>{t('orders.refundAmount')}: Rp {request.amount??'—'}</p><PageHelp><p>{t('itemRefund.manual')}</p><p>{t(request.reasonCode==='paid_unprepared'?'refundPolicy.unpreparedBlocked':'refundPolicy.noRestock')}</p></PageHelp></div>
 }

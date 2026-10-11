@@ -1,3 +1,4 @@
+import { OrderItemsTable } from '../components/OrderItemsTable'
 import { cachedActivityQuote } from '../utils/activityOfflineQuote'
 import { ActivityPanel } from '../components/ActivityPanel'
 import { activitiesApi } from '../services/api'
@@ -3316,7 +3317,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
           {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
           <p className="text-sm">{t(recovery?.intent ? 'checkoutIntent.preserve' : 'checkoutIntent.verifyRecords')}</p>
-          {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index}>{item.quantity} × {item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</li>)}</ul></details>}
+          {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index} className="grid grid-cols-[1fr_auto] gap-4"><span>{item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</span><span>{t('pos.quantity')}: {item.quantity}</span></li>)}</ul></details>}
           {recovery?.intent?.phase === 'prepared' && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={async () => {
             try { await discardPreparedCheckout(user!.storeId!); setOfflineSaveFailed(false) }
             catch { showToast(t('checkoutIntent.review'), 'warning') }
@@ -4915,7 +4916,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-bold">#{order.orderNumber || order.id}</p>
+                          <p className="text-xs text-gray-400">{t('pos.orderNo')}: #{order.orderNumber || order.id}</p>
                           <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
                         </div>
                         <div className="text-right">
@@ -4924,9 +4925,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         </div>
                       </div>
                       <div className="mt-2 text-sm text-gray-600">
-                        {order.items?.map((item: any, idx: number) => (
-                          <span key={idx}>{item.quantity}x {item.productName}{idx < order.items.length - 1 ? ', ' : ''}</span>
-                        ))}
+                        <OrderItemsTable items={order.items} />
                       </div>
                     </div>
                   ))}
@@ -4955,7 +4954,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               <div>
                 <label className="block text-sm font-medium">{t('refundPolicy.reason')}<select className="block w-full p-2 border rounded my-2" value={refundReasonCode} onChange={e=>setRefundReasonCode(e.target.value as 'customer_dissatisfied'|'paid_unprepared')}><option value="customer_dissatisfied">{t('refundPolicy.customer_dissatisfied')}</option><option value="paid_unprepared">{t('refundPolicy.paid_unprepared')}</option></select></label>
                 <p className="text-sm text-amber-700 mb-2">{t(refundReasonCode === 'paid_unprepared' ? 'refundPolicy.unpreparedBlocked' : 'refundPolicy.noRestock')}</p>
-                <div className="space-y-1 mb-3">{(deleteModalOrder.items || []).map((item: any)=><label key={item.id} className="flex gap-2 text-sm"><input type="checkbox" checked={refundItemIds.includes(item.id)} onChange={e=>setRefundItemIds(e.target.checked ? [...refundItemIds,item.id] : refundItemIds.filter(id=>id!==item.id))}/>{item.quantity} × {item.productName}</label>)}</div>
+                <div className="space-y-1 mb-3">{(deleteModalOrder.items || []).map((item: any)=><label key={item.id} className="flex gap-2 text-sm"><input type="checkbox" checked={refundItemIds.includes(item.id)} onChange={e=>setRefundItemIds(e.target.checked ? [...refundItemIds,item.id] : refundItemIds.filter(id=>id!==item.id))}/><span className="flex-1">{item.productName}</span><span>{t('pos.quantity')}: {item.quantity}</span></label>)}</div>
                 <label className="block text-sm font-medium mb-2">{t('orders.deleteReason')}</label>
                 <textarea
                   value={deleteReason}

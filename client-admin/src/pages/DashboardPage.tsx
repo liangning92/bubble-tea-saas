@@ -1,3 +1,4 @@
+import { OrderItemRows } from '../components/OrderItemsTable'
 import {PageHelp} from '../components/PageHelp'
 import { DashboardReadFailure } from '../components/DashboardReadState'
 import { useDashboardContext, dashboardLink, businessDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
@@ -461,7 +462,8 @@ export function DashboardPage() {
           <table className="w-full">
             <thead>
               <tr className="text-left text-sm text-gray-500 border-b">
-                <th className="pb-3 font-medium">{t('dashboard.orderNumber')}</th>
+                <th className="pb-3 font-medium">{t('shiftHandover.products')}</th>
+                <th className="pb-3 px-4 text-right font-medium">{t('shiftReview.quantity')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.amount')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.payment')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.status')}</th>
@@ -470,21 +472,18 @@ export function DashboardPage() {
             </thead>
             <tbody>
               {dashboard?.recentOrders?.map((order: any) => (
-                <tr
-                  key={order.id}
-                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`,{storeId,asOf,...businessDay(order.createdAt)}))}
-                  className="border-b last:border-0 cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <td className="py-3 font-mono text-sm">{order.orderNumber}</td>
-                  <td className="py-3 font-medium">
+                <OrderItemRows key={order.id} items={order.items}
+                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, {storeId,asOf,...businessDay(order.createdAt)}))}
+                  trailing={rowSpan => <>
+                  <td rowSpan={rowSpan} className="py-3 pr-4 font-medium">
                     {formatCurrency(order.finalAmount)}
                   </td>
-                  <td className="py-3">
+                  <td rowSpan={rowSpan} className="py-3 pr-4">
                     <span className="badge badge-info capitalize">
                       {order.paymentMethod}
                     </span>
                   </td>
-                  <td className="py-3">
+                  <td rowSpan={rowSpan} className="py-3 pr-4">
                     <span className={`badge ${
                       order.status === 'completed' ? 'badge-success' :
                       order.status === 'pending' ? 'badge-warning' :
@@ -493,17 +492,18 @@ export function DashboardPage() {
                       {order.status}
                     </span>
                   </td>
-                  <td className="py-3 text-sm text-gray-500">
+                  <td rowSpan={rowSpan} className="py-3 pr-4 text-sm text-gray-500">
                     {new Date(order.createdAt).toLocaleTimeString('id-ID', {
                       hour: '2-digit',
                       minute: '2-digit'
                     })}
                   </td>
-                </tr>
+                  </>}
+                />
               ))}
               {(!dashboard?.recentOrders || dashboard.recentOrders.length === 0) && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-gray-500">
+                  <td colSpan={6} className="py-8 text-center text-gray-500">
                     {t('common.noData')}
                   </td>
                 </tr>
