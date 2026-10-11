@@ -1,4 +1,5 @@
 import { ShiftHandoverPreview } from '../components/ShiftHandoverPreview'
+import { OrderItemsTable } from '../components/OrderItemsTable'
 import { cachedActivityQuote } from '../utils/activityOfflineQuote'
 import { ActivityPanel } from '../components/ActivityPanel'
 import { activitiesApi } from '../services/api'
@@ -4957,9 +4958,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         </div>
                       </div>
                       <div className="mt-2 text-sm text-gray-600">
-                        {order.items?.map((item: any, idx: number) => (
-                          <span key={idx}>{item.quantity}x {item.productName}{idx < order.items.length - 1 ? ', ' : ''}</span>
-                        ))}
+                        <OrderItemsTable items={order.items} />
                       </div>
                     </div>
                   ))}

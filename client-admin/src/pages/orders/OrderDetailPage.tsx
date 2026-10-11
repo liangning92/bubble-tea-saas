@@ -1,3 +1,4 @@
+import { OrderItemsTable } from '../../components/OrderItemsTable'
 import { useDashboardContext, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { PaymentEvidencePanel } from '../../components/PaymentEvidencePanel'
@@ -94,17 +95,7 @@ export function OrderDetailPage() {
           {/* Order Items */}
           <div className="card">
             <h2 className="font-semibold text-gray-900 mb-4">{t('orders.items')}</h2>
-            <div className="space-y-3">
-              {order.items?.map((item: any, i: number) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <p className="font-medium text-gray-900">{item.productName}</p>
-                    <p className="text-sm text-gray-500">{item.specName} x {item.quantity}</p>
-                  </div>
-                  <p className="font-medium">{formatCurrency(item.unitPrice * item.quantity)}</p>
-                </div>
-              ))}
-            </div>
+            <OrderItemsTable items={order.items} amount={(_, index) => formatCurrency(order.items[index].unitPrice * order.items[index].quantity)} />
            <div className="mt-4 pt-4 border-t flex justify-between text-lg font-bold">
               <span>{t('common.total')}</span>
               <span className="text-primary">{formatCurrency(order.totalAmount || order.total)}</span>

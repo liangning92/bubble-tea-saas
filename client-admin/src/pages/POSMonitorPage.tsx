@@ -1,3 +1,4 @@
+import { OrderItemsTable } from '../components/OrderItemsTable'
 import { readPOSFailure } from '../utils/posMonitorFailure'
 import { formatCurrency } from '../utils/helpers'
 import { useMemo, useEffect } from 'react'
@@ -247,7 +248,7 @@ export function POSMonitorPage() {
 
       {!!unposted.length && <section role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 p-4">
         <h2 className="font-bold text-red-800">{t('posMonitor.unpostedReceipts')} · {unposted.length} · Rp {unposted.reduce((sum:number,row:any)=>sum+row.grandTotal,0).toLocaleString('id-ID')}</h2>
-        <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id}>{row.orderNumber} · Rp {row.grandTotal.toLocaleString('id-ID')} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID')} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID')}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
+        <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id} className="border-b last:border-0 py-3"><OrderItemsTable items={row.items} /><span className="text-xs text-gray-500">{row.orderNumber}</span> · Rp {row.grandTotal.toLocaleString('id-ID')} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID')} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID')}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
       </section>}
       {/* Stats Row */}
       <div className="grid grid-cols-4 gap-4 mb-6">
