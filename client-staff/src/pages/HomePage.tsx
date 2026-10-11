@@ -232,7 +232,7 @@ export function HomePage() {
         <div className="home-section-title">
           <h2>{t("ui.month")}</h2>
           <button
-            aria-label={t("common.retry")}
+            aria-label={t("ui.refresh")}
             onClick={refresh}
             disabled={loading}
           >

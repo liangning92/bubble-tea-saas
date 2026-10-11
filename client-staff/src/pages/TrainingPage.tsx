@@ -315,7 +315,7 @@ export function TrainingPage() {
         icon={BookOpen}
         actions={
           <button
-            aria-label={t("common.retry")}
+            aria-label={t("ui.refresh")}
             onClick={() => {
               void loadData();
               catalogue.refresh();
