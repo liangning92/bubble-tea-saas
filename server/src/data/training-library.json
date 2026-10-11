@@ -3051,5 +3051,92 @@
       "zh": "带教安排：授权带教和最终评定人员、适用岗位和观察记录；后续检查按批准计划，不新增固定频次或自动完成资格。",
       "id": "Pendampingan: pendamping dan penilai akhir yang berwenang, tugas terkait, serta catatan pengamatan. Pemeriksaan lanjutan mengikuti rencana yang disetujui tanpa menambah frekuensi tetap atau kelulusan otomatis."
     }
+  ],
+  "checklists": [
+    {
+      "key": "opening",
+      "title": {
+        "zh": "☀️ 开店检查清单",
+        "en": "☀️ Opening Checklist",
+        "id": "☀️ Checklist Buka Toko"
+      },
+      "items": [
+        {
+          "zh": "检查并记录冰箱、冷冻柜温度",
+          "en": "Check & log fridge/freezer temperatures",
+          "id": "Cek & catat suhu kulkas/freezer"
+        },
+        {
+          "zh": "检查原料效期，过期报废并登记",
+          "en": "Check ingredient expiry; discard & log expired",
+          "id": "Cek kedaluwarsa bahan; buang & catat yang kedaluwarsa"
+        },
+        {
+          "zh": "泡第一桶茶、煮第一锅珍珠",
+          "en": "Brew first tea batch, cook first pearl batch",
+          "id": "Seduh teh pertama, masak boba pertama"
+        },
+        {
+          "zh": "果糖机排气校准、封口机预热",
+          "en": "Purge & calibrate fructose machine, preheat sealer",
+          "id": "Kalibrasi mesin fruktosa, panaskan mesin seal"
+        },
+        {
+          "zh": "补齐杯子、杯盖、吸管、封口膜、打包袋",
+          "en": "Restock cups, lids, straws, sealing film, bags",
+          "id": "Isi ulang gelas, tutup, sedotan, film seal, kantong"
+        },
+        {
+          "zh": "打开 POS、核对备用金、测试小票打印机",
+          "en": "Open POS, count float, test receipt printer",
+          "id": "Buka POS, hitung uang kas, tes printer struk"
+        },
+        {
+          "zh": "店面与吧台清洁，灯光和音乐打开",
+          "en": "Clean storefront & bar; lights and music on",
+          "id": "Bersihkan toko & bar; nyalakan lampu dan musik"
+        }
+      ]
+    },
+    {
+      "key": "closing",
+      "title": {
+        "zh": "🌙 闭店检查清单",
+        "en": "🌙 Closing Checklist",
+        "id": "🌙 Checklist Tutup Toko"
+      },
+      "items": [
+        {
+          "zh": "报废剩余茶汤、珍珠、奶盖并登记报损",
+          "en": "Discard leftover tea, pearls, foam and log waste",
+          "id": "Buang sisa teh, boba, foam dan catat waste"
+        },
+        {
+          "zh": "盘点高价值原料，在 App 提交盘点",
+          "en": "Count high-value items, submit count in App",
+          "id": "Hitung bahan bernilai tinggi, kirim di App"
+        },
+        {
+          "zh": "清洗所有器具、茶桶、雪克杯，倒置晾干",
+          "en": "Wash all tools, urns and shakers; air-dry upside down",
+          "id": "Cuci semua alat, tempat teh, shaker; keringkan terbalik"
+        },
+        {
+          "zh": "清洁冰箱内部、地面、下水道，倒垃圾",
+          "en": "Clean fridge interior, floor, drains; take out trash",
+          "id": "Bersihkan kulkas, lantai, saluran air; buang sampah"
+        },
+        {
+          "zh": "POS 交班结算，现金入保险柜",
+          "en": "POS shift close, cash into safe",
+          "id": "Tutup shift POS, uang masuk brankas"
+        },
+        {
+          "zh": "关闭非必要电源（保留冰箱），锁门",
+          "en": "Switch off non-essential power (keep fridges), lock up",
+          "id": "Matikan listrik yang tidak perlu (kecuali kulkas), kunci pintu"
+        }
+      ]
+    }
   ]
 }

@@ -31,7 +31,7 @@ export function validateLibrary(value: unknown) {
   if (Buffer.byteLength(JSON.stringify(value) || '', 'utf8') > LIBRARY_LIMITS.bytes) fail(413, 'TRAINING_CONTENT_TOO_LARGE')
   const parsed = trainingCatalogueSchema.safeParse(value)
   if (!parsed.success) fail(400, 'TRAINING_CONTENT_INVALID')
-  return parsed.data
+  return { ...parsed.data, checklists: parsed.data.checklists ?? seed.checklists }
 }
 function snapshotContent(content: any, published: boolean) {
   const copy = JSON.parse(JSON.stringify(content))
