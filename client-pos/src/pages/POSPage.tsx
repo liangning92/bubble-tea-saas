@@ -3645,7 +3645,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="flex flex-col items-center justify-center w-full mt-1">
                         <span className="font-semibold text-sm text-gray-900 text-center leading-tight truncate w-full">{product.name}</span>
                         {posLayout.showPrice && (
-                          <span className="text-primary font-bold text-sm mt-0.5">{formatCurrency(getActivityPrice(product.id, product.specs[0]?.price || 0))}</span>
+                          <span className="text-primary font-extrabold text-sm mt-0.5">{formatCurrency(getActivityPrice(product.id, product.specs[0]?.price || 0))}</span>
                         )}
                       </div>
                     </div>
@@ -3653,7 +3653,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     <div className="flex flex-col items-center justify-center w-full px-2">
                       <span className="font-bold text-base text-gray-900 text-center leading-tight line-clamp-2 w-full">{product.name}</span>
                       {posLayout.showPrice && (
-                        <span className="text-primary font-bold text-lg mt-1">{formatCurrency(getActivityPrice(product.id, product.specs[0]?.price || 0))}</span>
+                        <span className="text-primary font-extrabold text-lg mt-1">{formatCurrency(getActivityPrice(product.id, product.specs[0]?.price || 0))}</span>
                       )}
                     </div>
                   )}
