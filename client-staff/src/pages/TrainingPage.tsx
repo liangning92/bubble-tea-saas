@@ -89,8 +89,26 @@ export function TrainingPage() {
   const [syncError,setSyncError]=useState('')
   const [syncBusy,setSyncBusy]=useState(false)
   async function loadProgress(){try{const [records,checks]=await Promise.all([employeeApi.get('/my/learning'),employeeApi.get('/my/checklist')]);setCompletedModules(Object.fromEntries(records.filter((r:any)=>r.version===progressVersion&&r.completed).map((r:any)=>[r.course,true])));setCheckedItems(checks);setSyncError('')}catch{setSyncError(t('workspace.syncFailed'))}}
-  useEffect(()=>{if(user?.staffId)void loadProgress()},[user?.staffId,progressScope])
-  async function importLegacy(){setSyncBusy(true);try{const legacyKey=`btps_completed_training_modules_${user?.staffId}`;const scopedKey=`btps_completed_training_modules_${progressScope}`;const saved={...JSON.parse(localStorage.getItem(legacyKey)||'{}'),...JSON.parse(localStorage.getItem(scopedKey)||'{}')};for(const [course,completed] of Object.entries(saved))if(completed)await employeeApi.put('/my/learning',{course,version:'1',completed:true,source:'legacy_import'});localStorage.removeItem(legacyKey);localStorage.removeItem(scopedKey);await loadProgress()}catch{setSyncError(t('workspace.syncFailed'))}finally{setSyncBusy(false)}}
+  useEffect(()=>{setCompletedModules({});setCheckedItems({});setSelectedModule(null);if(user?.staffId&&catalogue.revision)void loadProgress()},[user?.staffId,progressScope])
+  async function importLegacy() {
+    if (syncBusy || !catalogue.revision) return
+    setSyncBusy(true)
+    try {
+      const sources = [
+        {key: `btps_completed_training_modules_${user?.staffId}`, version: '1'},
+        {key: `btps_completed_training_modules_${progressScope}`, version: progressVersion}
+      ]
+      for (const {key,version} of sources) {
+        const saved = JSON.parse(localStorage.getItem(key) || '{}')
+        for (const [course,completed] of Object.entries(saved)) {
+          if (completed) await employeeApi.put('/my/learning', {course,version,completed:true,source:'legacy_import'})
+        }
+        localStorage.removeItem(key)
+      }
+      await loadProgress()
+    } catch { setSyncError(t('workspace.syncFailed')) }
+    finally { setSyncBusy(false) }
+  }
 
   const STATUS_ICONS: Record<string, JSX.Element> = {
     scheduled: <Clock className="text-blue-500" size={18} />,
@@ -192,7 +210,7 @@ export function TrainingPage() {
   }
 
   const handleToggleCheck = async (key:string) => {
-    if(syncBusy)return;setSyncBusy(true);const updated={...checkedItems,[key]:!checkedItems[key]}
+    if(syncBusy)return;setSyncBusy(true);const scopedKey=`${progressVersion}:${key}`;const updated={...checkedItems,[scopedKey]:!checkedItems[scopedKey]}
     try{await employeeApi.put('/my/checklist',updated);setCheckedItems(updated);setSyncError('')}catch{setSyncError(t('workspace.syncFailed'))}finally{setSyncBusy(false)}
   }
   const handleResetChecklist = async () => {if(syncBusy)return;setSyncBusy(true);try{await employeeApi.put('/my/checklist',{});setCheckedItems({});setSyncError('')}catch{setSyncError(t('workspace.syncFailed'))}finally{setSyncBusy(false)}}
@@ -377,7 +395,7 @@ export function TrainingPage() {
 
           {catalogue.checklists.length === 0 && <p className="text-sm text-gray-500">{w.emptyChecklists}</p>}
           {catalogue.checklists.map((list) => {
-            const checkedCount = list.items.filter((_, idx) => checkedItems[`${list.key}_${idx}`]).length
+            const checkedCount = list.items.filter((_, idx) => checkedItems[`${progressVersion}:${list.key}_${idx}`]).length
             const isAllDone = checkedCount === list.items.length
 
             return (
@@ -398,7 +416,7 @@ export function TrainingPage() {
                 <div className="space-y-2.5">
                   {list.items.map((item, idx) => {
                     const itemKey = `${list.key}_${idx}`
-                    const isChecked = !!checkedItems[itemKey]
+                    const isChecked = !!checkedItems[`${progressVersion}:${itemKey}`]
 
                     return (
                       <div

@@ -179,11 +179,13 @@ export function QRCameraScannerModal({
     }
   }, [facingMode, hasScanned, handleDecodedString, stopCamera, t])
 
-  // 打开/关闭处理
+  useEffect(() => {
+    if (isOpen) { setScanError(''); setHasScanned(false) }
+  }, [isOpen])
+
+  // Camera callback changes must not erase a failed scan or restart decoding.
   useEffect(() => {
     if (isOpen) {
-      setScanError('')
-      setHasScanned(false)
       if (activeTab === 'camera') {
         startCamera()
       }
@@ -245,7 +247,7 @@ export function QRCameraScannerModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 flex flex-col justify-between select-none">
+    <div className="fixed inset-0 z-[80] bg-black/85 flex flex-col justify-between select-none">
       {/* 顶部栏 */}
       <div className="px-4 pt-12 pb-4 flex items-center justify-between text-white bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center gap-2">
@@ -355,7 +357,7 @@ export function QRCameraScannerModal({
                 {/* 识别成功/加载提示遮罩 */}
                 {(hasScanned || isLoading) && (
                   <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center text-white">
-                    {isLoading ? (
+                    {scanError ? <><AlertCircle size={40} className="text-red-400 mb-2" /><p className="text-xs font-bold">{scanError}</p></> : isLoading ? (
                       <>
                         <Loader2 size={36} className="text-primary animate-spin mb-2" />
                         <p className="text-xs font-bold">{t('common.loading', '正在登记考勤...')}</p>
