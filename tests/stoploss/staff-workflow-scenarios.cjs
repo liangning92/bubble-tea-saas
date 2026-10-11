@@ -143,6 +143,8 @@ module.exports = async function staffWorkflows({ prisma, check, call, provider }
   await check('PUT','/api/staff/'+staff.id,{baseSalary:2600000,hireDate:'2026-09-01'});
   await check('PUT','/api/attendance-rules/'+configuredAttendance.id,{earlyLeaveDeductionType:'daily_rate',earlyLeaveDeductionDailyRate:0.5,absenceDeductionType:'fixed',absenceDeductionFixed:1000000,sickLeaveDeductionType:'fixed',sickLeaveDeductionFixed:2000000});
   await prisma.attendance.create({data:{staffId:staff.id,checkInTime:new Date('2026-09-02T01:30:00Z'),checkOutTime:new Date('2026-09-02T08:00:00Z'),status:'late'}});
+  const unscheduled=await check('GET',`/api/staff-salary/calculate/${staff.id}?month=9&year=2026`);assert.equal(unscheduled.latePenalty,0);
+  await prisma.schedule.create({data:{staffId:staff.id,date:new Date('2026-09-02T00:00:00Z'),shift:'morning'}});
   await prisma.schedule.create({data:{staffId:staff.id,date:new Date('2026-09-03T00:00:00Z'),shift:'morning'}});
   await check('PUT','/api/leave/balance/'+staff.id,{year:2026,annualLeave:12,sickLeave:12});
   await check('POST','/api/leave/apply',{leaveType:'sick',startDate:'2026-09-04',endDate:'2026-09-04',totalDays:1},400,employeeToken);
