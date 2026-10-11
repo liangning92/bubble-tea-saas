@@ -373,7 +373,7 @@ export const expenseApi = {
   create: (data: any) => api.post('/expenses', data),
   update: (id: string, data: any) => api.put('/expenses/' + id, data),
   delete: (id: string) => api.delete('/expenses/' + id),
-  summary: (days?: number) => api.get('/expenses/summary', { params: days ? { days } : undefined }),
+  summary: (params?: number | { startDate?: string; endDate?: string }) => api.get('/expenses/summary', { params: typeof params === 'number' ? { days: params } : params }),
   bulkImport: (expenses: any[]) => api.post('/expenses/bulk', { expenses }),
   export: (params?: any) => api.get('/expenses/export', { params, responseType: 'blob' }),
   // Expense categories (customizable)

@@ -107,6 +107,7 @@ export function ExpenseListPage() {
     other: 0
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [pendingSalaryMinor, setPendingSalaryMinor] = useState(0)
   const [showModal, setShowModal] = useState(false)
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [showRecurringModal, setShowRecurringModal] = useState(false)
@@ -181,12 +182,13 @@ export function ExpenseListPage() {
 
       const [expensesRes, summaryRes] = await Promise.all([
         expenseApi.list(params),
-        expenseApi.summary(30)
+        expenseApi.summary({ startDate: filterStartDate || undefined, endDate: filterEndDate || undefined })
       ])
 
       setExpenses(expensesRes.data?.data?.list || [])
       if (summaryRes.data?.data) {
         const data = summaryRes.data.data
+        setPendingSalaryMinor(data.pendingSalaryMinor || 0)
         // Handle both old format (byCategory array) and new format (flat)
         if (data.byCategory) {
           const newSummary: ExpenseSummary = { rent: 0, utilities: 0, supplies: 0, salary: 0, reimbursement: 0, other: 0 }
@@ -563,6 +565,7 @@ export function ExpenseListPage() {
   }
 
   const openEditModal = (expense: Expense) => {
+    if (expense.referenceType === 'salary') return
     setSelectedExpense(expense)
     // Format amount with thousand separators for display
     const displayAmount = (expense.amount / 100).toLocaleString('id-ID')
@@ -899,6 +902,8 @@ export function ExpenseListPage() {
                   </div>
                   <p className="text-xs text-gray-500">{getCategoryLabel(cat.key)}</p>
                   <p className="font-bold text-gray-900">{formatCurrency(summary[cat.key as keyof ExpenseSummary] || 0)}</p>
+                  {cat.key === 'salary' && pendingSalaryMinor > 0 && <p className="text-xs font-medium text-amber-700 mt-1">{t('expense.pendingSalary')}: {formatCurrency(pendingSalaryMinor)}</p>}
+                  {cat.key === 'salary' && <Link to="/staff/salary/salary" className="text-xs text-primary hover:underline">{t('expense.viewPayroll')}</Link>}
                 </div>
               ))}
             </div>
@@ -939,7 +944,7 @@ export function ExpenseListPage() {
                   <div
                     key={expense.id}
                     className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={canWrite ? () => openEditModal(expense) : undefined}
+                    onClick={canWrite && expense.referenceType !== 'salary' ? () => openEditModal(expense) : undefined}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -956,7 +961,7 @@ export function ExpenseListPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-lg text-gray-900">{formatCurrency(expense.amount)}</p>
-                        <div className="flex items-center gap-1 mt-1">
+                        {expense.referenceType !== 'salary' && <div className="flex items-center gap-1 mt-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -977,7 +982,7 @@ export function ExpenseListPage() {
                           >
                             <Trash2 size={16} />
                           </button>
-                        </div>
+                        </div>}
                       </div>
                     </div>
                   </div>

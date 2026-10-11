@@ -1,5 +1,6 @@
 import prisma from '../config/database'
 import { BusinessInputError as ExpenseInputError, parseBusinessDate } from '../utils/businessDate'
+import { formatDate } from '../utils/dateUtils'
 export { BusinessInputError as ExpenseInputError } from '../utils/businessDate'
 export const normalizeExpenseDate = parseBusinessDate
 
@@ -30,12 +31,15 @@ export async function getExpenses(storeId: string, options?: {
 
 // Get expense summary by category
 export async function getExpenseSummary(storeId: string, startDate: Date, endDate: Date) {
-  const expenses = await prisma.expense.findMany({
+  const [expenses, pendingPayroll] = await Promise.all([prisma.expense.findMany({
     where: {
       storeId,
       date: { gte: startDate, lte: endDate }
     }
-  })
+  }), prisma.salary.aggregate({
+    where: { staff: { storeId }, status: 'pending', month: { gte: formatDate(startDate).slice(0, 7), lte: formatDate(endDate).slice(0, 7) } },
+    _sum: { finalAmount: true }
+  })])
 
   // Group by category
   const summary: Record<string, number> = {}
@@ -48,7 +52,10 @@ export async function getExpenseSummary(storeId: string, startDate: Date, endDat
   return {
     total,
     byCategory: Object.entries(summary).map(([category, amount]) => ({ category, amount })),
-    count: expenses.length
+    count: expenses.length,
+    // Expense amounts are hundredths; salary drafts use whole rupiah. Pending
+    // payroll is shown separately and must never be represented as cash paid.
+    pendingSalaryMinor: (pendingPayroll._sum.finalAmount || 0) * 100
   }
 }
 
