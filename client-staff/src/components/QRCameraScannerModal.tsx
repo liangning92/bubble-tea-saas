@@ -33,6 +33,7 @@ export function QRCameraScannerModal({
   const [mode, setMode] = useState<'check_in' | 'check_out'>(defaultMode)
   const [activeTab, setActiveTab] = useState<'camera' | 'manual'>('camera')
   const [manualCode, setManualCode] = useState('')
+  const [scanError, setScanError] = useState('')
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
   const [hasScanned, setHasScanned] = useState(false)
@@ -74,6 +75,7 @@ export function QRCameraScannerModal({
     const cleanValue = rawValue.trim()
     if (!cleanValue) return
 
+    setScanError('')
     setHasScanned(true)
 
     // 震动提示
@@ -87,9 +89,9 @@ export function QRCameraScannerModal({
 
     try {
       await onScan(cleanValue, mode)
-    } catch {
-      // 失败后允许重新扫码
-      setHasScanned(false)
+    } catch (error: any) {
+      setScanError(error.response?.data?.message || t('common.loadFailed'))
+      // Pause decoding until the employee explicitly retries.
     }
   }, [hasScanned, isLoading, mode, onScan])
 
@@ -180,6 +182,7 @@ export function QRCameraScannerModal({
   // 打开/关闭处理
   useEffect(() => {
     if (isOpen) {
+      setScanError('')
       setHasScanned(false)
       if (activeTab === 'camera') {
         startCamera()
@@ -268,12 +271,13 @@ export function QRCameraScannerModal({
         </button>
       </div>
 
+      {scanError && <div role="alert" className="mx-6 my-2 rounded-xl bg-red-50 text-red-700 p-3"><p>{scanError}</p><button className="mt-2 px-4 py-2 border rounded" onClick={()=>{setScanError('');setHasScanned(false)}}>{t('common.retry')}</button></div>}
       {/* 中部模式切换选择器 (上班签到 / 下班打卡) */}
       <div className="px-6 py-2">
         <div className="bg-white/15 backdrop-blur-md p-1 rounded-2xl flex border border-white/20">
           <button
             type="button"
-            onClick={() => setMode('check_in')}
+            onClick={() => {setScanError('');setHasScanned(false);setMode('check_in')}}
             className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_in'
                 ? 'bg-emerald-500 text-white shadow-md'
@@ -285,7 +289,7 @@ export function QRCameraScannerModal({
           </button>
           <button
             type="button"
-            onClick={() => setMode('check_out')}
+            onClick={() => {setScanError('');setHasScanned(false);setMode('check_out')}}
             className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_out'
                 ? 'bg-amber-500 text-white shadow-md'
