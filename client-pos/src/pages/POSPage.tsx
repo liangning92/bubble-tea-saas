@@ -3317,7 +3317,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         {(!recovery || recovery.intent || recovery.rows.some(row=>!row.locallyAcceptedAt) || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="shrink-0 max-h-[45vh] overflow-y-auto p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
           <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
           {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
-          {!recovery?.intent && <ul className="max-h-24 overflow-y-auto text-sm break-all" data-testid="checkout-recovery-list">{recovery?.rows.map(row => <li key={row.id}>{String(row.orderNumber || row.localId || '')}</li>)}</ul>}
           <p className="text-sm">{t(recovery?.intent ? 'checkoutIntent.preserve' : 'checkoutIntent.verifyRecords')}</p>
           {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index}>{item.quantity} × {item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</li>)}</ul></details>}
           {recovery?.intent?.phase === 'prepared' && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={async () => {
@@ -3333,7 +3332,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         </section>}
 
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
-        {!!recovery?.rows.filter(row=>row.locallyAcceptedAt).length && <section data-testid="offline-sales" role="status" className="shrink-0 max-h-[25vh] overflow-y-auto p-2 bg-amber-50 text-sm"><strong>{t('offlineSale.queue')}</strong><ul className="max-h-24 overflow-y-auto">{recovery.rows.filter(row=>row.locallyAcceptedAt).map(row=><li key={row.id}>{row.orderNumber} · {t(row.status === 'pending' || row.status === 'syncing' ? 'offlineSale.awaitUpload' : 'offlineSale.review')}{row.manualPayment ? ` · ${t('offlineSale.qrisPending')}` : ''}</li>)}</ul>{recovery.rows.some(row=>row.locallyAcceptedAt && row.status==='review') && <button type="button" className="underline" onClick={()=>{void syncManager.syncPendingOrders(true)}}>{t('checkoutIntent.retry')}</button>}</section>}
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
         <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
