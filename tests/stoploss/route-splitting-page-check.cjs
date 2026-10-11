@@ -107,13 +107,21 @@ async function navigate(page, kind, route) {
     if (kind === 'admin') {
       const failure = await setup(kind);
       try {
+        let recoveryLoads = 0;
+        failure.page.on('request', request => {
+          if (request.isNavigationRequest() && new URL(request.url()).pathname === '/register') recoveryLoads++;
+        });
         await failure.page.goto(url('/login'));
         await expect(failure.page.locator('input[type="password"]')).toBeVisible();
         await failure.page.route('**/RegisterPage-*.js', route => route.abort());
         await navigate(failure.page, kind, '/register');
         await expect(failure.page.getByRole('heading', {name:'Something went wrong'})).toBeVisible();
         await expect(failure.page.getByRole('button', {name:/Reload/})).toBeVisible();
-        console.log('PASS failed route chunk displays existing recovery controls without automatic reload');
+        await expect.poll(() => recoveryLoads).toBe(1);
+        assert(!failure.page.url().includes('__btps_reload'), 'cache-busting query is removed after the fresh page loads');
+        await failure.page.waitForTimeout(300);
+        assert.equal(recoveryLoads, 1, 'a persistent chunk failure must not cause a reload loop');
+        console.log('PASS failed route chunk refreshes once, then shows recovery controls without a loop');
       } finally {await failure.context.close();}
     }
   }
