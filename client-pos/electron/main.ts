@@ -2053,7 +2053,7 @@ function generateShiftReportText(data: any): string {
   if (si.openFloat !== false) money(label('开班备用金', 'Opening float', 'Kas awal'), data.openFloat)
   if (si.closeCash !== false) money(label('钱箱总数', 'Drawer total', 'Total laci'), data.actualCash)
   const receipts = data.manualReceipts || {}
-  money(label('现金收款', 'Cash receipts', 'Penerimaan tunai'), receipts.cash)
+  if (data.manualReceiptsCashBasis !== 'drawer_total') money(label('现金收款', 'Cash receipts', 'Penerimaan tunai'), receipts.cash)
   money(label('QRIS收款', 'QRIS receipts', 'Penerimaan QRIS'), receipts.qris)
   money(label('ShopeeFood收款', 'ShopeeFood receipts', 'Penerimaan ShopeeFood'), receipts.shopeefood)
   money(label('GoFood收款', 'GoFood receipts', 'Penerimaan GoFood'), receipts.gofood)

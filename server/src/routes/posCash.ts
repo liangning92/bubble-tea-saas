@@ -1,3 +1,4 @@
+import { shiftHandoverFinancials } from '../services/ShiftHandoverFinancials'
 import { parseDateBoundary } from '../utils/businessDate'
 import { calculateShiftCash, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
 import { manualReceiptsSchema } from '../services/ShiftManualReceipts'
@@ -187,6 +188,7 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
     const parsedReceipts = req.body.manualReceipts === undefined ? null : manualReceiptsSchema.safeParse(req.body.manualReceipts)
     if (parsedReceipts && !parsedReceipts.success) return res.status(400).json({code:400,message:'SHIFT_MANUAL_RECEIPTS_INVALID'})
     const manualReceipts = parsedReceipts?.success ? parsedReceipts.data : null
+    if (req.body.manualReceiptsCashBasis === 'drawer_total' && manualReceipts?.cash !== actualCash) return res.status(400).json({code:400,message:'SHIFT_DRAWER_AMOUNT_MISMATCH'})
     if (!Number.isSafeInteger(actualCash) || actualCash < 0 || actualCash > 2147483647) return res.status(400).json({code:400,message:'SHIFT_RECONCILIATION_REQUIRED'})
 
     const shiftConfig = await prisma.config.findFirst({
@@ -231,7 +233,8 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
       await tx.cashEvent.create({ data: { storeId, staffId, type: 'close_shift', amount: actualCash, shift: currentShift.shift, note: `交班 - 差异: ${difference !== null ? difference : 'N/A'}` } })
       await tx.config.create({ data: { storeId, key: 'pos.shift.purchase:' + session.id, category: 'shift_report', value: JSON.stringify(purchaseExpenses) } })
       const [cashier,shift] = await Promise.all([tx.staff.findFirst({where:{id:staffId,storeId},select:{name:true}}),tx.shift.findFirst({where:{storeId,key:currentShift.shift},select:{name:true,nameZh:true,nameId:true}})])
-      const report = {version:1,cashReconciliation,manualReceipts,manualReceiptsSource:manualReceipts ? 'manual_handover' : null,reportedBy:req.user!.id,reportKind:'handover',sessionId:session.id,cashierName:cashier?.name || null,shiftType:session.shift,shiftNames:shift,openedAt:session.openedAt,closedAt:session.closedAt,openFloat:session.openFloat,actualCash,summaryEvidence:evidence,recordedBalance,expectedCash,cashDifference:difference,purchaseExpenses,summaryItems:shiftSettings.summaryItems || {}}
+      const handoverFinancials = shiftHandoverFinancials(actualCash,currentShift.openFloat,cashReconciliation.expenses,manualReceipts?.qris ?? null,manualReceipts?.shopeefood || 0,manualReceipts?.gofood || 0,cashReconciliation.revenue)
+      const report = {version:2,manualReceiptsCashBasis:req.body.manualReceiptsCashBasis === 'drawer_total' ? 'drawer_total' : 'cash_receipts',handoverFinancials,cashReconciliation,manualReceipts,manualReceiptsSource:manualReceipts ? 'manual_handover' : null,reportedBy:req.user!.id,reportKind:'handover',sessionId:session.id,cashierName:cashier?.name || null,shiftType:session.shift,shiftNames:shift,openedAt:session.openedAt,closedAt:session.closedAt,openFloat:session.openFloat,actualCash,summaryEvidence:evidence,recordedBalance,expectedCash,cashDifference:difference,purchaseExpenses,summaryItems:shiftSettings.summaryItems || {}}
       await tx.config.create({data:{storeId,key:'pos.shift.report:'+session.id,category:'shift_report',value:JSON.stringify(report)}})
       if (cashWarning) await tx.config.create({data:{storeId,key:CASH_WARNING_PREFIX+session.id,category:'shift_report',value:JSON.stringify(cashWarning)}})
       return { ...session, expectedCash, cashDifference:difference, purchaseExpenses, report, cashWarning }

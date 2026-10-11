@@ -1,3 +1,5 @@
+import { netReceivedAmount } from '../utils/refundAllocation'
+import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 import { loadShiftCashReviews } from './ShiftCashReconciliation'
 import { loadManualReceipts } from './ShiftManualReceipts'
 import { PrismaClient } from '@prisma/client'
@@ -25,13 +27,15 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
   if (sessions.length > 500) throw new ShiftReviewInputError('SHIFT_RANGE_TOO_LARGE')
   const cashReviews = await loadShiftCashReviews(db, storeId, sessions.map(s => s.id))
   const manualReceipts = await loadManualReceipts(db, storeId, sessions.map(s => s.id))
+  const basisRows=sessions.length ? await db.config.findMany({where:{storeId,key:{in:sessions.map(s=>'pos.shift.report:'+s.id)}},select:{key:true,value:true}}) : []
+  const receiptBases=new Map(basisRows.map(r=>[r.key.slice('pos.shift.report:'.length),JSON.parse(r.value).manualReceiptsCashBasis || 'cash_receipts']))
   const ends = sessions.map(s => s.closedAt && s.closedAt < now ? s.closedAt : now)
   const from = new Date(Math.min(range.startDate.getTime(), ...sessions.map(s => s.openedAt.getTime())))
   const until = new Date(Math.min(now.getTime(), Math.max(range.endDate.getTime(), ...ends.map(d => d.getTime()))))
   const window = { storeId, createdAt: { gte: from, lt: until } }
   const [orders, expenses, warnings, staff, users, definitions, categoryConfig] = await Promise.all([
-    db.order.findMany({ where: window, select: { id: true, orderNumber: true, pickupNumber: true, staffId: true, status: true, finalAmount: true, paymentMethod: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
-    db.expense.findMany({ where: { ...window, referenceType: 'pos_reimbursement' }, orderBy: { createdAt: 'desc' } }),
+    db.order.findMany({ where: window, select: { id: true, orderNumber: true, pickupNumber: true, staffId: true, status: true, finalAmount: true, paymentMethod: true, createdAt: true, items:{select:{productName:true,quantity:true}}, refundRequests:{where:{status:{in:['approved','paid']}},select:{amount:true,status:true}} }, orderBy: { createdAt: 'desc' } }),
+    db.expense.findMany({ where: window, orderBy: { createdAt: 'desc' } }),
     db.pOSActionLog.findMany({ where: { ...window, severity: { in: ['warning', 'critical'] } }, select: { id: true, staffId: true, staffName: true, action: true, severity: true, description: true, entityId: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
     db.staff.findMany({ where: { storeId }, select: { id: true, userId: true, name: true, employeeNumber: true, position: true } }),
     db.user.findMany({ where: { storeId }, select: { id: true, role: true } }),
@@ -69,10 +73,16 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
     for (const o of b.orders) add(o.staffId, 'cashier', 'orders')
     for (const e of b.expenses) if (e.referenceId) add(e.referenceId.split(':')[0], 'purchaser', 'expenses')
     for (const w of b.warnings) add(w.staffId, 'operator', 'warnings')
-    const completed = b.orders.filter(o => o.status === 'completed')
+    const completed = b.orders.filter(o => ['completed','paid'].includes(o.status))
     const overlap = b.session ? buckets.some(other => other.id !== b.id && other.windowStart < b.windowEnd && other.windowEnd > b.windowStart) : false
-    return { ...b, cashReconciliation:cashReviews.get(b.id)?.cashReconciliation || null, cashWarning:cashReviews.get(b.id)?.cashWarning || null, manualReceipts: manualReceipts.get(b.id) || null, attribution: 'recorded_time_window', overlapping: overlap,
-      summary: { revenue: completed.reduce((sum, o) => sum + o.finalAmount, 0), completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
+    const receipts=manualReceipts.get(b.id)
+    const orderRevenue=completed.reduce((sum,o)=>sum+netReceivedAmount(o),0)
+    const calculated=b.session ? shiftHandoverFinancials(b.session.actualCash,b.session.openFloat,
+      cashReviews.get(b.id)?.cashReconciliation?.expenses ?? b.expenses.reduce((sum,e)=>sum+e.amount,0)/100,
+      receipts?.qris ?? null,receipts?.shopeefood || 0,receipts?.gofood || 0,orderRevenue) : null
+    const financials=calculated ? {...calculated,reported:!!receipts} : null
+    return { ...b, manualReceiptsCashBasis:receiptBases.get(b.id) || 'cash_receipts', handoverFinancials:financials, cashReconciliation:cashReviews.get(b.id)?.cashReconciliation || null, cashWarning:cashReviews.get(b.id)?.cashWarning || null, manualReceipts: manualReceipts.get(b.id) || null, attribution: 'recorded_time_window', overlapping: overlap,
+      summary: { revenue: financials?.totalRevenue ?? orderRevenue, completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
       orders: b.orders.map(o => ({ ...o, amount: o.finalAmount, staffName: person(o.staffId).name })),
       expenses: b.expenses.map(e => ({ id: e.id, category: e.category, amount: e.amount / 100, quantity: e.quantity ?? null, description: e.description, createdAt: e.createdAt, staffName: e.referenceId ? person(e.referenceId.split(':')[0]).name : null })),
       employees: [...participants.values()] }

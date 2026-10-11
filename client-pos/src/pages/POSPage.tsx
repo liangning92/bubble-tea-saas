@@ -4701,7 +4701,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
                   <section className="mb-4 rounded-xl border p-3" data-testid="manual-receipts-input">
                     <h3 className="font-semibold">{t('manualReceipts.title')}</h3><p className="my-2 text-xs text-gray-500">{t('manualReceipts.hint')}</p>
-                    <div className="grid grid-cols-2 gap-3">{(['cash','qris','shopeefood','gofood'] as const).map(key => <label key={key} className="text-sm">{t('manualReceipts.'+key)}<input type="text" inputMode="numeric" pattern="[0-9]*" aria-label={t('manualReceipts.'+key)} value={manualReceipts[key]} onChange={e => {if (/^\d*$/.test(e.target.value)) setManualReceipts(previous => ({...previous,[key]:e.target.value}))}} className="mt-1 w-full rounded-lg border p-3 text-lg" placeholder="0" /></label>)}</div>
+                    <div className="grid grid-cols-2 gap-3">{(['qris','shopeefood','gofood'] as const).map(key => <label key={key} className="text-sm">{t('manualReceipts.'+key)}<input type="text" inputMode="numeric" pattern="[0-9]*" aria-label={t('manualReceipts.'+key)} value={manualReceipts[key]} onChange={e => {if (/^\d*$/.test(e.target.value)) setManualReceipts(previous => ({...previous,[key]:e.target.value}))}} className="mt-1 w-full rounded-lg border p-3 text-lg" placeholder="0" /></label>)}</div>
                   </section>
                   {/* 主管确认 */}
                   {shiftSettings.requireSupervisorConfirm && (
@@ -4737,13 +4737,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           return
                         }
                         if (shiftClosing) return
-                        if (Object.values(manualReceipts).some(value => value.trim() === '' || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 2147483647)) { showToast(t('manualReceipts.required'), 'error'); return }
+                        if (([manualReceipts.qris,manualReceipts.shopeefood,manualReceipts.gofood]).some(value => value.trim() === '' || !Number.isSafeInteger(Number(value)) || Number(value) < 0 || Number(value) > 2147483647)) { showToast(t('manualReceipts.required'), 'error'); return }
                         setShiftClosing(true)
                         const actualCash = Number(shiftActualCash)
                         try {
                           const closeResult = await posApi.closeShift({
                             actualCash,
-                            manualReceipts: {cash:Number(manualReceipts.cash),qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)},
+                            manualReceiptsCashBasis:'drawer_total',
+                            manualReceipts: {cash:actualCash,qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)},
                             closeNote: ''
                           })
                           try {

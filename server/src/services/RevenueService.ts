@@ -1,3 +1,4 @@
+import { loadOnlineHandoverRevenue } from './ShiftHandoverFinancials'
 import {netReceivedAmount} from '../utils/refundAllocation'
 import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import prisma from '../config/database'
@@ -33,6 +34,11 @@ export async function getRevenueByChannel(storeId: string, startDate: Date, endD
     channelMap[channelName].orders += 1
   }
 
+  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate)
+  for (const key of ['shopeefood','gofood'] as const) {
+    const amount=handovers.reduce((sum,row)=>sum+row[key],0)
+    if (amount) channelMap[key+'_manual']={revenue:amount,orders:0}
+  }
   return Object.entries(channelMap).map(([channel, data]) => ({
     channel,
     revenue: data.revenue,
@@ -56,12 +62,17 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
   })
 
   await requireVerifiedReceiptIncome(orders)
-  const totalRevenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
+  const orderRevenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
+  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate)
+  const shopeefood=handovers.reduce((sum,row)=>sum+row.shopeefood,0)
+  const gofood=handovers.reduce((sum,row)=>sum+row.gofood,0)
+  const totalRevenue = orderRevenue+shopeefood+gofood
   const totalOrders = orders.length
-  const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
+  const avgOrderValue = totalOrders > 0 ? Math.round(orderRevenue / totalOrders) : 0
 
   return {
     revenue: totalRevenue,
+    orderRevenue,shopeefood,gofood,onlineDateBasis:'closedAt',
     orders: totalOrders,
     avgOrderValue
   }
@@ -117,12 +128,19 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
     dailyMap[dateStr].orders += 1
   }
 
+  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate)
+  const orderDaily=new Map(Object.entries(dailyMap).map(([day,value])=>[day,value.revenue]))
+  for (const row of handovers) {
+    const day=businessCalendarDate(row.closedAt)
+    dailyMap[day] ||= {revenue:0,orders:0}
+    dailyMap[day].revenue += row.shopeefood+row.gofood
+  }
   return Object.entries(dailyMap)
     .map(([date, data]) => ({
       date,
       revenue: data.revenue,
       orders: data.orders,
-      avgOrderValue: data.orders > 0 ? Math.round(data.revenue / data.orders) : 0
+      avgOrderValue: data.orders > 0 ? Math.round((orderDaily.get(date) || 0) / data.orders) : 0
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
