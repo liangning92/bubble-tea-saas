@@ -16,13 +16,6 @@ const SHIFT_ICONS = {
   off: X
 }
 
-const SHIFT_COLORS = {
-  morning: 'bg-yellow-100 text-yellow-700',
-  afternoon: 'bg-orange-100 text-orange-700',
-  evening: 'bg-blue-100 text-blue-700',
-  off: 'bg-gray-100 text-gray-500'
-}
-
 const SHIFT_LABELS_KEYS = {
   morning: 'schedule.morning',
   afternoon: 'schedule.afternoon',
@@ -31,7 +24,7 @@ const SHIFT_LABELS_KEYS = {
 }
 
 export function SchedulePage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
@@ -62,6 +55,11 @@ export function SchedulePage() {
     } finally {
       if (id === requestId.current) setIsLoading(false)
     }
+  }
+
+  const shiftName = (shift: any) => {
+    const language = i18n.language.split('-')[0]
+    return (language === 'zh' ? shift.nameZh : language === 'id' ? shift.nameId : '') || shift.name
   }
 
   const getWeekStart = businessWeekStart
@@ -164,11 +162,11 @@ export function SchedulePage() {
                 <div className={`w-full h-8 rounded-lg flex items-center justify-center ${
                   isToday
                     ? 'bg-white/20'
-                    : SHIFT_COLORS[shift as keyof typeof SHIFT_COLORS] || SHIFT_COLORS.off
+                    : 'bg-gray-100 text-gray-500'
                 }`}>
-                  <ShiftIcon size={16} />
+                  <ShiftIcon size={16} style={!isToday && detail?.color ? { color: detail.color } : undefined} />
                 </div>
-                <p className="mt-1 text-xs break-words">{detail?.name || t(SHIFT_LABELS_KEYS[shift as keyof typeof SHIFT_LABELS_KEYS] || shift)}
+                <p className="mt-1 text-xs break-words">{(detail && shiftName(detail)) || t(SHIFT_LABELS_KEYS[shift as keyof typeof SHIFT_LABELS_KEYS] || shift)}
                   {detail && <span className="block mt-1">{detail.startTime}–{detail.endTime}</span>}</p>
               </div>
             )
@@ -191,7 +189,7 @@ export function SchedulePage() {
             {(schedule?.shiftDetails || []).map((shift: any) => (
               <div key={shift.key} className="flex items-center gap-3">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: shift.color || '#F2498C' }} />
-                <span className="text-gray-700">{shift.name} · {shift.startTime}–{shift.endTime}</span>
+                <span className="text-gray-700">{shiftName(shift)} · {shift.startTime}–{shift.endTime}</span>
               </div>
             ))}
             <p className="text-gray-500 text-sm">{t('schedule.off')}</p>

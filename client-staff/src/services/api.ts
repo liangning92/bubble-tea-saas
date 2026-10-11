@@ -23,6 +23,12 @@ const getAuthHeader = () => {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+async function loadShiftSettings() {
+  const response = await http.get(`${API_BASE}/shifts`, { headers: getAuthHeader() })
+  if (!Array.isArray(response.data?.data)) throw new Error('Invalid shift settings response')
+  return response.data.data
+}
+
 export const staffApi = {
  reportTaskIssue: async(id:string,description:string)=>(await http.put(`${API_BASE}/hygiene/tasks/${id}/issue`,{description},{headers:getAuthHeader()})).data,
   getInventoryCounts:async()=> (await http.get(`${API_BASE}/inventory-counts`,{headers:getAuthHeader()})).data,
@@ -80,10 +86,15 @@ export const staffApi = {
 
   // Monthly Overview for Home Page
   getMonthlyOverview: async (params?: { month?: number; year?: number }) => {
-    const response = await http.get(`${API_BASE}/staff/overview/monthly`, {
-      params,
-      headers: getAuthHeader()
-    })
+    const [response, shifts] = await Promise.all([
+      http.get(`${API_BASE}/staff/overview/monthly`, { params, headers: getAuthHeader() }),
+      loadShiftSettings()
+    ])
+    const todayShift = response.data.data?.schedule?.todayShift
+    const settings = shifts.find((shift: any) => shift.key === todayShift?.shiftKey)
+    if (todayShift && settings) {
+      Object.assign(todayShift, { shiftName: settings.name, shiftNameZh: settings.nameZh, shiftNameId: settings.nameId })
+    }
     return response.data
   },
 
@@ -97,11 +108,13 @@ export const staffApi = {
 
   // Schedule
   getMySchedule: async (staffId: string, weekStart: string) => {
-    const response = await http.get(`${API_BASE}/staff/schedule/my`, {
-      params: { staffId, weekStart },
-      headers: getAuthHeader()
-    })
-    return response.data
+    const [response, shiftDetails] = await Promise.all([
+      http.get(`${API_BASE}/staff/schedule/my`, {
+        params: { staffId, weekStart }, headers: getAuthHeader()
+      }),
+      loadShiftSettings()
+    ])
+    return { ...response.data, data: response.data.data ? { ...response.data.data, shiftDetails } : null }
   },
 
   // Attendance Rules
