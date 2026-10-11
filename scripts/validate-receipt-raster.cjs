@@ -1,7 +1,7 @@
 // Render using Electron and the exact packaged modules, without contacting a printer.
 const {app}=require('electron'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
 const index=process.argv.indexOf('--resources');
-const modulePath=index>=0?path.join(process.argv[index+1],'app.asar/client-pos/dist-electron/electron/receiptRaster.js'):path.resolve('client-pos/dist-electron/electron/receiptRaster.js');
+const modulePath=index>=0?path.resolve(process.argv[index+1],'app.asar/client-pos/dist-electron/electron/receiptRaster.js'):path.resolve('client-pos/dist-electron/electron/receiptRaster.js');
 const timeout=setTimeout(()=>{console.error('Receipt renderer validation timed out');app.exit(1)},60000);
 app.whenReady().then(async()=>{
  const {renderTemplateReceipt}=require(modulePath),cases=[];

@@ -11,8 +11,8 @@ test('browser layout keeps long products beside right-aligned amounts on 58mm an
   const m=await page.evaluate(()=>{const amounts=[...document.querySelectorAll('.amount')];const r=el=>{const b=el.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom}};return {overflow:document.body.scrollWidth>innerWidth,amounts:amounts.map(el=>({name:r(el.children[0]),value:r(el.children[1])})),height:document.body.getBoundingClientRect().height,totalFont:getComputedStyle(document.querySelector('[data-block=total]')).fontSize,totalBold:getComputedStyle(document.querySelector('[data-block=total]')).fontWeight,detailLeft:r(document.querySelector('.item-details')).left,detailFont:getComputedStyle(document.querySelector('.item-details')).fontSize}});
   assert.equal(m.overflow,false);assert.equal(m.totalFont,'32px');assert.equal(m.totalBold,'700');assert.equal(m.detailFont,'20px');
   for(const amount of m.amounts){assert.equal(amount.value.right,width-16);assert.ok(amount.name.right<=amount.value.left-11);assert.equal(amount.name.top,amount.value.top);}
-  assert.ok(m.height<800,'no viewport-size blank space');
-  await page.screenshot({path:'/tmp/youme-receipt-'+paperSize+'.png',clip:{x:0,y:0,width,height:Math.ceil(m.height)}});
+  assert.ok(m.height>0&&m.height<800,'actual receipt height without viewport-size blank space');
+  await page.screenshot({path:'/tmp/youme-receipt-'+paperSize+'.png',fullPage:true});
   await page.setContent(layout.receiptHtml({...fixture,paperSize,blocks:[block('items',{showQtyPriceHeader:true})],items:[...fixture.items,{productName:'Tea',quantity:10,unitPrice:100000}]}));
   const columns=await page.locator('.item-grid').evaluateAll(rows=>rows.map(row=>[...row.children].map(el=>el.getBoundingClientRect().left)));
   assert.deepEqual(columns[0],columns[1]);assert.deepEqual(columns[1],columns[2]);await page.close();
