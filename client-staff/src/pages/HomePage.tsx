@@ -270,8 +270,8 @@ export function HomePage() {
             <strong>{overview || dashboard ? rewards + penalties : "—"}</strong>
             <span className="metric-label">{t("ui.rewards")}</span>
             <span className="metric-detail">
-              {t("workspace.rewardCount")} {rewards} ·{" "}
-              {t("workspace.penaltyCount")} {penalties}
+              <span className="block">{t("workspace.rewardCount")} {rewards}</span>
+              <span className="block">{t("workspace.penaltyCount")} {penalties}</span>
             </span>
           </button>
         </div>

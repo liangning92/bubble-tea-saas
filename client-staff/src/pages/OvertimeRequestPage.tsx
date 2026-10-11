@@ -88,7 +88,7 @@ export function OvertimeRequestPage() {
     }
     const badge = badges[status] || badges.pending
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+      <span className={`px-2 py-1 rounded-full text-sm font-medium ${badge.bg} ${badge.text}`}>
         {badge.label}
       </span>
     )
@@ -130,7 +130,7 @@ export function OvertimeRequestPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   <Calendar size={14} className="inline mr-1" />
                   {t('overtime.date')}
                 </label>
@@ -143,16 +143,16 @@ export function OvertimeRequestPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm font-medium text-gray-700">{t('overtime.startTime')}
+                <label className="block text-base font-medium text-gray-700">{t('overtime.startTime')}
                   <input type="time" value={formData.startTime} onChange={e => setFormData({ ...formData, startTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
                 </label>
-                <label className="block text-sm font-medium text-gray-700">{t('overtime.endTime')}
+                <label className="block text-base font-medium text-gray-700">{t('overtime.endTime')}
                   <input type="time" value={formData.endTime} onChange={e => setFormData({ ...formData, endTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
                 </label>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t('overtime.reason')}
                 </label>
                 <textarea
@@ -212,15 +212,15 @@ export function OvertimeRequestPage() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-medium">{formatDate(req.date)}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm text-gray-500">
                         {req.hours}h
                       </p>
                     </div>
                     {getStatusBadge(req.status)}
                   </div>
-                  <p className="text-sm text-gray-600 mb-1">{req.reason}</p>
+                  <p className="text-base text-gray-600 mb-1">{req.reason}</p>
                   {req.adminNote && (
-                    <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                    <p className="text-sm text-gray-500 bg-gray-50 p-2 rounded">
                       {t('overtime.adminNote')}: {req.adminNote}
                     </p>
                   )}

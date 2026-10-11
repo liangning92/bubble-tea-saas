@@ -105,9 +105,9 @@ export function SchedulePage() {
             <Calendar size={28} />
             <div>
               <h1 className="text-xl font-bold">{t('schedule.title')}</h1>
-              <p className="text-white/80 text-sm">
-                {weekStart.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short' })} - {' '}
-                {weekEnd.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', year: 'numeric' })}
+              <p className="text-white/80 text-base">
+                {weekStart.toLocaleDateString(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short' })} - {' '}
+                {weekEnd.toLocaleDateString(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
             </div>
           </div>
@@ -123,7 +123,7 @@ export function SchedulePage() {
           <ChevronLeft size={24} className="text-gray-600" />
         </button>
         <span className="font-bold text-gray-900">
-          {weekStart.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', month: 'long', year: 'numeric' })}
+          {weekStart.toLocaleDateString(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID', { timeZone: 'Asia/Jakarta', month: 'long', year: 'numeric' })}
         </span>
         <button
           onClick={goToNextWeek}
@@ -135,7 +135,7 @@ export function SchedulePage() {
 
       {/* Schedule Grid */}
       <div className="p-4">
-        {isLoading ? <RouteLoading /> : loadFailed ? <LoadFailure retry={loadSchedule} /> : <div className="grid grid-cols-7 gap-2">
+        {isLoading ? <RouteLoading /> : loadFailed ? <LoadFailure retry={loadSchedule} /> : <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {days.map((day, idx) => {
             const shift = getShiftForDay(businessWeekday(day))
             const detail = schedule?.shiftDetails?.find((item: any) => item.key === shift)
@@ -149,10 +149,10 @@ export function SchedulePage() {
                   isToday ? 'bg-primary text-white' : 'bg-white'
                 }`}
               >
-                <p className={`text-xs font-medium mb-1 ${
+                <p className={`text-sm font-medium mb-1 ${
                   isToday ? 'text-white/80' : 'text-gray-500'
                 }`}>
-                  {day.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'short' })}
+                  {day.toLocaleDateString(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID', { timeZone: 'Asia/Jakarta', weekday: 'short' })}
                 </p>
                 <p className={`text-lg font-bold mb-2 ${
                   isToday ? 'text-white' : 'text-gray-900'
@@ -166,7 +166,7 @@ export function SchedulePage() {
                 }`}>
                   <ShiftIcon size={16} style={!isToday && detail?.color ? { color: detail.color } : undefined} />
                 </div>
-                <p className="mt-1 text-xs break-words">{(detail && shiftName(detail)) || t(SHIFT_LABELS_KEYS[shift as keyof typeof SHIFT_LABELS_KEYS] || shift)}
+                <p className="mt-1 text-sm break-words">{(detail && shiftName(detail)) || t(SHIFT_LABELS_KEYS[shift as keyof typeof SHIFT_LABELS_KEYS] || shift)}
                   {detail && <span className="block mt-1">{detail.startTime}–{detail.endTime}</span>}</p>
               </div>
             )
@@ -176,7 +176,7 @@ export function SchedulePage() {
         {/* Shift Swap Button */}
         <button
           onClick={() => navigate('/shift-swap')}
-          className="w-full mt-4 py-3 border border-gray-200 rounded-xl text-sm font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50"
+          className="w-full mt-4 py-3 border border-gray-200 rounded-xl text-base font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50"
         >
           <Users size={18} />
           {t('schedule.requestShiftSwap')}
@@ -192,13 +192,13 @@ export function SchedulePage() {
                 <span className="text-gray-700">{shiftName(shift)} · {shift.startTime}–{shift.endTime}</span>
               </div>
             ))}
-            <p className="text-gray-500 text-sm">{t('schedule.off')}</p>
+            <p className="text-gray-500 text-base">{t('schedule.off')}</p>
           </div>
         </div>
 
         {/* Notes */}
         <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
-          <p className="text-sm text-yellow-800">
+          <p className="text-base text-yellow-800">
             {t('schedule.scheduleNote')}
           </p>
         </div>

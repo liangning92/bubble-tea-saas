@@ -123,7 +123,7 @@ export function ReimbursementPage() {
             <Receipt size={28} />
             <div>
               <h1 className="text-xl font-bold">{t('reimbursement.title')}</h1>
-              <p className="text-white/80 text-sm">{t('reimbursement.manageDescription')}</p>
+              <p className="text-white/80 text-base">{t('reimbursement.manageDescription')}</p>
             </div>
           </div>
           <button
@@ -154,11 +154,11 @@ export function ReimbursementPage() {
                 <div key={item.id} className="bg-white rounded-2xl shadow-sm p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <span className="inline-block px-2 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary">
+                      <span className="inline-block px-2 py-1 rounded-lg text-sm font-medium bg-primary/10 text-primary">
                         {getTypeLabel(item.type)}
                       </span>
                     </div>
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[item.status]}`}>
+                    <span className={`px-2 py-1 rounded-lg text-sm font-medium ${STATUS_COLORS[item.status]}`}>
                       {STATUS_LABELS[item.status] || item.status}
                     </span>
                   </div>
@@ -167,16 +167,16 @@ export function ReimbursementPage() {
                     {formatCurrency(item.amount)}
                   </div>
 
-                  <p className="text-gray-600 text-sm mb-3">{item.description}</p>
+                  <p className="text-gray-600 text-base mb-3">{item.description}</p>
 
                   {receipts.length > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
+                    <div className="flex items-center gap-2 text-base text-gray-500 mb-3">
                       <Upload size={16} />
                       <span>{receipts.length} {t('reimbursement.attachments')}</span>
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="flex items-center gap-2 text-base text-gray-500">
                     <Clock size={16} />
                     <span>{formatDate(item.createdAt, 'long')}</span>
                   </div>
@@ -184,7 +184,7 @@ export function ReimbursementPage() {
                   {item.status === 'pending' && (
                     <button
                       onClick={() => handleCancelReimbursement(item.id)}
-                      className="mt-3 w-full py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                      className="mt-3 w-full py-2 text-base text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
                     >
                       {t('reimbursement.cancel')}
                     </button>
@@ -305,7 +305,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('reimbursement.typeLabel')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-2">{t('reimbursement.typeLabel')}</label>
             {/* Quick chips */}
             <div className="flex flex-wrap gap-2 mb-3">
               {availableTypes.map((tItem) => {
@@ -315,7 +315,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
                     key={tItem.code}
                     type="button"
                     onClick={() => setReimbType(tItem.code)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                       isSelected
                         ? 'bg-primary text-white shadow-sm'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -340,7 +340,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
             </select>
 
             {/* Hint badges */}
-            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <div className="mt-2 flex flex-wrap gap-2 text-sm">
               {selectedTypeConfig?.maxAmount && (
                 <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-600">
                   {t('reimbursement.maxLimit') || 'Maksimal'}: {formatCurrency(String(selectedTypeConfig.maxAmount))}
@@ -359,7 +359,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('reimbursement.amountLabel')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-1">{t('reimbursement.amountLabel')}</label>
             <input
               type="number"
               min="1"
@@ -369,12 +369,12 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
               placeholder={t('attendance.quantityPlaceholder')}
             />
             {amount && (
-              <p className="text-sm text-gray-500 mt-1">{formatCurrency(amount)}</p>
+              <p className="text-base text-gray-500 mt-1">{formatCurrency(amount)}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('reimbursement.descriptionLabel')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-1">{t('reimbursement.descriptionLabel')}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -385,7 +385,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('reimbursement.attachmentLabel')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-1">{t('reimbursement.attachmentLabel')}</label>
             <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
               <input
                 type="file"
@@ -397,10 +397,10 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
               />
               <label htmlFor="receipts" className="cursor-pointer">
                 <Upload size={32} className="mx-auto text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">
+                <p className="text-base text-gray-500">
                   {t('reimbursement.uploadHint')}
                 </p>
-               <p className="text-xs text-gray-400 mt-1">
+               <p className="text-sm text-gray-400 mt-1">
                   {t('reimbursement.uploadFormat')}
                 </p>
               </label>

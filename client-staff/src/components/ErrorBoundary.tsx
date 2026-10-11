@@ -74,12 +74,12 @@ function ErrorFallback({ error, errorInfo, onReload, onGoBack }: {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{t('common.errorPageTitle')}</h2>
-            <p className="text-sm text-gray-500">{t('common.error')}</p>
+            <p className="text-base text-gray-500">{t('common.error')}</p>
           </div>
         </div>
 
         <div className="bg-gray-50 rounded-lg p-3 mb-4">
-          <p className="text-sm font-mono text-red-600 break-all">
+          <p className="text-base font-mono text-red-600 break-all">
             {error?.message || 'Unknown error'}
           </p>
         </div>
@@ -103,10 +103,10 @@ function ErrorFallback({ error, errorInfo, onReload, onGoBack }: {
 
         {process.env.NODE_ENV === 'development' && errorInfo && (
           <details className="mt-4 p-3 bg-gray-100 rounded-lg">
-            <summary className="text-sm font-medium cursor-pointer">
+            <summary className="text-base font-medium cursor-pointer">
               Stack Trace (Dev Only)
             </summary>
-            <pre className="mt-2 text-xs overflow-auto max-h-40">
+            <pre className="mt-2 text-sm overflow-auto max-h-40">
               {errorInfo.componentStack}
             </pre>
           </details>

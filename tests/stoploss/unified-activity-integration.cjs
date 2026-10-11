@@ -67,6 +67,27 @@ async function main(){
  const offline=require('../../server/src/services/ActivityOfflineService.ts'),snapshot=await offline.activityOfflineSnapshot('store');const when=new Date().toISOString();await svc.saveActivity('store',{...rest,status:'paused'},special.id,special.version);
  const oq=await offline.quoteOfflineActivity('store',common,snapshot.token,when);assert.equal(oq.finalAmount,13000);await assert.rejects(offline.quoteOfflineActivity('foreign',common,snapshot.token,when),/POLICY/);
  const offlineSale=await orders.createOrder({...request,orderNumber:'OFFLINE-'+crypto.randomUUID(),memberId:undefined,activityQuoteSignature:undefined,activityOfflineToken:snapshot.token,activityOccurredAt:when,activityChannelCode:'DINE_IN',discountAmount:oq.discount});assert.equal(offlineSale.finalAmount,13000);assert.equal((await orders.createOrder({...request,orderNumber:offlineSale.orderNumber,memberId:undefined,activityQuoteSignature:undefined,activityOfflineToken:snapshot.token,activityOccurredAt:when,activityChannelCode:'DINE_IN',discountAmount:oq.discount})).id,offlineSale.id);await svc.runActivityJobs();
+ // Transferable employee voucher: atomic issuance, bearer checkout, no change and full-refund restoration.
+ const compensation=require('../../server/src/services/SalaryAdjustmentService.ts');
+ const voucherRequest={staffId:'staff',month:'2026-10',type:'reward',rewardMethod:'voucher',amount:50000,reason:'Synthetic reward',validDays:30,requestId:crypto.randomUUID()};
+ const issued=await compensation.changeSalaryAdjustment({id:'owner',storeId:'store'},voucherRequest);
+ assert.equal((await compensation.changeSalaryAdjustment({id:'owner',storeId:'store'},voucherRequest)).voucherCode,issued.voucherCode);
+ assert.equal((await compensation.adjustmentPlan('store','staff','2026-10')).rewards,0);
+ const bearerId='virtual-'+issued.couponId, bearerQuote=await svc.quoteActivities('store',{...common,couponId:bearerId});
+ assert.equal(bearerQuote.grandTotal,0);assert.equal(bearerQuote.discount,23000);
+ const bearerRequest={...request,memberId:undefined,orderNumber:'BEARER-'+crypto.randomUUID(),activityCouponId:bearerId,activityQuoteSignature:bearerQuote.signature,discountAmount:bearerQuote.discount};
+ const countBeforeBearer=await db.order.count();
+ const competing=await Promise.allSettled([orders.createOrder(bearerRequest),orders.createOrder({...bearerRequest,orderNumber:'BEARER-RACE-'+crypto.randomUUID()})]);
+ assert.equal(competing.filter(r=>r.status==='fulfilled').length,1);assert.equal(await db.order.count(),countBeforeBearer+1);
+ const bearerSale=competing.find(r=>r.status==='fulfilled').value;
+ assert.equal((await db.coupon.findUnique({where:{id:issued.couponId}})).usedCount,1);
+ assert.equal((await orders.createOrder({...bearerRequest,orderNumber:bearerSale.orderNumber})).id,bearerSale.id);
+ await assert.rejects(compensation.changeSalaryAdjustment({id:'owner',storeId:'store'},{cancelId:issued.id}),/VOUCHER_ALREADY_USED/);
+ await svc.runActivityJobs();await orders.refundOrder(bearerSale.id,'Synthetic bearer reversal');
+ assert.equal((await db.coupon.findUnique({where:{id:issued.couponId}})).usedCount,0);
+ await compensation.changeSalaryAdjustment({id:'owner',storeId:'store'},{cancelId:issued.id});
+ await assert.rejects(svc.quoteActivities('store',{...common,couponId:bearerId}),/COUPON_UNAVAILABLE/);
+
  // Stock/quota exhaustion is independent from price; coupon claim retries cannot duplicate rights.
  const claim=await svc.saveActivity('store',payload('coupon',{couponId:'template',couponTrigger:'claim',perMemberLimit:1}));const claimId=crypto.randomUUID();const claimed=await svc.claimActivityCoupon('store',claim.id,'member2',claimId);assert.equal((await svc.claimActivityCoupon('store',claim.id,'member2',claimId)).coupon.id,claimed.coupon.id);await assert.rejects(svc.claimActivityCoupon('store',claim.id,'member2',crypto.randomUUID()),/CLAIM_LIMIT/);
  await db.member.update({where:{id:'member2'},data:{referralCode:'INVITER'}});await db.member.create({data:{id:'new-member',storeId:'store',phone:'new-member',name:'New member'}});await svc.linkActivityReferral('store','new-member','INVITER');await svc.linkActivityReferral('store','new-member','INVITER');await assert.rejects(svc.linkActivityReferral('store','new-member','invalid'),/REFERRAL_INVALID/);

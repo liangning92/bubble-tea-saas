@@ -1,4 +1,4 @@
-import { adjustmentPlan, savedAdjustmentPlan, saveAdjustmentPlan, normalizeAdjustments, changeSalaryAdjustment, listSalaryAdjustments, periodLock, SalaryAdjustmentError } from '../services/SalaryAdjustmentService'
+import { adjustmentPlan, savedAdjustmentPlan, saveAdjustmentPlan, normalizeAdjustments, changeSalaryAdjustment, listSalaryAdjustments, voucherStatuses, periodLock, SalaryAdjustmentError } from '../services/SalaryAdjustmentService'
 import { normalizeSalaryDeposits, salaryDepositPlan, sameDepositPlan } from '../services/SalaryDepositPlan'
 import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
@@ -27,10 +27,10 @@ async function saveDepositPlan(tx: any, salary: any, items: Array<{ staffDeposit
 const staffStore = requireResourceStore(req=>prisma.staff.findUnique({where:{id:req.params.staffId || req.body.staffId},select:{storeId:true}}))
 const salaryStore = requireResourceStore(async req=>{const row=await prisma.salary.findUnique({where:{id:req.params.id},select:{staff:{select:{storeId:true}}}});return row?.staff || null})
 
-const adjustmentInput = z.object({staffId:z.string().min(1),month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),type:z.enum(['reward','penalty']),amount:z.number().int().positive().max(2000000000),reason:z.string().trim().min(1).max(1000),requestId:z.string().uuid()})
+const adjustmentInput = z.object({staffId:z.string().min(1),month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),type:z.enum(['reward','penalty']),amount:z.number().int().positive().max(2000000000),reason:z.string().trim().min(1).max(1000),requestId:z.string().uuid(),rewardMethod:z.enum(['cash','voucher']).default('cash'),validDays:z.number().int().min(1).max(365).default(30),encouragement:z.string().trim().max(500).optional()}).refine(v=>v.type==='reward'||v.rewardMethod==='cash','Only rewards may issue vouchers')
 router.get('/adjustments', authenticate, authorize('admin','manager'), async(req:AuthRequest,res)=>{
   try {
-  const list=await listSalaryAdjustments(req.user!.storeId!)
+  const list=await voucherStatuses(req.user!.storeId!,await listSalaryAdjustments(req.user!.storeId!))
   const staff=await prisma.staff.findMany({where:{storeId:req.user!.storeId!},select:{id:true,name:true}})
   const salaries=await prisma.salary.findMany({where:{staff:{storeId:req.user!.storeId!}},select:{staffId:true,month:true,status:true}})
   res.json({code:200,data:{list:list.map(i=>({...i,staffName:staff.find(s=>s.id===i.staffId)?.name||'',payrollStatus:salaries.find(s=>s.staffId===i.staffId&&s.month===i.month)?.status||null}))}})

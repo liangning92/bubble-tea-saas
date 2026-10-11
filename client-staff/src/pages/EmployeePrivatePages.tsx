@@ -77,7 +77,7 @@ function UploadFiles({
 function RecordStatus({ record }: { record: any }) {
   const { t } = useTranslation();
   return (
-    <p className="text-sm">
+    <p className="text-base">
       {t(`workspace.${record.status}`)}{" "}
       {record.reviewNote && `· ${record.reviewNote}`}
       {record.payrollStatus === "pending_review" &&

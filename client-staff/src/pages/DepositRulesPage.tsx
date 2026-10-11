@@ -57,7 +57,7 @@ export function DepositRulesPage() {
       {/* Header */}
       <div className="bg-primary text-white px-4 py-6 rounded-b-3xl">
         <h1 className="text-xl font-bold">{t('deposit.rules')}</h1>
-        <p className="text-white/80 text-sm mt-1">
+        <p className="text-white/80 text-base mt-1">
           {t('deposit.rulesDescription')}
         </p>
       </div>
@@ -72,7 +72,7 @@ export function DepositRulesPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">{rule.name}</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${rule.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className={`text-sm px-2 py-0.5 rounded-full ${rule.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {rule.isActive ? t('common.active') : t('common.inactive')}
                   </span>
                 </div>
@@ -146,7 +146,7 @@ export function DepositRulesPage() {
         {/* Info Box */}
         <div className="bg-blue-50 rounded-xl p-4">
           <h4 className="font-medium text-blue-800 mb-2">{t('deposit.info')}</h4>
-          <ul className="text-sm text-blue-700 space-y-1">
+          <ul className="text-base text-blue-700 space-y-1">
             <li>• {t('deposit.info1')}</li>
             <li>• {t('deposit.info2')}</li>
             <li>• {t('deposit.info3')}</li>

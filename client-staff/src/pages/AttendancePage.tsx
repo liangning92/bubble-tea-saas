@@ -253,7 +253,7 @@ export function AttendancePage() {
         {/* Message */}
         {message && (
           <div
-            className={`mt-2 p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${
+            className={`mt-2 p-3 rounded-xl text-base font-medium flex items-center gap-2 ${
               message.type === "success"
                 ? "bg-emerald-600/90 text-white"
                 : "bg-red-600/90 text-white"
@@ -306,7 +306,7 @@ export function AttendancePage() {
                   ? t("attendance.todayShiftCompleted", "今日出勤已完成")
                   : t("attendance.statusNotCheckedIn", "未签到")}
             </h2>
-            <p className="text-gray-500 text-xs mt-1">
+            <p className="text-gray-500 text-sm mt-1">
               {isCheckedIn
                 ? t("attendance.workingSince", {
                     time: new Date(attendance.checkInTime).toLocaleTimeString(
@@ -332,7 +332,7 @@ export function AttendancePage() {
               <p className="text-lg font-bold text-primary">
                 {getWorkingHours().split(" ")[0]}
               </p>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-sm text-gray-400">
                 {t("attendance.workHours", "工时")}
               </p>
             </div>
@@ -348,7 +348,7 @@ export function AttendancePage() {
                     )
                   : "--:--"}
               </p>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-sm text-gray-400">
                 {t("attendance.checkInLabel", "上班")}
               </p>
             </div>
@@ -364,7 +364,7 @@ export function AttendancePage() {
                     )
                   : "--:--"}
               </p>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-sm text-gray-400">
                 {t("attendance.checkOutLabel", "下班")}
               </p>
             </div>
@@ -388,7 +388,7 @@ export function AttendancePage() {
                 <button
                   onClick={handleCheckOut}
                   disabled={isLoading}
-                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   {isLoading ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -406,14 +406,14 @@ export function AttendancePage() {
                     setShowScanner(true);
                   }}
                   disabled={isLoading}
-                  className="flex-1 py-3.5 bg-primary text-white rounded-2xl font-bold text-sm hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all"
+                  className="flex-1 py-3.5 bg-primary text-white rounded-2xl font-bold text-base hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all"
                 >
                   <RotateCcw size={18} />
                   {t("attendance.scanAgain", "再次扫码打卡")}
                 </button>
                 <button
                   onClick={() => navigate("/overtime")}
-                  className="py-3.5 px-4 bg-gray-100 text-gray-700 rounded-2xl font-medium text-xs hover:bg-gray-200"
+                  className="py-3.5 px-4 bg-gray-100 text-gray-700 rounded-2xl font-medium text-sm hover:bg-gray-200"
                 >
                   {t("attendance.requestOvertime", "申请加班")}
                 </button>
@@ -434,7 +434,7 @@ export function AttendancePage() {
                 <button
                   onClick={handleCheckIn}
                   disabled={isLoading}
-                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   {isLoading ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -470,7 +470,7 @@ export function AttendancePage() {
             <p className="font-medium text-gray-900">
               {t("attendance.location")}
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-base text-gray-500">
               {t("attendance.defaultLocation")}
             </p>
           </div>
@@ -479,7 +479,7 @@ export function AttendancePage() {
         {/* Correction Button */}
         <button
           onClick={() => navigate("/attendance/correction")}
-          className="w-full py-3 border border-gray-200 rounded-xl text-sm font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-2"
+          className="w-full py-3 border border-gray-200 rounded-xl text-base font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-2"
         >
           <Edit3 size={18} />
           {t("attendance.requestCorrection")}
@@ -488,7 +488,7 @@ export function AttendancePage() {
         {/* Overtime Button */}
         <button
           onClick={() => navigate("/overtime")}
-          className="w-full py-3 border border-gray-200 rounded-xl text-sm font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-6"
+          className="w-full py-3 border border-gray-200 rounded-xl text-base font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-6"
         >
           <PlusCircle size={18} />
           {t("attendance.requestOvertime")}
@@ -500,7 +500,7 @@ export function AttendancePage() {
             <h3 className="font-bold text-gray-900">
               {t("attendance.monthlyHistory")}
             </h3>
-            <span className="text-sm text-gray-500">
+            <span className="text-base text-gray-500">
               {new Date().toLocaleDateString("id-ID", {
                 month: "long",
                 year: "numeric",
@@ -544,7 +544,7 @@ export function AttendancePage() {
                           },
                         )}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-base text-gray-500">
                         {item.checkInTime
                           ? new Date(item.checkInTime).toLocaleTimeString(
                               "id-ID",
@@ -568,7 +568,7 @@ export function AttendancePage() {
                     </div>
                   </div>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    className={`px-2 py-1 rounded-full text-sm font-medium ${
                       item.checkOutTime
                         ? "bg-green-100 text-green-700"
                         : "bg-yellow-100 text-yellow-700"

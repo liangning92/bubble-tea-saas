@@ -55,7 +55,7 @@ export function SalaryPage() {
           <Wallet size={28} />
           <div>
             <h1 className="text-xl font-bold">{t('salary.title')}</h1>
-            <p className="text-white/80 text-sm">
+            <p className="text-white/80 text-base">
               {currentMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
             </p>
           </div>
@@ -63,10 +63,10 @@ export function SalaryPage() {
       </header>
 
       {salary && <section className="grid grid-cols-3 gap-2 p-4 bg-white border-b">
-        <div><p className="text-xs text-gray-500">{t('compensation.reward')}</p><p className="font-bold text-green-700">+{formatCurrency(salary.bonuses||0)}</p></div>
-        <div><p className="text-xs text-gray-500">{t('compensation.penalty')}</p><p className="font-bold text-red-600">−{formatCurrency(salary.compensationPenalties||0)}</p></div>
-        <div><p className="text-xs text-gray-500">{t('compensation.deposit')}</p><p className="font-bold text-amber-700">−{formatCurrency(salary.depositDeductionAmount||0)}</p></div>
-        {!!salary.compensationItems?.length && <ul className="col-span-3 text-sm">{salary.compensationItems.map((item:any)=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul>}
+        <div><p className="text-sm text-gray-500">{t('compensation.reward')}</p><p className="font-bold text-green-700">+{formatCurrency(salary.bonuses||0)}</p></div>
+        <div><p className="text-sm text-gray-500">{t('compensation.penalty')}</p><p className="font-bold text-red-600">−{formatCurrency(salary.compensationPenalties||0)}</p></div>
+        <div><p className="text-sm text-gray-500">{t('compensation.deposit')}</p><p className="font-bold text-amber-700">−{formatCurrency(salary.depositDeductionAmount||0)}</p></div>
+        {!!salary.compensationItems?.length && <ul className="col-span-3 text-base">{salary.compensationItems.map((item:any)=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul>}
       </section>}
 
       {/* Month Navigation */}
@@ -98,11 +98,11 @@ export function SalaryPage() {
           <>
             {/* Total Salary Card */}
             <div className="bg-gradient-to-br from-primary to-pink-600 rounded-2xl p-6 text-white mb-6">
-              <p className="text-white/80 text-sm mb-1">{t('salary.totalSalary')}</p>
+              <p className="text-white/80 text-base mb-1">{t('salary.totalSalary')}</p>
               <p className="text-4xl font-bold mb-4">
                 {formatCurrency(salary.totalSalary)}
               </p>
-              <div className="flex items-center gap-2 text-white/60 text-sm">
+              <div className="flex items-center gap-2 text-white/60 text-base">
                 <span>{salary.staffName}</span>
                 <span>•</span>
                 <span>{user?.position}</span>

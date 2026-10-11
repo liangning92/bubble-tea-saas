@@ -132,28 +132,28 @@ export function DepositPage() {
         <div className="bg-white/10 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-white/80 text-sm">{deposit.depositRule?.name || t('deposit.deposit')}</p>
-              <span className={`inline-block px-2 py-0.5 rounded text-xs mt-1 ${getStatusColor()}`}>
+              <p className="text-white/80 text-base">{deposit.depositRule?.name || t('deposit.deposit')}</p>
+              <span className={`inline-block px-2 py-0.5 rounded text-sm mt-1 ${getStatusColor()}`}>
                 {getStatusLabel()}
               </span>
             </div>
             <div className="text-right">
-              <p className="text-white/80 text-sm">{t('deposit.startDate')}</p>
+              <p className="text-white/80 text-base">{t('deposit.startDate')}</p>
               <p className="font-medium">{formatDate(deposit.startDate)}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <p className="text-white/60 text-xs">{t('deposit.total')}</p>
+              <p className="text-white/60 text-sm">{t('deposit.total')}</p>
               <p className="font-bold">{formatCurrency(deposit.totalAmount)}</p>
             </div>
             <div>
-              <p className="text-white/60 text-xs">{t('deposit.deducted')}</p>
+              <p className="text-white/60 text-sm">{t('deposit.deducted')}</p>
               <p className="font-bold text-red-300">{formatCurrency(deposit.deductedAmount)}</p>
             </div>
             <div>
-              <p className="text-white/60 text-xs">{t('deposit.remaining')}</p>
+              <p className="text-white/60 text-sm">{t('deposit.remaining')}</p>
               <p className="font-bold text-green-300">{formatCurrency(getRemainingAmount())}</p>
             </div>
           </div>
@@ -166,7 +166,7 @@ export function DepositPage() {
                 style={{ width: `${(deposit.deductedAmount / deposit.totalAmount) * 100}%` }}
               />
             </div>
-            <p className="text-white/60 text-xs mt-1 text-center">
+            <p className="text-white/60 text-sm mt-1 text-center">
               {deposit.deductionCount} x {t('deposit.deductions')}
             </p>
           </div>
@@ -187,7 +187,7 @@ export function DepositPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-medium text-gray-900">{log.note || t('deposit.monthlyDeduction')}</p>
-                    <p className="text-sm text-gray-500">{formatDate(log.createdAt)}</p>
+                    <p className="text-base text-gray-500">{formatDate(log.createdAt)}</p>
                   </div>
                   <div className="flex items-center gap-1 text-red-600 font-bold">
                     <ArrowDownRight size={16} />
@@ -209,7 +209,7 @@ export function DepositPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{log.reason}</p>
-                      <p className="text-sm text-gray-500">{formatDate(log.createdAt)}</p>
+                      <p className="text-base text-gray-500">{formatDate(log.createdAt)}</p>
                     </div>
                     <div className="flex items-center gap-1 text-green-600 font-bold">
                       <ArrowUpRight size={16} />

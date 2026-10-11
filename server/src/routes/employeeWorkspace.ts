@@ -1,4 +1,4 @@
-import { listSalaryAdjustments } from "../services/SalaryAdjustmentService";
+import { listSalaryAdjustments, voucherStatuses } from "../services/SalaryAdjustmentService";
 import {
   pushKeys,
   validPushEndpoint,
@@ -132,9 +132,9 @@ router.get(
     const u = identity(req);
     res.json({
       code: 200,
-      data: (await listSalaryAdjustments(u.storeId)).filter(
+      data: await voucherStatuses(u.storeId,(await listSalaryAdjustments(u.storeId)).filter(
         (r) => r.staffId === u.staffId,
-      ),
+      )),
     });
   }),
 );

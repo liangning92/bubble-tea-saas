@@ -126,12 +126,12 @@ export function LeavePage() {
             <Calendar size={26} />
             <div>
               <h1 className="text-xl font-bold">{t('leave.title')}</h1>
-              <p className="text-white/80 text-xs">{t('leave.manageLeave')}</p>
+              <p className="text-white/80 text-sm">{t('leave.manageLeave')}</p>
             </div>
           </div>
           <button
             onClick={() => setShowApplyModal(true)}
-            className="bg-white text-primary px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
+            className="bg-white text-primary px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
           >
             <Plus size={18} />
             {t('leave.applyLeave', '申请请假')}
@@ -181,21 +181,21 @@ export function LeavePage() {
                 <div key={leave.id} className="bg-white rounded-2xl shadow-sm p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <span className="inline-block px-2 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary">
+                      <span className="inline-block px-2 py-1 rounded-lg text-sm font-medium bg-primary/10 text-primary">
                         {t(LEAVE_TYPE_LABELS_KEYS[leave.leaveType] || leave.leaveType)}
                       </span>
                       {leave.halfDay && (
-                        <span className="inline-block ml-2 px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-700">
+                        <span className="inline-block ml-2 px-2 py-1 rounded-lg text-sm font-medium bg-blue-100 text-blue-700">
                           {t('leave.halfDay')}
                         </span>
                       )}
                     </div>
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[leave.status]}`}>
+                    <span className={`px-2 py-1 rounded-lg text-sm font-medium ${STATUS_COLORS[leave.status]}`}>
                       {t(STATUS_LABELS_KEYS[leave.status] || leave.status)}
                     </span>
                   </div>
 
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2 text-base">
                     <div className="flex items-center gap-2 text-gray-600">
                       <Calendar size={16} />
                       <span>
@@ -210,7 +210,7 @@ export function LeavePage() {
                       <p className="text-gray-500 mt-2">{t('leave.reason')}: {leave.reason}</p>
                     )}
                     {leave.attachmentUrl && (
-                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1.5 text-xs text-primary font-medium">
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1.5 text-sm text-primary font-medium">
                         <Paperclip size={14} />
                         <a
                           href={leave.attachmentUrl.startsWith('http') ? leave.attachmentUrl : `${window.location.origin}${leave.attachmentUrl}`}
@@ -227,7 +227,7 @@ export function LeavePage() {
                   {leave.status === 'pending' && (
                     <button
                       onClick={() => handleCancelLeave(leave.id)}
-                      className="mt-3 w-full py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                      className="mt-3 w-full py-2 text-base text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
                     >
                       {t('leave.cancel')}
                     </button>
@@ -427,7 +427,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
         <div className="space-y-4">
           {/* 请假类型选择 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-base font-medium text-gray-700 mb-2">
               {t('leave.leaveTypes', '请假类型')}
             </label>
 
@@ -441,7 +441,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
                     key={type.code}
                     type="button"
                     onClick={() => setLeaveType(type.code)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+                    className={`px-3 py-1.5 rounded-xl text-sm font-bold transition-all flex items-center gap-1 ${
                       isSelected
                         ? 'bg-primary text-white shadow-xs'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -458,7 +458,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
             <select
               value={leaveType}
               onChange={(e) => setLeaveType(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-xl bg-white text-sm font-medium focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="w-full p-3 border border-gray-200 rounded-xl bg-white text-base font-medium focus:ring-2 focus:ring-primary focus:border-transparent"
             >
               {leaveTypes.map((type) => (
                 <option key={type.code} value={type.code}>
@@ -469,7 +469,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
 
             {/* 假期属性贴心提示 */}
             {selectedTypeObj && (
-              <div className="mt-2 text-xs flex items-center gap-2 flex-wrap">
+              <div className="mt-2 text-sm flex items-center gap-2 flex-wrap">
                 {selectedTypeObj.requiresProof ? (
                   <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-medium border border-amber-200/60">
                     ⚠️ {t('leave.proofRequired', '需上传证明文件或假条')}
@@ -490,7 +490,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
+              <label className="block text-base font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
               <input
                 type="date"
                 value={startDate}
@@ -499,7 +499,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('leave.endDate')}</label>
+              <label className="block text-base font-medium text-gray-700 mb-1">{t('leave.endDate')}</label>
               <input
                 type="date"
                 value={endDate}
@@ -510,7 +510,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('leave.numberOfDays')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-1">{t('leave.numberOfDays')}</label>
             <input
               type="number"
               min="0.5"
@@ -530,13 +530,13 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
               onChange={(e) => setHalfDay(e.target.checked)}
               className="w-5 h-5"
             />
-            <label htmlFor="halfDay" className="text-sm text-gray-700">
+            <label htmlFor="halfDay" className="text-base text-gray-700">
               {t('leave.halfDay')}
             </label>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('leave.reasonOptional')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-1">{t('leave.reasonOptional')}</label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -547,7 +547,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+            <label className="block text-base font-medium text-gray-700 mb-1 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Paperclip size={15} className="text-gray-500" />
                 {t('leave.attachment', '证明/附件 (可选)')}
@@ -556,7 +556,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
                 <button
                   type="button"
                   onClick={() => setAttachmentUrl('')}
-                  className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                  className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1"
                 >
                   <Trash2 size={12} />
                   {t('common.remove', '移除')}
@@ -564,7 +564,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
               )}
             </label>
             {attachmentUrl ? (
-              <div className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-700">
+              <div className="flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700">
                 <Paperclip size={14} className="text-primary flex-shrink-0" />
                 <span className="truncate flex-1 font-mono">{attachmentUrl.split('/').pop()}</span>
                 <a
@@ -579,14 +579,14 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
             ) : (
               <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
                 {uploadingAttachment ? (
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Loader2 className="animate-spin" size={16} />
                     <span>{t('common.uploading', '正在上传...')}</span>
                   </div>
                 ) : (
                   <>
                     <Upload size={16} className="text-gray-400" />
-                    <span className="text-xs text-gray-600 font-medium">
+                    <span className="text-sm text-gray-600 font-medium">
                       {t('leave.uploadAttachmentHint', '上传病假条/证明文件 (JPG, PNG, PDF)')}
                     </span>
                   </>

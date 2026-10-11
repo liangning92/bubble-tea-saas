@@ -91,7 +91,7 @@ export function AttendanceCorrectionPage() {
     }
     const badge = badges[status] || badges.pending
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+      <span className={`px-2 py-1 rounded-full text-sm font-medium ${badge.bg} ${badge.text}`}>
         {badge.label}
       </span>
     )
@@ -133,7 +133,7 @@ export function AttendanceCorrectionPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   <Calendar size={14} className="inline mr-1" />
                   {t('attendance.date')}
                 </label>
@@ -147,7 +147,7 @@ export function AttendanceCorrectionPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.originalCheckIn')}
                   </label>
                   <input
@@ -159,7 +159,7 @@ export function AttendanceCorrectionPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.originalCheckOut')}
                   </label>
                   <input
@@ -174,7 +174,7 @@ export function AttendanceCorrectionPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.correctCheckIn')}
                   </label>
                   <input
@@ -186,7 +186,7 @@ export function AttendanceCorrectionPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.correctCheckOut')}
                   </label>
                   <input
@@ -200,7 +200,7 @@ export function AttendanceCorrectionPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t('attendance.reason')}
                 </label>
                 <textarea
@@ -260,12 +260,12 @@ export function AttendanceCorrectionPage() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-medium">{formatDate(req.date)}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm text-gray-500">
                         {req.originalCheckIn && `${t('attendance.originalCheckIn')}: ${req.originalCheckIn}`}
                         {req.originalCheckOut && ` - ${req.originalCheckOut}`}
                       </p>
                       {(req.correctCheckIn || req.correctCheckOut) && (
-                        <p className="text-xs text-green-600">
+                        <p className="text-sm text-green-600">
                           {t('attendance.correctCheckIn')}: {req.correctCheckIn || '-'}
                           {' - '}
                           {t('attendance.correctCheckOut')}: {req.correctCheckOut || '-'}
@@ -274,9 +274,9 @@ export function AttendanceCorrectionPage() {
                     </div>
                     {getStatusBadge(req.status)}
                   </div>
-                  <p className="text-sm text-gray-600 mb-1">{req.reason}</p>
+                  <p className="text-base text-gray-600 mb-1">{req.reason}</p>
                   {req.adminNote && (
-                    <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                    <p className="text-sm text-gray-500 bg-gray-50 p-2 rounded">
                       {t('attendance.adminNote')}: {req.adminNote}
                     </p>
                   )}

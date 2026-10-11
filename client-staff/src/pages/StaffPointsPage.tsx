@@ -27,7 +27,8 @@ export function StaffPointsPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const [compensation,setCompensation]=useState<any[]>([])
-  useEffect(()=>{employeeApi.get('/my/compensation').then(setCompensation).catch(()=>{})},[])
+  const [shareMessage,setShareMessage]=useState('')
+  const shareVoucher=async(code:string)=>{try{if(navigator.share)await navigator.share({title:t('voucher.title'),text:code});else{await navigator.clipboard.writeText(code);setShareMessage(t('voucher.copied'))}}catch(e:any){if(e.name!=='AbortError')setShareMessage(t('voucher.copyFailed'))}}
   const [currentTab, setCurrentTab] = useState<'history' | 'rewards'>('history')
   const [points, setPoints] = useState<any>(null)
   const [logs, setLogs] = useState<PointLog[]>([])
@@ -40,11 +41,13 @@ export function StaffPointsPage() {
     setLoadError(false)
     setIsLoading(true)
     try {
-      const [pointsRes, logsRes, rewardsRes] = await Promise.all([
+      const [pointsRes, logsRes, rewardsRes,compensationRes] = await Promise.all([
         staffApi.getMyPoints(),
         staffApi.getMyPointLogs(),
-        staffApi.getAvailableRewards()
+        staffApi.getAvailableRewards(),
+        employeeApi.get('/my/compensation')
       ])
+      setCompensation(compensationRes)
       setPoints(pointsRes.data)
       setLogs(logsRes.data?.list || [])
       setRewards(rewardsRes.data || [])
@@ -89,7 +92,7 @@ export function StaffPointsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <section className="p-4 space-y-2"><h2 className="font-bold">{t('compensation.title')}</h2>{compensation.map(r=><div key={r.id} className="bg-white rounded-xl p-3">{r.month} · {t('compensation.'+r.type)} · Rp {r.amount.toLocaleString()} · {t('compensation.'+r.status)}<p>{r.reason}</p></div>)}</section>
+      <section className="p-4 space-y-4"><h2 className="text-xl font-bold">{t('voucher.wallet')}</h2>{shareMessage&&<p role="status">{shareMessage}</p>}{compensation.map(r=><article key={r.id} className="bg-white rounded-2xl p-5 space-y-3 border border-gray-100"><div className="flex justify-between gap-3"><strong>{r.rewardMethod==='voucher'?t('voucher.title'):t('compensation.'+r.type)}</strong><span>{r.month}</span></div><p className="text-2xl font-bold text-primary">Rp {r.amount.toLocaleString('id-ID')}</p><p>{r.reason}</p>{r.rewardMethod==='voucher'?<><p>{r.encouragement}</p><div className="rounded-xl bg-pink-50 p-3 font-mono break-all text-lg select-all">{r.voucherCode}</div><p>{t('voucher.'+(r.voucherStatus||r.status))} · {t('voucher.expires')} {formatDate(r.validUntil)}</p><p className="text-base text-gray-600">{t('voucher.rules')}</p>{r.voucherStatus==='active'&&<button type="button" className="w-full bg-primary text-white rounded-xl py-3 font-semibold" onClick={()=>void shareVoucher(r.voucherCode)}>{t('voucher.share')}</button>}</>:<p>{t('compensation.'+r.status)}</p>}</article>)}</section>
       {/* Header */}
       <header className="bg-primary text-white px-4 py-6 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
@@ -105,9 +108,9 @@ export function StaffPointsPage() {
             <Star className="text-yellow-300" size={32} />
             <span className="text-4xl font-bold">{points?.currentPoints || 0}</span>
           </div>
-          <p className="text-white/80 text-sm">{t('staffPoints.currentPoints')}</p>
+          <p className="text-white/80 text-base">{t('staffPoints.currentPoints')}</p>
           {points?.lifetimePoints && (
-            <p className="text-white/60 text-xs mt-1">
+            <p className="text-white/60 text-sm mt-1">
               {t('staffPoints.lifetimePoints')}: {points.lifetimePoints}
             </p>
           )}
@@ -155,7 +158,7 @@ export function StaffPointsPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{log.description}</p>
-                      <p className="text-sm text-gray-500">{formatDate(log.createdAt)}</p>
+                      <p className="text-base text-gray-500">{formatDate(log.createdAt)}</p>
                     </div>
                     <div className={`flex items-center gap-1 font-bold ${
                       log.points > 0 ? 'text-green-600' : 'text-red-600'
@@ -184,9 +187,9 @@ export function StaffPointsPage() {
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{reward.name}</p>
                       {reward.description && (
-                        <p className="text-sm text-gray-500">{reward.description}</p>
+                        <p className="text-base text-gray-500">{reward.description}</p>
                       )}
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-base text-gray-500 mt-1">
                         {t('staffPoints.stock')}: {reward.stock}
                       </p>
                     </div>
@@ -198,7 +201,7 @@ export function StaffPointsPage() {
                       <button
                         onClick={() => handleRedeem(reward)}
                         disabled={redeeming === reward.id || reward.stock <= 0 || points?.currentPoints < reward.pointsCost}
-                        className="mt-2 px-3 py-1 bg-primary text-white text-sm rounded-lg disabled:opacity-50"
+                        className="mt-2 px-3 py-1 bg-primary text-white text-base rounded-lg disabled:opacity-50"
                       >
                         {redeeming === reward.id ? (
                           <Loader2 size={14} className="animate-spin" />

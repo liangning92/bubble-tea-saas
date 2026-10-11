@@ -272,7 +272,7 @@ export function InventoryPage() {
         <div className="px-5 pb-3 flex justify-end">
           <button
             onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-            className={`px-3 py-2 rounded-xl text-xs font-medium ${showLowStockOnly ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600"}`}
+            className={`px-3 py-2 rounded-xl text-sm font-medium ${showLowStockOnly ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600"}`}
           >
             <AlertTriangle className="w-4 h-4 inline mr-1" />
             {t("inventory.lowStock")}
@@ -288,7 +288,7 @@ export function InventoryPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("inventory.searchPlaceholder")}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
         </div>
@@ -297,7 +297,7 @@ export function InventoryPage() {
         <div className="px-4 pb-3 flex gap-2 overflow-x-auto">
           <button
             onClick={() => setSelectedCategory("")}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+            className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
               !selectedCategory
                 ? "bg-primary text-white"
                 : "bg-gray-100 text-gray-600"
@@ -309,7 +309,7 @@ export function InventoryPage() {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+              className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
                 selectedCategory === cat
                   ? "bg-primary text-white"
                   : "bg-gray-100 text-gray-600"
@@ -346,7 +346,7 @@ export function InventoryPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h3 className="font-medium text-gray-900">{item.name}</h3>
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-base text-gray-500 mt-0.5">
                       {item.category} · {item.unit}
                     </p>
                   </div>
@@ -356,7 +356,7 @@ export function InventoryPage() {
                     >
                       {item.currentStock.toLocaleString()}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm text-gray-500">
                       {t("inventory.safetyStock")}:{" "}
                       {item.safetyStock.toLocaleString()}
                     </p>
@@ -365,7 +365,7 @@ export function InventoryPage() {
 
                 {/* Low Stock Warning */}
                 {item.currentStock <= item.safetyStock && (
-                  <div className="mt-2 flex items-center text-orange-600 text-xs">
+                  <div className="mt-2 flex items-center text-orange-600 text-sm">
                     <AlertTriangle className="w-3 h-3 mr-1" />
                     {t("inventory.lowStockWarning")}
                   </div>
@@ -425,10 +425,10 @@ export function InventoryPage() {
 
             <div className="mb-4 p-3 bg-gray-50 rounded-lg">
               <p className="font-medium">{selectedItem.name}</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-base text-gray-500">
                 {selectedItem.category} · {selectedItem.unit}
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-base text-gray-500">
                 {t("inventory.currentStock")}:{" "}
                 {selectedItem.currentStock.toLocaleString()}
               </p>
@@ -436,7 +436,7 @@ export function InventoryPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t("inventory.quantity")} *
                 </label>
                 <input
@@ -450,7 +450,7 @@ export function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t("inventory.unitCost")}
                 </label>
                 <input
@@ -466,7 +466,7 @@ export function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t("inventory.note") || "Note"}
                 </label>
                 <input
@@ -513,10 +513,10 @@ export function InventoryPage() {
 
             <div className="mb-4 p-3 bg-gray-50 rounded-lg">
               <p className="font-medium">{selectedItem.name}</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-base text-gray-500">
                 {selectedItem.category} · {selectedItem.unit}
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-base text-gray-500">
                 {t("inventory.currentStock")}:{" "}
                 {selectedItem.currentStock.toLocaleString()}
               </p>
@@ -524,7 +524,7 @@ export function InventoryPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t("inventory.quantity")} *
                 </label>
                 <input
@@ -539,7 +539,7 @@ export function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t("inventory.reason") || "Reason"}
                 </label>
                 <select
@@ -566,7 +566,7 @@ export function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t("inventory.note") || "Note"}
                 </label>
                 <input
@@ -608,7 +608,7 @@ export function InventoryPage() {
             {selectedItem && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                 <p className="font-medium">{selectedItem.name}</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-base text-gray-500">
                   {selectedItem.category} · {selectedItem.unit}
                 </p>
               </div>
@@ -634,14 +634,14 @@ export function InventoryPage() {
                           {log.logType === "stock-out" ? "-" : "+"}
                           {Math.abs(log.quantity)} {selectedItem?.unit}
                         </p>
-                        <p className="text-xs text-gray-500">{log.reason}</p>
+                        <p className="text-sm text-gray-500">{log.reason}</p>
                       </div>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm text-gray-400">
                         {new Date(log.createdAt).toLocaleString()}
                       </p>
                     </div>
                     {log.note && (
-                      <p className="text-sm text-gray-500 mt-1">{log.note}</p>
+                      <p className="text-base text-gray-500 mt-1">{log.note}</p>
                     )}
                   </div>
                 ))}

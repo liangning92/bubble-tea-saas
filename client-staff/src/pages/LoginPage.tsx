@@ -107,7 +107,7 @@ export function LoginPage() {
               className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
               <Globe size={16} className="text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">{currentLang.flag} {currentLang.label}</span>
+              <span className="text-base font-medium text-gray-700">{currentLang.flag} {currentLang.label}</span>
             </button>
             {showLangMenu && (
               <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg py-1 z-50 shadow-lg">
@@ -138,14 +138,14 @@ export function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleLogin} className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm text-center mb-4">
+            <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-base text-center mb-4">
               {error}
             </div>
           )}
 
           {/* Phone Input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-base font-medium text-gray-700">
               {t('auth.phone')}
             </label>
             <div className="relative">
@@ -165,7 +165,7 @@ export function LoginPage() {
 
           {/* Password Input */}
           <div className="space-y-2 mt-4">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-base font-medium text-gray-700">
               {t('auth.password')}
             </label>
             <div className="relative">
@@ -192,12 +192,12 @@ export function LoginPage() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/20"
               />
-              <span className="text-sm text-gray-600">{t('auth.rememberMe')}</span>
+              <span className="text-base text-gray-600">{t('auth.rememberMe')}</span>
             </label>
             <button
               type="button"
               onClick={() => setError(t('auth.resetHelp'))}
-              className="text-sm text-primary-hover hover:text-primary-hover font-medium transition-colors"
+              className="text-base text-primary-hover hover:text-primary-hover font-medium transition-colors"
             >
               {t('auth.forgotPassword')}
             </button>
@@ -221,7 +221,7 @@ export function LoginPage() {
         </form>
 
         {/* Footer */}
-        <p className="text-center text-gray-400 text-sm mt-6">
+        <p className="text-center text-gray-400 text-base mt-6">
           © 2026 YOUME POS System
         </p>
       </div>
