@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import React, { Fragment, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export interface OrderItemDisplay {
