@@ -1,3 +1,4 @@
+import { TrainingSectionExtras, TrainingModuleExtras } from '../../../../shared/components/TrainingExtras'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -22,12 +23,12 @@ import {
   CheckSquare
 } from 'lucide-react'
 import { TrainingFormModal } from './TrainingFormModal'
-import {
-  TRAINING_MODULES,
-  CHECKLISTS,
-  TrainingModule,
-  tr
-} from '../../data/trainingContent'
+import { useTrainingCatalogue, TrainingModule, tr } from '../../../../shared/hooks/useTrainingCatalogue'
+import { trainingCopy } from '../../../../shared/utils/trainingCopy'
+import { TrainingLibraryEditor } from '../../components/TrainingLibraryEditor'
+import { TrainingDocument } from '../../components/TrainingDocument'
+import { TrainingVideo } from '../../components/TrainingVideo'
+import { useSearchParams } from 'react-router-dom'
 
 interface TrainingRecord {
   id: string
@@ -62,10 +63,14 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function TrainingListPage() {
   const { t, i18n } = useTranslation()
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
+  const catalogue = useTrainingCatalogue(token, user?.storeId)
+  const w = trainingCopy(i18n.language)
+  const [params, setParams] = useSearchParams()
+  const [editingLibrary, setEditingLibrary] = useState<string | null>(null)
 
   // Tab: 'records' | 'courses' | 'checklists'
-  const [activeTab, setActiveTab] = useState<'records' | 'courses' | 'checklists'>('records')
+  const [activeTab, setActiveTab] = useState<'records' | 'courses' | 'checklists'>(params.get('tab') === 'courses' ? 'courses' : params.get('tab') === 'checklists' ? 'checklists' : 'records')
 
   // Records state
   const [records, setRecords] = useState<TrainingRecord[]>([])
@@ -225,6 +230,8 @@ export function TrainingListPage() {
   const passedCount = records.filter(r => r.passed).length
   const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 100
 
+  if (editingLibrary !== null && user?.role === 'admin') return <TrainingLibraryEditor token={token} initialSelection={editingLibrary || undefined} onClose={() => {setEditingLibrary(null);catalogue.refresh()}} />
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -239,9 +246,9 @@ export function TrainingListPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={loadData}
+            onClick={() => {void loadData();catalogue.refresh()}}
             className="p-2 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
             disabled={isLoading}
             title={t('common.refresh', '刷新')}
@@ -255,13 +262,7 @@ export function TrainingListPage() {
           >
             <Settings size={18} />
           </button>
-          <button
-            onClick={() => setShowForm(true)}
-            className="btn-primary flex items-center gap-2 px-4 py-2 text-sm shadow-sm"
-          >
-            <Plus size={18} />
-            {t('staff.addTraining', '添加培训记录')}
-          </button>
+          {activeTab === 'records' ? <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 px-4 py-2 text-sm shadow-sm"><Plus size={18} />{t('staff.addTraining', '添加培训记录')}</button> : user?.role === 'admin' && <><button className="btn-secondary text-sm" onClick={() => setEditingLibrary('')}>{w.manage}</button><button disabled={catalogue.loading || catalogue.error || (activeTab === 'courses' ? catalogue.modules.length : catalogue.checklists.length) >= 100} className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50" onClick={() => setEditingLibrary(activeTab === 'courses' ? 'new-course' : 'new-checklist')}><Plus size={18}/>{activeTab === 'courses' ? w.addCourse : w.addChecklist}</button></>}
         </div>
       </div>
 
@@ -303,16 +304,16 @@ export function TrainingListPage() {
           </div>
           <div>
             <div className="text-xs text-gray-500 font-medium">{t('training.passRate', '考核通过率')}</div>
-            <div className="text-2xl font-bold text-purple-600 mt-0.5">{passRate}%</div>
+            <div className="text-2xl font-bold text-purple-600 mt-0.5">{totalCount > 0 ? `${passRate}%` : '—'}</div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <div className="flex gap-6">
+        <div className="flex flex-wrap gap-3 sm:gap-6">
           <button
-            onClick={() => setActiveTab('records')}
+            onClick={() => {setActiveTab('records');setParams({tab:'records'})}}
             className={`pb-3 text-sm font-semibold transition-colors relative flex items-center gap-2 ${
               activeTab === 'records'
                 ? 'text-primary'
@@ -327,7 +328,7 @@ export function TrainingListPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab('courses')}
+            onClick={() => {setActiveTab('courses');setParams({tab:'courses'})}}
             className={`pb-3 text-sm font-semibold transition-colors relative flex items-center gap-2 ${
               activeTab === 'courses'
                 ? 'text-primary'
@@ -335,14 +336,14 @@ export function TrainingListPage() {
             }`}
           >
             <BookOpen size={16} />
-            {t('training.coursesTab', 'SOP 课程标准库')} ({TRAINING_MODULES.length})
+            {t('training.coursesTab', 'SOP 课程标准库')} ({catalogue.modules.length})
             {activeTab === 'courses' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}
           </button>
 
           <button
-            onClick={() => setActiveTab('checklists')}
+            onClick={() => {setActiveTab('checklists');setParams({tab:'checklists'})}}
             className={`pb-3 text-sm font-semibold transition-colors relative flex items-center gap-2 ${
               activeTab === 'checklists'
                 ? 'text-primary'
@@ -350,8 +351,8 @@ export function TrainingListPage() {
             }`}
           >
             <CheckSquare size={16} />
-            {t('training.checklistsTab', '开闭店规范标准')} ({CHECKLISTS.length})
-            {activeTab === 'checklists' && (
+            {t('training.checklistsTab', '开闭店规范标准')} ({catalogue.checklists.length})
+            {activeTab === 'checklists' && !catalogue.loading && !catalogue.error && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}
           </button>
@@ -532,7 +533,10 @@ export function TrainingListPage() {
       )}
 
       {/* Tab 2: Standard Course Library */}
-      {activeTab === 'courses' && (
+      {activeTab !== 'records' && <p className="text-sm text-gray-500">{user?.role === 'admin' ? w.hint : w.readHint}</p>}
+      {activeTab !== 'records' && catalogue.loading && <p role="status">{w.loading}</p>}
+      {activeTab !== 'records' && catalogue.error && <div role="alert" className="card text-red-700">{w.loadFailed} <button className="underline" onClick={catalogue.refresh}>{w.retry}</button></div>}
+      {activeTab === 'courses' && !catalogue.loading && !catalogue.error && (
         <div className="space-y-4">
           <div className="bg-blue-50/70 border border-blue-200/60 rounded-xl p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -543,12 +547,13 @@ export function TrainingListPage() {
               </div>
             </div>
             <span className="text-xs font-semibold text-blue-700 bg-white px-2.5 py-1 rounded-md shadow-xs shrink-0">
-              共 {TRAINING_MODULES.length} 门核心必修课
+              共 {catalogue.modules.length} 门核心必修课
             </span>
           </div>
 
+          {catalogue.modules.length === 0 && <p className="text-gray-500">{w.emptyCourses}</p>}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {TRAINING_MODULES.map((mod) => (
+            {catalogue.modules.map((mod) => (
               <div
                 key={mod.key}
                 className="card bg-white hover:shadow-md transition-all border border-gray-200 flex flex-col justify-between overflow-hidden group"
@@ -563,6 +568,7 @@ export function TrainingListPage() {
                     </span>
                   </div>
 
+                  {user?.role === 'admin' && <button className="float-right text-sm text-primary" aria-label={`${w.edit} ${tr(mod.title,i18n.language)}`} onClick={() => setEditingLibrary(mod.key)}>{w.edit}</button>}
                   <h3 className="font-bold text-gray-900 text-base mb-1 group-hover:text-primary transition-colors">
                     {tr(mod.title, i18n.language)}
                   </h3>
@@ -591,14 +597,16 @@ export function TrainingListPage() {
       )}
 
       {/* Tab 3: Checklists */}
-      {activeTab === 'checklists' && (
+      {activeTab === 'checklists' && !catalogue.loading && !catalogue.error && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {CHECKLISTS.map((list) => (
+          {catalogue.checklists.length === 0 && <p className="text-gray-500">{w.emptyChecklists}</p>}
+          {catalogue.checklists.map((list) => (
             <div key={list.key} className="card bg-white p-5 border border-gray-200">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
                 <h3 className="font-bold text-gray-900 text-base">
                   {tr(list.title, i18n.language)}
                 </h3>
+                {user?.role === 'admin' && <button className="text-sm text-primary" aria-label={`${w.edit} ${tr(list.title,i18n.language)}`} onClick={() => setEditingLibrary('checklist:'+list.key)}>{w.edit}</button>}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                   共 {list.items.length} 条检查项
                 </span>
@@ -665,6 +673,8 @@ export function TrainingListPage() {
                           {tr(sec.title, i18n.language)}
                         </h5>
                       </div>
+                      {sec.documentId && <TrainingDocument id={sec.documentId} token={token} />}
+                      {sec.videoId && <TrainingVideo id={sec.videoId} token={token} />}
                       <ul className="space-y-1.5 text-xs text-gray-700 pl-2">
                         {sec.points.map((pt, pIdx) => (
                           <li key={pIdx} className="flex items-start gap-2">
@@ -674,6 +684,7 @@ export function TrainingListPage() {
                         ))}
                       </ul>
 
+                      <TrainingSectionExtras section={sec} language={i18n.language} />
                       {sec.tip && (
                         <div className="bg-amber-50 rounded-lg p-2.5 flex items-start gap-2 text-xs text-amber-800 border border-amber-200/50 mt-2">
                           <Lightbulb size={15} className="text-amber-500 shrink-0 mt-0.5" />
@@ -698,6 +709,7 @@ export function TrainingListPage() {
                 </div>
               </div>
 
+              <TrainingModuleExtras module={selectedCourse} language={i18n.language} />
               {/* Quiz Questions */}
               <div>
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
