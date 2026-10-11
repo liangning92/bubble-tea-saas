@@ -83,6 +83,8 @@ export function HomePage() {
     }
   }
   const shift = overview?.schedule?.todayShift;
+  const shiftLanguage = i18n.language.split('-')[0];
+  const shiftName = (shiftLanguage === 'zh' ? shift?.shiftNameZh : shiftLanguage === 'id' ? shift?.shiftNameId : '') || shift?.shiftName;
   const locale =
     i18n.language === "zh"
       ? "zh-CN"
@@ -203,7 +205,7 @@ export function HomePage() {
           onClick={() => navigate("/schedule")}
         >
           <div>
-            <h2>{shift?.shiftName || t("home.noShiftToday")}</h2>
+            <h2>{shiftName || t("home.noShiftToday")}</h2>
             {shift && (
               <p className="home-shift-time">
                 {shift.startTime}
