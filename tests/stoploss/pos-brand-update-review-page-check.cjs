@@ -22,12 +22,12 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
  await page.goto(origin+'/#/pos');await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await page.getByRole('button',{name:'确认渠道',exact:true}).click();
  assert.ok(await page.getByAltText('Logo',{exact:true}).evaluate(async img=>img.src===(await import('/src/assets/logo.ts')).YOUME_LOGO_WHITE));
  await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');for(let n=0;n<69;n++)await db.orders.add({localId:'legacy-'+n,orderNumber:'20260720'+n,storeId:'store',staffId:'staff',items:[],finalAmount:16000,status:'quarantined',createdAt:new Date(),syncAttempts:0,quarantineAudit:{actorId:'admin',at:new Date()}})});
- await expect(page.getByTestId('checkout-quarantine')).toContainText('(69)');await page.getByTestId('checkout-quarantine').locator('summary').click();
- await page.getByRole('button',{name:'确认这 69 笔为正常订单并收起提示',exact:true}).click();await expect(page.getByTestId('checkout-quarantine')).toHaveCount(0);await page.reload();await page.getByRole('button',{name:'确认渠道',exact:true}).click();await expect(page.getByTestId('checkout-quarantine')).toHaveCount(0);
- const reviewed=await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return {orders:await db.orders.toArray(),audit:(await db.config.toArray()).filter(x=>x.key.startsWith('checkout.quarantine-review:'))}});
- assert.equal(reviewed.orders.length,69);assert.ok(reviewed.orders.every(r=>r.status==='quarantined'&&r.finalAmount===16000&&r.syncAttempts===0&&r.quarantineReview.actorId==='admin'));assert.equal(reviewed.audit.length,1);assert.equal(reviewed.audit[0].value.orders.length,69);
- await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');await db.orders.add({localId:'new-review',orderNumber:'NEW-REVIEW',storeId:'store',staffId:'staff',items:[],finalAmount:10000,status:'quarantined',createdAt:new Date(),syncAttempts:0})});await expect(page.getByTestId('checkout-quarantine')).toContainText('(1)');
- const denied=await page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');const {acknowledgeQuarantinedOrders,readCheckoutRecovery}=await import('/src/utils/checkoutIntent.ts');useAuthStore.setState({user:{...useAuthStore.getState().user,role:'cashier'}});const r=await readCheckoutRecovery('store');try{await acknowledgeQuarantinedOrders('store',JSON.stringify(r.quarantined.map(x=>[x.id,x.localId,x.orderNumber])));return false}catch(e){return e.message==='CHECKOUT_ADMIN_REQUIRED'}});assert.equal(denied,true);assert.equal(writes,0);
- console.log('PASS 69 reviewed orders retained with audit, notice stays archived after reload, new review remains visible, cashier refused, zero order/payment API writes');
+ await expect(page.getByTestId('checkout-quarantine')).toHaveCount(0);await page.reload();await page.getByRole('button',{name:'确认渠道',exact:true}).click();await expect(page.getByTestId('checkout-quarantine')).toHaveCount(0);
+ const retained=await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return db.orders.toArray()});
+ assert.equal(retained.length,69);assert.ok(retained.every(r=>r.status==='quarantined'&&r.finalAmount===16000&&r.syncAttempts===0));
+ await page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');useAuthStore.setState({user:{...useAuthStore.getState().user,role:'cashier'}})});await expect(page.getByTestId('checkout-quarantine')).toHaveCount(0);
+ assert.equal(writes,0);
+ console.log('PASS 69 historical local copies preserved without cashier/admin checkout banner or repeat-review action; zero order/payment API writes');
+
  }finally{if(browser)await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

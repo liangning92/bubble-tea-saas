@@ -15,7 +15,7 @@ import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
 import { backendAuthHeaders } from '../utils/backendIdentity'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, discardPreparedCheckout, definiteFirstRejection, acknowledgeRecoveredCheckout, quarantineCheckoutRecovery, acknowledgeQuarantinedOrders, type CheckoutIntent } from '../utils/checkoutIntent'
+import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, discardPreparedCheckout, definiteFirstRejection, acknowledgeRecoveredCheckout, quarantineCheckoutRecovery, type CheckoutIntent } from '../utils/checkoutIntent'
 import { ScanPage } from './ScanPage'
 import { decodeScanIdentity, resolveScanProduct, validCatalogSpec, validCatalogPrice, ScanIdentity } from '../utils/barcodeIdentity'
 import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
@@ -3331,9 +3331,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             <button type="button" disabled={!quarantineAcknowledged || isCheckingOut} className="block border rounded px-3 py-1 disabled:opacity-50" onClick={async()=>{try {await quarantineCheckoutRecovery(user!.storeId!,user!.id,JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}));clearCart();setShowPaymentModal(false);setQuarantineAcknowledged(false)} catch {showToast(t('checkoutIntent.review'),'warning')}}}>{t('checkoutIntent.quarantine')}</button>
           </div>}
         </section>}
-        {!!recovery?.quarantined.length && <section data-testid="checkout-quarantine" role="status" className="shrink-0 max-h-[25vh] overflow-y-auto p-2 bg-amber-50 text-sm"><details><summary>{t('checkoutIntent.quarantined')} ({recovery.quarantined.length})</summary><ul className="max-h-24 overflow-y-auto">{recovery.quarantined.map(row=><li key={row.id}>{row.orderNumber}</li>)}</ul>
-          {['admin', 'owner'].includes(user?.role || '') && <div className="mt-2"><p>{t('checkoutIntent.reviewArchiveHint')}</p><button type="button" className="border rounded px-3 py-1 mt-1" disabled={isCheckingOut} onClick={async()=>{try {await acknowledgeQuarantinedOrders(user!.storeId!,JSON.stringify(recovery.quarantined.map(row=>[row.id,row.localId,row.orderNumber])))} catch {showToast(t('checkoutIntent.review'),'warning')}}}>{t('checkoutIntent.reviewArchive',{count:recovery.quarantined.length})}</button></div>}
-        </details></section>}
+
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
         {!!recovery?.rows.filter(row=>row.locallyAcceptedAt).length && <section data-testid="offline-sales" role="status" className="shrink-0 max-h-[25vh] overflow-y-auto p-2 bg-amber-50 text-sm"><strong>{t('offlineSale.queue')}</strong><ul className="max-h-24 overflow-y-auto">{recovery.rows.filter(row=>row.locallyAcceptedAt).map(row=><li key={row.id}>{row.orderNumber} · {t(row.status === 'pending' || row.status === 'syncing' ? 'offlineSale.awaitUpload' : 'offlineSale.review')}{row.manualPayment ? ` · ${t('offlineSale.qrisPending')}` : ''}</li>)}</ul>{recovery.rows.some(row=>row.locallyAcceptedAt && row.status==='review') && <button type="button" className="underline" onClick={()=>{void syncManager.syncPendingOrders(true)}}>{t('checkoutIntent.retry')}</button>}</section>}
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}

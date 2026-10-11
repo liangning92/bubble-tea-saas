@@ -1,4 +1,4 @@
-import { assertCheckoutBackend, assertBackendAuth, currentBackendIdentity, readBackendAuth } from './backendIdentity'
+import { assertCheckoutBackend, assertBackendAuth, currentBackendIdentity } from './backendIdentity'
 import { db, type LocalOrder } from '../db/offline'
 import { withCheckoutSyncLock } from './checkoutSyncClaim'
 import { posOrderNumber, matchesCheckoutNumber } from './orderNumber'
@@ -115,7 +115,7 @@ export async function readCheckoutRecovery(storeId: string) {
   const rows = await db.orders.where('status').anyOf('pending', 'syncing', 'sending', 'review', 'failed')
     .and(row => row.storeId === storeId && !['rejected', 'discarded'].includes(row.checkoutResolution || '')).toArray()
   const confirmed = await db.orders.where('status').equals('synced').and(row => row.storeId === storeId && !!row.recoveredConfirmation && !row.recoveryAcknowledged).toArray()
-  const quarantined = await db.orders.where('status').equals('quarantined').and(row => row.storeId === storeId && !row.quarantineReview).toArray()
+  const quarantined = await db.orders.where('status').equals('quarantined').and(row => row.storeId === storeId).toArray()
   return { intent, blocked: !!intent || rows.some(row => !row.locallyAcceptedAt), rows, confirmed, quarantined, generation:await readCheckoutGeneration(storeId) }
 }
 
@@ -159,18 +159,4 @@ export async function quarantineCheckoutRecovery(storeId: string, actorId: strin
     await advanceCheckoutGeneration(storeId)
     await db.config.delete(key(storeId))
   }))
-}
-
-/** Archive an administrator's manual review without changing payment, sync or ledger state. */
-export async function acknowledgeQuarantinedOrders(storeId: string, expected: string): Promise<void> {
-  assertBackendAuth(currentBackendIdentity(), storeId)
-  const actor = readBackendAuth().user
-  if (!actor?.id || !['admin', 'owner'].includes(actor.role || '')) throw new Error('CHECKOUT_ADMIN_REQUIRED')
-  await db.transaction('rw', db.config, db.orders, async () => {
-    const rows = await db.orders.where('status').equals('quarantined').and(row => row.storeId === storeId && !row.quarantineReview).toArray()
-    if (!rows.length || JSON.stringify(rows.map(row=>[row.id,row.localId,row.orderNumber])) !== expected) throw new Error('CHECKOUT_REVIEW_REQUIRED')
-    const review = {actorId: actor.id!, at: new Date(), decision: 'manual_verified_normal' as const}
-    await db.config.add({key:`checkout.quarantine-review:${encodeURIComponent(storeId)}:${crypto.randomUUID()}`,value:{...review,orders:rows.map(row=>({id:row.id,localId:row.localId,orderNumber:row.orderNumber}))},updatedAt:review.at})
-    for (const row of rows) await db.orders.update(row.id!, {quarantineReview:review})
-  })
 }

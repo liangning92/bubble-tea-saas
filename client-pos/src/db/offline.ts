@@ -39,7 +39,6 @@ export interface LocalOrder {
   recoveredConfirmation?: {serverId: string; orderNumber: string; receivedAt: Date}
   recoveryAcknowledged?: {actorId: string; at: Date}
   quarantineAudit?: {actorId: string; at: Date}
-  quarantineReview?: {actorId: string; at: Date; decision: 'manual_verified_normal'}
   checkoutRequest?: Record<string, any>
   checkoutResolution?: 'accepted' | 'rejected' | 'discarded' | 'review' | 'quarantined'
   items: any[]
