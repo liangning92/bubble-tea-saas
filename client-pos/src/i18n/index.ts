@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      voucher: {"wallet": "Penghargaan & voucher", "title": "Voucher hadiah", "method": "Bentuk penghargaan", "cash": "Hadiah tunai", "validDays": "Masa berlaku (hari)", "encouragement": "Pesan penyemangat (otomatis jika kosong)", "encouragementDefault": "Terima kasih atas kerja kerasmu! Nikmati hadiah ini atau bagikan kepada orang tersayang.", "rules": "Boleh diberikan kepada orang lain. Sekali pakai, tanpa uang kembali; kode tidak dapat dipakai ulang.", "code": "Kode voucher", "placeholder": "Kode voucher hadiah atau promosi", "apply": "Gunakan", "applied": "Dipilih", "remove": "Hapus", "active": "Siap digunakan", "used": "Sudah digunakan", "expired": "Kedaluwarsa", "cancelled": "Dibatalkan", "expires": "Berlaku sampai", "share": "Bagikan kode", "copied": "Kode disalin. Bagikan kepada orang lain.", "copyFailed": "Salin kode dengan menekan lama kode voucher."},
       handoverFlow: {"finish":"Selesai", "reprint":"Cetak ulang", "cashHint": "Semua uang tunai di laci, termasuk kas awal.", "title": "Periksa rincian shift", "dateShift": "Tanggal / shift", "cashier": "Kasir", "revenue": "Pendapatan", "cash": "Tunai", "openFloat": "Kas awal", "drawerTotal": "Total uang tunai", "expenses": "Biaya", "qris": "QRIS", "shopeefood": "ShopeeFood", "gofood": "GoFood", "back": "Kembali", "confirm": "Konfirmasi", "close": "Serah terima", "previewFailed": "Rincian shift gagal dimuat. Periksa koneksi dan coba lagi.", "changed": "Data shift berubah. Periksa kembali sebelum serah terima."},
       orderDisplay: {"product": "Nama Produk", "quantity": "Jumlah", "amount": "Jumlah harga"},
       "activityPricing": {"changedTitle": "Harga berubah", "changed": "Harga diperbarui. Periksa jumlah sebelum membayar.", "wait": "Tunggu perhitungan harga selesai", "loading": "Menghitung promosi…", "bestOnly": "Diskon terbaik dipilih; diskon harga tidak digabungkan"},
@@ -789,6 +790,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      voucher: {"wallet": "Rewards & vouchers", "title": "Voucher reward", "method": "Reward method", "cash": "Cash reward", "validDays": "Valid for (days)", "encouragement": "Encouraging message (generated if empty)", "encouragementDefault": "Thank you for your hard work! Enjoy this reward or share it with someone special.", "rules": "Transferable. One use, no change; a code cannot be used twice.", "code": "Voucher code", "placeholder": "Reward or promotion voucher code", "apply": "Apply", "applied": "Selected", "remove": "Remove", "active": "Available", "used": "Used", "expired": "Expired", "cancelled": "Cancelled", "expires": "Valid until", "share": "Share code", "copied": "Code copied. You can share it with someone else.", "copyFailed": "Press and hold the voucher code to copy it."},
       handoverFlow: {"finish":"Finish", "reprint":"Print again", "cashHint": "All cash in the drawer, including the opening float.", "title": "Review shift details", "dateShift": "Date / shift", "cashier": "Cashier", "revenue": "Revenue", "cash": "Cash", "openFloat": "Opening float", "drawerTotal": "Total cash", "expenses": "Expenses", "qris": "QRIS", "shopeefood": "ShopeeFood", "gofood": "GoFood", "back": "Back", "confirm": "Confirm", "close": "Handover", "previewFailed": "Could not load shift details. Check the connection and try again.", "changed": "Shift data changed. Review the details again before handover."},
       orderDisplay: {"product": "Product Name", "quantity": "Quantity", "amount": "Amount"},
       "activityPricing": {"changedTitle": "Price changed", "changed": "Prices were updated. Review the amount before payment.", "wait": "Wait for pricing to finish", "loading": "Calculating promotions…", "bestOnly": "Best discount selected; price discounts do not stack"},
@@ -1564,6 +1566,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      voucher: {"wallet": "奖惩与代金券", "title": "代金券奖励", "method": "奖励方式", "cash": "现金奖励", "validDays": "有效天数", "encouragement": "鼓励的话（留空自动生成）", "encouragementDefault": "感谢你的努力！享受这份奖励，也可以分享给重要的人。", "rules": "可转赠，持券码即可使用；一次抵扣，不找零，不能重复使用。", "code": "代金券码", "placeholder": "输入员工券或活动券码", "apply": "使用", "applied": "已选择", "remove": "移除", "active": "可使用", "used": "已使用", "expired": "已过期", "cancelled": "已取消", "expires": "有效期至", "share": "分享券码", "copied": "券码已复制，可转发给他人", "copyFailed": "无法自动复制，请长按券码复制"},
       handoverFlow: {"finish":"完成", "reprint":"重新打印", "cashHint": "钱箱里所有现金，包含备用金。", "title": "核对班次明细", "dateShift": "日期 / 班次", "cashier": "收银员", "revenue": "营收", "cash": "现金", "openFloat": "备用金", "drawerTotal": "现金总数", "expenses": "费用", "qris": "QRIS", "shopeefood": "ShopeeFood", "gofood": "GoFood", "back": "返回", "confirm": "确定", "close": "交班", "previewFailed": "无法读取班次明细，请检查连接后重试。", "changed": "班次数据已变化，请重新核对后交班。"},
       orderDisplay: {"product": "产品名称", "quantity": "数量", "amount": "金额"},
       "activityPricing": {"changedTitle": "价格已变化", "changed": "价格已更新，请核对金额后支付。", "wait": "请等待价格计算完成", "loading": "正在计算活动价格…", "bestOnly": "自动选择最优惠方案，价格优惠不叠加"},
@@ -2350,6 +2353,7 @@ const resources = {
     }
   }
 }
+
 
 const getInitialLanguage = () => {
   try {

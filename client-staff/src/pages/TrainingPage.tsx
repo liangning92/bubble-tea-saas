@@ -364,7 +364,7 @@ export function TrainingPage() {
         <div className="flex px-2">
           <button
             onClick={() => setActiveTab("courses")}
-            className={`flex-1 py-3.5 text-center text-sm font-medium transition-colors relative ${
+            className={`flex-1 py-3.5 text-center text-base font-medium transition-colors relative ${
               activeTab === "courses"
                 ? "text-primary font-bold"
                 : "text-gray-500 hover:text-gray-700"
@@ -383,7 +383,7 @@ export function TrainingPage() {
 
           <button
             onClick={() => setActiveTab("checklists")}
-            className={`flex-1 py-3.5 text-center text-sm font-medium transition-colors relative ${
+            className={`flex-1 py-3.5 text-center text-base font-medium transition-colors relative ${
               activeTab === "checklists"
                 ? "text-primary font-bold"
                 : "text-gray-500 hover:text-gray-700"
@@ -402,7 +402,7 @@ export function TrainingPage() {
 
           <button
             onClick={() => setActiveTab("records")}
-            className={`flex-1 py-3.5 text-center text-sm font-medium transition-colors relative ${
+            className={`flex-1 py-3.5 text-center text-base font-medium transition-colors relative ${
               activeTab === "records"
                 ? "text-primary font-bold"
                 : "text-gray-500 hover:text-gray-700"
@@ -420,7 +420,7 @@ export function TrainingPage() {
       </div>
 
       {activeTab !== "records" && catalogue.loading && (
-        <p role="status" className="p-4 text-sm">
+        <p role="status" className="p-4 text-base">
           {w.loading}
         </p>
       )}
@@ -435,7 +435,7 @@ export function TrainingPage() {
       {/* Tab 1: Course Modules */}
       {activeTab === "courses" && !catalogue.loading && !catalogue.error && (
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+          <div className="flex items-center justify-between text-sm text-gray-500 px-1">
             <span>{t("training.coursesTab", "标准 SOP 培训体系")}</span>
             <span>
               {completedCount}/{totalCourses}{" "}
@@ -444,7 +444,7 @@ export function TrainingPage() {
           </div>
 
           {catalogue.modules.length === 0 && (
-            <p className="text-sm text-gray-500">{w.emptyCourses}</p>
+            <p className="text-base text-gray-500">{w.emptyCourses}</p>
           )}
           {catalogue.modules.map((mod) => {
             const isCompleted = !!completedModules[mod.key];
@@ -464,20 +464,20 @@ export function TrainingPage() {
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="font-bold text-gray-900 text-sm truncate">
+                    <h3 className="font-bold text-gray-900 text-base truncate">
                       {tr(mod.title, i18n.language)}
                     </h3>
                     {isCompleted && (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-600 border border-green-200">
+                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-sm font-medium bg-green-50 text-green-600 border border-green-200">
                         <CheckCircle2 size={11} />
                         {t("training.completedBadge", "已学完")}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 line-clamp-1 mb-2">
+                  <p className="text-sm text-gray-500 line-clamp-1 mb-2">
                     {tr(mod.subtitle, i18n.language)}
                   </p>
-                  <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                  <div className="flex items-center gap-3 text-sm text-gray-400">
                     <span className="flex items-center gap-1">
                       <Clock size={12} />
                       {mod.minutes} {t("training.minutes", "分钟")}
@@ -508,12 +508,12 @@ export function TrainingPage() {
       {activeTab === "checklists" && !catalogue.loading && !catalogue.error && (
         <div className="p-4 space-y-5">
           <div className="flex items-center justify-between px-1">
-            <span className="text-xs text-gray-500">
+            <span className="text-sm text-gray-500">
               {t("training.checklistProgress", "日常开闭店 SOP 规范标准")}
             </span>
             <button
               onClick={handleResetChecklist}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
+              className="text-sm text-primary hover:underline flex items-center gap-1"
             >
               <RotateCcw size={12} />
               {t("training.resetChecklist", "重置清单")}
@@ -521,7 +521,7 @@ export function TrainingPage() {
           </div>
 
           {catalogue.checklists.length === 0 && (
-            <p className="text-sm text-gray-500">{w.emptyChecklists}</p>
+            <p className="text-base text-gray-500">{w.emptyChecklists}</p>
           )}
           {catalogue.checklists.map((list) => {
             const checkedCount = list.items.filter(
@@ -536,12 +536,12 @@ export function TrainingPage() {
               >
                 <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-3">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-gray-900 text-sm">
+                    <h3 className="font-bold text-gray-900 text-base">
                       {tr(list.title, i18n.language)}
                     </h3>
                   </div>
                   <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    className={`text-sm font-medium px-2 py-0.5 rounded-full ${
                       isAllDone
                         ? "bg-green-50 text-green-600"
                         : "bg-gray-100 text-gray-600"
@@ -573,7 +573,7 @@ export function TrainingPage() {
                           onChange={() => {}} // handled by parent div
                           className="mt-0.5 rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                         />
-                        <span className="text-xs leading-relaxed flex-1 select-none">
+                        <span className="text-sm leading-relaxed flex-1 select-none">
                           {tr(item, i18n.language)}
                         </span>
                       </div>
@@ -593,7 +593,7 @@ export function TrainingPage() {
           <div className="flex gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setFilterStatus("")}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 !filterStatus
                   ? "bg-primary text-white shadow-xs"
                   : "bg-white text-gray-600 border border-gray-200"
@@ -603,7 +603,7 @@ export function TrainingPage() {
             </button>
             <button
               onClick={() => setFilterStatus("completed")}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 filterStatus === "completed"
                   ? "bg-primary text-white shadow-xs"
                   : "bg-white text-gray-600 border border-gray-200"
@@ -613,7 +613,7 @@ export function TrainingPage() {
             </button>
             <button
               onClick={() => setFilterStatus("in_progress")}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 filterStatus === "in_progress"
                   ? "bg-primary text-white shadow-xs"
                   : "bg-white text-gray-600 border border-gray-200"
@@ -623,7 +623,7 @@ export function TrainingPage() {
             </button>
             <button
               onClick={() => setFilterStatus("scheduled")}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 filterStatus === "scheduled"
                   ? "bg-primary text-white shadow-xs"
                   : "bg-white text-gray-600 border border-gray-200"
@@ -647,10 +647,10 @@ export function TrainingPage() {
           ) : filteredTrainings.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
               <BookOpen size={40} className="mx-auto mb-3 text-gray-300" />
-              <p className="text-gray-500 text-sm font-medium">
+              <p className="text-gray-500 text-base font-medium">
                 {t("training.noTraining")}
               </p>
-              <p className="text-gray-400 text-xs mt-1">
+              <p className="text-gray-400 text-sm mt-1">
                 {t(
                   "training.coursesTab",
                   "可在“课程学习”栏目中自主学习 SOP 技能",
@@ -672,16 +672,16 @@ export function TrainingPage() {
                           <BookOpen size={16} />
                         </div>
                         <div>
-                          <p className="font-bold text-gray-900 text-sm">
+                          <p className="font-bold text-gray-900 text-base">
                             {training.title}
                           </p>
-                          <p className="text-xs text-gray-400">
+                          <p className="text-sm text-gray-400">
                             {getCategoryLabel(training.trainingType)}
                           </p>
                         </div>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${
+                        className={`px-2 py-0.5 rounded-full text-sm font-medium flex items-center gap-1 ${
                           STATUS_BADGES[training.status] ||
                           "bg-gray-100 text-gray-600"
                         }`}
@@ -691,7 +691,7 @@ export function TrainingPage() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 rounded-xl p-3 my-2.5">
+                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl p-3 my-2.5">
                       <div>
                         <span className="text-gray-400">
                           {t("training.startDate")}:
@@ -736,7 +736,7 @@ export function TrainingPage() {
                     </div>
 
                     {training.certificate && (
-                      <div className="text-xs text-gray-600 flex items-center gap-1.5 mb-2">
+                      <div className="text-sm text-gray-600 flex items-center gap-1.5 mb-2">
                         <Award size={14} className="text-amber-500" />
                         <span className="text-gray-400">
                           {t("training.certificate")}:
@@ -749,7 +749,7 @@ export function TrainingPage() {
 
                     {attachments.length > 0 && (
                       <div className="pt-2 border-t border-gray-100 space-y-1.5">
-                        <p className="text-[11px] text-gray-400">
+                        <p className="text-sm text-gray-400">
                           {t("training.attachments")}:
                         </p>
                         {attachments.map((att: any, index: number) => (
@@ -759,7 +759,7 @@ export function TrainingPage() {
                             download={att.name}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 rounded-lg p-2 text-xs text-gray-700"
+                            className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 rounded-lg p-2 text-sm text-gray-700"
                           >
                             <FileText
                               size={14}
@@ -799,12 +799,12 @@ export function TrainingPage() {
                   <h2 className="text-lg font-bold leading-tight">
                     {tr(selectedModule.title, i18n.language)}
                   </h2>
-                  <p className="text-xs text-white/80 mt-0.5">
+                  <p className="text-sm text-white/80 mt-0.5">
                     {tr(selectedModule.subtitle, i18n.language)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-white/90 pt-1">
+              <div className="flex items-center gap-3 text-sm text-white/90 pt-1">
                 <span>
                   ⏱️ {selectedModule.minutes} {t("training.minutes", "分钟")}
                 </span>
@@ -832,10 +832,10 @@ export function TrainingPage() {
                       className="border border-gray-100 rounded-2xl p-4 bg-gray-50/50 space-y-3"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center">
                           {secIdx + 1}
                         </span>
-                        <h4 className="font-bold text-gray-900 text-sm">
+                        <h4 className="font-bold text-gray-900 text-base">
                           {tr(sec.title, i18n.language)}
                         </h4>
                       </div>
@@ -847,7 +847,7 @@ export function TrainingPage() {
                       {sec.videoId && (
                         <TrainingVideo id={sec.videoId} token={token} />
                       )}
-                      <ul className="space-y-2 text-xs text-gray-700">
+                      <ul className="space-y-2 text-sm text-gray-700">
                         {sec.points.map((pt, ptIdx) => (
                           <li
                             key={ptIdx}
@@ -865,7 +865,7 @@ export function TrainingPage() {
                       />
                       {/* Key Tip */}
                       {sec.tip && (
-                        <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">
+                        <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex items-start gap-2 text-sm text-amber-800">
                           <Lightbulb
                             size={16}
                             className="text-amber-500 shrink-0 mt-0.5"
@@ -881,7 +881,7 @@ export function TrainingPage() {
 
                       {/* Warning */}
                       {sec.warning && (
-                        <div className="bg-red-50 border border-red-200/60 rounded-xl p-3 flex items-start gap-2 text-xs text-red-800">
+                        <div className="bg-red-50 border border-red-200/60 rounded-xl p-3 flex items-start gap-2 text-sm text-red-800">
                           <AlertTriangle
                             size={16}
                             className="text-red-500 shrink-0 mt-0.5"
@@ -906,17 +906,17 @@ export function TrainingPage() {
                 <div className="space-y-4">
                   <div className="bg-primary/10 rounded-2xl p-3.5 flex items-center justify-between">
                     <div>
-                      <h4 className="font-bold text-primary text-sm flex items-center gap-1.5">
+                      <h4 className="font-bold text-primary text-base flex items-center gap-1.5">
                         <Sparkles size={16} />
                         {t("training.takeQuiz", "随堂测验考核")}
                       </h4>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="text-sm text-gray-500 mt-0.5">
                         答对 70% 以上即可通过并记录学习档案
                       </p>
                     </div>
                     {quizSubmitted && quizScore !== null && (
                       <span
-                        className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        className={`px-2.5 py-1 rounded-full text-sm font-bold ${
                           quizScore >= 70
                             ? "bg-green-100 text-green-700"
                             : "bg-red-100 text-red-700"
@@ -934,7 +934,7 @@ export function TrainingPage() {
                         key={qIdx}
                         className="bg-gray-50 border border-gray-100 rounded-2xl p-4 space-y-3"
                       >
-                        <p className="font-bold text-gray-900 text-xs flex items-start gap-1.5">
+                        <p className="font-bold text-gray-900 text-sm flex items-start gap-1.5">
                           <span className="text-primary">{qIdx + 1}.</span>
                           <span>{tr(qItem.q, i18n.language)}</span>
                         </p>
@@ -971,10 +971,10 @@ export function TrainingPage() {
                                     [qIdx]: optIdx,
                                   }))
                                 }
-                                className={`w-full p-2.5 text-left rounded-xl border text-xs flex items-center gap-2 transition-all ${optionClass}`}
+                                className={`w-full p-2.5 text-left rounded-xl border text-sm flex items-center gap-2 transition-all ${optionClass}`}
                               >
                                 <span
-                                  className={`w-4 h-4 rounded-full border text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                                  className={`w-4 h-4 rounded-full border text-sm font-bold flex items-center justify-center shrink-0 ${
                                     isSelected
                                       ? "border-primary bg-primary text-white"
                                       : "border-gray-300"
@@ -1001,7 +1001,7 @@ export function TrainingPage() {
                           : "bg-red-50 border-red-200 text-red-800"
                       }`}
                     >
-                      <p className="font-bold text-sm">
+                      <p className="font-bold text-base">
                         {quizScore >= 70
                           ? t("training.examPassed", "恭喜考核通过！")
                           : t(
@@ -1009,7 +1009,7 @@ export function TrainingPage() {
                               "未达到合格线，请温习后再测！",
                             )}
                       </p>
-                      <p className="text-xs mt-1 text-gray-600">
+                      <p className="text-sm mt-1 text-gray-600">
                         {t("training.scoreLabel", "得分")}: {quizScore}分
                       </p>
                     </div>
@@ -1024,14 +1024,14 @@ export function TrainingPage() {
                 <>
                   <button
                     onClick={() => setSelectedModule(null)}
-                    className="flex-1 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors"
+                    className="flex-1 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-100 transition-colors"
                   >
                     {t("training.close", "关闭")}
                   </button>
                   {selectedModule.quiz.length > 0 && (
                     <button
                       onClick={() => setShowQuiz(true)}
-                      className="flex-1 py-3 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-hover flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                      className="flex-1 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-hover flex items-center justify-center gap-1.5 transition-colors shadow-xs"
                     >
                       <Play size={14} />
                       {t("training.takeQuiz", "开始随堂测验")}
@@ -1049,7 +1049,7 @@ export function TrainingPage() {
                     <>
                       <button
                         onClick={() => setShowQuiz(false)}
-                        className="py-3 px-4 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-colors"
+                        className="py-3 px-4 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-100 transition-colors"
                       >
                         {t("training.viewSop", "查看 SOP")}
                       </button>
@@ -1060,7 +1060,7 @@ export function TrainingPage() {
                           Object.keys(selectedAnswers).length <
                             selectedModule.quiz.length
                         }
-                        className="flex-1 py-3 bg-primary disabled:opacity-50 text-white rounded-xl text-xs font-bold hover:bg-primary-hover transition-colors shadow-xs"
+                        className="flex-1 py-3 bg-primary disabled:opacity-50 text-white rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors shadow-xs"
                       >
                         {t("common.submit", "提交答案")}
                       </button>
@@ -1073,14 +1073,14 @@ export function TrainingPage() {
                           setQuizSubmitted(false);
                           setQuizScore(null);
                         }}
-                        className="flex-1 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 flex items-center justify-center gap-1 transition-colors"
+                        className="flex-1 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-100 flex items-center justify-center gap-1 transition-colors"
                       >
                         <RotateCcw size={14} />
                         {t("training.retake", "重新测验")}
                       </button>
                       <button
                         onClick={() => setSelectedModule(null)}
-                        className="flex-1 py-3 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-hover transition-colors shadow-xs"
+                        className="flex-1 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors shadow-xs"
                       >
                         {t("training.close", "完成并关闭")}
                       </button>

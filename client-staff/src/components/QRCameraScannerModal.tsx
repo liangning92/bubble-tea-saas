@@ -258,7 +258,7 @@ export function QRCameraScannerModal({
             <h2 className="font-bold text-base leading-tight">
               {t('attendance.scanQR', '扫码打卡')}
             </h2>
-            <p className="text-xs text-white/70">
+            <p className="text-sm text-white/70">
               {t('attendance.scanQRDesc', '对准收银机屏幕上的动态考勤码')}
             </p>
           </div>
@@ -280,7 +280,7 @@ export function QRCameraScannerModal({
           <button
             type="button"
             onClick={() => {setScanError('');setHasScanned(false);setMode('check_in')}}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_in'
                 ? 'bg-emerald-500 text-white shadow-md'
                 : 'text-white/80 hover:text-white'
@@ -292,7 +292,7 @@ export function QRCameraScannerModal({
           <button
             type="button"
             onClick={() => {setScanError('');setHasScanned(false);setMode('check_out')}}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_out'
                 ? 'bg-amber-500 text-white shadow-md'
                 : 'text-white/80 hover:text-white'
@@ -311,17 +311,17 @@ export function QRCameraScannerModal({
             {cameraError ? (
               <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 text-center text-white max-w-xs">
                 <AlertCircle size={40} className="mx-auto text-amber-400 mb-3" />
-                <p className="text-sm font-medium mb-4">{cameraError}</p>
+                <p className="text-base font-medium mb-4">{cameraError}</p>
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="py-2.5 px-4 bg-primary text-white rounded-xl text-xs font-bold active:scale-95 transition-transform"
+                    className="py-2.5 px-4 bg-primary text-white rounded-xl text-sm font-bold active:scale-95 transition-transform"
                   >
                     {t('attendance.uploadPhoto', '拍照 / 上传识别')}
                   </button>
                   <button
                     onClick={() => setActiveTab('manual')}
-                    className="py-2.5 px-4 bg-white/20 text-white rounded-xl text-xs font-medium active:scale-95 transition-transform"
+                    className="py-2.5 px-4 bg-white/20 text-white rounded-xl text-sm font-medium active:scale-95 transition-transform"
                   >
                     {t('attendance.manualInput', '手动输入考勤码')}
                   </button>
@@ -357,15 +357,15 @@ export function QRCameraScannerModal({
                 {/* 识别成功/加载提示遮罩 */}
                 {(hasScanned || isLoading) && (
                   <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center text-white">
-                    {scanError ? <><AlertCircle size={40} className="text-red-400 mb-2" /><p className="text-xs font-bold">{scanError}</p></> : isLoading ? (
+                    {scanError ? <><AlertCircle size={40} className="text-red-400 mb-2" /><p className="text-sm font-bold">{scanError}</p></> : isLoading ? (
                       <>
                         <Loader2 size={36} className="text-primary animate-spin mb-2" />
-                        <p className="text-xs font-bold">{t('common.loading', '正在登记考勤...')}</p>
+                        <p className="text-sm font-bold">{t('common.loading', '正在登记考勤...')}</p>
                       </>
                     ) : (
                       <>
                         <CheckCircle size={40} className="text-emerald-400 mb-2" />
-                        <p className="text-xs font-bold">{t('attendance.scanSuccess', '识别成功！')}</p>
+                        <p className="text-sm font-bold">{t('attendance.scanSuccess', '识别成功！')}</p>
                       </>
                     )}
                   </div>
@@ -373,17 +373,17 @@ export function QRCameraScannerModal({
               </div>
             )}
 
-            <p className="text-white/80 text-xs text-center mt-4 max-w-xs">
+            <p className="text-white/80 text-sm text-center mt-4 max-w-xs">
               {t('attendance.alignQrCode', '将收银机动态二维码置于取景框内即可自动识别')}
             </p>
           </div>
         ) : (
           /* 手动输入备用标签页 */
           <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-2xl">
-            <h3 className="font-bold text-gray-900 text-sm mb-1">
+            <h3 className="font-bold text-gray-900 text-base mb-1">
               {t('attendance.manualInput', '手动输入')}
             </h3>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-sm text-gray-500 mb-3">
               {t('attendance.qrInputPlaceholder', '粘贴或输入POS屏幕上的动态考勤码...')}
             </p>
             <textarea
@@ -391,13 +391,13 @@ export function QRCameraScannerModal({
               onChange={e => setManualCode(e.target.value)}
               placeholder="eyJzIjoiY21vbWUiLCJwIjoicG9zLTAxIiwidCI..."
               rows={4}
-              className="w-full p-3 text-xs border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent font-mono resize-none text-gray-800"
+              className="w-full p-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent font-mono resize-none text-gray-800"
             />
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('camera')}
-                className="py-2.5 px-4 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium"
+                className="py-2.5 px-4 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium"
               >
                 {t('common.back', '返回相机')}
               </button>
@@ -405,7 +405,7 @@ export function QRCameraScannerModal({
                 type="button"
                 disabled={isLoading || !manualCode.trim()}
                 onClick={() => handleDecodedString(manualCode.trim())}
-                className="flex-1 py-2.5 bg-primary disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
+                className="flex-1 py-2.5 bg-primary disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 shadow-xs"
               >
                 {isLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                 {t('attendance.qrSubmit', '立即验证打卡')}
@@ -435,7 +435,7 @@ export function QRCameraScannerModal({
           <div className="w-11 h-11 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center">
             <ImageIcon size={20} />
           </div>
-          <span className="text-[11px] font-medium">{t('attendance.uploadPhoto', '相册/拍照')}</span>
+          <span className="text-sm font-medium">{t('attendance.uploadPhoto', '相册/拍照')}</span>
         </button>
 
         {/* 翻转前后摄像头 */}
@@ -449,7 +449,7 @@ export function QRCameraScannerModal({
             <div className="w-11 h-11 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center">
               <RotateCw size={20} />
             </div>
-            <span className="text-[11px] font-medium">{t('attendance.switchCamera', '翻转镜头')}</span>
+            <span className="text-sm font-medium">{t('attendance.switchCamera', '翻转镜头')}</span>
           </button>
         )}
 
@@ -461,7 +461,7 @@ export function QRCameraScannerModal({
           <div className="w-11 h-11 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center">
             {activeTab === 'camera' ? <Keyboard size={20} /> : <Camera size={20} />}
           </div>
-          <span className="text-[11px] font-medium">
+          <span className="text-sm font-medium">
             {activeTab === 'camera' ? t('attendance.manualInput', '手动输入') : t('attendance.scanCamera', '相机扫码')}
           </span>
         </button>

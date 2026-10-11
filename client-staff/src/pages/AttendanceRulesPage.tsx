@@ -63,7 +63,7 @@ export function AttendanceRulesPage() {
       {/* Header */}
       <div className="bg-primary text-white px-4 py-6 rounded-b-3xl">
         <h1 className="text-xl font-bold">{t('attendanceRules.title')}</h1>
-        <p className="text-white/80 text-sm mt-1">
+        <p className="text-white/80 text-base mt-1">
           {t('attendanceRules.description')}
         </p>
       </div>

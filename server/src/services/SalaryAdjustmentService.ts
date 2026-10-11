@@ -1,9 +1,10 @@
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes } from 'crypto'
 import { Prisma } from '@prisma/client'
 import prisma from '../config/database'
 
+export const voucherEncouragement='Terima kasih atas kerja kerasmu! Nikmati hadiah ini atau bagikan kepada orang tersayang.'
 export class SalaryAdjustmentError extends Error {}
-export interface SalaryAdjustment {id:string;staffId:string;month:string;type:'reward'|'penalty';amount:number;reason:string;status:'active'|'cancelled';createdBy:string;createdAt:string;cancelledBy?:string;cancelledAt?:string}
+export interface SalaryAdjustment {id:string;staffId:string;month:string;type:'reward'|'penalty';amount:number;reason:string;status:'active'|'cancelled';createdBy:string;createdAt:string;cancelledBy?:string;cancelledAt?:string;rewardMethod?:'cash'|'voucher';validDays?:number;encouragement?:string;couponId?:string;voucherCode?:string;validUntil?:string}
 type DB=Prisma.TransactionClient
 export async function periodLock(db: DB, storeId: string, staffId: string, month: string) {
   const key=`salary.period.${staffId}.${month}`
@@ -13,8 +14,12 @@ export async function listSalaryAdjustments(storeId:string,db:DB=prisma):Promise
   const rows=await db.config.findMany({where:{storeId,key:{startsWith:'staff.compensation.'}},orderBy:{createdAt:'desc'}})
   return rows.map(row=>JSON.parse(row.value))
 }
+export async function voucherStatuses(storeId:string,items:SalaryAdjustment[],db:DB=prisma) {
+  const coupons=await db.coupon.findMany({where:{storeId,id:{in:items.flatMap(i=>i.couponId?[i.couponId]:[])}}})
+  return items.map(i=>{const c=coupons.find(c=>c.id===i.couponId);return c?{...i,voucherStatus:c.status==='cancelled'?'cancelled':c.usedCount>0?'used':c.validUntil<=new Date()?'expired':'active'}:i})
+}
 export async function adjustmentPlan(storeId:string,staffId:string,month:string,db:DB=prisma) {
-  const items=(await listSalaryAdjustments(storeId,db)).filter(i=>i.staffId===staffId&&i.month===month&&i.status==='active')
+  const items=(await listSalaryAdjustments(storeId,db)).filter(i=>i.staffId===staffId&&i.month===month&&i.status==='active'&&i.rewardMethod!=='voucher')
   return {items,rewards:items.filter(i=>i.type==='reward').reduce((s,i)=>s+i.amount,0),penalties:items.filter(i=>i.type==='penalty').reduce((s,i)=>s+i.amount,0)}
 }
 export async function savedAdjustmentPlan(storeId:string,salaryId:string,db:DB=prisma) {
@@ -33,7 +38,7 @@ export async function normalizeAdjustments(db:DB,storeId:string,staffId:string,m
   if(included&&(bonus<plan.rewards||deduction<plan.penalties))throw new SalaryAdjustmentError('Salary cannot omit recorded rewards or penalties')
   return {plan,bonus:bonus+(included?0:plan.rewards),deduction:deduction+(included?0:plan.penalties)}
 }
-export async function changeSalaryAdjustment(actor:{id:string;storeId:string},input:{staffId:string;month:string;type:'reward'|'penalty';amount:number;reason:string;requestId:string}|{cancelId:string}) {
+export async function changeSalaryAdjustment(actor:{id:string;storeId:string},input:{staffId:string;month:string;type:'reward'|'penalty';amount:number;reason:string;requestId:string;rewardMethod?:'cash'|'voucher';validDays?:number;encouragement?:string}|{cancelId:string}) {
   return prisma.$transaction(async db=>{
     let existing:SalaryAdjustment|undefined
     if('cancelId' in input){const row=await db.config.findUnique({where:{storeId_key:{storeId:actor.storeId,key:`staff.compensation.${input.cancelId}`}}});if(!row)throw new SalaryAdjustmentError('ADJUSTMENT_NOT_FOUND');existing=JSON.parse(row.value)}
@@ -42,22 +47,29 @@ export async function changeSalaryAdjustment(actor:{id:string;storeId:string},in
     const staff=await db.staff.findUnique({where:{id:staffId},select:{storeId:true}})
     if(!staff||staff.storeId!==actor.storeId)throw new SalaryAdjustmentError('STAFF_STORE_MISMATCH')
     await periodLock(db,actor.storeId,staffId,month)
+    if('cancelId' in input){const current=await db.config.findUnique({where:{storeId_key:{storeId:actor.storeId,key:`staff.compensation.${input.cancelId}`}}});existing=current?JSON.parse(current.value):existing}
     if ('staffId' in input) {
       const replay=await db.config.findUnique({where:{storeId_key:{storeId:actor.storeId,key:`staff.compensation.${input.requestId}`}}})
-      if(replay){const row=JSON.parse(replay.value);if(JSON.stringify([row.staffId,row.month,row.type,row.amount,row.reason,row.createdBy])!==JSON.stringify([input.staffId,input.month,input.type,input.amount,input.reason,actor.id]))throw new SalaryAdjustmentError('REQUEST_ID_CONFLICT');return row}
+      if(replay){const row=JSON.parse(replay.value);if(JSON.stringify([row.staffId,row.month,row.type,row.amount,row.reason,row.createdBy,row.rewardMethod||'cash',row.validDays||30,row.encouragement||''])!==JSON.stringify([input.staffId,input.month,input.type,input.amount,input.reason,actor.id,input.rewardMethod||'cash',input.validDays||30,(input.rewardMethod==='voucher'?input.encouragement?.trim()||voucherEncouragement:'')]))throw new SalaryAdjustmentError('REQUEST_ID_CONFLICT');return row}
     }
     const salary=await db.salary.findFirst({where:{staffId,month}})
     if(existing?.status==='cancelled')return existing
-    if(salary?.status==='paid')throw new SalaryAdjustmentError('Paid payroll cannot be changed')
+    const voucher=existing?.rewardMethod==='voucher'||('staffId' in input&&input.type==='reward'&&input.rewardMethod==='voucher')
+    if(!voucher&&salary?.status==='paid')throw new SalaryAdjustmentError('Paid payroll cannot be changed')
     let item:SalaryAdjustment
-    if(existing){item={...existing,status:'cancelled',cancelledBy:actor.id,cancelledAt:new Date().toISOString()}}
+    if(existing){if(voucher){const cancelled=await db.coupon.updateMany({where:{id:existing.couponId,storeId:actor.storeId,status:'active',usedCount:0},data:{status:'cancelled'}});if(cancelled.count!==1)throw new SalaryAdjustmentError('VOUCHER_ALREADY_USED_OR_CANCELLED')}item={...existing,status:'cancelled',cancelledBy:actor.id,cancelledAt:new Date().toISOString()}}
     else {
       const data=input as Extract<typeof input,{staffId:string}>
       item={id:data.requestId||randomUUID(),staffId,month,type:data.type,amount:data.amount,reason:data.reason,status:'active',createdBy:actor.id,createdAt:new Date().toISOString()}
+      if(voucher){
+        const validDays=data.validDays||30, validFrom=new Date(),validUntil=new Date(validFrom.getTime()+validDays*86400000)
+        const coupon=await db.coupon.create({data:{storeId:actor.storeId,code:'YOUME-'+randomBytes(9).toString('hex').toUpperCase(),type:'discount_fixed',value:data.amount,minOrder:0,maxDiscount:data.amount,validFrom,validUntil,usageLimit:1,status:'active'}})
+        item={...item,rewardMethod:'voucher',validDays,encouragement:data.encouragement?.trim()||voucherEncouragement,couponId:coupon.id,voucherCode:coupon.code,validUntil:validUntil.toISOString()}
+      }
     }
     const key=`staff.compensation.${item.id}`
     await db.config.upsert({where:{storeId_key:{storeId:actor.storeId,key}},create:{storeId:actor.storeId,key,category:'staff',value:JSON.stringify(item)},update:{value:JSON.stringify(item)}})
-    if(salary){
+    if(salary&&!voucher){
       const old=await savedAdjustmentPlan(actor.storeId,salary.id,db),next=await adjustmentPlan(actor.storeId,staffId,month,db)
       const bonus=salary.bonus-old.rewards+next.rewards,deduction=salary.deduction-old.penalties+next.penalties
       const finalAmount=salary.baseSalary+salary.overtime+salary.commission+bonus-deduction

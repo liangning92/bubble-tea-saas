@@ -46,7 +46,7 @@ export function TrainingLibrary({ token, recordsPath, embedded = false }: { toke
       {!assessment.reviewed && <p role="alert" className="p-3 bg-amber-100">{w.draft}</p>}
       <h2 className="text-xl font-bold">{text(assessment.title)}</h2>
       {assessment.instructions.map((line,i) => <p key={i}>{text(line)}</p>)}
-      <div className="overflow-x-auto"><table className="w-full border-collapse text-sm"><thead><tr>{w.columns.map(c=><th key={c} className="border p-2">{c}</th>)}</tr></thead><tbody>{assessment.rows.map(row=><tr key={row.key}>{[row.station,row.scenario,row.action,row.evidence,row.result,row.critical].map((cell,i)=><td key={i} className="border p-2 align-top min-w-40">{text(cell)}</td>)}</tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full border-collapse text-base"><thead><tr>{w.columns.map(c=><th key={c} className="border p-2">{c}</th>)}</tr></thead><tbody>{assessment.rows.map(row=><tr key={row.key}>{[row.station,row.scenario,row.action,row.evidence,row.result,row.critical].map((cell,i)=><td key={i} className="border p-2 align-top min-w-40">{text(cell)}</td>)}</tr>)}</tbody></table></div>
       <h3 className="font-bold">{w.standards}</h3><ul className="list-disc pl-5">{standards.map((line,i)=><li key={i}>{text(line)}</li>)}</ul>
     </article> : module ? <article className="space-y-5">
       <button className="underline text-blue-700" onClick={() => setSelected(null)}>{w.modules}</button>

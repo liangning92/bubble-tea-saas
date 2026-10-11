@@ -144,13 +144,15 @@ export async function quoteActivities(storeId:string,input:QuoteInput,db:any=pri
  const context:ActivityContext={now,channel:channel?.code||input.channel||'DINE_IN',paymentMethod:input.paymentMethod,member:member?{id:member.id,level:member.level,birthday:member.birthday?.toISOString(),firstOrder}:undefined,groupActivityIds:group?[group.activityId]:[],unavailableIds}
  const extras:PriceCandidate[]=[];let coupon:any=null
  const subtotal=items.reduce((s,i)=>s+i.quantity*(i.unitPrice+(i.addons||[]).reduce((x,a)=>x+a.price*(a.qty||1),0)),0)
- if(input.couponId){coupon=await db.memberCoupon.findFirst({where:{id:input.couponId,memberId:member?.id||'__none__',status:'unused'},include:{coupon:true}})
+ if(input.couponId){
+ if(input.couponId.startsWith('virtual-')){const c=await db.coupon.findFirst({where:{id:input.couponId.slice(8),storeId}});coupon=c?{id:input.couponId,coupon:c}:null}
+ else coupon=await db.memberCoupon.findFirst({where:{id:input.couponId,memberId:member?.id||'__none__',status:'unused'},include:{coupon:true}})
  const c=coupon?.coupon
  if(!c||c.storeId!==storeId||c.status!=='active'||c.validFrom>now||c.validUntil<=now||(c.usageLimit&&c.usedCount>=c.usageLimit)||subtotal<c.minOrder)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
  const basicTotal=items.reduce((sum,i)=>sum+i.unitPrice*i.quantity,0)
  let discount=c.type==='discount_fixed'?c.value:c.type==='discount_percent'?Math.round(basicTotal*c.value/100):0
  if(c.type==='free_product'){const cheapest=items.length?Math.min(...items.map(i=>i.unitPrice)):0;discount=Math.min(cheapest,c.value>0?c.value:cheapest)}
- extras.push({id:coupon.id,version:0,name:c.code,discount:Math.min(basicTotal,discount,c.maxDiscount||Infinity),priority:0,kind:'coupon'})
+ extras.push({id:coupon.id,version:0,name:c.code,discount:Math.min(c.type==='discount_fixed'?subtotal:basicTotal,discount,c.maxDiscount||Infinity),priority:0,kind:'coupon'})
  }
  const redeemed=Math.min(input.pointsRequested||0,member?.points||0,subtotal*100)
  if(redeemed>=100)extras.push({id:'points',version:0,name:'Points',discount:Math.floor(redeemed/100),priority:0,kind:'points',pointsRedeemed:Math.floor(redeemed/100)*100})
@@ -200,11 +202,16 @@ export async function enqueueActivityGrants(tx:any,order:any,quote:Awaited<Retur
  if(quote.applied?.kind==='activity')selectedIds.add(quote.applied.id)
  quote.entitlements.forEach(p=>selectedIds.add(p.activity.id))
  for(const id of [...selectedIds].sort()){const a=quote.entitlements.find(p=>p.activity.id===id)?.activity||(await listActivities(order.storeId,tx)).find(a=>a.id===id);if(a){if((quote as any).offline){if(quote.applied?.id===id&&!quote.entitlements.some(p=>p.activity.id===id))continue;try{await reserveActivity(tx,order.storeId,a,quote.context.now)}catch(error:any){if(error.message!=='ACTIVITY_PRICE_CHANGED')throw error;quote.entitlements=quote.entitlements.filter(p=>p.activity.id!==id)}}else await reserveActivity(tx,order.storeId,a)}}
- if(quote.couponId){const memberCoupon=await tx.memberCoupon.findUnique({where:{id:quote.couponId},include:{coupon:true}})
- const c=memberCoupon?.coupon;if(!c)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
- const changed=await tx.memberCoupon.updateMany({where:{id:quote.couponId,memberId:order.memberId,status:'unused'},data:{status:'used',usedAt:new Date(),orderId:order.id}});if(changed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
- const claimed=await tx.coupon.updateMany({where:{id:c.id,status:'active',...(c.usageLimit?{usedCount:{lt:c.usageLimit}}:{})},data:{usedCount:{increment:1}}});if(claimed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
+ if(quote.couponId){
+ const bearer=quote.couponId.startsWith('virtual-')
+ const memberCoupon=bearer?null:await tx.memberCoupon.findUnique({where:{id:quote.couponId},include:{coupon:true}})
+ const c=bearer?await tx.coupon.findFirst({where:{id:quote.couponId.slice(8),storeId:order.storeId}}):memberCoupon?.coupon
+ if(!c||c.storeId!==order.storeId)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
+ if(!bearer){const changed=await tx.memberCoupon.updateMany({where:{id:quote.couponId,memberId:order.memberId,status:'unused'},data:{status:'used',usedAt:new Date(),orderId:order.id}});if(changed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')}
+ const now=new Date()
+ const claimed=await tx.coupon.updateMany({where:{id:c.id,storeId:order.storeId,status:'active',validFrom:{lte:now},validUntil:{gt:now},...(c.usageLimit?{usedCount:{lt:c.usageLimit}}:{})},data:{usedCount:{increment:1}}});if(claimed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
  }
+
  if(quote.groupId){const row=await tx.config.findUnique({where:{storeId_key:{storeId:order.storeId,key:ACTIVITY_PREFIX+'group.'+quote.groupId}}});if(!row)throw Error('ACTIVITY_GROUP_NOT_FORMED');const g=decode<any>(row.value);if(g.status!=='formed')throw Error('ACTIVITY_GROUP_ALREADY_PAID');await casRecord(tx,row,{...g,status:'paid',orderId:order.id})}
  const grants:any[]=[]
  for(const plan of quote.entitlements){const a=plan.activity;const id=`${order.id}.${a.id}`
@@ -295,7 +302,7 @@ export async function fulfilActivityGrant(storeId:string,id:string){
  })
 }
 export async function reverseActivityGrants(tx:any,storeId:string,orderId:string,remainingPaid:number,remainingItems:QuoteItem[]=[]){
- if(remainingPaid===0){const quoteRow=await tx.config.findUnique({where:{storeId_key:{storeId,key:ACTIVITY_PREFIX+'order.'+orderId}}});if(quoteRow){const quote=decode<any>(quoteRow.value);if(quote.couponId&&!quote.couponRestored){const coupon=await tx.memberCoupon.findFirst({where:{id:quote.couponId,orderId},include:{coupon:true}});if(coupon&&coupon.coupon.storeId===storeId){await tx.coupon.updateMany({where:{id:coupon.couponId,usedCount:{gt:0}},data:{usedCount:{decrement:1}}});await tx.memberCoupon.update({where:{id:coupon.id},data:{status:'unused',usedAt:null,orderId:null}})}await casRecord(tx,quoteRow,{...quote,couponRestored:true})}}}
+ if(remainingPaid===0){const quoteRow=await tx.config.findUnique({where:{storeId_key:{storeId,key:ACTIVITY_PREFIX+'order.'+orderId}}});if(quoteRow){const quote=decode<any>(quoteRow.value);if(quote.couponId&&!quote.couponRestored){if(quote.couponId.startsWith('virtual-')){await tx.coupon.updateMany({where:{id:quote.couponId.slice(8),storeId,usedCount:{gt:0}},data:{usedCount:{decrement:1}}})}else {const coupon=await tx.memberCoupon.findFirst({where:{id:quote.couponId,orderId},include:{coupon:true}});if(coupon&&coupon.coupon.storeId===storeId){await tx.coupon.updateMany({where:{id:coupon.couponId,usedCount:{gt:0}},data:{usedCount:{decrement:1}}});await tx.memberCoupon.update({where:{id:coupon.id},data:{status:'unused',usedAt:null,orderId:null}})}}await casRecord(tx,quoteRow,{...quote,couponRestored:true})}}}
  const grants=await records<any>(tx,storeId,'grant.'+orderId+'.')
  for(const g of grants){if(['revoked','cancelled','manual_review'].includes(g.status))continue
  const a:Activity=g.plan.activity,minimum=a.rule.minAmount||0

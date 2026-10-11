@@ -227,7 +227,8 @@ router.delete('/coupons/:id', authenticate, authorize('admin'), async (req: Auth
 router.post('/coupons/verify', authenticate, async (req: AuthRequest, res) => {
   try {
     const { code, memberId } = req.body
-    if (!code) {
+    if(!req.user?.storeId)return res.status(400).json({code:400,message:'Store context is required'})
+    if (typeof code!=='string'||!code.trim()||code.length>128) {
       return res.status(400).json({ code: 400, message: 'Coupon code is required' })
     }
 
@@ -235,8 +236,8 @@ router.post('/coupons/verify', authenticate, async (req: AuthRequest, res) => {
     const now = new Date()
 
     // 1. 查询优惠券母券
-    const coupon = await prisma.coupon.findUnique({
-      where: { code: trimmedCode }
+    const coupon = await prisma.coupon.findFirst({
+      where: { code: trimmedCode, storeId: req.user!.storeId }
     })
 
     if (!coupon) {
@@ -247,7 +248,7 @@ router.post('/coupons/verify', authenticate, async (req: AuthRequest, res) => {
       return res.status(400).json({ code: 400, message: 'Coupon is not active' })
     }
 
-    if (new Date(coupon.validFrom) > now || new Date(coupon.validUntil) < now) {
+    if (new Date(coupon.validFrom) > now || new Date(coupon.validUntil) <= now) {
       return res.status(400).json({ code: 400, message: 'Coupon is expired or not yet valid' })
     }
 
@@ -258,6 +259,8 @@ router.post('/coupons/verify', authenticate, async (req: AuthRequest, res) => {
     // 2. 如果关联了 memberId，查询或准备 memberCoupon 记录
     let memberCoupon = null
     if (memberId) {
+      const member=await prisma.member.findFirst({where:{id:memberId,storeId:req.user!.storeId}})
+      if(!member)return res.status(400).json({code:400,message:'Member not found'})
       memberCoupon = await prisma.memberCoupon.findFirst({
         where: {
           memberId,
@@ -270,17 +273,7 @@ router.post('/coupons/verify', authenticate, async (req: AuthRequest, res) => {
         return res.status(400).json({ code: 400, message: 'Member already used this coupon' })
       }
 
-      // 如果会员名下尚未领过该全局券，自动为该会员发券以便核销
-      if (!memberCoupon) {
-        memberCoupon = await prisma.memberCoupon.create({
-          data: {
-            memberId,
-            couponId: coupon.id,
-            status: 'unused'
-          },
-          include: { coupon: true }
-        })
-      }
+
     }
 
     res.json({

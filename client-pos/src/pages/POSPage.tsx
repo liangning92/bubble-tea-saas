@@ -2844,7 +2844,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         setShowCouponModal(false)
         setCouponCodeInput('')
         playSoundWithSettings('keypress', soundSettings.keypress)
-        showToast(`已应用优惠券: ${coupon.code}`, 'success')
+        showToast(`${t('voucher.applied')}: ${coupon.code}`, 'success')
       } else {
         showToast(t('pos.invalidCouponCode', '无效或不可用的优惠券码'), 'error')
       }
@@ -2896,7 +2896,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
 
-    if(activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
+    if(isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
     const checkoutStarted=performance.now()
     const checkoutTiming=(phase:string)=>console.info(`[CHECKOUT-TIMING] ${phase}_ms=${Math.round(performance.now()-checkoutStarted)}`)
     const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>cachedActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
@@ -4067,6 +4067,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
+                  <section className="rounded-xl border border-gray-200 p-3 space-y-2">
+                    <label htmlFor="payment-voucher-code" className="block text-sm font-semibold">{t('voucher.code')}</label>
+                    {selectedCoupon?<div className="flex items-center justify-between gap-2"><span>{selectedCoupon.coupon?.code} · {t('voucher.applied')}</span><button type="button" disabled={isCheckingOut} onClick={()=>setSelectedCoupon(null)} className="text-primary">{t('voucher.remove')}</button></div>:<div className="flex gap-2"><input id="payment-voucher-code" value={couponCodeInput} disabled={isVerifyingCoupon||isCheckingOut} onChange={e=>setCouponCodeInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(!isVerifyingCoupon&&couponCodeInput.trim())void verifyCouponByCode()}}} placeholder={t('voucher.placeholder')} className="min-w-0 flex-1 border rounded-lg px-3 py-2 uppercase"/><button type="button" disabled={isVerifyingCoupon||isCheckingOut||!couponCodeInput.trim()} onClick={()=>void verifyCouponByCode()} className="bg-primary text-white rounded-lg px-3 disabled:opacity-50">{isVerifyingCoupon?t('common.loading'):t('voucher.apply')}</button></div>}
+                    <p className="text-xs text-gray-500">{t('voucher.rules')}</p>
+                  </section>
+
                   {/* 支付方式网格 */}
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -4230,7 +4236,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   disabled={
                     isCheckingOut || !recovery || recovery.blocked || recovery.confirmed.length > 0 ||
                     Boolean(paymentIssue) ||
-                    activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length ||
+                    isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length ||
                     (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total))
                   }
                   className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"

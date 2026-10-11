@@ -120,19 +120,19 @@ export function ProfilePage() {
           <h3 className="font-bold text-gray-900 mb-4">{t("profile.title")}</h3>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-500">
+              <label className="text-base text-gray-500">
                 {t("profile.name")}
               </label>
               <p className="font-medium text-gray-900">{user?.name || "-"}</p>
             </div>
             <div>
-              <label className="text-sm text-gray-500">
+              <label className="text-base text-gray-500">
                 {t("profile.phone")}
               </label>
               <p className="font-medium text-gray-900">{user?.phone || "-"}</p>
             </div>
             <div>
-              <label className="text-sm text-gray-500">
+              <label className="text-base text-gray-500">
                 {t("profile.position")}
               </label>
               <p className="font-medium text-gray-900">
@@ -140,7 +140,7 @@ export function ProfilePage() {
               </p>
             </div>
             <div>
-              <label className="text-sm text-gray-500">
+              <label className="text-base text-gray-500">
                 {t("profile.store")}
               </label>
               <p className="font-medium text-gray-900">
@@ -186,7 +186,7 @@ export function ProfilePage() {
               )}
 
               <div>
-                <label className="text-sm text-gray-500">
+                <label className="text-base text-gray-500">
                   {t("profile.oldPassword")}
                 </label>
                 <input
@@ -199,7 +199,7 @@ export function ProfilePage() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-500">
+                <label className="text-base text-gray-500">
                   {t("profile.newPassword")}
                 </label>
                 <input
@@ -212,7 +212,7 @@ export function ProfilePage() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-500">
+                <label className="text-base text-gray-500">
                   {t("profile.confirmNewPassword")}
                 </label>
                 <input

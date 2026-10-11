@@ -38,7 +38,7 @@ export function ModuleLinks({ group }: { group: "attendance" | "profile" }) {
           ["/reimbursement", "home.reimbursement", Receipt],
           ["/profile/documents", "workspace.documents", FolderLock],
           ["/deposit", "home.deposit", Landmark],
-          ["/points", "home.points", Award],
+          ["/points", "voucher.wallet", Award],
         ] as const);
   return (
     <section className={`module-links ${group}`}>

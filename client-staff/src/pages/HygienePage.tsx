@@ -196,13 +196,13 @@ export function HygienePage() {
       <div className="hygiene-summary">
         <div className="bg-white rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-gray-900">{tasks.length}</div>
-          <div className="text-xs text-gray-500">{t("hygiene.totalTasks")}</div>
+          <div className="text-sm text-gray-500">{t("hygiene.totalTasks")}</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-yellow-500">
             {pendingTasks.length}
           </div>
-          <div className="text-xs text-gray-500">{t("hygiene.toDo")}</div>
+          <div className="text-sm text-gray-500">{t("hygiene.toDo")}</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-green-500">
@@ -212,7 +212,7 @@ export function HygienePage() {
               ).length
             }
           </div>
-          <div className="text-xs text-gray-500">{t("hygiene.done")}</div>
+          <div className="text-sm text-gray-500">{t("hygiene.done")}</div>
         </div>
       </div>
 
@@ -255,7 +255,7 @@ export function HygienePage() {
       )}
       {/* Pending Tasks */}
       <div className="px-4">
-        <h2 className="text-sm font-medium text-gray-700 mb-3">
+        <h2 className="text-base font-medium text-gray-700 mb-3">
           {t("hygiene.pending")}
         </h2>
 
@@ -270,12 +270,12 @@ export function HygienePage() {
                 <div className="flex flex-wrap items-start gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
+                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-sm">
                         {t("hygiene.area")}: {task.area || task.areaCode}
                       </span>
-                      <span className="text-sm font-medium">{task.name}</span>
+                      <span className="text-base font-medium">{task.name}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-sm text-gray-500 mt-2">
+                    <div className="flex items-center gap-3 text-base text-gray-500 mt-2">
                       <span className="flex items-center gap-1">
                         <Clock size={14} />
                         {task.time}
@@ -288,14 +288,14 @@ export function HygienePage() {
                       )}
                     </div>
                     {task.template?.standard && (
-                      <div className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                      <div className="mt-2 text-base text-gray-600 bg-gray-50 p-2 rounded">
                         {t("hygiene.standard")}: {task.template.standard}
                       </div>
                     )}
                   </div>
                   {task.status === "in_progress" &&
                     task.template?.photoRequired && (
-                      <label className="text-xs text-gray-600">
+                      <label className="text-sm text-gray-600">
                         {t("hygiene.photoRequired")}
                         <input
                           aria-label={t("hygiene.photoRequired")}
@@ -364,7 +364,7 @@ export function HygienePage() {
       {/* Completed Tasks */}
       {completedTasks.length > 0 && (
         <div className="px-4 mt-6">
-          <h2 className="text-sm font-medium text-gray-700 mb-3">
+          <h2 className="text-base font-medium text-gray-700 mb-3">
             {t("ui.submissions")}
           </h2>
           <div className="space-y-2">
@@ -378,7 +378,7 @@ export function HygienePage() {
                 ) : (
                   <CheckCircle size={18} className="text-green-500 shrink-0" />
                 )}
-                <span className="text-sm text-gray-600">
+                <span className="text-base text-gray-600">
                   {task.area || task.areaCode} - {task.name} ·{" "}
                   {t(`hygiene.state_${task.status}`)}
                 </span>

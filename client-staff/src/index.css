@@ -85,7 +85,7 @@ body {
 /* Staff workspace: one visual language across the daily workflow. */
 :root {
   --staff-ink: #302b31;
-  --staff-muted: #827c83;
+  --staff-muted: #68616a;
   --staff-canvas: #f7f6f4;
   --staff-line: #eee9e7;
   --staff-rose: #c94668;
@@ -150,7 +150,7 @@ a:focus-visible {
   display: flex;
   align-items: center;
   padding: 16px 20px 4px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--staff-rose);
   font-weight: 600;
 }
@@ -197,7 +197,7 @@ a:focus-visible {
   background: #fce9ed;
 }
 .employee-nav-label {
-  font-size: 10px;
+  font-size: 14px;
   line-height: 14px;
   text-align: center;
   overflow-wrap: anywhere;
@@ -228,10 +228,10 @@ a:focus-visible {
   padding-left: 11px;
   border-left: 1px solid #ded6d7;
   color: var(--staff-muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 .home-language {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: #69606b;
   padding: 6px 8px;
@@ -245,7 +245,7 @@ a:focus-visible {
   gap: 12px;
 }
 .home-date {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--staff-muted);
   margin-bottom: 5px;
 }
@@ -259,7 +259,7 @@ a:focus-visible {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 14px;
   margin-top: 6px;
   color: var(--staff-muted);
 }
@@ -294,7 +294,7 @@ a:focus-visible {
   align-items: center;
   gap: 6px;
   color: #87747e;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 .work-status {
@@ -305,7 +305,7 @@ a:focus-visible {
   color: #80737a;
   padding: 5px 9px;
   border-radius: 20px;
-  font-size: 10px;
+  font-size: 14px;
 }
 .work-status i {
   width: 5px;
@@ -345,7 +345,7 @@ a:focus-visible {
   font-weight: 400;
 }
 .home-shift-time small {
-  font-size: 10px;
+  font-size: 14px;
   margin-left: 7px;
   color: #9a8590;
   font-weight: 500;
@@ -379,7 +379,7 @@ a:focus-visible {
 .home-scan-area p {
   text-align: center;
   color: #9b8590;
-  font-size: 10px;
+  font-size: 14px;
   margin-top: 9px;
   line-height: 1.5;
 }
@@ -400,7 +400,7 @@ a:focus-visible {
   align-items: center;
   gap: 5px;
   color: var(--staff-muted);
-  font-size: 10px;
+  font-size: 14px;
   padding: 4px;
 }
 .home-section-title > svg {
@@ -411,7 +411,7 @@ a:focus-visible {
   border-radius: 8px;
   background: #ece8e5;
   color: #8a7c84;
-  font-size: 11px;
+  font-size: 14px;
   padding: 3px 7px;
   text-align: center;
 }
@@ -447,19 +447,19 @@ a:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 .home-metrics strong small {
-  font-size: 9px;
+  font-size: 14px;
   color: #a1969d;
   font-weight: 500;
   margin-left: 4px;
 }
 .metric-label {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 550;
   color: #837780;
   margin-top: 5px;
 }
 .metric-detail {
-  font-size: 8px;
+  font-size: 14px;
   line-height: 1.5;
   color: #a0959b;
   margin-top: 4px;
@@ -517,13 +517,13 @@ a:focus-visible {
 }
 .workspace-row strong {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
   line-height: 1.4;
 }
 .workspace-row small {
   display: block;
-  font-size: 10px;
+  font-size: 14px;
   color: #a3969d;
   margin-top: 4px;
   line-height: 1.5;
@@ -533,7 +533,7 @@ a:focus-visible {
   color: #c2b7bd;
 }
 .task-count {
-  font-size: 11px;
+  font-size: 14px;
   color: #b4aab1;
   font-weight: 650;
 }
@@ -550,7 +550,7 @@ a:focus-visible {
   width: 100%;
   gap: 7px;
   color: #977c4f;
-  font-size: 11px;
+  font-size: 14px;
   padding: 9px 13px;
   border-radius: 11px;
   background: #faf1e2;
@@ -575,13 +575,13 @@ a:focus-visible {
 }
 .home-action strong {
   margin-top: 12px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
 }
 .home-action small {
   margin-top: 4px;
   color: #a3959e;
-  font-size: 10px;
+  font-size: 14px;
   line-height: 1.5;
 }
 .home-action:last-child {
@@ -611,12 +611,12 @@ a:focus-visible {
   color: #83a18e;
 }
 .home-empty strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 .home-empty p {
   color: #a3969d;
-  font-size: 10px;
+  font-size: 14px;
   margin-top: 5px;
   line-height: 1.6;
 }
@@ -628,7 +628,7 @@ a:focus-visible {
   background: #edf5ef;
   color: #3f7d5e;
   border-radius: 14px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .workspace-feedback.warning {
   background: #fff3df;
@@ -667,7 +667,7 @@ a:focus-visible {
   letter-spacing: -0.6px;
 }
 .page-header-copy p {
-  font-size: 11px;
+  font-size: 14px;
   color: #998d96;
   margin-top: 6px;
   line-height: 1.5;
@@ -675,7 +675,7 @@ a:focus-visible {
 .page-header-actions {
   flex: none;
   color: #c44b6b;
-  font-size: 12px;
+  font-size: 14px;
 }
 .module-links {
   padding: 20px;
@@ -694,7 +694,7 @@ a:focus-visible {
 }
 .module-links-hint {
   color: #9a8b94;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.6;
   margin: -4px 0 15px;
 }
@@ -719,7 +719,7 @@ a:focus-visible {
   border-radius: 10px;
 }
 .module-link-tile strong {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.5;
   font-weight: 600;
   flex: 1;
@@ -761,7 +761,7 @@ a:focus-visible {
 }
 .profile-identity p {
   color: #9d8090;
-  font-size: 12px;
+  font-size: 14px;
   margin-top: 5px;
 }
 .hygiene-summary {
@@ -805,7 +805,7 @@ a:focus-visible {
     gap: 10px;
   }
   .home-brand span {
-    font-size: 9px;
+    font-size: 14px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -823,13 +823,13 @@ a:focus-visible {
   padding-bottom: 20px;
 }
 .employee-nav-label {
-  font-size: 11px;
+  font-size: 14px;
 }
 .home-metrics .metric-label {
-  font-size: 12px;
+  font-size: 14px;
 }
 .metric-detail {
-  font-size: 10px;
+  font-size: 14px;
 }
 .workspace-row strong,
 .home-action strong {
@@ -839,17 +839,17 @@ a:focus-visible {
 .home-action small,
 .home-empty p,
 .home-scan-area p {
-  font-size: 11px;
+  font-size: 14px;
 }
 .home-empty strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 .page-header-copy p,
 .module-links-hint {
-  font-size: 12px;
+  font-size: 14px;
 }
 .module-link-tile strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .p-4 > .employee-page-header {
   padding: 6px 0 12px;
@@ -872,7 +872,7 @@ a:focus-visible {
 .training-summary span {
   display: block;
   color: #a38f9b;
-  font-size: 11px;
+  font-size: 14px;
 }
 .training-summary strong {
   display: block;
@@ -881,13 +881,13 @@ a:focus-visible {
   font-weight: 700;
 }
 .training-summary small {
-  font-size: 12px;
+  font-size: 14px;
   color: #bcaeb6;
   font-weight: 500;
 }
 .training-progress-note {
   margin: 0 20px 16px;
-  font-size: 11px;
+  font-size: 14px;
   color: #94858f;
   line-height: 1.6;
 }
@@ -908,7 +908,7 @@ a:focus-visible {
 .hygiene-task-actions button {
   min-height: 44px;
   padding: 9px 12px;
-  font-size: 12px;
+  font-size: 14px;
   border-radius: 12px;
   font-weight: 600;
 }
@@ -924,3 +924,30 @@ a:focus-visible {
 .hygiene-skip-button {
   color: #a5919c;
 }
+
+/* Readable phone typography and touch targets, including legacy inner pages. */
+.employee-shell { font-size: 16px; line-height: 1.6; }
+.employee-shell input, .employee-shell select, .employee-shell textarea { font-size: 16px; min-height: 48px; }
+.employee-shell button { min-height: 44px; }
+.employee-shell .text-gray-400 { color: #716b74; }
+.employee-nav-label { font-size: 13px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+.employee-nav-item { padding: 8px 2px; min-width: 0; }
+.home-metrics .metric-label { line-height: 1.35; }
+.home-metrics .metric-detail { line-height: 1.45; }
+.workspace-row strong, .home-action strong { font-size: 16px; }
+.workspace-row small, .home-action small { line-height: 1.5; }
+.hygiene-task-actions { flex-wrap: wrap; }
+.hygiene-task-actions button { font-size: 14px; }
+.employee-shell table { line-height: 1.5; }
+.employee-shell th, .employee-shell td { padding: 12px; }
+.training-progress-note { color: #68616a; }
+@media (max-width: 380px) {
+  .home-metrics { gap: 8px; }
+  .home-metrics .metric-value { font-size: 22px; }
+  .employee-nav-label { font-size: 12px; }
+}
+
+/* Forms and scanner overlays sit above navigation; the form body owns scrolling. */
+.fixed.inset-0.z-50 { z-index: 80; }
+.employee-shell .fixed.inset-0 { padding-bottom: env(safe-area-inset-bottom); }
+.employee-shell .fixed.inset-0 > .overflow-y-auto { max-height: calc(100dvh - 24px - env(safe-area-inset-bottom)); padding-bottom: 24px; }

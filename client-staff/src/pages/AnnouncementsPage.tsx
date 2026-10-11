@@ -90,7 +90,7 @@ export function AnnouncementsPage() {
     }
     const badge = badges[type] || badges.info
     return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+      <span className={`px-2 py-0.5 rounded-full text-sm font-medium ${badge.bg} ${badge.text}`}>
         {badge.label}
       </span>
     )
@@ -109,7 +109,7 @@ export function AnnouncementsPage() {
           <div className="flex-1">
             <h1 className="text-lg font-bold">{t('announcement.title')}</h1>
             {unreadCount > 0 && (
-              <p className="text-xs text-primary">{unreadCount} {t('announcement.unread')}</p>
+              <p className="text-sm text-primary">{unreadCount} {t('announcement.unread')}</p>
             )}
           </div>
         </div>
@@ -145,9 +145,9 @@ export function AnnouncementsPage() {
                 {getTypeBadge(announcement.type)}
               </div>
 
-              <p className="text-sm text-gray-600 mb-3 whitespace-pre-wrap break-words">{announcement.content}</p>
+              <p className="text-base text-gray-600 mb-3 whitespace-pre-wrap break-words">{announcement.content}</p>
 
-              <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center justify-between text-sm text-gray-500">
                 <div className="flex items-center gap-1">
                   <Calendar size={12} />
                   <span>{formatDate(announcement.createdAt)}</span>

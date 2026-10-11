@@ -92,7 +92,7 @@ export function ShiftSwapPage() {
     }
     const badge = badges[status] || badges.pending
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+      <span className={`px-2 py-1 rounded-full text-sm font-medium ${badge.bg} ${badge.text}`}>
         {badge.label}
       </span>
     )
@@ -135,7 +135,7 @@ export function ShiftSwapPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('shiftSwap.originalDate')}
                   </label>
                   <input
@@ -146,7 +146,7 @@ export function ShiftSwapPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('shiftSwap.originalShift')}
                   </label>
                   <select
@@ -162,7 +162,7 @@ export function ShiftSwapPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('shiftSwap.targetDate')}
                   </label>
                   <input
@@ -173,7 +173,7 @@ export function ShiftSwapPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('shiftSwap.targetShift')}
                   </label>
                   <select
@@ -188,7 +188,7 @@ export function ShiftSwapPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-base font-medium text-gray-700 mb-1">
                   {t('shiftSwap.reason')}
                 </label>
                 <textarea
@@ -248,15 +248,15 @@ export function ShiftSwapPage() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-medium">{formatDate(req.originalDate)} → {formatDate(req.targetDate)}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm text-gray-500">
                         {shifts.find(s => s.key === req.originalShift)?.name || req.originalShift} → {shifts.find(s => s.key === req.targetShift)?.name || req.targetShift}
                       </p>
                     </div>
                     {getStatusBadge(req.status)}
                   </div>
-                  {req.reason && <p className="text-sm text-gray-600 mb-1">{req.reason}</p>}
+                  {req.reason && <p className="text-base text-gray-600 mb-1">{req.reason}</p>}
                   {req.adminNote && (
-                    <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                    <p className="text-sm text-gray-500 bg-gray-50 p-2 rounded">
                       {t('shiftSwap.adminNote')}: {req.adminNote}
                     </p>
                   )}
