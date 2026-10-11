@@ -44,19 +44,19 @@ export function InventoryPage() {
   const [showLowStockOnly, setShowLowStockOnly] = useState(false)
 
   // Modal states
-  const [showStockInModal, setShowStockInModal] = useState(false)
-  const [showStockOutModal, setShowStockOutModal] = useState(false)
+  const [showStockInModal, setShowStockInModal] = useSessionDraft('inventory.stockInOpen', false)
+  const [showStockOutModal, setShowStockOutModal] = useSessionDraft('inventory.stockOutOpen', false)
   const [showLogsModal, setShowLogsModal] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [selectedItem, setSelectedItem] = useSessionDraft<InventoryItem | null>('inventory.selectedItem', null)
   const [stockLogs, setStockLogs] = useState<StockLog[]>([])
 
   // Form states
-  const [stockInQty, setStockInQty] = useSessionDraft('InventoryPage.tsx.stockInQty', '')
-  const [stockInCost, setStockInCost] = useSessionDraft('InventoryPage.tsx.stockInCost', '')
-  const [stockInNote, setStockInNote] = useSessionDraft('InventoryPage.tsx.stockInNote', '')
-  const [stockOutQty, setStockOutQty] = useSessionDraft('InventoryPage.tsx.stockOutQty', '')
-  const [stockOutReason, setStockOutReason] = useSessionDraft('InventoryPage.tsx.stockOutReason', 'adjust')
-  const [stockOutNote, setStockOutNote] = useSessionDraft('InventoryPage.tsx.stockOutNote', '')
+  const [stockInQty, setStockInQty] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInQty`, '')
+  const [stockInCost, setStockInCost] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInCost`, '')
+  const [stockInNote, setStockInNote] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockInNote`, '')
+  const [stockOutQty, setStockOutQty] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutQty`, '')
+  const [stockOutReason, setStockOutReason] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutReason`, 'adjust')
+  const [stockOutNote, setStockOutNote] = useSessionDraft(`inventory.${selectedItem?.id || "unselected"}.stockOutNote`, '')
   const [submitting, setSubmitting] = useState(false)
 
   const categories = [...new Set(inventory.map(item => item.category).filter(Boolean))]
@@ -71,7 +71,8 @@ export function InventoryPage() {
       setLoading(true)
       const res = await staffApi.getInventoryList({ storeId })
       if (res.code === 200) {
-        setInventory(res.data.list || [])
+        const items = res.data.list || []; setInventory(items)
+        if(selectedItem){const current=items.find((item:InventoryItem)=>item.id===selectedItem.id);if(current)setSelectedItem(current)}
       }
     } catch (error: any) {
       setFeedback(error.message || t('inventory.loadFailed'))

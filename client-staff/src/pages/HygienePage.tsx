@@ -1,4 +1,4 @@
-import { useMemoryDraft } from '../utils/useSessionDraft'
+import { useMemoryDraft, useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { RouteLoading } from '../components/RouteLoading'
 import { businessDate } from '../utils/businessDate'
@@ -14,11 +14,11 @@ export function HygienePage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [confirmTask, setConfirmTask] = useState<any>(null)
-  const [issueTaskId,setIssueTaskId]=useState<string|null>(null)
-  const [issueDescription,setIssueDescription]=useState('')
-  const [skipTaskId, setSkipTaskId] = useState<string | null>(null)
-  const [skipNote, setSkipNote] = useState('')
+  const [confirmTask, setConfirmTask] = useSessionDraft<any>('hygiene.confirmTask',null)
+  const [issueTaskId,setIssueTaskId]=useSessionDraft<string|null>('hygiene.issueTask',null)
+  const [issueDescription,setIssueDescription]=useSessionDraft(`hygiene.issue.${issueTaskId}`, '')
+  const [skipTaskId, setSkipTaskId] = useSessionDraft<string | null>('hygiene.skipTask',null)
+  const [skipNote, setSkipNote] = useSessionDraft(`hygiene.skip.${skipTaskId}`, '')
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [photos, setPhotos] = useMemoryDraft<Record<string, File>>('hygiene.photos', {})
@@ -61,6 +61,7 @@ export function HygienePage() {
       }
       await staffApi.completeTask(task.id, { photoUrl })
       setConfirmTask(null)
+      setPhotos(previous=>{const next={...previous};delete next[task.id];return next})
       await loadTasks()
     } catch (err: any) { setActionError(err.response?.data?.message || t('common.error')) }
     finally { setBusy(null) }
