@@ -74,7 +74,19 @@ Var BTPSUpgradeDiagnostic
     File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     CreateDirectory "$APPDATA\BTPS\logs"
+
+  ${Else}
+    InitPluginsDir
+    File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
+  ${EndIf}
+!macroend
+
+!ifndef BUILD_UNINSTALLER
+!macro customCheckAppRunning
+  ${If} $BTPSUpgradeReceipt != ""
+    DetailPrint "Closing POS before installing the update..."
     Call BTPSWaitForClosedPOS
+    DetailPrint "Preparing the update and preserving existing orders..."
     nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --installer "$EXEPATH" --staged-pointer "$APPDATA\BTPS\upgrade-stage.json" --diagnostic "$BTPSUpgradeDiagnostic"'
     Pop $R0
     Pop $R1
@@ -90,14 +102,8 @@ Var BTPSUpgradeDiagnostic
       Quit
     ${EndIf}
   ${Else}
-    InitPluginsDir
-    File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
+    Call BTPSWaitForClosedPOS
   ${EndIf}
-!macroend
-
-!ifndef BUILD_UNINSTALLER
-!macro customCheckAppRunning
-  Call BTPSWaitForClosedPOS
   ${If} $BTPSUpgradeReceipt != ""
     ${If} $INSTDIR != $BTPSOldApp
       MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK
