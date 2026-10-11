@@ -64,6 +64,7 @@ export function LoginPage() {
       return
     }
 
+    window.dispatchEvent(new Event('pos-update-check-requested'))
     setCheckingUpdate(true)
     setIsUpToDate(false)
     setUpdateStatusText(t('pos.checkingUpdate', '正在检查更新...'))
@@ -99,10 +100,10 @@ export function LoginPage() {
       setTimeout(() => setUpdateStatusText(''), 4000)
     }
 
-    offStatus?.()
-
+    // Keep the listener for availability events emitted after checkForUpdates resolves.
     // 10秒超时防呆保护
     setTimeout(() => {
+      offStatus?.()
       setCheckingUpdate(false)
     }, 10000)
   }
@@ -283,22 +284,7 @@ export function LoginPage() {
 
           {/* Logo & Brand */}
           <div className="text-center mb-8 flex justify-center items-center h-16 min-h-[64px]">
-            {(() => {
-              const rawLogo = (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || ''
-              const storeLogo = (rawLogo && rawLogo !== '/youme-logo-red.png' && rawLogo !== '/youme-logo-white.png') ? rawLogo : ''
-              return (
-                <img
-                  src={storeLogo || YOUME_LOGO_RED}
-                  alt="YOUME"
-                  onError={(e) => {
-                    const target = e.currentTarget as HTMLImageElement
-                    target.onerror = null
-                    target.src = YOUME_LOGO_RED
-                  }}
-                  className="h-16 max-w-[200px] mx-auto object-contain"
-                />
-              )
-            })()}
+            <img src={YOUME_LOGO_RED} alt="YOUME" className="h-16 max-w-[200px] mx-auto object-contain" />
           </div>
 
           {/* Login card */}

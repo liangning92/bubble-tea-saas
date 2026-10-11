@@ -104,7 +104,9 @@ jobs:
         run: node tests/stoploss/pos-expense-page-check.cjs
 
       - name: Verify in-app upgrade controls and pending-order preservation
-        run: node tests/stoploss/online-update-page-check.cjs
+        run: |
+          node tests/stoploss/online-update-page-check.cjs
+          node tests/stoploss/pos-brand-update-review-page-check.cjs
 
       - name: Verify built admin and staff workflows against isolated PostgreSQL
         run: |
