@@ -294,7 +294,7 @@ const LivePreview: React.FC<{
     subtotal:35000,tax:3850,total:28850,discount:10000,promotionName:t('posSettings.receiptDiscount'),paymentMethod:t('posSettings.receiptCash'),paidAmount:50000,change:21150
   }),[blocks,paperSize,defaultLogo,defaultQrCode,i18n.language,t])
   return <div className="bg-white border rounded-lg overflow-hidden" style={{width,height:Math.ceil(height*scale)}}>
-    <iframe title={t('posSettings.preview','小票预览')} srcDoc={html} sandbox="allow-same-origin" scrolling="no" onLoad={e=>{const frame=e.currentTarget;const measured=frame.contentDocument?.body.getBoundingClientRect().height;if(measured)setHeight(measured)}} style={{border:0,width:dots,height,transform:`scale(${scale})`,transformOrigin:'top left',display:'block'}} />
+    <iframe title={t('common.preview')} srcDoc={html} sandbox="allow-same-origin" scrolling="no" onLoad={e=>{const frame=e.currentTarget;const measured=frame.contentDocument?.body.getBoundingClientRect().height;if(measured)setHeight(measured)}} style={{border:0,width:dots,height,transform:`scale(${scale})`,transformOrigin:'top left',display:'block'}} />
   </div>
 }
 
