@@ -34,8 +34,8 @@ const AttendanceRulesPage = lazy(() => import('./pages/AttendanceRulesPage').the
 function LayoutWithNav({ children }: { children: React.ReactNode }) {
   const path=useLocation().pathname, parent=modulePath(path), {t}=useTranslation()
   return (
-    <div className="min-h-screen bg-gray-50 pb-[calc(4rem+env(safe-area-inset-bottom))]">
-      {path!==parent&&<Link to={parent} className="block p-3 text-primary font-semibold">← {t("common.back")}</Link>}
+    <div className="employee-shell">
+      {path!==parent&&<Link to={parent} className="employee-parent-link">← {t("common.back")}</Link>}
       <Suspense fallback={<RouteLoading />}>{children}</Suspense>
       <BottomNav />
     </div>

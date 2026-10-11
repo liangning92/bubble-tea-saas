@@ -1,3 +1,5 @@
+import { PageHeader } from "../components/PageHeader";
+import { ShieldCheck, FolderLock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { employeeApi } from "../services/api";
@@ -107,8 +109,11 @@ export function EmployeeAppealsPage() {
   }, []);
   return (
     <main className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">{t("workspace.appeals")}</h1>
-      <p>{t("workspace.appealHelp")}</p>
+      <PageHeader
+        title={t("workspace.appeals")}
+        subtitle={t("workspace.appealHelp")}
+        icon={ShieldCheck}
+      />
       <p role="alert" className="text-red-600">
         {error}
       </p>
@@ -233,8 +238,11 @@ export function EmployeeDocumentsPage() {
         : ["email", "address", "emergencyContact", "emergencyPhone"];
   return (
     <main className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">{t("workspace.documents")}</h1>
-      <p>{t("workspace.profileHelp")}</p>
+      <PageHeader
+        title={t("workspace.documents")}
+        subtitle={t("workspace.profileHelp")}
+        icon={FolderLock}
+      />
       <p role="alert" className="text-red-600">
         {error}
       </p>

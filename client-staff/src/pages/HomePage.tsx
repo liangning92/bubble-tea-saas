@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ScanLine, Bell, RefreshCw } from "lucide-react";
+import {
+  ScanLine,
+  Bell,
+  RefreshCw,
+  CalendarDays,
+  Clock3,
+  ArrowUpRight,
+  ChevronRight,
+  Sparkles,
+  ShieldCheck,
+  BookOpen,
+  Repeat2,
+  MapPin,
+  CheckCircle2,
+} from "lucide-react";
 import { useAuthStore } from "../stores/auth";
 import { staffApi, employeeApi } from "../services/api";
 import { EmployeeActions } from "../components/EmployeeActions";
@@ -69,184 +83,298 @@ export function HomePage() {
     }
   }
   const shift = overview?.schedule?.todayShift;
+  const locale =
+    i18n.language === "zh"
+      ? "zh-CN"
+      : i18n.language === "en"
+        ? "en-GB"
+        : "id-ID";
+  const today = new Intl.DateTimeFormat(locale, {
+    timeZone: "Asia/Jakarta",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date());
+  const rewards =
+    (overview?.pointsAndDiscipline?.rewardsCount || 0) +
+    (dashboard?.rewardsCount || 0);
+  const penalties =
+    (overview?.pointsAndDiscipline?.penaltiesCount || 0) +
+    (dashboard?.penaltiesCount || 0);
+  const reminders = dashboard?.reminders?.slice(0, 5) || [];
+  const taskRows = [
+    {
+      path: "/hygiene",
+      title: t("hygiene.title"),
+      subtitle: t("ui.hygieneHint"),
+      count: dashboard?.hygiene?.todo,
+      icon: ShieldCheck,
+      tone: "mint",
+    },
+    {
+      path: "/training",
+      title: t("home.training"),
+      subtitle: t("ui.trainingHint"),
+      count: dashboard?.training,
+      icon: BookOpen,
+      tone: "lavender",
+    },
+    {
+      path: "/shift-swap",
+      title: t("workspace.swapConfirm"),
+      subtitle: t("nav.schedule"),
+      count: dashboard?.swap,
+      icon: Repeat2,
+      tone: "amber",
+    },
+  ];
   return (
-    <main className="space-y-4 pb-4">
-      <header className="bg-primary text-white p-4 rounded-b-2xl flex items-center justify-between">
+    <main className="employee-home">
+      <header className="home-topbar">
+        <div className="home-brand">
+          <img src="/youme-logo-red.png" alt="YOUME" />
+          <span>{t("ui.workplace")}</span>
+        </div>
+        <select
+          aria-label="Language"
+          value={i18n.language}
+          onChange={(e) => {
+            i18n.changeLanguage(e.target.value);
+            localStorage.setItem("bubble-tea-language", e.target.value);
+          }}
+          className="home-language"
+        >
+          <option value="id">ID</option>
+          <option value="zh">中文</option>
+          <option value="en">EN</option>
+        </select>
+      </header>
+      <section className="home-greeting">
         <div>
-          <h1 className="font-bold text-xl">{user?.name}</h1>
-          <p className="text-sm">
-            {overview?.staff?.storeName || user?.storeName}
+          <p className="home-date">{today} · WIB</p>
+          <h1>
+            {t("ui.greeting", {
+              name: user?.name?.split(" ")[0] || user?.name,
+            })}
+          </h1>
+          <p className="home-store">
+            <MapPin size={13} />
+            {overview?.staff?.storeName || user?.storeName || t("ui.workplace")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            aria-label="Language"
-            value={i18n.language}
-            onChange={(e) => {
-              i18n.changeLanguage(e.target.value);
-              localStorage.setItem("bubble-tea-language", e.target.value);
-            }}
-            className="bg-white/20 rounded p-2"
-          >
-            <option className="text-black" value="id">
-              ID
-            </option>
-            <option className="text-black" value="zh">
-              中文
-            </option>
-            <option className="text-black" value="en">
-              EN
-            </option>
-          </select>
+        <button
+          className="home-scan-icon"
+          aria-label={t("workspace.scan")}
+          disabled={loading || failed.includes("attendance")}
+          onClick={() => setScanner(true)}
+        >
+          <ScanLine size={25} />
+        </button>
+      </section>
+      {message && (
+        <p role="status" className="workspace-feedback">
+          <CheckCircle2 size={17} />
+          {message}
+        </p>
+      )}
+      {(failed.length > 0 || dashboard?.failedModules?.length > 0) && (
+        <div role="alert" className="workspace-feedback warning">
+          {t("common.loadFailed")}{" "}
+          <button onClick={refresh}>{t("common.retry")}</button>
+        </div>
+      )}
+      <section className="home-shift-card">
+        <div className="home-shift-top">
+          <span className="home-eyebrow">
+            <CalendarDays size={15} />
+            {t("ui.yourShift")}
+          </span>
+          <span className={`work-status ${working ? "working" : ""}`}>
+            <i />
+            {working
+              ? t("home.working")
+              : attendance
+                ? t("attendance.checkOut")
+                : t("home.notCheckedIn")}
+          </span>
+        </div>
+        <button
+          className="home-shift-details"
+          onClick={() => navigate("/schedule")}
+        >
+          <div>
+            <h2>{shift?.shiftName || t("home.noShiftToday")}</h2>
+            {shift && (
+              <p className="home-shift-time">
+                {shift.startTime}
+                <span>—</span>
+                {shift.endTime}
+                <small>WIB</small>
+              </p>
+            )}
+          </div>
+          <ArrowUpRight size={21} />
+        </button>
+        <div className="home-scan-area">
           <button
-            aria-label={t("workspace.scan")}
+            className="home-scan-cta"
             disabled={loading || failed.includes("attendance")}
             onClick={() => setScanner(true)}
-            className="p-3 bg-white/20 rounded-xl"
           >
-            <ScanLine size={26} />
+            <ScanLine size={20} />
+            {working ? t("ui.checkOut") : t("ui.checkIn")}
+            <ChevronRight size={17} />
           </button>
+          <p>{t("ui.scanHint")}</p>
         </div>
-      </header>
-      <div className="px-4 space-y-4">
-        {message && (
-          <p role="status" className="p-3 bg-white rounded">
-            {message}
-          </p>
-        )}
-        {(failed.length > 0 || dashboard?.failedModules?.length > 0) && (
-          <div role="alert" className="p-3 bg-amber-50 rounded-xl">
-            {t("common.loadFailed")}{" "}
-            <button onClick={refresh} className="text-primary font-bold">
-              {t("common.retry")}
-            </button>
-          </div>
-        )}
-        <div className="flex justify-between items-center">
-          <h2 className="font-bold">
-            {t("workspace.monthlyBoard")} {overview?.month}
-          </h2>
+      </section>
+      <section>
+        <div className="home-section-title">
+          <h2>{t("ui.month")}</h2>
           <button
             aria-label={t("common.retry")}
             onClick={refresh}
             disabled={loading}
           >
-            <RefreshCw size={20} />
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <span>{overview?.month}</span>
           </button>
         </div>
-        <section className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => navigate("/attendance")}
-            className="bg-white rounded-xl p-4 text-left"
-          >
-            <p className="text-sm text-gray-500">{t("home.presentDays")}</p>
-            <strong className="text-2xl">
-              {dashboard?.workDays ?? overview?.attendance?.presentDays ?? "—"}
-            </strong>
-          </button>
-          <button
-            onClick={() => navigate("/attendance/appeals")}
-            className="bg-white rounded-xl p-4 text-left"
-          >
-            <p className="text-sm text-gray-500">
-              {t("workspace.lateMinutes")}
-            </p>
-            <strong className="text-2xl">
-              {dashboard?.lateMinutes ?? "—"}
-            </strong>
-          </button>
-          <button
-            onClick={() => navigate("/points")}
-            className="bg-white rounded-xl p-4 text-left"
-          >
-            <p>{t("home.rewardsPenalties")}</p>
-            <p>
-              {t("workspace.rewardCount")}:{" "}
-              {overview || dashboard
-                ? (overview?.pointsAndDiscipline?.rewardsCount || 0) +
-                  (dashboard?.rewardsCount || 0)
-                : "—"}{" "}
-              · {t("workspace.penaltyCount")}:{" "}
-              {overview || dashboard
-                ? (overview?.pointsAndDiscipline?.penaltiesCount || 0) +
-                  (dashboard?.penaltiesCount || 0)
-                : "—"}
-            </p>
-          </button>
-          <button
-            onClick={() => navigate("/attendance")}
-            className="bg-white rounded-xl p-4 text-left"
-          >
-            <p>{t("nav.attendance")}</p>
+        <div className="home-metrics">
+          <button onClick={() => navigate("/attendance")}>
+            <span className="metric-icon mint">
+              <CalendarDays size={18} />
+            </span>
             <strong>
-              {working
-                ? t("home.working")
-                : attendance
-                  ? t("attendance.checkOut")
-                  : t("home.notCheckedIn")}
+              {dashboard?.workDays ?? overview?.attendance?.presentDays ?? "—"}
+              <small>{t("ui.days")}</small>
             </strong>
+            <span className="metric-label">{t("home.presentDays")}</span>
           </button>
-        </section>
-        <section className="bg-white p-4 rounded-xl space-y-3">
-          <h2 className="font-bold flex gap-2">
-            <Bell size={19} />
-            {t("workspace.reminders")}
-          </h2>
-          <button
-            className="block text-left w-full"
-            onClick={() => navigate("/schedule")}
-          >
-            {t("home.todayScheduleTitle")}:{" "}
-            {shift
-              ? `${shift.shiftName} ${shift.startTime}–${shift.endTime}`
-              : t("home.noShiftToday")}{" "}
-            →
+          <button onClick={() => navigate("/attendance/appeals")}>
+            <span className="metric-icon amber">
+              <Clock3 size={18} />
+            </span>
+            <strong>
+              {dashboard?.lateMinutes ?? "—"}
+              <small>{t("workspace.minutes")}</small>
+            </strong>
+            <span className="metric-label">{t("ui.late")}</span>
           </button>
-          {dashboard && (
+          <button onClick={() => navigate("/points")}>
+            <span className="metric-icon rose">
+              <Sparkles size={18} />
+            </span>
+            <strong>{overview || dashboard ? rewards + penalties : "—"}</strong>
+            <span className="metric-label">{t("ui.rewards")}</span>
+            <span className="metric-detail">
+              {t("workspace.rewardCount")} {rewards} ·{" "}
+              {t("workspace.penaltyCount")} {penalties}
+            </span>
+          </button>
+        </div>
+      </section>
+      <section>
+        <div className="home-section-title">
+          <h2>{t("ui.tasks")}</h2>
+          <span className="home-count">
+            {dashboard
+              ? (dashboard.hygiene?.todo || 0) +
+                (dashboard.training || 0) +
+                (dashboard.swap || 0)
+              : "—"}
+          </span>
+        </div>
+        <div className="workspace-list">
+          {taskRows.map(
+            ({ path, title, subtitle, count, icon: Icon, tone }) => (
+              <button
+                className="workspace-row"
+                key={path}
+                onClick={() => navigate(path)}
+              >
+                <span className={`workspace-row-icon ${tone}`}>
+                  <Icon size={21} />
+                </span>
+                <span className="workspace-row-copy">
+                  <strong>{title}</strong>
+                  <small>{subtitle}</small>
+                </span>
+                <span className={`task-count ${count ? "has-tasks" : ""}`}>
+                  {count ?? "—"}
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            ),
+          )}
+        </div>
+        {dashboard?.hygiene?.pendingReview > 0 && (
+          <button className="home-pending" onClick={() => navigate("/hygiene")}>
+            <Clock3 size={15} />
+            {t("hygiene.title")} · {t("workspace.pendingReview")}{" "}
+            {dashboard.hygiene.pendingReview}
+            <ChevronRight size={15} />
+          </button>
+        )}
+      </section>
+      <section>
+        <div className="home-section-title">
+          <h2>{t("ui.quick")}</h2>
+        </div>
+        <EmployeeActions />
+      </section>
+      <section>
+        <div className="home-section-title">
+          <h2>{t("ui.review")}</h2>
+          <Bell size={17} />
+        </div>
+        <div className="workspace-list">
+          {!reminders.length && !overview?.announcements?.length ? (
+            <div className="home-empty">
+              <span>
+                <CheckCircle2 size={22} />
+              </span>
+              <div>
+                <strong>{t("ui.noUpdates")}</strong>
+                <p>{t("ui.noUpdatesHint")}</p>
+              </div>
+            </div>
+          ) : (
             <>
-              <button
-                className="block w-full text-left"
-                onClick={() => navigate("/hygiene")}
-              >
-                {t("hygiene.title")}: {t("workspace.todo")}{" "}
-                {dashboard.hygiene.todo} · {t("workspace.pendingReview")}{" "}
-                {dashboard.hygiene.pendingReview} →
-              </button>
-              <button
-                className="block w-full text-left"
-                onClick={() => navigate("/training")}
-              >
-                {t("home.training")}: {dashboard.training} →
-              </button>
-              <button
-                className="block w-full text-left"
-                onClick={() => navigate("/shift-swap")}
-              >
-                {t("workspace.swapConfirm")}: {dashboard.swap} →
-              </button>
+              {reminders.map((r: any) => (
+                <button
+                  key={r.id}
+                  className="workspace-row"
+                  onClick={() => navigate(r.url)}
+                >
+                  <span className="workspace-row-icon rose">
+                    <Bell size={19} />
+                  </span>
+                  <span className="workspace-row-copy">
+                    <strong>{r.title}</strong>
+                  </span>
+                  <ChevronRight size={17} />
+                </button>
+              ))}
+              {overview?.announcements?.map((a: any) => (
+                <button
+                  key={a.id}
+                  className="workspace-row"
+                  onClick={() => navigate("/announcements")}
+                >
+                  <span className="workspace-row-icon lavender">
+                    <Bell size={19} />
+                  </span>
+                  <span className="workspace-row-copy">
+                    <strong>{a.title}</strong>
+                  </span>
+                  <ChevronRight size={17} />
+                </button>
+              ))}
             </>
           )}
-          {dashboard?.reminders?.slice(0, 8).map((r: any) => (
-            <button
-              key={r.id}
-              className="block text-left w-full border-t pt-2"
-              onClick={() => navigate(r.url)}
-            >
-              {r.title} →
-            </button>
-          ))}
-          {overview?.announcements?.map((a: any) => (
-            <button
-              key={a.id}
-              className="block text-left w-full border-t pt-2"
-              onClick={() => navigate("/announcements")}
-            >
-              {a.title} →
-            </button>
-          ))}
-        </section>
-        <EmployeeActions />
-      </div>
+        </div>
+      </section>
       <QRCameraScannerModal
         isOpen={scanner}
         onClose={() => setScanner(false)}
