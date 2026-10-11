@@ -2322,8 +2322,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if (cart.length > 0 && reason === 'unpaid' && cart !== settledCartRef.current) {
       logPOSAction({
         action: 'cart_clear',
-        description: `清空购物车（${cart.length}件商品未结账）`,
-        metadata: { itemCount: cart.length, totalAmount: subtotal + tax },
+        description: `清空购物车（${cart.reduce((sum, item) => sum + item.quantity, 0)}件商品未结账）`,
+        metadata: { itemCount: cart.reduce((sum, item) => sum + item.quantity, 0), lineCount: cart.length, totalAmount: subtotal + tax, cartSnapshot: cartAuditSnapshot(cart) },
         severity: 'warning',
       })
     }
