@@ -1,6 +1,7 @@
 import React from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { isChunkLoadError, recoverChunkLoadError, reloadFreshPage } from '../utils/chunkRecovery'
 
 interface Props {
   children: React.ReactNode
@@ -26,10 +27,11 @@ class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     this.setState({ errorInfo })
     console.error('ErrorBoundary caught:', error, errorInfo)
+    recoverChunkLoadError(error)
   }
 
   handleReload = () => {
-    window.location.reload()
+    reloadFreshPage()
   }
 
   handleGoBack = () => {
@@ -80,7 +82,7 @@ function ErrorFallback({ error, errorInfo, onReload, onGoBack }: {
 
         <div className="bg-gray-50 rounded-lg p-3 mb-4">
           <p className="text-sm font-mono text-red-600 break-all">
-            {error?.message || 'Unknown error'}
+            {isChunkLoadError(error) ? t('common.chunkLoadError') : (error?.message || 'Unknown error')}
           </p>
         </div>
 

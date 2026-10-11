@@ -6,6 +6,12 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import App from './App'
 import './index.css'
 import './i18n'
+import { recoverChunkLoadError, removeRecoveryQuery } from './utils/chunkRecovery'
+
+removeRecoveryQuery()
+window.addEventListener('vite:preloadError', event => {
+  if (recoverChunkLoadError((event as Event & { payload?: unknown }).payload)) event.preventDefault()
+})
 
 const queryClient = new QueryClient({
   defaultOptions: {
