@@ -413,8 +413,8 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-black/50 flex items-end justify-center z-50 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold">{t('leave.applyLeave')}</h2>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">

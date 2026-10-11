@@ -10,7 +10,7 @@ export function BottomNav() {
   const isActive = (path: string) => location.pathname === path
 
   return (
-    <nav aria-label={t('nav.home')} className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex justify-around z-40">
+    <nav aria-label={t('nav.home')} className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex justify-around z-[60]">
       <button
         onClick={() => navigate('/')}
         aria-current={isActive('/') ? 'page' : undefined}

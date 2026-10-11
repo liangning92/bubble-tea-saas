@@ -292,8 +292,8 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50">
-      <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-black/50 flex items-end justify-center z-50">
+      <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">{t('reimbursement.applyTitle')}</h2>
           <button onClick={onClose} className="p-2">
