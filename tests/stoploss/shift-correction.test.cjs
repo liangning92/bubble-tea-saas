@@ -14,14 +14,15 @@ function fixture(status='closed'){
  return {db:{$transaction:fn=>fn(tx)},session,read:()=>({report,audit,warning,deleted})};
 }
 test('closed shift correction updates totals, resets warning and retains original values with reason',async()=>{
- const f=fixture();await svc.correctShift(f.db,actor,'s',{updatedAt,manualReceipts:{cash:0,qris:0,shopeefood:0,gofood:0},reason:'wrong entry'});
- const r=f.read();assert.equal(f.session.cashDifference,-200);assert.equal(r.report.expectedCash,200);assert.equal(r.report.manualReceipts.cash,0);assert.equal(r.warning.status,'pending');assert.equal(r.audit.description,'wrong entry');assert.equal(JSON.parse(r.audit.oldValue).session.openFloat,100);assert.equal(JSON.parse(r.audit.newValue).changes.openFloat,undefined);assert.equal(f.session.openFloat,100);
+ const f=fixture();await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:100,manualReceipts:{cash:0,qris:0,shopeefood:0,gofood:0},reason:'wrong entry'});
+ const r=f.read();assert.equal(f.session.cashDifference,-200);assert.equal(r.report.expectedCash,200);assert.equal(r.report.manualReceipts.cash,0);assert.equal(r.warning.status,'pending');assert.equal(r.audit.description,'wrong entry');assert.equal(JSON.parse(r.audit.oldValue).session.openFloat,100);assert.equal(JSON.parse(r.audit.newValue).changes.openFloat,100);assert.equal(f.session.openFloat,100);
 });
-test('matching correction removes obsolete discrepancy warning',async()=>{const f=fixture();await svc.correctShift(f.db,actor,'s',{updatedAt,manualReceipts:{cash:200,qris:0,shopeefood:0,gofood:0},reason:'counted again'});assert.equal(f.read().deleted,true);assert.equal(f.session.cashDifference,0)});
-const valid={updatedAt,manualReceipts:{cash:200,qris:10,shopeefood:20,gofood:30},reason:'verified correction'};
-test('open shift rejects handover correction and preserves opening float',async()=>{const f=fixture('open');await assert.rejects(()=>svc.correctShift(f.db,actor,'s',valid),e=>e.status===400);assert.equal(f.session.openFloat,100);assert.equal(f.read().audit,undefined)});
-test('only four handover amounts can change; float, expected cash, order totals and metadata are rejected',async()=>{
- for(const extra of [{openFloat:0},{actualCash:10},{expectedCash:0},{revenue:0},{status:'open'}]){const f=fixture();await assert.rejects(()=>svc.correctShift(f.db,actor,'s',{...valid,...extra}));assert.equal(f.session.openFloat,100);assert.equal(f.read().audit,undefined)}
+test('matching correction removes obsolete discrepancy warning',async()=>{const f=fixture();await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:100,manualReceipts:{cash:200,qris:0,shopeefood:0,gofood:0},reason:'counted again'});assert.equal(f.read().deleted,true);assert.equal(f.session.cashDifference,0)});
+const valid={updatedAt,openFloat:100,manualReceipts:{cash:200,qris:10,shopeefood:20,gofood:30},reason:'verified correction'};
+test('open shift corrects float, adjusts expected cash and preserves open status with audit',async()=>{const f=fixture('open');await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:0,reason:'verified opening count'});assert.equal(f.session.openFloat,0);assert.equal(f.session.expectedCash,100);assert.equal(f.session.status,'open');assert.equal(JSON.parse(f.read().audit.oldValue).session.openFloat,100);assert.equal(f.read().audit.description,'verified opening count')});
+test('closed shift corrects float and recomputes discrepancy without altering orders',async()=>{const f=fixture();await svc.correctShift(f.db,actor,'s',{...valid,openFloat:50});assert.equal(f.session.openFloat,50);assert.equal(f.session.expectedCash,150);assert.equal(f.session.cashDifference,50);assert.equal(f.read().report.handoverFinancials.openFloat,50);assert.equal(f.read().report.cashReconciliation.revenue,100)});
+test('only staff-entered amounts can change; expected cash, order totals and metadata are rejected',async()=>{
+ for(const extra of [{actualCash:10},{expectedCash:0},{revenue:0},{status:'open'}]){const f=fixture();await assert.rejects(()=>svc.correctShift(f.db,actor,'s',{...valid,...extra}));assert.equal(f.session.openFloat,100);assert.equal(f.read().audit,undefined)}
  const f=fixture();await svc.correctShift(f.db,actor,'s',valid);assert.deepEqual(f.read().report.manualReceipts,valid.manualReceipts);assert.equal(f.session.openFloat,100);assert.equal(f.read().report.cashReconciliation.revenue,100);
 });
 test('manager, stale revision, missing reason, missing and extra receipt fields are rejected',async()=>{
