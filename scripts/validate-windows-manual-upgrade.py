@@ -112,7 +112,7 @@ def historic():
         return c.execute('SELECT id,totalAmount,finalAmount,paymentMethod FROM "Order"').fetchall()
 
 
-def drive_installer(exe, process=None, on_retry=None):
+def drive_installer(exe, process=None, on_retry=None, run_after_finish=True):
     # Drive the ordinary online-updater NSIS command line and visible wizard.
     user = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -186,13 +186,16 @@ def drive_installer(exe, process=None, on_retry=None):
                     if run:
                         checked = user.SendMessageW(run[0], 0xF0, 0, 0)
                         print('Owned NSIS Run checkbox state: ' + str(checked), flush=True)
-                        if checked != 1:
+                        if checked != int(run_after_finish):
                             user.PostMessageW(run[0], 0xF5, 0, 0)
                             continue
                     finish_seen = True
-                    # Select the ordinary Run checkbox before pressing Finish.
+                    # Keep automatic relaunch for normal online upgrades; the
+                    # port-contention case starts POS separately after Retry.
                     trace(f'installer-finish-click pid={process.pid} cases={len(CASES)}')
                 user.PostMessageW(next_button[0], 0xF5, 0, 0)
+                if finish_seen:
+                    trace(f'installer-finish-posted pid={process.pid} cases={len(CASES)}')
         time.sleep(.5)
     if process.poll() is None:
         process.terminate()  # Only the installer this synthetic test owns.
@@ -388,12 +391,13 @@ try:
         assert sha(APP / 'BTPS.exe') == old_program and sha(DB) == old_database
         listener.close()
     try:
-        drive_installer(installer, on_retry=close_api_after_prompt)
+        drive_installer(installer, on_retry=close_api_after_prompt, run_after_finish=False)
     finally:
         listener.close()
+    subprocess.Popen([str(APP / 'BTPS.exe')])
     verify_started_runtime(expected_version)
     assert historic() == history
-    CASES.append('interactive-nsis-running-local-api-close-retry-succeeds')
+    CASES.append('interactive-nsis-running-local-api-close-retry-install-succeeds')
     # The original 295 package is named bubble-tea-saas. Put owned history in
     # the profile that 295 really opens; the earlier synthetic fixture used BTPS.
     historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
