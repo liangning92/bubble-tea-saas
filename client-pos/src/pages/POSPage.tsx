@@ -1920,7 +1920,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       shiftApi.list().then(res => {
         const available = Array.isArray(res.data?.data) ? res.data.data.filter((s: { key: string }) => s.key !== 'off') : []
         setActiveShifts(available)
-        setSelectedShiftType(current => available.some((s: { key: string }) => s.key === current) ? current : available[0]?.key || '')
+        setSelectedShiftType(current => available.some((s: { key: string }) => s.key === current) ? current : '')
       }).catch(() => {
         setActiveShifts([])
         setSelectedShiftType('')
@@ -2846,9 +2846,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     const current = response.data?.data
     if (!current?.hasOpenShift || !current.shift?.id || current.shift.shift === 'off') throw Error('OPEN_SHIFT_REQUIRED')
   }
+  const openShiftModal = () => {
+    setSelectedShiftType('')
+    setShowShiftModal(true)
+  }
   const showOpenShiftRequired = () => setConfirmModal({
     isOpen: true, title: t('pos.shiftOpen'), message: t('pos.openShiftRequired'),
-    type: 'warning', onConfirm: () => setShowShiftModal(true)
+    type: 'warning', onConfirm: () => openShiftModal()
   })
   const beginPayment = async () => {
     if (paymentOpening.current || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate || !cartRef.current.length) return
@@ -3412,7 +3416,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   id: 'shift',
                   icon: <Users size={18} />,
                   labelKey: posLayout.toolbarLabels?.shift || 'toolbar.shift',
-                  onClick: () => setShowShiftModal(true)
+                  onClick: () => openShiftModal()
                 })
               }
               if (posLayout.showAttendance !== false) {
@@ -4629,6 +4633,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
+                  {activeShifts.length > 0 && !selectedShiftType && <p role="status" className="text-amber-700 mb-4">{t('pos.shiftSelectionRequired')}</p>}
                   {activeShifts.length === 0 && <p className="text-red-600 mb-4">{t('pos.shiftUnavailable')}</p>}
 
                   {/* 开班金额输入 */}
@@ -4647,7 +4652,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   <button
                     onClick={async () => {
                       if (!activeShifts.some(s => s.key === selectedShiftType)) {
-                        showToast(t('pos.shiftUnavailable'), 'error')
+                        showToast(t(activeShifts.length ? 'pos.shiftSelectionRequired' : 'pos.shiftUnavailable'), 'error')
                         return
                       }
                       const floatInput = document.getElementById('openFloatInput') as HTMLInputElement
@@ -4669,7 +4674,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       }
                     }}
                     disabled={!activeShifts.some(s => s.key === selectedShiftType)}
-                    className="w-full py-4 bg-green-500 text-white rounded-xl font-bold touch-feedback text-lg"
+                    className="w-full py-4 bg-green-500 text-white rounded-xl font-bold touch-feedback text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t('pos.confirmOpenShift')}
                   </button>
@@ -5255,7 +5260,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     setShowLogoutModal(false)
                     setIsLocked(false)
                     if (current.hasOpenShift) {
-                      setShowShiftModal(true)
+                      openShiftModal()
                     } else {
                       logout()
                     }
