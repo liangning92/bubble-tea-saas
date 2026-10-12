@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { salaryApi, staffApi } from '../../services/api'
-import { DollarSign, Plus, Loader2, Filter, X, CheckCircle } from 'lucide-react'
+import { DollarSign, Loader2, Filter, X, CheckCircle } from 'lucide-react'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -56,7 +56,9 @@ export function SalaryListPage() {
 
   const [preparing,setPreparing]=useState(false)
   const [prepareMessage,setPrepareMessage]=useState('')
-  const prepareMonth=async()=>{setPreparing(true);setPrepareMessage('');try{const response=await salaryApi.prepareMonth(filterMonth||getCurrentMonth());const skipped=response.data.data.skipped||[];setPrepareMessage(skipped.length ? l.prepared+' '+skipped.map((s:any)=>s.name+' ('+s.reason+')').join(', ') : l.prepare+' ✓');await loadSalaries()}catch(error:any){setPrepareMessage(error?.response?.data?.message||t('common.error'))}finally{setPreparing(false)}}
+  const salaryLoadSequence=useRef(0)
+  const skipInitialManualDays=useRef(false)
+  const [allPayroll,setAllPayroll]=useState<Salary[]>([])
   const [salaries, setSalaries] = useState<Salary[]>([])
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -91,7 +93,7 @@ export function SalaryListPage() {
   const [calculating, setCalculating] = useState(false)
 
   const activeSalaryContext = useRef('')
-  activeSalaryContext.current = `${showModal}:${formData.staffId}:${formData.month}`
+  activeSalaryContext.current = `${showModal}:${formData.staffId}:${formData.month}:${workingDays?.probation}:${workingDays?.regular}`
 
   useEffect(() => {
     if (!showModal || !formData.staffId || !formData.month) return
@@ -126,20 +128,28 @@ export function SalaryListPage() {
   }, [user, filterStaff, filterMonth, filterStatus])
 
   const loadSalaries = async () => {
+    const sequence=++salaryLoadSequence.current
     setIsLoading(true)
     try {
       const params: any = {}
       params.storeId = user?.storeId
-      if (filterStaff) params.staffId = filterStaff
       params.month = filterMonth || getCurrentMonth()
       params.includeUnrecorded = true
-      if (filterStatus) params.status = filterStatus
+      setPreparing(true);setPrepareMessage('')
+      const prepared=await salaryApi.prepareMonth(params.month)
+      const skipped=prepared.data.data.skipped||[]
+      if(skipped.length)setPrepareMessage(l.prepared+' '+skipped.map((s:any)=>s.name+' ('+s.reason+')').join(', '))
+      if(sequence!==salaryLoadSequence.current)return
       const response = await salaryApi.list(params)
-      setSalaries(response.data?.data?.list || [])
+      if(sequence!==salaryLoadSequence.current)return
+      const rows=response.data?.data?.list||[]
+      setAllPayroll(rows)
+      setSalaries(rows.filter((s:Salary)=>(!filterStaff||s.staffId===filterStaff)&&(!filterStatus||s.status===filterStatus)))
     } catch (error) {
       console.error('Failed to load salaries:', error)
+      setPrepareMessage(t('common.error'))
     } finally {
-      setIsLoading(false)
+      if(sequence===salaryLoadSequence.current){setIsLoading(false);setPreparing(false)}
     }
   }
 
@@ -182,7 +192,8 @@ export function SalaryListPage() {
   const handleOpenModal = (salary?: Salary) => {
     setDaysError(false)
     const basis=salary?.payrollBasis
-    setWorkingDays(basis && (basis.workingDays || salary?.status==='unrecorded') ? {probation:String(basis.workingDays?.probation ?? basis.segments.filter((s:any)=>s.type==='probation').reduce((n:number,s:any)=>n+s.days,0)),regular:String(basis.workingDays?.regular ?? basis.segments.filter((s:any)=>s.type==='regular').reduce((n:number,s:any)=>n+s.days,0))} : null)
+    skipInitialManualDays.current=!!salary&&salary.status!=='unrecorded'&&!!basis?.workingDays&&basis.daysSource!=='attendance'
+    setWorkingDays(basis && basis.daysSource!=='attendance' && (basis.workingDays || salary?.status==='unrecorded') ? {probation:String(basis.workingDays?.probation ?? basis.segments.filter((s:any)=>s.type==='probation').reduce((n:number,s:any)=>n+s.days,0)),regular:String(basis.workingDays?.regular ?? basis.segments.filter((s:any)=>s.type==='regular').reduce((n:number,s:any)=>n+s.days,0))} : null)
     setPayrollBasis(salary?.payrollBasis||null)
     setSaveError('')
     setDepositError('')
@@ -221,7 +232,7 @@ export function SalaryListPage() {
     setEditingSalary(null)
   }
 
-  const handleAutoCalculate = async () => {
+  const handleAutoCalculate = async (useAttendance=false) => {
     if (!formData.staffId || !formData.month) {
       alert(t('staff.salary.selectStaffMonth'))
       return
@@ -232,10 +243,11 @@ export function SalaryListPage() {
     setSaveError('')
     try {
       const [year, month] = formData.month.split('-')
-      const response = await salaryApi.calculate(formData.staffId, parseInt(month), parseInt(year),workingDays?{probation:Number(workingDays.probation),regular:Number(workingDays.regular)}:undefined)
+      const response = await salaryApi.calculate(formData.staffId, parseInt(month), parseInt(year),!useAttendance&&workingDays?{probation:Number(workingDays.probation),regular:Number(workingDays.regular)}:undefined)
       const data = response.data?.data
 
       if (data && contextKey === activeSalaryContext.current) {
+        if(useAttendance)setWorkingDays(null)
         setPayrollBasis(data.payrollBasis || null)
         appliedCompensation.current=data.compensation || {rewards:0,penalties:0}
         setCompensationIds(data.compensationAdjustmentIds || [])
@@ -279,6 +291,7 @@ export function SalaryListPage() {
 
   useEffect(()=>{
     if(!showModal||!workingDays||!formData.staffId||!formData.month)return
+    if(skipInitialManualDays.current){skipInitialManualDays.current=false;return}
     let active=true
     setCalculating(true);setSaveError('');setDaysError(false)
     const days={probation:Number(workingDays.probation),regular:Number(workingDays.regular)}
@@ -306,6 +319,8 @@ export function SalaryListPage() {
     setSaving(true)
     try {
       const data = {
+        manualCorrection:true,
+        manualBaseSalary:!!payrollBasis && Number(formData.baseSalary)!==payrollBasis.amount,
         workingDays: workingDays ? {probation:Number(workingDays.probation),regular:Number(workingDays.regular)} : undefined,
         autoBaseSalary: !!payrollBasis && Number(formData.baseSalary) === payrollBasis.amount,
         compensationAdjustmentIds:compensationIds,
@@ -345,17 +360,6 @@ export function SalaryListPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm(t('staff.salary.confirmDelete'))) return
-    try {
-      await salaryApi.delete(id)
-      loadSalaries()
-    } catch (error) {
-      console.error('Failed to delete salary:', error)
-      alert(t('common.error'))
-    }
-  }
-
   const pendingSalaries = salaries.filter(s => s.status === 'pending')
   const paidSalaries = salaries.filter(s => s.status === 'paid')
   const thisMonth = getCurrentMonth()
@@ -374,15 +378,12 @@ export function SalaryListPage() {
             <DollarSign size={28} />
             <div />
           </div>
-          <button disabled={preparing||user?.role!=='admin'||!canWrite} onClick={prepareMonth} className="bg-white text-primary px-4 py-2 rounded-lg font-medium disabled:opacity-50">{preparing?t('common.loading'):l.prepare}</button>
           <button
             onClick={() => handleOpenModal()}
-            disabled={user?.role !== 'admin'}
-            title={user?.role !== 'admin' ? t('staff.salary.adminCreateOnly') : undefined}
+            disabled={preparing||!canWrite}
             className="flex items-center gap-2 bg-white text-primary px-4 py-2 rounded-lg font-medium hover:bg-gray-100"
           >
-            <Plus size={20} />
-            {t('staff.salary.addSalary')}
+            {l.correction}
           </button>
         </div>
       </header>
@@ -447,14 +448,7 @@ export function SalaryListPage() {
           <div className="flex flex-col items-center justify-center py-12 text-gray-500">
             <DollarSign size={48} className="mb-4 opacity-50" />
             <p>{t('staff.salary.noSalaries')}</p>
-            <button
-              onClick={() => handleOpenModal()}
-            disabled={user?.role !== 'admin'}
-            title={user?.role !== 'admin' ? t('staff.salary.adminCreateOnly') : undefined}
-              className="mt-4 text-primary font-medium"
-            >
-              {t('staff.salary.addFirst')}
-            </button>
+
           </div>
         ) : (
           salaries.map((salary) => (
@@ -480,6 +474,7 @@ export function SalaryListPage() {
               </div>
 
               {salary.status==='unrecorded'&&<p className="text-sm text-amber-700 mb-2">{salary.calculationError ? probationLabels(i18n.language).configError : l.estimate}</p>}
+              {salary.payrollBasis?.employmentNeedsReview&&<p role="alert" className="text-amber-700">{l.employmentReview}</p>}
               <PayrollBasisSummary basis={salary.payrollBasis}/>
               {(salary.depositDeductions?.length || 0) > 0 && <p className="text-sm text-red-600 mb-2">{t('staff.salary.depositPortion')}: {formatCurrency((salary.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0))}</p>}
               {salary.depositNeedsReview && <p role="alert" className="text-sm text-amber-700 mb-2">{t('salaryDeposit.recalculate')} {formatCurrency(salary.expectedDepositAmount || 0)}</p>}
@@ -526,25 +521,19 @@ export function SalaryListPage() {
               </div>
 
               <div className="flex gap-2">
-                {salary.status === 'unrecorded' && <button disabled={!canWrite || user?.role!=='admin'} onClick={()=>handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.verify}</button>}
-                {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.editDays}</button>}
+                {salary.status === 'unrecorded' && <button disabled={!canWrite || user?.role!=='admin'} onClick={()=>handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.correction}</button>}
+                {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.correction}</button>}
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
-                    disabled={user?.role !== 'admin' || salary.depositNeedsReview}
+                    disabled={user?.role !== 'admin' || salary.depositNeedsReview || salary.payrollBasis?.employmentNeedsReview}
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
                     {t('staff.salary.markAsPaid')}
                   </button>
                 )}
-                <button
-                  onClick={() => handleDelete(salary.id)}
-                  disabled={salary.status !== 'pending' || user?.role !== 'admin'}
-                  className="py-2 px-3 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
-                >
-                  {t('common.delete')}
-                </button>
+
               </div>
             </div>
           ))
@@ -557,7 +546,7 @@ export function SalaryListPage() {
           <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">
-                {editingSalary ? t('staff.salary.editSalary') : t('staff.salary.addSalary')}
+                {l.correction}
               </h2>
               <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={20} />
@@ -573,14 +562,11 @@ export function SalaryListPage() {
                 </label>
                 <select
                   value={formData.staffId}
-                  onChange={(e) => {setWorkingDays(null);setFormData({ ...formData, staffId: e.target.value })}}
+                  onChange={(e) => {const row=allPayroll.find(s=>s.staffId===e.target.value);if(row)handleOpenModal(row);else{setWorkingDays(null);setEditingSalary(null);setFormData({...formData,staffId:e.target.value})}}}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  disabled={!!editingSalary}
                 >
                   <option value="">{t('staff.salary.selectStaff')}</option>
-                  {staffOptions.map((staff) => (
-                    <option key={staff.id} value={staff.id}>{staff.name}</option>
-                  ))}
+                  {allPayroll.map(salary=><option key={salary.staffId} value={salary.staffId} disabled={salary.status==='paid'}>{salary.staff?.name||salary.staffId}</option>)}
                 </select>
               </div>
 
@@ -600,7 +586,7 @@ export function SalaryListPage() {
 
               <p className="col-span-2 text-sm text-gray-500">{probationLabels(i18n.language).automatic}</p>
               <div className="col-span-2"><PayrollBasisSummary basis={payrollBasis ? {...payrollBasis,recordedBaseSalary:Number(formData.baseSalary),manualAdjustment:Number(formData.baseSalary)!==payrollBasis.amount} : null}/></div>
-              <section className="border rounded-xl p-3 space-y-2"><h3 className="font-medium">{l.editDays}</h3><p className="text-sm text-gray-500">{l.dayHint}</p>{payrollBasis && ['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((s:any)=>s.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?probationLabels(i18n.language).probation:probationLabels(i18n.language).regular} ({l.max}: {segment.eligibleDays ?? segment.days})<input aria-label={type==='probation'?l.probationDays:l.regularDays} type="number" min="0" max={segment.eligibleDays ?? segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={workingDays?.[type as 'probation'|'regular'] ?? segment.days} onChange={e=>setWorkingDays(previous=>({...previous||{probation:String(payrollBasis.segments.find((s:any)=>s.type==='probation')?.days||0),regular:String(payrollBasis.segments.find((s:any)=>s.type==='regular')?.days||0)},[type]:e.target.value}))}/></label>})}</section>
+              <section className="border rounded-xl p-3 space-y-2"><h3 className="font-medium">{l.editDays}</h3><button type="button" disabled={calculating||!canWrite} className="text-sm text-blue-700" onClick={()=>handleAutoCalculate(true)}>{l.restore}</button><p className="text-sm text-gray-500">{l.dayHint}</p>{payrollBasis?.attendanceDays&&<p className="text-sm text-blue-700">{l.automaticDays}: {payrollBasis.attendanceDays.probation+payrollBasis.attendanceDays.regular} · {workingDays?l.manualSource:l.attendanceSource}</p>}{payrollBasis && ['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((s:any)=>s.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?probationLabels(i18n.language).probation:probationLabels(i18n.language).regular} ({l.max}: {segment.eligibleDays ?? segment.days})<input aria-label={type==='probation'?l.probationDays:l.regularDays} type="number" min="0" max={segment.eligibleDays ?? segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={workingDays?.[type as 'probation'|'regular'] ?? segment.days} onChange={e=>setWorkingDays(previous=>({...previous||{probation:String(payrollBasis.segments.find((s:any)=>s.type==='probation')?.days||0),regular:String(payrollBasis.segments.find((s:any)=>s.type==='regular')?.days||0)},[type]:e.target.value}))}/></label>})}</section>
               {/* Base Salary */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -609,7 +595,6 @@ export function SalaryListPage() {
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    readOnly={!!workingDays}
                     value={formData.baseSalary}
                     onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
                     className="flex-1 w-full p-3 border border-gray-200 rounded-xl"
@@ -618,7 +603,7 @@ export function SalaryListPage() {
                   />
                   <button
                     type="button"
-                    onClick={handleAutoCalculate}
+                    onClick={()=>handleAutoCalculate()}
                     disabled={!canWrite || calculating || depositLoading || !formData.staffId || !formData.month}
                     className="px-4 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1 text-sm font-medium"
                   >
@@ -666,7 +651,6 @@ export function SalaryListPage() {
                 <input
                   type="number"
                   value={formData.bonus}
-                  readOnly
                   onChange={(e) => setFormData({ ...formData, bonus: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"
@@ -682,7 +666,6 @@ export function SalaryListPage() {
                 <input
                   type="number"
                   value={formData.deduction}
-                  readOnly
                   onChange={(e) => setFormData({ ...formData, deduction: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"

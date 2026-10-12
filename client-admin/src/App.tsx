@@ -46,6 +46,7 @@ const ShiftConfigPage = lazy(() => import('./pages/staff/ShiftConfigPage').then(
 const ReimbursementListPage = lazy(() => import('./pages/staff/ReimbursementListPage').then(module => ({ default: module.ReimbursementListPage })))
 const ReimbursementTypeConfigPage = lazy(() => import('./pages/staff/ReimbursementTypeConfigPage').then(module => ({ default: module.ReimbursementTypeConfigPage })))
 const ProbationRulesPage = lazy(() => import('./pages/staff/ProbationRulesPage').then(module => ({ default: module.ProbationRulesPage })))
+const PayrollRulesPage = lazy(()=>import('./pages/staff/PayrollRulesPage').then(module=>({default:module.PayrollRulesPage})))
 const SalaryListPage = lazy(() => import('./pages/staff/SalaryListPage').then(module => ({ default: module.SalaryListPage })))
 const ShiftSwapListPage = lazy(() => import('./pages/staff/ShiftSwapListPage').then(module => ({ default: module.ShiftSwapListPage })))
 const AttendanceCorrectionListPage = lazy(() => import('./pages/staff/AttendanceCorrectionListPage').then(module => ({ default: module.AttendanceCorrectionListPage })))
@@ -241,6 +242,7 @@ function App() {
           <Route path="salary" element={<SalaryIndexPage />}>
             <Route index element={<SalaryListPage />} />
             <Route path="salary" element={<SalaryListPage />} />
+            <Route path="payroll-rules" element={<PayrollRulesPage />} />
             <Route path="deposit" element={<StaffDepositListPage />} />
             <Route path="probation-rules" element={<ProbationRulesPage />} />
             <Route path="deposit-rules" element={<DepositRulesPage />} />

@@ -1,6 +1,8 @@
+import { getPayrollRules } from './PayrollRuleService'
 import { z } from 'zod'
 import { PrismaClient, Prisma } from '@prisma/client'
 type DB = Pick<PrismaClient, 'config'> | Pick<Prisma.TransactionClient, 'config'>
+type PayrollDB = DB & Pick<PrismaClient, 'attendance'>
 const ruleKey = 'staff.probation.rule'
 const employeeKey = (id: string) => `staff.probation.employee.${id}`
 const basisKey = (id: string) => `salary.probationBasis.${id}`
@@ -58,9 +60,28 @@ export function payrollBasis(staff: Employee, enrollment: Enrollment, month: str
  return {version:1,month,proration:'calendar_days',timezone:'Asia/Jakarta',daysInMonth,eligibleDays:Math.max(0,until-begin),workingDays:workingDays||null,payableDays:segments.reduce((sum,s)=>sum+s.days,0),formalMonthlySalary:staff.baseSalary,confirmationDate:confirmation,rule:enrollment.enabled?enrollment.rule:null,segments,amount}
 }
 export async function staffProbation(db: DB, staff: Employee, now=new Date()) {const enrollment=await getEnrollment(db,staff),today=businessDate(now),hire=staff.hireDate?businessDate(staff.hireDate):null,end=hire?confirmationDay(hire,enrollment):null;return {...enrollment,status:hire&&today<hire?'not_started':end&&today<end?'probation':'regular',confirmationDate:end,overrideConfirmationDate:enrollment.confirmationDate||null,formalMonthlySalary:staff.baseSalary,currentMonthlySalary:staff.baseSalary===null?null:monthlyRateCents(staff,enrollment,today)/100} }
-export async function calculatePayrollBasis(db: DB, staff: Employee, month: string, workingDays?: WorkingDays) {if(staff.baseSalary===null)throw new ProbationInputError('STAFF_BASE_SALARY_REQUIRED');return payrollBasis(staff,await getEnrollment(db,staff),month,workingDays)}
-export async function savePayrollBasis(db: DB, salary: {id:string;staffId:string;month:string;baseSalary:number}, staff: Employee, workingDays?: WorkingDays) {if(staff.baseSalary===null)return
- const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays);await write(db,staff.storeId,basisKey(salary.id),{...basis,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
+export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, month: string, workingDays?: WorkingDays) {
+ if(staff.baseSalary===null)throw new ProbationInputError('STAFF_BASE_SALARY_REQUIRED')
+ const enrollment=await getEnrollment(db,staff),available=payrollBasis(staff,enrollment,month)
+ const start=new Date(month+'-01T00:00:00+07:00'),end=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),1)-7*3600000)
+ const records=await db.attendance.findMany({where:{staffId:staff.id,checkInTime:{gte:start,lt:end},status:{not:'absence'}},select:{checkInTime:true,status:true}})
+ const dates=new Set(records.filter(r=>r.status!=='absence').map(r=>businessDate(r.checkInTime)))
+ const attendanceDays:WorkingDays={probation:0,regular:0}
+ for(const date of dates){const segment=available.segments.find(s=>date>=s.startDate&&date<=s.endDate);if(segment)attendanceDays[segment.type]++}
+ const basis=payrollBasis(staff,enrollment,month,workingDays||attendanceDays)
+ const rules=await getPayrollRules(db,staff.storeId)
+ const fullMonthEligible=!!staff.hireDate&&businessDate(staff.hireDate)<=month+'-01'&&(!staff.terminationDate||dayNumber(businessDate(staff.terminationDate))>=dayNumber(month+'-01')+basis.daysInMonth-1)
+ const paidRestDays=fullMonthEligible?Math.min(rules.paidRestDays,Math.max(0,basis.daysInMonth-basis.payableDays)):0
+ // Fixed monthly credits have no leave dates. Across probation/regular rates,
+ // use the month's employment-weighted rate and disclose the credit separately.
+ const workNumerator=basis.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
+ const monthNumerator=available.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
+ const totalAmount=Math.round((workNumerator*basis.daysInMonth+monthNumerator*paidRestDays)/(100*basis.daysInMonth*basis.daysInMonth))
+ const paidRestAmount=totalAmount-basis.amount
+ return {...basis,workedAmount:basis.amount,amount:basis.amount+paidRestAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:workingDays?'manual':'attendance',attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
+}
+export async function savePayrollBasis(db: PayrollDB, salary: {id:string;staffId:string;month:string;baseSalary:number}, staff: Employee, workingDays?: WorkingDays, manualCorrection=false) {if(staff.baseSalary===null)return
+ const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays);await write(db,staff.storeId,basisKey(salary.id),{...basis,manualCorrection,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
 export async function savedPayrollBasis(db: DB, storeId:string, salaryId:string) {return read(db,storeId,basisKey(salaryId))}
 
 // Rebase unpaid payroll when the employment dates change; payments remain historical.
@@ -72,12 +93,13 @@ export async function refreshEmploymentPayroll(db: Prisma.TransactionClient, sta
   const salary=await db.salary.findUnique({where:{id:listed.id}})
   if(!salary || salary.status!=='pending')continue
   const previous=await savedPayrollBasis(db,staff.storeId,salary.id)
-  const available=await calculatePayrollBasis(db,staff,salary.month)
-  const days=previous?.workingDays ? {
+  if(previous?.manualCorrection){await write(db,staff.storeId,basisKey(salary.id),{...previous,employmentNeedsReview:true});continue}
+  const available=payrollBasis(staff,await getEnrollment(db,staff),salary.month)
+  const days=previous?.workingDays && previous.daysSource!=='attendance' ? {
    probation:Math.min(previous.workingDays.probation,available.segments.find(s=>s.type==='probation')?.days||0),
    regular:Math.min(previous.workingDays.regular,available.segments.find(s=>s.type==='regular')?.days||0)
   }:undefined
-  const basis=days?await calculatePayrollBasis(db,staff,salary.month,days):available
+  const basis=await calculatePayrollBasis(db,staff,salary.month,days)
   const finalAmount=basis.amount+salary.overtime+salary.commission+salary.bonus-salary.deduction
   if(finalAmount<0)throw new ProbationInputError('SALARY_DEDUCTIONS_EXCEED_TERMINATION_PAY')
   const changed=await db.salary.updateMany({where:{id:salary.id,status:'pending'},data:{baseSalary:basis.amount,finalAmount}})

@@ -1,3 +1,4 @@
+import {payrollLabels} from '../../../../shared/payrollLabels'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useTranslation } from 'react-i18next'
 import { Outlet, Link, useLocation } from 'react-router-dom'
@@ -10,6 +11,7 @@ export function SalaryIndexPage() {
   const tabs = [
     { key: 'salary', label: t('staff.salaryTab', '工资'), path: '/staff/salary/salary', icon: Wallet },
     { key: 'reimbursement', label: t('nav.reimbursement'), path: '/staff/salary/reimbursement', icon: Receipt },
+    {key:'payroll-rules',label:payrollLabels(i18n.language).rules,path:'/staff/salary/payroll-rules',icon:Wallet},
     { key: 'probation-rules', label: probationLabels(i18n.language).title, path: '/staff/salary/probation-rules', icon: Wallet },
     { key: 'deposit-rules', label: t('staff.depositRules'), path: '/staff/salary/deposit-rules', icon: Coins },
     { key: 'deposit', label: t('staff.deposit'), path: '/staff/salary/deposit', icon: Coins },

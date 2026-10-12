@@ -330,8 +330,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     }
   }
   deductions += latePenalty + penalty(rule?.earlyLeaveDeductionType, earlyLeaveDays, rule?.earlyLeaveDeductionFixed, rule?.earlyLeaveDeductionDailyRate)
-    + penalty(rule?.absenceDeductionType, absentDays, rule?.absenceDeductionFixed, rule?.absenceDeductionDailyRate)
-    + penalty(rule?.sickLeaveDeductionType, sickDays, rule?.sickLeaveDeductionFixed, rule?.sickLeaveDeductionDailyRate) + Math.round(unpaidDays * dailySalary)
+    // Non-worked days are already excluded from base pay; do not deduct them twice.
 
   // A manually verified day count replaces incomplete attendance penalties.
   if (manualDays) deductions = 0
