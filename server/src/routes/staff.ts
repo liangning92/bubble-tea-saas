@@ -1,3 +1,4 @@
+import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { updateStaffSystemRole } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
@@ -6,7 +7,6 @@ import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import { isFeatureEnabled, getStaffConfig } from '../services/StaffConfigService'
@@ -210,7 +210,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
           userId: user.id,
           storeId,
           name,
-          employeeNumber: `EMP${Date.now()}${crypto.randomUUID().slice(0, 8)}`,
+          employeeNumber: await allocateEmployeeNumber(tx),
           position: position || '店员',
           employmentType: employmentType || 'full_time',
           baseSalary: req.body.baseSalary ?? null,
