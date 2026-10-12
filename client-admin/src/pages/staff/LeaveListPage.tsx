@@ -1,3 +1,4 @@
+import {payrollLabels} from '../../../../shared/payrollLabels'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -31,7 +32,7 @@ interface Leave {
 }
 
 export function LeaveListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
 
   const [leaves, setLeaves] = useState<Leave[]>([])
@@ -66,8 +67,9 @@ export function LeaveListPage() {
       loadLeaves()
       setSelectedLeave(null)
       setActionType(null)
-    } catch (error) {
+    } catch (error:any) {
       console.error('Failed to approve leave:', error)
+      alert(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error?.response?.data?.message||t('common.error'))
     }
   }
 

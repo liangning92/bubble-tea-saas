@@ -162,6 +162,8 @@ async function depositChange(operation: 'deduct' | 'refund', data: any) {
 
 // Staff
 export const staffApi = {
+  payrollRules:()=>api.get('/staff/payroll-rules'),
+  savePayrollRules:(data:any)=>api.put('/staff/payroll-rules',data),
   probationRule: () => api.get('/staff/probation-rule'),
   saveProbationRule: (data: any) => api.put('/staff/probation-rule', data),
   list: (params?: any) => api.get('/staff', { params }),

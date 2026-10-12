@@ -1,3 +1,4 @@
+import {payrollLabels} from '../../../shared/payrollLabels'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
@@ -319,7 +320,7 @@ interface ApplyLeaveModalProps {
 }
 
 function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [leaveType, setLeaveType] = useSessionDraft('LeavePage.tsx.leaveType', 'annual')
   const [leaveTypes, setLeaveTypes] = useState<any[]>(DEFAULT_LEAVE_TYPES)
   const [startDate, setStartDate] = useSessionDraft('LeavePage.tsx.startDate', '')
@@ -394,6 +395,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
       return
     }
 
+    for(let day=new Date(startDate+'T00:00:00Z').getTime();day<=new Date(endDate+'T00:00:00Z').getTime();day+=86400000){const weekday=new Date(day).getUTCDay();if(weekday===0||weekday===6){alert(payrollLabels(i18n.language).weekendRule);return}}
     setIsSubmitting(true)
     try {
       await staffApi.applyLeave({
@@ -408,7 +410,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
       setStartDate(''); setEndDate(''); setReason(''); setTotalDays(1); setHalfDay(false); setAttachmentUrl('')
       onSuccess()
     } catch (error: any) {
-      alert(error.response?.data?.message || t('leave.submitError'))
+      alert(error.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error.response?.data?.message || t('leave.submitError'))
     } finally {
       setIsSubmitting(false)
     }
@@ -490,7 +492,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-base font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
+              <p className="text-sm text-amber-700 mb-2">{payrollLabels(i18n.language).weekendRule}</p><label className="block text-base font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
               <input
                 type="date"
                 value={startDate}

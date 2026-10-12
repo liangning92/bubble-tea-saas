@@ -1,3 +1,4 @@
+import { assertWeekdayLeave } from './PayrollRuleService'
 import { formatDate } from '../utils/dateUtils'
 import prisma from '../config/database'
 
@@ -26,6 +27,7 @@ export interface LeaveBalanceUpdate {
 // Apply for leave
 export async function applyLeave(data: LeaveApplication, autoInitBalance: boolean = true) {
   const { staffId, leaveType, totalDays, startDate, endDate } = data
+  await assertWeekdayLeave(prisma,data.storeId,startDate,endDate)
 
   const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: data.storeId, code: leaveType } } })
   const deductBalance = configuredType?.deductBalance ?? ['annual', 'sick'].includes(leaveType)
@@ -95,6 +97,7 @@ export async function approveLeave(leaveId: string, approverId: string) {
   const leave = await prisma.leave.findUnique({ where: { id: leaveId } })
   if (!leave) throw new Error('Leave not found')
   if (leave.status !== 'pending') throw new Error('Leave is not pending')
+  await assertWeekdayLeave(prisma,leave.storeId,leave.startDate,leave.endDate)
 
   const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: leave.storeId, code: leave.leaveType } } })
   const deductBalance = configuredType?.deductBalance ?? ['annual', 'sick'].includes(leave.leaveType)

@@ -17,6 +17,7 @@ try{
  context.on('pageerror',e=>errors.push(e.message))
  await context.route('**/api/**',async route=>{
   const url=new URL(route.request().url());let data={}
+  if(url.pathname==='/api/salaries/prepare-month')data={created:0,updated:0,existing:1,skipped:[]}
   if(url.pathname==='/api/staff')data={list:[{id:'employee',name:'工资测试员工',employeeNumber:'EMP001'}],total:1}
   if(url.pathname==='/api/salaries'&&route.request().method()==='GET'){listQuery=url;const b=basis();if(legacy){b.workingDays=null;b.manualAdjustment=true;b.recordedBaseSalary=123456}data={list:[{id:legacy?'legacy':'unrecorded:employee',staffId:'employee',month:'2026-10',staff:{id:'employee',name:'工资测试员工',employeeNumber:'EMP001'},status:legacy?'pending':'unrecorded',payrollBasis:b,baseSalary:legacy?123456:b.amount,overtime:0,commission:0,bonus:0,deduction:0,finalAmount:b.amount}]}}
   if(url.pathname.includes('/deposit-plan/'))data={depositDeductions:[],compensation:{items:[],rewards:0,penalties:0}}
@@ -27,17 +28,18 @@ try{
  const page=await context.newPage();await page.goto('http://127.0.0.1:6322/staff/salary/salary')
  await expect(page.locator('p').filter({hasText:'工资测试员工'})).toBeVisible()
  assert.equal(listQuery.searchParams.get('includeUnrecorded'),'true')
- await page.getByRole('button',{name:'确认工资 / 修改天数'}).click()
- const probation=page.getByRole('spinbutton',{name:'试用期计薪天数'}),regular=page.getByRole('spinbutton',{name:'正式期计薪天数'})
+ await expect(page.getByRole('button',{name:'生成本月全部待发工资'})).toHaveCount(0);await expect(page.getByRole('button',{name:'新增工资记录'})).toHaveCount(0);await page.locator('header').getByRole('button',{name:'更正',exact:true}).click();await page.locator('select').last().selectOption('employee')
+ const probation=page.getByRole('spinbutton',{name:'试用期实际工作天数'}),regular=page.getByRole('spinbutton',{name:'正式期实际工作天数'})
  await probation.fill('16');await expect(page.getByRole('alert').filter({hasText:'请检查工作天数'})).toBeVisible()
  await expect(page.getByRole('button',{name:'保存',exact:true})).toBeDisabled()
  await probation.fill('10.5');await regular.fill('4')
- await expect(page.locator('input[readonly]').first()).toHaveValue('560000')
+ await expect(page.locator('input[type=number]').nth(2)).toHaveValue('560000')
  await expect(page.getByRole('button',{name:'保存',exact:true})).toBeEnabled()
+ await page.locator('input[type=number]').nth(2).fill('570000')
  await page.getByRole('button',{name:'保存',exact:true}).click()
  await expect.poll(()=>saved?.workingDays).toEqual({probation:10.5,regular:4})
- assert.equal(saved.autoBaseSalary,true);assert.equal(saved.baseSalary,560000);assert.deepEqual(errors,[])
- legacy=true;await page.reload();await page.getByRole('button',{name:'修改工作天数',exact:true}).click();await expect(page.locator('input[type=number]').nth(2)).toHaveValue('123456')
+ assert.equal(saved.manualCorrection,true);assert.equal(saved.autoBaseSalary,false);assert.equal(saved.manualBaseSalary,true);assert.equal(saved.baseSalary,570000);assert.deepEqual(errors,[])
+ legacy=true;await page.reload();await page.locator('header').getByRole('button',{name:'更正',exact:true}).click();await page.locator('select').last().selectOption('employee');await expect(page.locator('input[type=number]').nth(2)).toHaveValue('123456')
  console.log('PASS complete roster, half-day calculation, bounds, saved payload and preservation of legacy manual wages in real admin UI')
  await context.close()
 }finally{if(browser)await browser.close();await server.close()}

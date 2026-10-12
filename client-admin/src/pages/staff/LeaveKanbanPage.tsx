@@ -1,3 +1,4 @@
+import {payrollLabels} from '../../../../shared/payrollLabels'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -30,7 +31,7 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 }
 
 export function LeaveKanbanPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const [leaves, setLeaves] = useState<Leave[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -55,9 +56,9 @@ export function LeaveKanbanPage() {
     try {
       await leaveApi.approve(leaveId)
       loadLeaves()
-    } catch (error) {
+    } catch (error:any) {
       console.error('Failed to approve:', error)
-      alert(t('leave.approveFailed'))
+      alert(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:t('leave.approveFailed'))
     }
   }
 
