@@ -1,16 +1,20 @@
 name: CI - Build and verify
 
 on:
-  push:
-    branches:
-      - '**'
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: 'Full source SHA in the user-confirmed change list'
+        type: string
+        required: true
+      confirmed:
+        description: 'User has confirmed this exact SHA and component'
+        type: boolean
+        default: false
 
 jobs:
   verify:
+    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

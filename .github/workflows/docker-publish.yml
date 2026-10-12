@@ -1,27 +1,23 @@
 name: Verify Docker Images (No Publish)
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'server/**'
-      - 'client-admin/**'
-      - 'client-pos/**'
-      - 'client-staff/**'
-      - 'shared/**'
-      - 'Dockerfile'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/docker-publish.yml'
-  pull_request:
-    branches: [master]
   workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: 'Full source SHA in the user-confirmed change list'
+        type: string
+        required: true
+      confirmed:
+        description: 'User has confirmed this exact SHA and component'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   verify:
+    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
