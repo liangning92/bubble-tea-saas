@@ -16,9 +16,11 @@ const delay = ms => new Promise(r=>setTimeout(r,ms));
     return response.result.result.value;
   };
   const originalVersion=process.argv[4] || '2026.10.295';
+  const targetVersion=process.argv[5];
   // Wait for the original setupUpdater to register its IPC handlers.
   if(process.argv[2]==='download') await delay(20000);
   if(process.argv[2]==='download'){
+    if(!targetVersion)throw Error('Expected candidate version is required');
     const result=await evaluate(`(async()=>{
       const e=process.mainModule.require('electron');
       const u=process.mainModule.require('electron-updater').autoUpdater;
@@ -26,7 +28,7 @@ const delay = ms => new Promise(r=>setTimeout(r,ms));
       u.disableDifferentialDownload=true;
       const w=e.BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('index.html'));
       if(!w)throw Error('Original main window missing');
-      await w.webContents.executeJavaScript('window.__upgradeReady=false;window.__upgradeAvailable=false;window.__upgradeError=null;window.electronAPI.onUpdateStatus(s=>{if(s==="available")window.__upgradeAvailable=true;if(s==="downloaded")window.__upgradeReady=true});window.electronAPI.onUpdateError(e=>window.__upgradeError=e);true');
+      await w.webContents.executeJavaScript('window.__upgradeReady=false;window.__upgradeAvailable=false;window.__upgradeError=null;window.__upgradeTarget=${JSON.stringify(targetVersion)};window.electronAPI.onUpdateStatus((s,info)=>{if(s==="available"&&info?.version===window.__upgradeTarget)window.__upgradeAvailable=true;if(s==="downloaded"&&info?.version===window.__upgradeTarget)window.__upgradeReady=true});window.electronAPI.onUpdateError(e=>window.__upgradeError=e);true');
       // The old POS can still be checking GitHub when this fixture switches
       // to its local feed. Its IPC returns early in that case; wait for the
       // actual available event before using the original download button.
