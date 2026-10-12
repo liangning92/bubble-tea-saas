@@ -58,6 +58,14 @@ Var BTPSUpgradeDiagnostic
   ${AndIf} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
     StrCpy $BTPSOldApp "$INSTDIR"
   ${EndIf}
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
+!macroend
+
+!ifndef BUILD_UNINSTALLER
+!macro customCheckAppRunning
+  # Keep NSIS initialization fast so the installation window appears before
+  # process handoff, final backup verification, and schema migration.
   ${If} $BTPSOldApp != ""
   ${OrIf} ${FileExists} "$APPDATA\BTPS\data\dev.db"
   ${OrIf} ${FileExists} "$APPDATA\bubble-tea-saas\data\dev.db"
@@ -76,8 +84,6 @@ Var BTPSUpgradeDiagnostic
     SetErrorLevel 73
     Quit
     btps_upgrade_confirmed:
-    InitPluginsDir
-    File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     CreateDirectory "$APPDATA\BTPS\logs"
     Call BTPSWaitForClosedPOS
@@ -95,14 +101,7 @@ Var BTPSUpgradeDiagnostic
       SetErrorLevel 73
       Quit
     ${EndIf}
-  ${Else}
-    InitPluginsDir
-    File /oname=$PLUGINSDIR\btps-db-upgrade.exe "${BUILD_RESOURCES_DIR}\upgrade-helper\btps-db-upgrade.exe"
   ${EndIf}
-!macroend
-
-!ifndef BUILD_UNINSTALLER
-!macro customCheckAppRunning
   # The initial handoff already required eight quiet seconds. Check again
   # immediately before replacing files; only repeat the graceful wait if POS
   # has actually reappeared while the wizard was open.

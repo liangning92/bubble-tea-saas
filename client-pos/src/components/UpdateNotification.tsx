@@ -14,6 +14,7 @@ export function UpdateNotification({className = ''}: {className?: string}) {
   const [visible, setVisible] = useState(false)
   const [currentVersion, setCurrentVersion] = useState('')
   const manual = useRef(false)
+  const installAfterDownload = useRef(false)
   const current = useRef('')
   useEffect(() => {
     const api = window.electronAPI
@@ -38,6 +39,7 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     })
     const offProgress = api.onUpdateProgress((value: any) => setProgress(value.percent || 0))
     const offError = api.onUpdateError((message: string) => {
+      installAfterDownload.current = false
       useOrderStore.getState().setIsInstallingUpdate(false)
       setStatus('error'); setError(message)
       if (manual.current) setVisible(true)
@@ -45,6 +47,11 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     })
     return () => {window.removeEventListener('pos-update-check-requested', manualCheck); disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
+  useEffect(() => {
+    if (status !== 'downloaded' || !installAfterDownload.current) return
+    installAfterDownload.current = false
+    void run('install')
+  }, [status])
   const run = async (action: 'check'|'download'|'show'|'install') => {
     const api = window.electronAPI
     if (!api) return
@@ -64,14 +71,22 @@ export function UpdateNotification({className = ''}: {className?: string}) {
         }
       }
       if (action === 'check') {setStatus('checking'); await api.checkForUpdates()}
-      if (action === 'download') {setStatus('downloading'); const result = await api.downloadUpdate(); if ((result as any) === false) throw Error(t('pos.updateError'))}
+      if (action === 'download') {
+        const state = useOrderStore.getState()
+        if (state.isCheckingOut || !window.dispatchEvent(new Event('pos-before-update', {cancelable: true}))) throw Error(t('updateFlow.busy'))
+        installAfterDownload.current = true
+        setStatus('downloading')
+        const result = await api.downloadUpdate()
+        if (result === false) throw Error(t('pos.updateError'))
+      }
       if (action === 'show') {
         if (!(await api.showUpdateInstaller()).success) throw Error(t('updateFlow.fileMissing'))
         manual.current = false
       }
-    } catch (err: any) {useOrderStore.getState().setIsInstallingUpdate(false);manual.current = false; setError(err.message); setStatus('error'); setVisible(true)}
+    } catch (err: any) {installAfterDownload.current = false;useOrderStore.getState().setIsInstallingUpdate(false);manual.current = false; setError(err.message); setStatus('error'); setVisible(true)}
   }
   const close = () => {
+    if (installAfterDownload.current || status === 'installing') return
     if (info?.version && status === 'available') {
       try {localStorage.setItem(DISMISSED, JSON.stringify({version: info.version, until: Date.now() + 86400000}))} catch {}
     }
@@ -79,7 +94,7 @@ export function UpdateNotification({className = ''}: {className?: string}) {
   }
   if (!window.electronAPI || !visible) return null
   return <div className={`fixed top-4 right-4 z-50 max-w-sm ${className}`}><div className="bg-white rounded-xl shadow-2xl border p-4">
-    <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-gray-900">{t(status === 'error' ? 'pos.updateError' : status === 'checking' ? 'pos.checkingUpdate' : status === 'downloaded' ? 'updateFlow.downloadedTitle' : 'pos.updateAvailable')}</h3><button onClick={close} aria-label={t('updateFlow.close')} className="text-gray-400 hover:text-gray-600"><X size={18}/></button></div>
+    <div className="flex items-center justify-between mb-3"><h3 className="font-bold text-gray-900">{t(status === 'error' ? 'pos.updateError' : status === 'checking' ? 'pos.checkingUpdate' : status === 'downloaded' ? 'updateFlow.downloadedTitle' : 'pos.updateAvailable')}</h3>{!installAfterDownload.current && status !== 'installing' && <button onClick={close} aria-label={t('updateFlow.close')} className="text-gray-400 hover:text-gray-600"><X size={18}/></button>}</div>
     {currentVersion && <p className="text-xs text-gray-500 mb-2">{t('updateFlow.current', {version: currentVersion})}</p>}
     {status === 'available' && info && <div className="space-y-3"><p className="text-sm text-gray-600">{t('pos.newVersionReady', {version: info.version})}</p><button onClick={() => void run('download')} className="w-full py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2"><Download size={16}/>{t('pos.downloadUpdate')}</button></div>}
     {status === 'checking' && <p className="flex items-center gap-2"><RefreshCw size={18} className="animate-spin"/>{t('pos.checkingUpdate')}</p>}
