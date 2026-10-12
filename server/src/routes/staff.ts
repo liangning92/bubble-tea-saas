@@ -1044,24 +1044,23 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// PUT /api/staff/:id/reset-password - Reset staff password (admin only)
+// Resolve the employee's linked login account; Staff.id and User.id differ.
 router.put('/:id/reset-password', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params
     const { newPassword } = req.body
-
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ code: 400, message: 'Password must be at least 6 characters' })
+    if (typeof newPassword !== 'string' || newPassword.length < 6 || Buffer.byteLength(newPassword, 'utf8') > 72) {
+      return res.status(400).json({ code: 400, message: 'Password must be at least 6 characters and at most 72 UTF-8 bytes' })
     }
-
-    const hashed = await bcrypt.hash(newPassword, 10)
-    await prisma.user.update({
-      where: { id },
-      data: { password: hashed }
-    })
-
+    const staff = await prisma.staff.findUnique({ where: { id: req.params.id }, include: { user: { select: { id: true, role: true } } } })
+    if (!staff || !staff.user) return res.status(404).json({ code: 404, message: 'Employee login account not found' })
+    if (!canAccessStore(req.user!, staff.storeId) || (req.user!.role !== 'admin' && staff.user.role === 'admin')) {
+      return res.status(403).json({ code: 403, message: 'Access denied' })
+    }
+    const hashed = await bcrypt.hash(newPassword, 12)
+    await prisma.user.update({ where: { id: staff.userId }, data: { password: hashed } })
     res.json({ code: 200, message: 'Password reset successfully', timestamp: new Date().toISOString() })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2025') return res.status(404).json({ code: 404, message: 'Employee login account not found' })
     console.error('Reset password error:', error)
     res.status(500).json({ code: 500, message: 'Failed to reset password' })
   }
