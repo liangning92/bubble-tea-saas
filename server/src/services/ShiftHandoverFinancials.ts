@@ -2,9 +2,10 @@ import { PrismaClient } from '@prisma/client'
 import { manualReceiptsSchema } from './ShiftManualReceipts'
 export function shiftHandoverFinancials(drawerTotal:number|null, openFloat:number, expenses:number, qris:number|null, shopeefood:number, gofood:number, orderRevenue:number) {
   return {drawerTotal,openFloat,expenses,qris,shopeefood,gofood,orderRevenue,
-    actualCashReceived:drawerTotal === null || qris === null ? null : drawerTotal-expenses-openFloat-qris,
+    // Counted drawer cash already excludes QRIS and cash spent during the shift.
+    actualCashReceived:drawerTotal === null ? null : drawerTotal-openFloat,
     totalRevenue:orderRevenue+shopeefood+gofood,
-    cashFormula:'drawerTotal-expenses-openFloat-qris', revenueFormula:'orderRevenue+shopeefood+gofood'}
+    cashFormula:'drawerTotal-openFloat', revenueFormula:'orderRevenue+shopeefood+gofood'}
 }
 export async function loadOnlineHandoverRevenue(db:Pick<PrismaClient,'shiftSession'|'config'>,storeId:string,start:Date,end:Date) {
   const sessions=await db.shiftSession.findMany({where:{storeId,status:'closed',closedAt:{gte:start,lte:end}},select:{id:true,closedAt:true}})

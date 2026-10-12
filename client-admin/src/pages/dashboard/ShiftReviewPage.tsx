@@ -2,7 +2,7 @@ import { ShiftCorrection } from '../../components/ShiftCorrection'
 import { OrderItemRows } from '../../components/OrderItemsTable'
 import { ShiftHandoverFinancials } from '../../components/ShiftHandoverFinancials'
 import { ShiftCashReconciliation, ShiftCashWarning, formatShiftCash } from '../../../../shared/utils/shiftCashReconciliation'
-import { ManualReceipts, ManualReceiptAmounts } from '../../components/ManualReceipts'
+import { ManualReceiptAmounts } from '../../components/ManualReceipts'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -67,8 +67,8 @@ export function ShiftReviewPage() {
     const startDate = kind === 'yesterday' ? shiftDay(today, -1) : kind === 'week' ? shiftDay(today, -((weekday + 6) % 7)) : today
     setRange({ startDate, endDate: kind === 'yesterday' ? startDate : today })
   }
-  const cards = (row: Review) => <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-    {(['revenue', 'orders', 'warnings', 'expenseAmount', 'employees'] as const).map(key => <div key={key} className="bg-white rounded-xl border p-4">
+  const cards = (row: Review) => <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    {(['revenue', 'orders', 'warnings', 'expenseAmount', 'employees'] as const).filter(key => !row.handoverFinancials || !['revenue', 'expenseAmount'].includes(key)).map(key => <div key={key} className="bg-white rounded-xl border p-4">
       <p className="text-sm text-gray-500">{t(`shiftReview.${key}`)}</p><p className={`mt-2 text-2xl font-bold ${key === 'revenue' ? 'text-primary' : key === 'warnings' && (row.summary.warnings > 0 || row.cashWarning?.status === 'pending') ? 'text-amber-700' : 'text-gray-900'}`}>{key === 'revenue' || key === 'expenseAmount' ? money(row.summary[key]) : row.summary[key] + (key === 'warnings' && row.cashWarning?.status === 'pending' ? 1 : 0)}</p>
     </div>)}
   </div>
@@ -93,11 +93,8 @@ export function ShiftReviewPage() {
       {selected && <section className="space-y-4" data-testid="shift-review-detail">
         <div className="flex flex-wrap justify-between items-end gap-2"><div><h2 className="text-xl font-bold">{title(selected)} · {t('shiftReview.details')}</h2><p className="text-sm text-gray-500 mt-1">{instant(selected.windowStart)} — {instant(selected.windowEnd)} · WIB</p></div><span className="text-sm text-gray-500">{t('shiftReview.updated')} {data && instant(data.asOf)}</span></div>
         {cards(selected)}
+        {selected.handoverFinancials && <ShiftHandoverFinancials amounts={selected.handoverFinancials} />}
         {user?.role === 'admin' && selected.session && ['open','closed'].includes(selected.session.status) && <ShiftCorrection key={selected.id+selected.session.updatedAt} id={selected.id} session={selected.session} receipts={selected.manualReceipts} refresh={()=>query.refetch()} />}
-        {selected.cashReconciliation && <section className="rounded-xl border bg-white p-4" data-testid="shift-cash-reconciliation">
-          <h3 className="font-semibold">{t('cashReconciliation.title')}</h3><p className="my-2 text-sm text-gray-500">{t('cashReconciliation.formula')}</p>
-          <dl className="grid grid-cols-2 lg:grid-cols-4 gap-4">{(['revenue','expenses','qris','cashFromRevenue','openFloat','expectedCash'] as const).map(key=><div key={key}><dt className="text-sm text-gray-500">{t('cashReconciliation.'+key)}</dt><dd className="font-semibold">{money(selected.cashReconciliation![key])}</dd></div>)}<div><dt className="text-sm text-gray-500">{t('cashReconciliation.actualCash')}</dt><dd className="font-semibold">{money(selected.session?.actualCash)}</dd></div><div><dt className="text-sm text-gray-500">{t('cashReconciliation.difference')}</dt><dd className="font-semibold">{money(selected.cashWarning?.difference ?? (selected.session?.actualCash == null ? null : selected.session.actualCash-selected.cashReconciliation.expectedCash))}</dd></div></dl>
-        </section>}
         {selected.cashWarning?.status === 'pending' && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4" data-testid="shift-cash-warning">
           <h3 className="font-bold text-amber-900">{t('cashReconciliation.pending')}</h3>
           <p role="alert" className="mt-2 text-sm text-amber-900">{t('cashReconciliation.warning',{difference:money(selected.cashWarning.difference)})}</p>
@@ -109,10 +106,8 @@ export function ShiftReviewPage() {
         <p className="text-sm text-gray-500">{t('shiftReview.attribution')}</p>
         {selected.overlapping && <p role="alert" className="text-amber-700">{t('shiftReview.overlap')}</p>}
         <nav className="flex flex-wrap gap-1 border-b" aria-label={t('shiftReview.details')}>{(['overview', 'orders', 'warnings', 'expenses', 'employees'] as Tab[]).map(key => <button key={key} aria-pressed={tab === key} className={`px-4 py-3 font-medium ${tab === key ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setTab(key)}>{t(`shiftReview.${key}`)}{key !== 'overview' && ` (${key === 'warnings' ? warningRows.length : selected[key].length})`}</button>)}</nav>
-        {selected.handoverFinancials && <ShiftHandoverFinancials amounts={selected.handoverFinancials} />}
-        {selected.session && <ManualReceipts amounts={selected.manualReceipts || null} cashIsDrawer={selected.manualReceiptsCashBasis === 'drawer_total'} />}
         {tab === 'overview' ? <div className="bg-white rounded-xl border p-5 grid md:grid-cols-2 gap-4">
-          {selected.session && <><div><span className="text-gray-500">{t('shiftReview.opener')}</span><p className="font-semibold">{selected.session.opener.name}</p></div><div><span className="text-gray-500">{t('shiftReview.handover')}</span><p className="font-semibold">{selected.session.nextStaff?.name || '—'}</p></div><div><span className="text-gray-500">{t('shiftReview.float')}</span><p className="font-semibold">{money(selected.session.openFloat)}</p></div><div><span className="text-gray-500">{t('shiftReview.counted')}</span><p className="font-semibold">{money(selected.session.actualCash)}</p></div><div><span className="text-gray-500">{t('shiftReview.difference')}</span><p className="font-semibold">{money(selected.session.cashDifference)}</p></div><div><span className="text-gray-500">{t('shiftReview.closeNote')}</span><p>{selected.session.closeNote || '—'}</p></div></>}
+          {selected.session && <><div><span className="text-gray-500">{t('shiftReview.opener')}</span><p className="font-semibold">{selected.session.opener.name}</p></div><div><span className="text-gray-500">{t('shiftReview.handover')}</span><p className="font-semibold">{selected.session.nextStaff?.name || '—'}</p></div><div><span className="text-gray-500">{t('shiftReview.closeNote')}</span><p>{selected.session.closeNote || '—'}</p></div></>}
           <div><span className="text-gray-500">{t('shiftReview.completedOrders')}</span><p className="font-semibold">{selected.summary.completedOrders}</p></div><div><span className="text-gray-500">{t('shiftReview.refunded')}</span><p className="font-semibold">{selected.summary.refundedOrders} · {money(selected.summary.refundedAmount)}</p></div>
         </div> : <div className="bg-white rounded-xl border overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr>{(tab === 'orders' ? ['time', 'products', 'quantity', 'employee', 'payment', 'status', 'amount'] : tab === 'expenses' ? ['time', 'category', 'quantity', 'employee', 'description', 'amount'] : tab === 'warnings' ? ['time', 'employee', 'severity', 'description'] : ['employee', 'number', 'role', 'orders', 'expenses', 'warnings']).map(key => <th key={key} className="p-3 whitespace-nowrap">{key === 'products' ? t('shiftHandover.products') : t(`shiftReview.${key}`)}</th>)}</tr></thead><tbody>
           {tab === 'orders' && (paged as Review['orders']).map(o => <OrderItemRows key={o.id} items={o.items}
