@@ -828,7 +828,7 @@ function createCustomerWindow() {
 
   const targetDisplay = rightmostDisplay
 
-  const { width, height, x: screenX, y: screenY } = targetDisplay.workArea
+  const { width, height, x: screenX, y: screenY } = targetDisplay.bounds
 
   customerWindow = new BrowserWindow({
     width,
@@ -836,6 +836,7 @@ function createCustomerWindow() {
     x: screenX,
     y: screenY,
     fullscreen: true,
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: getResourcePath('dist-electron/electron/preload.js'),
@@ -851,6 +852,24 @@ function createCustomerWindow() {
   customerWindow.setMenu(null)
   customerWindow.setMenuBarVisibility(false)
   customerWindow.setAutoHideMenuBar(true)
+
+  // Use DIP bounds directly; Electron already accounts for the display DPI.
+  const displayWindow = customerWindow
+  const fitDisplay = () => {
+    if (displayWindow.isDestroyed()) return
+    const display = screen.getAllDisplays().find(item => item.id === targetDisplay.id)
+    if (!display) return
+    displayWindow.setBounds(display.bounds)
+    displayWindow.setFullScreen(true)
+  }
+  const onDisplayMetricsChanged = (_event: Electron.Event, display: Electron.Display) => {
+    if (display.id === targetDisplay.id) fitDisplay()
+  }
+  displayWindow.once('ready-to-show', fitDisplay)
+  screen.on('display-metrics-changed', onDisplayMetricsChanged)
+  displayWindow.once('closed', () => {
+    screen.removeListener('display-metrics-changed', onDisplayMetricsChanged)
+  })
 
   // 加载副屏界面
   if (isDev) {

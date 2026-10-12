@@ -383,6 +383,23 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// POST /api/orders/:id/void - retain receipt and audit evidence for erroneous/test sales.
+router.post('/:id/void', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const body = z.object({ reasonCode: z.enum(['error', 'test']), reason: z.string().trim().min(1).max(1000), noActualPayment: z.literal(true) }).safeParse(req.body)
+    if (!body.success) return res.status(400).json({ code: 400, message: 'INVALID_VOID_REASON' })
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } })
+    if (!checkOrderAccess(req, res, order)) return
+    await OrderService.voidOrder(req.params.id, body.data.reasonCode, body.data.reason, req.user!.staffId || req.user!.id)
+    res.json({ code: 200, message: 'Order voided' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to void order'
+    if (/^(VOID_|INVALID_VOID_|ORDER_ALREADY_REFUNDED|REFUND_REMAINING_ITEMS_REQUIRED|REPLICA_FINANCIAL_ACTION_LOCAL_ONLY)/.test(message)) return res.status(409).json({ code: 409, message })
+    console.error('Void order error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to void order' })
+  }
+})
+
 // POST /api/orders/:id/refund
 router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {

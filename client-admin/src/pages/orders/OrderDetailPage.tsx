@@ -7,6 +7,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import api, { orderApi } from '../../services/api'
+import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import { ArrowLeft, Printer, RotateCcw, CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react'
 
@@ -17,6 +18,19 @@ export function OrderDetailPage() {
   const queryClient = useQueryClient()
   const [refundReason, setRefundReason] = useState('')
   const [showRefund, setShowRefund] = useState(false)
+  const user = useAuthStore(state => state.user)
+  const [showVoid, setShowVoid] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidKind, setVoidKind] = useState<'error' | 'test'>('error')
+  const [noActualPayment, setNoActualPayment] = useState(false)
+  const voidMutation = useMutation({
+    mutationFn: () => api.post(`/orders/${id}/void`, { reasonCode: voidKind, reason: voidReason, noActualPayment }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries()
+      setShowVoid(false)
+      alert(t('orderVoid.done'))
+    }
+  })
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['order',context.storeId,id],
@@ -115,6 +129,23 @@ export function OrderDetailPage() {
                 {order.status === 'pending' && <button onClick={() => updateStatusMutation.mutate('preparing')} className="btn-primary w-full">{t('orders.startPrepare')}</button>}
                 {order.status === 'preparing' && <button onClick={() => updateStatusMutation.mutate('ready')} className="btn-primary w-full">{t('orders.markReady')}</button>}
               </div>
+            </div>
+          )}
+
+          {['admin', 'manager'].includes(user?.role || '') && ['completed', 'paid'].includes(order.status) && (
+            <div className="card">
+              <h2 className="font-semibold mb-3">{t('orderVoid.title')}</h2>
+              <p className="text-sm text-gray-600 mb-3">{t('orderVoid.description')}</p>
+              {!showVoid ? <button className="btn-danger w-full" onClick={() => setShowVoid(true)}>{t('orderVoid.title')}</button> : <div className="space-y-3">
+                <select className="input" value={voidKind} onChange={e => setVoidKind(e.target.value as 'error' | 'test')}>
+                  <option value="error">{t('orderVoid.error')}</option><option value="test">{t('orderVoid.test')}</option>
+                </select>
+                <textarea className="input" rows={3} value={voidReason} onChange={e => setVoidReason(e.target.value)} placeholder={t('orderVoid.reason')} maxLength={1000}/>
+                <label className="flex gap-2 text-sm"><input type="checkbox" checked={noActualPayment} onChange={e => setNoActualPayment(e.target.checked)}/>{t('orderVoid.noPayment')}</label>
+                {voidMutation.isError && <p role="alert" className="text-sm text-red-600">{t('orderVoid.failed')}</p>}
+                <button className="btn-danger w-full" disabled={voidMutation.isPending || !voidReason.trim() || !noActualPayment} onClick={() => window.confirm(t('orderVoid.confirm')) && voidMutation.mutate()}>{voidMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
+                <button className="btn-secondary w-full" onClick={() => setShowVoid(false)}>{t('common.cancel')}</button>
+              </div>}
             </div>
           )}
 

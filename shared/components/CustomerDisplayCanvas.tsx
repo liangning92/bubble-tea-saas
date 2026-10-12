@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react'
 
-// One design coordinate system for the editor preview and the physical display.
+// Shared base coordinates; extend the layout to fill other display ratios.
 export const CUSTOMER_CANVAS_WIDTH = 1280
 export const CUSTOMER_CANVAS_HEIGHT = 720
 

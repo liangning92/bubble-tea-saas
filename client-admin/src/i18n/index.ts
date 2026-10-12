@@ -12194,6 +12194,52 @@ Object.assign(resources.en.translation.staff, {
   attendanceRulesDescription: 'Manage attendance and deduction rules'
 })
 
+
+const orderVoidTranslations = {
+  "zh": {
+    "title": "作废错误／测试订单",
+    "description": "仅用于没有真实收款的错误单或测试单。作废后扣除营收，正常列表隐藏，回退会员积分和优惠券；保留审计记录，不自动退回原材料。",
+    "error": "错误订单",
+    "test": "测试订单",
+    "reason": "填写作废原因",
+    "noPayment": "确认没有真实收款；真实交易需要给顾客退钱时请使用退款。",
+    "confirm": "确认作废？该订单将从营收和正常订单中排除，原材料库存不变。",
+    "done": "订单已作废，营收和订单列表已更新。",
+    "failed": "作废失败。已有退款、非有效订单或云端同步副本不能直接作废；请在原收银端处理。",
+    "activeOrders": "有效订单",
+    "voided": "已作废／取消"
+  },
+  "en": {
+    "title": "Void erroneous / test order",
+    "description": "For orders without an actual payment. Removes revenue and hides the order from the active list, reverses member points and coupons, retains audit evidence, and leaves ingredients unchanged.",
+    "error": "Erroneous order",
+    "test": "Test order",
+    "reason": "Enter the reason",
+    "noPayment": "No actual payment was received. Use a refund to return a real customer payment.",
+    "confirm": "Void this order? Revenue and active orders will exclude it. Ingredient stock remains unchanged.",
+    "done": "Order voided. Revenue and orders updated.",
+    "failed": "Unable to void. Orders with refunds, inactive orders and cloud replicas cannot be voided here. Use the original POS.",
+    "activeOrders": "Active orders",
+    "voided": "Voided / cancelled"
+  },
+  "id": {
+    "title": "Batalkan pesanan salah / uji",
+    "description": "Untuk pesanan tanpa pembayaran nyata. Menghapus pendapatan dan menyembunyikan pesanan dari daftar aktif, mengembalikan poin dan kupon, menyimpan jejak audit, dan tidak mengubah bahan baku.",
+    "error": "Pesanan salah",
+    "test": "Pesanan uji",
+    "reason": "Masukkan alasan",
+    "noPayment": "Tidak ada pembayaran nyata. Gunakan pengembalian dana untuk pembayaran pelanggan yang nyata.",
+    "confirm": "Batalkan pesanan ini? Pendapatan dan pesanan aktif akan mengecualikannya. Stok bahan tetap.",
+    "done": "Pesanan dibatalkan. Pendapatan dan daftar diperbarui.",
+    "failed": "Tidak dapat membatalkan pesanan dengan refund, pesanan tidak aktif, atau salinan cloud. Gunakan POS asal.",
+    "activeOrders": "Pesanan aktif",
+    "voided": "Dibatalkan"
+  }
+}
+for (const language of Object.keys(resources) as Array<keyof typeof resources>) {
+  Object.assign(resources[language].translation, { orderVoid: orderVoidTranslations[language] })
+}
+
 i18n.use(initReactI18next).init({
   resources,
   lng: getInitialLanguage(),

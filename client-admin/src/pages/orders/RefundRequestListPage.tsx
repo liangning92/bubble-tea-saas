@@ -1,5 +1,6 @@
 import { OrderItemsTable } from '../../components/OrderItemsTable'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { adminApi } from '../../services/api'
@@ -31,6 +32,7 @@ interface RefundRequest {
 
 export function RefundRequestListPage() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [requests, setRequests] = useState<RefundRequest[]>([])
   const [loading, setLoading] = useState(false)
@@ -59,6 +61,7 @@ export function RefundRequestListPage() {
     setSubmitting(true)
     try {
       await adminApi.approveRefund(selectedRequest.id, { verifiedPrepared: selectedRequest.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRequest.reasonCode === 'paid_unprepared', note: actionNote })
+      await queryClient.invalidateQueries()
       alert(t('orders.refundApproved'))
       setSelectedRequest(null)
       setActionNote('')

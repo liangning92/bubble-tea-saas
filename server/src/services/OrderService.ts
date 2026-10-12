@@ -4,6 +4,7 @@ import { quoteActivities, enqueueActivityGrants, runActivityJobs, reverseActivit
 import { getActivityPriceRules } from './ActivityPricingService'
 import { activityPrice } from '../utils/activityPricing'
 import { findOrderReplay as replayReceipt, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
+import { netReceivedAmount } from '../utils/refundAllocation'
 import { containsFilter } from '../utils/stringFilter'
 import { OrderBusinessRejection } from './OrderBusinessRejection'
 import {orderNumberCandidate,isOrderNumberCollision} from '../utils/orderNumber'
@@ -410,7 +411,7 @@ export async function getOrders(params: {
     where.storeId = userId // In this case, userId is actually storeId for staff/cashier
   }
 
-  if (status) where.status = status
+  where.status = status || { notIn: ['refunded', 'cancelled'] }
   if (paymentMethod) where.paymentMethod = paymentMethod
   if (channelId) where.channelId = channelId
 
@@ -466,6 +467,7 @@ export async function getOrders(params: {
       where,
       include: {
         items: true,
+        refundRequests: { where: { status: { in: ['approved', 'paid'] } } },
         channel: { select: { id: true, name: true, code: true, icon: true } },
         member: { select: { id: true, name: true, phone: true } }
       },
@@ -477,7 +479,7 @@ export async function getOrders(params: {
   ])
 
   return {
-    list: orders.map(publicOrder),
+    list: orders.map(order => ({ ...publicOrder(order), netAmount: netReceivedAmount(order) })),
     pagination: {
       page,
       pageSize,
@@ -958,14 +960,14 @@ export async function updateOrderStatus(orderId: string, status: string) {
 }
 
 // Refund order (idempotent, transactional, full rollback of points / coupons / cash)
-export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean },db:any=prisma) {
-  const note = `Refund: ${reason || 'No reason provided'}`
+export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean },db:any=prisma,voiding?: { reasonCode: 'error' | 'test'; actorId: string }) {
+  const note = `${voiding ? 'Void' : 'Refund'}: ${reason || 'No reason provided'}`
 
   const operation = async (tx:any) => {
     // Idempotency guard: only flip status once (atomic conditional update)
     const flipped = await tx.order.updateMany({
-      where: { id: orderId, status: { notIn: ['refunded', 'cancelled'] } },
-      data: { status: 'refunded' }
+      where: { id: orderId, status: voiding ? { in: ['completed', 'paid'] } : { notIn: ['refunded', 'cancelled'] } },
+      data: { status: voiding ? 'cancelled' : 'refunded' }
     })
     if (flipped.count === 0) {
       const exists = await tx.order.findUnique({ where: { id: orderId }, select: { id: true } })
@@ -982,6 +984,10 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
 
     const earlier=await tx.refundRequest.findFirst({where:{orderId:o.id,status:{in:['approved','paid']}}})
     if(earlier)throw new Error('REFUND_REMAINING_ITEMS_REQUIRED')
+    if (voiding) {
+      if (await tx.refundRequest.findFirst({ where: { orderId, status: 'pending' } })) throw new Error('VOID_PENDING_REFUND')
+      await tx.financeAuditLog.create({ data: { storeId: o.storeId, userId: voiding.actorId, action: 'update', entityType: 'order', entityId: o.id, description: `Void ${voiding.reasonCode}: ${reason}`, newValue: JSON.stringify({ status: 'cancelled', reasonCode: voiding.reasonCode, reason, inventoryAction: 'unchanged' }) } })
+    }
 
     if (refundAmount !== undefined && (!Number.isSafeInteger(refundAmount) || refundAmount <= 0 || refundAmount > o.finalAmount)) {
       throw new Error('INVALID_REFUND_AMOUNT')
@@ -1047,7 +1053,12 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
 
     // 3. Cash refund → cash_out so drawer reconciliation stays accurate
     const cashRefund = refundAmount && refundAmount > 0 ? Math.min(refundAmount, o.finalAmount) : o.finalAmount
-    if (o.paymentMethod === 'cash' && cashRefund > 0) {
+    if (o.paymentMethod === 'cash' && cashRefund > 0 && voiding) {
+      // Correct the fictitious sale in its original shift; this is not a cash payout.
+      const sales = await tx.cashEvent.findMany({ where: { storeId: o.storeId, orderId: o.orderNumber, type: 'cash_sale' } })
+      if (sales.reduce((sum, sale) => sum + sale.amount, 0) !== o.finalAmount) throw new Error('VOID_CASH_EVIDENCE_REQUIRED')
+      for (const sale of sales) await tx.cashEvent.create({ data: { storeId: o.storeId, staffId: voiding.actorId, type: 'cash_sale', amount: -sale.amount, shift: sale.shift, paymentMethod: 'cash', orderId: o.orderNumber, createdAt: sale.createdAt, note: `Void ${o.orderNumber}: reverse ${sale.id}; ${reason}` } })
+    } else if (o.paymentMethod === 'cash' && cashRefund > 0) {
       await tx.cashEvent.create({
         data: {
           storeId: o.storeId,
@@ -1073,6 +1084,12 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
     return o
   };
   return db===prisma?prisma.$transaction(operation):operation(db)
+}
+
+// Administrative correction for fictitious sales, separate from customer refunds.
+export async function voidOrder(orderId: string, reasonCode: 'error' | 'test', reason: string, actorId: string) {
+  if (!['error', 'test'].includes(reasonCode) || !reason.trim() || reason.length > 1000) throw new Error('INVALID_VOID_REASON')
+  return refundOrder(orderId, reason.trim(), actorId, undefined, undefined, prisma, { reasonCode, actorId })
 }
 
 // Create refund request (from POS)

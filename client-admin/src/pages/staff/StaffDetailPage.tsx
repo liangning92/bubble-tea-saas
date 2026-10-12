@@ -221,6 +221,10 @@ export function StaffDetailPage() {
               <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID')}`}</span>
             </div>}
             <div className="flex justify-between">
+              <span className="text-gray-500">{t('salary.baseSalary')}</span>
+              <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID')}`}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-500">{t('staff.hireDate')}</span>
               <span className="font-medium">
                 {staff.hireDate

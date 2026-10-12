@@ -3,7 +3,7 @@ import { useDashboardContext, requireRead, dashboardLink } from '../../utils/das
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { orderApi, channelApi, adminApi } from '../../services/api'
@@ -32,6 +32,7 @@ type OrderSubTab = 'orders' | 'refunds'
 
 export function OrderListPage() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { user: _user } = useAuthStore()
   const context=useDashboardContext()
@@ -88,6 +89,7 @@ export function OrderListPage() {
     if (!confirmPreparedRefund(selectedRefund, t)) return
     try {
       await adminApi.approveRefund(selectedRefund.id, { verifiedPrepared: selectedRefund.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRefund.reasonCode === 'paid_unprepared', note: refundNote })
+      await queryClient.invalidateQueries()
       alert(t('orders.refundApproved'))
       setSelectedRefund(null)
       setRefundAction(null)
@@ -172,10 +174,11 @@ export function OrderListPage() {
           />
         </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-40">
-          <option value="">{t('common.all')} {t('orders.status')}</option>
+          <option value="">{t('orderVoid.activeOrders')}</option>
           <option value="pending">{t('orders.pending')}</option>
           <option value="completed">{t('orders.completed')}</option>
           <option value="refunded">{t('orders.refunded')}</option>
+          <option value="cancelled">{t('orderVoid.voided')}</option>
         </select>
         <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="input w-40">
           <option value="">{t('channels.allChannels') || 'All Channels'}</option>
