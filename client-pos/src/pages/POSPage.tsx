@@ -486,7 +486,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     footer: 'Thank you!',
     taxRate: 11,
     showLogo: true,
-    storeLogo: (typeof window !== 'undefined' && localStorage.getItem('pos_store_logo')) || '',
+    storeLogo: (typeof window !== 'undefined' && localStorage.getItem('pos_receipt_logo')) || '',
     paperSize: '80mm',
     printCopies: 1,
     showQR: false,
@@ -513,8 +513,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   })
 
   // Cache the actual enabled template image, scoped by its absolute source URL.
-  const templateLogo = receiptTemplate?.blocks?.find((b: any) => b.type === 'logo' && b.enabled !== false)?.config?.url
-  const receiptLogoSource = templateLogo || posReceipt.storeLogo || storeInfo.storeLogo || ''
+  const receiptLogoSource = posReceipt.storeLogo || ''
   const receiptLogoUrl = receiptLogoSource.startsWith('data:image/') || /^https?:\/\//.test(receiptLogoSource)
     ? receiptLogoSource
     : receiptLogoSource ? `${getApiUrl().replace(/\/api$/, '')}${receiptLogoSource.startsWith('/') ? '' : '/'}${receiptLogoSource}` : ''
@@ -543,11 +542,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas')
-        canvas.width = img.width
-        canvas.height = img.height
+        const scale = Math.min(1, 576 / img.width, 1024 / img.height)
+        canvas.width = Math.max(1, Math.round(img.width * scale))
+        canvas.height = Math.max(1, Math.round(img.height * scale))
         const ctx = canvas.getContext('2d')
         if (ctx) {
-          ctx.drawImage(img, 0, 0)
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
           if (!cancelled) {
             const image = canvas.toDataURL('image/png')
             cachedLogoBase64Ref.current = image
@@ -565,14 +565,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     return receiptLogoUrl
   }, [receiptLogoUrl])
 
-  const getPrintBlocks = () => receiptTemplate?.blocks?.map((block: any) => {
-    if (block.type !== 'logo' || !block.config?.url) return block
-    const source = block.config.url
-    const url = source === receiptLogoSource ? getPrintLogo()
-      : /^https?:\/\//.test(source) || source.startsWith('data:image/') ? source
-      : `${getApiUrl().replace(/\/api$/, '')}${source.startsWith('/') ? '' : '/'}${source}`
-    return {...block, config:{...block.config, url}}
-  }) || null
+  const getPrintBlocks = () => receiptTemplate?.blocks?.map((block: any) =>
+    block.type === 'logo' ? { ...block, config: { ...block.config, url: getPrintLogo() } } : block
+  ) || null
 
   // 根据 channelSettings 与 posLayout 动态过滤并补齐自定义名称的可用渠道
   const availableChannels = useMemo(() => {
@@ -1062,19 +1057,17 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         // 店铺信息 - Admin保存为storeInfo对象
         const storeInfoData = configs.storeInfo || {}
         const receiptConfig = configs.posReceipt || configs.receiptSettings || {}
-        const resolvedStoreLogo = typeof receiptConfig.storeLogo === 'string' ? receiptConfig.storeLogo : storeInfoData.storeLogo || storeInfoData.logo || ''
+        const resolvedStoreLogo = typeof receiptConfig.storeLogo === 'string' ? receiptConfig.storeLogo : ''
 
-        if (storeInfoData.storeName || storeInfoData.address || storeInfoData.phone || resolvedStoreLogo) {
+        localStorage.setItem('pos_receipt_logo', resolvedStoreLogo)
+        if (storeInfoData.storeName || storeInfoData.address || storeInfoData.phone) {
           setStoreInfo({
             storeName: storeInfoData.storeName || 'YOUME',
             address: storeInfoData.address || '',
             phone: storeInfoData.phone || '',
             openingHours: storeInfoData.openingHours || '',
-            storeLogo: resolvedStoreLogo,
+            storeLogo: storeInfoData.storeLogo || '',
           })
-          if (resolvedStoreLogo) {
-            localStorage.setItem('pos_store_logo', resolvedStoreLogo)
-          }
         }
 
         // POS布局设置 - Admin保存为posLayout对象，包含快捷键、渠道开关等
