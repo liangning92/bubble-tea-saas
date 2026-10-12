@@ -1,3 +1,4 @@
+import { probationLabels } from '../../../../shared/probationLabels'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -7,12 +8,15 @@ import { useAuthStore } from '../../stores/auth'
 import { ArrowLeft, Key, X } from 'lucide-react'
 
 export function StaffFormPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const probationText = probationLabels(i18n.language)
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const isEdit = !!id
+  const probationRuleQuery = useQuery({queryKey:['probation-rule',user?.storeId],queryFn:()=>staffApi.probationRule()})
+  useEffect(()=>{if(!isEdit&&probationRuleQuery.data?.data?.data?.enabled)setForm(previous=>({...previous,probationEnabled:true}))},[isEdit,probationRuleQuery.data?.data?.data?.enabled])
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -30,7 +34,9 @@ export function StaffFormPage() {
     baseSalary: '',
     hourlyRate: '',
     weeklyHours: '',
-    hireDate: ''
+    hireDate: '',
+    probationEnabled: false,
+    confirmationDate: ''
   })
 
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -92,7 +98,9 @@ export function StaffFormPage() {
         baseSalary: s.baseSalary ?? '',
         hourlyRate: s.hourlyRate ?? '',
         weeklyHours: s.weeklyHours || '',
-        hireDate: s.hireDate ? new Date(s.hireDate).toISOString().slice(0, 10) : ''
+        hireDate: s.hireDate ? new Date(s.hireDate).toISOString().slice(0, 10) : '',
+        probationEnabled: !!s.probation?.enabled,
+        confirmationDate: s.probation?.overrideConfirmationDate || ''
       })
     }
   }, [staffData])
@@ -133,6 +141,8 @@ export function StaffFormPage() {
     submitData.baseSalary = submitData.baseSalary === '' ? undefined : Number(submitData.baseSalary)
     submitData.hourlyRate = submitData.hourlyRate === '' ? undefined : Number(submitData.hourlyRate)
     submitData.weeklyHours = submitData.weeklyHours === '' ? undefined : Number(submitData.weeklyHours)
+    submitData.confirmationDate = form.confirmationDate || null
+    if (submitData.probationEnabled && !form.hireDate) { setSaveError(probationText.hireRequired); return }
     if (submitData.hireDate === '') submitData.hireDate = undefined
     if (submitData.password === '') submitData.password = undefined
 
@@ -274,7 +284,13 @@ export function StaffFormPage() {
             </div>
           </div>
 
-          <label htmlFor="staff-baseSalary" className="block text-sm">{t('salary.baseSalary')} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
+          <label htmlFor="staff-baseSalary" className="block text-sm">{probationText.formal} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
+          <section className="bg-blue-50 rounded-xl p-4 space-y-3"><p className="text-sm">{probationText.contract}</p>
+          <label className="flex gap-2 items-center"><input type="checkbox" checked={form.probationEnabled} disabled={probationRuleQuery.isLoading || probationRuleQuery.isError || (!probationRuleQuery.data?.data?.data?.enabled && !staffData?.data?.data?.probation?.enabled)} onChange={e=>setForm({...form,probationEnabled:e.target.checked})}/>{probationText.enroll}</label>
+          {probationRuleQuery.isError&&<p role="alert">{probationText.loadError}<button type="button" onClick={()=>probationRuleQuery.refetch()}>↻</button></p>}
+          {!probationRuleQuery.data?.data?.data?.enabled&&<Link to="/staff/salary/probation-rules" className="text-primary underline text-sm">{probationText.needsRule}</Link>}
+          {form.probationEnabled&&<><p className="text-sm">{probationText.hireRequired}</p><label className="block text-sm">{probationText.override}<input type="date" min={form.hireDate||undefined} className="input" value={form.confirmationDate} onChange={e=>setForm({...form,confirmationDate:e.target.value})}/></label>{staffData?.data?.data?.probation?.confirmationDate&&<p className="text-sm">{probationText.confirmation}: {staffData.data.data.probation.confirmationDate}</p>}</>}
+          </section>
           {/* Part-time fields */}
           {(form.employmentType === 'part_time' || form.employmentType === 'intern') && (
             <div className="grid grid-cols-2 gap-4">

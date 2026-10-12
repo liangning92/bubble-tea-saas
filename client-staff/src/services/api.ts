@@ -126,6 +126,7 @@ export const staffApi = {
   },
 
   // Salary
+  getMyProbation: async (month: string) => {const response = await http.get(`${API_BASE}/staff/salary/my/probation`, {params:{month},headers:getAuthHeader()});return response.data},
   getMySalary: async (staffId: string, month: number, year: number) => {
     const response = await http.get(`${API_BASE}/staff/salary/my`, {
       params: { staffId, month, year },

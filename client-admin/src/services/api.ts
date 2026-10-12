@@ -105,7 +105,6 @@ export const categoryApi = {
 
 // Orders
 export const orderApi = {
-  exportData: (params: any) => api.get('/orders/export-data', { params }),
   receivedReceipts: () => api.get('/orders/received-receipts'),
   list: (params?: any) => api.get('/orders', { params }),
   get: (id: string) => api.get('/orders/' + id),
@@ -163,6 +162,8 @@ async function depositChange(operation: 'deduct' | 'refund', data: any) {
 
 // Staff
 export const staffApi = {
+  probationRule: () => api.get('/staff/probation-rule'),
+  saveProbationRule: (data: any) => api.put('/staff/probation-rule', data),
   list: (params?: any) => api.get('/staff', { params }),
   get: (id: string) => api.get('/staff/' + id),
   create: (data: any) => api.post('/staff', data),
