@@ -1,3 +1,4 @@
+import { prepareReceiptLogoConfig, ReceiptLogoConflict } from '../utils/receiptLogoConfig'
 import {internalConfigWhere,isInternalConfig,isSecretConfig} from '../utils/configAccess'
 import { isTrainingLibraryKey, ordinaryConfigWhere } from '../services/TrainingLibraryStore'
 import {COUNT_OBSERVATION_PREFIX} from '../utils/countObservation'
@@ -11,6 +12,14 @@ import { validateBody } from '../utils/validation'
 import { getStaffConfig, saveStaffConfig, DEFAULT_STAFF_CONFIG } from '../services/StaffConfigService'
 
 const router = Router()
+
+async function prepareConfigValue(storeId: string, key: string, value: unknown) {
+  if (key !== 'posReceipt') return value
+  const row = await prisma.config.findUnique({ where: { storeId_key: { storeId, key } } })
+  let previous: unknown = null
+  try { previous = row ? JSON.parse(row.value) : null } catch { /* Legacy non-JSON value. */ }
+  return prepareReceiptLogoConfig(previous, value)
+}
 
 const configSchema = z.object({
   storeId: z.string(),
@@ -174,7 +183,8 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
     if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
-    const valueStr = typeof value === 'string' ? value : JSON.stringify(value)
+    const preparedValue = await prepareConfigValue(storeId, key, value)
+    const valueStr = typeof preparedValue === 'string' ? preparedValue : JSON.stringify(preparedValue)
 
     const config = await prisma.config.upsert({
       where: { storeId_key: { storeId, key } },
@@ -189,6 +199,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof ReceiptLogoConflict) return res.status(409).json({ code: 409, message: error.message })
     console.error('Save config error:', error)
     res.status(500).json({ code: 500, message: 'Failed to save config' })
   }
@@ -205,8 +216,9 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
     if (!Array.isArray(configs)) return res.status(400).json({code:400,message:'Invalid configs'})
     if (configs.some((c: { key?: string }) => c?.key === 'paymentMethods') && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (configs.some((c: any) => isTrainingLibraryKey(c?.key))) return res.status(403).json({code:403,message:'Protected training content'})
+    const preparedConfigs = await Promise.all(configs.map(async (c: any) => ({ ...c, value: await prepareConfigValue(storeId, c.key, c.value) })))
     await prisma.$transaction(
-      configs.map((c: any) =>
+      preparedConfigs.map((c: any) =>
         prisma.config.upsert({
           where: { storeId_key: { storeId, key: c.key } },
           create: {
@@ -229,6 +241,7 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof ReceiptLogoConflict) return res.status(409).json({ code: 409, message: error.message })
     console.error('Batch save configs error:', error)
     res.status(500).json({ code: 500, message: 'Failed to save configs' })
   }

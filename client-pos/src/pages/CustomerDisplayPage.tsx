@@ -378,8 +378,7 @@ export function CustomerDisplayPage(): React.ReactElement {
           </div>
         )
       case 'logo': {
-        const displayLogo = localStorage.getItem('pos_store_logo') || ''
-        return <CustomerDisplayLogo src={displayLogo} fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={appearance.logoStyle} background={regionBackground} />
+        return <CustomerDisplayLogo fallback={YOUME_LOGO_RED} whiteFallback={YOUME_LOGO_WHITE} style={appearance.logoStyle} background={regionBackground} />
       }
       default:
         return null

@@ -145,6 +145,7 @@ jobs:
           DEVICE_EVIDENCE_DIR=workflow-evidence/pos-devices node tests/stoploss/pos-device-diagnostics-page-check.cjs
           node tests/stoploss/tv-display-page-check.cjs
           node tests/stoploss/customer-display-parity-page-check.cjs
+          node tests/stoploss/independent-logo-page-check.cjs
 
       - name: Verify dashboard scope and current POS payment, barcode and printer workflows
         run: |
