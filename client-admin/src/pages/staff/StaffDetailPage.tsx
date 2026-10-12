@@ -1,4 +1,8 @@
+import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
+import { probationLabels } from '../../../../shared/probationLabels'
 import { useState } from 'react'
+import { StaffFormPage } from './StaffFormPage'
+import { useAuthStore } from '../../stores/auth'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -6,11 +10,12 @@ import { staffApi } from '../../services/api'
 import { ArrowLeft, Mail, Phone, MapPin, Clock, User, AlertCircle, Shield } from 'lucide-react'
 
 export function StaffDetailPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const probationText = probationLabels(i18n.language)
   const { id } = useParams()
   const queryClient = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['staff', id],
     queryFn: () => staffApi.get(id!),
     enabled: !!id
@@ -19,12 +24,15 @@ export function StaffDetailPage() {
   const [showRoleModal, setShowRoleModal] = useState(false)
   const [selectedRole, setSelectedRole] = useState('')
 
-  const staff = data?.data
+  const [editing, setEditing] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const user = useAuthStore(state => state.user)
+  const staff = data?.data?.data
 
   const updateRoleMutation = useMutation({
     mutationFn: (role: string) => staffApi.updateRole(id!, role),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff', id] })
+      queryClient.invalidateQueries({ queryKey: ['staff'] })
       setShowRoleModal(false)
     }
   })
@@ -41,12 +49,13 @@ export function StaffDetailPage() {
     return (
       <div className="text-center py-12 text-gray-500">
         <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-        <p>{t('common.notFound')}</p>
+        <p>{isError ? t('common.error') : t('common.notFound')}</p>
+        {isError && <button type="button" className="btn-secondary mt-4" onClick={() => refetch()}>↻</button>}
       </div>
     )
   }
 
-  const currentRole = staff.role || 'staff'
+  const currentRole = staff.role || staff.user?.role || 'staff'
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -124,12 +133,13 @@ export function StaffDetailPage() {
           <ArrowLeft size={20} />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">{t('staff.staffDetails')}</h1>
-        <Link to={`/staff/${id}/edit`} className="btn-primary ml-auto">
+        {!editing && <button type="button" onClick={() => { setEditing(true); setSaved(false) }} className="btn-primary ml-auto">
           {t('common.edit')}
-        </Link>
+        </button>}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {saved && <p role="status" className="text-green-700 mb-4">{t('common.saveSuccess')}</p>}
+      {editing ? <StaffFormPage onSaved={() => { setEditing(false); setSaved(true) }} onCancel={() => setEditing(false)} /> : <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Basic Info Card */}
         <div className="card">
           <div className="flex items-center gap-4 mb-6">
@@ -141,6 +151,7 @@ export function StaffDetailPage() {
             <div>
               <h2 className="text-xl font-bold">{staff.name}</h2>
               <p className="text-gray-500">{staff.employeeNumber}</p>
+              <p className="text-sm mt-2">{staff.payrollEmployee===false?staffIdentityLabels(i18n.language).accountOnly:staffIdentityLabels(i18n.language).employee} · {staff.status==='active'?staffIdentityLabels(i18n.language).enabled:staffIdentityLabels(i18n.language).disabled}</p>
               <span className={`badge ${getStatusBadge(staff.status)} capitalize mt-1`}>
                 {getStatusLabel(staff.status)}
               </span>
@@ -179,13 +190,13 @@ export function StaffDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">{t('staff.rolePermission')}</h3>
-            <button
+            {user?.role === 'admin' && <button
               onClick={handleOpenRoleModal}
               className="p-2 rounded-lg hover:bg-gray-100 text-primary"
               title={t('common.edit')}
             >
               <Shield size={18} />
-            </button>
+            </button>}
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
@@ -206,10 +217,14 @@ export function StaffDetailPage() {
           <h3 className="font-semibold text-gray-900 mb-4">{t('staff.employmentInfo')}</h3>
           <div className="space-y-4">
             <div className="flex justify-between">
+              <span className="text-gray-500">{t('salary.baseSalary')}</span>
+              <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID')}`}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-500">{t('staff.hireDate')}</span>
               <span className="font-medium">
                 {staff.hireDate
-                  ? new Date(staff.hireDate).toLocaleDateString('id-ID')
+                  ? new Date(staff.hireDate).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })
                   : '-'}
               </span>
             </div>
@@ -217,22 +232,30 @@ export function StaffDetailPage() {
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('staff.terminationDate')}</span>
                 <span className="font-medium text-red-600">
-                  {new Date(staff.terminationDate).toLocaleDateString('id-ID')}
+                  {new Date(staff.terminationDate).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}
                 </span>
               </div>
             )}
-            {staff.weeklyHours && (
+            {staff.weeklyHours != null && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('staff.weeklyHours')}</span>
                 <span className="font-medium">{staff.weeklyHours}h</span>
               </div>
             )}
-            {staff.hourlyRate && (
+            {staff.hourlyRate != null && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('staff.hourlyRate')}</span>
                 <span className="font-medium">Rp {staff.hourlyRate.toLocaleString('id-ID')}/jam</span>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="font-semibold text-gray-900 mb-4">{probationText.title}</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between"><span className="text-gray-500">{t('staff.status')}</span><span>{staff.probation?.enabled ? probationText[staff.probation.status as 'probation' | 'regular' | 'not_started'] || '-' : probationText.disabled}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">{probationText.confirmation}</span><span>{staff.probation?.confirmationDate || '-'}</span></div>
           </div>
         </div>
 
@@ -297,7 +320,7 @@ export function StaffDetailPage() {
             <p className="text-gray-400 text-center py-4">{t('common.noData')}</p>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Role Edit Modal */}
       {showRoleModal && (
@@ -336,6 +359,7 @@ export function StaffDetailPage() {
               ))}
             </div>
 
+            {updateRoleMutation.isError && <p role="alert" className="text-red-600 mb-3">{(updateRoleMutation.error as any)?.response?.data?.message || t('common.error')}</p>}
             <div className="flex gap-3">
               <button
                 onClick={() => setShowRoleModal(false)}

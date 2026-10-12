@@ -1,15 +1,17 @@
+import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { staffApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Plus, Loader2, Edit2, Users, Search, Eye, Trash2, AlertTriangle, UserCheck, UserX } from 'lucide-react'
+import { Plus, Loader2, Edit2, Users, Search, Eye, UserX as OffboardIcon, AlertTriangle, UserCheck, UserX } from 'lucide-react'
 
 export function StaffListPage() {
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
+  const navigate=useNavigate()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [positionFilter, setPositionFilter] = useState<string>('')
@@ -69,19 +71,9 @@ export function StaffListPage() {
     return labels[type] || type
   }
 
-  const queryClient = useQueryClient()
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => staffApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] })
-      queryClient.invalidateQueries({ queryKey: ['attendance-summary'] })
-    }
-  })
 
   const handleDelete = (staff: any) => {
-    if (!confirm(t('common.confirmDelete') + '?')) return
-    deleteMutation.mutate(staff.id)
+    navigate(`/staff/${staff.id}/edit`)
   }
 
   return (
@@ -208,11 +200,11 @@ export function StaffListPage() {
                 {staff.map((s: any) => (
                   <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
                     <td className="py-3 font-mono text-sm">{s.employeeNumber || s.id.slice(-6).toUpperCase()}</td>
-                    <td className="py-3 font-medium">{s.name}</td>
+                    <td className="py-3 font-medium">{s.name}{s.payrollEmployee===false&&<p className="text-xs text-gray-500">{staffIdentityLabels(i18n.language).accountOnly}</p>}</td>
                     <td className="py-3 text-gray-600">{s.phone}</td>
                     <td className="py-3">{getPositionLabel(s.position)}</td>
                     <td className="py-3 text-sm text-gray-600">{getEmploymentTypeLabel(s.employmentType || 'full_time')}{s.probation?.enabled&&<span className="badge badge-info ml-2">{probationLabels(i18n.language)[s.probation.status==='probation'?'probation':s.probation.status==='not_started'?'not_started':'regular']}</span>}</td>
-                    <td className="py-3 font-medium">{s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
+                    <td className="py-3 font-medium">{s.payrollEmployee===false ? '—' : s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
                     <td className="py-3">
                       <span className={`badge ${getStatusBadge(s.status)} capitalize`}>
                         {s.status === 'active' ? t('common.active') : s.status === 'inactive' ? t('common.inactive') : s.status}
@@ -237,9 +229,9 @@ export function StaffListPage() {
                         <button
                           onClick={() => handleDelete(s)}
                           className="p-2 rounded-lg hover:bg-red-50 text-red-600"
-                          title={t('common.delete')}
+                          title={staffIdentityLabels(i18n.language).offboard}
                         >
-                          <Trash2 size={18} />
+                          <OffboardIcon size={18} />
                         </button>
                       </div>
                     </td>

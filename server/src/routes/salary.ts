@@ -1,3 +1,4 @@
+import { isPayrollEmployee } from '../services/StaffIdentityService'
 import { workingDaysSchema, savePayrollBasis, savedPayrollBasis, calculatePayrollBasis, ProbationInputError } from '../services/ProbationService'
 import { adjustmentPlan, savedAdjustmentPlan, saveAdjustmentPlan, normalizeAdjustments, changeSalaryAdjustment, listSalaryAdjustments, voucherStatuses, periodLock, SalaryAdjustmentError } from '../services/SalaryAdjustmentService'
 import { normalizeSalaryDeposits, salaryDepositPlan, sameDepositPlan } from '../services/SalaryDepositPlan'
@@ -17,7 +18,9 @@ const salaryFields = z.object({ manualCorrection:z.boolean().optional(), manualB
 const createSalary = z.object({ manualCorrection:z.boolean().optional(), manualBaseSalary:z.boolean().optional(), workingDays: workingDaysSchema.optional(), autoBaseSalary: z.boolean().optional(), staffId: z.string().min(1), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), baseSalary: money, overtime: money.default(0), commission: money.default(0), bonus: money.default(0), deduction: money.default(0), status: z.literal('pending').optional(), depositDeductions: depositPlan, compensationAdjustmentIds:z.array(z.string().uuid()).max(200).default([]) }).refine(s => s.baseSalary + s.overtime + s.commission + s.bonus >= s.deduction, 'Deductions exceed gross salary')
 async function payrollEmployee(tx:any, staffId:string, automatic:boolean) {
   if(automatic && !process.env.DATABASE_URL?.startsWith('file:')) await tx.$queryRaw`SELECT id FROM "Staff" WHERE id=${staffId} FOR UPDATE`
-  return tx.staff.findUniqueOrThrow({where:{id:staffId}})
+  const staff=await tx.staff.findUniqueOrThrow({where:{id:staffId}})
+  if(!await isPayrollEmployee(tx,staff))throw new ProbationInputError('ACCOUNT_NOT_EMPLOYEE')
+  return staff
 }
 class SalaryConflict extends Error {}
 const payrollReviewReason=(error:any)=>{const code=error?.message;return ['STAFF_BASE_SALARY_REQUIRED','DEDUCTIONS_EXCEED_PAY','PAYROLL_AMOUNT_OUT_OF_RANGE','PROBATION_HIRE_DATE_REQUIRED','PROBATION_SALARY_EXCEEDS_FORMAL_SALARY','CONFIRMATION_BEFORE_HIRE','INVALID_PROBATION_DATE','SALARY_DEPOSIT_RECALC_REQUIRED','SALARY_ADJUSTMENTS_RECALC_REQUIRED','TERMINATION_BEFORE_HIRE'].includes(code)?code:'PAYROLL_CALCULATION_FAILED'}
@@ -93,7 +96,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       const monthStart=new Date(month+'-01T00:00:00+07:00'),monthEnd=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),1)-7*3600000)
       const employees=await prisma.staff.findMany({where:{storeId,...(staffId?{id:String(staffId)}:{}),OR:[{status:'active'},{status:'resigned',terminationDate:{gte:monthStart}}]},include:{user:{select:{id:true,phone:true,role:true}}},orderBy:{employeeNumber:'asc'}})
       if(!status || status==='unrecorded')for(const staff of employees){
-        if(ids.has(staff.id)||(staff.hireDate&&staff.hireDate>=monthEnd)||(staff.terminationDate&&staff.terminationDate<monthStart))continue
+        if(!await isPayrollEmployee(prisma,staff)||ids.has(staff.id)||(staff.hireDate&&staff.hireDate>=monthEnd)||(staff.terminationDate&&staff.terminationDate<monthStart))continue
         let calculation:any=null,calculationError=null
         try{calculation=await calculateSalary(staff.id,Number(month.slice(5)),Number(month.slice(0,4)))}catch(error:any){calculationError=payrollReviewReason(error)}
         const payrollReview=await review(prisma,storeId!,staff.id,month)|| (calculationError?{reason:calculationError}:calculation?.totalSalary<0?{reason:'DEDUCTIONS_EXCEED_PAY'}:null)
@@ -119,7 +122,7 @@ router.post('/prepare-month', authenticate, authorize('admin','manager'), valida
   const employees=await prisma.staff.findMany({where:{storeId,OR:[{status:'active'},{status:'resigned',terminationDate:{gte:monthStart}}]}})
   const result:{created:number;updated:number;existing:number;skipped:Array<{staffId:string;name:string;reason:string}>}={created:0,updated:0,existing:0,skipped:[]}
   for(const employee of employees){
-   if((employee.hireDate&&employee.hireDate>=monthEnd)||(employee.terminationDate&&employee.terminationDate<monthStart))continue
+   if(!await isPayrollEmployee(prisma,employee)||(employee.hireDate&&employee.hireDate>=monthEnd)||(employee.terminationDate&&employee.terminationDate<monthStart))continue
    try{
     const current=await prisma.salary.findFirst({where:{staffId:employee.id,month}})
     const isCorrected=(basis:any)=>basis&&(basis.manualCorrection||basis.manualAdjustment||basis.daysSource==='manual'||(!basis.daysSource&&basis.workingDays&&basis.payableDays<basis.eligibleDays))

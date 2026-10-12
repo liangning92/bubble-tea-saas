@@ -1,3 +1,4 @@
+import { isPayrollEmployee } from './StaffIdentityService'
 import { getPayrollRules } from './PayrollRuleService'
 import { z } from 'zod'
 import { PrismaClient, Prisma } from '@prisma/client'
@@ -9,13 +10,13 @@ const basisKey = (id: string) => `salary.probationBasis.${id}`
 export class ProbationInputError extends Error {}
 export const probationRuleSchema = z.object({ enabled: z.boolean(), durationUnit: z.enum(['days','months']), duration: z.number().int().min(1).max(730), salaryMode: z.enum(['fixed','percentage']), salaryValue: z.number().int().min(1).max(2000000000) }).refine(r => r.durationUnit !== 'months' || r.duration <= 24, 'Maximum 24 months').refine(r => r.salaryMode !== 'percentage' || r.salaryValue <= 100, 'Percentage must not exceed 100')
 export type ProbationRule = z.infer<typeof probationRuleSchema>
-type Employee = { id: string; storeId: string; baseSalary: number | null; hireDate: Date | null; terminationDate?: Date | null }
+type Employee = { id: string; storeId: string; baseSalary: number | null; hireDate: Date | null; terminationDate?: Date | null; userId?:string; user?:{role:string} }
 export type Enrollment = { exempt?: boolean; enabled: boolean; rule?: ProbationRule; confirmationDate?: string | null }
 async function read(db: DB, storeId: string, key: string) { const row = await db.config.findUnique({ where: {storeId_key:{storeId,key}} }); return row ? JSON.parse(row.value) : null }
 async function write(db: DB, storeId: string, key: string, value: unknown) { return db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value:JSON.stringify(value),category:'staff'},update:{value:JSON.stringify(value)}}) }
 export async function getProbationRule(db: DB, storeId: string) { const row = await read(db,storeId,ruleKey); return row ? probationRuleSchema.parse(row) : {enabled:false} }
 export async function saveProbationRule(db: DB, storeId: string, input: unknown) { const result=probationRuleSchema.safeParse(input); if(!result.success)throw new ProbationInputError(result.error.issues.map(i=>i.message).join('; '));await write(db,storeId,ruleKey,result.data);return result.data }
-export async function getEnrollment(db: DB, staff: Employee): Promise<Enrollment> { const saved = await read(db,staff.storeId,employeeKey(staff.id)); if(saved && (saved.enabled || saved.exempt || saved.rule))return saved; const rule=await getProbationRule(db,staff.storeId); return rule.enabled && staff.hireDate ? {enabled:true,rule:probationRuleSchema.parse(rule)} : {enabled:false} }
+export async function getEnrollment(db: DB, staff: Employee): Promise<Enrollment> { if(!await isPayrollEmployee(db,staff))return {enabled:false}; const saved = await read(db,staff.storeId,employeeKey(staff.id)); if(saved && (saved.enabled || saved.exempt || saved.rule))return saved; const rule=await getProbationRule(db,staff.storeId); return rule.enabled && staff.hireDate ? {enabled:true,rule:probationRuleSchema.parse(rule)} : {enabled:false} }
 export function dayNumber(day: string) { if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new ProbationInputError('INVALID_PROBATION_DATE'); const date=new Date(day+'T00:00:00Z');if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==day)throw new ProbationInputError('INVALID_PROBATION_DATE');return date.getTime()/86400000 }
 const dayString = (day: number) => new Date(day*86400000).toISOString().slice(0,10)
 export function businessDate(date: Date) {const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);const p=(k:string)=>parts.find(x=>x.type===k)!.value;return `${p('year')}-${p('month')}-${p('day')}`}
@@ -27,6 +28,7 @@ export function confirmationDay(hire: string, enrollment: Enrollment) {
  const target=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+rule.duration,1));const last=new Date(Date.UTC(target.getUTCFullYear(),target.getUTCMonth()+1,0)).getUTCDate();return dayString(Date.UTC(target.getUTCFullYear(),target.getUTCMonth(),Math.min(start.getUTCDate(),last))/86400000)
 }
 export async function saveEnrollment(db: DB, staff: Employee, enabled?: boolean, confirmationDate?: string | null) {
+ if(!await isPayrollEmployee(db,staff))return {enabled:false}
  const previous=await getEnrollment(db,staff)
  if(enabled===undefined && confirmationDate===undefined && !previous.enabled)return previous
  const next: Enrollment={...previous,exempt:enabled===undefined?previous.exempt:!enabled,enabled:enabled ?? previous.enabled,confirmationDate:confirmationDate===undefined?previous.confirmationDate:confirmationDate}
@@ -61,6 +63,7 @@ export function payrollBasis(staff: Employee, enrollment: Enrollment, month: str
 }
 export async function staffProbation(db: DB, staff: Employee, now=new Date()) {const enrollment=await getEnrollment(db,staff),today=businessDate(now),hire=staff.hireDate?businessDate(staff.hireDate):null,end=hire?confirmationDay(hire,enrollment):null;return {...enrollment,status:hire&&today<hire?'not_started':end&&today<end?'probation':'regular',confirmationDate:end,overrideConfirmationDate:enrollment.confirmationDate||null,formalMonthlySalary:staff.baseSalary,currentMonthlySalary:staff.baseSalary===null?null:monthlyRateCents(staff,enrollment,today)/100} }
 export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, month: string, workingDays?: WorkingDays) {
+ if(!await isPayrollEmployee(db,staff))throw new ProbationInputError('ACCOUNT_NOT_EMPLOYEE')
  if(staff.baseSalary===null)throw new ProbationInputError('STAFF_BASE_SALARY_REQUIRED')
  const enrollment=await getEnrollment(db,staff),available=payrollBasis(staff,enrollment,month)
  const start=new Date(month+'-01T00:00:00+07:00'),end=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),1)-7*3600000)
