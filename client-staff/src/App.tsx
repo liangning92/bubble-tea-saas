@@ -1,3 +1,4 @@
+import {isStaffBasicPermission} from '../../shared/StaffBasicAccess'
 import {StaffAccessProvider,useStaffAccess,permissionForPage} from '../../shared/StaffAccess'
 import {StaffApprovalInbox} from '../../shared/StaffApprovalInbox'
 import {StaffApprovalDialog} from '../../shared/StaffApprovalDialog'
@@ -51,8 +52,23 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const access=useStaffAccess(),{t}=useTranslation()
   const location=useLocation()
   if (!isAuthenticated || !token || !user) { sessionStorage.setItem("employee-return",location.pathname); return <Navigate to="/login" replace /> }
-  if(!access.ready)return access.failed?<p role="alert">{t('staffAccessV2.denied')}<button onClick={()=>window.dispatchEvent(new Event('focus'))}>{t('common.refresh')}</button></p>:<RouteLoading />
-  if(!access.can(permissionForPage(location.pathname,true)!))return <p role="alert" className="p-6">{t('staffAccessV2.denied')}</p>
+  const permission=permissionForPage(location.pathname,true)!
+  const retryAccess = () => window.dispatchEvent(new Event('staff-access-changed'))
+  const accessNotice = (message: string) => (
+    <LayoutWithNav>
+      <div role="alert" className="p-6">
+        <p>{message}</p>
+        <button className="btn-primary mt-3" onClick={retryAccess}>{t('common.refresh')}</button>
+        <Link to="/" className="block mt-3">{t('nav.home')}</Link>
+      </div>
+    </LayoutWithNav>
+  )
+  if (!isStaffBasicPermission(permission) && !access.ready) {
+    return access.failed
+      ? accessNotice(t('common.loadFailed'))
+      : <LayoutWithNav><RouteLoading /></LayoutWithNav>
+  }
+  if (!access.can(permission)) return accessNotice(t('staffAccessV2.denied'))
   return <>{children}</>
 }
 

@@ -58,6 +58,7 @@ export const STAFF_PERMISSION_CATALOG = [
   {key:'personal.tasks',group:'personal',roles:all},
   {key:'personal.messages',group:'personal',roles:all}
 ] as const
+export const STAFF_BASIC_PERMISSIONS = STAFF_PERMISSION_CATALOG.filter(p => p.key.startsWith('personal.')).map(p => p.key)
 export function defaultStaffPermissions(baseRole: StaffBaseRole): string[] {
   return STAFF_PERMISSION_CATALOG.filter(p => (p.roles as readonly string[]).includes(baseRole)).map(p => p.key)
 }

@@ -1,7 +1,7 @@
 import { readPolicyV2 } from './StaffPermissionV2Service'
 import { z } from 'zod'
 import prisma from '../config/database'
-import { STAFF_PERMISSION_CATALOG, defaultStaffPermissions, StaffBaseRole } from './StaffPermissionCatalog'
+import { STAFF_BASIC_PERMISSIONS, STAFF_PERMISSION_CATALOG, defaultStaffPermissions, StaffBaseRole } from './StaffPermissionCatalog'
 
 export const STAFF_ACCESS_KEY = 'staff.access.policy'
 const baseRole = z.enum(['manager','cashier','staff'])
@@ -30,7 +30,7 @@ export async function assignedStaffAccess(user:{role:string;staffId?:string;stor
   if (!binding) return null
   const role=policy.roles.find(r=>r.id===binding.roleId)
   if (!role || role.baseRole!==user.role) throw new StaffAccessError('STAFF_ACCESS_CONFIGURATION_INVALID',503)
-  return {id:role.id,name:role.name,baseRole:role.baseRole,permissions:role.permissions}
+  return {id:role.id,name:role.name,baseRole:role.baseRole,permissions:[...new Set([...role.permissions,...STAFF_BASIC_PERMISSIONS])]}
 }
 export async function getStaffAccessSettings(actor:{id:string;role:string;storeId:string}) {
   if (actor.role!=='admin'||!actor.storeId) throw new StaffAccessError('STAFF_ACCESS_ADMIN_REQUIRED',403)
