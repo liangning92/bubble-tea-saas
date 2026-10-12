@@ -146,7 +146,6 @@ export function setupUpdater(window: BrowserWindow, hooks: {prepare:()=>Promise<
   })
 
   autoUpdater.on('download-progress', (progressObj: any) => {
-    log('info', 'Download progress:', progressObj.percent.toFixed(2) + '%')
     sendToRenderer('update-progress', {
       percent: progressObj.percent,
       bytesPerSecond: progressObj.bytesPerSecond,

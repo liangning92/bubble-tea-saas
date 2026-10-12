@@ -1,4 +1,5 @@
 # Manual upgrade: no automatic process killing, no database replacement.
+!include "FileFunc.nsh"
 !ifndef BUILD_UNINSTALLER
 Var BTPSOldApp
 Var BTPSUpgradeReceipt
@@ -66,6 +67,11 @@ Var BTPSUpgradeDiagnostic
       SetErrorLevel 73
       Quit
     ${EndIf}
+    # electron-updater has already received the cashier's install action.
+    # Go straight to the installer UI; retain the confirmation for manual runs.
+    ${GetParameters} $R4
+    ${GetOptions} $R4 "--updated" $R5
+    IfErrors 0 btps_upgrade_confirmed
     MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish the current payment before installing. Setup will automatically close this POS, install the update, and restart it. Continue?$\r$\n请先完成当前收款。安装器将自动关闭本机收银程序、安装更新并重新启动。是否继续？$\r$\nSelesaikan pembayaran saat ini. Instalasi akan menutup POS otomatis, memasang pembaruan, dan membuka POS kembali. Lanjutkan?" IDYES btps_upgrade_confirmed
     SetErrorLevel 73
     Quit
@@ -130,7 +136,6 @@ CRCCheck off
   # 创建桌面快捷方式
   CreateShortcut "$DESKTOP\BTPS.lnk" "$INSTDIR\BTPS.exe"
   CreateShortcut "$DESKTOP\BubbleTeaPOS.lnk" "$INSTDIR\BTPS.exe"
-  CreateShortcut "$DESKTOP\BTPS 日志.lnk" "explorer.exe" "$APPDATA\BTPS\logs"
 !macroend
 
 !macro customUnInstall

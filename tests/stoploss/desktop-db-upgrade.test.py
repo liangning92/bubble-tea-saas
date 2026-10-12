@@ -31,6 +31,40 @@ class UpgradeTests(unittest.TestCase):
             U.wait_stopped(mock.Mock(side_effect=[['BTPS.exe'], []]), on_running=close)
         close.assert_called_once()
 
+    def test_installer_retries_graceful_close_when_pos_remains_or_reappears(self):
+        close = mock.Mock(return_value=1)
+        clock = iter([0.0, 0.5, 1.1]).__next__
+        with mock.patch.object(U, 'wait_stopped') as wait:
+            wait.side_effect = lambda _processes, _timeout, on_running, quiet_period: [on_running() for _ in range(3)]
+            requests = U.request_stop_until_closed(lambda: ['BTPS.exe'], self.app, 60, close, clock)
+        self.assertEqual(requests, 2)
+        self.assertEqual(close.call_count, 2)
+        wait.assert_called_once()
+        self.assertEqual(wait.call_args.kwargs['quiet_period'], 8)
+
+    def test_installer_does_not_accept_a_brief_gap_before_old_pos_reappears(self):
+        elapsed = [0.0]
+        def advance(seconds):
+            elapsed[0] += seconds
+        def processes():
+            return ['BTPS.exe'] if elapsed[0] < 1 or 3 <= elapsed[0] < 4 else []
+        close = mock.Mock(return_value=1)
+        with mock.patch.object(U.time, 'monotonic', side_effect=lambda: elapsed[0]), mock.patch.object(U.time, 'sleep', side_effect=advance):
+            requests = U.request_stop_until_closed(processes, self.app, 20, close)
+        self.assertEqual(requests, 2)
+        self.assertGreaterEqual(elapsed[0], 12)
+
+    def test_successful_upgrade_stages_do_not_write_diagnostic_file(self):
+        diagnostic = self.root / 'upgrade-check.json'
+        previous = U.LAST_DIAGNOSTIC
+        try:
+            U.LAST_DIAGNOSTIC = diagnostic
+            U.upgrade_stage('automatic-pos-shutdown')
+            self.assertFalse(diagnostic.exists())
+            self.assertEqual(U.LAST_STAGE, 'automatic-pos-shutdown')
+        finally:
+            U.LAST_DIAGNOSTIC = previous
+
     def test_still_running_reports_the_specific_blocker(self):
         with self.assertRaises(U.PosStillRunningError) as caught:
             U.wait_stopped(lambda: ['BTPS.exe'], timeout=0)
