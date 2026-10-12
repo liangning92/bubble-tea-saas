@@ -428,7 +428,9 @@ export async function getOrders(params: {
     const s = search.trim()
     where.OR = [
       { orderNumber: containsText(s) },
-      { pickupNumber: containsText(s) }
+      { pickupNumber: containsText(s) },
+      { items: { some: { productName: containsText(s) } } },
+      { member: { is: { OR: [{ name: containsText(s) }, { phone: containsText(s) }] } } }
     ]
   }
 

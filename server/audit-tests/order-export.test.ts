@@ -27,3 +27,15 @@ test('foreign or missing shift fails before reading orders',async()=>{
  await expect(getOrders({storeId:'a',shiftSessionId:'foreign'})).rejects.toThrow('INVALID_ORDER_SHIFT')
  expect(db.order.findMany).not.toHaveBeenCalled()
 })
+test('one search matches order identifiers, historical product snapshots and member names or phone',async()=>{
+ await getOrders({storeId:'a',search:'Historical Tea',paymentMethod:'cash'})
+ const where=db.order.findMany.mock.calls[0][0].where
+ expect(where.storeId).toBe('a');expect(where.paymentMethod).toBe('cash')
+ expect(where.OR).toEqual(expect.arrayContaining([
+  {orderNumber:expect.objectContaining({contains:'Historical Tea'})},
+  {pickupNumber:expect.objectContaining({contains:'Historical Tea'})},
+  {items:{some:{productName:expect.objectContaining({contains:'Historical Tea'})}}},
+  {member:{is:{OR:[{name:expect.objectContaining({contains:'Historical Tea'})},{phone:expect.objectContaining({contains:'Historical Tea'})}]}}}
+ ]))
+ expect(where.items).toBeUndefined()
+})
