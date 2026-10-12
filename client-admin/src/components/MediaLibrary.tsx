@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { mediaApi, MediaAsset, MediaScene } from '../services/media'
+import { mediaUploadError, mediaApi, MediaAsset, MediaScene } from '../services/media'
 import { receiptMediaUrl } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 
@@ -24,7 +24,7 @@ export function MediaLibrary({scene='library',max=10,onSelect,onClose,imagesOnly
   const data=query.data?.data.data
   useEffect(()=>{setPage(1)},[search,kind])
   const invalidate=()=>client.invalidateQueries({queryKey:['media',storeId]})
-  const run=async(fn:()=>Promise<unknown>)=>{setBusy(true);setError('');try{await fn();await invalidate()}catch(e:any){setError(t('media.failed'));if(e.response?.status===409)setReferences(e.response.data?.data?.list||[])}finally{setBusy(false)}}
+  const run=async(fn:()=>Promise<unknown>)=>{setBusy(true);setError('');try{await fn();await invalidate()}catch(e:any){setError(t(mediaUploadError(e)));if(e.response?.status===409)setReferences(e.response.data?.data?.list||[])}finally{setBusy(false)}}
   return <div className="space-y-4">
     <div className="flex justify-between items-center"><h1 className="text-xl font-bold">{t('media.title')}</h1>{onClose&&<button type="button" className="btn" onClick={onClose}>{t('common.close')}</button>}</div>
     <p className="text-sm text-gray-500">{t('media.limits')}</p>

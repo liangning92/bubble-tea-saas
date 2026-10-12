@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { insightPeriod, saleLines, summarizeProducts, productPreferences } from '../src/utils/productInsights'
+import { insightPeriod, saleLines, summarizeProducts, productPreferences, productQuadrants } from '../src/utils/productInsights'
 const catalog=[{id:'p1',name:'Tea',categoryId:'c1',category:{name:'Tea'}},{id:'p2',name:'Boba',categoryId:'c1',category:{name:'Tea'}},{id:'p3',name:'Unsold',categoryId:'c2',category:{name:'Ice'}}]
 function order(id='o1'):any{return {id,status:'completed',totalAmount:1000,finalAmount:990,checkoutTaxAmount:90,discountAmount:100,requestFingerprint:'v1:test',channelId:'ch1',channel:{name:'POS'},refundRequests:[],items:[{id:'i1',productId:'p1',product:catalog[0],productName:'Tea',specId:'s1',specName:'Medium',quantity:2,unitPrice:300,bomCost:100,addons:'[{"name":"Pearl"},{"name":"Pearl"}]'},{id:'i2',productId:'p2',product:catalog[1],productName:'Boba',specId:'s2',specName:'Large',quantity:1,unitPrice:400,bomCost:200,addons:'[]'}]}}
 test('store timezone and equal elapsed comparison windows',()=>{
@@ -62,4 +62,15 @@ test('partial refunds without line selections are explicitly treated as estimate
  const o=order();o.refundRequests=[{amount:110,status:'approved',selectedItemIds:'[]',reasonCode:'customer_dissatisfied'}]
  assert.ok(saleLines(o).every((l:any)=>!l.evidence))
  assert.ok(summarizeProducts([o],catalog,{days:30}).list.filter(r=>r.quantity).every(r=>r.margin===null))
+})
+
+test('quadrants keep full counts but rank only five sold products with reliable margins',()=>{
+ const rows=['star','plowhorse','puzzle','dog'].flatMap(type=>Array.from({length:7},(_,i)=>({productId:`${type}-${i}`,quantity:i+1,margin:40+i,matrixType:type})))
+ rows.push({productId:'unknown',quantity:99,margin:null as any,matrixType:'incomplete'},{productId:'unsold',quantity:0,margin:90,matrixType:'unsold'})
+ const groups=productQuadrants(rows.reverse())
+ assert.equal(groups.length,4)
+ for(const group of groups){assert.equal(group.count,7);assert.deepEqual(group.products.map(p=>p.quantity),[7,6,5,4,3]);assert.ok(group.products.every(p=>p.matrixType===group.type))}
+ assert.equal(productQuadrants([]).every(g=>g.count===0&&g.products.length===0),true)
+ const ties=productQuadrants([{productId:'b',quantity:1,margin:50,matrixType:'star'},{productId:'c',quantity:1,margin:60,matrixType:'star'},{productId:'a',quantity:1,margin:50,matrixType:'star'}])
+ assert.deepEqual(ties[0].products.map(p=>p.productId),['c','a','b'])
 })
