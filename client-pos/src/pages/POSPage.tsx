@@ -1,3 +1,4 @@
+import { discoverPrinters } from '../utils/printerDiscovery'
 import { ShiftHandoverPreview } from '../components/ShiftHandoverPreview'
 import { OrderItemsTable } from '../components/OrderItemsTable'
 import { cachedActivityQuote } from '../utils/activityOfflineQuote'
@@ -1437,23 +1438,27 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     fetchAppVersion()
   }, [loadConfig])
 
-  // 启动与登录后静默检测收银机连接的物理打印机并自动上报给服务端供Admin选配
+  // Refresh after USB hot-plug and keep the Admin inventory current.
   useEffect(() => {
+    let cancelled = false
+    let busy = false
     const silentDetectAndReport = async () => {
+      if (busy || cancelled) return
+      busy = true
       try {
-        if (!electronAPI?.getPrinters) return
-        const printers = await electronAPI.getPrinters()
-        if (printers && Array.isArray(printers) && printers.length > 0) {
-          const names = printers.map((p: any) => typeof p === 'string' ? p : p.name).filter(Boolean)
-          console.log('[POS] Auto-detected local printers on startup:', names)
-          const storeId = user?.storeId || localStorage.getItem('storeId') || ''
-          await posApi.reportPrinters(names, storeId)
-        }
+        const names = await discoverPrinters(electronAPI)
+        if (cancelled) return
+        setDetectedPrinters(names)
+        const storeId = user?.storeId || localStorage.getItem('storeId') || ''
+        if (storeId) await posApi.reportPrinters(names, storeId)
       } catch (err) {
-        console.warn('[POS] Failed to auto-report printers on startup:', err)
-      }
+        console.warn('[POS] Failed to auto-report printers:', err)
+      } finally { busy = false }
     }
-    silentDetectAndReport()
+    void silentDetectAndReport()
+    const interval = setInterval(() => { void silentDetectAndReport() }, 30000)
+    window.addEventListener('focus', silentDetectAndReport)
+    return () => { cancelled = true; clearInterval(interval); window.removeEventListener('focus', silentDetectAndReport) }
   }, [user?.storeId])
 
   // 定期轮询配置（Admin修改后自动同步，10秒间隔）
@@ -2429,18 +2434,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setDetectedPrinters([])
     setSelectedPrinterForSetup(null)
     try {
-      let printerList: string[] = []
-      if (electronAPI?.listPrinters) {
-        const result = await electronAPI.listPrinters()
-        if (result?.printers && Array.isArray(result.printers)) {
-          printerList = result.printers
-        }
-      } else if (electronAPI?.getPrinters) {
-        const raw = await electronAPI.getPrinters()
-        if (Array.isArray(raw)) {
-          printerList = raw.map((p: any) => typeof p === 'string' ? p : p.name).filter(Boolean)
-        }
-      }
+      const printerList = await discoverPrinters(electronAPI)
 
       console.log('[POS] Detected printers:', printerList)
       if (printerList.length > 0) {
@@ -2683,7 +2677,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           channelName: 'Dine-in',
           stickerWidth: labelPrinter?.stickerWidth || 40,
           stickerHeight: labelPrinter?.stickerHeight || 30,
-          stickerGap: labelPrinter?.stickerGap || 2,
+          stickerGap: labelPrinter?.stickerGap ?? 2,
         }],
         isTspl: true
       })
@@ -3056,6 +3050,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         }
       }
 
+      // Each output uses its own configured device; a stalled receipt must not block cup labels.
+      void printCupStickers(orderNum, cart, finalPickupNum)
       // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
       if (posReceipt.autoPrint !== false) {
         const printResult = await printReceipt(orderNum, {
@@ -3071,8 +3067,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       checkoutTiming('receipt_sent')
       // 打印厨房单
       printKitchenOrder(orderNum, cart, finalPickupNum)
-      // 打印茶饮单杯杯贴 (TSPL)
-      printCupStickers(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
       electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
       // Display animation is ancillary; only the server verifies completed order eligibility.
@@ -3281,7 +3275,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : ''),
           stickerWidth: labelPrinter?.stickerWidth || 40,
           stickerHeight: labelPrinter?.stickerHeight || 30,
-          stickerGap: labelPrinter?.stickerGap || 2,
+          stickerGap: labelPrinter?.stickerGap ?? 2,
         })
         cupIndex++
       }
@@ -3293,8 +3287,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         stickers: stickerList,
         isTspl: true
       })
-      if (!result?.success) showToast(t('printerRouting.failed'), 'warning')
-    } catch { showToast(t('printerRouting.failed'), 'warning') }
+      if (!result?.success) showToast(t('pos.labelPrintFailed', 'Failed to print cup label') + (result?.error ? `: ${result.error}` : ''), 'warning')
+    } catch (err: any) { showToast(t('pos.labelPrintFailed', 'Failed to print cup label') + ': ' + (err?.message || ''), 'warning') }
   }
 
   // The generation survives acknowledgement, so even a delayed tab observes the invalidation.
