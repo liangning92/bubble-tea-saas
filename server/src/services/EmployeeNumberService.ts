@@ -10,6 +10,10 @@ export function formatEmployeeNumber(sequence: number) {
 // Call within the same transaction that creates Staff. Updating the singleton
 // counter row locks allocation until commit; the saved high-water mark prevents reuse.
 export async function allocateEmployeeNumber(tx: Prisma.TransactionClient) {
+  if (!process.env.DATABASE_URL?.startsWith('file:')) {
+    const rows = await tx.$queryRaw<{ value: number }[]>`SELECT nextval('employee_number_sequence')::int AS value`
+    return formatEmployeeNumber(Number(rows[0].value))
+  }
   const owner = await tx.store.findFirst({ orderBy: { id: 'asc' }, select: { id: true } })
   if (!owner) throw new Error('EMPLOYEE_NUMBER_STORE_REQUIRED')
   const where = { storeId_key: { storeId: owner.id, key: EMPLOYEE_NUMBER_SEQUENCE_KEY } }
