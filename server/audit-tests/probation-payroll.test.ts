@@ -1,5 +1,5 @@
 import {expect,jest,test} from '@jest/globals'
-import {payrollBasis,confirmationDay,monthlyRateCents,saveEnrollment,getEnrollment,saveProbationRule,savePayrollBasis,savedPayrollBasis,ProbationInputError} from '../src/services/ProbationService'
+import {businessDate,payrollBasis,confirmationDay,monthlyRateCents,saveEnrollment,getEnrollment,saveProbationRule,savePayrollBasis,savedPayrollBasis,ProbationInputError} from '../src/services/ProbationService'
 const staff={id:'a',storeId:'s',baseSalary:1400000,hireDate:new Date('2026-10-12T00:00:00+07:00')}
 const rule={enabled:true,durationUnit:'months' as const,duration:1,salaryMode:'percentage' as const,salaryValue:80}
 const enrollment={enabled:true,rule}
@@ -14,3 +14,5 @@ function db(){const rows=new Map<string,string>();return {config:{findUnique:jes
 test('employee rules are snapshotted, changing store rules does not change enrolled employee wages',async()=>{const p=db();await saveProbationRule(p as any,'s',rule);await saveEnrollment(p as any,staff,true);await saveProbationRule(p as any,'s',{...rule,salaryValue:50});expect((await getEnrollment(p as any,staff)).rule?.salaryValue).toBe(80)})
 test('saved payroll snapshot survives later rule changes and records manual adjustments explicitly',async()=>{const p=db();await saveProbationRule(p as any,'s',rule);await saveEnrollment(p as any,staff,true);await savePayrollBasis(p as any,{id:'salary',staffId:'a',month:'2026-10',baseSalary:700000},staff);await saveProbationRule(p as any,'s',{...rule,salaryValue:50});const saved=await savedPayrollBasis(p as any,'s','salary');expect(saved.amount).toBe(722581);expect(saved.recordedBaseSalary).toBe(700000);expect(saved.manualAdjustment).toBe(true)})
 test('rule configuration validates values and does not default to active',async()=>{const p=db();await expect(saveEnrollment(p as any,staff,true)).rejects.toThrow('PROBATION_RULE_REQUIRED');for(const r of [{...rule,duration:0},{...rule,salaryValue:101},{...rule,duration:25},{...rule,salaryMode:'fixed',salaryValue:-1}])await expect(saveProbationRule(p as any,'s',r)).rejects.toThrow()})
+
+test('hire dates use Jakarta business day rather than UTC date',()=>{expect(businessDate(new Date('2026-10-11T17:30:00Z'))).toBe('2026-10-12')})

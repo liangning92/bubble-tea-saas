@@ -1,3 +1,4 @@
+import { jakartaInput } from '../../utils/orderExport'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
@@ -98,7 +99,7 @@ export function StaffFormPage() {
         baseSalary: s.baseSalary ?? '',
         hourlyRate: s.hourlyRate ?? '',
         weeklyHours: s.weeklyHours || '',
-        hireDate: s.hireDate ? new Date(s.hireDate).toISOString().slice(0, 10) : '',
+        hireDate: s.hireDate ? jakartaInput(s.hireDate).slice(0, 10) : '',
         probationEnabled: !!s.probation?.enabled,
         confirmationDate: s.probation?.overrideConfirmationDate || ''
       })
