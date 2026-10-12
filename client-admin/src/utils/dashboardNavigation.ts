@@ -1,15 +1,11 @@
+import {queryInstantRange} from './queryPeriods'
 import { useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth'
 
 export const validInstant = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
 // Indonesia store business day, independent of the browser's local timezone.
-export function businessDay(instant: string) {
-  if (!validInstant(instant)) throw new Error('DASHBOARD_CONTEXT_INVALID')
-  const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(instant))
-  const part = (type: string) => parts.find(p=>p.type===type)!.value
-  const start = Date.parse(`${part('year')}-${part('month')}-${part('day')}T00:00:00+07:00`)
-  return {startDate:new Date(start).toISOString(),endDate:new Date(start+86400000-1).toISOString()}
-}
+export function businessDay(instant:string,timezone='Asia/Jakarta'){if(!validInstant(instant))throw Error('DASHBOARD_CONTEXT_INVALID');return queryInstantRange('today',timezone,new Date(instant))}
+
 export function dashboardLink(path: string, context: Record<string, string | undefined>) {
   const params = new URLSearchParams()
   for (const [key,value] of Object.entries(context)) if (value !== undefined) params.set(key,value)

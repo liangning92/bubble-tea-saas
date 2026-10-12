@@ -1,3 +1,5 @@
+import {loadStoreDateSettings} from '../utils/storeDateSettings'
+import {revenuePeriodRange,businessCalendarDate} from '../utils/revenueDateRange'
 import { getActivityPriceRules } from '../services/ActivityPricingService'
 import { tvScreenRouter } from './tvScreen'
 import {changeMemberBalance} from '../services/MemberBalanceService'
@@ -1310,22 +1312,14 @@ router.get('/message-stats', authenticate, authorize('admin', 'manager'), async 
     const storeId = req.user!.storeId
     const { period = 'week' } = req.query
 
-    // Calculate date range based on period
-    const now = new Date()
-    let startDate = new Date()
-    if (period === 'today') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    } else if (period === 'week') {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    } else if (period === 'month') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-    }
+    const settings=await loadStoreDateSettings(prisma,storeId)
+    const {start:startDate,end:endDate}=revenuePeriodRange({period},new Date(),'week',settings.timezone)
 
     // Get message logs from the period
     const logs = await prisma.messageLog.findMany({
       where: {
         storeId,
-        createdAt: { gte: startDate }
+        createdAt: { gte: startDate, lte: endDate }
       },
       orderBy: { createdAt: 'asc' }
     })
@@ -1367,7 +1361,7 @@ router.get('/message-stats', authenticate, authorize('admin', 'manager'), async 
     // Group by day
     const dailyMap = new Map<string, { sent: number; delivered: number; failed: number }>()
     logs.forEach(log => {
-      const date = log.createdAt.toISOString().split('T')[0]
+      const date = businessCalendarDate(log.createdAt,settings.timezone)
       const existing = dailyMap.get(date) || { sent: 0, delivered: 0, failed: 0 }
       existing.sent++
       if (log.status === 'delivered') existing.delivered++

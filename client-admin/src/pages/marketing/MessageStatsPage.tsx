@@ -1,3 +1,5 @@
+import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
+import {QUERY_PERIODS,QueryPeriod} from '../../utils/queryPeriods'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -38,11 +40,12 @@ export function MessageStatsPage() {
   const { user } = useAuthStore()
   const storeId = user?.storeId || 'default'
 
-  const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week')
+  const dateSettings=useStoreDateSettings()
+  const [period, setPeriod] = useState<QueryPeriod>('week')
 
   // Fetch message stats
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['message-stats', storeId, period],
+    queryKey: ['message-stats', storeId, period,dateSettings],
     queryFn: () => marketingApi.messageStats(storeId, period)
   })
 
@@ -57,15 +60,7 @@ export function MessageStatsPage() {
     dailyStats: []
   }
 
-  const getPeriodLabel = (p: string) => {
-    switch (p) {
-      case 'today': return t('marketing.today')
-      case 'week': return t('marketing.thisWeek')
-      case 'month': return t('marketing.thisMonth')
-      default: return p
-    }
-  }
-
+  const getPeriodLabel=(p:string)=>t('queryPeriods.'+p)
   if (isError) return <MarketingError retry={() => refetch()} />
 
   return (
@@ -75,7 +70,7 @@ export function MessageStatsPage() {
 
         {/* Period Filter */}
         <div className="flex gap-2">
-          {(['today', 'week', 'month'] as const).map(p => (
+          {QUERY_PERIODS.map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

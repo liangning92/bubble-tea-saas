@@ -4,7 +4,7 @@ const ts=require('typescript'),fs=require('node:fs'),vm=require('node:vm');
 function moduleAt(path, deps){
  const module={exports:{}};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,
- {module,exports:module.exports,require:name=>{if(name in deps)return deps[name];throw Error('Unexpected dependency '+name);},console:{error:()=>{},warn:()=>{}},Date,Set});
+ {module,exports:module.exports,require:name=>{if(name in deps)return deps[name];if(name.endsWith('/storeDateSettings'))return moduleAt('server/src/utils/storeDateSettings.ts',{});throw Error('Unexpected dependency '+name);},console:{error:()=>{},warn:()=>{}},Date,Set});
  return module.exports;
 }
 const auth={authenticate:(req,res,next)=>next(),authorize:(...roles)=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({message:'Forbidden'})};
@@ -132,4 +132,11 @@ test('historical off session is readable and closable without active configurati
  const run=routes('server/src/routes/posCash.ts',db,{'../utils/dateUtils':{startOfTodayJakarta:()=>new Date('2026-10-06T17:00:00Z')}});
  const read=await run('get/shifts/current',{user});assert.equal(read.code,200);assert.equal(read.data.data.shift.shift,'off');assert.equal(read.data.data.hasOpenShift,true);
  const closed=await run('post/shifts/close',{user,body:{actualCash:100}});assert.equal(closed.code,200);assert.equal(updated.where.id,'historic-off');assert.equal(updated.data.status,'closed');assert.equal(events[0].data.shift,'off');
+});
+test('store timezone/date settings reject invalid values before any configuration write',async()=>{
+ let writes=0;const db={config:{upsert:async()=>{writes++;return {key:'storeInfo',category:'store'}},findMany:async()=>[]}};
+ const run=routes('server/src/routes/config.ts',db,{'zod':require('zod'),'../utils/validation':{validateBody:()=>auth.authenticate},'../services/TrainingLibraryStore':{isTrainingLibraryKey:()=>false,ordinaryConfigWhere:{}},'../services/StaffConfigService':{}});
+ const actor={...user,role:'admin'};
+ for(const value of [{timezone:'Not/AZone'},{dateFormat:'unsupported'}]){const response=await run('post/',{user:actor,body:{storeId:actor.storeId,key:'storeInfo',value,category:'store'}});assert.equal(response.code,400);assert.equal(writes,0);}
+ const response=await run('post/',{user:actor,body:{storeId:actor.storeId,key:'storeInfo',value:{storeName:'Preserved',timezone:'America/New_York',dateFormat:'DD/MM/YYYY'},category:'store'}});assert.equal(response.code,200);assert.equal(writes,1);
 });

@@ -1,3 +1,6 @@
+import { loadStoreDateSettings } from '../utils/storeDateSettings'
+import { revenuePeriodRange } from '../utils/revenueDateRange'
+import { netReceivedAmount } from '../utils/refundAllocation'
 import { parseDateBoundary } from '../utils/businessDate'
 import {requireVerifiedReceiptIncome} from '../services/ReceiptFinancialEvidenceService'
 import { Router } from 'express'
@@ -275,25 +278,28 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
   try {
     const storeId = req.user!.storeId
 
-    // Use UTC-based dates for consistent query (store uses UTC timestamps)
+    // Dashboard cards and revenue reports use the same store calendar day.
     const now = new Date()
-    const todayUTC = new Date(now.getFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
-    const thisMonthUTC = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1)
-    const yesterdayUTC = new Date(todayUTC)
-    yesterdayUTC.setUTCDate(yesterdayUTC.getUTCDate() - 1)
+    const dateSettings=await loadStoreDateSettings(prisma,storeId)
+    const todayRange = revenuePeriodRange({period:'today'}, now,'today',dateSettings.timezone)
+    const monthRange = revenuePeriodRange({period:'month'}, now,'today',dateSettings.timezone)
+    const todayStart = todayRange.start
+    const tomorrowStart = new Date(todayRange.end.getTime()+1)
+    const monthStart = monthRange.start
+    const yesterdayStart = revenuePeriodRange({period:'today'},new Date(todayStart.getTime()-1),'today',dateSettings.timezone).start
 
     // ============ 今日数据 ============
     const todayOrders = await prisma.order.findMany({
       where: {
         storeId,
-        status: 'completed',
-        createdAt: { gte: todayUTC }
+        status: {in:['completed','paid']},
+        createdAt: { gte: todayStart, lt: tomorrowStart }
       },
-      include: { items: true }
+      include: { items: true, refundRequests:{where:{status:{in:['approved','paid']}}} }
     })
     await requireVerifiedReceiptIncome(todayOrders)
 
-    const todayRevenue = todayOrders.reduce((sum, o) => sum + o.finalAmount, 0)
+    const todayRevenue = todayOrders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
     const todayCost = todayOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.bomCost, 0), 0)
     const todayProfit = todayRevenue - todayCost
 
@@ -301,24 +307,25 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
     const yesterdayOrders = await prisma.order.findMany({
       where: {
         storeId,
-        status: 'completed',
-        createdAt: { gte: yesterdayUTC, lt: todayUTC }
-      }
+        status: {in:['completed','paid']},
+        createdAt: { gte: yesterdayStart, lt: todayStart }
+      },
+      include:{refundRequests:{where:{status:{in:['approved','paid']}}}}
     })
     await requireVerifiedReceiptIncome(yesterdayOrders)
-    const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + o.finalAmount, 0)
+    const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
 
     // ============ 本月数据 ============
     const monthOrders = await prisma.order.findMany({
       where: {
         storeId,
-        status: 'completed',
-        createdAt: { gte: thisMonthUTC }
+        status: {in:['completed','paid']},
+        createdAt: { gte: monthStart, lt: tomorrowStart }
       },
-      include: { items: true }
+      include: { items: true, refundRequests:{where:{status:{in:['approved','paid']}}} }
     })
     await requireVerifiedReceiptIncome(monthOrders)
-    const monthRevenue = monthOrders.reduce((sum, o) => sum + o.finalAmount, 0)
+    const monthRevenue = monthOrders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
     const monthCost = monthOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.bomCost, 0), 0)
     const monthProfit = monthRevenue - monthCost
 
@@ -344,7 +351,8 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
 
     const todayAttendance = await prisma.attendance.count({
       where: {
-        checkInTime: { gte: todayUTC }
+        staff: {storeId},
+        checkInTime: { gte: todayStart, lt: tomorrowStart }
       }
     })
 
@@ -360,7 +368,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
     const todayNewMembers = await prisma.member.count({
       where: {
         storeId,
-        createdAt: { gte: todayUTC }
+        createdAt: { gte: todayStart, lt: tomorrowStart }
       }
     })
 
@@ -450,7 +458,9 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
           status: o.status,
           createdAt: o.createdAt
         })),
-        timestamp: new Date().toISOString()
+        timestamp: now.toISOString(),
+        ...dateSettings,
+        range: {startDate:todayStart.toISOString(),endDate:new Date(tomorrowStart.getTime()-1).toISOString()}
       }
     })
   } catch (error) {

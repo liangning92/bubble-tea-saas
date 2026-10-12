@@ -4,18 +4,18 @@ import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 import { loadShiftCashReviews } from './ShiftCashReconciliation'
 import { loadManualReceipts } from './ShiftManualReceipts'
 import { PrismaClient } from '@prisma/client'
-import { parseBusinessDate } from '../utils/businessDate'
-import { formatDate } from '../utils/dateUtils'
+import { loadStoreDateSettings, calendarStart, nextCalendarDate } from '../utils/storeDateSettings'
+import { parseRevenueDate, businessCalendarDate } from '../utils/revenueDateRange'
 import { withPurchaseQuantities } from './ExpenseService'
 
 export class ShiftReviewInputError extends Error {}
-export function shiftReviewRange(start: unknown, end: unknown, now = new Date()) {
+export function shiftReviewRange(start: unknown, end: unknown, now = new Date(),timezone='Asia/Jakarta') {
   try {
-    const startDate = parseBusinessDate(start || formatDate(now))
-    const lastDate = parseBusinessDate(end || start || formatDate(now))
+    const startDate = parseRevenueDate(start || businessCalendarDate(now,timezone),false,timezone)
+    const lastDate = parseRevenueDate(end || start || businessCalendarDate(now,timezone),false,timezone)
     if (typeof start === 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(start)) throw Error()
     if (typeof end === 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(end)) throw Error()
-    const endDate = new Date(lastDate.getTime() + 86400000)
+    const endDate = calendarStart(nextCalendarDate(businessCalendarDate(lastDate,timezone)),timezone)
     if (endDate <= startDate || endDate.getTime() - startDate.getTime() > 31 * 86400000) throw Error()
     return { startDate, endDate }
   } catch { throw new ShiftReviewInputError('INVALID_SHIFT_DATE_RANGE') }
@@ -23,7 +23,8 @@ export function shiftReviewRange(start: unknown, end: unknown, now = new Date())
 
 type ReviewDB = Pick<PrismaClient, 'shiftSession' | 'shift' | 'order' | 'expense' | 'pOSActionLog' | 'staff' | 'user' | 'financeAuditLog' | 'config'>
 export async function loadShiftReview(db: ReviewDB, storeId: string, start: unknown, end: unknown, now = new Date()) {
-  const range = shiftReviewRange(start, end, now)
+  const settings=await loadStoreDateSettings(db,storeId)
+  const range = shiftReviewRange(start, end, now,settings.timezone)
   const sessions = await db.shiftSession.findMany({ where: { storeId, openedAt: { lt: range.endDate, lte: now }, OR: [{ closedAt: null }, { closedAt: { gt: range.startDate } }] }, orderBy: { openedAt: 'asc' } })
   if (sessions.length > 500) throw new ShiftReviewInputError('SHIFT_RANGE_TOO_LARGE')
   const cashReviews = await loadShiftCashReviews(db, storeId, sessions.map(s => s.id))
@@ -60,7 +61,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
   for (const o of orders) assign(o.createdAt)?.orders.push(o)
   for (const e of quantities) assign(e.createdAt)?.expenses.push(e)
   for (const w of warnings) assign(w.createdAt)?.warnings.push(w)
-  const nightlyIds=dailyNightHandoverIds(sessions.filter(s=>s.status==='closed'),definitions)
+  const nightlyIds=dailyNightHandoverIds(sessions.filter(s=>s.status==='closed'),definitions,settings.timezone)
   const serialize = (b: typeof buckets[number] | typeof outside) => {
     // Orders and shift cash use whole IDR; Expense.amount uses hundredths.
     // Return display amounts without changing any stored accounting values.
@@ -89,5 +90,5 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
       expenses: b.expenses.map(e => ({ id: e.id, category: e.category, amount: e.amount / 100, quantity: e.quantity ?? null, description: e.description, createdAt: e.createdAt, staffName: e.referenceId ? person(e.referenceId.split(':')[0]).name : null })),
       employees: [...participants.values()] }
   }
-  return { range: { start: range.startDate, end: range.endDate, timezone: 'Asia/Jakarta' }, asOf: now, categories, sessions: buckets.map(serialize), unassigned: serialize(outside) }
+  return { range: { start: range.startDate, end: range.endDate, ...settings }, asOf: now, categories, sessions: buckets.map(serialize), unassigned: serialize(outside) }
 }

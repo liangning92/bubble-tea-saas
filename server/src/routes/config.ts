@@ -1,3 +1,4 @@
+import { DATE_FORMATS, validTimezone } from '../utils/storeDateSettings'
 import { prepareReceiptLogoConfig, ReceiptLogoConflict } from '../utils/receiptLogoConfig'
 import {internalConfigWhere,isInternalConfig,isSecretConfig} from '../utils/configAccess'
 import { isTrainingLibraryKey, ordinaryConfigWhere } from '../services/TrainingLibraryStore'
@@ -14,6 +15,7 @@ import { getStaffConfig, saveStaffConfig, DEFAULT_STAFF_CONFIG } from '../servic
 const router = Router()
 
 async function prepareConfigValue(storeId: string, key: string, value: unknown) {
+  if(key==='storeInfo')return z.object({timezone:z.string().refine(validTimezone,'INVALID_STORE_TIMEZONE').optional(),dateFormat:z.enum(DATE_FORMATS).optional()}).passthrough().parse(value)
   if (key !== 'posReceipt') return value
   const row = await prisma.config.findUnique({ where: { storeId_key: { storeId, key } } })
   let previous: unknown = null
@@ -199,6 +201,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({code:400,message:'INVALID_STORE_DATE_SETTINGS'})
     if (error instanceof ReceiptLogoConflict) return res.status(409).json({ code: 409, message: error.message })
     console.error('Save config error:', error)
     res.status(500).json({ code: 500, message: 'Failed to save config' })
@@ -241,6 +244,7 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({code:400,message:'INVALID_STORE_DATE_SETTINGS'})
     if (error instanceof ReceiptLogoConflict) return res.status(409).json({ code: 409, message: error.message })
     console.error('Batch save configs error:', error)
     res.status(500).json({ code: 500, message: 'Failed to save configs' })

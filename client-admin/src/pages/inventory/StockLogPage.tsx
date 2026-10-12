@@ -1,3 +1,5 @@
+import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
+import {QUERY_PERIODS,QueryPeriod,queryInstantRange,calendarStart} from '../../utils/queryPeriods'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -17,6 +19,7 @@ import {
 type LogTab = 'all' | 'in' | 'sold' | 'waste' | 'process' | 'adjust'
 
 export function StockLogPage() {
+  const dateSettings=useStoreDateSettings()
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
 
@@ -24,7 +27,7 @@ export function StockLogPage() {
   const [activeTab, setActiveTab] = useState<LogTab>('all')
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
-  const [datePreset, setDatePreset] = useState<'all' | 'today' | '7days' | '30days' | 'custom'>('all')
+  const [datePreset, setDatePreset] = useState<'all' | QueryPeriod | 'custom'>('all')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
 
@@ -51,26 +54,16 @@ export function StockLogPage() {
 
   // Date range calculation
   const dateRange = useMemo(() => {
-    const today = new Date()
-    const formatDateYMD = (d: Date) => d.toISOString().split('T')[0]
-
-    if (datePreset === 'today') {
-      const todayStr = formatDateYMD(today)
-      return { startDate: todayStr, endDate: todayStr }
-    } else if (datePreset === '7days') {
-      const past = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000)
-      return { startDate: formatDateYMD(past), endDate: formatDateYMD(today) }
-    } else if (datePreset === '30days') {
-      const past = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)
-      return { startDate: formatDateYMD(past), endDate: formatDateYMD(today) }
+    if (QUERY_PERIODS.includes(datePreset as QueryPeriod)) {
+      return queryInstantRange(datePreset as QueryPeriod,dateSettings.timezone)
     } else if (datePreset === 'custom') {
       return {
-        startDate: customStartDate || undefined,
-        endDate: customEndDate || undefined
+        startDate: customStartDate ? calendarStart(customStartDate,dateSettings.timezone).toISOString() : undefined,
+        endDate: customEndDate ? new Date(calendarStart(new Date(Date.parse(customEndDate+'T00:00:00Z')+86400000).toISOString().slice(0,10),dateSettings.timezone).getTime()-1).toISOString() : undefined
       }
     }
     return { startDate: undefined, endDate: undefined }
-  }, [datePreset, customStartDate, customEndDate])
+  }, [datePreset, customStartDate, customEndDate,dateSettings.timezone])
 
   // Fetch inventory items for dropdowns and display
   const { data: inventoryData } = useQuery({
@@ -520,10 +513,8 @@ export function StockLogPage() {
         {/* Preset Date Selector */}
         <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex">
           {[
+            ...QUERY_PERIODS.map(key=>({key,label:t('queryPeriods.'+key)})),
             { key: 'all', label: t('common.all') },
-            { key: 'today', label: t('inventory.today') },
-            { key: '7days', label: t('inventory.last7Days') },
-            { key: '30days', label: t('inventory.last30Days') },
             { key: 'custom', label: t('inventory.customRange') }
           ].map(preset => (
             <button

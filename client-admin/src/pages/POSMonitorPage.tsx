@@ -1,8 +1,10 @@
+import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
+import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../utils/queryPeriods'
 import { OrderItemsTable } from '../components/OrderItemsTable'
 import { readPOSFailure } from '../utils/posMonitorFailure'
 import { formatCurrency } from '../utils/helpers'
 import { useMemo, useEffect } from 'react'
-import { useDashboardContext, requireRead, finiteNumber, businessDay } from '../utils/dashboardNavigation'
+import { useDashboardContext, requireRead, finiteNumber } from '../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../components/DashboardReadState'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -115,6 +117,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 export function POSMonitorPage() {
+  const dateSettings=useStoreDateSettings()
   const context=useDashboardContext()
   const { t } = useTranslation()
   const [filter, setFilter] = useState({
@@ -137,25 +140,10 @@ export function POSMonitorPage() {
 
   // Build date range
   const getDateRange = () => {
-    const now = new Date(rangeClock)
-    let startDate: string | undefined
-    let endDate: string | undefined
-
-    switch (filter.dateRange) {
-      case 'today':
-        startDate = businessDay(now.toISOString()).startDate
-        break
-      case 'week':
-        startDate = new Date(now.setDate(now.getDate() - 7)).toISOString()
-        break
-      case 'month':
-        startDate = new Date(now.setMonth(now.getMonth() - 1)).toISOString()
-        break
-    }
-    return { startDate, endDate }
+    return queryInstantRange(filter.dateRange as QueryPeriod,dateSettings.timezone,new Date(rangeClock))
   }
 
-  const { startDate, endDate } = useMemo(()=>filter.dateRange==='dashboard'?{startDate:context.startDate,endDate:context.endDate}:getDateRange(),[filter.dateRange,context.startDate,context.endDate,rangeClock])
+  const { startDate, endDate } = useMemo(()=>filter.dateRange==='dashboard'?{startDate:context.startDate,endDate:context.endDate}:getDateRange(),[filter.dateRange,context.startDate,context.endDate,rangeClock,dateSettings.timezone])
 
   const {data:unpostedData,isError:receiptError,isPending:receiptPending,refetch:refetchReceipts} = useQuery({
     queryKey:['received-receipts',context.storeId],enabled:context.valid,
@@ -362,10 +350,8 @@ export function POSMonitorPage() {
             onChange={(e) => setFilter({ ...filter, dateRange: e.target.value, page: 1 })}
             className="input w-32"
           >
+            {QUERY_PERIODS.map(period=><option key={period} value={period}>{t('queryPeriods.'+period)}</option>)}
             {context.startDate && <option value="dashboard">{t('dashboardNavigation.dashboardRange')}</option>}
-            <option value="today">{t('posMonitor.today')}</option>
-            <option value="week">{t('posMonitor.week')}</option>
-            <option value="month">{t('posMonitor.month')}</option>
           </select>
 
           <select

@@ -1,3 +1,4 @@
+import {formatStoreDate} from './storeDateTime'
 // Format currency to IDR
 export function formatCurrency(amount: number): string {
   if (amount === undefined || amount === null) return 'Rp 0'
@@ -20,34 +21,21 @@ function safeParseDate(date: string | Date): Date | null {
 export function formatDate(date: string | Date, fallback = '-'): string {
   const d = safeParseDate(date)
   if (!d) return fallback
-  return d.toLocaleDateString('id-ID', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  return formatStoreDate(d)
 }
 
 // Format datetime
 export function formatDateTime(date: string | Date, fallback = '-'): string {
   const d = safeParseDate(date)
   if (!d) return fallback
-  return d.toLocaleString('id-ID', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatStoreDate(d,undefined,true)
 }
 
 // Format time only
 export function formatTime(date: string | Date, fallback = '-'): string {
   const d = safeParseDate(date)
   if (!d) return fallback
-  return d.toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatStoreDate(d,undefined,true).split(' ').slice(-1)[0]
 }
 
 // cn utility
