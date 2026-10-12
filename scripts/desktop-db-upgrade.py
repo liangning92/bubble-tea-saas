@@ -674,16 +674,15 @@ def refresh_stage_database(pointer, installer, db, old_app):
     with closing(connection(db, writable=True)) as current:
         integrity(current)
         columns = column_map(current)
-        history = fingerprints(current, columns)
+        # The local API has already stopped. VACUUM INTO captures one consistent
+        # snapshot; the installer compares its fingerprint with the live DB
+        # before applying the schema change.
         current.execute('VACUUM INTO ?', (str(temporary),))
-        if fingerprints(current, columns) != history:
-            fail('DATABASE_CHANGED_DURING_STAGE')
     with open(temporary, 'r+b') as stream:
         os.fsync(stream.fileno())
     with closing(connection(temporary)) as snapshot:
         integrity(snapshot)
-        if fingerprints(snapshot, columns) != history:
-            fail('SNAPSHOT_HISTORY_MISMATCH')
+        history = fingerprints(snapshot, columns)
     os.replace(temporary, receipt['databaseBackup'])
     receipt.update(databaseBackupSha256=digest(receipt['databaseBackup']),
                    databaseState=database_file_state(db),

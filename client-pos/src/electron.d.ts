@@ -18,7 +18,7 @@ declare global {
 
       // Updates
       checkForUpdates: () => Promise<{ updateAvailable: boolean }>
-      downloadUpdate: () => Promise<void>
+      downloadUpdate: () => Promise<boolean>
       installUpdate: (snapshot: any) => Promise<boolean>
       showUpdateInstaller: () => Promise<{success: boolean}>
 
