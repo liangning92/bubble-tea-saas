@@ -1,3 +1,4 @@
+import { allocateEmployeeNumber } from './EmployeeNumberService'
 import { readWork, listWork } from './EmployeeWorkspaceStore'
 import { adjustmentPlan } from './SalaryAdjustmentService'
 import { salaryDepositPlan } from './SalaryDepositPlan'
@@ -79,21 +80,23 @@ export async function createStaff(data: {
     throw new Error('Staff password must be 6–72 bytes')
   }
 
+  const hashed = await bcrypt.hash(data.password, 12)
+  return prisma.$transaction(async tx => {
   // First create the User
-  const user = await prisma.user.create({
+  const user = await tx.user.create({
     data: {
       phone: data.phone,
-      password: await bcrypt.hash(data.password, 12),
+      password: hashed,
       role: 'staff',
       storeId: data.storeId
     }
   })
 
   // Generate employee number
-  const employeeNumber = 'EMP' + Date.now().toString().slice(-6)
+  const employeeNumber = await allocateEmployeeNumber(tx)
 
   // Then create the Staff linked to the User
-  return prisma.staff.create({
+  return tx.staff.create({
     data: {
       userId: user.id,
       storeId: data.storeId,
@@ -112,6 +115,7 @@ export async function createStaff(data: {
       bankName: data.bankName,
       status: 'active'
     }
+  })
   })
 }
 
