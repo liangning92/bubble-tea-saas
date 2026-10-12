@@ -1,3 +1,5 @@
+import { PayrollBasisSummary } from '../../components/PayrollBasisSummary'
+import { probationLabels } from '../../../../shared/probationLabels'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -14,6 +16,7 @@ interface Salary {
   id: string
   staffId: string
   month: string
+  payrollBasis?: any
   compensationAdjustmentIds?: string[]
   compensationRewards?: number
   compensationPenalties?: number
@@ -45,7 +48,7 @@ interface StaffOption {
 
 export function SalaryListPage() {
   const canWrite=useEmployeePermission('salary.write')
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
 
   const [salaries, setSalaries] = useState<Salary[]>([])
@@ -59,6 +62,7 @@ export function SalaryListPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingSalary, setEditingSalary] = useState<Salary | null>(null)
   const [depositPlan, setDepositPlan] = useState<{staffId: string; month: string; items: Array<{staffDepositId: string; amountMinor: number}>} | null>(null)
+  const [payrollBasis,setPayrollBasis]=useState<any>(null)
   const [saveError, setSaveError] = useState('')
   const [depositLoading, setDepositLoading] = useState(false)
   const [depositError, setDepositError] = useState('')
@@ -76,6 +80,9 @@ export function SalaryListPage() {
   })
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
+
+  const activeSalaryContext = useRef('')
+  activeSalaryContext.current = `${showModal}:${formData.staffId}:${formData.month}`
 
   useEffect(() => {
     if (!showModal || !formData.staffId || !formData.month) return
@@ -161,6 +168,7 @@ export function SalaryListPage() {
   }
 
   const handleOpenModal = (salary?: Salary) => {
+    setPayrollBasis(salary?.payrollBasis||null)
     setSaveError('')
     setDepositError('')
     appliedCompensation.current={rewards:salary?.compensationRewards||0,penalties:salary?.compensationPenalties||0}
@@ -204,13 +212,16 @@ export function SalaryListPage() {
       return
     }
 
+    const contextKey = activeSalaryContext.current
     setCalculating(true)
+    setSaveError('')
     try {
       const [year, month] = formData.month.split('-')
       const response = await salaryApi.calculate(formData.staffId, parseInt(month), parseInt(year))
       const data = response.data?.data
 
-      if (data) {
+      if (data && contextKey === activeSalaryContext.current) {
+        setPayrollBasis(data.payrollBasis || null)
         appliedCompensation.current=data.compensation || {rewards:0,penalties:0}
         setCompensationIds(data.compensationAdjustmentIds || [])
         appliedDepositAmount.current = (data.depositDeductions || []).reduce((sum: number, item: {amountMinor: number}) => sum + Math.round(item.amountMinor / 100), 0)
@@ -226,11 +237,30 @@ export function SalaryListPage() {
       }
     } catch (error) {
       console.error('Failed to calculate salary:', error)
-      alert(t('staff.salary.calcFailed'))
+      if (contextKey === activeSalaryContext.current) setSaveError(t('staff.salary.calcFailed'))
     } finally {
-      setCalculating(false)
+      if (contextKey === activeSalaryContext.current) setCalculating(false)
     }
   }
+
+  useEffect(()=>{
+    if(editingSalary)return
+    setPayrollBasis(null)
+    if(!showModal||editingSalary||!formData.staffId||!formData.month)return
+    let active=true
+    setCalculating(true); setSaveError('')
+    salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4))).then(response=>{
+      if(!active)return
+      const data=response.data?.data
+      if(!Number.isSafeInteger(data?.baseSalary)||!data?.payrollBasis)throw Error('INVALID_SALARY_CALCULATION')
+      setPayrollBasis(data.payrollBasis||null)
+      appliedCompensation.current=data.compensation||{rewards:0,penalties:0};setCompensationIds(data.compensationAdjustmentIds||[])
+      appliedDepositAmount.current=(data.depositDeductions||[]).reduce((sum:number,item:{amountMinor:number})=>sum+Math.round(item.amountMinor/100),0)
+      setDepositPlan({staffId:formData.staffId,month:formData.month,items:data.depositDeductions||[]})
+      setFormData(previous=>({...previous,baseSalary:String(data.baseSalary??0),overtime:String(data.overtimePay??0),bonus:String(data.bonuses??0),deduction:String(data.deductions??0)}))
+    }).catch(()=>{if(active){setSaveError(t('staff.salary.calcFailed'));setFormData(previous=>({...previous,baseSalary:''}))}}).finally(()=>{if(active)setCalculating(false)})
+    return ()=>{active=false}
+  },[showModal,editingSalary,formData.staffId,formData.month])
 
   const handleSave = async () => {
     if (!formData.staffId || !formData.month || !formData.baseSalary) {
@@ -246,6 +276,7 @@ export function SalaryListPage() {
     setSaving(true)
     try {
       const data = {
+        autoBaseSalary: !!payrollBasis && Number(formData.baseSalary) === payrollBasis.amount,
         compensationAdjustmentIds:compensationIds,
         storeId: user?.storeId,
         staffId: formData.staffId,
@@ -530,6 +561,8 @@ export function SalaryListPage() {
                 />
               </div>
 
+              <p className="col-span-2 text-sm text-gray-500">{probationLabels(i18n.language).automatic}</p>
+              <div className="col-span-2"><PayrollBasisSummary basis={payrollBasis ? {...payrollBasis,recordedBaseSalary:Number(formData.baseSalary),manualAdjustment:Number(formData.baseSalary)!==payrollBasis.amount} : null}/></div>
               {/* Base Salary */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

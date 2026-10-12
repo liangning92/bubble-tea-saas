@@ -1,3 +1,4 @@
+import { probationLabels } from '../../../../shared/probationLabels'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +8,7 @@ import { useAuthStore } from '../../stores/auth'
 import { Plus, Loader2, Edit2, Users, Search, Eye, Trash2, AlertTriangle, UserCheck, UserX } from 'lucide-react'
 
 export function StaffListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -210,7 +211,7 @@ export function StaffListPage() {
                     <td className="py-3 font-medium">{s.name}</td>
                     <td className="py-3 text-gray-600">{s.phone}</td>
                     <td className="py-3">{getPositionLabel(s.position)}</td>
-                    <td className="py-3 text-sm text-gray-600">{getEmploymentTypeLabel(s.employmentType || 'full_time')}</td>
+                    <td className="py-3 text-sm text-gray-600">{getEmploymentTypeLabel(s.employmentType || 'full_time')}{s.probation?.enabled&&<span className="badge badge-info ml-2">{probationLabels(i18n.language)[s.probation.status==='probation'?'probation':s.probation.status==='not_started'?'not_started':'regular']}</span>}</td>
                     <td className="py-3 font-medium">{s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
                     <td className="py-3">
                       <span className={`badge ${getStatusBadge(s.status)} capitalize`}>

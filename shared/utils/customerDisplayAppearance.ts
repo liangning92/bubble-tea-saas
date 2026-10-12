@@ -42,7 +42,7 @@ export function customerDisplayAppearance(config: CustomerAppearanceConfig, stat
     promotions: appearance.promotions ?? config.promotions,
     welcomeText: appearance.welcomeText ?? config.welcomeText ?? '',
     welcomeStyle: { ...config.welcomeStyle, ...appearance.welcomeStyle },
-    logoStyle: { ...config.logoStyle, ...appearance.logoStyle },
+    logoStyle: { ...config.logoStyle, ...appearance.logoStyle, sources: { ...appearance.logoStyle?.sources, ...config.logoStyle?.sources } },
     autoSyncPromotions: appearance.autoSyncPromotions ?? config.autoSyncPromotions,
     backgroundColor: customerBackground(appearance.backgroundColor || (state === 'complete' ? '#16A34A' : config.backgroundColor)),
     orderHeaderColor: customerBackground(appearance.orderHeaderColor || '#D94D6E'),

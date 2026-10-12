@@ -32,14 +32,14 @@ export function SettingsPage() {
 
   // 加载店铺信息
   const { data: configData, isLoading } = useQuery({
-    queryKey: ['config', 'store'],
-    queryFn: () => configApi.get(),
+    queryKey: ['config', 'store', user?.storeId || ''],
+    queryFn: () => configApi.get(user?.storeId || undefined),
     enabled: activeTab === 'store'
   })
 
   useEffect(() => {
-    if (configData?.data?.storeInfo) {
-      setStoreInfo(prev => ({ ...prev, ...configData.data.storeInfo }))
+    if (configData?.data?.data?.storeInfo) {
+      setStoreInfo(prev => ({ ...prev, ...configData.data.data.storeInfo }))
     }
   }, [configData])
 
@@ -56,15 +56,7 @@ export function SettingsPage() {
 
   const handleSave = (key: string, value: any) => {
     saveMutation.mutate({ key, value })
-    // 当修改 storeInfo 时，同步将 storeLogo 写入 posReceipt 以保持 POS 端配置同步
-    if (key === 'storeInfo' && value && value.storeLogo !== undefined) {
-      configApi.get().then((res: any) => {
-        const currentReceipt = res?.data?.posReceipt || {}
-        if (currentReceipt.storeLogo !== value.storeLogo) {
-          configApi.set(user?.storeId || '', 'posReceipt', { ...currentReceipt, storeLogo: value.storeLogo }, 'pos').catch(() => {})
-        }
-      }).catch(() => {})
-    }
+
   }
 
   if (activeTab === 'store' && isLoading) {

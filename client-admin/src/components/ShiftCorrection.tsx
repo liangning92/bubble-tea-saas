@@ -20,7 +20,7 @@ export function ShiftCorrection({id,session,receipts,refresh}:{id:string;session
       if(saving)return
       if(!values.reason.trim() || fields.some(key=>!/^\d+$/.test(values[key]) || Number(values[key])>2147483647)){setError(t('shiftCorrection.invalid'));return}
       setSaving(true);setError('')
-      try {await api.put('/finance/shift-sessions/'+id+'/correction',{updatedAt:session.updatedAt,openFloat:Number(values.openFloat),reason:values.reason.trim(),...(closed ? {actualCash:Number(values.actualCash),manualReceipts:{cash:Number(values.actualCash),qris:Number(values.qris),shopeefood:Number(values.shopeefood),gofood:Number(values.gofood)}}:{})});await refresh();setEditing(false)}
+      try {await api.put('/finance/shift-sessions/'+id+'/correction',{updatedAt:session.updatedAt,openFloat:Number(values.openFloat),reason:values.reason.trim(),...(closed ? {manualReceipts:{cash:Number(values.actualCash),qris:Number(values.qris),shopeefood:Number(values.shopeefood),gofood:Number(values.gofood)}}:{})});await refresh();setEditing(false)}
       catch{setError(t('shiftCorrection.failed'))}finally{setSaving(false)}
     }}>
       <p className="text-sm text-gray-500">{t('shiftCorrection.hint')}</p>

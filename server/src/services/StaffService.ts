@@ -1,3 +1,4 @@
+import { calculatePayrollBasis, getEnrollment, monthlyRateCents, getProbationRule, saveEnrollment } from './ProbationService'
 import { allocateEmployeeNumber } from './EmployeeNumberService'
 import { readWork, listWork } from './EmployeeWorkspaceStore'
 import { adjustmentPlan } from './SalaryAdjustmentService'
@@ -71,6 +72,8 @@ export async function createStaff(data: {
   hourlyRate?: number
   weeklyHours?: number
   hireDate?: Date
+  probationEnabled?: boolean
+  confirmationDate?: string | null
   emergencyContact?: string
   emergencyPhone?: string
   bankAccount?: string
@@ -96,7 +99,7 @@ export async function createStaff(data: {
   const employeeNumber = await allocateEmployeeNumber(tx)
 
   // Then create the Staff linked to the User
-  return tx.staff.create({
+  const created = await tx.staff.create({
     data: {
       userId: user.id,
       storeId: data.storeId,
@@ -116,6 +119,9 @@ export async function createStaff(data: {
       status: 'active'
     }
   })
+  const policy = await getProbationRule(tx,data.storeId)
+  await saveEnrollment(tx,created,data.probationEnabled ?? policy.enabled,data.confirmationDate)
+  return created
   })
 }
 
@@ -267,7 +273,10 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
 
   if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
-  const baseSalary = staff.baseSalary
+  const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`)
+  const enrollment = await getEnrollment(prisma,staff)
+  const baseSalary = payrollBasis.amount
+  const standardMonthlySalary = payrollBasis.eligibleDays ? payrollBasis.segments.reduce((sum,s)=>sum+s.monthlyRate*s.days,0)/payrollBasis.eligibleDays : staff.baseSalary
   let deductions = 0
   let bonuses = 0
   let depositDeductions: { staffDepositId: string; ruleName: string; amount: number; amountMinor: number }[] = []
@@ -284,7 +293,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
       checkOut: previous?.checkOut && (!attendance.checkOutTime || previous.checkOut > attendance.checkOutTime) ? previous.checkOut : attendance.checkOutTime })
   }
   const onLeave = (key: string) => leaves.some(leave => key >= formatDate(leave.startDate) && key <= formatDate(leave.endDate))
-  const dailySalary = baseSalary / 26
+  const dailySalary = standardMonthlySalary / 26
   const penalty = (type: string | undefined, count: number, fixed: number | null | undefined, ratio: number | null | undefined) => type === 'fixed' ? Math.round(count * (fixed || 0) / 100) : type === 'daily_rate' ? Math.round(count * dailySalary * (ratio ?? 1)) : 0
   const monthlyLateRule = await readWork(staff.storeId, `rule.${String(year)}-${String(month).padStart(2, '0')}`)
   const snapshots = await listWork(staff.storeId!, `attendance.${staffId}.`)
@@ -333,9 +342,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
   const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId, status: 'approved', date: { gte: startDate, lte: endDate } } })
   const overtimeHours = approvedOvertime.reduce((sum, request) => sum + request.hours, 0)
-  const hourlyRate = baseSalary / 176
   const overtimePay = overtimeHours >= overtimeMinHours
-    ? Math.floor(overtimeHours * hourlyRate * overtimeRate)
+    ? Math.floor(approvedOvertime.reduce((sum, request)=>sum+request.hours*(monthlyRateCents(staff,enrollment,formatDate(request.date))/100/176)*overtimeRate,0))
     : 0
 
   return {
@@ -344,6 +352,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     month,
     year,
     baseSalary,
+    payrollBasis,
     workDays,
     lateDays,
     overtimeHours,

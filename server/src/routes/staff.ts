@@ -1,3 +1,4 @@
+import { getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { updateStaffSystemRole } from '../services/StaffPermissionService'
@@ -30,6 +31,7 @@ async function getAttendanceRuleWithDefaults(storeId: string) {
   }
 }
 
+const payrollDate = z.string().refine(value=>{try{if(/^\d{4}-\d{2}-\d{2}$/.test(value))dayNumber(value);else if(!Number.isFinite(Date.parse(value)))return false;return true}catch{return false}},'Valid date is required')
 // Validation schemas
 const createStaffSchema = z.object({
   storeId: z.string(),
@@ -43,7 +45,9 @@ const createStaffSchema = z.object({
   baseSalary: z.number().int().min(0).optional(),
   hourlyRate: z.number().int().min(0).optional(),
   weeklyHours: z.number().optional(),
-  hireDate: z.string().optional(),
+  hireDate: payrollDate.optional(),
+  probationEnabled: z.boolean().optional(),
+  confirmationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   emergencyContact: z.string().optional(),
   emergencyPhone: z.string().optional(),
   bankAccount: z.string().optional(),
@@ -60,8 +64,10 @@ const updateStaffSchema = z.object({
   baseSalary: z.number().int().min(0).optional(),
   hourlyRate: z.number().int().min(0).optional(),
   weeklyHours: z.number().optional(),
-  hireDate: z.string().optional(),
-  terminationDate: z.string().optional(),
+  hireDate: payrollDate.optional(),
+  probationEnabled: z.boolean().optional(),
+  confirmationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  terminationDate: payrollDate.optional(),
   emergencyContact: z.string().optional(),
   emergencyPhone: z.string().optional(),
   bankAccount: z.string().optional(),
@@ -121,12 +127,13 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     res.json({
       code: 200,
       data: {
-        list: staff.map(s => ['admin', 'manager'].includes(req.user!.role) ? ({
+        list: await Promise.all(staff.map(async s => ['admin', 'manager'].includes(req.user!.role) ? ({
           ...s,
+          probation: await staffProbation(prisma,s),
           phone: s.user.phone,
           role: s.user.role,
           _count: undefined
-        }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status })),
+        }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status }))),
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
       },
       timestamp: new Date().toISOString()
@@ -135,6 +142,24 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     console.error('Get staff error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get staff' })
   }
+})
+
+// Probation policy is configured explicitly; existing employees are opt-in.
+router.get('/probation-rule', authenticate, authorize('admin','manager'), async(req:AuthRequest,res)=>{
+ try {res.json({code:200,data:await getProbationRule(prisma,req.user!.storeId)})}catch{res.status(500).json({code:500,message:'PROBATION_RULE_READ_FAILED'})}
+})
+router.put('/probation-rule', authenticate, authorize('admin'), validateBody(probationRuleSchema), async(req:AuthRequest,res)=>{
+ try {res.json({code:200,data:await saveProbationRule(prisma,req.user!.storeId,req.body)})}catch(error:any){res.status(error instanceof ProbationInputError?400:500).json({code:error instanceof ProbationInputError?400:500,message:error.message})}
+})
+router.get('/salary/my/probation',authenticate,async(req:AuthRequest,res)=>{
+ try {const staff=await prisma.staff.findFirst({where:{userId:req.user!.id}});if(!staff)return res.status(404).json({code:404,message:'Staff profile not found'})
+ const month=req.query.month ? String(req.query.month) : formatDate(new Date()).slice(0,7)
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({code:400,message:'INVALID_SALARY_PERIOD'})
+ const salary=await prisma.salary.findFirst({where:{staffId:staff.id,month},orderBy:{createdAt:'desc'}})
+ const snapshot=salary?await savedPayrollBasis(prisma,staff.storeId,salary.id):null
+ const basis=snapshot || (!salary&&staff.baseSalary!==null ? await calculatePayrollBasis(prisma,staff,month):null)
+ res.json({code:200,data:{...await staffProbation(prisma,staff),basis,month,salaryStatus:salary?.status||'not_created',recordedBaseSalary:salary?.baseSalary??null}})
+ }catch(error:any){res.status(error instanceof ProbationInputError?400:500).json({code:error instanceof ProbationInputError?400:500,message:error.message})}
 })
 
 // GET /api/staff/:id
@@ -163,6 +188,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
       code: 200,
       data: {
         ...staff,
+        probation: await staffProbation(prisma, staff),
         phone: staff.user.phone,
         role: staff.user.role
       },
@@ -230,6 +256,8 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
         }
       })
 
+      const rule = await getProbationRule(tx, storeId)
+      await saveEnrollment(tx, newStaff, req.body.probationEnabled ?? rule.enabled, req.body.confirmationDate)
       return newStaff
     })
 
@@ -249,6 +277,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     console.error('Create staff error:', error)
     res.status(500).json({ code: 500, message: 'Failed to create staff' })
   }
@@ -288,6 +317,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
 
     const staff = await prisma.$transaction(async tx => {
       const staff = await tx.staff.update({ where: { id }, data: updateData })
+      await saveEnrollment(tx, staff, req.body.probationEnabled, req.body.confirmationDate)
       if (status !== undefined) {
         await tx.user.update({ where: { id: existing.userId }, data: { updatedAt: new Date() } })
       }
@@ -301,6 +331,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     console.error('Update staff error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update staff' })
   }
@@ -1020,6 +1051,7 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
     const salaryData = {
       staffName: staff.name,
       month: salaryRecord.month,
+      payrollBasis: await savedPayrollBasis(prisma,staff.storeId,salaryRecord.id),
       baseSalary: salaryRecord.baseSalary,
       workDays,
       lateDays,
