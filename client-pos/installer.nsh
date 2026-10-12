@@ -103,7 +103,19 @@ Var BTPSUpgradeDiagnostic
 
 !ifndef BUILD_UNINSTALLER
 !macro customCheckAppRunning
-  Call BTPSWaitForClosedPOS
+  # The initial handoff already required eight quiet seconds. Check again
+  # immediately before replacing files; only repeat the graceful wait if POS
+  # has actually reappeared while the wizard was open.
+  nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --timeout 0'
+  Pop $R0
+  Pop $R1
+  ${If} $R0 == "74"
+    Call BTPSWaitForClosedPOS
+  ${ElseIf} $R0 != "0"
+    MessageBox MB_OK|MB_ICONSTOP "Unable to verify POS shutdown. No program replacement.$\r$\n无法确认收银已退出，未替换程序。$\r$\nTidak dapat memverifikasi POS sudah ditutup; program belum diganti." /SD IDOK
+    SetErrorLevel 73
+    Quit
+  ${EndIf}
   ${If} $BTPSUpgradeReceipt != ""
     ${If} $INSTDIR != $BTPSOldApp
       MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK
