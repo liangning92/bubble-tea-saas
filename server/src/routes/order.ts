@@ -77,35 +77,48 @@ const createOrderSchema = z.object({
 })
 
 // GET /api/orders
-router.get('/', authenticate, async (req: AuthRequest, res) => {
+const listOrders = async (req: AuthRequest, res: Response) => {
   try {
-    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search } = req.query
+    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search, productName, shiftSessionId } = req.query
 
+    const parsed = z.object({
+      startDate: z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(), endDate: z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
+      productName: z.string().max(200).optional(), shiftSessionId: z.string().max(100).optional(),
+      page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(10000).default(20)
+    }).safeParse({ startDate, endDate, productName, shiftSessionId, page, pageSize })
+    if (!parsed.success || (startDate && endDate && new Date(String(startDate)) > new Date(String(endDate)))) return res.status(400).json({ code: 400, message: 'INVALID_ORDER_FILTERS' })
+    if (storeId && !canAccessStore(req.user!, String(storeId))) return res.status(403).json({ code: 403, message: 'Store access denied' })
     const result = await OrderService.getOrders({
-      storeId: storeId as string,
+      storeId: (storeId || req.user!.storeId) as string,
       userId: req.user!.id,
       userRole: req.user!.role,
       status: status as string,
       paymentMethod: paymentMethod as string,
       channelId: channelId as string,
       search: search as string,
-      startDate: startDate as string,
-      endDate: endDate as string,
+      productName: parsed.data.productName,
+      shiftSessionId: parsed.data.shiftSessionId,
+      startDate: startDate && /^\d{4}-\d{2}-\d{2}$/.test(String(startDate)) ? String(startDate)+'T00:00:00+07:00' : startDate as string,
+      endDate: endDate && /^\d{4}-\d{2}-\d{2}$/.test(String(endDate)) ? String(endDate)+'T23:59:59.999+07:00' : endDate as string,
       date: date as string,
-      page: parseInt(page as string) || 1,
-      pageSize: parseInt(pageSize as string) || 20
+      page: req.path === '/export-data' ? 1 : parsed.data.page,
+      pageSize: req.path === '/export-data' ? 10001 : parsed.data.pageSize
     })
 
+    if (req.path === '/export-data' && result.list.length > 10000) return res.status(400).json({ code: 400, message: 'ORDER_EXPORT_TOO_LARGE' })
     res.json({
       code: 200,
       data: result,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_ORDER_SHIFT') return res.status(400).json({ code: 400, message: error.message })
     console.error('Get orders error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get orders' })
   }
-})
+}
+router.get('/', authenticate, listOrders)
+router.get('/export-data', authenticate, authorize('admin', 'manager'), listOrders)
 
 // GET /api/orders/refund-requests - 必须在 /:id 之前
 router.get('/refund-requests', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {

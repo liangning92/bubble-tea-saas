@@ -375,6 +375,8 @@ export async function getOrders(params: {
   paymentMethod?: string
   channelId?: string
   search?: string
+  productName?: string
+  shiftSessionId?: string
   startDate?: string
   endDate?: string
   date?: string  // Single date for "show orders on this date"
@@ -407,6 +409,15 @@ export async function getOrders(params: {
   if (status) where.status = status
   if (paymentMethod) where.paymentMethod = paymentMethod
   if (channelId) where.channelId = channelId
+
+  if (params.productName?.trim()) where.items = { some: { productName: containsText(params.productName.trim()) } }
+  if (params.shiftSessionId) {
+    const session = await prisma.shiftSession.findFirst({ where: { id: params.shiftSessionId, storeId: where.storeId } })
+    if (!session) throw new Error('INVALID_ORDER_SHIFT')
+    const until = session.closedAt || new Date()
+    const overlapping = await prisma.shiftSession.findMany({ where: { storeId: session.storeId, id: { not: session.id }, openedAt: { lt: until }, OR: [{ closedAt: null }, { closedAt: { gt: session.openedAt } }] } })
+    where.AND = [{ createdAt: { gte: session.openedAt, lt: until } }, ...overlapping.map(other => ({ NOT: { createdAt: { gte: other.openedAt, lt: other.closedAt || until } } }))]
+  }
 
   if (search && search.trim()) {
     const s = search.trim()
@@ -454,7 +465,7 @@ export async function getOrders(params: {
         channel: { select: { id: true, name: true, code: true, icon: true } },
         member: { select: { id: true, name: true, phone: true } }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize
     }),
