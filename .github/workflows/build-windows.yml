@@ -187,8 +187,9 @@ jobs:
       - name: Verify compiled manual helper and interactive installer on owned synthetic historical database
         if: ${{ !inputs.skip_validation }}
         run: |
-          python scripts/validate-windows-manual-upgrade.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native manual upgrade validation failed' }
+          python -u -X faulthandler scripts/validate-windows-manual-upgrade.py
+          $validationExitCode = $LASTEXITCODE
+          if ($validationExitCode -ne 0) { throw "Native manual upgrade validation failed with exit code $validationExitCode" }
 
       - name: Smoke test packaged local API
         if: ${{ !inputs.skip_validation }}
