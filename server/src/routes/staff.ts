@@ -1,3 +1,4 @@
+import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
 import { getPayrollRules, savePayrollRules, payrollRuleSchema } from '../services/PayrollRuleService'
 import { refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
@@ -58,6 +59,7 @@ const createStaffSchema = z.object({
 })
 
 const updateStaffSchema = z.object({
+  payrollEmployee:z.boolean().optional(),
   name: z.string().min(1).max(50).optional(),
   position: z.string().optional(),
   status: z.enum(['active', 'inactive', 'resigned', 'suspended']).optional(),
@@ -130,6 +132,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       data: {
         list: await Promise.all(staff.map(async s => ['admin', 'manager'].includes(req.user!.role) ? ({
           ...s,
+          payrollEmployee: await isPayrollEmployee(prisma,s),
           probation: await staffProbation(prisma,s),
           phone: s.user.phone,
           role: s.user.role,
@@ -196,6 +199,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
       code: 200,
       data: {
         ...staff,
+        payrollEmployee: await isPayrollEmployee(prisma,staff),
         probation: await staffProbation(prisma, staff),
         phone: staff.user.phone,
         role: staff.user.role
@@ -295,10 +299,17 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(updateStaffSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true, hireDate:true, terminationDate:true } })
+    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true, hireDate:true, terminationDate:true, user:{select:{role:true}} } })
     if (!existing) return res.status(404).json({ code: 404, message: 'Staff not found' })
     if (!canAccessStore(req.user!, existing.storeId)) {
       return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    }
+    if(existing.user.role==='admin' && req.user!.role!=='admin')return res.status(403).json({code:403,message:'Access denied'})
+    if(req.body.payrollEmployee!==undefined && (req.user!.role!=='admin'||existing.user.role!=='admin'))return res.status(403).json({code:403,message:'Access denied'})
+    if(req.body.status && req.body.status!=='active' && existing.userId===req.user!.id)return res.status(400).json({code:400,message:'不能停用当前登录账户，请由另一位管理员操作。'})
+    if(req.body.status && req.body.status!=='active' && existing.user.role==='admin'){
+      const activeAdmins=await prisma.user.count({where:{role:'admin',OR:[{staff:null},{staff:{status:'active'}}]}})
+      if(activeAdmins<=1)return res.status(400).json({code:400,message:'请先设置另一位有效管理员，再停用此账户。'})
     }
     const {
       name, position, status, employmentType, baseSalary, hourlyRate, weeklyHours,
@@ -327,8 +338,9 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
       const staff = await tx.staff.update({ where: { id }, data: updateData })
       if(staff.status==='resigned'&&!staff.terminationDate)throw new ProbationInputError('TERMINATION_DATE_REQUIRED')
       if(staff.terminationDate&&staff.hireDate&&staff.terminationDate<staff.hireDate)throw new ProbationInputError('TERMINATION_BEFORE_HIRE')
-      await saveEnrollment(tx, staff, req.body.probationEnabled, req.body.confirmationDate)
-      if((hireDate!==undefined&&staff.hireDate?.getTime()!==existing.hireDate?.getTime())||(terminationDate!==undefined&&staff.terminationDate?.getTime()!==existing.terminationDate?.getTime()))await refreshEmploymentPayroll(tx,staff)
+      if(req.body.payrollEmployee!==undefined)await saveStaffIdentity(tx,{...staff,user:existing.user},req.body.payrollEmployee)
+      await saveEnrollment(tx, {...staff,user:existing.user}, req.body.probationEnabled, req.body.confirmationDate)
+      if((hireDate!==undefined&&staff.hireDate?.getTime()!==existing.hireDate?.getTime())||(terminationDate!==undefined&&staff.terminationDate?.getTime()!==existing.terminationDate?.getTime()))if(await isPayrollEmployee(tx,{...staff,user:existing.user}))await refreshEmploymentPayroll(tx,staff)
       if (status !== undefined) {
         await tx.user.update({ where: { id: existing.userId }, data: { updatedAt: new Date() } })
       }
@@ -383,26 +395,8 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthReques
 })
 
 // DELETE /api/staff/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params
-
-    const staff = await prisma.staff.update({
-      where: { id },
-      data: { status: 'resigned' }
-    })
-    await prisma.user.update({ where: { id: staff.userId }, data: { updatedAt: new Date() } })
-
-    res.json({
-      code: 200,
-      message: 'Staff marked as resigned',
-      data: staff,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Delete staff error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to delete staff' })
-  }
+router.delete('/:id', authenticate, authorize('admin'), async (_req: AuthRequest, res) => {
+  res.status(400).json({code:400,message:'请在员工资料中办理离职并填写最后计薪日期。'})
 })
 
 // POST /api/staff/attendance
