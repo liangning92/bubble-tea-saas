@@ -4,6 +4,20 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      orderVoid: {
+    "title": "Batalkan pesanan salah / uji",
+    "description": "Untuk pesanan tanpa pembayaran nyata. Menghapus pendapatan dan menyembunyikan pesanan dari daftar aktif, mengembalikan poin dan kupon, menyimpan jejak audit, dan tidak mengubah bahan baku.",
+    "error": "Pesanan salah",
+    "test": "Pesanan uji",
+    "reason": "Masukkan alasan",
+    "noPayment": "Tidak ada pembayaran nyata. Gunakan pengembalian dana untuk pembayaran pelanggan yang nyata.",
+    "confirm": "Batalkan pesanan ini? Pendapatan dan pesanan aktif akan mengecualikannya. Stok bahan tetap.",
+    "done": "Pesanan dibatalkan. Pendapatan dan daftar diperbarui.",
+    "failed": "Tidak dapat membatalkan pesanan dengan refund, pesanan tidak aktif, atau salinan cloud. Gunakan POS asal.",
+    "activeOrders": "Pesanan aktif",
+    "voided": "Dibatalkan"
+  },
+      staffAccessV2: {"production":"Pesanan produksi","approvals":"Pusat persetujuan","denied":"Anda tidak memiliki izin. Hubungi pemilik."},
       voucher: {"wallet": "Penghargaan & voucher", "title": "Voucher hadiah", "method": "Bentuk penghargaan", "cash": "Hadiah tunai", "validDays": "Masa berlaku (hari)", "encouragement": "Pesan penyemangat (otomatis jika kosong)", "encouragementDefault": "Terima kasih atas kerja kerasmu! Nikmati hadiah ini atau bagikan kepada orang tersayang.", "rules": "Boleh diberikan kepada orang lain. Sekali pakai, tanpa uang kembali; kode tidak dapat dipakai ulang.", "code": "Kode voucher", "placeholder": "Kode voucher hadiah atau promosi", "apply": "Gunakan", "applied": "Dipilih", "remove": "Hapus", "active": "Siap digunakan", "used": "Sudah digunakan", "expired": "Kedaluwarsa", "cancelled": "Dibatalkan", "expires": "Berlaku sampai", "share": "Bagikan kode", "copied": "Kode disalin. Bagikan kepada orang lain.", "copyFailed": "Salin kode dengan menekan lama kode voucher."},
       shiftCorrection: {"title": "Koreksi jumlah shift", "hint": "Koreksi kas awal yang diisi karyawan. Shift yang ditutup juga dapat mengoreksi kas, QRIS, ShopeeFood dan GoFood. Alasan, nilai sebelumnya, dan operator disimpan dalam catatan audit.", "reason": "Alasan koreksi (wajib)", "invalid": "Isi jumlah rupiah bulat non-negatif dan alasan koreksi.", "failed": "Koreksi gagal. Muat ulang detail shift lalu coba lagi."},
       logoSettings: {"receipt": "Atur Logo Struk", "display": "Atur Logo Layar Pelanggan", "independent": "Logo ini hanya digunakan di sini. Mengubahnya tidak akan mengubah logo di tempat lain.", "thermalBlack": "Struk termal menggunakan logo hitam. Gambar yang diunggah akan disimpan sebagai gambar hitam-putih.", "preview": "Pratinjau logo", "blankImage": "Gambar ini tidak memiliki bagian yang dapat dicetak. Pilih logo yang terlihat.", "saveFailed": "Logo gagal disimpan. Konfigurasi sebelumnya tetap dipertahankan.", "notConfigured": "Belum ada logo struk. Buka pengaturan logo untuk memilih atau mengunggah gambar."},
@@ -2594,6 +2608,7 @@ const resources = {
         "pos": "POS",
       },
       "posSettings": {
+        preview: "Pratinjau",
         "layout": "Tampilan",
         "toolbar": "Toolbar",
         "channels": "Saluran",
@@ -4062,6 +4077,20 @@ const resources = {
   },
   "en": {
     "translation": {
+      orderVoid: {
+    "title": "Void erroneous / test order",
+    "description": "For orders without an actual payment. Removes revenue and hides the order from the active list, reverses member points and coupons, retains audit evidence, and leaves ingredients unchanged.",
+    "error": "Erroneous order",
+    "test": "Test order",
+    "reason": "Enter the reason",
+    "noPayment": "No actual payment was received. Use a refund to return a real customer payment.",
+    "confirm": "Void this order? Revenue and active orders will exclude it. Ingredient stock remains unchanged.",
+    "done": "Order voided. Revenue and orders updated.",
+    "failed": "Unable to void. Orders with refunds, inactive orders and cloud replicas cannot be voided here. Use the original POS.",
+    "activeOrders": "Active orders",
+    "voided": "Voided / cancelled"
+  },
+      staffAccessV2: {"production":"Production orders","approvals":"Approval center","denied":"You do not have access to this feature. Contact the owner."},
       voucher: {"wallet": "Rewards & vouchers", "title": "Voucher reward", "method": "Reward method", "cash": "Cash reward", "validDays": "Valid for (days)", "encouragement": "Encouraging message (generated if empty)", "encouragementDefault": "Thank you for your hard work! Enjoy this reward or share it with someone special.", "rules": "Transferable. One use, no change; a code cannot be used twice.", "code": "Voucher code", "placeholder": "Reward or promotion voucher code", "apply": "Apply", "applied": "Selected", "remove": "Remove", "active": "Available", "used": "Used", "expired": "Expired", "cancelled": "Cancelled", "expires": "Valid until", "share": "Share code", "copied": "Code copied. You can share it with someone else.", "copyFailed": "Press and hold the voucher code to copy it."},
       shiftCorrection: {"title": "Correct shift amounts", "hint": "Correct the opening float entered by staff. Closed shifts also allow cash, QRIS, ShopeeFood and GoFood handover corrections. The reason, previous values and operator are saved in the audit log.", "reason": "Correction reason (required)", "invalid": "Enter non-negative whole rupiah amounts and a correction reason.", "failed": "Correction failed. Refresh shift details and try again."},
       logoSettings: {"receipt": "Receipt Logo Settings", "display": "Customer Display Logo Settings", "independent": "This logo is used only here. Changing it does not change logos elsewhere.", "thermalBlack": "Thermal receipts use black ink. Uploaded artwork is saved as a printable monochrome image.", "preview": "Logo preview", "blankImage": "This image has no printable content. Choose a visible logo.", "saveFailed": "Could not save the logo. The previous settings are retained.", "notConfigured": "No receipt logo is configured. Open Logo Settings to choose or upload an image."},
@@ -6159,6 +6188,7 @@ const resources = {
         "pos": "POS",
       },
       "posSettings": {
+        preview: "Preview",
         "layout": "Layout",
         "toolbar": "Toolbar",
         "channels": "Channels",
@@ -8057,6 +8087,20 @@ const resources = {
   },
   "zh": {
     "translation": {
+      orderVoid: {
+    "title": "作废错误／测试订单",
+    "description": "仅用于没有真实收款的错误单或测试单。作废后扣除营收，正常列表隐藏，回退会员积分和优惠券；保留审计记录，不自动退回原材料。",
+    "error": "错误订单",
+    "test": "测试订单",
+    "reason": "填写作废原因",
+    "noPayment": "确认没有真实收款；真实交易需要给顾客退钱时请使用退款。",
+    "confirm": "确认作废？该订单将从营收和正常订单中排除，原材料库存不变。",
+    "done": "订单已作废，营收和订单列表已更新。",
+    "failed": "作废失败。已有退款、非有效订单或云端同步副本不能直接作废；请在原收银端处理。",
+    "activeOrders": "有效订单",
+    "voided": "已作废／取消"
+  },
+      staffAccessV2: {"production":"制作订单","approvals":"审批中心","denied":"你没有访问此功能的权限，请联系老板"},
       voucher: {"wallet": "奖惩与代金券", "title": "代金券奖励", "method": "奖励方式", "cash": "现金奖励", "validDays": "有效天数", "encouragement": "鼓励的话（留空自动生成）", "encouragementDefault": "感谢你的努力！享受这份奖励，也可以分享给重要的人。", "rules": "可转赠，持券码即可使用；一次抵扣，不找零，不能重复使用。", "code": "代金券码", "placeholder": "输入员工券或活动券码", "apply": "使用", "applied": "已选择", "remove": "移除", "active": "可使用", "used": "已使用", "expired": "已过期", "cancelled": "已取消", "expires": "有效期至", "share": "分享券码", "copied": "券码已复制，可转发给他人", "copyFailed": "无法自动复制，请长按券码复制"},
       shiftCorrection: {"title": "更正班次金额", "hint": "可更正员工开班填写的备用金；已交班班次还可更正现金、QRIS、ShopeeFood、GoFood 四项。更正原因、修改前后数据和操作人将保存到审计记录。", "reason": "更正原因（必填）", "invalid": "请填写非负整数金额及更正原因。", "failed": "更正失败，请刷新班次详情后重试。"},
       logoSettings: {"receipt": "小票 Logo 设置", "display": "副屏 Logo 设置", "independent": "此 Logo 仅用于当前用途，修改不会覆盖其他位置的 Logo。", "thermalBlack": "热敏小票使用黑色 Logo，上传图片将转换并保存为实际打印的黑白图。", "preview": "Logo 预览", "blankImage": "图片没有可打印的内容，请选择清晰可见的 Logo。", "saveFailed": "Logo 保存失败，原配置已保留。", "notConfigured": "尚未配置小票 Logo，请打开 Logo 设置选择或上传图片。"},
@@ -11200,6 +11244,7 @@ const resources = {
         "testCashDrawerFailed": "钱箱打开失败"
       },
       "posSettings": {
+        preview: "预览",
         "layout": "布局",
         "toolbar": "工具栏",
         "channels": "渠道",
@@ -12195,51 +12240,6 @@ Object.assign(resources.en.translation.staff, {
 })
 
 
-const orderVoidTranslations = {
-  "zh": {
-    "title": "作废错误／测试订单",
-    "description": "仅用于没有真实收款的错误单或测试单。作废后扣除营收，正常列表隐藏，回退会员积分和优惠券；保留审计记录，不自动退回原材料。",
-    "error": "错误订单",
-    "test": "测试订单",
-    "reason": "填写作废原因",
-    "noPayment": "确认没有真实收款；真实交易需要给顾客退钱时请使用退款。",
-    "confirm": "确认作废？该订单将从营收和正常订单中排除，原材料库存不变。",
-    "done": "订单已作废，营收和订单列表已更新。",
-    "failed": "作废失败。已有退款、非有效订单或云端同步副本不能直接作废；请在原收银端处理。",
-    "activeOrders": "有效订单",
-    "voided": "已作废／取消"
-  },
-  "en": {
-    "title": "Void erroneous / test order",
-    "description": "For orders without an actual payment. Removes revenue and hides the order from the active list, reverses member points and coupons, retains audit evidence, and leaves ingredients unchanged.",
-    "error": "Erroneous order",
-    "test": "Test order",
-    "reason": "Enter the reason",
-    "noPayment": "No actual payment was received. Use a refund to return a real customer payment.",
-    "confirm": "Void this order? Revenue and active orders will exclude it. Ingredient stock remains unchanged.",
-    "done": "Order voided. Revenue and orders updated.",
-    "failed": "Unable to void. Orders with refunds, inactive orders and cloud replicas cannot be voided here. Use the original POS.",
-    "activeOrders": "Active orders",
-    "voided": "Voided / cancelled"
-  },
-  "id": {
-    "title": "Batalkan pesanan salah / uji",
-    "description": "Untuk pesanan tanpa pembayaran nyata. Menghapus pendapatan dan menyembunyikan pesanan dari daftar aktif, mengembalikan poin dan kupon, menyimpan jejak audit, dan tidak mengubah bahan baku.",
-    "error": "Pesanan salah",
-    "test": "Pesanan uji",
-    "reason": "Masukkan alasan",
-    "noPayment": "Tidak ada pembayaran nyata. Gunakan pengembalian dana untuk pembayaran pelanggan yang nyata.",
-    "confirm": "Batalkan pesanan ini? Pendapatan dan pesanan aktif akan mengecualikannya. Stok bahan tetap.",
-    "done": "Pesanan dibatalkan. Pendapatan dan daftar diperbarui.",
-    "failed": "Tidak dapat membatalkan pesanan dengan refund, pesanan tidak aktif, atau salinan cloud. Gunakan POS asal.",
-    "activeOrders": "Pesanan aktif",
-    "voided": "Dibatalkan"
-  }
-}
-for (const language of Object.keys(resources) as Array<keyof typeof resources>) {
-  Object.assign(resources[language].translation, { orderVoid: orderVoidTranslations[language] })
-}
-
 i18n.use(initReactI18next).init({
   resources,
   lng: getInitialLanguage(),
@@ -12248,5 +12248,3 @@ i18n.use(initReactI18next).init({
 })
 
 export default i18n
-
-for(const [lang,values] of Object.entries({zh:{production:'制作订单',approvals:'审批中心',denied:'你没有访问此功能的权限，请联系老板'},en:{production:'Production orders',approvals:'Approval center',denied:'You do not have access to this feature. Contact the owner.'},id:{production:'Pesanan produksi',approvals:'Pusat persetujuan',denied:'Anda tidak memiliki izin. Hubungi pemilik.'}}))i18n.addResourceBundle(lang,'translation',{staffAccessV2:values},true,true)

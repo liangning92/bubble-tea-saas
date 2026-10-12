@@ -25,7 +25,7 @@ function load(relative) {
   }).outputText
   new Function('require', 'module', 'exports', output)(name => {
     if (name.endsWith('/config/env')) return { config: { jwt: { secret } } }
-    if (name.endsWith('/config/database')) return { user: { findUnique: async ({ where }) => users[where.id] || null } }
+    if (name.endsWith('/config/database')) return { user: { findUnique: async ({ where }) => users[where.id] || null }, config: { findUnique: async () => null } }
     if (name.startsWith('.')) return load(path.relative(root, path.resolve(path.dirname(file), name + '.ts')))
     return serverRequire(name)
   }, module, module.exports)

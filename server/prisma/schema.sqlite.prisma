@@ -224,7 +224,7 @@ model Staff {
   storeId              String
   store                Store                  @relation(fields: [storeId], references: [id])
   name                 String
-  employeeNumber       String
+  employeeNumber       String          @unique
   position             String                 @default("店员")
   status               String                 @default("active") // active | inactive | resigned | suspended
   employmentType       String                 @default("full_time") // full_time | part_time | contract | intern
@@ -2114,6 +2114,7 @@ model LocalSchemaMigration {
   backupPath String
   appliedAt DateTime @default(now())
 }
+
 
 // Permission approvals are durable records, independent of role configuration rollback.
 model StaffActionApproval {
