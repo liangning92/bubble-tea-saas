@@ -1,12 +1,16 @@
+import {userAccessV2} from '../services/StaffPermissionV2Service'
+import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
+import { getPayrollRules, savePayrollRules, payrollRuleSchema } from '../services/PayrollRuleService'
+import { refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
+import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
-import { updateStaffSystemRole } from '../services/StaffPermissionService'
+import { updateStaffSystemRole, StaffAccessError } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
 import { formatDate, startOfDay as wibDayStart, endOfDay as wibDayEnd, startOfWeek as wibWeekStart } from '../utils/dateUtils'
 import { parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest, canAccessStore } from '../middlewares/auth'
 import { isFeatureEnabled, getStaffConfig } from '../services/StaffConfigService'
@@ -30,6 +34,7 @@ async function getAttendanceRuleWithDefaults(storeId: string) {
   }
 }
 
+const payrollDate = z.string().refine(value=>{try{if(/^\d{4}-\d{2}-\d{2}$/.test(value))dayNumber(value);else if(!Number.isFinite(Date.parse(value)))return false;return true}catch{return false}},'Valid date is required')
 // Validation schemas
 const createStaffSchema = z.object({
   storeId: z.string(),
@@ -43,7 +48,9 @@ const createStaffSchema = z.object({
   baseSalary: z.number().int().min(0).optional(),
   hourlyRate: z.number().int().min(0).optional(),
   weeklyHours: z.number().optional(),
-  hireDate: z.string().optional(),
+  hireDate: payrollDate.optional(),
+  probationEnabled: z.boolean().optional(),
+  confirmationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   emergencyContact: z.string().optional(),
   emergencyPhone: z.string().optional(),
   bankAccount: z.string().optional(),
@@ -53,6 +60,7 @@ const createStaffSchema = z.object({
 })
 
 const updateStaffSchema = z.object({
+  payrollEmployee:z.boolean().optional(),
   name: z.string().min(1).max(50).optional(),
   position: z.string().optional(),
   status: z.enum(['active', 'inactive', 'resigned', 'suspended']).optional(),
@@ -60,8 +68,10 @@ const updateStaffSchema = z.object({
   baseSalary: z.number().int().min(0).optional(),
   hourlyRate: z.number().int().min(0).optional(),
   weeklyHours: z.number().optional(),
-  hireDate: z.string().optional(),
-  terminationDate: z.string().optional(),
+  hireDate: payrollDate.optional(),
+  probationEnabled: z.boolean().optional(),
+  confirmationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  terminationDate: payrollDate.nullable().optional(),
   emergencyContact: z.string().optional(),
   emergencyPhone: z.string().optional(),
   bankAccount: z.string().optional(),
@@ -121,12 +131,14 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     res.json({
       code: 200,
       data: {
-        list: staff.map(s => ['admin', 'manager'].includes(req.user!.role) ? ({
+        list: await Promise.all(staff.map(async s => (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['staff.read']==='allow':['admin', 'manager'].includes(req.user!.role)) ? ({
           ...s,
+          payrollEmployee: await isPayrollEmployee(prisma,s),
+          probation: await staffProbation(prisma,s),
           phone: s.user.phone,
           role: s.user.role,
           _count: undefined
-        }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status })),
+        }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status }))),
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
       },
       timestamp: new Date().toISOString()
@@ -135,6 +147,31 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     console.error('Get staff error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get staff' })
   }
+})
+
+router.get('/payroll-rules',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await getPayrollRules(prisma,req.user!.storeId!)})}catch(error:any){res.status(500).json({code:500,message:error.message})}
+})
+router.put('/payroll-rules',authenticate,authorize('admin'),validateBody(payrollRuleSchema),async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await savePayrollRules(prisma,req.user!.storeId!,req.body)})}catch(error:any){res.status(400).json({code:400,message:error.message})}
+})
+
+// Probation policy is configured explicitly; existing employees are opt-in.
+router.get('/probation-rule', authenticate, authorize('admin','manager'), async(req:AuthRequest,res)=>{
+ try {res.json({code:200,data:await getProbationRule(prisma,req.user!.storeId)})}catch{res.status(500).json({code:500,message:'PROBATION_RULE_READ_FAILED'})}
+})
+router.put('/probation-rule', authenticate, authorize('admin'), validateBody(probationRuleSchema), async(req:AuthRequest,res)=>{
+ try {res.json({code:200,data:await saveProbationRule(prisma,req.user!.storeId,req.body)})}catch(error:any){res.status(error instanceof ProbationInputError?400:500).json({code:error instanceof ProbationInputError?400:500,message:error.message})}
+})
+router.get('/salary/my/probation',authenticate,async(req:AuthRequest,res)=>{
+ try {const staff=await prisma.staff.findFirst({where:{userId:req.user!.id}});if(!staff)return res.status(404).json({code:404,message:'Staff profile not found'})
+ const month=req.query.month ? String(req.query.month) : formatDate(new Date()).slice(0,7)
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({code:400,message:'INVALID_SALARY_PERIOD'})
+ const salary=await prisma.salary.findFirst({where:{staffId:staff.id,month},orderBy:{createdAt:'desc'}})
+ const snapshot=salary?await savedPayrollBasis(prisma,staff.storeId,salary.id):null
+ const basis=snapshot || (!salary&&staff.baseSalary!==null ? await calculatePayrollBasis(prisma,staff,month):null)
+ res.json({code:200,data:{...await staffProbation(prisma,staff),basis,month,salaryStatus:salary?.status||'not_created',recordedBaseSalary:salary?.baseSalary??null}})
+ }catch(error:any){res.status(error instanceof ProbationInputError?400:500).json({code:error instanceof ProbationInputError?400:500,message:error.message})}
 })
 
 // GET /api/staff/:id
@@ -163,8 +200,11 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
       code: 200,
       data: {
         ...staff,
+        payrollEmployee: await isPayrollEmployee(prisma,staff),
+        probation: await staffProbation(prisma, staff),
         phone: staff.user.phone,
-        role: staff.user.role
+        role: staff.user.role,
+        accessRole: staff.user.role==='admin'?null:await userAccessV2({role:staff.user.role,staffId:staff.id,storeId:staff.storeId}).then(access=>access?{id:access.id,name:access.name,revision:access.revision}:null)
       },
       timestamp: new Date().toISOString()
     })
@@ -210,7 +250,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
           userId: user.id,
           storeId,
           name,
-          employeeNumber: `EMP${Date.now()}${crypto.randomUUID().slice(0, 8)}`,
+          employeeNumber: await allocateEmployeeNumber(tx),
           position: position || '店员',
           employmentType: employmentType || 'full_time',
           baseSalary: req.body.baseSalary ?? null,
@@ -230,6 +270,8 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
         }
       })
 
+      const rule = await getProbationRule(tx, storeId)
+      await saveEnrollment(tx, newStaff, req.body.probationEnabled ?? rule.enabled, req.body.confirmationDate)
       return newStaff
     })
 
@@ -249,6 +291,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     console.error('Create staff error:', error)
     res.status(500).json({ code: 500, message: 'Failed to create staff' })
   }
@@ -258,10 +301,17 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(updateStaffSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true } })
+    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true, hireDate:true, terminationDate:true, user:{select:{role:true}} } })
     if (!existing) return res.status(404).json({ code: 404, message: 'Staff not found' })
     if (!canAccessStore(req.user!, existing.storeId)) {
       return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
+    }
+    if(existing.user.role==='admin' && req.user!.role!=='admin')return res.status(403).json({code:403,message:'Access denied'})
+    if(req.body.payrollEmployee!==undefined && (req.user!.role!=='admin'||existing.user.role!=='admin'))return res.status(403).json({code:403,message:'Access denied'})
+    if(req.body.status && req.body.status!=='active' && existing.userId===req.user!.id)return res.status(400).json({code:400,message:'不能停用当前登录账户，请由另一位管理员操作。'})
+    if(req.body.status && req.body.status!=='active' && existing.user.role==='admin'){
+      const activeAdmins=await prisma.user.count({where:{role:'admin',OR:[{staff:null},{staff:{status:'active'}}]}})
+      if(activeAdmins<=1)return res.status(400).json({code:400,message:'请先设置另一位有效管理员，再停用此账户。'})
     }
     const {
       name, position, status, employmentType, baseSalary, hourlyRate, weeklyHours,
@@ -278,7 +328,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
     if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate
     if (weeklyHours !== undefined) updateData.weeklyHours = weeklyHours
     if (hireDate !== undefined) updateData.hireDate = new Date(hireDate)
-    if (terminationDate !== undefined) updateData.terminationDate = new Date(terminationDate)
+    if (terminationDate !== undefined) updateData.terminationDate = terminationDate===null?null:new Date(terminationDate)
     if (emergencyContact !== undefined) updateData.emergencyContact = emergencyContact
     if (emergencyPhone !== undefined) updateData.emergencyPhone = emergencyPhone
     if (bankAccount !== undefined) updateData.bankAccount = bankAccount
@@ -288,6 +338,11 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
 
     const staff = await prisma.$transaction(async tx => {
       const staff = await tx.staff.update({ where: { id }, data: updateData })
+      if(staff.status==='resigned'&&!staff.terminationDate)throw new ProbationInputError('TERMINATION_DATE_REQUIRED')
+      if(staff.terminationDate&&staff.hireDate&&staff.terminationDate<staff.hireDate)throw new ProbationInputError('TERMINATION_BEFORE_HIRE')
+      if(req.body.payrollEmployee!==undefined)await saveStaffIdentity(tx,{...staff,user:existing.user},req.body.payrollEmployee)
+      await saveEnrollment(tx, {...staff,user:existing.user}, req.body.probationEnabled, req.body.confirmationDate)
+      if((hireDate!==undefined&&staff.hireDate?.getTime()!==existing.hireDate?.getTime())||(terminationDate!==undefined&&staff.terminationDate?.getTime()!==existing.terminationDate?.getTime()))if(await isPayrollEmployee(tx,{...staff,user:existing.user}))await refreshEmploymentPayroll(tx,staff)
       if (status !== undefined) {
         await tx.user.update({ where: { id: existing.userId }, data: { updatedAt: new Date() } })
       }
@@ -301,6 +356,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     console.error('Update staff error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update staff' })
   }
@@ -335,32 +391,15 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthReques
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if(error instanceof StaffAccessError)return res.status(error.status).json({code:error.status,message:error.message})
     console.error('Update role error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update role' })
   }
 })
 
 // DELETE /api/staff/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params
-
-    const staff = await prisma.staff.update({
-      where: { id },
-      data: { status: 'resigned' }
-    })
-    await prisma.user.update({ where: { id: staff.userId }, data: { updatedAt: new Date() } })
-
-    res.json({
-      code: 200,
-      message: 'Staff marked as resigned',
-      data: staff,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Delete staff error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to delete staff' })
-  }
+router.delete('/:id', authenticate, authorize('admin'), async (_req: AuthRequest, res) => {
+  res.status(400).json({code:400,message:'请在员工资料中办理离职并填写最后计薪日期。'})
 })
 
 // POST /api/staff/attendance
@@ -552,7 +591,7 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
     const { staffId, startDate, endDate } = req.query
 
     const where: any = {staff:{storeId:req.user!.storeId}}
-    if (!['admin','manager'].includes(req.user!.role)) {
+    if (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['attendance.read']!=='allow':!['admin','manager'].includes(req.user!.role)) {
       if (staffId && staffId !== req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
       where.staffId = req.user!.staffId
     } else if (staffId) where.staffId = staffId as string
@@ -649,7 +688,7 @@ router.get('/schedule/list', authenticate, async (req: AuthRequest, res) => {
     const storeId = req.user!.storeId
 
     const where: any = {staff:{storeId:req.user!.storeId}}
-    if (!['admin','manager'].includes(req.user!.role)) {
+    if (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['schedules.read']!=='allow':!['admin','manager'].includes(req.user!.role)) {
       if (staffId && staffId !== req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
       where.staffId = req.user!.staffId
     } else if (staffId) where.staffId = staffId as string
@@ -1020,6 +1059,7 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
     const salaryData = {
       staffName: staff.name,
       month: salaryRecord.month,
+      payrollBasis: await savedPayrollBasis(prisma,staff.storeId,salaryRecord.id),
       baseSalary: salaryRecord.baseSalary,
       workDays,
       lateDays,
@@ -1044,24 +1084,23 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// PUT /api/staff/:id/reset-password - Reset staff password (admin only)
+// Resolve the employee's linked login account; Staff.id and User.id differ.
 router.put('/:id/reset-password', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params
     const { newPassword } = req.body
-
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ code: 400, message: 'Password must be at least 6 characters' })
+    if (typeof newPassword !== 'string' || newPassword.length < 6 || Buffer.byteLength(newPassword, 'utf8') > 72) {
+      return res.status(400).json({ code: 400, message: 'Password must be at least 6 characters and at most 72 UTF-8 bytes' })
     }
-
-    const hashed = await bcrypt.hash(newPassword, 10)
-    await prisma.user.update({
-      where: { id },
-      data: { password: hashed }
-    })
-
+    const staff = await prisma.staff.findUnique({ where: { id: req.params.id }, include: { user: { select: { id: true, role: true } } } })
+    if (!staff || !staff.user) return res.status(404).json({ code: 404, message: 'Employee login account not found' })
+    if (!canAccessStore(req.user!, staff.storeId) || (req.user!.role !== 'admin' && staff.user.role === 'admin')) {
+      return res.status(403).json({ code: 403, message: 'Access denied' })
+    }
+    const hashed = await bcrypt.hash(newPassword, 12)
+    await prisma.user.update({ where: { id: staff.userId }, data: { password: hashed } })
     res.json({ code: 200, message: 'Password reset successfully', timestamp: new Date().toISOString() })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2025') return res.status(404).json({ code: 404, message: 'Employee login account not found' })
     console.error('Reset password error:', error)
     res.status(500).json({ code: 500, message: 'Failed to reset password' })
   }

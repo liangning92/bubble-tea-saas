@@ -1,12 +1,17 @@
+import {Link} from 'react-router-dom'
+import { payrollIssueText, payrollLabels } from '../../../../shared/payrollLabels'
+import { PayrollBasisSummary } from '../../components/PayrollBasisSummary'
+import { probationLabels } from '../../../../shared/probationLabels'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { salaryApi, staffApi } from '../../services/api'
-import { DollarSign, Plus, Loader2, Filter, X, CheckCircle } from 'lucide-react'
+import { DollarSign, Loader2, Filter, X, CheckCircle } from 'lucide-react'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
+  unrecorded: 'bg-gray-100 text-gray-700',
   paid: 'bg-green-100 text-green-700'
 }
 
@@ -14,6 +19,9 @@ interface Salary {
   id: string
   staffId: string
   month: string
+  payrollReview?: {reason:string}|null
+  calculationError?: string
+  payrollBasis?: any
   compensationAdjustmentIds?: string[]
   compensationRewards?: number
   compensationPenalties?: number
@@ -45,20 +53,29 @@ interface StaffOption {
 
 export function SalaryListPage() {
   const canWrite=useEmployeePermission('salary.write')
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
 
+  const [preparing,setPreparing]=useState(false)
+  const [prepareMessage,setPrepareMessage]=useState('')
+  const salaryLoadSequence=useRef(0)
+  const skipInitialManualDays=useRef(false)
+  const [allPayroll,setAllPayroll]=useState<Salary[]>([])
   const [salaries, setSalaries] = useState<Salary[]>([])
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filterStaff, setFilterStaff] = useState<string>('')
-  const [filterMonth, setFilterMonth] = useState<string>('')
+  const [filterMonth, setFilterMonth] = useState<string>(() => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit'}).format(new Date()))
   const [filterStatus, setFilterStatus] = useState<string>('')
 
   // Modal state
   const [showModal, setShowModal] = useState(false)
   const [editingSalary, setEditingSalary] = useState<Salary | null>(null)
   const [depositPlan, setDepositPlan] = useState<{staffId: string; month: string; items: Array<{staffDepositId: string; amountMinor: number}>} | null>(null)
+  const [payrollBasis,setPayrollBasis]=useState<any>(null)
+  const [daysError,setDaysError]=useState(false)
+  const [workingDays,setWorkingDays]=useState<{probation:string;regular:string}|null>(null)
+  const l=payrollLabels(i18n.language)
   const [saveError, setSaveError] = useState('')
   const [depositLoading, setDepositLoading] = useState(false)
   const [depositError, setDepositError] = useState('')
@@ -76,6 +93,9 @@ export function SalaryListPage() {
   })
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
+
+  const activeSalaryContext = useRef('')
+  activeSalaryContext.current = `${showModal}:${formData.staffId}:${formData.month}:${workingDays?.probation}:${workingDays?.regular}`
 
   useEffect(() => {
     if (!showModal || !formData.staffId || !formData.month) return
@@ -101,8 +121,7 @@ export function SalaryListPage() {
 
   // Get current month in YYYY-MM format
   const getCurrentMonth = () => {
-    const now = new Date()
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit'}).format(new Date())
   }
 
   useEffect(() => {
@@ -111,26 +130,36 @@ export function SalaryListPage() {
   }, [user, filterStaff, filterMonth, filterStatus])
 
   const loadSalaries = async () => {
+    const sequence=++salaryLoadSequence.current
     setIsLoading(true)
     try {
       const params: any = {}
       params.storeId = user?.storeId
-      if (filterStaff) params.staffId = filterStaff
-      if (filterMonth) params.month = filterMonth
-      if (filterStatus) params.status = filterStatus
+      params.month = filterMonth || getCurrentMonth()
+      params.includeUnrecorded = true
+      setPreparing(true);setPrepareMessage('')
+      await salaryApi.prepareMonth(params.month)
+      if(sequence!==salaryLoadSequence.current)return
       const response = await salaryApi.list(params)
-      setSalaries(response.data?.data?.list || [])
+      if(sequence!==salaryLoadSequence.current)return
+      const rows=response.data?.data?.list||[]
+      setAllPayroll(rows)
+      setSalaries(rows.filter((s:Salary)=>(!filterStaff||s.staffId===filterStaff)&&(!filterStatus||s.status===filterStatus)))
     } catch (error) {
       console.error('Failed to load salaries:', error)
+      setPrepareMessage(t('common.error'))
     } finally {
-      setIsLoading(false)
+      if(sequence===salaryLoadSequence.current){setIsLoading(false);setPreparing(false)}
     }
   }
 
   const loadStaff = async () => {
     try {
       const response = await staffApi.list({ storeId: user?.storeId, pageSize: 100 })
-      setStaffOptions(response.data?.data?.list || [])
+      const rows=response.data?.data?.list || []
+      const total=response.data?.data?.total || rows.length
+      for(let page=2;rows.length<total;page++){const next=await staffApi.list({storeId:user?.storeId,pageSize:100,page});const items=next.data?.data?.list||[];if(!items.length)break;rows.push(...items)}
+      setStaffOptions(rows)
     } catch (error) {
       console.error('Failed to load staff:', error)
     }
@@ -161,6 +190,11 @@ export function SalaryListPage() {
   }
 
   const handleOpenModal = (salary?: Salary) => {
+    setDaysError(false)
+    const basis=salary?.payrollBasis
+    skipInitialManualDays.current=!!salary&&salary.status!=='unrecorded'&&!!basis?.workingDays&&basis.daysSource!=='attendance'
+    setWorkingDays(basis && basis.daysSource!=='attendance' && (basis.workingDays || salary?.status==='unrecorded') ? {probation:String(basis.workingDays?.probation ?? basis.segments.filter((s:any)=>s.type==='probation').reduce((n:number,s:any)=>n+s.days,0)),regular:String(basis.workingDays?.regular ?? basis.segments.filter((s:any)=>s.type==='regular').reduce((n:number,s:any)=>n+s.days,0))} : null)
+    setPayrollBasis(salary?.payrollBasis||null)
     setSaveError('')
     setDepositError('')
     appliedCompensation.current={rewards:salary?.compensationRewards||0,penalties:salary?.compensationPenalties||0}
@@ -168,7 +202,7 @@ export function SalaryListPage() {
     appliedDepositAmount.current = (salary?.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0)
     setDepositPlan(salary ? { staffId: salary.staffId, month: salary.month, items: salary.depositDeductions || [] } : null)
     if (salary) {
-      setEditingSalary(salary)
+      setEditingSalary(salary.status==='unrecorded'?null:salary)
       setFormData({
         staffId: salary.staffId,
         month: salary.month,
@@ -182,7 +216,7 @@ export function SalaryListPage() {
       setEditingSalary(null)
       setFormData({
         staffId: '',
-        month: getCurrentMonth(),
+        month: filterMonth || getCurrentMonth(),
         baseSalary: '',
         overtime: '0',
         commission: '0',
@@ -198,19 +232,23 @@ export function SalaryListPage() {
     setEditingSalary(null)
   }
 
-  const handleAutoCalculate = async () => {
+  const handleAutoCalculate = async (useAttendance=false) => {
     if (!formData.staffId || !formData.month) {
       alert(t('staff.salary.selectStaffMonth'))
       return
     }
 
+    const contextKey = activeSalaryContext.current
     setCalculating(true)
+    setSaveError('')
     try {
       const [year, month] = formData.month.split('-')
-      const response = await salaryApi.calculate(formData.staffId, parseInt(month), parseInt(year))
+      const response = await salaryApi.calculate(formData.staffId, parseInt(month), parseInt(year),!useAttendance&&workingDays?{probation:Number(workingDays.probation),regular:Number(workingDays.regular)}:undefined)
       const data = response.data?.data
 
-      if (data) {
+      if (data && contextKey === activeSalaryContext.current) {
+        if(useAttendance)setWorkingDays(null)
+        setPayrollBasis(data.payrollBasis || null)
         appliedCompensation.current=data.compensation || {rewards:0,penalties:0}
         setCompensationIds(data.compensationAdjustmentIds || [])
         appliedDepositAmount.current = (data.depositDeductions || []).reduce((sum: number, item: {amountMinor: number}) => sum + Math.round(item.amountMinor / 100), 0)
@@ -226,11 +264,46 @@ export function SalaryListPage() {
       }
     } catch (error) {
       console.error('Failed to calculate salary:', error)
-      alert(t('staff.salary.calcFailed'))
+      if (contextKey === activeSalaryContext.current) setSaveError(t('staff.salary.calcFailed'))
     } finally {
-      setCalculating(false)
+      if (contextKey === activeSalaryContext.current) setCalculating(false)
     }
   }
+
+  useEffect(()=>{
+    if(editingSalary || workingDays)return
+    setPayrollBasis(null)
+    if(!showModal||editingSalary||!formData.staffId||!formData.month)return
+    let active=true
+    setCalculating(true); setSaveError('')
+    salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4))).then(response=>{
+      if(!active)return
+      const data=response.data?.data
+      if(!Number.isSafeInteger(data?.baseSalary)||!data?.payrollBasis)throw Error('INVALID_SALARY_CALCULATION')
+      setPayrollBasis(data.payrollBasis||null)
+      appliedCompensation.current=data.compensation||{rewards:0,penalties:0};setCompensationIds(data.compensationAdjustmentIds||[])
+      appliedDepositAmount.current=(data.depositDeductions||[]).reduce((sum:number,item:{amountMinor:number})=>sum+Math.round(item.amountMinor/100),0)
+      setDepositPlan({staffId:formData.staffId,month:formData.month,items:data.depositDeductions||[]})
+      setFormData(previous=>({...previous,baseSalary:String(data.baseSalary??0),overtime:String(data.overtimePay??0),bonus:String(data.bonuses??0),deduction:String(data.deductions??0)}))
+    }).catch(()=>{if(active){setSaveError(t('staff.salary.calcFailed'));setFormData(previous=>({...previous,baseSalary:''}))}}).finally(()=>{if(active)setCalculating(false)})
+    return ()=>{active=false}
+  },[showModal,editingSalary,formData.staffId,formData.month])
+
+  useEffect(()=>{
+    if(!showModal||!workingDays||!formData.staffId||!formData.month)return
+    if(skipInitialManualDays.current){skipInitialManualDays.current=false;return}
+    let active=true
+    setCalculating(true);setSaveError('');setDaysError(false)
+    const days={probation:Number(workingDays.probation),regular:Number(workingDays.regular)}
+    if(workingDays.probation===''||workingDays.regular===''){setSaveError(l.invalidDays);setDaysError(true);setCalculating(false);return}
+    salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4)),days).then(response=>{
+      if(!active)return
+      const data=response.data.data
+      setPayrollBasis(data.payrollBasis)
+      setFormData(previous=>({...previous,baseSalary:String(data.baseSalary),bonus:String(data.compensation?.rewards||0),deduction:String((data.compensation?.penalties||0)+(data.depositDeductions||[]).reduce((sum:number,item:any)=>sum+item.amount,0))}))
+    }).catch(()=>{if(active){setSaveError(l.invalidDays);setDaysError(true)}}).finally(()=>{if(active)setCalculating(false)})
+    return ()=>{active=false}
+  },[showModal,formData.staffId,formData.month,workingDays?.probation,workingDays?.regular])
 
   const handleSave = async () => {
     if (!formData.staffId || !formData.month || !formData.baseSalary) {
@@ -238,14 +311,18 @@ export function SalaryListPage() {
       return
     }
 
-    if (saving || calculating || depositLoading || depositError) return
+    if (saving || calculating || depositLoading || depositError || daysError) return
     if (Number(formData.deduction) < appliedDepositAmount.current+appliedCompensation.current.penalties || Number(formData.bonus)<appliedCompensation.current.rewards) {setSaveError(t('salaryDeposit.minimum')); return}
     const amounts = ['baseSalary', 'overtime', 'commission', 'bonus', 'deduction'].map(key => Number(formData[key as keyof typeof formData]))
-    if (amounts.some(value => !Number.isSafeInteger(value) || value < 0) || calculateFinalAmount() < 0) { setSaveError(t('common.required')); return }
+    if (amounts.some(value => !Number.isSafeInteger(value) || value < 0) || calculateFinalAmount() < 0) { setSaveError(l.invalidMoney); return }
     setSaveError('')
     setSaving(true)
     try {
       const data = {
+        manualCorrection:true,
+        manualBaseSalary:!!payrollBasis && Number(formData.baseSalary)!==payrollBasis.amount,
+        workingDays: workingDays ? {probation:Number(workingDays.probation),regular:Number(workingDays.regular)} : undefined,
+        autoBaseSalary: !!payrollBasis && Number(formData.baseSalary) === payrollBasis.amount,
         compensationAdjustmentIds:compensationIds,
         storeId: user?.storeId,
         staffId: formData.staffId,
@@ -267,7 +344,7 @@ export function SalaryListPage() {
       loadSalaries()
       handleCloseModal()
     } catch (error: any) {
-      setSaveError(error?.response?.data?.errors?.map((item: any) => item.message).join('; ') || error?.response?.data?.message || t('common.error'))
+      setSaveError(payrollIssueText(i18n.language,error?.response?.data?.message))
     } finally {
       setSaving(false)
     }
@@ -277,27 +354,16 @@ export function SalaryListPage() {
     try {
       await salaryApi.markPaid(id)
       loadSalaries()
-    } catch (error) {
+    } catch (error:any) {
       console.error('Failed to mark paid:', error)
-      alert(t('salaryDeposit.recalculate'))
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm(t('staff.salary.confirmDelete'))) return
-    try {
-      await salaryApi.delete(id)
-      loadSalaries()
-    } catch (error) {
-      console.error('Failed to delete salary:', error)
-      alert(t('common.error'))
+      alert(error?.response?.data?.message==='SALARY_REVIEW_REQUIRED'?l.reviewGeneric:t('salaryDeposit.recalculate'))
     }
   }
 
   const pendingSalaries = salaries.filter(s => s.status === 'pending')
   const paidSalaries = salaries.filter(s => s.status === 'paid')
   const thisMonth = getCurrentMonth()
-  const thisMonthSalaries = salaries.filter(s => s.month === thisMonth)
+  const thisMonthSalaries = salaries.filter(s => s.month === thisMonth && s.status!=='unrecorded')
 
   const totalPending = pendingSalaries.reduce((sum, s) => sum + s.finalAmount, 0)
   const totalPaid = paidSalaries.reduce((sum, s) => sum + s.finalAmount, 0)
@@ -314,16 +380,15 @@ export function SalaryListPage() {
           </div>
           <button
             onClick={() => handleOpenModal()}
-            disabled={user?.role !== 'admin'}
-            title={user?.role !== 'admin' ? t('staff.salary.adminCreateOnly') : undefined}
+            disabled={preparing||!canWrite}
             className="flex items-center gap-2 bg-white text-primary px-4 py-2 rounded-lg font-medium hover:bg-gray-100"
           >
-            <Plus size={20} />
-            {t('staff.salary.addSalary')}
+            {l.correction}
           </button>
         </div>
       </header>
 
+      {prepareMessage&&<p role="alert" className="p-4 text-amber-700">{prepareMessage}</p>}
       {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-2">
@@ -351,6 +416,7 @@ export function SalaryListPage() {
           >
             <option value="">{t('common.all')} {t('staff.salary.status')}</option>
             <option value="pending">{t('staff.salary.pending')}</option>
+            <option value="unrecorded">{l.unrecorded}</option>
             <option value="paid">{t('staff.salary.paid')}</option>
           </select>
         </div>
@@ -382,14 +448,7 @@ export function SalaryListPage() {
           <div className="flex flex-col items-center justify-center py-12 text-gray-500">
             <DollarSign size={48} className="mb-4 opacity-50" />
             <p>{t('staff.salary.noSalaries')}</p>
-            <button
-              onClick={() => handleOpenModal()}
-            disabled={user?.role !== 'admin'}
-            title={user?.role !== 'admin' ? t('staff.salary.adminCreateOnly') : undefined}
-              className="mt-4 text-primary font-medium"
-            >
-              {t('staff.salary.addFirst')}
-            </button>
+
           </div>
         ) : (
           salaries.map((salary) => (
@@ -404,7 +463,7 @@ export function SalaryListPage() {
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[salary.status]}`}>
-                  {salary.status === 'pending' ? t('staff.salary.pending') : t('staff.salary.paid')}
+                  {salary.payrollReview ? (salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection) : salary.status === 'unrecorded' ? l.unrecorded : salary.status === 'pending' ? t('staff.salary.pending') : t('staff.salary.paid')}
                 </span>
               </div>
 
@@ -414,6 +473,9 @@ export function SalaryListPage() {
                 </span>
               </div>
 
+              {salary.payrollReview&&<p className="text-sm text-amber-700 mb-2">{payrollIssueText(i18n.language,salary.payrollReview.reason)}{salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'&&<Link className="ml-2 underline" to={'/staff/'+salary.staffId+'/edit'}>{l.configureSalary}</Link>}</p>}
+              {salary.payrollBasis?.employmentNeedsReview&&<p role="alert" className="text-amber-700">{l.employmentReview}</p>}
+              <PayrollBasisSummary basis={salary.payrollBasis}/>
               {(salary.depositDeductions?.length || 0) > 0 && <p className="text-sm text-red-600 mb-2">{t('staff.salary.depositPortion')}: {formatCurrency((salary.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0))}</p>}
               {salary.depositNeedsReview && <p role="alert" className="text-sm text-amber-700 mb-2">{t('salaryDeposit.recalculate')} {formatCurrency(salary.expectedDepositAmount || 0)}</p>}
               <div className="grid grid-cols-3 gap-2 mb-3 rounded-xl border p-3">
@@ -455,28 +517,23 @@ export function SalaryListPage() {
               </div>
 
               <div className="text-2xl font-bold text-gray-900 mb-3">
-                {formatCurrency(salary.finalAmount)}
+                {salary.payrollReview?(salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection):formatCurrency(salary.finalAmount)}
               </div>
 
               <div className="flex gap-2">
-                {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{t('common.edit')}</button>}
+                {salary.status === 'unrecorded' && <button disabled={!canWrite || user?.role!=='admin'} onClick={()=>handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.correction}</button>}
+                {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.correction}</button>}
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
-                    disabled={user?.role !== 'admin' || salary.depositNeedsReview}
+                    disabled={user?.role !== 'admin' || !!salary.payrollReview || salary.depositNeedsReview || salary.payrollBasis?.employmentNeedsReview}
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
                     {t('staff.salary.markAsPaid')}
                   </button>
                 )}
-                <button
-                  onClick={() => handleDelete(salary.id)}
-                  disabled={salary.status !== 'pending' || user?.role !== 'admin'}
-                  className="py-2 px-3 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
-                >
-                  {t('common.delete')}
-                </button>
+
               </div>
             </div>
           ))
@@ -489,7 +546,7 @@ export function SalaryListPage() {
           <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">
-                {editingSalary ? t('staff.salary.editSalary') : t('staff.salary.addSalary')}
+                {l.correction}
               </h2>
               <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={20} />
@@ -505,14 +562,11 @@ export function SalaryListPage() {
                 </label>
                 <select
                   value={formData.staffId}
-                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
+                  onChange={(e) => {const row=allPayroll.find(s=>s.staffId===e.target.value);if(row)handleOpenModal(row);else{setWorkingDays(null);setEditingSalary(null);setFormData({...formData,staffId:e.target.value})}}}
                   className="w-full p-3 border border-gray-200 rounded-xl"
-                  disabled={!!editingSalary}
                 >
                   <option value="">{t('staff.salary.selectStaff')}</option>
-                  {staffOptions.map((staff) => (
-                    <option key={staff.id} value={staff.id}>{staff.name}</option>
-                  ))}
+                  {allPayroll.map(salary=><option key={salary.staffId} value={salary.staffId} disabled={salary.status==='paid'}>{salary.staff?.name||salary.staffId}</option>)}
                 </select>
               </div>
 
@@ -524,12 +578,15 @@ export function SalaryListPage() {
                 <input
                   type="month"
                   value={formData.month}
-                  onChange={(e) => setFormData({ ...formData, month: e.target.value })}
+                  onChange={(e) => {setWorkingDays(null);setFormData({ ...formData, month: e.target.value })}}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   disabled={!!editingSalary}
                 />
               </div>
 
+              <p className="col-span-2 text-sm text-gray-500">{probationLabels(i18n.language).automatic}</p>
+              <div className="col-span-2"><PayrollBasisSummary basis={payrollBasis ? {...payrollBasis,recordedBaseSalary:Number(formData.baseSalary),manualAdjustment:Number(formData.baseSalary)!==payrollBasis.amount} : null}/></div>
+              <section className="border rounded-xl p-3 space-y-2"><h3 className="font-medium">{l.editDays}</h3><button type="button" disabled={calculating||!canWrite} className="text-sm text-blue-700" onClick={()=>handleAutoCalculate(true)}>{l.restore}</button><p className="text-sm text-gray-500">{l.dayHint}</p>{payrollBasis?.attendanceDays&&<p className="text-sm text-blue-700">{l.automaticDays}: {payrollBasis.attendanceDays.probation+payrollBasis.attendanceDays.regular} · {workingDays?l.manualSource:l.attendanceSource}</p>}{payrollBasis && ['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((s:any)=>s.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?probationLabels(i18n.language).probation:probationLabels(i18n.language).regular} ({l.max}: {segment.eligibleDays ?? segment.days})<input aria-label={type==='probation'?l.probationDays:l.regularDays} type="number" min="0" max={segment.eligibleDays ?? segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={workingDays?.[type as 'probation'|'regular'] ?? segment.days} onChange={e=>setWorkingDays(previous=>({...previous||{probation:String(payrollBasis.segments.find((s:any)=>s.type==='probation')?.days||0),regular:String(payrollBasis.segments.find((s:any)=>s.type==='regular')?.days||0)},[type]:e.target.value}))}/></label>})}</section>
               {/* Base Salary */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -546,7 +603,7 @@ export function SalaryListPage() {
                   />
                   <button
                     type="button"
-                    onClick={handleAutoCalculate}
+                    onClick={()=>handleAutoCalculate()}
                     disabled={!canWrite || calculating || depositLoading || !formData.staffId || !formData.month}
                     className="px-4 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1 text-sm font-medium"
                   >
@@ -594,7 +651,6 @@ export function SalaryListPage() {
                 <input
                   type="number"
                   value={formData.bonus}
-                  readOnly
                   onChange={(e) => setFormData({ ...formData, bonus: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"
@@ -610,7 +666,6 @@ export function SalaryListPage() {
                 <input
                   type="number"
                   value={formData.deduction}
-                  readOnly
                   onChange={(e) => setFormData({ ...formData, deduction: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                   placeholder="0"
@@ -643,7 +698,7 @@ export function SalaryListPage() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!canWrite || saving || calculating || depositLoading || !!depositError}
+                  disabled={!canWrite || saving || calculating || depositLoading || !!depositError || daysError}
                   className="flex-1 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {saving ? (

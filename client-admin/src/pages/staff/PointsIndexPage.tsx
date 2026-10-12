@@ -1,9 +1,12 @@
+import {useEmployeeNavigation} from '../../contexts/EmployeeAccess'
+import {permissionForPage} from '../../../../shared/StaffAccess'
 import { useTranslation } from 'react-i18next'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { Star, Settings, Gift } from 'lucide-react'
 
 export function PointsIndexPage() {
   const { t } = useTranslation()
+  const allowed=useEmployeeNavigation()
   const location = useLocation()
 
   const tabs = [
@@ -20,7 +23,7 @@ export function PointsIndexPage() {
       {/* 三级导航 - 积分模块 */}
       <div className="sticky top-0 bg-gray-50 z-10 pb-4 mb-4">
         <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap overflow-x-auto">
-          {tabs.map(tab => {
+          {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => {
             const Icon = tab.icon
             return (
               <Link

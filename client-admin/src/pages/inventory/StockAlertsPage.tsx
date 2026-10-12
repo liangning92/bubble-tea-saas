@@ -10,23 +10,24 @@ import { Loader2, AlertTriangle, Package } from 'lucide-react'
 export function StockAlertsPage() {
   const { t, i18n } = useTranslation()
   const context=useDashboardContext()
+  const [showAll,setShowAll]=useState(false)
   const [forecastDays, setForecastDays] = useState([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)
 
   useEffect(()=>{setForecastDays([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)},[context.forecastDays])
 
   const {data:settings}=useQuery({queryKey:['inventory-alert-config',context.storeId],enabled:context.valid,queryFn:()=>inventoryApi.getAlertConfig()})
   const config=settings?.data?.data
-  const fmt=(v:number|null)=>v===null?'—':Number(v.toFixed(3))
+  const fmt=(v:number|null)=>v===null?t('media.unavailable'):Number(v.toFixed(3))
   // 低库存预警
   const { data: alertsData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['bom-alerts',context.storeId,forecastDays],
+    queryKey: ['bom-alerts',context.storeId,forecastDays,showAll],
     enabled:context.valid,
-    queryFn: async () => {const response=await bomApi.getLowStockAlerts(forecastDays);return requireRead(response,Array.isArray(response.data?.data))},
+    queryFn: async () => {const response=await (showAll?bomApi.getMaterialUsage(forecastDays):bomApi.getLowStockAlerts(forecastDays));return requireRead(response,Array.isArray(response.data?.data))},
     refetchInterval: 30000 // Auto-refresh every 30 seconds
   })
 
   // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
-  const alertsList = alertsData?.data?.data || []
+  const alertsList = (alertsData?.data?.data || []).map((item:any)=>({...item,urgency:showAll&&config?.enableLowStockAlert?(item.currentStock<=0||item.daysUntilStockOut!==null&&item.daysUntilStockOut<=config.lowStockCriticalDays?'critical':item.daysUntilStockOut!==null&&item.daysUntilStockOut<=config.lowStockWarningDays?'warning':undefined):item.urgency}))
 
   if (!context.valid) return <DashboardReadFailure scope />
   if (isError) return <DashboardReadFailure retry={()=>refetch()} />
@@ -37,7 +38,7 @@ export function StockAlertsPage() {
       <p>{t('varianceFlow.forecastHint')}</p>
       {config&&<p>{t(config.enableLowStockAlert?'varianceFlow.enabled':'varianceFlow.disabled')} · {t('varianceFlow.warning')} {config.lowStockWarningDays} d · {t('varianceFlow.critical')} {config.lowStockCriticalDays} d · {config.autoCheckIntervalHours} h</p>}
       <div className="flex items-center justify-between">
-        <div />
+        <div className="flex gap-2">{[false,true].map(all=><button key={String(all)} type="button" className={`btn ${showAll===all?'btn-primary':''}`} onClick={()=>setShowAll(all)}>{t(all?'media.allMaterials':'media.alertOnly')}</button>)}</div>
         <select
           value={forecastDays}
           onChange={(e) => setForecastDays(parseInt(e.target.value))}
@@ -119,7 +120,7 @@ export function StockAlertsPage() {
               <div className="flex-1">
                 <div className="font-medium">{formatItemName(alert.name, i18n.language)}</div>
                 <div className="text-sm text-gray-500">
-                  {t('inventory.currentStock')}: {alert.currentStock} {alert.unit} |
+                  {t('inventory.currentStock')}: {alert.currentStock} {alert.unit} | {t('bom.dailyUsage')}: {fmt(alert.dailyUsage)} {alert.unit} |
                   {t('inventory.daysLeft')}: {fmt(alert.daysUntilStockOut)} {t('bom.days')}
                 </div>
               </div>

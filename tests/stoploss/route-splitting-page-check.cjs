@@ -26,17 +26,18 @@ function start(kind) {
   servers.push(server);
   return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
 }
-async function setup(kind, authenticated = false) {
+async function setup(kind, authenticated = false, apiOrigin = 'http://127.0.0.1:1') {
   const context = await browser.newContext({serviceWorkers:'block'});
-  await context.addInitScript(({kind, authenticated}) => {
-    localStorage.setItem('bubble-tea-language', 'en'); localStorage.setItem('pos_language', 'en');
+  await context.addInitScript(({kind, authenticated, apiOrigin}) => {
+    localStorage.setItem('bubble-tea-language', 'en'); localStorage.setItem('pos_language', 'en');if(kind==='pos')localStorage.setItem('pos-api-url',apiOrigin+'/api');
     if (authenticated) {
       const key = kind === 'admin' ? 'auth-storage' : kind === 'pos' ? 'pos-auth' : 'staff-auth-storage';
-      sessionStorage.setItem(key, JSON.stringify({state:{isAuthenticated:true, token:'synthetic-only', user:{id:'synthetic-user',role:kind==='admin'?'admin':kind==='pos'?'cashier':'staff',storeId:'synthetic-store',staffId:'synthetic-staff',staff:{id:'synthetic-staff',name:'Synthetic'},name:'Synthetic'}},version:0}));
+      sessionStorage.setItem(key, JSON.stringify({state:{isAuthenticated:true, token:'synthetic-only', apiUrl:apiOrigin+'/api', user:{id:'synthetic-user',role:kind==='admin'?'admin':kind==='pos'?'cashier':'staff',storeId:'synthetic-store',staffId:'synthetic-staff',staff:{id:'synthetic-staff',name:'Synthetic'},name:'Synthetic'}},version:0}));
     }
-  }, {kind, authenticated});
+  }, {kind, authenticated, apiOrigin});
   await context.route('**/*', route => {
     const url = new URL(route.request().url());
+    if (authenticated && url.pathname === '/api/staff-permissions/me') return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({code:200,data:{role:null}})});
     if (url.protocol === 'file:' || (url.hostname === '127.0.0.1' && url.pathname !== '/api/health')) return route.continue();
     return route.abort();
   });
@@ -74,7 +75,7 @@ async function navigate(page, kind, route) {
       assert(!fixture.requests.some(u => /(?:ExpenseListPage|CashManagementPage|SalaryPage)-/.test(u)), `${kind}: authentication blocks protected chunk loading`);
       assert.deepEqual(fixture.errors, []);
     } finally {await fixture.context.close();}
-    const auth = await setup(kind, true);
+    const auth = await setup(kind, true, origin);
     try {
       const first = kind === 'admin' ? '/inventory/consumption-analysis' : kind === 'pos' ? '/diagnostics' : '/profile';
       await auth.page.goto(url(first));

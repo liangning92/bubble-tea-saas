@@ -1,8 +1,21 @@
+import { getInsights } from '../services/ProductInsightsService'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as ProductManagementService from '../services/ProductManagementService'
 
 const router = Router()
+
+const insightsHandler = (detail = false, preferences = false) => async (req: AuthRequest, res: any) => {
+  try {
+    const days = Number(req.query.days || 30)
+    if (!Number.isInteger(days) || days < 1 || days > 365) return res.status(400).json({code:400,message:'INVALID_DAYS'})
+    const data = await getInsights(req.user!.storeId,{days,categoryId:req.query.categoryId as string,channelId:req.query.channelId as string},{detail,productId:preferences?req.params.productId:undefined,page:Number(req.query.page)||1,search:req.query.search as string,sort:req.query.sort as string,direction:req.query.direction as string})
+    res.json({code:200,data})
+  } catch(error:any) {res.status(error.message==='PRODUCT_NOT_FOUND'?404:500).json({code:error.message==='PRODUCT_NOT_FOUND'?404:500,message:error.message==='PRODUCT_NOT_FOUND'?'PRODUCT_NOT_FOUND':'PRODUCT_INSIGHTS_FAILED'})}
+}
+router.get('/insights',authenticate,authorize('admin','manager'),insightsHandler())
+router.get('/insights/details',authenticate,authorize('admin','manager'),insightsHandler(true))
+router.get('/insights/preferences/:productId',authenticate,authorize('admin','manager'),insightsHandler(false,true))
 
 // ==================== PROCESS RECIPES ====================
 

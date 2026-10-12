@@ -224,7 +224,7 @@ model Staff {
   storeId              String
   store                Store                  @relation(fields: [storeId], references: [id])
   name                 String
-  employeeNumber       String
+  employeeNumber       String          @unique
   position             String                 @default("店员")
   status               String                 @default("active") // active | inactive | resigned | suspended
   employmentType       String                 @default("full_time") // full_time | part_time | contract | intern
@@ -590,6 +590,7 @@ model Category {
 }
 
 model Product {
+  images ProductImage[]
   id            String                @id @default(cuid())
   storeId       String
   store         Store                 @relation(fields: [storeId], references: [id])
@@ -2113,4 +2114,70 @@ model LocalSchemaMigration {
   checksum String
   backupPath String
   appliedAt DateTime @default(now())
+}
+
+// Store-owned reusable media. Restrict references before removing a file.
+model MediaAsset {
+  id String @id @default(cuid())
+  storeId String
+  name String
+  kind String
+  mimeType String
+  size Int
+  url String
+  storagePath String @unique
+  uploadedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  images ProductImage[]
+  references MediaReference[]
+  @@index([storeId, kind, createdAt])
+}
+
+model ProductImage {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  mediaId String
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  position Int
+  @@unique([productId, mediaId])
+  @@unique([productId, position])
+}
+
+model MediaReference {
+  id String @id @default(cuid())
+  mediaId String
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  storeId String
+  configKey String
+  @@unique([storeId, configKey, mediaId])
+}
+
+// Permission approvals are durable records, independent of role configuration rollback.
+model StaffActionApproval {
+  id String @id @default(uuid())
+  storeId String
+  applicantId String
+  approverId String?
+  action String
+  targetId String
+  requestId String
+  fingerprint String
+  payload String
+  beforeValue String?
+  result String?
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  executedAt DateTime?
+  @@unique([storeId, applicantId, requestId])
+  @@index([storeId, status, createdAt])
+}
+model StaffApprovalCredential {
+  userId String @id
+  pinHash String
+  failedAttempts Int @default(0)
+  lockedUntil DateTime?
+  updatedAt DateTime @updatedAt
 }

@@ -1,3 +1,4 @@
+import { dailyNightHandoverIds } from '../utils/dailyOnlineRevenue'
 import { netReceivedAmount } from '../utils/refundAllocation'
 import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 import { loadShiftCashReviews } from './ShiftCashReconciliation'
@@ -39,7 +40,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
     db.pOSActionLog.findMany({ where: { ...window, severity: { in: ['warning', 'critical'] } }, select: { id: true, staffId: true, staffName: true, action: true, severity: true, description: true, entityId: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
     db.staff.findMany({ where: { storeId }, select: { id: true, userId: true, name: true, employeeNumber: true, position: true } }),
     db.user.findMany({ where: { storeId }, select: { id: true, role: true } }),
-    db.shift.findMany({ where: { storeId }, select: { key: true, name: true, nameZh: true, nameId: true } }),
+    db.shift.findMany({ where: { storeId }, select: { key: true, name: true, nameZh: true, nameId: true, startTime: true } }),
     db.config.findUnique({ where: { storeId_key: { storeId, key: 'expense.categories' } }, select: { value: true } })
   ])
   let categories: { key: string; label?: string; labelZh?: string; labelEn?: string; labelId?: string; isDefault?: boolean }[] = []
@@ -59,6 +60,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
   for (const o of orders) assign(o.createdAt)?.orders.push(o)
   for (const e of quantities) assign(e.createdAt)?.expenses.push(e)
   for (const w of warnings) assign(w.createdAt)?.warnings.push(w)
+  const nightlyIds=dailyNightHandoverIds(sessions.filter(s=>s.status==='closed'),definitions)
   const serialize = (b: typeof buckets[number] | typeof outside) => {
     // Orders and shift cash use whole IDR; Expense.amount uses hundredths.
     // Return display amounts without changing any stored accounting values.
@@ -79,8 +81,8 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
     const orderRevenue=completed.reduce((sum,o)=>sum+netReceivedAmount(o),0)
     const calculated=b.session ? shiftHandoverFinancials(b.session.actualCash,b.session.openFloat,
       cashReviews.get(b.id)?.cashReconciliation?.expenses ?? b.expenses.reduce((sum,e)=>sum+e.amount,0)/100,
-      receipts?.qris ?? null,receipts?.shopeefood || 0,receipts?.gofood || 0,orderRevenue) : null
-    const financials=calculated ? {...calculated,reported:!!receipts} : null
+      receipts?.qris ?? null,nightlyIds.has(b.id) ? receipts?.shopeefood || 0 : 0,nightlyIds.has(b.id) ? receipts?.gofood || 0 : 0,orderRevenue) : null
+    const financials=calculated ? {...calculated,reported:!!receipts,onlineRevenueCounted:nightlyIds.has(b.id)} : null
     return { ...b, manualReceiptsCashBasis:receiptBases.get(b.id) || 'cash_receipts', handoverFinancials:financials, cashReconciliation:cashReviews.get(b.id)?.cashReconciliation || null, cashWarning:cashReviews.get(b.id)?.cashWarning || null, manualReceipts: manualReceipts.get(b.id) || null, attribution: 'recorded_time_window', overlapping: overlap,
       summary: { revenue: financials?.totalRevenue ?? orderRevenue, completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
       orders: b.orders.map(o => ({ ...o, amount: o.finalAmount, staffName: person(o.staffId).name })),

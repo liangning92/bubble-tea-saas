@@ -369,6 +369,7 @@ const resources = {
         "useCoupon": "Gunakan sekarang",
         "couponNotEligible": "Belum memenuhi syarat",
         "selectShift": "Pilih Shift",
+        "shiftSelectionRequired": "Pilih shift terlebih dahulu sebelum membuka shift.",
         "openFloatAmount": "Jumlah Saldo Awal",
         "enterOpenFloat": "Masukkan jumlah saldo awal",
         "openFloatRequired": "Jumlah saldo awal diperlukan",
@@ -1154,6 +1155,7 @@ const resources = {
         "useCoupon": "Use now",
         "couponNotEligible": "Not eligible yet",
         "selectShift": "Select Shift",
+        "shiftSelectionRequired": "Choose a shift before opening the till.",
         "openFloatAmount": "Open Float Amount",
         "enterOpenFloat": "Enter open float amount",
         "openFloatRequired": "Open float amount is required",
@@ -1898,6 +1900,7 @@ const resources = {
         "useCoupon": "立即使用",
         "couponNotEligible": "未达门槛",
         "selectShift": "选择班次",
+        "shiftSelectionRequired": "请先选择班次，再确认开班。",
         "openFloatAmount": "开班金额",
         "enterOpenFloat": "输入开班金额",
         "openFloatRequired": "请输入开班金额",
@@ -2375,3 +2378,5 @@ i18n.use(initReactI18next).init({
 })
 
 export default i18n
+
+for(const [lang,values] of Object.entries({zh:{production:'制作订单',approvals:'审批中心',denied:'你没有访问此功能的权限，请联系老板'},en:{production:'Production orders',approvals:'Approval center',denied:'You do not have access to this feature. Contact the owner.'},id:{production:'Pesanan produksi',approvals:'Pusat persetujuan',denied:'Anda tidak memiliki izin. Hubungi pemilik.'}}))i18n.addResourceBundle(lang,'translation',{staffAccessV2:values},true,true)

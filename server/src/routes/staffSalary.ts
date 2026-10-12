@@ -1,3 +1,4 @@
+import { workingDaysSchema, ProbationInputError } from '../services/ProbationService'
 import prisma from '../config/database'
 import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
@@ -16,14 +17,18 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), r
       return res.status(400).json({ code: 400, message: 'Month and year are required' })
     }
 
+    const manualDays = req.query.probationDays !== undefined || req.query.regularDays !== undefined ? workingDaysSchema.safeParse({probation:Number(req.query.probationDays),regular:Number(req.query.regularDays)}) : null
+    if(manualDays && !manualDays.success)return res.status(400).json({code:400,message:'INVALID_WORKING_DAYS'})
     const result = await calculateSalary(
       staffId,
       Number(month),
-      Number(year)
+      Number(year),
+      manualDays?.success ? manualDays.data : undefined
     )
 
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (['INVALID_SALARY_PERIOD', 'STAFF_BASE_SALARY_REQUIRED'].includes(error.message)) return res.status(400).json({ code: 400, message: error.message })
     console.error('Calculate salary error:', error)
     res.status(500).json({ code: 500, message: 'Failed to calculate salary' })

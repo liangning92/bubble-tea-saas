@@ -1,8 +1,10 @@
+import {consumeDiscountApproval} from './StaffActionApprovalService'
 import { quoteOfflineActivity } from './ActivityOfflineService'
 import { quoteActivities, enqueueActivityGrants, runActivityJobs, reverseActivityGrants, ensureMigrated } from './ActivityService'
 import { getActivityPriceRules } from './ActivityPricingService'
 import { activityPrice } from '../utils/activityPricing'
 import { findOrderReplay as replayReceipt, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
+import { netReceivedAmount } from '../utils/refundAllocation'
 import { containsFilter } from '../utils/stringFilter'
 import { OrderBusinessRejection } from './OrderBusinessRejection'
 import {orderNumberCandidate,isOrderNumberCollision} from '../utils/orderNumber'
@@ -56,6 +58,9 @@ export interface CreateOrderData {
   activityGroupId?: string
   activityGiftSelections?: Record<string,string>
   discountAmount?: number
+  manualDiscountAmount?: number
+  discountBasketId?: string
+  approvalId?: string
   pointsRedeemed?: number    // 积分抵扣金额
   taxEnabled?: boolean       // 是否计算税费（根据客户端配置）
   paymentMethod: string
@@ -375,6 +380,8 @@ export async function getOrders(params: {
   paymentMethod?: string
   channelId?: string
   search?: string
+  productName?: string
+  shiftSessionId?: string
   startDate?: string
   endDate?: string
   date?: string  // Single date for "show orders on this date"
@@ -404,15 +411,26 @@ export async function getOrders(params: {
     where.storeId = userId // In this case, userId is actually storeId for staff/cashier
   }
 
-  if (status) where.status = status
+  where.status = status || { notIn: ['refunded', 'cancelled'] }
   if (paymentMethod) where.paymentMethod = paymentMethod
   if (channelId) where.channelId = channelId
+
+  if (params.productName?.trim()) where.items = { some: { productName: containsText(params.productName.trim()) } }
+  if (params.shiftSessionId) {
+    const session = await prisma.shiftSession.findFirst({ where: { id: params.shiftSessionId, storeId: where.storeId } })
+    if (!session) throw new Error('INVALID_ORDER_SHIFT')
+    const until = session.closedAt || new Date()
+    const overlapping = await prisma.shiftSession.findMany({ where: { storeId: session.storeId, id: { not: session.id }, openedAt: { lt: until }, OR: [{ closedAt: null }, { closedAt: { gt: session.openedAt } }] } })
+    where.AND = [{ createdAt: { gte: session.openedAt, lt: until } }, ...overlapping.map(other => ({ NOT: { createdAt: { gte: other.openedAt, lt: other.closedAt || until } } }))]
+  }
 
   if (search && search.trim()) {
     const s = search.trim()
     where.OR = [
       { orderNumber: containsText(s) },
-      { pickupNumber: containsText(s) }
+      { pickupNumber: containsText(s) },
+      { items: { some: { productName: containsText(s) } } },
+      { member: { is: { OR: [{ name: containsText(s) }, { phone: containsText(s) }] } } }
     ]
   }
 
@@ -451,10 +469,11 @@ export async function getOrders(params: {
       where,
       include: {
         items: true,
+        refundRequests: { where: { status: { in: ['approved', 'paid'] } } },
         channel: { select: { id: true, name: true, code: true, icon: true } },
         member: { select: { id: true, name: true, phone: true } }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize
     }),
@@ -462,7 +481,7 @@ export async function getOrders(params: {
   ])
 
   return {
-    list: orders.map(publicOrder),
+    list: orders.map(order => ({ ...publicOrder(order), netAmount: netReceivedAmount(order) })),
     pagination: {
       page,
       pageSize,
@@ -603,22 +622,23 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
 
   if (channel && channel.storeId !== data.storeId) throw new Error('CHANNEL_STORE_MISMATCH')
 
+  if(data.manualDiscountAmount && (!context?.actorId || !Number.isSafeInteger(data.manualDiscountAmount) || data.manualDiscountAmount<=0))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
   let unifiedQuote: Awaited<ReturnType<typeof quoteActivities>> & {offline?:boolean} | undefined
   if(data.activityOfflineToken){
     await ensureMigrated(data.storeId)
     unifiedQuote=await quoteOfflineActivity(data.storeId,{items:data.items,channelId:channel?.id,channel:data.activityChannelCode,paymentMethod:data.paymentMethod,taxEnabled:data.taxEnabled},data.activityOfflineToken,data.activityOccurredAt||'')
-    if(unifiedQuote.discount!==(data.discountAmount||0)||data.memberId||(data.pointsRedeemed||0)>0)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
+    if(unifiedQuote.discount!==((data.discountAmount||0)-(data.manualDiscountAmount||0))||data.memberId||(data.pointsRedeemed||0)>0)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
   }
   if (data.activityQuoteSignature) {
     await ensureMigrated(data.storeId)
     unifiedQuote = await quoteActivities(data.storeId, {items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested ?? data.pointsRedeemed,groupId:data.activityGroupId,giftSelections:data.activityGiftSelections,taxEnabled:data.taxEnabled})
-    if (unifiedQuote.signature !== data.activityQuoteSignature || unifiedQuote.pendingSelections.length || unifiedQuote.discount !== (data.discountAmount||0)+(unifiedQuote.pointsRedeemed ? Math.floor(unifiedQuote.pointsRedeemed/100) : 0) || unifiedQuote.pointsRedeemed !== (data.pointsRedeemed||0)) throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
+    if (unifiedQuote.signature !== data.activityQuoteSignature || unifiedQuote.pendingSelections.length || unifiedQuote.discount !== ((data.discountAmount||0)-(data.manualDiscountAmount||0))+(unifiedQuote.pointsRedeemed ? Math.floor(unifiedQuote.pointsRedeemed/100) : 0) || unifiedQuote.pointsRedeemed !== (data.pointsRedeemed||0)) throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
   }
   if(!unifiedQuote&&context?.validateActivityPricing&&data.status!=='suspended'){
     await ensureMigrated(data.storeId)
     const inferred=await quoteActivities(data.storeId,{items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,pointsRequested:data.pointsRedeemed,taxEnabled:data.taxEnabled})
-    const submitted=data.items.reduce((sum,i)=>sum+i.quantity*(i.unitPrice+(i.addons||[]).reduce((amount:any,a:any)=>amount+a.price*(a.qty||1),0)),0)-(data.discountAmount||0)-Math.floor((data.pointsRedeemed||0)/100)
-    if(inferred.pendingSelections.length||submitted!==inferred.finalAmount||inferred.discount!==(data.discountAmount||0)+Math.floor((data.pointsRedeemed||0)/100)||inferred.pointsRedeemed!==(data.pointsRedeemed||0)||data.items.some((i,index)=>i.unitPrice!==inferred.items[index].unitPrice))throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
+    const submitted=data.items.reduce((sum,i)=>sum+i.quantity*(i.unitPrice+(i.addons||[]).reduce((amount:any,a:any)=>amount+a.price*(a.qty||1),0)),0)-((data.discountAmount||0)-(data.manualDiscountAmount||0))-Math.floor((data.pointsRedeemed||0)/100)
+    if(inferred.pendingSelections.length||submitted!==inferred.finalAmount||inferred.discount!==((data.discountAmount||0)-(data.manualDiscountAmount||0))+Math.floor((data.pointsRedeemed||0)/100)||inferred.pointsRedeemed!==(data.pointsRedeemed||0)||data.items.some((i,index)=>i.unitPrice!==inferred.items[index].unitPrice))throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
     unifiedQuote=inferred
   }
   const activityRules = !unifiedQuote && context?.validateActivityPricing ? await getActivityPriceRules(data.storeId) : []
@@ -760,6 +780,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   // Create order with transaction
   let created = false
   const persistOrder = () => prisma.$transaction(async (tx) => {
+    if(data.manualDiscountAmount)await consumeDiscountApproval(tx,context?.actorId||'',data)
     if (unifiedQuote && !unifiedQuote.offline) {
       if(data.memberId) await tx.member.updateMany({where:{id:data.memberId,storeId:data.storeId},data:{points:{increment:0}}})
       const fresh = await quoteActivities(data.storeId,{items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested ?? data.pointsRedeemed,groupId:data.activityGroupId,giftSelections:data.activityGiftSelections,taxEnabled:data.taxEnabled},tx)
@@ -941,14 +962,14 @@ export async function updateOrderStatus(orderId: string, status: string) {
 }
 
 // Refund order (idempotent, transactional, full rollback of points / coupons / cash)
-export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean }) {
-  const note = `Refund: ${reason || 'No reason provided'}`
+export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean },db:any=prisma,voiding?: { reasonCode: 'error' | 'test'; actorId: string }) {
+  const note = `${voiding ? 'Void' : 'Refund'}: ${reason || 'No reason provided'}`
 
-  const order = await prisma.$transaction(async (tx) => {
+  const operation = async (tx:any) => {
     // Idempotency guard: only flip status once (atomic conditional update)
     const flipped = await tx.order.updateMany({
-      where: { id: orderId, status: { notIn: ['refunded', 'cancelled'] } },
-      data: { status: 'refunded' }
+      where: { id: orderId, status: voiding ? { in: ['completed', 'paid'] } : { notIn: ['refunded', 'cancelled'] } },
+      data: { status: voiding ? 'cancelled' : 'refunded' }
     })
     if (flipped.count === 0) {
       const exists = await tx.order.findUnique({ where: { id: orderId }, select: { id: true } })
@@ -965,6 +986,10 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
 
     const earlier=await tx.refundRequest.findFirst({where:{orderId:o.id,status:{in:['approved','paid']}}})
     if(earlier)throw new Error('REFUND_REMAINING_ITEMS_REQUIRED')
+    if (voiding) {
+      if (await tx.refundRequest.findFirst({ where: { orderId, status: 'pending' } })) throw new Error('VOID_PENDING_REFUND')
+      await tx.financeAuditLog.create({ data: { storeId: o.storeId, userId: voiding.actorId, action: 'update', entityType: 'order', entityId: o.id, description: `Void ${voiding.reasonCode}: ${reason}`, newValue: JSON.stringify({ status: 'cancelled', reasonCode: voiding.reasonCode, reason, inventoryAction: 'unchanged' }) } })
+    }
 
     if (refundAmount !== undefined && (!Number.isSafeInteger(refundAmount) || refundAmount <= 0 || refundAmount > o.finalAmount)) {
       throw new Error('INVALID_REFUND_AMOUNT')
@@ -1030,7 +1055,12 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
 
     // 3. Cash refund → cash_out so drawer reconciliation stays accurate
     const cashRefund = refundAmount && refundAmount > 0 ? Math.min(refundAmount, o.finalAmount) : o.finalAmount
-    if (o.paymentMethod === 'cash' && cashRefund > 0) {
+    if (o.paymentMethod === 'cash' && cashRefund > 0 && voiding) {
+      // Correct the fictitious sale in its original shift; this is not a cash payout.
+      const sales = await tx.cashEvent.findMany({ where: { storeId: o.storeId, orderId: o.orderNumber, type: 'cash_sale' } })
+      if (sales.reduce((sum, sale) => sum + sale.amount, 0) !== o.finalAmount) throw new Error('VOID_CASH_EVIDENCE_REQUIRED')
+      for (const sale of sales) await tx.cashEvent.create({ data: { storeId: o.storeId, staffId: voiding.actorId, type: 'cash_sale', amount: -sale.amount, shift: sale.shift, paymentMethod: 'cash', orderId: o.orderNumber, createdAt: sale.createdAt, note: `Void ${o.orderNumber}: reverse ${sale.id}; ${reason}` } })
+    } else if (o.paymentMethod === 'cash' && cashRefund > 0) {
       await tx.cashEvent.create({
         data: {
           storeId: o.storeId,
@@ -1054,9 +1084,14 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
     await reverseActivityGrants(tx,o.storeId,o.id,0)
     // Prepared refunds never restore ingredients. Unprepared reversals above share this transaction.
     return o
-  })
+  };
+  return db===prisma?prisma.$transaction(operation):operation(db)
+}
 
-  return order
+// Administrative correction for fictitious sales, separate from customer refunds.
+export async function voidOrder(orderId: string, reasonCode: 'error' | 'test', reason: string, actorId: string) {
+  if (!['error', 'test'].includes(reasonCode) || !reason.trim() || reason.length > 1000) throw new Error('INVALID_VOID_REASON')
+  return refundOrder(orderId, reason.trim(), actorId, undefined, undefined, prisma, { reasonCode, actorId })
 }
 
 // Create refund request (from POS)

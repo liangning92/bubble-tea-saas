@@ -47,6 +47,9 @@ jobs:
       - name: Check translations
         run: npm run i18n:check
 
+      - name: Verify store media and product insights with disposable databases
+        run: node scripts/test-media-insights.cjs
+
       - name: Check stop-loss and release gates with isolated synthetic files
         run: |
           node --test tests/stoploss/*.test.cjs

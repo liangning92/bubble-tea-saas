@@ -6,7 +6,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
  execFileSync('ffmpeg',['-y','-loop','1','-i',qr,'-vf','pad=640:480:(ow-iw)/2:(oh-ih)/2:color=white,format=yuv420p','-r','10','-t','2',video],{stdio:'ignore'});
  const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href);
  const tw=(await import(pathToFileURL(path.resolve('client-pos/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-pos/src/**/*.{js,ts,jsx,tsx}')];
- const vite=await createServer({configFile:false,root:path.resolve('client-pos'),cacheDir:'/tmp/pos-devices-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6204,strictPort:true},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
+ const vite=await createServer({configFile:false,esbuild:{jsx:'automatic'},root:path.resolve('client-pos'),cacheDir:'/tmp/pos-devices-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6204,strictPort:true},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
  try{
  await vite.listen();browser=await chromium.launch({args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',`--use-file-for-fake-video-capture=${video}`]});
  const make=async(scenario)=>{

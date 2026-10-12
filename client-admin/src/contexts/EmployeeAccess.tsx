@@ -1,9 +1,14 @@
 import { createContext, useContext } from 'react'
 import { useAuthStore } from '../stores/auth'
-export interface EmployeeAccess {ready:boolean;role:{name:string;permissions:string[]}|null}
+export interface EmployeeAccess {ready:boolean;role:{name:string;permissions:string[];version?:number;modes?:Record<string,string>}|null}
 export const EmployeeAccessContext=createContext<EmployeeAccess>({ready:true,role:null})
-export function useEmployeePermission(permission:string) {
+export function useEmployeePermission(permission:string,request=false) {
   const {user}=useAuthStore()
   const access=useContext(EmployeeAccessContext)
-  return user?.role==='admin' || (access.ready && (!access.role || access.role.permissions.includes(permission)))
+  if(user?.role==='admin')return true
+  if(!access.ready)return false
+  if(!access.role)return true
+  return access.role.permissions.includes(permission)||(request&&access.role.version===2&&access.role.modes?.[permission]==='approval')
 }
+
+export function useEmployeeNavigation(){const {user}=useAuthStore();const access=useContext(EmployeeAccessContext);return(permission:string|null)=>user?.role==='admin'||access.ready&&(!access.role||!!permission&&access.role.permissions.includes(permission))}

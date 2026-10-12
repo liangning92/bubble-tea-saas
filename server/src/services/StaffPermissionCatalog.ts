@@ -83,6 +83,9 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (method==='POST' && /^\/orders\/received-receipts$/.test(path)) return null
   if (/^\/sync\/order$/.test(path)) return 'orders.create'
   if (/^\/queue(?:\/|$)/.test(path)) return read ? 'orders.read' : 'orders.status'
+  if (method==='PUT' && path==='/config/hardware-settings') return 'orders.create'
+  if (read && /^\/product-analysis\/insights(?:\/|$)/.test(path)) return 'products.read'
+  if (/^\/media(?:\/|$)/.test(path)) return null // Media routes enforce scene permissions.
   if (/^\/upload(?:\/|$)/.test(path)) return null
   if (/^\/inventory\/stock-in(?:\/|$)/.test(path) && !read) return 'inventory.stockIn'
   if (/^\/inventory\/stock-out(?:\/|$)/.test(path) && !read) return 'inventory.stockOut'
@@ -112,6 +115,7 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (read && /^\/announcement(?:\/(?:list|active))?$/.test(path)) return user?.accessRole?.permissions.includes('notifications.read') ? 'notifications.read' : 'personal.messages'
   if (read && path === '/staff/overview/monthly') return 'personal.profile'
   if (/^\/staff\/(profile|me)(?:\/|$)/.test(path)) return 'personal.profile'
+  if (path === '/staff/probation-rule') return read ? 'salary.read' : 'salary.write'
   if (/^\/staff\/salary\/my(?:\/|$)/.test(path)) return 'personal.salary'
   if (/^\/staff\/attendance\/(my|today|check-in|check-out)(?:\/|$)/.test(path)) return 'personal.attendance'
   if (/^\/staff\/schedule\/my(?:\/|$)/.test(path)) return 'personal.schedule'

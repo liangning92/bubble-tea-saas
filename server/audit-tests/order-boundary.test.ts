@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals'
 jest.mock('../src/config/database', () => ({ __esModule: true, default: {
   order: { findUnique: jest.fn(), delete: jest.fn() },
   refundRequest: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
-  shiftSession: { findFirst: jest.fn() },shift:{findFirst:jest.fn(async()=>({key:'morning'}))},config:{findMany:jest.fn(async()=>[{storeId:'a',value:'{"cash":true}'}])}
+  shiftSession: { findFirst: jest.fn() },shift:{findFirst:jest.fn(async()=>({key:'morning'}))},config:{findUnique:jest.fn(async()=>null),findMany:jest.fn(async()=>[{storeId:'a',value:'{"cash":true}'}])}
 } }))
 jest.mock('../src/config/env', () => ({ config: { jwt: { secret: 'synthetic-test-only' } } }))
 jest.mock('../src/services/OrderService', () => ({

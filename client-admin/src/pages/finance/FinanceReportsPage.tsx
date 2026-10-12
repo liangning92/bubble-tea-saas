@@ -1,3 +1,4 @@
+import { payrollLabels } from '../../../../shared/payrollLabels'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -235,6 +236,8 @@ export function FinanceReportsPage() {
                     <span className="text-gray-600">{t('finance.staffSalaries')}</span>
                     <span className="font-medium">{formatCurrency(profit.operatingCosts?.salary || 0)}</span>
                   </div>
+                  <p className="text-sm text-amber-700">{payrollLabels(i18n.language).pending}: {formatCurrency(profit.operatingCosts?.pendingSalary||0)}</p>
+                  <p className="text-sm text-gray-500">{payrollLabels(i18n.language).financeHint}</p>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.otherExpenses')}</span>
                     <span className="font-medium">{formatCurrency(profit.operatingCosts?.other || 0)}</span>
@@ -436,6 +439,8 @@ export function FinanceReportsPage() {
                     <span className="text-gray-600">{t('finance.staffSalaries')}</span>
                     <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.staffSalaries || 0)}</span>
                   </div>
+                  <p className="text-sm text-amber-700">{payrollLabels(i18n.language).pending}: {formatCurrency(profit.operatingCosts?.pendingSalary||0)}</p>
+                  <p className="text-sm text-gray-500">{payrollLabels(i18n.language).financeHint}</p>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.otherExpenses')}</span>
                     <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.otherExpenses || 0)}</span>

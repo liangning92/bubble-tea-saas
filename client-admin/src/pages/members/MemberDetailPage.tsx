@@ -1,4 +1,4 @@
-import { OrderItemRows } from '../../components/OrderItemsTable'
+import { OrderItemRows, OrderItemColumns } from '../../components/OrderItemsTable'
 import { useState } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -110,10 +110,11 @@ export function MemberDetailPage() {
             <h2 className="font-semibold text-gray-900 mb-4">{t('members.orders', 'Orders')} ({member.orderCount || 0})</h2>
             {member.orders?.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">{t('shiftHandover.products')}</th><th className="px-4 text-right">{t('shiftReview.quantity')}</th><th>{t('orders.date')}</th><th>{t('orders.status')}</th><th className="text-right">{t('orders.amount')}</th></tr></thead>
+                <table className="w-full min-w-[740px] table-fixed text-sm" data-testid="member-orders-table">
+                  <OrderItemColumns after={[180,112,undefined]} />
+                  <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">{t('shiftHandover.products')}</th><th className="px-2 text-left">{t('shiftReview.quantity')}</th><th className="pl-6">{t('orders.date')}</th><th>{t('orders.status')}</th><th className="text-right">{t('orders.amount')}</th></tr></thead>
                   <tbody>{member.orders.map((order: any) => (
-                    <OrderItemRows key={order.id} items={order.items} trailing={rowSpan => <><td rowSpan={rowSpan}>{formatDateTime(order.createdAt)}</td><td rowSpan={rowSpan}>{order.status}</td><td rowSpan={rowSpan} className="text-right">{formatCurrency(order.finalAmount ?? order.totalAmount)}</td></>} />
+                    <OrderItemRows key={order.id} items={order.items} trailing={rowSpan => <><td rowSpan={rowSpan} className="pl-6">{formatDateTime(order.createdAt)}</td><td rowSpan={rowSpan}>{order.status}</td><td rowSpan={rowSpan} className="text-right">{formatCurrency(order.finalAmount ?? order.totalAmount)}</td></>} />
                   ))}</tbody>
                 </table>
               </div>

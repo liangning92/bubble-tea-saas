@@ -1,3 +1,5 @@
+import {permissionForPage} from '../../../shared/StaffAccess'
+import {StaffApprovalDialog} from '../../../shared/StaffApprovalDialog'
 import { EmployeeAccessContext } from '../contexts/EmployeeAccess'
 import api from '../services/api'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
@@ -42,7 +44,7 @@ export function MainLayout() {
   const { user, logout } = useAuthStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [lang, setLang] = useState(i18n.language)
-  const [access,setAccess]=useState<{actor:string;role:{name:string;permissions:string[]}|null;failed:boolean}|null>(null)
+  const [access,setAccess]=useState<{actor:string;role:{name:string;permissions:string[];version?:number;modes?:Record<string,string>}|null;failed:boolean}|null>(null)
   const actorKey=(user?.id||'')+':'+(user?.storeId||'')+':'+(user?.role||'')
   useEffect(()=>{
     if(user?.role==='admin'){setAccess({actor:actorKey,role:null,failed:false});return}
@@ -222,10 +224,10 @@ export function MainLayout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="p-6">
-          {!ready ? access?.failed ? <div role="alert" className="card text-red-600">{t('common.error')}<button className="btn-primary ml-4" onClick={()=>window.location.reload()}>{t('common.refresh')}</button></div> : <RouteLoading /> : <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>}
+          {!ready ? access?.failed ? <div role="alert" className="card text-red-600">{t('common.error')}<button className="btn-primary ml-4" onClick={()=>window.location.reload()}>{t('common.refresh')}</button></div> : <RouteLoading /> : <Suspense fallback={<RouteLoading />}>{customRole?.version===2 && user?.role!=='admin' && permissionForPage(location.pathname) && !customRole.permissions.includes(permissionForPage(location.pathname)!) ? <div role="alert" className="card">{t('staffAccessV2.denied')}</div> : <Outlet />}</Suspense>}
         </div>
       </main>
     </div>
-    </EmployeeAccessContext.Provider>
+    <StaffApprovalDialog /></EmployeeAccessContext.Provider>
   )
 }

@@ -1,8 +1,10 @@
+import { MediaPicker } from '../../components/MediaLibrary'
+import { mediaApi } from '../../services/media'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { productApi, categoryApi, addonApi, uploadApi, inventoryApi, channelApi } from '../../services/api'
+import { productApi, categoryApi, addonApi, receiptMediaUrl, inventoryApi, channelApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatItemName } from '../../utils/helpers'
 import { ArrowLeft, Upload, X, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
@@ -30,7 +32,8 @@ export function ProductFormPage() {
     channelPrices: [] as { channelId: string; priceAdjustment: number; enabled: boolean }[]
   })
 
-  const [uploadedImages, setUploadedImages] = useState<{ url: string; filename: string }[]>([])
+  const [uploadedImages, setUploadedImages] = useState<{ url: string; mediaId?: string }[]>([])
+  const [showMediaPicker, setShowMediaPicker] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
 
@@ -51,7 +54,7 @@ export function ProductFormPage() {
 
   const { data: productData } = useQuery({
     queryKey: ['product', id],
-    queryFn: () => productApi.get(id!),
+    queryFn: async () => {await mediaApi.list('product',{pageSize:1});return productApi.get(id!)},
     enabled: !!id
   })
 
@@ -82,10 +85,7 @@ export function ProductFormPage() {
         })) || [],
         channelPrices: p.channelPrices || []
       })
-      if (p.image) {
-        const filename = p.image.split('/').pop()
-        setUploadedImages([{ url: p.image, filename }])
-      }
+      setUploadedImages(p.images?.length ? p.images : p.image ? [{url:p.image}] : [])
     }
   }, [productData])
 
@@ -156,6 +156,7 @@ export function ProductFormPage() {
       categoryId: form.categoryId,
       description: form.description,
       image: uploadedImages.length > 0 ? uploadedImages[0].url : '',
+      ...(!uploadedImages.some(i=>!i.mediaId)?{mediaIds:uploadedImages.map(i=>i.mediaId)}:{}),
       status: form.status,
       specs: form.specs.map((s: any, i: number) => ({
         id: s.id,
@@ -188,12 +189,10 @@ export function ProductFormPage() {
     setIsUploading(true)
     try {
       const fileArray = Array.from(files)
-      const response = await uploadApi.uploadProduct(fileArray)
-      const newImages = response.data.data.urls.map((url: string, i: number) => ({
-        url,
-        filename: response.data.data.filenames[i]
-      }))
-      setUploadedImages(prev => [...prev, ...newImages])
+      if(uploadedImages.length + fileArray.length > 5) throw Error(t('media.maxImages'))
+      const response = await mediaApi.upload('product',fileArray)
+      const newImages = response.data.data.list.map((a:any)=>({url:a.url,mediaId:a.id}))
+      setUploadedImages(prev => [...prev.filter(i=>i.mediaId), ...newImages].slice(0,5))
     } catch (error: any) {
       console.error('Upload failed:', error)
       const msg = error?.response?.data?.message || error?.message || t('products.imageUploadFailed')
@@ -201,7 +200,7 @@ export function ProductFormPage() {
     } finally {
       setIsUploading(false)
     }
-  }, [])
+  }, [uploadedImages,t])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -219,17 +218,8 @@ export function ProductFormPage() {
     setDragActive(false)
   }, [])
 
-  const removeImage = async (index: number) => {
-    const image = uploadedImages[index]
-    if (image.filename) {
-      try {
-        await uploadApi.delete('products', image.filename)
-      } catch (error) {
-        console.error('Delete image failed:', error)
-      }
-    }
-    setUploadedImages(prev => prev.filter((_, i) => i !== index))
-  }
+  const removeImage = (index: number) => setUploadedImages(prev => prev.filter((_, i) => i !== index))
+  const moveImage = (index:number, direction:number) => setUploadedImages(prev=>{const copy=[...prev];const next=index+direction;if(next<0||next>=copy.length)return copy;[copy[index],copy[next]]=[copy[next],copy[index]];return copy})
 
   const addSpec = () => {
     setForm({ ...form, specs: [...form.specs, { name: t('products.specLarge'), price: 0, isDefault: false }] })
@@ -392,6 +382,8 @@ export function ProductFormPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {t('products.image')}
             </label>
+            <button type="button" className="btn mb-3" disabled={uploadedImages.length>=5} onClick={()=>setShowMediaPicker(true)}>{t('media.choose')}</button>
+            {showMediaPicker&&<MediaPicker scene="product" max={5-uploadedImages.length} onClose={()=>setShowMediaPicker(false)} onSelect={assets=>{setUploadedImages(prev=>[...prev.filter(i=>i.mediaId),...assets.filter(a=>!prev.some(i=>i.mediaId===a.id)).map(a=>({mediaId:a.id,url:a.url}))].slice(0,5));setShowMediaPicker(false)}} />}
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
@@ -404,13 +396,16 @@ export function ProductFormPage() {
                 <div className="flex flex-wrap gap-4 justify-center">
                   {uploadedImages.map((img, index) => (
                     <div key={index} className="relative group">
+                      <p className="text-xs">{index===0?t('media.mainImage'):index+1}</p>
                       <img
-                        src={img.url}
+                        src={receiptMediaUrl(img.url)}
                         alt=""
                         className="w-24 h-24 object-cover rounded-lg"
                       />
+                      <div className="flex justify-between"><button type="button" aria-label={t('media.moveEarlier')} disabled={index===0} onClick={()=>moveImage(index,-1)}>←</button><button type="button" aria-label={t('media.moveLater')} disabled={index===uploadedImages.length-1} onClick={()=>moveImage(index,1)}>→</button></div>
                       <button
                         type="button"
+                        aria-label={t('media.deselect')}
                         onClick={() => removeImage(index)}
                         className="absolute -top-2 -right-2 p-1 bg-error text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                       >

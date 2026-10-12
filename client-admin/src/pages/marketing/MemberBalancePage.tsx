@@ -1,3 +1,4 @@
+import {useEmployeePermission} from '../../contexts/EmployeeAccess'
 import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -25,6 +26,8 @@ interface MemberBalance {
 }
 
 export function MemberBalancePage() {
+  const canBalance=useEmployeePermission('members.balance',true)
+  const [accessError,setAccessError]=useState('')
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const storeId = user?.storeId || 'default'
@@ -64,6 +67,7 @@ export function MemberBalancePage() {
 
   // Topup mutation
   const topupMutation = useMutation({
+    onError:(error:any)=>setAccessError(error.response?.data?.message||error.message||t('common.error')),
     mutationFn: ({ memberId, amount, note }: { memberId: string; amount: number; note?: string }) =>
       marketingApi.memberTopup(memberId, amount, note),
     onSuccess: () => {
@@ -77,6 +81,7 @@ export function MemberBalancePage() {
 
   // Deduct mutation
   const deductMutation = useMutation({
+    onError:(error:any)=>setAccessError(error.response?.data?.message||error.message||t('common.error')),
     mutationFn: ({ memberId, amount, note }: { memberId: string; amount: number; note?: string }) =>
       marketingApi.memberDeduct(memberId, amount, note),
     onSuccess: () => {
@@ -178,17 +183,18 @@ export function MemberBalancePage() {
                 </div>
               </div>
 
+              {accessError&&<p role="alert" className="text-red-600">{accessError}</p>}
               {/* Action Buttons */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowTopup(true)}
+                  disabled={!canBalance} onClick={() => {setAccessError('');setShowTopup(true)}}
                   className="btn-primary flex items-center gap-2"
                 >
                   <ArrowUpCircle size={18} />
                   {t('marketing.topup')}
                 </button>
                 <button
-                  onClick={() => setShowDeduct(true)}
+                  disabled={!canBalance} onClick={() => {setAccessError('');setShowDeduct(true)}}
                   className="btn-secondary flex items-center gap-2"
                 >
                   <ArrowDownCircle size={18} />

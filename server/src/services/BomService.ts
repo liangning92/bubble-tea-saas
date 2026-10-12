@@ -10,6 +10,7 @@ export async function getProductsWithBomCost(storeId: string) {
   const products = await prisma.product.findMany({
     where: { storeId, deletedAt: null },
     include: {
+      images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: { select: { name: true } },
       specs: { orderBy: { isDefault: 'desc' }, take: 1 },
       bomItems: {
@@ -27,6 +28,8 @@ export async function getProductsWithBomCost(storeId: string) {
 
     return {
       id: product.id,
+    image: product.image,
+    images: product.images.map(i => ({mediaId:i.mediaId,url:i.media.url,position:i.position})),
       name: product.name,
       code: product.code,
       category: product.category?.name,
@@ -46,6 +49,7 @@ export async function getProductBomDetail(productId: string) {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     include: {
+      images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: { select: { name: true } },
       specs: { orderBy: { isDefault: 'desc' } },
       bomItems: {
@@ -103,6 +107,8 @@ export async function getProductBomDetail(productId: string) {
 
   return {
     id: product.id,
+    image: product.image,
+    images: product.images.map(i => ({mediaId:i.mediaId,url:i.media.url,position:i.position})),
     name: product.name,
     code: product.code,
     category: product.category?.name,

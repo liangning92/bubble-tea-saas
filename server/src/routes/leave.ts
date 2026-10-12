@@ -226,7 +226,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
     }
 
     // Check access permission
-    if (req.user!.role !== 'admin' && req.user!.role !== 'manager') {
+    if (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['attendance.read']!=='allow':req.user!.role !== 'admin' && req.user!.role !== 'manager') {
       const staff = await prisma.staff.findFirst({
         where: { userId: req.user!.id }
       })

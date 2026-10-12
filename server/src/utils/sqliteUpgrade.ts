@@ -30,7 +30,7 @@ async function columns(db:Database,table:string) {
 }
 async function checkBaseline(db:Database) {
  for(const model of Prisma.dmmf.datamodel.models){
-  if(['LocalSchemaMigration','PaymentEvidence'].includes(model.name))continue
+  if(['LocalSchemaMigration','PaymentEvidence','StaffActionApproval','StaffApprovalCredential'].includes(model.name))continue
   const table=model.dbName||model.name
   const names=(await columns(db,table)).map(c=>c.name)
   for(const field of model.fields.filter(field=>field.kind!=='object')){

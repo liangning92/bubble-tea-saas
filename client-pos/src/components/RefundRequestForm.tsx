@@ -1,8 +1,11 @@
+import api from '../services/api'
+import {useStaffAccess} from '../../../shared/StaffAccess'
+import {requestStaffApproval} from '../../../shared/StaffApprovalDialog'
 import {useEffect,useState} from 'react'
 import {useTranslation} from 'react-i18next'
 import {posApi} from '../services/api'
 export function RefundRequestForm({order,onDone,onCancel}:{order:any;onDone:()=>void;onCancel:()=>void}){
- const {t}=useTranslation();const [quote,setQuote]=useState<any>(null),[quantities,setQuantities]=useState<Record<string,number>>({}),[reason,setReason]=useState(''),[kind,setKind]=useState('customer_dissatisfied'),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+ const access=useStaffAccess();const {t}=useTranslation();const [quote,setQuote]=useState<any>(null),[quantities,setQuantities]=useState<Record<string,number>>({}),[reason,setReason]=useState(''),[kind,setKind]=useState('customer_dissatisfied'),[error,setError]=useState(''),[busy,setBusy]=useState(false)
  useEffect(()=>{let active=true;posApi.getRefundQuote(order.id).then(r=>{if(active)setQuote(r.data.data)}).catch(()=>{if(active)setError(t('itemRefund.evidence'))});return()=>{active=false}},[order.id,t])
  const rows=quote?.items||[]
  const items=rows.filter((i:any)=>(quantities[i.itemId]||0)>0).map((i:any)=>({itemId:i.itemId,quantity:quantities[i.itemId]}))
@@ -10,7 +13,7 @@ export function RefundRequestForm({order,onDone,onCancel}:{order:any;onDone:()=>
  async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');try{
   const body=kind==='paid_unprepared'?{orderId:order.id,reason,reasonCode:kind,selectedItemIds:order.items.map((i:any)=>i.id)}:{orderId:order.id,reason,reasonCode:kind,items}
   const key='refund-request:'+JSON.stringify(body);let requestId=sessionStorage.getItem(key);if(!requestId){requestId=crypto.randomUUID();sessionStorage.setItem(key,requestId)}
-  await posApi.requestRefund({...body,requestId});sessionStorage.removeItem(key);onDone()
+  const response=await posApi.requestRefund({...body,requestId});if(access.role?.version===2){await requestStaffApproval(api,{action:'orders.refund',targetId:response.data.data.id,requestId:crypto.randomUUID(),payload:{verifiedPrepared:kind==='customer_dissatisfied',verifiedUnprepared:kind==='paid_unprepared',note:reason.slice(0,300)}});}sessionStorage.removeItem(key);onDone()
  }catch(e:any){setError(`${t('itemRefund.failed')}: ${e?.response?.data?.message||''}`)}finally{setBusy(false)}}
  return <form onSubmit={submit} className="p-4 space-y-3" data-testid="item-refund-form"><h2 className="font-bold">{t('itemRefund.title')}</h2><p>{order.orderNumber}</p><label>{t('refundPolicy.reason')}<select className="border p-2 w-full" value={kind} onChange={e=>setKind(e.target.value)} disabled={busy}><option value="customer_dissatisfied">{t('refundPolicy.customer_dissatisfied')}</option><option value="paid_unprepared">{t('refundPolicy.paid_unprepared')}</option></select></label>
  {kind==='customer_dissatisfied'?<><p>{t('itemRefund.hint')}</p>{rows.map((i:any)=><label key={i.itemId} className="block">{i.name} · {t('itemRefund.remaining')}: {i.remaining}<input aria-label={i.name} type="number" min="0" max={i.remaining} step="1" value={quantities[i.itemId]||0} disabled={busy} className="border p-2 w-full" onChange={e=>setQuantities({...quantities,[i.itemId]:Math.max(0,Math.min(i.remaining,Number(e.target.value)))})}/></label>)}<p data-testid="refund-amount">{t('orders.refundAmount')}: Rp {amount}</p></>:<p>{t('itemRefund.unprepared')}</p>}

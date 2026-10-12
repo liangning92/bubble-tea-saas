@@ -1,10 +1,13 @@
+import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { Outlet } from 'react-router-dom'
 import { MarketingTabs, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 
 export function MarketingIndexPage() {
   const l = useMarketingCopy()
+  const canReadMedia=useEmployeePermission('marketing.read')
   return <div className="marketing-workspace min-w-0 space-y-5">
     <MarketingTabs primary items={[
+      ...(canReadMedia?[{path:'/marketing/media',label:l('媒体库','Media library','Pustaka media')}]:[]),
       { path: '/marketing/overview', label: l('营销总览','Overview','Ringkasan') },
       { path: '/marketing/promotions', label: l('促销','Promotions','Promosi') },
       { path: '/marketing/members', label: l('会员','Members','Member') },

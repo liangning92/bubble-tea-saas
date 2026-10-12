@@ -14,6 +14,7 @@ for(const provider of ['sqlite','postgresql']){
  const file=path.join(folder,'schema.prisma');fs.writeFileSync(file,schema);
  execFileSync(process.execPath,[cli,'generate','--schema',file],{cwd:root,env,stdio:['ignore','ignore','pipe']});
  const sql=execFileSync(process.execPath,[cli,'migrate','diff','--from-empty','--to-schema-datamodel',file,'--script'],{cwd:root,env,encoding:'utf8'});
- fs.writeFileSync(path.join(folder,'schema.sql'),sql);
+ const allocationMigration=provider==='postgresql'?fs.readFileSync('server/prisma/migrations/20261013_employee_number_sequence/migration.sql','utf8'):'';
+ fs.writeFileSync(path.join(folder,'schema.sql'),sql+'\n'+allocationMigration);
 }
 console.log(JSON.stringify({runtime:root,providers:['sqlite','postgresql'],noDatabaseAccess:true}));

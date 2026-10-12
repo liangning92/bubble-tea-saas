@@ -1,8 +1,8 @@
 import prisma from '../config/database'
-export async function changeMemberBalance(id:string,storeId:string,amount:number,type:'topup'|'deduct',operatorId:string,note?:string,requestId?:string) {
+export async function changeMemberBalance(id:string,storeId:string,amount:number,type:'topup'|'deduct',operatorId:string,note?:string,requestId?:string,db:any=prisma) {
   if(!Number.isSafeInteger(amount)||amount<=0)throw new Error('INVALID_BALANCE_AMOUNT')
   if(!requestId || !/^[0-9a-f-]{36}$/i.test(requestId))throw new Error('BALANCE_REQUEST_ID_REQUIRED')
-  return prisma.$transaction(async tx=>{
+  const operation=async (tx:any)=>{
     const locked=await tx.member.updateMany({where:{id,storeId},data:{balance:{increment:0}}})
     if(locked.count!==1)throw new Error('MEMBER_NOT_FOUND_OR_INSUFFICIENT_BALANCE')
     const key=`member.balance.${id}.${requestId}`
@@ -15,5 +15,5 @@ export async function changeMemberBalance(id:string,storeId:string,amount:number
     const log=await tx.memberBalanceLog.create({data:{memberId:id,type,amount:delta,balanceBefore:member.balance-delta,balanceAfter:member.balance,operatorId,note:note||type}})
     await tx.config.create({data:{storeId,key,category:'member_balance',value:JSON.stringify({amount,type,operatorId,log})}})
     return {member,log}
-  })
+  };return db===prisma?prisma.$transaction(operation):operation(db)
 }
