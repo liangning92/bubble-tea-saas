@@ -126,21 +126,20 @@ export function TvDisplayPage() {
   useEffect(()=>{const timer=setInterval(()=>setActivityIndex(n=>n+1),(config.carouselIntervalSeconds||6)*1000);return()=>clearInterval(timer)},[config.carouselIntervalSeconds])
   const currentActivity=visibleActivities[activityIndex%Math.max(1,visibleActivities.length)]
   const idleMode=visibleActivities.length===0
-  const idlePhotos=useMemo(()=>config.idleProductsEnabled?(config.idleProducts||[]).map(product=>({url:product.image,title:product.name,subtitle:product.price===undefined?'':formatCurrency(product.price)})):[],[config.idleProductsEnabled,config.idleProducts])
+  const idlePhotos=useMemo(()=>config.idleProductsEnabled?(config.idleProducts||[]).map(product=>({kind:'image' as const,url:product.image,title:product.name,subtitle:product.price===undefined?'':formatCurrency(product.price)})):[],[config.idleProductsEnabled,config.idleProducts])
   // Hero Banners Carousel
   const activeBanners = useMemo(() => {
     return idleMode&&idlePhotos.length ? idlePhotos : config.mediaFiles || []
   }, [config.mediaFiles, idleMode, idlePhotos])
 
   const carouselKey=JSON.stringify(activeBanners.map(banner=>[banner.url,banner.title,banner.subtitle]))
-  useEffect(() => {
-    setActiveBannerIndex(0)
-    if (activeBanners.length <= 1) return
-    const interval = setInterval(() => {
-      setActiveBannerIndex(prev => (prev + 1) % activeBanners.length)
-    }, (config.carouselIntervalSeconds || 6) * 1000)
-    return () => clearInterval(interval)
-  }, [carouselKey, config.carouselIntervalSeconds])
+  const nextBanner=()=>setActiveBannerIndex(prev=>(prev+1)%Math.max(1,activeBanners.length))
+  useEffect(()=>{setActiveBannerIndex(0)},[carouselKey])
+  useEffect(()=>{
+    if(activeBanners.length<=1 || activeBanners[activeBannerIndex]?.kind==='video')return
+    const timer=setTimeout(nextBanner,(config.carouselIntervalSeconds||6)*1000)
+    return ()=>clearTimeout(timer)
+  },[carouselKey,activeBannerIndex,config.carouselIntervalSeconds])
 
   // Setup Real-time WebSocket connection to backend
   useEffect(() => {
@@ -321,14 +320,8 @@ export function TvDisplayPage() {
                 }`}
                 style={{ transition: 'opacity 1s ease-in-out, transform 8s ease' }}
               >
-                <img
-                  src={index===activeBannerIndex||index===(activeBannerIndex+1)%activeBanners.length?mediaUrl(banner.url):undefined}
-                  alt={banner.title}
-                  className={'w-full h-full '+(idleMode&&idlePhotos.length?'object-contain':'object-cover')}
-                  onError={(e) => {
-                    e.currentTarget.style.visibility = 'hidden'
-                  }}
-                />
+                {banner.kind==='video' ? (index===activeBannerIndex&&<video key={banner.url} src={mediaUrl(banner.url)} className="w-full h-full object-cover" autoPlay muted playsInline loop={activeBanners.length===1} onEnded={nextBanner} onError={nextBanner} />) : <img src={index===activeBannerIndex||index===(activeBannerIndex+1)%activeBanners.length?mediaUrl(banner.url):undefined} alt={banner.title} className="w-full h-full object-cover" onError={()=>{if(index===activeBannerIndex)nextBanner()}} />}
+
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/50" />
               </div>

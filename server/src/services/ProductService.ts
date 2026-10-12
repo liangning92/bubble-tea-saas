@@ -1,3 +1,4 @@
+import { setProductImages, legacyProductImage } from './MediaService'
 import {convertQuantity} from '../utils/inventoryUnits'
 import {inventoryQuantityCost} from './InventoryQuantityService'
 import { containsText } from '../utils/textSearch'
@@ -24,6 +25,7 @@ function transformProductForApi(product: any): any {
   const { bomItems, specs, addons, channelPrices, category, ...rest } = product
   return {
     ...serializeBigInt(rest),
+    images: (product.images || []).map((i: any) => ({ mediaId: i.mediaId, url: i.media.url, position: i.position })),
     category: category ? serializeBigInt(category) : undefined,
     specs: (specs || []).map((s: any) => serializeBigInt(s)),
     addons: (addons || []).map((a: any) => ({
@@ -68,6 +70,7 @@ export interface CreateProductData {
   description?: string
   categoryId: string
   image?: string
+  mediaIds?: string[]
   status?: string
   tags?: string[]
   specs?: { id?: string; name: string; price: number; priceAdjustment?: number; isDefault?: boolean }[]
@@ -199,6 +202,7 @@ export async function getProducts(filter: ProductFilter) {
   const products = await prisma.product.findMany({
     where,
     include: {
+      images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: { select: { id: true, name: true } },
       specs: { orderBy: { isDefault: 'desc' } },
       addons: {
@@ -233,6 +237,7 @@ export async function getProductById(productId: string) {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     include: {
+      images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: true,
       specs: { orderBy: { isDefault: 'desc' } },
       addons: {
@@ -259,6 +264,7 @@ export async function getProductByBarcode(barcode: string, storeId: string) {
       status: 'active'
     },
     include: {
+      images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: true,
       specs: { orderBy: { isDefault: 'desc' }, take: 1 },
       addons: {
@@ -301,6 +307,9 @@ export async function createProduct(data: CreateProductData) {
         tags: JSON.stringify(data.tags || [])
       }
     })
+
+    const mediaIds=data.mediaIds ?? (data.image!==undefined?await legacyProductImage(tx,product.storeId,data.image):undefined)
+    if (mediaIds !== undefined) await setProductImages(tx, product.id, product.storeId, mediaIds)
 
     // Create specs
     if (data.specs && data.specs.length > 0) {
@@ -364,7 +373,9 @@ export async function updateProduct(productId: string, data: Partial<CreateProdu
     if (data.name !== undefined) updateData.name = data.name
     if (data.description !== undefined) updateData.description = data.description
     if (data.categoryId !== undefined) updateData.categoryId = data.categoryId
-    if (data.image !== undefined) updateData.image = data.image
+    const existingImageProduct=await tx.product.findUniqueOrThrow({where:{id:productId}})
+    const mediaIds=data.mediaIds ?? (data.image!==undefined?await legacyProductImage(tx,existingImageProduct.storeId,data.image,existingImageProduct.image):undefined)
+    if (data.image !== undefined && mediaIds === undefined) updateData.image = data.image
     if (data.status !== undefined) updateData.status = data.status
     if (data.tags !== undefined) updateData.tags = JSON.stringify(data.tags)
 
@@ -388,6 +399,8 @@ export async function updateProduct(productId: string, data: Partial<CreateProdu
       where: { id: productId },
       data: updateData
     })
+
+    if (mediaIds !== undefined) await setProductImages(tx, product.id, product.storeId, mediaIds)
 
     // Update specs if provided (update in-place to avoid breaking OrderItem foreign keys)
     if (data.specs) {
@@ -538,6 +551,7 @@ export async function getProductsForPOS(storeId: string) {
       deletedAt: null
     },
     include: {
+      images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: { select: { id: true, name: true } },
       specs: {
         where: { productId: { not: undefined } },

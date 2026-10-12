@@ -1,3 +1,6 @@
+import { Link } from 'react-router-dom'
+import { ProductImageEditor, ProductPicture } from '../../components/ProductImageEditor'
+import { mediaApi } from '../../services/media'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -17,6 +20,8 @@ export function ProductListPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<any>(null)
   const [categoryForm, setCategoryForm] = useState({ name: '' })
+  const [images,setImages]=useState<ProductPicture[]>([])
+  const [imagesChanged,setImagesChanged]=useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [editForm, setEditForm] = useState({ code: '', name: '', categoryId: '', price: '', description: '', status: 'active' })
@@ -38,7 +43,7 @@ export function ProductListPage() {
 
   const { data: productsData, isLoading } = useQuery({
     queryKey: ['products'],
-    queryFn: () => productApi.list({ pageSize: 500 })
+    queryFn: async () => {await mediaApi.list('product',{pageSize:1});return productApi.list({ pageSize: 500 })}
   })
 
   const { data: categoriesData, refetch } = useQuery({
@@ -118,6 +123,8 @@ export function ProductListPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
       setShowEditModal(false)
+      setImages([])
+      setImagesChanged(false)
       setEditingProduct(null)
     },
     onError: (error: any) => {
@@ -181,6 +188,8 @@ export function ProductListPage() {
   }
 
   const openEditModal = (product: any) => {
+    setImages(product.images?.length?product.images:product.image?[{url:product.image}]:[])
+    setImagesChanged(false)
     setEditingProduct(product)
     setEditForm({
       code: product.code || '',
@@ -194,6 +203,8 @@ export function ProductListPage() {
   }
 
   const openAddModal = () => {
+    setImages([])
+    setImagesChanged(false)
     setEditingProduct(null)
     setEditForm({ code: '', name: '', categoryId: '', price: '', description: '', status: 'active' })
     setShowEditModal(true)
@@ -206,7 +217,8 @@ export function ProductListPage() {
     const data: any = {
       name: editForm.name,
       description: editForm.description,
-      status: editForm.status
+      status: editForm.status,
+      ...(imagesChanged?{mediaIds:images.map(i=>i.mediaId).filter(Boolean)}:{})
     }
     if (editForm.code?.trim()) {
       data.code = editForm.code.trim().toUpperCase()
@@ -389,7 +401,7 @@ export function ProductListPage() {
                   return (
                     <tr key={product.id} className="border-b last:border-0 hover:bg-gray-50">
                       <td className="py-3 pl-3 font-mono text-sm">{product.code || '-'}</td>
-                      <td className="py-3 font-medium text-gray-900">{product.name}</td>
+                      <td className="py-3 font-medium text-gray-900"><Link className="hover:text-primary" to={`/products/recipes?productId=${product.id}`}>{product.name}</Link></td>
                       <td className="py-3 text-gray-600">{getCategoryName(product.categoryId)}</td>
                       <td className="py-3 text-left font-mono">{formatCurrency(product.costPrice || 0)}</td>
                       <td className="py-3 text-left font-mono">{formatCurrency(product.specs?.[0]?.price || 0)}</td>
@@ -472,7 +484,7 @@ export function ProductListPage() {
       {/* Edit/Add Product Modal */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 pointer-events-none">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">{editingProduct ? t('common.edit') : t('common.add')} {t('products.title')}</h2>
               <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -524,6 +536,7 @@ export function ProductListPage() {
                   className="input w-full"
                 />
               </div>
+              <ProductImageEditor images={images} onChange={next=>{setImages(next);setImagesChanged(true)}} />
               <div>
                 <label className="block text-sm font-medium mb-1">{t('products.description') }</label>
                 <textarea

@@ -27,7 +27,7 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('Inventory','ledgerSequence','BIGINT NOT NULL DEFAULT 0'), ('Inventory','ledgerEpoch','BIGINT NOT NULL DEFAULT 0'),
     ('StockInLog','ledgerSequence','BIGINT'), ('StockOutLog','ledgerSequence','BIGINT'),
     ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'")]
-CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence and LocalSchemaMigration tables and indexes', 'Order_pickupNumber_idx nonunique index']
+CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes', 'Order_pickupNumber_idx nonunique index']
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
 CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
@@ -122,7 +122,7 @@ def integrity(c):
 def catalog_from_empty(db, source_sha):
     with closing(connection(db)) as c:
         integrity(c)
-        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ('PaymentEvidence','LocalSchemaMigration')) OR (type='index' AND tbl_name IN ('PaymentEvidence','LocalSchemaMigration') AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name")]}
+        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference')) OR (type='index' AND tbl_name IN ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference') AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name")]}
         for table in tables(c):
             if c.execute('SELECT count(*) FROM ' + quote(table)).fetchone()[0]:
                 fail('CATALOG_REQUIRES_EMPTY_TEMPLATE')
@@ -141,7 +141,7 @@ def supported_schema(c, catalog, allow_missing=True):
     actual_tables = set(tables(c))
     for table, expected in catalog['tables'].items():
         if table not in actual_tables:
-            if table in ('PaymentEvidence','LocalSchemaMigration') and allow_missing:
+            if table in ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference') and allow_missing:
                 continue
             fail('UNSUPPORTED_SCHEMA_MISSING_TABLE')
         fields = {r[1]: {'type': r[2].upper(), 'notnull': r[3], 'pk': r[5]}
@@ -762,9 +762,9 @@ def prepare(db, old_app, catalog, processes, registry=None, staged=None):
                     c.execute('ALTER TABLE '+quote(table)+' ADD COLUMN '+quote(name)+' '+declaration)
                     added_columns.append(table+'.'+name)
                     if table=='Order' and name=='pickupNumber': added_column=True
-            if any(table in catalog['tables'] and table not in tables(c) for table in ('PaymentEvidence','LocalSchemaMigration')):
+            if any(table in catalog['tables'] and table not in tables(c) for table in ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference')):
                 ddl=catalog.get('newTableDDL',[])
-                if not ddl or any(not any(table in statement for table in ('PaymentEvidence','LocalSchemaMigration')) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
+                if not ddl or any(not any(table in statement for table in ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference')) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
                 for statement in ddl: c.execute(statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ', 1).replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ', 1).replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ', 1))
             added_index = not supported_schema(c, catalog, allow_missing=False)
             if added_index:

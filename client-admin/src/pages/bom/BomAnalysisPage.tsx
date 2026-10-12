@@ -1,16 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { bomApi } from '../../services/api'
+import { bomApi, receiptMediaUrl } from '../../services/api'
 import { formatCurrency, formatItemName } from '../../utils/helpers'
 import { Loader2, Package, Search, Edit3 } from 'lucide-react'
 
 export function BomAnalysisPage() {
   const { t, i18n } = useTranslation()
-  const [activeTab, setActiveTab] = useState<'products' | 'materials'>('products')
+  const [searchParams,setSearchParams]=useSearchParams()
+  const requestedProductId=searchParams.get('productId')
+  const [activeImage,setActiveImage]=useState(0)
+  const [specId,setSpecId]=useState('')
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
-  const [forecastDays, setForecastDays] = useState(30)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
 
@@ -21,21 +23,15 @@ export function BomAnalysisPage() {
   })
 
   // Selected product BOM detail
-  const { data: productDetail, isLoading: detailLoading } = useQuery({
-    queryKey: ['bom-product', selectedProduct?.id],
-    queryFn: () => bomApi.getProductDetail(selectedProduct!.id),
-    enabled: !!selectedProduct?.id
-  })
-
-  // Material usage forecast
-  const { data: usageData, isLoading: usageLoading } = useQuery({
-    queryKey: ['bom-usage', forecastDays],
-    queryFn: () => bomApi.getMaterialUsage(forecastDays)
+  const { data: productDetail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail } = useQuery({
+    queryKey: ['bom-product', requestedProductId||selectedProduct?.id],
+    queryFn: () => bomApi.getProductDetail(requestedProductId||selectedProduct!.id),
+    enabled: !!(requestedProductId||selectedProduct?.id)
   })
 
   const products = useMemo(() => productsData?.data?.data?.list || [], [productsData])
-  const usageList = usageData?.data?.data || []
   const detail = productDetail?.data?.data
+  const currentProduct=requestedProductId?(selectedProduct?.id===requestedProductId?selectedProduct:detail?.id===requestedProductId?detail:null):selectedProduct
 
   // Extract all categories
   const categories = useMemo(() => {
@@ -58,20 +54,23 @@ export function BomAnalysisPage() {
     })
   }, [products, searchTerm, selectedCategory])
 
-  // Auto-select first product
   useEffect(() => {
-    if (!selectedProduct && filteredProducts.length > 0) {
-      setSelectedProduct(filteredProducts[0])
-    }
-  }, [filteredProducts, selectedProduct])
-
-  const sellingPrice = detail?.specs?.[0]?.price || selectedProduct?.sellingPrice || 0
-  const bomCost = detail?.totalBomCost || selectedProduct?.bomCost || 0
+    const requested=searchParams.get('productId')
+    const match=products.find((p:any)=>p.id===requested)
+    if(requested) setSelectedProduct(match||null)
+    else if(!selectedProduct || !filteredProducts.some((p:any)=>p.id===selectedProduct.id))setSelectedProduct(filteredProducts[0]||null)
+  },[filteredProducts,searchParams])
+  useEffect(()=>{setActiveImage(0);setSpecId('')},[selectedProduct?.id])
+  const images=detail?.images?.length?detail.images:detail?.image?[{url:detail.image}]:[]
+  const selectedSpec=detail?.specs?.find((s:any)=>s.id===specId)||detail?.specs?.find((s:any)=>s.isDefault)||detail?.specs?.[0]
+  const sellingPrice = selectedSpec?.price ?? currentProduct?.sellingPrice ?? 0
+  const bomCost = detail?.totalBomCost ?? currentProduct?.bomCost ?? 0
   const grossProfit = sellingPrice - bomCost
   const profitRate = sellingPrice > 0 ? Math.round((grossProfit / sellingPrice) * 100) : 0
 
   return (
     <div className="space-y-6">
+      {detailError&&<p className="text-red-600" role="alert">{t('media.failed')} <button type="button" className="btn" onClick={()=>refetchDetail()}>{t('media.retry')}</button></p>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -80,44 +79,10 @@ export function BomAnalysisPage() {
           </h1>
         </div>
 
-        {activeTab === 'materials' && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600">{t('bom.forecastPeriod')}:</span>
-            <select
-              value={forecastDays}
-              onChange={(e) => setForecastDays(parseInt(e.target.value))}
-              className="input w-36"
-            >
-              <option value={7}>{t('bom.days7')}</option>
-              <option value={30}>{t('bom.days30')}</option>
-              <option value={90}>{t('bom.days90')}</option>
-            </select>
-          </div>
-        )}
-      </div>
-
-      {/* Sub Tabs */}
-      <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex overflow-x-auto max-w-full">
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-            activeTab === 'products' ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          {t('bom.productCosts')}
-        </button>
-        <button
-          onClick={() => setActiveTab('materials')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-            activeTab === 'materials' ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          {t('bom.materialForecast')}
-        </button>
       </div>
 
       {/* Products Tab Content */}
-      {activeTab === 'products' && (
+      {(
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Product List */}
           <div className="lg:col-span-4 space-y-4">
@@ -184,13 +149,13 @@ export function BomAnalysisPage() {
                 </div>
               ) : (
                 filteredProducts.map((product: any) => {
-                  const isSelected = selectedProduct?.id === product.id
+                  const isSelected = currentProduct?.id === product.id
                   const hasBom = product.bomItemCount > 0
 
                   return (
                     <div
                       key={product.id}
-                      onClick={() => setSelectedProduct(product)}
+                      onClick={() => {setSelectedProduct(product);setSearchParams({productId:product.id})}}
                       className={`p-4 cursor-pointer transition-colors ${
                         isSelected
                           ? 'bg-primary/10 border-l-4 border-l-primary'
@@ -239,19 +204,19 @@ export function BomAnalysisPage() {
 
           {/* Right Column: Recipe Details */}
           <div className="lg:col-span-8 space-y-6">
-            {selectedProduct && (
+            {currentProduct && (
               <div className="card p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">
-                    {selectedProduct.name}
+                    {currentProduct.name}
                   </h2>
                   <p className="text-xs text-gray-500 font-mono mt-0.5">
-                    {t('bom.productCode')}: {selectedProduct.code}
+                    {t('bom.productCode')}: {currentProduct.code}
                   </p>
                 </div>
 
                 <Link
-                  to={`/products/${selectedProduct.id}/recipe`}
+                  to={`/products/${currentProduct.id}/recipe`}
                   className="btn btn-primary btn-sm flex items-center gap-1.5"
                 >
                   <Edit3 size={16} />
@@ -260,11 +225,17 @@ export function BomAnalysisPage() {
               </div>
             )}
 
+            {currentProduct && <div className="card space-y-3">
+              {images.length ? <><img src={receiptMediaUrl(images[activeImage]?.url||images[0].url)} alt={currentProduct.name} className="w-full max-h-80 object-contain rounded-lg" /><div className="flex gap-2">{images.map((img:any,index:number)=><button type="button" key={img.mediaId||img.url} aria-label={`${currentProduct.name} ${index+1}`} aria-pressed={activeImage===index} onClick={()=>setActiveImage(index)} className={`border-2 rounded-lg ${activeImage===index?'border-primary':'border-transparent'}`}><img src={receiptMediaUrl(img.url)} alt="" className="w-16 h-16 object-cover rounded" /></button>)}</div></> : <p className="text-sm text-gray-400">{t('media.noImage')}</p>}
+              {!!detail?.specs?.length && <select aria-label={t('insights.specs')} className="input w-auto" value={selectedSpec?.id||''} onChange={e=>setSpecId(e.target.value)}>{detail.specs.map((spec:any)=><option key={spec.id} value={spec.id}>{spec.name}</option>)}</select>}
+              <Link className="text-primary text-sm" to={`/products/${currentProduct.id}/edit`}>{t('common.edit')}</Link>
+            </div>}
+
             {detailLoading ? (
               <div className="card flex justify-center py-24">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
               </div>
-            ) : selectedProduct && detail ? (
+            ) : currentProduct && detail ? (
               <div className="space-y-6">
                 {/* 3 Standard KPI Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -371,7 +342,7 @@ export function BomAnalysisPage() {
                     <div className="text-center py-12 text-gray-500">
                       <p className="text-sm">{t('bom.noMaterials')}</p>
                       <Link
-                        to={`/products/${selectedProduct.id}/recipe`}
+                        to={`/products/${currentProduct.id}/recipe`}
                         className="btn btn-primary btn-sm mt-3 inline-flex items-center gap-1.5"
                       >
                         <Edit3 size={16} />
@@ -391,67 +362,6 @@ export function BomAnalysisPage() {
         </div>
       )}
 
-      {/* Materials Forecast Tab Content */}
-      {activeTab === 'materials' && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold text-gray-900">
-              {t('bom.materialForecast')} ({forecastDays} {t('bom.days')})
-            </h3>
-          </div>
-
-          {usageLoading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            </div>
-          ) : usageList.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">
-              {t('common.noData')}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-gray-500 border-b">
-                    <th className="pb-3 font-medium min-w-[200px]">{t('inventory.itemName')}</th>
-                    <th className="pb-3 font-medium whitespace-nowrap text-right">{t('inventory.currentStock')}</th>
-                    <th className="pb-3 font-medium whitespace-nowrap text-right">{t('bom.dailyUsage')}</th>
-                    <th className="pb-3 font-medium whitespace-nowrap text-right">{t('bom.totalUsage')}</th>
-                    <th className="pb-3 font-medium whitespace-nowrap text-right">{t('bom.daysLeft')}</th>
-                    <th className="pb-3 font-medium whitespace-nowrap text-right">{t('bom.suggestOrder')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usageList.map((item: any, idx: number) => (
-                    <tr key={idx} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="py-3 text-sm font-medium text-gray-900">
-                        {formatItemName(item.name, i18n.language)}
-                      </td>
-                      <td className="py-3 text-sm text-right whitespace-nowrap">
-                        {item.currentStock} {item.unit}
-                      </td>
-                      <td className="py-3 text-sm text-right whitespace-nowrap text-gray-600">
-                        {item.dailyUsage} {item.unit}
-                      </td>
-                      <td className="py-3 text-sm text-right whitespace-nowrap font-medium text-gray-900">
-                        {item.totalUsage} {item.unit}
-                      </td>
-                      <td className="py-3 text-sm text-right whitespace-nowrap">
-                        <span className={`badge ${item.daysLeft <= 7 ? 'badge-error' : item.daysLeft <= 15 ? 'badge-warning' : 'badge-success'}`}>
-                          {item.daysLeft} {t('bom.days')}
-                        </span>
-                      </td>
-                      <td className="py-3 text-sm text-right whitespace-nowrap font-medium text-primary">
-                        {item.suggestedOrder > 0 ? `${item.suggestedOrder} ${item.unit}` : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

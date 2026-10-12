@@ -1,3 +1,4 @@
+import { MediaPicker } from '../../components/MediaLibrary'
 import { LogoSettingsDialog, LogoColor, LogoSources } from '../../components/LogoSettingsDialog'
 import { CustomerDisplayCanvas } from '../../../../shared/components/CustomerDisplayCanvas'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../../shared/utils/customerDisplayAppearance'
@@ -28,6 +29,7 @@ const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled,
 
 // Media file type
 interface MediaFile {
+  mediaId?: string
   url: string
   filename: string
   mimetype: string
@@ -42,6 +44,7 @@ const DualScreenMediaUpload: React.FC<{
   onMediaFilesChange?: (getNewFiles: (current: MediaFile[]) => MediaFile[]) => void
 }> = ({ mediaFiles, onUpload, onRemove, onMediaFilesChange }) => {
   const { t } = useTranslation()
+  const [showPicker,setShowPicker]=useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -130,6 +133,12 @@ const DualScreenMediaUpload: React.FC<{
       {uploadError && <p role="alert" className="text-sm text-red-600">{uploadError}</p>}
 
       {/* Preview Grid */}
+      <button type="button" className="btn" onClick={()=>setShowPicker(true)}>{t('media.choose')}</button>
+      {showPicker&&<MediaPicker scene="display" onClose={()=>setShowPicker(false)} onSelect={assets=>{
+        const added=assets.map(a=>({mediaId:a.id,url:a.url,filename:a.name,mimetype:a.mimeType,isVideo:a.kind==='video'}))
+        const merge=(current:MediaFile[])=>[...current,...added.filter(a=>!current.some(f=>f.mediaId===a.mediaId))]
+        if(onMediaFilesChange)onMediaFilesChange(merge);else onUpload(merge(mediaFiles));setShowPicker(false)
+      }} />}
       {mediaFiles.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
           {mediaFiles.map((file, index) => (

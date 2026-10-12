@@ -1,3 +1,4 @@
+import { saveMediaConfig } from '../services/MediaService'
 import { prepareReceiptLogoConfig, ReceiptLogoConflict } from '../utils/receiptLogoConfig'
 import {internalConfigWhere,isInternalConfig,isSecretConfig} from '../utils/configAccess'
 import { isTrainingLibraryKey, ordinaryConfigWhere } from '../services/TrainingLibraryStore'
@@ -162,11 +163,7 @@ router.put('/hardware-settings', authenticate, async (req: AuthRequest, res) => 
     }
     if (storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({code:403,message:'Store access denied'})
     const valueStr = JSON.stringify(hardwareSettings)
-    const config = await prisma.config.upsert({
-      where: { storeId_key: { storeId, key: 'hardwareSettings' } },
-      create: { storeId, key: 'hardwareSettings', value: valueStr, category: 'pos' },
-      update: { value: valueStr, category: 'pos' }
-    })
+    const config = await prisma.$transaction(tx => saveMediaConfig(tx,storeId,'hardwareSettings',hardwareSettings,'pos'))
     res.json({ code: 200, message: 'Hardware settings saved', timestamp: new Date().toISOString() })
   } catch (error) {
     console.error('Save hardware settings error:', error)
@@ -186,11 +183,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
     const preparedValue = await prepareConfigValue(storeId, key, value)
     const valueStr = typeof preparedValue === 'string' ? preparedValue : JSON.stringify(preparedValue)
 
-    const config = await prisma.config.upsert({
-      where: { storeId_key: { storeId, key } },
-      create: { storeId, key, value: valueStr, category },
-      update: { value: valueStr, category }
-    })
+    const config = await prisma.$transaction(tx => saveMediaConfig(tx,storeId,key,value,category))
 
     res.json({
       code: 200,
@@ -217,23 +210,7 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
     if (configs.some((c: { key?: string }) => c?.key === 'paymentMethods') && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (configs.some((c: any) => isTrainingLibraryKey(c?.key))) return res.status(403).json({code:403,message:'Protected training content'})
     const preparedConfigs = await Promise.all(configs.map(async (c: any) => ({ ...c, value: await prepareConfigValue(storeId, c.key, c.value) })))
-    await prisma.$transaction(
-      preparedConfigs.map((c: any) =>
-        prisma.config.upsert({
-          where: { storeId_key: { storeId, key: c.key } },
-          create: {
-            storeId,
-            key: c.key,
-            value: typeof c.value === 'string' ? c.value : JSON.stringify(c.value),
-            category: c.category
-          },
-          update: {
-            value: typeof c.value === 'string' ? c.value : JSON.stringify(c.value),
-            category: c.category
-          }
-        })
-      )
-    )
+    await prisma.$transaction(async tx => {for(const c of configs) await saveMediaConfig(tx,storeId,c.key,c.value,c.category)})
 
     res.json({
       code: 200,
@@ -255,8 +232,9 @@ router.delete('/:storeId/:key', authenticate, authorize('admin'), async (req: Au
     if (isTrainingLibraryKey(key)) return res.status(403).json({code:403,message:'Protected training content'})
     if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
-    await prisma.config.delete({
-      where: { storeId_key: { storeId, key } }
+    await prisma.$transaction(async tx=>{
+      await tx.mediaReference.deleteMany({where:{storeId,configKey:key}})
+      await tx.config.delete({where:{storeId_key:{storeId,key}}})
     })
 
     res.json({

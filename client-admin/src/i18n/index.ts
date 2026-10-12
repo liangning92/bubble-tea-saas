@@ -1,3 +1,4 @@
+import { mediaInsightsTranslations } from './mediaInsights'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
@@ -12190,6 +12191,12 @@ Object.assign(resources.en.translation.staff, {
   salaryLink: 'View Payroll', depositRulesLabel: 'Deposit Rules', attendanceRulesLabel: 'Attendance Rules',
   attendanceRulesDescription: 'Manage attendance and deduction rules'
 })
+
+for (const language of ['zh','en','id'] as const) {
+  Object.assign(resources[language].translation, mediaInsightsTranslations[language])
+  resources[language].translation.products.recipeAndCost = mediaInsightsTranslations[language].media.productDetail
+  resources[language].translation.bom.recipeAndCost = mediaInsightsTranslations[language].media.productDetail
+}
 
 i18n.use(initReactI18next).init({
   resources,

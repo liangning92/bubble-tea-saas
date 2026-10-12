@@ -6,6 +6,7 @@ import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 
+const MediaLibraryPage = lazy(() => import('./pages/marketing/MediaLibraryPage').then(m => ({ default: m.MediaLibraryPage })))
 const MessageLogPage = lazy(() => import('./pages/marketing/MessageLogPage').then(module => ({default:module.MessageLogPage})))
 const MarketingOverviewPage = lazy(() => import('./pages/marketing/MarketingOverviewPage').then(module => ({ default: module.MarketingOverviewPage })))
 const ActivitiesPage = lazy(() => import('./pages/marketing/ActivitiesPage').then(module => ({ default: module.ActivitiesPage })))
@@ -279,6 +280,7 @@ function App() {
             <Route path="timed-specials" element={<Navigate to="/marketing/promotions/activities" replace />} />
             <Route path="stacking-rules" element={<Navigate to="/marketing/promotions/activities" replace />} />
             <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
+          <Route path="media" element={<MediaLibraryPage />} />
           </Route>
 
           {/* 会员 */}
@@ -322,6 +324,7 @@ function App() {
 
           {/* 电视大屏互动 */}
           <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
+          <Route path="media" element={<MediaLibraryPage />} />
         </Route>
 
         {/* 卫生管理 */}

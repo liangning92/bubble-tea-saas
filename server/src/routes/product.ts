@@ -19,6 +19,7 @@ const createProductSchema = z.object({
   description: z.string().optional(),
   categoryId: z.string(),
   image: z.string().optional(),
+  mediaIds: z.array(z.string()).max(5).refine(ids => new Set(ids).size === ids.length).optional(),
   status: z.string().optional(),
   tags: z.array(z.string()).optional(),
   specs: z.array(z.object({
@@ -195,7 +196,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 })
 
 // PUT /api/products/:id
-router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), validateBody(updateProductSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const product = await ProductService.updateProduct(id, req.body)

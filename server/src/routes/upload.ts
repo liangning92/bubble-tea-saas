@@ -1,3 +1,7 @@
+import { mediaAccess } from './media'
+import { saveMediaFiles } from '../services/MediaService'
+import { uploadRoot, mediaPath } from '../utils/mediaFiles'
+import prisma from '../config/database'
 import { Router } from 'express'
 // @ts-ignore - multer types not available
 import multer from 'multer'
@@ -9,7 +13,6 @@ import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 const router = Router()
 
 // Ensure upload directories exist
-const uploadRoot = process.env.UPLOADS_PATH || path.resolve(__dirname, '../../uploads')
 const dirs = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen', 'tvMusic'].map(dir => path.join(uploadRoot, dir))
 dirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
@@ -118,15 +121,15 @@ router.post('/tvMusic', authenticate, authorize('admin', 'manager'), (req: AuthR
 })
 
 // POST /api/upload/product - Upload product image
-router.post('/product', authenticate, uploadProduct.array('images', 5), (req: AuthRequest, res) => {
+router.post('/product', authenticate, (req: AuthRequest,res,next)=>{req.query.scene='product';mediaAccess(req,res,next)}, uploadProduct.array('images', 5), async (req: AuthRequest, res) => {
   try {
     const files = req.files as any[]
-    const urls = files.map(file => `/uploads/products/${file.filename}`)
-
+    const assets=await saveMediaFiles(req.user!.storeId,req.user!.id,files,['image'])
+    const urls=assets.map(a=>a.url)
     res.json({
       code: 200,
       message: 'Images uploaded successfully',
-      data: { urls, filenames: files.map(f => f.filename) },
+      data: { urls, filenames: assets.map(a=>a.storagePath.split('/').pop()), files: assets },
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -136,7 +139,7 @@ router.post('/product', authenticate, uploadProduct.array('images', 5), (req: Au
 })
 
 // POST /api/upload/receipt - Upload receipt image
-router.post('/receipt', authenticate, uploadReceipt.array('receipts', 5), (req: AuthRequest, res) => {
+router.post('/receipt', authenticate, uploadReceipt.array('receipts', 5), async (req: AuthRequest, res) => {
   try {
     const files = req.files as any[]
     const urls = files.map(file => `/uploads/receipts/${file.filename}`)
@@ -154,7 +157,7 @@ router.post('/receipt', authenticate, uploadReceipt.array('receipts', 5), (req: 
 })
 
 // POST /api/upload/attachment - Upload general attachment
-router.post('/attachment', authenticate, uploadAttachment.array('files', 10), (req: AuthRequest, res) => {
+router.post('/attachment', authenticate, uploadAttachment.array('files', 10), async (req: AuthRequest, res) => {
   try {
     const files = req.files as any[]
     const urls = files.map(file => `/uploads/attachments/${file.filename}`)
@@ -194,17 +197,12 @@ router.post('/avatar', authenticate, uploadAvatar.single('avatar'), (req: AuthRe
 })
 
 // POST /api/upload/dualScreen - Upload dual screen images/videos
-router.post('/dualScreen', authenticate, uploadDualScreen.array('files', 10), (req: AuthRequest, res) => {
+router.post('/dualScreen', authenticate, (req: AuthRequest,res,next)=>{req.query.scene='display';mediaAccess(req,res,next)}, uploadDualScreen.array('files', 10), async (req: AuthRequest, res) => {
   try {
     const files = req.files as any[]
-    const urls = files.map(file => `/uploads/dualScreen/${file.filename}`)
-    const fileInfos = files.map(file => ({
-      url: `/uploads/dualScreen/${file.filename}`,
-      filename: file.filename,
-      mimetype: file.mimetype,
-      size: file.size,
-      isVideo: file.mimetype.startsWith('video/')
-    }))
+    const assets=await saveMediaFiles(req.user!.storeId,req.user!.id,files,['image','video'])
+    const urls=assets.map(a=>a.url)
+    const fileInfos=assets.map(a=>({...a,mediaId:a.id,filename:a.storagePath.split('/').pop(),mimetype:a.mimeType,isVideo:a.kind==='video'}))
 
     res.json({
       code: 200,
@@ -219,7 +217,7 @@ router.post('/dualScreen', authenticate, uploadDualScreen.array('files', 10), (r
 })
 
 // DELETE /api/upload/:type/:filename - Delete uploaded file
-router.delete('/:type/:filename', authenticate, (req: AuthRequest, res) => {
+router.delete('/:type/:filename', authenticate, async (req: AuthRequest, res) => {
   try {
     const { type, filename } = req.params
     const allowedTypes = ['products', 'receipts', 'attachments', 'avatars', 'dualScreen']
@@ -228,7 +226,10 @@ router.delete('/:type/:filename', authenticate, (req: AuthRequest, res) => {
       return res.status(400).json({ code: 400, message: 'Invalid file type' })
     }
 
-    const filepath = path.join('uploads', type, filename)
+    if (['products','dualScreen'].includes(type)) return res.status(403).json({code:403,message:'DELETE_MEDIA_FROM_LIBRARY'})
+    const tracked=await prisma.mediaAsset.findUnique({where:{storagePath:`${type}/${filename}`}})
+    if(tracked)return res.status(403).json({code:403,message:'DELETE_MEDIA_FROM_LIBRARY'})
+    const filepath=mediaPath(`${type}/${filename}`)
 
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ code: 404, message: 'File not found' })

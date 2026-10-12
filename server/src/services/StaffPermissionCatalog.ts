@@ -83,6 +83,9 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (method==='POST' && /^\/orders\/received-receipts$/.test(path)) return null
   if (/^\/sync\/order$/.test(path)) return 'orders.create'
   if (/^\/queue(?:\/|$)/.test(path)) return read ? 'orders.read' : 'orders.status'
+  if (method==='PUT' && path==='/config/hardware-settings') return 'orders.create'
+  if (read && /^\/product-analysis\/insights(?:\/|$)/.test(path)) return 'products.read'
+  if (/^\/media(?:\/|$)/.test(path)) return null // Media routes enforce scene permissions.
   if (/^\/upload(?:\/|$)/.test(path)) return null
   if (/^\/inventory\/stock-in(?:\/|$)/.test(path) && !read) return 'inventory.stockIn'
   if (/^\/inventory\/stock-out(?:\/|$)/.test(path) && !read) return 'inventory.stockOut'

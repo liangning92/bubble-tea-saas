@@ -1,3 +1,4 @@
+import { mediaRouter } from './routes/media'
 import { startEmployeeWorker } from './services/EmployeeReminderService'
 import { employeeWorkspaceRouter } from './routes/employeeWorkspace'
 import { isDisplayPublicRoute } from './utils/displayPublicRoute'
@@ -263,6 +264,7 @@ app.use('/api/reimbursement', reimbursementRouter)
 app.use('/api/leave-types', leaveTypeRouter)
 app.use('/api/reimbursement-types', reimbursementTypeRouter)
 app.use('/api/upload', uploadRouter)
+app.use('/api/media', mediaRouter)
 app.use('/api/addons', addonRouter)
 app.use('/api/inventory-counts', inventoryCountRouter)
 app.use('/api/process-recipes', processRecipeRouter)
