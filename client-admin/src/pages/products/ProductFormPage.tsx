@@ -1,5 +1,5 @@
 import { MediaPicker } from '../../components/MediaLibrary'
-import { mediaApi } from '../../services/media'
+import { mediaUploadError, mediaApi } from '../../services/media'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -189,13 +189,13 @@ export function ProductFormPage() {
     setIsUploading(true)
     try {
       const fileArray = Array.from(files)
-      if(uploadedImages.length + fileArray.length > 5) throw Error(t('media.maxImages'))
+      if(uploadedImages.length + fileArray.length > 5) throw Error('INVALID_PRODUCT_IMAGES')
       const response = await mediaApi.upload('product',fileArray)
       const newImages = response.data.data.list.map((a:any)=>({url:a.url,mediaId:a.id}))
       setUploadedImages(prev => [...prev.filter(i=>i.mediaId), ...newImages].slice(0,5))
     } catch (error: any) {
       console.error('Upload failed:', error)
-      const msg = error?.response?.data?.message || error?.message || t('products.imageUploadFailed')
+      const msg = t(mediaUploadError(error))
       alert(msg)
     } finally {
       setIsUploading(false)

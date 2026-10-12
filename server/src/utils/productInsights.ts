@@ -107,3 +107,12 @@ export function productPreferences(orders:any[],productId:string) {
   const ratios=(map:Map<string,any>)=>[...map.values()].map(r=>({...r,percentage:total?r.quantity/total*100:0})).sort((a,b)=>b.quantity-a.quantity)
   return {total,specs:ratios(specs),addons:ratios(addons)}
 }
+
+// Rank within each quadrant after classification using the entire sales population.
+export function productQuadrants(rows:any[]) {
+  return ['star','plowhorse','puzzle','dog'].map(type=>{
+    const products=rows.filter(row=>row.matrixType===type&&row.quantity>0&&row.margin!==null)
+      .sort((a,b)=>b.quantity-a.quantity||b.margin-a.margin||a.productId.localeCompare(b.productId))
+    return {type,count:products.length,products:products.slice(0,5)}
+  })
+}
