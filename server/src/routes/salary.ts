@@ -259,6 +259,10 @@ router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, asyn
       if(before.status==='pending'&&await review(tx,before.staff.storeId!,before.staffId,before.month))throw new SalaryConflict('SALARY_REVIEW_REQUIRED')
       const basis=await savedPayrollBasis(tx,before.staff.storeId!,before.id)
       if(before.status==='pending'&&basis?.employmentNeedsReview)throw new SalaryConflict('SALARY_EMPLOYMENT_RECALC_REQUIRED')
+      if(before.status==='pending'&&basis&&!basis.manualCorrection&&!basis.manualAdjustment&&basis.daysSource!=='manual'){
+        const current=await calculateSalary(before.staffId,Number(before.month.slice(5)),Number(before.month.slice(0,4)))
+        if(current.totalSalary<0)throw new SalaryConflict('SALARY_REVIEW_REQUIRED')
+      }
       const changed = await tx.salary.updateMany({ where: { id: req.params.id, status: 'pending' }, data: { status: 'paid' } })
       const salary = await tx.salary.findUniqueOrThrow({ where: { id: req.params.id } })
       if (changed.count === 1) {
