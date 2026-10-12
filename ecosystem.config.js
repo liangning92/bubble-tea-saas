@@ -17,7 +17,8 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: '7072',
-        DATABASE_URL: 'file:/Users/liangning/Desktop/Claude_Work/bubble-tea-saas/server/prisma/dev.db',
+        DATABASE_URL: `file:${path.join(WORKDIR, 'server/prisma/dev.db')}`,
+        CORS_ORIGIN: 'http://localhost:5173,http://localhost:6063,http://localhost:7072,http://127.0.0.1:5173,http://127.0.0.1:6063,http://127.0.0.1:7072',
       },
       error_file: '../logs/tea-server-err.log',
       out_file: '../logs/tea-server-out.log',
