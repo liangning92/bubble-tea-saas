@@ -29,6 +29,7 @@ GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
 REG = 'Software\\' + GUID
 DATA = pathlib.Path(os.environ['APPDATA']) / 'BTPS'
 assert not DATA.exists(), 'Runner profile must have no existing POS data'
+OWNED_PROFILES = {DATA}
 try:
     winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG)
 except FileNotFoundError:
@@ -405,12 +406,19 @@ try:
     if SCOPE in ('installer', 'legacy'):
         # Use the latest checked-in authentic updater as the routine upgrade path.
         historical_profile = pathlib.Path(os.environ['APPDATA']) / 'bubble-tea-saas'
-        assert not (historical_profile / 'data/dev.db').exists(), 'Runner must have no historical database'
+        assert not historical_profile.exists(), 'Runner must have no historical profile'
         (historical_profile / 'data').mkdir(parents=True, exist_ok=True)
+        OWNED_PROFILES.add(historical_profile)
         shutil.copy2(DB, historical_profile / 'data/dev.db')
-        alternate_profile = DATA
-        DATA = historical_profile
-        DB = historical_profile / 'data/dev.db'
+        if SCOPE == 'legacy':
+            # 295 opens the original bubble-tea-saas profile; later versions
+            # retain that profile when upgrading through the whole matrix.
+            alternate_profile = DATA
+            DATA = historical_profile
+            DB = historical_profile / 'data/dev.db'
+        else:
+            # A standalone 392 installation opens BTPS, not the 295 profile.
+            alternate_profile = historical_profile
         authentic_validate = runpy.run_path(str(ROOT / 'scripts/validate-authentic-295-upgrade.py'))['validate']
         if SCOPE == 'legacy':
             authentic = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile)
@@ -448,5 +456,5 @@ finally:
     # Remove only fixture roots created after absence assertions in this script.
     # On failure retain all synthetic artifacts for CI diagnosis.
     if COMPLETED:
-        for profile in {DATA, pathlib.Path(os.environ['APPDATA']) / 'BTPS'}:
+        for profile in OWNED_PROFILES:
             shutil.rmtree(profile)
