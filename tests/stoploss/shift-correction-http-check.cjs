@@ -39,18 +39,19 @@ if(!/^\/tmp\/pos-(?:intent-http-runtime(?:-[\w-]+)?|idempotency-runtime-[\w-]+)$
  async function correction(id,body,token=tokens.owner){const r=await fetch(base+'/api/finance/shift-sessions/'+id+'/correction',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:r.status,body:await r.json()}}
  const session=await prisma.shiftSession.findUniqueOrThrow({where:{id:'morning-1'}});
  const revision=session.updatedAt.toISOString();
- const payload={updatedAt:revision,manualReceipts:{cash:50000,qris:0,shopeefood:0,gofood:0},reason:'Synthetic correction'};
+ const payload={updatedAt:revision,openFloat:50000,manualReceipts:{cash:50000,qris:0,shopeefood:0,gofood:0},reason:'Synthetic correction'};
  await prisma.config.create({data:{storeId:'store',key:'pos.shift.report:morning-1',category:'shift_report',value:JSON.stringify({cashReconciliation:{openFloat:100000,cashFromRevenue:0,expectedCash:100000,expenses:0,revenue:0,qris:0}})}});
  assert.equal((await correction('morning-1',payload,tokens.manager)).status,403);
  assert.equal((await correction('morning-1',payload,tokens['foreign-owner'])).status,404);
  assert.equal((await correction('morning-1',{...payload,reason:''})).status,400);
- const corrected=await correction('morning-1',payload);assert.equal(corrected.status,200);assert.equal(corrected.body.data.openFloat,100000);assert.equal(corrected.body.data.cashDifference,-50000);
+ const corrected=await correction('morning-1',payload);assert.equal(corrected.status,200);assert.equal(corrected.body.data.openFloat,50000);assert.equal(corrected.body.data.cashDifference,0);
  assert.equal((await correction('morning-1',payload)).status,409);
  const audit=await prisma.financeAuditLog.findFirstOrThrow({where:{entityType:'shift_correction'}});assert.equal(JSON.parse(audit.oldValue).session.openFloat,100000);assert.equal(audit.description,'Synthetic correction');
- const refreshed=(await get()).body.data.sessions.find(s=>s.id==='morning-1');assert.equal(refreshed.manualReceipts.qris,0);assert.equal(refreshed.session.openFloat,100000);assert.equal(refreshed.cashReconciliation.expectedCash,100000);
+ const refreshed=(await get()).body.data.sessions.find(s=>s.id==='morning-1');assert.equal(refreshed.manualReceipts.qris,0);assert.equal(refreshed.session.openFloat,50000);assert.equal(refreshed.cashReconciliation.expectedCash,50000);
  const open=await prisma.shiftSession.create({data:{id:'open-correction',storeId:'store',staffId:'cashier',shift:'morning',openFloat:100,status:'open'}});
- assert.equal((await correction(open.id,{...payload,updatedAt:open.updatedAt.toISOString()})).status,400);
- for(const extra of [{openFloat:0},{actualCash:0},{expectedCash:0},{revenue:0}])assert.equal((await correction('morning-1',{...payload,...extra})).status,400);
+ assert.equal((await correction(open.id,{updatedAt:open.updatedAt.toISOString(),openFloat:0,reason:'Verified opening correction'})).status,200);
+ const correctedOpen=await prisma.shiftSession.findUniqueOrThrow({where:{id:open.id}});assert.equal(correctedOpen.openFloat,0);assert.equal(correctedOpen.status,'open');
+ for(const extra of [{actualCash:0},{expectedCash:0},{revenue:0}])assert.equal((await correction('morning-1',{...payload,...extra})).status,400);
  console.log('PASS actual HTTP/SQLite correction authorization, store isolation, zero amounts, derived report, audit history and stale writes');
 
  if(process.env.SHIFT_CORRECTION_UI==='1'){
@@ -62,9 +63,9 @@ if(!/^\/tmp\/pos-(?:intent-http-runtime(?:-[\w-]+)?|idempotency-runtime-[\w-]+)$
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:6317/dashboard/shifts');
  await page.getByLabel('开始日期',{exact:true}).fill('2026-10-07');await page.getByLabel('结束日期',{exact:true}).fill('2026-10-07');await page.locator('table').first().locator('tbody tr').first().getByRole('button',{name:'查看详情',exact:true}).click();
  const form=page.getByTestId('shift-correction');await form.getByRole('button',{name:'更正班次金额',exact:true}).click();
- assert.equal(await form.locator('input').count(),4);assert.equal(await form.getByText('备用金',{exact:true}).count(),0);await form.getByRole('textbox').nth(0).fill('100000');await form.getByRole('textbox').nth(1).fill('60000');await form.getByRole('textbox').last().fill('Synthetic UI correction');
+ assert.equal(await form.locator('input').count(),5);await form.getByRole('textbox').nth(0).fill('60000');await form.getByRole('textbox').nth(1).fill('60000');await form.getByRole('textbox').last().fill('Synthetic UI correction');
  await form.getByRole('button',{name:'保存',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('[data-testid="shift-correction"] form'));
- const saved=await prisma.shiftSession.findUniqueOrThrow({where:{id:'morning-1'}});assert.equal(saved.openFloat,100000);assert.equal(saved.actualCash,100000);assert.equal(saved.cashDifference,0);assert.deepEqual(errors,[]);
+ const saved=await prisma.shiftSession.findUniqueOrThrow({where:{id:'morning-1'}});assert.equal(saved.openFloat,60000);assert.equal(saved.actualCash,60000);assert.equal(saved.cashDifference,0);assert.deepEqual(errors,[]);
  await page.screenshot({path:root+'/shift-correction.png',fullPage:true});console.log('PASS actual admin UI correction form, persisted amounts and refreshed details');await context.close();
  }
  fs.writeFileSync(root+'/evidence.json',JSON.stringify(data,null,2));console.log('Evidence: '+root);
