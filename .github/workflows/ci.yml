@@ -153,6 +153,7 @@ jobs:
           node tests/stoploss/payroll-finance-page-check.cjs
           node tests/stoploss/admin-dashboard-page-check.cjs
           node tests/stoploss/cleared-cart-page-check.cjs
+          INTENT_SCENARIOS=qris-customer-paid,qris-customer-paid-success node tests/stoploss/checkout-intent-page-check.cjs
           node tests/stoploss/training-management-page-check.cjs
           node tests/stoploss/continuous-offline-page-check.cjs
           node tests/stoploss/barcode-page-check.cjs
