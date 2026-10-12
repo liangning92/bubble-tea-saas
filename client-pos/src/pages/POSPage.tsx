@@ -20,7 +20,6 @@ import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, d
 import { ScanPage } from './ScanPage'
 import { decodeScanIdentity, resolveScanProduct, validCatalogSpec, validCatalogPrice, ScanIdentity } from '../utils/barcodeIdentity'
 import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
-import { ManualQrEvidence, ManualQrProof } from '../components/ManualQrEvidence'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -393,15 +392,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     type?: 'warning' | 'danger' | 'info'
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} })
 
-  // QRIS Payment State
-  const [qrisData, setQrisData] = useState<{
-    qrImage?: string
-    qrString?: string
-    externalId?: string
-    status: 'idle' | 'waiting' | 'paid' | 'manual' | 'expired' | 'failed'
-  }>({ status: 'idle' })
   const [externalPaymentConfirmed,setExternalPaymentConfirmed] = useState(false)
-  const [manualProof, setManualProof] = useState<ManualQrProof | null>(null)
 
   // Refs for keyboard handler to avoid stale closure (initialized to undefined, synced via useEffect)
   const cartRef = useRef(cart)
@@ -2159,7 +2150,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     socket.on('connect',()=>{void refresh();void readResults()});socket.on('marketing:activities:updated',refresh);socket.on('marketing:entitlements:updated',readResults)
     return()=>{live=false;clearInterval(timer);clearInterval(rightsTimer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);socket.disconnect()}
   },[user?.storeId])
-  useEffect(() => { setQrisData({status:'idle'});setExternalPaymentConfirmed(false) }, [showPaymentModal,paymentMethod,total])
+  useEffect(() => { setExternalPaymentConfirmed(false) }, [showPaymentModal,paymentMethod,total,basketGeneration])
 
   const change = paidAmount ? Math.max(0, (parseInt(paidAmount) || 0) - total) : 0
   const paymentIssue = paymentProblem({ready:paymentConfigReady,enabled:paymentMethods.some(m=>m.id===paymentMethod),method:paymentMethod,total,paid:paidAmount,minAmount:paymentSettings.minAmount,maxCashAmount:paymentSettings.maxCashAmount,changeEnabled:paymentSettings.changeEnabled,externalConfirmed:externalPaymentConfirmed})
@@ -2878,12 +2869,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }
 
   // 结账
-  const handleCheckout = async () => {
+  const handleCheckout = async (customerPaid = false) => {
     if(checkoutValidation.current)return
     checkoutValidation.current=true
-    try { await handleCheckoutAttempt() } finally { checkoutValidation.current=false }
+    try { await handleCheckoutAttempt(customerPaid) } finally { checkoutValidation.current=false }
   }
-  const handleCheckoutAttempt = async () => {
+  const handleCheckoutAttempt = async (customerPaid = false) => {
+    const manualQris = paymentMethod === 'qris' && customerPaid
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate) return
 
@@ -2897,7 +2889,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
 
-    if (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total)) {
+    if (paymentMethod === 'qris' && !customerPaid) {
       showToast(t('manualPayment.required'), 'warning')
       return
     }
@@ -2948,7 +2940,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
       activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
-      paymentEvidenceId: paymentMethod === 'qris' ? manualProof?.id : undefined,
       discountAmount,              // 折扣金额（客户端计算）
       pointsRedeemed: currentQuote?.pointsRedeemed||0,  // 仅扣减最终择优方案使用的积分
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
@@ -2982,11 +2973,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
-      if (qrisData.status === 'manual') orderData.note = [orderData.note,t('offlineSale.qrisPending')].filter(Boolean).join(' ')
+      if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
-      if ((paymentMethod === 'cash' || qrisData.status === 'manual') && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
-        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,qrisData.status === 'manual',paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
+      if ((paymentMethod === 'cash' || manualQris) && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
+        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
         accepted = true
         settledCartRef.current = cart
         Object.assign(orderData,local.checkoutRequest)
@@ -3086,8 +3077,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(paymentMethod === 'cash' || qrisData.status === 'manual' ? 'offlineSale.saved' : 'pos.orderSuccess')} #${finalPickupNum}`, 'success')
-      setQrisData({status:'idle'})
+      showToast(`${t(paymentMethod === 'cash' || manualQris ? 'offlineSale.saved' : 'pos.orderSuccess')} #${finalPickupNum}`, 'success')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
@@ -4031,7 +4021,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     console.error('Failed to log modal close:', e)
                   }
                   setShowPaymentModal(false)
-                  setManualProof(null)
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
               >
@@ -4077,7 +4066,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         return (
                           <button
                             key={m.id}
-                            onClick={() => {setPaymentMethod(m.id);setQrisData({status:'idle'})}}
+                            onClick={() => setPaymentMethod(m.id)}
                             className={`p-2 rounded-xl border-2 flex items-center gap-2 transition-all touch-feedback text-left ${
                               isSelected
                                 ? 'border-primary bg-primary/10 text-primary font-bold shadow-sm ring-1 ring-primary'
@@ -4092,7 +4081,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
-                  {paymentMethod === 'qris' && <div><ManualQrEvidence amount={total} onChange={setManualProof} /><label className="text-sm text-amber-800"><input type="checkbox" checked={qrisData.status==='manual'} onChange={e=>setQrisData({status:e.target.checked?'manual':'idle'})}/> {t('offlineSale.qrisManual')}</label>{qrisData.status==='manual' && <p>{t('offlineSale.qrisPending')}</p>}</div>}
+
                 </div>
 
                 {/* 右列 (现金输入键盘 / 非现金引导) */}
@@ -4181,11 +4170,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <h4 className="font-bold text-gray-800 text-sm">
                         {paymentMethods.find(m => m.id === paymentMethod)?.labelKey ? t(paymentMethods.find(m => m.id === paymentMethod)!.labelKey) : paymentMethod.toUpperCase()}
                       </h4>
-                      <p className="text-xs text-gray-500 mt-1 max-w-xs">
-                        {paymentMethod === 'qris'
-                          ? t('offlineSale.qrisPending')
-                          : t('pos.externalPayHelp', '请引导顾客在外接刷卡机 (EDC) 或扫码机上完成刷卡/交易，完成后点击下方确认结账')}
-                      </p>
+                      {paymentMethod !== 'qris' && <p className="text-xs text-gray-500 mt-1 max-w-xs">{t('pos.externalPayHelp')}</p>}
                       {paymentMethod !== 'qris' && <label className="mt-3 text-sm text-left"><input type="checkbox" checked={externalPaymentConfirmed} onChange={e=>setExternalPaymentConfirmed(e.target.checked)} /> {t('paymentValidation.externalConfirm')}</label>}
                       <div className="mt-3 px-3 py-1 bg-white rounded-lg border text-xs font-mono font-bold text-gray-700">
                         {t('pos.amountDue', '支付金额')}: {formatCurrency(total)}
@@ -4225,12 +4210,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   {t('common.cancel', '取消')}
                 </button>
                 <button
-                  onClick={handleCheckout}
+                  onClick={() => handleCheckout(paymentMethod === 'qris')}
                   disabled={
                     isCheckingOut || !recovery || recovery.blocked || recovery.confirmed.length > 0 ||
                     Boolean(paymentIssue) ||
-                    isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length ||
-                    (paymentMethod === 'qris' && qrisData.status !== 'manual' && (!manualProof || manualProof.amount !== total))
+                    isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length
                   }
                   className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"
                 >
@@ -4239,8 +4223,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <Loader2 size={16} className="animate-spin" />
                       <span>{t('common.loading', '正在结账...')}</span>
                     </>
-                  ) : paymentMethod === 'qris' && !manualProof ? (
-                    t('manualPayment.required')
+                  ) : paymentMethod === 'qris' ? (
+                    t('manualPayment.customerPaid')
                   ) : (
                     <>
                       <span>💰</span>
