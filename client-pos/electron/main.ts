@@ -547,41 +547,6 @@ async function startLocalServer(): Promise<void> {
       log.log('[Server] No working node.exe found - using process.execPath as fallback:', nodeExecPath)
     }
   }
-  // ── FORK DEBUG（按 ChatGPT 建议添加）──────────────────────────────
-  // 关键诊断信息：在 fork 之前打印，帮助定位子进程静默崩溃的根因
-  writeCrash(`[FORK DEBUG] serverEntry = ${serverEntry}`)
-  writeCrash(`[FORK DEBUG] serverEntry exists = ${fs.existsSync(serverEntry)}`)
-  writeCrash(`[FORK DEBUG] nodeExecPath = ${nodeExecPath}`)
-  writeCrash(`[FORK DEBUG] nodeExecPath exists = ${fs.existsSync(nodeExecPath)}`)
-  writeCrash(`[FORK DEBUG] NODE_PATH = ${nodePath}`)
-  writeCrash(`[FORK DEBUG] cwd = ${process.cwd()}`)
-  writeCrash(`[FORK DEBUG] resourcesPath = ${process.resourcesPath}`)
-  writeCrash(`[FORK DEBUG] appPath = ${app.getAppPath()}`)
-  // 检查 electronDir 和 node.exe
-  if (process.platform === 'win32') {
-    const electronDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'server', 'node_modules', 'electron', 'dist')
-    writeCrash(`[FORK DEBUG] electronDir = ${electronDir}`)
-    writeCrash(`[FORK DEBUG] electronDir exists = ${fs.existsSync(electronDir)}`)
-    const nodeExeInElectron = path.join(electronDir, 'node.exe')
-    writeCrash(`[FORK DEBUG] node.exe in electron dir exists = ${fs.existsSync(nodeExeInElectron)}`)
-  }
-  // 检查 server/dist/index.js 是否存在
-  const serverDistIndex = path.join(unpackedRoot, 'server', 'dist', 'index.js')
-  writeCrash(`[FORK DEBUG] serverDistIndex = ${serverDistIndex}`)
-  writeCrash(`[FORK DEBUG] serverDistIndex exists = ${fs.existsSync(serverDistIndex)}`)
-  // 检查 prisma client
-  const prismaClientIndex = path.join(prismaModulesPath, '@prisma', 'client', 'index.js')
-  writeCrash(`[FORK DEBUG] prismaClientIndex = ${prismaClientIndex}`)
-  writeCrash(`[FORK DEBUG] prismaClientIndex exists = ${fs.existsSync(prismaClientIndex)}`)
-  const prismaClient = path.join(unpackedRoot, 'node_modules', '@prisma', 'client')
-  writeCrash(`[FORK DEBUG] prismaClient dir exists = ${fs.existsSync(prismaClient)}`)
-  // 检查 seed.db
-  writeCrash(`[FORK DEBUG] seedTemplatePath = ${seedTemplatePath}`)
-  writeCrash(`[FORK DEBUG] seedTemplatePath exists = ${fs.existsSync(seedTemplatePath)}`)
-  writeCrash(`[FORK DEBUG] userDbPath = ${userDbPath}`)
-  writeCrash(`[FORK DEBUG] userDbPath exists = ${fs.existsSync(userDbPath)}`)
-  // ── FORK DEBUG 结束 ───────────────────────────────────────────────
-
   log.log('[Server] Node exec path:', nodeExecPath)
   log.log('[Server] Server entry:', serverEntry)
   log.log('[Server] Exists:', fs.existsSync(serverEntry))
@@ -593,6 +558,7 @@ async function startLocalServer(): Promise<void> {
       PORT: '7072',
       JWT_SECRET: getOrCreateLocalJwtSecret(),
       ELECTRON_RUN_AS_NODE: '1',
+      LOCAL_POS_EMBEDDED: '1',
       // 覆盖数据库路径为用户可写目录
       // 使用 file:${path} 格式，Prisma 会正确处理带引号的路径
       DATABASE_URL: `file:${userDbPath}`,
@@ -621,8 +587,7 @@ async function startLocalServer(): Promise<void> {
 
   // ChatGPT 建议：加 spawn 事件，确认子进程真的启动了
   serverProcess.on('spawn', () => {
-    writeCrash('[Server] child spawn event - PID: ' + serverProcess?.pid)
-    console.log('[Server] child spawn event - PID:', serverProcess?.pid)
+    log.info('[Server] Local API started, PID:', serverProcess?.pid)
   })
 
   serverProcess.on('error', (err: Error) => {
@@ -631,17 +596,12 @@ async function startLocalServer(): Promise<void> {
   })
 
   serverProcess.on('exit', (code: number | null, signal: string | null) => {
-    writeCrash(`[Server] CHILD EXIT code=${code} signal=${signal} pid=${serverProcess?.pid}`)
-    console.log(`[Server] Process exited with code ${code}, signal ${signal}, pid ${serverProcess?.pid}`)
+    if (code !== 0 && signal !== 'SIGTERM') {
+      writeCrash(`[Server] Unexpected local API exit code=${code} signal=${signal} pid=${serverProcess?.pid}`)
+    }
     serverProcess = null
   })
 
-  serverProcess.on('close', (code: number | null, signal: string | null) => {
-    writeCrash(`[Server] CHILD CLOSE code=${code} signal=${signal}`)
-    console.log(`[Server] Process closed with code ${code}, signal ${signal}`)
-  })
-
-  console.log('[Server] Local API server started (PID:', serverProcess.pid, ')')
 }
 
 /**
@@ -777,103 +737,14 @@ function createMainWindow() {
   } else {
     const indexPath = getResourcePath('dist/index.html')
     const preloadPath = getResourcePath('dist-electron/electron/preload.js')
-    const fs = require('fs')
-
-    console.log('[Electron] App path:', app.getAppPath())
-    console.log('[Electron] __dirname:', __dirname)
-    console.log('[Electron] Loading index from:', indexPath)
-    console.log('[Electron] Preload path:', preloadPath)
-
-    // 检查文件是否存在
-    const indexExists = fs.existsSync(indexPath)
-    const preloadExists = fs.existsSync(preloadPath)
-    console.log('[Electron] Index exists:', indexExists)
-    console.log('[Electron] Preload exists:', preloadExists)
-
-    // 诊断信息
-    const diagnosticInfo = {
-      'app.getAppPath()': app.getAppPath(),
-      '__dirname': __dirname,
-      'indexPath': indexPath,
-      'preloadPath': preloadPath,
-      'indexPath 存在': indexExists,
-      'preloadPath 存在': preloadExists,
-      'indexPath 目录': fs.existsSync(path.dirname(indexPath)) ? '存在' : '不存在',
-      'isDev': isDev,
-      'isPackaged': app.isPackaged,
-      'NODE_ENV': process.env.NODE_ENV || 'undefined'
-    }
-    // 函数：显示诊断窗口（仅在加载失败时弹出）
-    const showDiagnosticWindow = () => {
-      const diagWindow = new BrowserWindow({
-        width: 900,
-        height: 650,
-        title: '诊断信息 - YOUME POS',
-        alwaysOnTop: true
-      })
-      const dir = path.dirname(indexPath)
-      let dirContents = '无法读取'
-      try {
-        if (fs.existsSync(dir)) {
-          dirContents = fs.readdirSync(dir).slice(0, 30).join('\n')
-        }
-      } catch (e) {}
-
-      const logPath = path.join(app.getPath('userData'), 'logs', 'main.log')
-      let recentLogs = '无日志文件'
-      try {
-        if (fs.existsSync(logPath)) {
-          const logContent = fs.readFileSync(logPath, 'utf-8')
-          const logLines = logContent.split('\n').filter(Boolean).slice(-30)
-          recentLogs = logLines.map((line: string) => {
-            if (line.includes('[error]') || line.includes('[FATAL]')) {
-              return '<span style="color:#f44747">' + line.replace(/</g, '&lt;') + '</span>'
-            } else if (line.includes('[warn]')) {
-              return '<span style="color:#dcdcaa">' + line.replace(/</g, '&lt;') + '</span>'
-            }
-            return '<span style="color:#9cdcfe">' + line.replace(/</g, '&lt;') + '</span>'
-          }).join('\n')
-        }
-      } catch (e) { recentLogs = '读取失败: ' + String(e) }
-
-      const logPathDisplay = logPath.replace(/</g, '&lt;')
-      const diagnosticText = Object.entries(diagnosticInfo)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join('\n')
-
-      diagWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(`<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>诊断信息 - YOUME POS</title>
-<style>
-body{font-family:Consolas,monospace;background:#1e1e1e;color:#d4d4d4;padding:16px}
-pre{background:#2d2d2d;padding:10px;border-radius:5px;overflow-x:auto;word-wrap:break-word;white-space:pre-wrap}
-.key{color:#9cdcfe}
-.status-ok{color:#4ec9b0}
-.status-error{color:#f44747}
-h3{margin-top:16px;color:#569cd6}
-.log-section{max-height:500px;overflow-y:scroll;background:#1e1e1e;border:1px solid #333;border-radius:5px}
-</style>
-</head>
-<body>
-<h2 style="color:#569cd6">🚨 启动诊断 - 白屏时必看</h2>
-<pre>${diagnosticText.replace(/</g, '&lt;')}</pre>
-<h3>${dir.replace(/</g, '&lt;')} 目录内容</h3>
-<pre>${dirContents.replace(/</g, '&lt;')}</pre>
-<h3>📋 最近运行日志 (${logPathDisplay})</h3>
-<div class="log-section"><pre>${recentLogs}</pre></div>
-<p style="color:#808080;margin-top:16px">如果主窗口加载失败，请截图发给技术支持分析。</p>
-</body>
-</html>`)}`)
-    }
-
-    if (!indexExists) {
-      showDiagnosticWindow()
+    const window = mainWindow
+    if (!fs.existsSync(indexPath) || !fs.existsSync(preloadPath)) {
+      log.error('[Electron] Packaged UI asset missing', {indexExists: fs.existsSync(indexPath), preloadExists: fs.existsSync(preloadPath)})
+      showErrorPage(window, '收银界面无法启动', '程序文件不完整，请联系负责人。')
     } else {
-      mainWindow.loadFile(indexPath).then(() => {
-        console.log('[Electron] Successfully loaded index.html')
-      }).catch((err) => {
-        console.error('[Electron] Failed to load index:', err)
-        showDiagnosticWindow()
+      void window.loadFile(indexPath).catch((error) => {
+        log.error('[Electron] Failed to load POS interface:', error)
+        if (!window.isDestroyed()) showErrorPage(window, '收银界面无法启动', '程序界面加载失败，请联系负责人。')
       })
     }
 
@@ -910,31 +781,11 @@ h3{margin-top:16px;color:#569cd6}
       if (mainWindow) showErrorPage(mainWindow, '渲染进程异常', '应用程序渲染进程意外退出。', `详情: ${JSON.stringify(details)}`)
     })
 
-    // 监听控制台消息（来自渲染进程）- 捕获所有级别
-    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-      const levelNames = ['debug', 'info', 'warn', 'error']
-      const levelName = levelNames[level] || `level${level}`
-      console.log(`[Renderer ${levelName}] ${message} (${sourceId}:${line})`)
-
-      // React 常见错误关键字
-      const errorPatterns = [
-        'Error:', 'Cannot', 'undefined', 'null is not',
-        'is not a function', 'is not defined', 'Failed to',
-        'SyntaxError', 'TypeError', 'ReferenceError'
-      ]
-      const isLikelyError = level >= 2 ||
-        errorPatterns.some(p => message.includes(p))
-
-      if (isLikelyError && mainWindow && !mainWindow.isDestroyed()) {
-        // 显示渲染错误
-        console.error(`[Renderer Error Detected] ${message}`)
-      }
-    })
-
-    // 监听渲染进程崩溃
-    mainWindow.webContents.on('render-process-gone', (_event, details) => {
-      console.error('[Electron] Renderer process exited:', details.reason)
-      if (mainWindow) showErrorPage(mainWindow, '渲染进程崩溃', '应用程序崩溃，请尝试重新安装。', `reason: ${details.reason}`)
+    // Retain actionable renderer warnings and errors, without copying every
+    // routine console message into the cashier's production logs.
+    mainWindow.webContents.on('console-message', (_event, level, message) => {
+      if (level >= 3) log.error('[Renderer]', message.slice(0, 1000))
+      else if (level === 2) log.warn('[Renderer]', message.slice(0, 1000))
     })
   }
 
@@ -943,15 +794,6 @@ h3{margin-top:16px;color:#569cd6}
     if (customerWindow) {
       customerWindow.close()
     }
-  })
-
-  // 监听页面加载错误
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('[Electron] Failed to load:', errorCode, errorDescription)
-  })
-
-  mainWindow.webContents.on('render-process-gone', () => {
-    console.error('[Electron] Renderer process crashed')
   })
 
   console.log('[Electron] Main window created')

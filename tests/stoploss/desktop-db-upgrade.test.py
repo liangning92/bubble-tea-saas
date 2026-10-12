@@ -2,7 +2,9 @@ from contextlib import closing
 import importlib.util
 import pathlib
 import shutil
+import socket
 import sqlite3
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -31,6 +33,40 @@ class UpgradeTests(unittest.TestCase):
             U.wait_stopped(mock.Mock(side_effect=[['BTPS.exe'], []]), on_running=close)
         close.assert_called_once()
 
+    def test_installer_retries_graceful_close_when_pos_remains_or_reappears(self):
+        close = mock.Mock(return_value=1)
+        clock = iter([0.0, 0.5, 1.1]).__next__
+        with mock.patch.object(U, 'wait_stopped') as wait:
+            wait.side_effect = lambda _processes, _timeout, on_running, quiet_period: [on_running() for _ in range(3)]
+            requests = U.request_stop_until_closed(lambda: ['BTPS.exe'], self.app, 60, close, clock)
+        self.assertEqual(requests, 2)
+        self.assertEqual(close.call_count, 2)
+        wait.assert_called_once()
+        self.assertEqual(wait.call_args.kwargs['quiet_period'], 8)
+
+    def test_installer_does_not_accept_a_brief_gap_before_old_pos_reappears(self):
+        elapsed = [0.0]
+        def advance(seconds):
+            elapsed[0] += seconds
+        def processes():
+            return ['BTPS.exe'] if elapsed[0] < 1 or 3 <= elapsed[0] < 4 else []
+        close = mock.Mock(return_value=1)
+        with mock.patch.object(U.time, 'monotonic', side_effect=lambda: elapsed[0]), mock.patch.object(U.time, 'sleep', side_effect=advance):
+            requests = U.request_stop_until_closed(processes, self.app, 20, close)
+        self.assertEqual(requests, 2)
+        self.assertGreaterEqual(elapsed[0], 12)
+
+    def test_successful_upgrade_stages_do_not_write_diagnostic_file(self):
+        diagnostic = self.root / 'upgrade-check.json'
+        previous = U.LAST_DIAGNOSTIC
+        try:
+            U.LAST_DIAGNOSTIC = diagnostic
+            U.upgrade_stage('automatic-pos-shutdown')
+            self.assertFalse(diagnostic.exists())
+            self.assertEqual(U.LAST_STAGE, 'automatic-pos-shutdown')
+        finally:
+            U.LAST_DIAGNOSTIC = previous
+
     def test_still_running_reports_the_specific_blocker(self):
         with self.assertRaises(U.PosStillRunningError) as caught:
             U.wait_stopped(lambda: ['BTPS.exe'], timeout=0)
@@ -39,11 +75,18 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(report['reason'], 'POS_OR_LOCAL_API_STILL_RUNNING')
 
     def test_local_api_is_reported_without_blame_on_unrelated_node(self):
-        with mock.patch.object(U.sys, 'platform', 'win32'), mock.patch.object(U.socket, 'socket') as socket:
-            socket.return_value.__enter__.return_value.connect_ex.return_value = 0
+        with mock.patch.object(U, 'windows_local_api_listening', return_value=True):
             with self.assertRaises(U.PosStillRunningError) as caught:
                 U.wait_stopped(lambda: ['node.exe'], timeout=0)
         self.assertEqual(caught.exception.details, {'posProcesses': [], 'localApiPort': 7072})
+
+    def test_local_api_listener_table_does_not_depend_on_tcp_accept_queue(self):
+        listening = struct.pack('<I6I', 1, 2, 0, socket.htons(7072), 0, 0, 1234)
+        closed = struct.pack('<I6I', 1, 5, 0, socket.htons(7072), 0, 0, 1234)
+        self.assertTrue(U.tcp_table_has_listener(listening, 7072))
+        self.assertFalse(U.tcp_table_has_listener(closed, 7072))
+        with self.assertRaises(RuntimeError):
+            U.tcp_table_has_listener(listening[:-1], 7072)
 
     def test_unrelated_node_process_does_not_block_pos_upgrade(self):
         self.assertIsNone(U.require_stopped(lambda: ['node.exe']))

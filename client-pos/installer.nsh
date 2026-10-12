@@ -1,4 +1,5 @@
 # Manual upgrade: no automatic process killing, no database replacement.
+!include "FileFunc.nsh"
 !ifndef BUILD_UNINSTALLER
 Var BTPSOldApp
 Var BTPSUpgradeReceipt
@@ -66,6 +67,11 @@ Var BTPSUpgradeDiagnostic
       SetErrorLevel 73
       Quit
     ${EndIf}
+    # electron-updater has already received the cashier's install action.
+    # Go straight to the installer UI; retain the confirmation for manual runs.
+    ${GetParameters} $R4
+    ${GetOptions} $R4 "--updated" $R5
+    IfErrors 0 btps_upgrade_confirmed
     MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish the current payment before installing. Setup will automatically close this POS, install the update, and restart it. Continue?$\r$\n请先完成当前收款。安装器将自动关闭本机收银程序、安装更新并重新启动。是否继续？$\r$\nSelesaikan pembayaran saat ini. Instalasi akan menutup POS otomatis, memasang pembaruan, dan membuka POS kembali. Lanjutkan?" IDYES btps_upgrade_confirmed
     SetErrorLevel 73
     Quit
@@ -97,7 +103,19 @@ Var BTPSUpgradeDiagnostic
 
 !ifndef BUILD_UNINSTALLER
 !macro customCheckAppRunning
-  Call BTPSWaitForClosedPOS
+  # The initial handoff already required eight quiet seconds. Check again
+  # immediately before replacing files; only repeat the graceful wait if POS
+  # has actually reappeared while the wizard was open.
+  nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --timeout 0'
+  Pop $R0
+  Pop $R1
+  ${If} $R0 == "74"
+    Call BTPSWaitForClosedPOS
+  ${ElseIf} $R0 != "0"
+    MessageBox MB_OK|MB_ICONSTOP "Unable to verify POS shutdown. No program replacement.$\r$\n无法确认收银已退出，未替换程序。$\r$\nTidak dapat memverifikasi POS sudah ditutup; program belum diganti." /SD IDOK
+    SetErrorLevel 73
+    Quit
+  ${EndIf}
   ${If} $BTPSUpgradeReceipt != ""
     ${If} $INSTDIR != $BTPSOldApp
       MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK
@@ -130,7 +148,6 @@ CRCCheck off
   # 创建桌面快捷方式
   CreateShortcut "$DESKTOP\BTPS.lnk" "$INSTDIR\BTPS.exe"
   CreateShortcut "$DESKTOP\BubbleTeaPOS.lnk" "$INSTDIR\BTPS.exe"
-  CreateShortcut "$DESKTOP\BTPS 日志.lnk" "explorer.exe" "$APPDATA\BTPS\logs"
 !macroend
 
 !macro customUnInstall

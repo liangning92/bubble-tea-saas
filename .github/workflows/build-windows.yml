@@ -187,8 +187,15 @@ jobs:
       - name: Verify compiled manual helper and interactive installer on owned synthetic historical database
         if: ${{ !inputs.skip_validation }}
         run: |
-          python scripts/validate-windows-manual-upgrade.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native manual upgrade validation failed' }
+          python -u -X faulthandler scripts/validate-windows-manual-upgrade.py
+          $validationExitCode = $LASTEXITCODE
+          if ($validationExitCode -ne 0) {
+            $errorFile = Join-Path $env:RUNNER_TEMP 'btps-upgrade-validator-error.txt'
+            $traceFile = Join-Path $env:RUNNER_TEMP 'btps-upgrade-validator-trace.txt'
+            if (Test-Path $traceFile) { Get-Content $traceFile }
+            if (Test-Path $errorFile) { Get-Content $errorFile }
+            throw "Native manual upgrade validation failed with exit code $validationExitCode"
+          }
 
       - name: Smoke test packaged local API
         if: ${{ !inputs.skip_validation }}

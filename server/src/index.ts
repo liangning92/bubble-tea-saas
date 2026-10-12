@@ -173,7 +173,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-TV-Display-Token']
 }))
-app.use(morgan('dev'))
+app.use(morgan('dev', {
+  skip: (_req, res) => process.env.LOCAL_POS_EMBEDDED === '1' && res.statusCode < 400
+}))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 

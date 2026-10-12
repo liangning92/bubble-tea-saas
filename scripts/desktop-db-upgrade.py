@@ -12,6 +12,7 @@ import pathlib
 import shutil
 import socket
 import sqlite3
+import struct
 import sys
 import tempfile
 import time
@@ -299,8 +300,6 @@ def durable_json(path, data):
 def upgrade_stage(name):
     global LAST_STAGE
     LAST_STAGE = name
-    if LAST_DIAGNOSTIC:
-        durable_json(LAST_DIAGNOSTIC, {'status': 'running', 'stage': name})
 
 
 def failure_report(error):
@@ -366,34 +365,74 @@ def windows_processes():
     return names
 
 
+def tcp_table_has_listener(table, port):
+    if len(table) < 4:
+        fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+    count = struct.unpack_from('<I', table)[0]
+    row_size = 24  # MIB_TCPROW_OWNER_PID: six DWORD values.
+    if len(table) < 4 + count * row_size:
+        fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+    for index in range(count):
+        state, _address, encoded_port, _remote_address, _remote_port, _pid = struct.unpack_from('<6I', table, 4 + index * row_size)
+        if state == 2 and socket.ntohs(encoded_port & 0xffff) == port:
+            return True
+    return False
+
+
+def windows_local_api_listening():
+    """Read LISTEN sockets without filling an unaccepted TCP connection queue."""
+    if sys.platform != 'win32':
+        return False
+    from ctypes import wintypes
+    api = ctypes.WinDLL('iphlpapi', use_last_error=True).GetExtendedTcpTable
+    api.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), wintypes.BOOL,
+                    wintypes.ULONG, ctypes.c_int, wintypes.ULONG]
+    api.restype = wintypes.DWORD
+    size = wintypes.DWORD(0)
+    result = api(None, ctypes.byref(size), False, socket.AF_INET, 3, 0)
+    if result not in (0, 122) or size.value < 4:
+        fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+    for _ in range(3):
+        table = ctypes.create_string_buffer(size.value)
+        result = api(table, ctypes.byref(size), False, socket.AF_INET, 3, 0)
+        if result == 0:
+            return tcp_table_has_listener(table.raw[:size.value], 7072)
+        if result != 122:
+            break
+    fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+
+
 def require_stopped(processes):
     # The old POS may fork a system node.exe for its local API, but other apps
     # can also run node.exe. Check our listener instead of blocking every Node
     # process on the cashier's machine.
     names = {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe'}
-    local_api = False
-    if sys.platform == 'win32':
-        with socket.socket() as listener:
-            listener.settimeout(0.2)
-            if listener.connect_ex(('127.0.0.1', 7072)) == 0:
-                local_api = True
+    local_api = windows_local_api_listening()
     if names or local_api:
         raise PosStillRunningError(names, local_api)
 
 
-def wait_stopped(processes, timeout=15, on_running=None):
+def wait_stopped(processes, timeout=15, on_running=None, quiet_period=0):
     deadline = time.monotonic() + timeout
+    stable_since = None
     while True:
         try:
             require_stopped(processes)
-            return
+            now = time.monotonic()
+            if stable_since is None:
+                stable_since = now
+            if now - stable_since >= quiet_period:
+                return
         except PosStillRunningError:
+            stable_since = None
             if on_running:
                 on_running()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise
-            time.sleep(min(.25, remaining))
+        else:
+            remaining = quiet_period - (time.monotonic() - stable_since)
+        time.sleep(max(0, min(.25, remaining)))
 
 
 def owned_pos_executable(executable, old_app):
@@ -442,6 +481,26 @@ def request_pos_close(old_app):
     if not user.EnumWindows(close, 0):
         fail('WINDOW_SHUTDOWN_REQUEST_FAILED')
     return len(requested)
+
+
+def request_stop_until_closed(processes, old_app, timeout=60, close=None, clock=None):
+    """Repeat a graceful close request if POS remains open or reappears."""
+    close = close or request_pos_close
+    clock = clock or time.monotonic
+    requested = 0
+    last_request = None
+
+    def request_if_due():
+        nonlocal requested, last_request
+        now = clock()
+        if last_request is None or now - last_request >= 1.0:
+            requested += close(old_app)
+            last_request = now
+
+    # A momentary gap between the updater quitting and the old POS starting
+    # again must not be mistaken for a completed handoff.
+    wait_stopped(processes, timeout, request_if_due, quiet_period=8)
+    return requested
 
 
 def profile_database():
@@ -857,17 +916,19 @@ def main():
         fail('NATIVE_WINDOWS_INSTALLER_HELPER_REQUIRED')
     catalog = bundled_catalog()
     if args.command in ('wait-stopped', 'request-stop'):
-        timeout = args.timeout if args.command == 'wait-stopped' else 15
-        if not 0 <= timeout <= 30:
+        # The updater starts interactive NSIS just before Electron quits. An old
+        # POS can also reappear while setup is opening, so allow enough time for
+        # a graceful exit and keep requesting it if a new process appears.
+        timeout = args.timeout if args.command == 'wait-stopped' else 60
+        if not 0 <= timeout <= 60:
             fail('INVALID_STOP_WAIT_TIMEOUT')
         upgrade_stage('automatic-pos-shutdown' if args.command == 'request-stop' else 'waiting-for-pos-exit')
-        requested = 0
-        def request_once_visible():
-            nonlocal requested
-            if not requested:
-                requested = request_pos_close(args.old_app)
         try:
-            wait_stopped(windows_processes, timeout, request_once_visible if args.command == 'request-stop' else None)
+            if args.command == 'request-stop':
+                requested = request_stop_until_closed(windows_processes, args.old_app, timeout)
+            else:
+                wait_stopped(windows_processes, timeout)
+                requested = 0
         except PosStillRunningError as error:
             report = failure_report(error)
             if LAST_DIAGNOSTIC:
