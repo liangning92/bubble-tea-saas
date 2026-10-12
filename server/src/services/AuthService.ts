@@ -1,3 +1,4 @@
+import { allocateEmployeeNumber } from './EmployeeNumberService'
 import prisma from '../config/database'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
@@ -119,7 +120,7 @@ export async function register(data: RegisterData) {
         userId: user.id,
         storeId,
         name,
-        employeeNumber: `EMP${Date.now().toString().slice(-6)}`,
+        employeeNumber: await allocateEmployeeNumber(tx),
         position: role === 'admin' ? 'Manager' : 'Cashier',
         status: 'active'
       }
