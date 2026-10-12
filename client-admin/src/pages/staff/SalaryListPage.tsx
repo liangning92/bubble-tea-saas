@@ -1,4 +1,5 @@
-import { payrollLabels } from '../../../../shared/payrollLabels'
+import {Link} from 'react-router-dom'
+import { payrollIssueText, payrollLabels } from '../../../../shared/payrollLabels'
 import { PayrollBasisSummary } from '../../components/PayrollBasisSummary'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
@@ -18,6 +19,7 @@ interface Salary {
   id: string
   staffId: string
   month: string
+  payrollReview?: {reason:string}|null
   calculationError?: string
   payrollBasis?: any
   compensationAdjustmentIds?: string[]
@@ -136,9 +138,7 @@ export function SalaryListPage() {
       params.month = filterMonth || getCurrentMonth()
       params.includeUnrecorded = true
       setPreparing(true);setPrepareMessage('')
-      const prepared=await salaryApi.prepareMonth(params.month)
-      const skipped=prepared.data.data.skipped||[]
-      if(skipped.length)setPrepareMessage(l.prepared+' '+skipped.map((s:any)=>s.name+' ('+s.reason+')').join(', '))
+      await salaryApi.prepareMonth(params.month)
       if(sequence!==salaryLoadSequence.current)return
       const response = await salaryApi.list(params)
       if(sequence!==salaryLoadSequence.current)return
@@ -314,7 +314,7 @@ export function SalaryListPage() {
     if (saving || calculating || depositLoading || depositError || daysError) return
     if (Number(formData.deduction) < appliedDepositAmount.current+appliedCompensation.current.penalties || Number(formData.bonus)<appliedCompensation.current.rewards) {setSaveError(t('salaryDeposit.minimum')); return}
     const amounts = ['baseSalary', 'overtime', 'commission', 'bonus', 'deduction'].map(key => Number(formData[key as keyof typeof formData]))
-    if (amounts.some(value => !Number.isSafeInteger(value) || value < 0) || calculateFinalAmount() < 0) { setSaveError(t('common.required')); return }
+    if (amounts.some(value => !Number.isSafeInteger(value) || value < 0) || calculateFinalAmount() < 0) { setSaveError(l.invalidMoney); return }
     setSaveError('')
     setSaving(true)
     try {
@@ -344,7 +344,7 @@ export function SalaryListPage() {
       loadSalaries()
       handleCloseModal()
     } catch (error: any) {
-      setSaveError(error?.response?.data?.errors?.map((item: any) => item.message).join('; ') || error?.response?.data?.message || t('common.error'))
+      setSaveError(payrollIssueText(i18n.language,error?.response?.data?.message))
     } finally {
       setSaving(false)
     }
@@ -354,9 +354,9 @@ export function SalaryListPage() {
     try {
       await salaryApi.markPaid(id)
       loadSalaries()
-    } catch (error) {
+    } catch (error:any) {
       console.error('Failed to mark paid:', error)
-      alert(t('salaryDeposit.recalculate'))
+      alert(error?.response?.data?.message==='SALARY_REVIEW_REQUIRED'?l.reviewGeneric:t('salaryDeposit.recalculate'))
     }
   }
 
@@ -463,7 +463,7 @@ export function SalaryListPage() {
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[salary.status]}`}>
-                  {salary.status === 'unrecorded' ? l.unrecorded : salary.status === 'pending' ? t('staff.salary.pending') : t('staff.salary.paid')}
+                  {salary.payrollReview ? (salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection) : salary.status === 'unrecorded' ? l.unrecorded : salary.status === 'pending' ? t('staff.salary.pending') : t('staff.salary.paid')}
                 </span>
               </div>
 
@@ -473,7 +473,7 @@ export function SalaryListPage() {
                 </span>
               </div>
 
-              {salary.status==='unrecorded'&&<p className="text-sm text-amber-700 mb-2">{salary.calculationError ? probationLabels(i18n.language).configError : l.estimate}</p>}
+              {salary.payrollReview&&<p className="text-sm text-amber-700 mb-2">{payrollIssueText(i18n.language,salary.payrollReview.reason)}{salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'&&<Link className="ml-2 underline" to={'/staff/'+salary.staffId+'/edit'}>{l.configureSalary}</Link>}</p>}
               {salary.payrollBasis?.employmentNeedsReview&&<p role="alert" className="text-amber-700">{l.employmentReview}</p>}
               <PayrollBasisSummary basis={salary.payrollBasis}/>
               {(salary.depositDeductions?.length || 0) > 0 && <p className="text-sm text-red-600 mb-2">{t('staff.salary.depositPortion')}: {formatCurrency((salary.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0))}</p>}
@@ -517,7 +517,7 @@ export function SalaryListPage() {
               </div>
 
               <div className="text-2xl font-bold text-gray-900 mb-3">
-                {formatCurrency(salary.finalAmount)}
+                {salary.payrollReview?(salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection):formatCurrency(salary.finalAmount)}
               </div>
 
               <div className="flex gap-2">
@@ -526,7 +526,7 @@ export function SalaryListPage() {
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
-                    disabled={user?.role !== 'admin' || salary.depositNeedsReview || salary.payrollBasis?.employmentNeedsReview}
+                    disabled={user?.role !== 'admin' || !!salary.payrollReview || salary.depositNeedsReview || salary.payrollBasis?.employmentNeedsReview}
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
