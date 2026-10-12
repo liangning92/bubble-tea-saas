@@ -2,7 +2,7 @@
 
 ## Verified failure
 
-The Windows terminal runs BTPS 2026.10.449. Windows has a healthy `Label Printer(4inch)` queue on USB002 and a separate POS-58 receipt queue on USB001. The enabled label configuration had an empty printerName. The corresponding backend store configuration was corrected to bind that exact label queue; receipt and kitchen settings were preserved. The terminal was at the login page, so receiving the new backend configuration and printing a real order remain unverified.
+The Windows terminal runs BTPS 2026.10.449. Windows has a healthy `Label Printer(4inch)` queue on USB002 and a separate POS-58 receipt queue on USB001. The enabled label configuration had an empty printerName. The corresponding backend store configuration was corrected to bind that exact label queue; receipt and kitchen settings were preserved. After the user authorized login, the terminal reached the POS page and its local label configuration synchronized to `Label Printer(4inch)`, USB, enabled. The receipt target remained POS-58 and kitchen printing remained disabled. No sales order or print job was created. The current cashier toolbar hides hardware testing, and there was no safely accessible window-interface console/debug port, so physical printing remains unverified. Cloud and local backend health checks returned HTTP 200. No login credentials are recorded here.
 
 The label driver advertises 100×150 mm at 203 dpi. The application has no saved label dimensions and defaults to 40×30 mm with a 2 mm gap. Driver defaults do not establish the size of paper physically loaded or establish TSPL compatibility. Do not change paper dimensions based on that default alone.
 
