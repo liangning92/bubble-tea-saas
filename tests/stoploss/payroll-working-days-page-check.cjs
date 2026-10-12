@@ -6,7 +6,7 @@ const {pathToFileURL}=require('node:url')
 const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href)
 const tailwind=(await import(pathToFileURL(path.resolve('client-admin/tailwind.config.js')).href)).default
 tailwind.content=[path.resolve('client-admin/src/**/*.{js,ts,jsx,tsx}')]
-const server=await createServer({css:{postcss:{plugins:[require('tailwindcss')(tailwind),require('autoprefixer')()]}},configFile:false,root:path.resolve('client-admin'),server:{host:'127.0.0.1',port:6322,strictPort:true}})
+const server=await createServer({css:{postcss:{plugins:[require('tailwindcss')(tailwind),require('autoprefixer')()]}},configFile:false,esbuild:{jsx:'automatic'},root:path.resolve('client-admin'),server:{host:'127.0.0.1',port:6322,strictPort:true}})
 let browser
 try{
  await server.listen();browser=await chromium.launch()
