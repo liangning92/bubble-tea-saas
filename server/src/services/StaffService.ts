@@ -1,4 +1,4 @@
-import { calculatePayrollBasis, getEnrollment, monthlyRateCents, getProbationRule, saveEnrollment } from './ProbationService'
+import { businessDate, WorkingDays, calculatePayrollBasis, getEnrollment, monthlyRateCents, getProbationRule, saveEnrollment } from './ProbationService'
 import { allocateEmployeeNumber } from './EmployeeNumberService'
 import { readWork, listWork } from './EmployeeWorkspaceStore'
 import { adjustmentPlan } from './SalaryAdjustmentService'
@@ -239,12 +239,12 @@ export async function getSchedule(staffId: string, date: Date) {
 }
 
 // Salary operations
-export async function calculateSalary(staffId: string, month: number, year: number) {
+export async function calculateSalary(staffId: string, month: number, year: number, manualDays?: WorkingDays) {
   if(!Number.isInteger(month)||month<1||month>12||!Number.isInteger(year)||year<2000||year>2100)throw new Error('INVALID_SALARY_PERIOD')
-  const startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
-  const endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
+  let startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
+  let endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
 
-  const [staff, attendances, attendanceRule] = await Promise.all([
+  const [staff, monthlyAttendances, attendanceRule] = await Promise.all([
     prisma.staff.findUnique({ where: { id: staffId } }),
     prisma.attendance.findMany({
       where: {
@@ -261,6 +261,9 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   ])
 
   if (!staff) throw new Error('Staff not found')
+  if(staff.hireDate)startDate=new Date(Math.max(startDate.getTime(),new Date(businessDate(staff.hireDate)+'T00:00:00+07:00').getTime()))
+  if(staff.terminationDate)endDate=new Date(Math.min(endDate.getTime(),new Date(businessDate(staff.terminationDate)+'T23:59:59.999+07:00').getTime()))
+  const attendances=monthlyAttendances.filter(a=>a.checkInTime>=startDate&&a.checkInTime<=endDate)
 
   // Use attendance rule or defaults
   const rule = attendanceRule
@@ -273,7 +276,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
 
   if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
-  const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`)
+  const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`, manualDays)
   const enrollment = await getEnrollment(prisma,staff)
   const baseSalary = payrollBasis.amount
   const standardMonthlySalary = payrollBasis.eligibleDays ? payrollBasis.segments.reduce((sum,s)=>sum+s.monthlyRate*s.days,0)/payrollBasis.eligibleDays : staff.baseSalary
@@ -330,11 +333,14 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     + penalty(rule?.absenceDeductionType, absentDays, rule?.absenceDeductionFixed, rule?.absenceDeductionDailyRate)
     + penalty(rule?.sickLeaveDeductionType, sickDays, rule?.sickLeaveDeductionFixed, rule?.sickLeaveDeductionDailyRate) + Math.round(unpaidDays * dailySalary)
 
+  // A manually verified day count replaces incomplete attendance penalties.
+  if (manualDays) deductions = 0
+
   depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2, '0')}`)
   deductions += depositDeductions.reduce((sum, item) => sum + item.amount, 0)
 
   const featureConfig = await getStaffConfig(staff.storeId)
-  if (featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
+  if (!manualDays && featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
 
   const compensation = await adjustmentPlan(staff.storeId!,staffId,`${year}-${String(month).padStart(2,'0')}`)
   bonuses += compensation.rewards

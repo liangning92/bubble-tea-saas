@@ -1,4 +1,4 @@
-import { getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
+import { refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { updateStaffSystemRole } from '../services/StaffPermissionService'
@@ -67,7 +67,7 @@ const updateStaffSchema = z.object({
   hireDate: payrollDate.optional(),
   probationEnabled: z.boolean().optional(),
   confirmationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  terminationDate: payrollDate.optional(),
+  terminationDate: payrollDate.nullable().optional(),
   emergencyContact: z.string().optional(),
   emergencyPhone: z.string().optional(),
   bankAccount: z.string().optional(),
@@ -287,7 +287,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(updateStaffSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true } })
+    const existing = await prisma.staff.findUnique({ where: { id }, select: { storeId: true, userId: true, hireDate:true, terminationDate:true } })
     if (!existing) return res.status(404).json({ code: 404, message: 'Staff not found' })
     if (!canAccessStore(req.user!, existing.storeId)) {
       return res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
@@ -307,7 +307,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
     if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate
     if (weeklyHours !== undefined) updateData.weeklyHours = weeklyHours
     if (hireDate !== undefined) updateData.hireDate = new Date(hireDate)
-    if (terminationDate !== undefined) updateData.terminationDate = new Date(terminationDate)
+    if (terminationDate !== undefined) updateData.terminationDate = terminationDate===null?null:new Date(terminationDate)
     if (emergencyContact !== undefined) updateData.emergencyContact = emergencyContact
     if (emergencyPhone !== undefined) updateData.emergencyPhone = emergencyPhone
     if (bankAccount !== undefined) updateData.bankAccount = bankAccount
@@ -317,7 +317,10 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
 
     const staff = await prisma.$transaction(async tx => {
       const staff = await tx.staff.update({ where: { id }, data: updateData })
+      if(staff.status==='resigned'&&!staff.terminationDate)throw new ProbationInputError('TERMINATION_DATE_REQUIRED')
+      if(staff.terminationDate&&staff.hireDate&&staff.terminationDate<staff.hireDate)throw new ProbationInputError('TERMINATION_BEFORE_HIRE')
       await saveEnrollment(tx, staff, req.body.probationEnabled, req.body.confirmationDate)
+      if((hireDate!==undefined&&staff.hireDate?.getTime()!==existing.hireDate?.getTime())||(terminationDate!==undefined&&staff.terminationDate?.getTime()!==existing.terminationDate?.getTime()))await refreshEmploymentPayroll(tx,staff)
       if (status !== undefined) {
         await tx.user.update({ where: { id: existing.userId }, data: { updatedAt: new Date() } })
       }

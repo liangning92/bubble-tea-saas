@@ -1,3 +1,4 @@
+import { payrollLabels } from '../../../../shared/payrollLabels'
 import { jakartaInput } from '../../utils/orderExport'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useState, useEffect } from 'react'
@@ -35,6 +36,7 @@ export function StaffFormPage() {
     baseSalary: '',
     hourlyRate: '',
     weeklyHours: '',
+    terminationDate: '',
     hireDate: '',
     probationEnabled: false,
     confirmationDate: ''
@@ -99,6 +101,7 @@ export function StaffFormPage() {
         baseSalary: s.baseSalary ?? '',
         hourlyRate: s.hourlyRate ?? '',
         weeklyHours: s.weeklyHours || '',
+        terminationDate:s.terminationDate?jakartaInput(s.terminationDate).slice(0,10):'',
         hireDate: s.hireDate ? jakartaInput(s.hireDate).slice(0, 10) : '',
         probationEnabled: !!s.probation?.enabled,
         confirmationDate: s.probation?.overrideConfirmationDate || ''
@@ -142,6 +145,9 @@ export function StaffFormPage() {
     submitData.baseSalary = submitData.baseSalary === '' ? undefined : Number(submitData.baseSalary)
     submitData.hourlyRate = submitData.hourlyRate === '' ? undefined : Number(submitData.hourlyRate)
     submitData.weeklyHours = submitData.weeklyHours === '' ? undefined : Number(submitData.weeklyHours)
+    if(form.status==='resigned'&&(!form.terminationDate||(form.hireDate&&form.terminationDate<form.hireDate))){setSaveError(payrollLabels(i18n.language).terminationRequired);return}
+    if(isEdit)submitData.terminationDate=form.terminationDate||null
+    else delete submitData.terminationDate
     submitData.confirmationDate = form.confirmationDate || null
     if (submitData.probationEnabled && !form.hireDate) { setSaveError(probationText.hireRequired); return }
     if (submitData.hireDate === '') submitData.hireDate = undefined
@@ -285,6 +291,7 @@ export function StaffFormPage() {
             </div>
           </div>
 
+          {isEdit&&<label className="block text-sm">{payrollLabels(i18n.language).termination}<input type="date" min={form.hireDate||undefined} className="input" value={form.terminationDate} onChange={e=>setForm({...form,terminationDate:e.target.value})}/></label>}
           <label htmlFor="staff-baseSalary" className="block text-sm">{probationText.formal} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
           <section className="bg-blue-50 rounded-xl p-4 space-y-3"><p className="text-sm">{probationText.contract}</p>
           <label className="flex gap-2 items-center"><input type="checkbox" checked={form.probationEnabled} disabled={probationRuleQuery.isLoading || probationRuleQuery.isError || (!probationRuleQuery.data?.data?.data?.enabled && !staffData?.data?.data?.probation?.enabled)} onChange={e=>setForm({...form,probationEnabled:e.target.checked})}/>{probationText.enroll}</label>
