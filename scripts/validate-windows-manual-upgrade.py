@@ -41,6 +41,13 @@ DATA.joinpath('data').mkdir(parents=True)
 DB = DATA / 'data/dev.db'
 CASES = []
 COMPLETED = False
+TRACE = pathlib.Path(os.environ['RUNNER_TEMP']) / 'btps-upgrade-validator-trace.txt'
+
+
+def trace(message):
+    # CI-only progress survives an installer-induced console or process exit.
+    with TRACE.open('a', encoding='utf-8') as output:
+        output.write(f'{time.monotonic():.3f} pid={os.getpid()} {message}\n')
 
 
 def sha(path):
@@ -122,6 +129,7 @@ def drive_installer(exe, process=None, on_retry=None):
     user.PostMessageW.restype = wintypes.BOOL
     # Same interactive handoff arguments used by electron-updater's NsisUpdater.
     process = process or subprocess.Popen([str(exe), '--updated', '--force-run', '/D=' + str(APP)])
+    trace(f'installer-start pid={process.pid} cases={len(CASES)}')
     visited_confirmation = False
     finish_seen = False
     retry_seen = False
@@ -183,11 +191,13 @@ def drive_installer(exe, process=None, on_retry=None):
                             continue
                     finish_seen = True
                     # Select the ordinary Run checkbox before pressing Finish.
+                    trace(f'installer-finish-click pid={process.pid} cases={len(CASES)}')
                 user.PostMessageW(next_button[0], 0xF5, 0, 0)
         time.sleep(.5)
     if process.poll() is None:
         process.terminate()  # Only the installer this synthetic test owns.
         raise RuntimeError('Owned interactive installer did not finish within timeout; page states: ' + str(sorted(observed)))
+    trace(f'installer-exit pid={process.pid} code={process.returncode} confirmation={visited_confirmation} finish={finish_seen} cases={len(CASES)}')
     assert process.returncode == 0 and not visited_confirmation and finish_seen, ('NSIS UI', process.returncode, visited_confirmation, finish_seen)
     if on_retry is not None:
         assert retry_seen, 'Expected ordinary Retry dialog was not exercised'
