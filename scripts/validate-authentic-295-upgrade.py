@@ -76,7 +76,12 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
     old_process = subprocess.Popen([str(app / 'BTPS.exe'),'--inspect=127.0.0.1:19295'], stdout=log, stderr=log)
     inspector = root / 'scripts/validate-authentic-295-inspector.cjs'
     try:
-        downloaded = subprocess.check_output(['node',str(inspector),'download',str(server.server_port), original_version], text=True, cwd=root, timeout=240).strip()
+        try:
+            downloaded = subprocess.check_output(['node',str(inspector),'download',str(server.server_port), original_version], text=True, cwd=root, timeout=240).strip()
+        except Exception:
+            log.flush()
+            print('Original ' + original_version + ' updater runtime log (last 8000 chars):\n' + (temp / ('original-' + original_version + '-runtime.log')).read_text(errors='replace')[-8000:], flush=True)
+            raise
         result = json.loads(downloaded)
         print('Original ' + original_version + ' runtime profile: ' + result['userData'], flush=True)
         assert result['version'] == original_version, result
