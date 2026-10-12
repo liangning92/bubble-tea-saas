@@ -30,13 +30,15 @@ function logoFixture({templateLogo='/uploads/template.png',storeLogo='/uploads/s
  vm.runInNewContext(ts.transpileModule(cacheCode+'\nglobalThis.getLogo=getPrintLogo;globalThis.getBlocks=getPrintBlocks',{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);
  return {context,images,cache,start:()=>effects[0](),get:()=>context.getLogo()};
 }
-test('enabled template logo takes precedence and its absolute image is retained across an offline restart',async()=>{
- const f=logoFixture(),cleanup=f.start();assert.equal(f.images[0].src,'https://store.example/uploads/template.png');
+test('receipt-specific image takes precedence over obsolete template/global images and survives offline restart',async()=>{
+ const f=logoFixture(),cleanup=f.start();assert.equal(f.images[0].src,'https://store.example/uploads/store.png');
  f.images[0].onload();assert.equal(f.get(),'data:image/png;base64,VALID_CACHED_IMAGE');assert.equal(f.context.getBlocks()[1].config.url,f.get());await Promise.resolve();cleanup();
  const offline=logoFixture({cache:f.cache});offline.start();await new Promise(r=>setImmediate(r));assert.equal(offline.get(),f.get());
- const otherStore=logoFixture({cache:f.cache,api:'https://other.example/api'});otherStore.start();await new Promise(r=>setImmediate(r));assert.equal(otherStore.get(),'https://other.example/uploads/template.png');
+ const otherStore=logoFixture({cache:f.cache,api:'https://other.example/api'});otherStore.start();await new Promise(r=>setImmediate(r));assert.equal(otherStore.get(),'https://other.example/uploads/store.png');
 });
-test('missing template source falls back to configured store image, and cancelled downloads cannot replace it',()=>{
- const f=logoFixture({templateLogo:'',storeLogo:''}),cleanup=f.start();assert.equal(f.get(),'https://store.example/uploads/fallback.png');
- const late=f.images[0].onload;cleanup();late();assert.equal(f.cache.size,0);assert.equal(f.get(),'https://store.example/uploads/fallback.png');
+test('an unset receipt image never inherits obsolete template or global images',()=>{
+ const f=logoFixture({storeLogo:''});f.start();assert.equal(f.get(),'');assert.equal(f.images.length,0);assert.equal(f.context.getBlocks()[1].config.url,'');
+});
+test('cancelled receipt image downloads cannot replace the selected source',()=>{
+ const f=logoFixture(),cleanup=f.start();const late=f.images[0].onload;cleanup();late();assert.equal(f.cache.size,0);assert.equal(f.get(),'https://store.example/uploads/store.png');
 });

@@ -287,7 +287,7 @@ const LivePreview: React.FC<{
   const dots=receiptWidth(paperSize),width=paperSize==='58mm'?200:280,scale=width/dots
   const html=useMemo(()=>receiptHtml({
     paperSize,language:i18n.language,
-    blocks:blocks.map(block=>['logo','qrCode'].includes(block.type)?{...block,config:{...block.config,url:receiptMediaUrl(block.config.url||(block.type==='logo'?defaultLogo:defaultQrCode)||'')}}:block),
+    blocks:blocks.map(block=>['logo','qrCode'].includes(block.type)?{...block,config:{...block.config,url:receiptMediaUrl((block.type==='logo'?defaultLogo:block.config.url||defaultQrCode)||'')}}:block),
     qrCodeUrl:defaultQrCode,orderNum:'7K3M9Q2R5A',pickupNumber:'A01',createdAt:new Date().toISOString(),channelName:'POS',
     storePhone:t('posSettings.receiptSamplePhone'),storeAddress:t('posSettings.receiptSampleAddress'),cashierName:t('posSettings.receiptSampleCashier'),customerName:'-',
     items:[{productName:t('posSettings.receiptSampleProduct'),quantity:1,unitPrice:35000,sugarLevelName:t('posSettings.receiptSampleOption'),addons:[{name:t('posSettings.receiptSampleAddon')}]}],
@@ -381,9 +381,12 @@ const BlockPropertiesPanel: React.FC<{
   block: ReceiptBlock
   defaultLogo?: string
   defaultQrCode?: string
+  onOpenLogoSettings?: () => void
   onUpdate: (block: ReceiptBlock) => void
   onClose: () => void
-}> = ({ block, defaultLogo, defaultQrCode, onUpdate, onClose }) => {
+}> = ({ block, defaultLogo, defaultQrCode, onOpenLogoSettings, onUpdate, onClose }) => {
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false)
+  useEffect(() => setLogoLoadFailed(false), [defaultLogo])
   const { t } = useTranslation()
   const def = getBlockDef(t, block.type)
 
@@ -507,44 +510,35 @@ const BlockPropertiesPanel: React.FC<{
             <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
                 <CheckCircle size={13} className="text-blue-600" />
-                <span>{t('posSettings.usingGlobalLogo', '已自动引用全局小票 Logo')}</span>
+                <span>{t('logoSettings.receipt')}</span>
               </div>
               <p className="text-[11px] text-blue-700 leading-relaxed">
-                {t('posSettings.receiptLogoSingleSourceNotice', '模板自动继承小票设置中上传的店铺 Logo。如需更换或上传新图片，请统一在小票设置主页面中维护。')}
+                {t('logoSettings.independent')}
               </p>
-              {(block.config.url || defaultLogo) ? (
+              {defaultLogo ? (
                 <div className="flex items-center gap-2.5 p-2 bg-white rounded border border-blue-200">
                   <div className="w-12 h-10 bg-gray-50 rounded border flex items-center justify-center p-1 overflow-hidden shrink-0">
                     <img
-                      src={receiptMediaUrl(block.config.url || defaultLogo)}
+                      src={receiptMediaUrl(defaultLogo)}
                       alt="Current Logo"
                       className="max-w-full max-h-full object-contain"
-                      onError={(e) => { (e.target as any).style.display = 'none' }}
+                      onLoad={() => setLogoLoadFailed(false)}
+                      onError={() => setLogoLoadFailed(true)}
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-mono text-gray-600 truncate">{block.config.url || defaultLogo}</p>
-                    <span className="text-[10px] text-emerald-600 font-medium">✓ {t('posSettings.logoInUse', '当前使用中')}</span>
+                    <p className="text-[11px] font-mono text-gray-600 truncate">{defaultLogo}</p>
+                    {logoLoadFailed ? <span className="text-[10px] text-red-600">{t('receiptPrinting.logoFileMissing')}</span> : <span className="text-[10px] text-emerald-600 font-medium">✓ {t('posSettings.logoInUse', '当前使用中')}</span>}
                   </div>
                 </div>
               ) : (
                 <div className="p-2 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-700">
-                  {t('posSettings.noGlobalLogoConfigured', '小票设置中尚未配置 Logo，打印时将使用店铺名称文字。')}
+                  {t('logoSettings.notConfigured')}
                 </div>
               )}
             </div>
 
-            {/* 自定义 URL（可选覆盖） */}
-            <div>
-              <label className="text-xs text-gray-500">{t('posSettings.customLogoUrlOverride', '自定义图片 URL')}</label>
-              <input
-                type="text"
-                value={block.config.url || ''}
-                onChange={(e) => updateConfig('url', e.target.value)}
-                placeholder={defaultLogo || 'https://...'}
-                className="input mt-1 w-full text-xs"
-              />
-            </div>
+            {onOpenLogoSettings && <button type="button" className="btn-primary text-sm" onClick={onOpenLogoSettings}>{t('logoSettings.receipt')}</button>}
           </div>
         )}
 
@@ -931,9 +925,10 @@ interface ReceiptTemplateEditorProps {
   defaultLogo?: string
   defaultQrCode?: string
   onSave?: () => void
+  onOpenLogoSettings?: () => void
 }
 
-export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ storeId, defaultLogo, defaultQrCode, onSave }) => {
+export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ storeId, defaultLogo, defaultQrCode, onSave, onOpenLogoSettings }) => {
   const { t } = useTranslation()
 
   const [templates, setTemplates] = useState<any[]>([])
@@ -1291,6 +1286,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
             <BlockPropertiesPanel
               block={selectedBlock}
               defaultLogo={defaultLogo}
+              onOpenLogoSettings={onOpenLogoSettings}
               defaultQrCode={defaultQrCode}
               onUpdate={handleUpdateBlock}
               onClose={() => setSelectedBlockId(null)}

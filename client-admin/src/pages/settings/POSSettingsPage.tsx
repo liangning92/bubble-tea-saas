@@ -1,3 +1,4 @@
+import { LogoSettingsDialog, LogoColor, LogoSources } from '../../components/LogoSettingsDialog'
 import { CustomerDisplayCanvas } from '../../../../shared/components/CustomerDisplayCanvas'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../../shared/utils/customerDisplayAppearance'
 import { CustomerDisplayLayout, CustomerLayoutColumn, CustomerLayoutRow, customerRows, equalPercents, customerBackground, customerTextColor } from '../../../../shared/components/CustomerDisplayLayout'
@@ -9,7 +10,7 @@ import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
-import { CustomerDisplayLogo, CustomerDisplayLogoStyle } from '../../../../shared/components/CustomerDisplayLogo'
+import { CustomerDisplayLogo, CustomerDisplayLogoStyle, customerDisplayLogoColor } from '../../../../shared/components/CustomerDisplayLogo'
 import { customerDisplayMedia } from '../../../../shared/utils/customerDisplayMedia'
 import { PromotionText, PromotionTextStyle } from '../../../../shared/components/PromotionText'
 
@@ -322,9 +323,8 @@ const _DualScreenLayoutEditor: React.FC<{
 // DualScreen Preview Component
 export const DualScreenPreview: React.FC<{
   dualScreen: any
-  storeLogo?: string
   editingState?: CustomerDisplayState
-}> = React.memo(({ dualScreen, storeLogo, editingState }) => {
+}> = React.memo(({ dualScreen, editingState }) => {
   const { t } = useTranslation()
   const [previewState, setPreviewState] = useState<'idle' | 'ordering' | 'complete'>('idle')
   useEffect(() => { if (editingState) setPreviewState(editingState) }, [editingState])
@@ -445,7 +445,7 @@ export const DualScreenPreview: React.FC<{
           </div>
         )
       case 'logo':
-        return <CustomerDisplayLogo src={receiptMediaUrl(storeLogo)} fallback="/youme-logo-red.png" whiteFallback="/youme-logo-white.png" style={appearance.logoStyle} background={regionBackground} />
+        return <CustomerDisplayLogo fallback="/youme-logo-red.png" whiteFallback="/youme-logo-white.png" style={appearance.logoStyle} background={regionBackground} />
       default:
         return null
     }
@@ -690,7 +690,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   // 小票设置视图模式 (基础设置 / 模板设计器)
   const [receiptSubMode, setReceiptSubMode] = useState<'basic' | 'template'>('basic')
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
+  const [logoDialog, setLogoDialog] = useState<'receipt' | 'display' | null>(null)
   const [logoLoadFailed, setLogoLoadFailed] = useState(false)
 
   // 小票设置
@@ -700,7 +700,9 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     templateId: '',
     taxRate: 11,
     showLogo: true,
-    storeLogo: '',               // 店铺Logo URL
+    storeLogo: '',               // This receipt's own image; never written to storeInfo.
+    logoSources: {} as LogoSources,
+    logoVariant: 'black' as LogoColor,
     headerCustomText: '',
     footerMessage: '',
     // 升级字段
@@ -735,14 +737,6 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   // ========== SAVE MUTATION ==========
   const saveConfigMutation = useMutation({
     mutationFn: async (data: { key: string; value: any }) => {
-      if (data.key === 'posReceipt' && data.value?.storeLogo !== undefined) {
-        const storeInfo = posConfig?.data?.data?.storeInfo || {}
-        await configApi.setBatch(effectiveStoreId, [
-          { key: data.key, value: data.value, category: 'pos' },
-          { key: 'storeInfo', value: { ...storeInfo, storeLogo: data.value.storeLogo }, category: 'pos' }
-        ])
-        return
-      }
       await configApi.set(effectiveStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
@@ -753,7 +747,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     },
     onError: (error: any) => {
       console.error('Save config error:', error)
-      alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.unknownError')))
+      if (!logoDialog) alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.unknownError')))
     }
   })
 
@@ -1001,6 +995,39 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   }, [posConfig])
 
 
+  const savePurposeLogo = async (color: LogoColor, file?: File) => {
+    let url = logoDialog === 'receipt'
+      ? _posReceipt.logoSources?.[color] || _posReceipt.storeLogo
+      : editedAppearance.logoStyle?.sources?.[color] || ''
+    if (file) {
+      const uploaded = await uploadApi.uploadReceipt([file])
+      const raw = uploaded.data?.data?.urls?.[0]
+      if (!raw) throw new Error(t('common.error'))
+      url = new URL(raw, new URL(uploaded.config.baseURL || '/api', window.location.href).origin).href
+    }
+    if (url) await new Promise<void>((resolve, reject) => {
+      const image = new Image()
+      const timer = setTimeout(() => { image.onload = image.onerror = null; reject(new Error('LOGO_IMAGE_FAILED')) }, 5000)
+      image.onload = () => { clearTimeout(timer); resolve() }
+      image.onerror = () => { clearTimeout(timer); reject(new Error('LOGO_IMAGE_FAILED')) }
+      image.src = receiptMediaUrl(url)
+    })
+    if (logoDialog === 'receipt') {
+      const next = { ..._posReceipt, storeLogo: url, logoPurpose: 'receipt', logoVariant: color, logoSources: { ..._posReceipt.logoSources, [color]: url }, showLogo: true }
+      await saveConfigMutation.mutateAsync({ key: 'posReceipt', value: next })
+      setPosReceipt(next)
+      setLogoLoadFailed(false)
+    } else {
+      const ds = hardwareSettings.dualScreen || {}
+      const next = { ...hardwareSettings, dualScreen: { ...ds,
+        logoStyle: { ...ds.logoStyle, sources: { ...ds.logoStyle?.sources, [color]: url } },
+        stateAppearance: { ...ds.stateAppearance, [appearanceState]: { ...ds.stateAppearance?.[appearanceState], logoStyle: { ...ds.stateAppearance?.[appearanceState]?.logoStyle, variant: color } } }
+      } }
+      await saveConfigMutation.mutateAsync({ key: 'hardwareSettings', value: next })
+      setHardwareSettings(next)
+    }
+  }
+
   // ========== SUB TABS ==========
   const subTabs: { key: POSSubTab; labelKey: string; icon: React.ReactNode }[] = [
     { key: 'layout', labelKey: 'posSettings.layout', icon: <LayoutGrid size={18} /> },
@@ -1019,6 +1046,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
+
         <Loader2 className="animate-spin text-primary" size={32} />
       </div>
     )
@@ -1026,6 +1054,13 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   return (
     <div className="space-y-6">
+      {logoDialog && <LogoSettingsDialog
+        purpose={logoDialog}
+        variant={logoDialog === 'receipt' ? _posReceipt.logoVariant : customerDisplayLogoColor(editedAppearance.logoStyle, editedAppearance.backgroundColor)}
+        sources={logoDialog === 'receipt' ? { ..._posReceipt.logoSources, black: _posReceipt.storeLogo || _posReceipt.logoSources?.black } : editedAppearance.logoStyle?.sources || {}}
+        onSave={savePurposeLogo}
+        onClose={() => setLogoDialog(null)}
+      />}
       {showSuccess && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50 animate-pulse">
           <CheckCircle size={18} />
@@ -1752,6 +1787,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
               <div>
                 <h3 className="text-lg font-semibold text-gray-800">{t('posSettings.dualScreenSettings', '客显副屏多媒体与版式')}</h3>
                 <p className="text-sm text-gray-500 mt-1">{t('posSettings.dualScreenHint', '配置面向顾客的双屏客显内容、轮播海报、促销信息及版式排版')}</p>
+                  <button type="button" className="btn-primary text-sm" onClick={() => setLogoDialog('display')}>{t('logoSettings.display')}</button>
               </div>
               <Toggle
                 enabled={hardwareSettings.dualScreen?.enabled || false}
@@ -1771,7 +1807,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 </div>
                 <p className="text-sm text-gray-500">{t('posSettings.stateEditorHint')}</p>
                 <div role="tabpanel" className="space-y-4">
-                  <DualScreenPreview dualScreen={hardwareSettings.dualScreen} editingState={appearanceState} storeLogo={_posReceipt.storeLogo} />
+                  <DualScreenPreview dualScreen={hardwareSettings.dualScreen} editingState={appearanceState} />
                   {appearanceState !== 'complete' && <_DualScreenLayoutEditor
                     title={t(appearanceState === 'idle' ? 'posSettings.idleLayout' : 'posSettings.orderingLayout')}
                     layout={selectedLayout}
@@ -2473,32 +2509,9 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 <h4 className="font-medium text-gray-800 text-sm">{t('posSettings.receiptLogo')}</h4>
                 {_posReceipt.storeLogo && <img src={receiptMediaUrl(_posReceipt.storeLogo)} alt="Receipt Logo" className="max-h-24 max-w-48 bg-white object-contain" onLoad={() => setLogoLoadFailed(false)} onError={() => setLogoLoadFailed(true)} />}
                 {logoLoadFailed && <p className="text-sm text-red-600">{t('receiptPrinting.logoFileMissing')}</p>}
-                <div className="flex items-center gap-3">
-                  <label className="btn-primary text-sm cursor-pointer">
-                    {isUploadingLogo ? t('common.loading') : t('posSettings.uploadLogoBtn')}
-                    <input aria-label={t('posSettings.uploadLogoBtn')} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={isUploadingLogo || saveConfigMutation.isPending} onChange={async event => {
-                      const input = event.currentTarget, file = input.files?.[0]
-                      if (!file) return
-                      setIsUploadingLogo(true)
-                      try {
-                        const uploaded = await uploadApi.uploadReceipt([file])
-                        const raw = uploaded.data?.data?.urls?.[0]
-                        if (!raw) throw new Error(t('common.error'))
-                        const apiOrigin = new URL(uploaded.config.baseURL || '/api', window.location.href).origin
-                        const storeLogo = new URL(raw, apiOrigin).href
-                        const updated = { ..._posReceipt, storeLogo, showLogo: true }
-                        await saveConfigMutation.mutateAsync({ key: 'posReceipt', value: updated })
-                        setPosReceipt(updated)
-                        setLogoLoadFailed(false)
-                      } catch (error: any) { alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.error'))) }
-                      finally { setIsUploadingLogo(false); input.value = '' }
-                    }} />
-                  </label>
-                  {_posReceipt.storeLogo && <button type="button" className="text-sm text-red-600" disabled={isUploadingLogo || saveConfigMutation.isPending} onClick={async () => {
-                    const updated = { ..._posReceipt, storeLogo: '' }
-                    try { await saveConfigMutation.mutateAsync({ key: 'posReceipt', value: updated }); setPosReceipt(updated); setLogoLoadFailed(false) } catch { alert(t('pos.saveFailed')) }
-                  }}>{t('posSettings.removeLogo')}</button>}
-                </div>
+                <p className="text-xs text-gray-600">{t('logoSettings.independent')}</p>
+                <button type="button" className="btn-primary text-sm" onClick={() => setLogoDialog('receipt')}>{t('logoSettings.receipt')}</button>
+
               </div>
 
               {/* 纸张与打印基础 */}
@@ -2630,6 +2643,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
             <ReceiptTemplateEditor
               storeId={effectiveStoreId}
               defaultLogo={_posReceipt.storeLogo}
+              onOpenLogoSettings={() => setLogoDialog('receipt')}
               defaultQrCode={_posReceipt.qrCodeUrl}
               onSave={() => {
                 // Refresh all configs and template queries after saving template
