@@ -105,7 +105,7 @@ def historic():
 
 
 def drive_installer(exe, process=None, on_retry=None):
-    # Click ordinary visible NSIS controls. No test flag or confirmation bypass is shipped.
+    # Drive the ordinary online-updater NSIS command line and visible wizard.
     user = ctypes.windll.user32
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
@@ -187,7 +187,7 @@ def drive_installer(exe, process=None, on_retry=None):
     if process.poll() is None:
         process.terminate()  # Only the installer this synthetic test owns.
         raise RuntimeError('Owned interactive installer did not finish within timeout; page states: ' + str(sorted(observed)))
-    assert process.returncode == 0 and visited_confirmation and finish_seen, ('NSIS UI', process.returncode, visited_confirmation, finish_seen)
+    assert process.returncode == 0 and not visited_confirmation and finish_seen, ('NSIS UI', process.returncode, visited_confirmation, finish_seen)
     if on_retry is not None:
         assert retry_seen, 'Expected ordinary Retry dialog was not exercised'
 
@@ -350,7 +350,7 @@ try:
     print(json.dumps({'preparedDowntimeSeconds': round(fast_downtime, 3), 'localApiReady': restarted_runtime['localApiReady']}), flush=True)
     assert fast_downtime <= 90, ('Prepared upgrade exceeded 90 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
-    CASES.append('real-interactive-nsis-install-with-ordinary-confirmation-and-history-preserved')
+    CASES.append('real-interactive-nsis-online-install-without-repeat-confirmation-and-history-preserved')
     # Reproduce the employee failure with a valid receipt for another package.
     obsolete_installer = TEMP / 'obsolete-installer.exe'
     obsolete_installer.write_bytes(b'owned obsolete installer')
