@@ -66,8 +66,10 @@ import { default as announcementRouter } from './routes/announcement'
 import { campaignCategoryRouter } from './routes/campaignCategory'
 import { hardwareRouter } from './routes/hardware'
 import syncRouter from './routes/sync'
+import { tvRouter } from './routes/tv'
 import { startHygieneScheduler } from './services/SchedulerService'
 import { startMarketingScheduler } from './services/MarketingSchedulerService'
+import { startTvDiscoveryService } from './services/tvDiscovery'
 import { errorHandler } from './middlewares/errorHandler'
 import { notFoundHandler } from './middlewares/notFound'
 import { socketManager } from './socket'
@@ -135,6 +137,10 @@ app.use(express.urlencoded({ extended: true }))
 // In dev: project root/server/uploads (fallback)
 const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, '../uploads')
 app.use('/uploads', express.static(uploadsPath))
+
+// Serve TV display client
+const tvPublicPath = path.join(__dirname, '../public/tv')
+app.use('/tv', express.static(tvPublicPath))
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -232,6 +238,7 @@ app.use('/api/payments', paymentRouter)
 app.use('/api/announcement', announcementRouter)
 app.use('/api/hardware', hardwareRouter)
 app.use('/api/sync', syncRouter)
+app.use('/api/tv', tvRouter)
 
 // Error Handling
 app.use(notFoundHandler)
@@ -272,6 +279,11 @@ httpServer.listen(config.port, '0.0.0.0', () => {
   console.log('[Server] Starting marketing scheduler...')
   startMarketingScheduler()
   console.log('[Server] Marketing scheduler started')
+
+  // 启动电视大屏局域网零配置自动发现服务
+  console.log('[Server] Starting TV auto-discovery service...')
+  startTvDiscoveryService()
+  console.log('[Server] TV auto-discovery service started')
 })
 
 export default app

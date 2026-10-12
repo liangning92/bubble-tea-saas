@@ -766,3 +766,26 @@ export const posActionLogApi = {
     api.get('/pos-action-logs/stats', { params }),
   getSessions: () => api.get('/pos-action-logs/sessions'),
 }
+
+// TV & Media Library API
+export const tvApi = {
+  getMedia: (params?: { type?: string; category?: string; search?: string }) => api.get('/tv/media', { params }),
+  uploadMedia: (formData: FormData) => api.post('/tv/media/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  updateMedia: (id: string, data: any) => api.put(`/tv/media/${id}`, data),
+  deleteMedia: (id: string) => api.delete(`/tv/media/${id}`),
+
+  getScreens: () => api.get('/tv/screens'),
+  getScreen: (id: string) => api.get(`/tv/screens/${id}`),
+  createScreen: (data: any) => api.post('/tv/screens', data),
+  updateScreen: (id: string, data: any) => api.put(`/tv/screens/${id}`, data),
+  deleteScreen: (id: string) => api.delete(`/tv/screens/${id}`),
+  pushScreen: (id: string) => api.post(`/tv/screens/${id}/push`),
+  getDisplayData: (code: string) => api.get(`/tv/display/${code}`),
+
+  // 激活配对码系统
+  requestPairPin: () => api.post('/tv/pair/request'),
+  checkPairStatus: (pin: string) => api.get(`/tv/pair/check/${pin}`),
+  claimPairPin: (data: { pin: string; screenCode?: string; screenName?: string; orientation?: string }) => api.post('/tv/pair/claim', data),
+}

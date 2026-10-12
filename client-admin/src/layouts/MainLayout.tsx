@@ -14,21 +14,25 @@ import {
   Megaphone,
   Sprout,
   Wallet,
-  Link2
+  Link2,
+  Tv,
+  Film
 } from 'lucide-react'
 import { useState } from 'react'
 
-// 一级导航只有10个模块
+// 一级导航模块
 const navItems = [
-  { path: '/dashboard', label: 'nav.dashboard', icon: LayoutDashboard },
-  { path: '/products', label: 'nav.products', icon: Package },
-  { path: '/inventory', label: 'nav.inventory', icon: Warehouse },
-  { path: '/finance', label: 'nav.finance', icon: Wallet },
-  { path: '/channels', label: 'nav.channels', icon: Link2 },
-  { path: '/staff', label: 'nav.staff', icon: Users },
-  { path: '/hygiene', label: 'nav.hygiene', icon: Sprout },
-  { path: '/marketing', label: 'nav.marketing', icon: Megaphone },
-  { path: '/settings', label: 'nav.settings', icon: Settings },
+  { path: '/dashboard', label: 'nav.dashboard', defaultLabel: '仪表盘', icon: LayoutDashboard },
+  { path: '/products', label: 'nav.products', defaultLabel: '商品管理', icon: Package },
+  { path: '/tv-screens', label: 'nav.tvScreens', defaultLabel: '电视大屏', icon: Tv },
+  { path: '/media-library', label: 'nav.mediaLibrary', defaultLabel: '公共媒体库', icon: Film },
+  { path: '/inventory', label: 'nav.inventory', defaultLabel: '库存管理', icon: Warehouse },
+  { path: '/finance', label: 'nav.finance', defaultLabel: '财务中心', icon: Wallet },
+  { path: '/channels', label: 'nav.channels', defaultLabel: '销售渠道', icon: Link2 },
+  { path: '/staff', label: 'nav.staff', defaultLabel: '员工管理', icon: Users },
+  { path: '/hygiene', label: 'nav.hygiene', defaultLabel: '卫生检查', icon: Sprout },
+  { path: '/marketing', label: 'nav.marketing', defaultLabel: '营销活动', icon: Megaphone },
+  { path: '/settings', label: 'nav.settings', defaultLabel: '系统设置', icon: Settings },
 ]
 
 export function MainLayout() {
@@ -86,7 +90,7 @@ export function MainLayout() {
               >
                 <item.icon size={22} />
                 {sidebarOpen && (
-                  <span className="font-medium">{t(item.label)}</span>
+                  <span className="font-medium">{t(item.label, (item as any).defaultLabel || item.label)}</span>
                 )}
               </Link>
             )

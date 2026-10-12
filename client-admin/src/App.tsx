@@ -4,6 +4,8 @@ import { MainLayout } from './layouts/MainLayout'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { TVScreensPage } from './pages/tv/TVScreensPage'
+import { MediaLibraryPage } from './pages/tv/MediaLibraryPage'
 import { ProductsIndexPage } from './pages/products/ProductsIndexPage'
 import { ProductListPage } from './pages/products/ProductListPage'
 import { ProductCostPage } from './pages/products/ProductCostPage'
@@ -331,6 +333,10 @@ function App() {
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<POSSettingsPage />} />
+
+        {/* 电视大屏 & 公共媒体库 */}
+        <Route path="tv-screens" element={<TVScreensPage />} />
+        <Route path="media-library" element={<MediaLibraryPage />} />
 
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />
