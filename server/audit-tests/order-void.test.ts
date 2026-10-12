@@ -1,5 +1,5 @@
 import { beforeEach, expect, jest, test } from '@jest/globals'
-jest.mock('../src/config/database', () => ({ __esModule: true, default: { $transaction: jest.fn(), order: { findMany: jest.fn(), count: jest.fn() }, config: { findFirst: jest.fn() } } }))
+jest.mock('../src/config/database', () => ({ __esModule: true, default: { $transaction: jest.fn(), order: { findMany: jest.fn(), count: jest.fn() }, shiftSession:{findMany:jest.fn(async()=>[])},shift:{findMany:jest.fn(async()=>[])}, config: { findFirst: jest.fn(),findMany:jest.fn(async()=>[]) } } }))
 jest.mock('../src/config/env', () => ({ config: { indonesia: { ppnRate: 0.11 } } }))
 jest.mock('../src/services/ReferralService', () => ({ processOrderReferralRewards: jest.fn() }))
 jest.mock('../src/services/PointsRuleService', () => ({ getOrCreatePointsRule: jest.fn(), calculatePoints: jest.fn() }))
@@ -21,7 +21,7 @@ beforeEach(() => {
         updateMany: async ({ where, data }: any) => { if (!where.status.in.includes(draft.status)) return { count: 0 }; draft.status = data.status; return { count: 1 } },
         findUnique: async () => ({ id: sale.id }), findUniqueOrThrow: async () => ({ ...sale, status: draft.status })
       },
-      config: { findUnique: async () => null },
+      config: { findUnique: async () => null, findMany: async () => [] },
       refundRequest: { findFirst: async ({ where }: any) => where.status === 'pending' ? (draft.pending ? { id: 'pending' } : null) : (draft.approved ? { id: 'approved' } : null) },
       memberCoupon: { updateMany: async () => ({ count: 0 }) },
       cashEvent: { findMany: async () => [...draft.cash], create: async ({ data }: any) => { draft.cash.push(data) } },

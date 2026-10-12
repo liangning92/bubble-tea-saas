@@ -558,6 +558,21 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "POST /api/orders/:id/void": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "orders.create",
+    "resource": {
+      "model": "order",
+      "param": "id"
+    },
+    "permission": "orders.refund.approve",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "POST /api/orders/:id/refund": {
     "legacyRoles": [
       "admin",

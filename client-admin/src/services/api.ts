@@ -107,6 +107,7 @@ export const categoryApi = {
 
 // Orders
 export const orderApi = {
+  exportData: (params?: any) => api.get('/orders/export', { params }),
   receivedReceipts: () => api.get('/orders/received-receipts'),
   list: (params?: any) => api.get('/orders', { params }),
   get: (id: string) => api.get('/orders/' + id),

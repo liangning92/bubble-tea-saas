@@ -3,12 +3,13 @@ import { useDashboardContext, requireRead, dashboardLink } from '../../utils/das
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
 import { useState, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { orderApi, channelApi, adminApi } from '../../services/api'
+import { orderApi, channelApi, adminApi, financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
+import { exportText, jakartaInput, orderReportHtml } from '../../utils/orderExport'
 import { Loader2, CheckCircle, XCircle, Search } from 'lucide-react'
 
 interface RefundRequest {
@@ -31,8 +32,7 @@ interface RefundRequest {
 type OrderSubTab = 'orders' | 'refunds'
 
 export function OrderListPage() {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user: _user } = useAuthStore()
   const context=useDashboardContext()
@@ -93,15 +93,9 @@ export function OrderListPage() {
   const channels = channelsData?.data?.data?.list || []
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['orders',context.storeId,context.startDate,context.endDate,statusFilter, channelFilter, search],
-    enabled:context.valid,
-    queryFn: async () => {const response=await orderApi.list({
-      storeId:context.storeId,startDate:context.startDate,endDate:context.endDate,
-      pageSize: 100,
-      status: statusFilter || undefined,
-      channelId: channelFilter || undefined,
-      search: search.trim() || undefined
-    });return requireRead(response,Array.isArray(response.data?.data?.list))}
+    queryKey: ['orders', filters, page],
+    enabled: context.valid && validRange,
+    queryFn: async () => { const response = await orderApi.list({ ...filters, page, pageSize: 100 }); return requireRead(response, Array.isArray(response.data?.data?.list)) }
   })
 
   const orders = data?.data?.data?.list || []
@@ -126,7 +120,6 @@ export function OrderListPage() {
     if (!confirmPreparedRefund(selectedRefund, t)) return
     try {
       await adminApi.approveRefund(selectedRefund.id, { verifiedPrepared: selectedRefund.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRefund.reasonCode === 'paid_unprepared', note: refundNote })
-      await queryClient.invalidateQueries()
       alert(t('orders.refundApproved'))
       setSelectedRefund(null)
       setRefundAction(null)
@@ -247,7 +240,7 @@ export function OrderListPage() {
           </div>
         ) : isError ? (
 <DashboardReadFailure retry={()=>refetch()} />
-        ) : orders.length === 0 ? (
+        ) : !validRange || orders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">{t('common.noData')}</div>
         ) : (
           <div className="overflow-x-auto">
@@ -305,6 +298,7 @@ export function OrderListPage() {
           </div>
         )}
       </div>
+      <div className="flex items-center gap-4 mt-3 text-sm"><span>{labels.count}: {data?.data?.data?.pagination?.total || 0} · {labels.page} {page}</span><button className="btn-secondary" disabled={page <= 1 || isLoading} onClick={() => setPage(page-1)}>{labels.prev}</button><button className="btn-secondary" disabled={page >= (data?.data?.data?.pagination?.totalPages || 1) || isLoading} onClick={() => setPage(page+1)}>{labels.next}</button></div>
         </>
       )}
 

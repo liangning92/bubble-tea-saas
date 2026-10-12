@@ -3,7 +3,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
 (async()=>{
  const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href);
  const tw=(await import(pathToFileURL(path.resolve('client-pos/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-pos/src/**/*.{js,ts,jsx,tsx}')];
- const server=await createServer({configFile:false,root:path.resolve('client-pos'),cacheDir:'/tmp/pos-printer-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6199,strictPort:true,proxy:{}},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
+ const server=await createServer({configFile:false,esbuild:{jsx:'automatic'},root:path.resolve('client-pos'),cacheDir:'/tmp/pos-printer-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6199,strictPort:true,proxy:{}},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
  try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync('/tmp/pos-printer-page-evidence',{recursive:true});
  for(const scenario of (process.env.PRINTER_SCENARIOS || ['legacy-cache','enabled','disabled','empty','unconfigured','offline-device','rejected-device','timeout','network','offline-order'].join(',')).split(',')){
   const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});let posts=0;const errors=[];

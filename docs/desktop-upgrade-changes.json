@@ -12,5 +12,8 @@
   "RefundRequest.selectedItemIds TEXT NOT NULL DEFAULT '[]'",
   "PaymentEvidence and LocalSchemaMigration tables and indexes",
   "Order_pickupNumber_idx nonunique index",
-  "Preserve compatible legacy INTEGER affinity for leave day Float columns"
+  "Preserve compatible legacy INTEGER affinity for leave day Float columns",
+  "StaffActionApproval and StaffApprovalCredential additive permission-approval tables and indexes",
+  "StaffAccessSchemaMigration versioned checksum record with verified pre-migration SQLite backup",
+  "Staff.employeeNumber unique constraint with database-backed global numbering sequence; preserve issued numbers and refuse unsafe duplicate-index creation"
 ]
