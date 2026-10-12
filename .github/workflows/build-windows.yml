@@ -14,6 +14,11 @@ on:
         type: boolean
         required: false
         default: false
+      full_legacy_regression:
+        description: 'Run the historical 295/372/384/392 upgrade matrix (manual regression only)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +43,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Fix git URLs
         run: |
@@ -49,6 +56,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
+      - name: Select checks for the changed files
+        id: validation
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          FULL_LEGACY_REGRESSION: ${{ inputs.full_legacy_regression }}
+        run: |
+          node tests/stoploss/windows-validation-scope.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Validation scope self-test failed' }
+          node scripts/windows-validation-scope.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot determine Windows validation scope' }
 
       - name: Set version
         id: version
@@ -111,7 +130,7 @@ jobs:
           $catalogPath = (Resolve-Path 'build/upgrade-helper/schema-catalog.json').Path
           python -m PyInstaller --clean --noconfirm --onefile --name btps-db-upgrade --distpath build/upgrade-helper --workpath "$env:RUNNER_TEMP/upgrade-pyinstaller" --specpath "$env:RUNNER_TEMP" --add-data "${catalogPath}:runtime" scripts/desktop-db-upgrade.py
           if ($LASTEXITCODE -ne 0) { throw 'Native helper build failed' }
-          if ('${{ inputs.skip_validation }}' -ne 'true') {
+          if ('${{ inputs.skip_validation }}' -ne 'true' -and '${{ steps.validation.outputs.SCOPE }}' -ne 'core') {
             python tests/stoploss/desktop-db-upgrade.test.py
             if ($LASTEXITCODE -ne 0) { throw 'Windows snapshot and rollback tests failed' }
           }
@@ -162,7 +181,7 @@ jobs:
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
 
       - name: Verify exact packaged receipt renderer without physical printing
-        if: ${{ !inputs.skip_validation }}
+        if: ${{ !inputs.skip_validation && steps.validation.outputs.RECEIPT_CHECK == 'true' }}
         run: |
           npx electron scripts/validate-receipt-raster.cjs --resources release/win-unpacked/resources
           if ($LASTEXITCODE -ne 0) { throw 'Packaged receipt raster validation failed' }
@@ -186,6 +205,8 @@ jobs:
 
       - name: Verify compiled manual helper and interactive installer on owned synthetic historical database
         if: ${{ !inputs.skip_validation }}
+        env:
+          BTPS_VALIDATION_SCOPE: ${{ steps.validation.outputs.SCOPE }}
         run: |
           python -u -X faulthandler scripts/validate-windows-manual-upgrade.py
           $validationExitCode = $LASTEXITCODE
@@ -233,15 +254,6 @@ jobs:
             Write-Host 'Packaged POS API startup passed'
           } finally {
             if (!$api.HasExited) { Stop-Process -Id $api.Id -Force }
-          }
-
-      - name: List ASAR contents (debug)
-        run: |
-          $asar = Get-ChildItem -Path release -Filter "*.asar" -Recurse | Select-Object -First 1
-          if ($asar) {
-            npx asar list $asar.FullName | Select-String "electron-pos-printer"
-          } else {
-            Write-Host "No ASAR found"
           }
 
       - name: Upload build artifacts

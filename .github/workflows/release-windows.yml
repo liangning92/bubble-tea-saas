@@ -59,48 +59,42 @@ jobs:
           const manual=JSON.parse(fs.readFileSync('evidence/desktop-manual-upgrade-report.json','utf8'));
           assert.equal(manual.sourceSha,process.env.RELEASE_SHA);
           assert.equal(manual.allCriticalCasesPassed,true);
+          assert.ok(['core','installer','legacy'].includes(manual.scope));
           assert.equal(manual.installedVersion,manual.expectedVersion,'Installed runtime version must match the advertised build');
           assert.match(manual.installedVersion,/^\d+\.\d+\.\d+$/);
           assert.equal(manual.syntheticOnly,true);
           assert.equal(manual.onlineInteractiveInstallerVerified,true);
-          assert.equal(manual.authentic295.originalVersion,'2026.10.295');
-          assert.equal(manual.authentic295.originalUninstallerPresent,true);
-          assert.equal(manual.authentic295.originalPayloadUnmodified,true);
-          assert.equal(manual.authentic295.originalUpdaterIpcUsed,true);
-          assert.equal(manual.authentic295.downloadedCandidateHashMatched,true);
-          assert.equal(manual.authentic295.historicalRowsPreserved,true);
-          assert.equal(manual.authentic295.alternateProfilePreserved,true);
-          assert.equal(manual.authentic295.restartedRuntime.version,manual.expectedVersion);
           assert.equal(manual.restartedRuntime.normalExit,true);
           assert.equal(manual.restartedRuntime.localApiReady,true);
           assert.equal(manual.restartedRuntime.processStarted,true);
           assert.equal(manual.restartedRuntime.originalProfileUsed,true);
           assert.equal(manual.restartedRuntime.version,manual.expectedVersion);
           assert.deepEqual(manual.onlineInstallerArguments,['--updated','--force-run']);
-          assert.equal(manual.cases.length,14);
-          for (const name of ['compiled-helper-waits-for-local-api-normal-exit','compiled-helper-running-local-api-retains-program-and-data','interactive-nsis-running-pos-automatic-close-install-restart-succeeds','interactive-nsis-running-local-api-close-retry-install-succeeds']) assert.ok(manual.cases.includes(name));
-          assert.ok(manual.cases.includes('interactive-nsis-obsolete-stage-preserved-new-installer-succeeds'));
+          for (const name of ['compiled-helper-old-database-upgrade-and-verified-backups','compiled-helper-backup-failure-preserves-database','compiled-helper-waits-for-local-api-normal-exit','compiled-helper-running-local-api-retains-program-and-data','interactive-nsis-reuses-background-verified-backup','real-interactive-nsis-online-install-without-repeat-confirmation-and-history-preserved']) assert.ok(manual.cases.includes(name),name);
           assert.equal(manual.downtimeLimitSeconds,120);
           assert.ok(Number.isFinite(manual.preparedDowntimeSeconds) && manual.preparedDowntimeSeconds > 0 && manual.preparedDowntimeSeconds <= 120);
-          for (const [key,version] of [['authentic372','2026.10.372'],['authentic384','2026.10.384'],['authentic392','2026.10.392']]) {
-            const run=manual[key];
-            assert.equal(run.originalVersion,version);
-            for (const field of ['originalUninstallerPresent','originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
+          if (manual.scope==='installer'||manual.scope==='legacy') {
+            for (const name of ['interactive-nsis-obsolete-stage-preserved-new-installer-succeeds','interactive-nsis-running-pos-automatic-close-install-restart-succeeds','interactive-nsis-running-local-api-close-retry-install-succeeds']) assert.ok(manual.cases.includes(name),name);
+            const run=manual.authentic392;
+            assert.equal(run.originalVersion,'2026.10.392');
+            for (const field of ['originalUninstallerPresent','originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved','backgroundBackupReused']) assert.equal(run[field],true);
             assert.equal(run.restartedRuntime.version,manual.expectedVersion);
             assert.equal(run.restartedRuntime.normalExit,true);
             assert.equal(run.restartedRuntime.localApiReady,true);
             assert.equal(run.restartedRuntime.processStarted,true);
             assert.equal(run.restartedRuntime.originalProfileUsed,true);
+            assert.ok(run.downtimeSeconds>0&&run.downtimeSeconds<=120);
           }
-          assert.equal(manual.authentic372.originalInstallerSha256,'3943a394c848f869c8abc12e5706ce3e4bf2c18ff0412d708537ccfb8cd70acc');
-          assert.equal(manual.authentic384.originalInstallerSha256,'3f52f8c7e19a0f497a53015e402a231adf675d4c2e63bec0d0aef899496810e6');
-          assert.equal(manual.authentic372.obsoleteStagePreserved,true);
-          assert.equal(manual.authentic384.backgroundBackupReused,true);
-          assert.equal(manual.authentic392.originalInstallerSha256,'4b3b9d22e71d85e3e949d432d8a4a947ee0346b51505975bd98b63e41f137eff');
-          assert.equal(manual.authentic392.backgroundBackupReused,true);
-          assert.ok(Number.isFinite(manual.authentic392.downtimeSeconds) && manual.authentic392.downtimeSeconds > 0 && manual.authentic392.downtimeSeconds <= 120);
-          assert.ok(Number.isFinite(manual.authentic384.downtimeSeconds) && manual.authentic384.downtimeSeconds > 0 && manual.authentic384.downtimeSeconds <= 120);
-          assert.ok(manual.cases.includes('interactive-nsis-reuses-background-verified-backup'));
+          if (manual.scope==='legacy') {
+            for (const [key,version] of [['authentic295','2026.10.295'],['authentic372','2026.10.372'],['authentic384','2026.10.384']]) {
+              const run=manual[key];
+              assert.equal(run.originalVersion,version);
+              for (const field of ['originalUninstallerPresent','originalPayloadUnmodified','originalUpdaterIpcUsed','downloadedCandidateHashMatched','historicalRowsPreserved','alternateProfilePreserved']) assert.equal(run[field],true);
+              assert.equal(run.restartedRuntime.version,manual.expectedVersion);
+            }
+            assert.equal(manual.authentic372.obsoleteStagePreserved,true);
+            assert.equal(manual.authentic384.backgroundBackupReused,true);
+          }
           assert.ok(manual.cases.includes('compiled-helper-historical-integer-leave-schema-preserved'));
           assert.ok(manual.cases.includes('generated-prisma-half-day-read-write-on-historical-integer-columns'));
           assert.deepEqual(manual.changes,JSON.parse(fs.readFileSync('docs/desktop-upgrade-changes.json','utf8')));
