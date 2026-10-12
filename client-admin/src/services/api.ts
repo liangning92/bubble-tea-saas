@@ -597,6 +597,7 @@ export const announcementApi = {
 
 // Salaries
 export const salaryApi = {
+  prepareMonth:(month:string)=>api.post('/salaries/prepare-month',{month}),
   adjustments: () => api.get('/salaries/adjustments'),
   createAdjustment: (data: any) => api.post('/salaries/adjustments',data),
   cancelAdjustment: (id: string) => api.post(`/salaries/adjustments/${id}/cancel`),
@@ -606,8 +607,8 @@ export const salaryApi = {
   update: (id: string, data: any) => api.put('/salaries/' + id, data),
   markPaid: (id: string) => api.put('/salaries/' + id + '/mark-paid'),
   delete: (id: string) => api.delete('/salaries/' + id),
-  calculate: (staffId: string, month: number, year: number) =>
-    api.get('/staff-salary/calculate/' + staffId, { params: { month, year } })
+  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}) =>
+    api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
 }
 
 // Marketing

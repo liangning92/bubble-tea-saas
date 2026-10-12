@@ -1,0 +1,13 @@
+import {beforeEach,expect,jest,test} from '@jest/globals'
+jest.mock('../src/config/database',()=>({__esModule:true,default:{staff:{findUnique:jest.fn()},attendance:{findMany:jest.fn()},attendanceRule:{findFirst:jest.fn()},schedule:{findMany:jest.fn()},leave:{findMany:jest.fn()},overtimeRequest:{findMany:jest.fn()},config:{findUnique:jest.fn()}}}))
+jest.mock('../src/config/env',()=>({config:{database:{url:'file:synthetic.db'}}}))
+jest.mock('../src/services/EmployeeWorkspaceStore',()=>({readWork:jest.fn(async()=>null),listWork:jest.fn(async()=>[])}))
+jest.mock('../src/services/SalaryAdjustmentService',()=>({adjustmentPlan:jest.fn(async()=>({items:[],rewards:50000,penalties:20000}))}))
+jest.mock('../src/services/SalaryDepositPlan',()=>({salaryDepositPlan:jest.fn(async()=>[{amount:100000,amountMinor:10000000}])}))
+jest.mock('../src/services/StaffConfigService',()=>({getStaffConfig:jest.fn(async()=>({attendanceBonus:true}))}))
+import prisma from '../src/config/database'
+import {calculateSalary} from '../src/services/StaffService'
+const db=prisma as any
+beforeEach(()=>{jest.clearAllMocks();db.staff.findUnique.mockResolvedValue({id:'staff',storeId:'s',name:'Test',baseSalary:1400000,hireDate:new Date('2026-10-01T00:00:00+07:00'),terminationDate:null});db.config.findUnique.mockResolvedValue(null);db.attendance.findMany.mockResolvedValue([]);db.attendanceRule.findFirst.mockResolvedValue({absenceDeductionType:'fixed',absenceDeductionFixed:10000000,overtimeRate:1.5,overtimeMinHours:1});db.schedule.findMany.mockResolvedValue([{date:new Date('2026-10-05T00:00:00+07:00')}]);db.leave.findMany.mockResolvedValue([]);db.overtimeRequest.findMany.mockResolvedValue([])})
+test('manual workdays replace incomplete attendance deductions and bonus but retain deposits and rewards/penalties',async()=>{const result=await calculateSalary('staff',10,2026,{probation:0,regular:31});expect(result.baseSalary).toBe(1400000);expect(result.deductions).toBe(120000);expect(result.bonuses).toBe(50000);expect(result.totalSalary).toBe(1330000)})
+test('approved overtime and leave queries end on the inclusive termination day',async()=>{db.staff.findUnique.mockResolvedValue({id:'staff',storeId:'s',name:'Test',baseSalary:1400000,hireDate:new Date('2026-10-12T00:00:00+07:00'),terminationDate:new Date('2026-10-20T00:00:00+07:00')});const result=await calculateSalary('staff',10,2026,{probation:0,regular:9});expect(result.baseSalary).toBe(406452);expect(db.overtimeRequest.findMany).toHaveBeenCalledWith({where:{staffId:'staff',status:'approved',date:{gte:new Date('2026-10-12T00:00:00+07:00'),lte:new Date('2026-10-20T23:59:59.999+07:00')}}});expect(result.payrollBasis.eligibleDays).toBe(9)})

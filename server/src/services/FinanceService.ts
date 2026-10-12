@@ -204,7 +204,7 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
     prisma.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } }, select: { amount: true, category: true, type: true, referenceType: true } }),
     prisma.salary.findMany({
       where: { staff: { storeId }, month: { gte: formatDate(startDate).slice(0, 7), lte: formatDate(endDate).slice(0, 7) } },
-      select: { month: true, finalAmount: true }
+      select: { month: true, finalAmount: true, status:true }
     })
   ])
 
@@ -224,17 +224,19 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
   // Allocate a monthly payroll record across the Jakarta calendar days that
   // the selected date range actually covers. A full-month statement still
   // includes the full salary; a seven-day analysis does not charge a month.
-  const salaryAccrual = payroll.reduce((sum, salary) => {
+  const accrueSalary = (salary: typeof payroll[number]) => {
     const [year, month] = salary.month.split('-').map(Number)
     const monthStart = Date.UTC(year, month - 1, 1) - 7 * 3600000
     const firstDay = Math.max(startOfDay(startDate).getTime(), monthStart)
     const lastDay = Math.min(startOfDay(endDate).getTime(), Date.UTC(year, month, 1) - 7 * 3600000 - 86400000)
     const coveredDays = Math.max(0, Math.floor((lastDay - firstDay) / 86400000) + 1)
     const monthDays = new Date(Date.UTC(year, month, 0)).getUTCDate()
-    return sum + Math.round(salary.finalAmount * coveredDays / monthDays)
-  }, 0)
+    return Math.round(salary.finalAmount * coveredDays / monthDays)
+  }
+  const salaryAccrual = payroll.reduce((sum,salary)=>sum+accrueSalary(salary),0)
+  const pendingSalary = payroll.filter(s=>s.status==='pending').reduce((sum,salary)=>sum+accrueSalary(salary),0)
   const totalOperatingCosts = otherExpenses + manualSalary + salaryAccrual
-  const operatingCosts = { actual: totalOperatingCosts, salary: salaryAccrual + manualSalary, other: otherExpenses, isEstimate: false }
+  const operatingCosts = { actual: totalOperatingCosts, salary: salaryAccrual + manualSalary, pendingSalary, other: otherExpenses, isEstimate: false }
   const netProfit = grossProfit - totalOperatingCosts
   const netMargin = revenue > 0 ? Math.round(netProfit / revenue * 100) : 0
 
