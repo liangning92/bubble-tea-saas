@@ -2,7 +2,9 @@ from contextlib import closing
 import importlib.util
 import pathlib
 import shutil
+import socket
 import sqlite3
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -73,11 +75,18 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(report['reason'], 'POS_OR_LOCAL_API_STILL_RUNNING')
 
     def test_local_api_is_reported_without_blame_on_unrelated_node(self):
-        with mock.patch.object(U.sys, 'platform', 'win32'), mock.patch.object(U.socket, 'socket') as socket:
-            socket.return_value.__enter__.return_value.connect_ex.return_value = 0
+        with mock.patch.object(U, 'windows_local_api_listening', return_value=True):
             with self.assertRaises(U.PosStillRunningError) as caught:
                 U.wait_stopped(lambda: ['node.exe'], timeout=0)
         self.assertEqual(caught.exception.details, {'posProcesses': [], 'localApiPort': 7072})
+
+    def test_local_api_listener_table_does_not_depend_on_tcp_accept_queue(self):
+        listening = struct.pack('<I6I', 1, 2, 0, socket.htons(7072), 0, 0, 1234)
+        closed = struct.pack('<I6I', 1, 5, 0, socket.htons(7072), 0, 0, 1234)
+        self.assertTrue(U.tcp_table_has_listener(listening, 7072))
+        self.assertFalse(U.tcp_table_has_listener(closed, 7072))
+        with self.assertRaises(RuntimeError):
+            U.tcp_table_has_listener(listening[:-1], 7072)
 
     def test_unrelated_node_process_does_not_block_pos_upgrade(self):
         self.assertIsNone(U.require_stopped(lambda: ['node.exe']))

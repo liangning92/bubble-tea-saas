@@ -12,6 +12,7 @@ import pathlib
 import shutil
 import socket
 import sqlite3
+import struct
 import sys
 import tempfile
 import time
@@ -364,17 +365,49 @@ def windows_processes():
     return names
 
 
+def tcp_table_has_listener(table, port):
+    if len(table) < 4:
+        fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+    count = struct.unpack_from('<I', table)[0]
+    row_size = 24  # MIB_TCPROW_OWNER_PID: six DWORD values.
+    if len(table) < 4 + count * row_size:
+        fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+    for index in range(count):
+        state, _address, encoded_port, _remote_address, _remote_port, _pid = struct.unpack_from('<6I', table, 4 + index * row_size)
+        if state == 2 and socket.ntohs(encoded_port & 0xffff) == port:
+            return True
+    return False
+
+
+def windows_local_api_listening():
+    """Read LISTEN sockets without filling an unaccepted TCP connection queue."""
+    if sys.platform != 'win32':
+        return False
+    from ctypes import wintypes
+    api = ctypes.WinDLL('iphlpapi', use_last_error=True).GetExtendedTcpTable
+    api.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), wintypes.BOOL,
+                    wintypes.ULONG, ctypes.c_int, wintypes.ULONG]
+    api.restype = wintypes.DWORD
+    size = wintypes.DWORD(0)
+    result = api(None, ctypes.byref(size), False, socket.AF_INET, 3, 0)
+    if result not in (0, 122) or size.value < 4:
+        fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+    for _ in range(3):
+        table = ctypes.create_string_buffer(size.value)
+        result = api(table, ctypes.byref(size), False, socket.AF_INET, 3, 0)
+        if result == 0:
+            return tcp_table_has_listener(table.raw[:size.value], 7072)
+        if result != 122:
+            break
+    fail('LOCAL_API_PORT_STATUS_UNAVAILABLE')
+
+
 def require_stopped(processes):
     # The old POS may fork a system node.exe for its local API, but other apps
     # can also run node.exe. Check our listener instead of blocking every Node
     # process on the cashier's machine.
     names = {name.lower() for name in processes()} & {'btps.exe', 'bubbleteapos.exe'}
-    local_api = False
-    if sys.platform == 'win32':
-        with socket.socket() as listener:
-            listener.settimeout(0.2)
-            if listener.connect_ex(('127.0.0.1', 7072)) == 0:
-                local_api = True
+    local_api = windows_local_api_listening()
     if names or local_api:
         raise PosStillRunningError(names, local_api)
 
