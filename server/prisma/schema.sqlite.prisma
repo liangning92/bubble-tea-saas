@@ -224,7 +224,7 @@ model Staff {
   storeId              String
   store                Store                  @relation(fields: [storeId], references: [id])
   name                 String
-  employeeNumber       String
+  employeeNumber       String          @unique
   position             String                 @default("店员")
   status               String                 @default("active") // active | inactive | resigned | suspended
   employmentType       String                 @default("full_time") // full_time | part_time | contract | intern
@@ -2152,4 +2152,32 @@ model MediaReference {
   storeId String
   configKey String
   @@unique([storeId, configKey, mediaId])
+}
+
+// Permission approvals are durable records, independent of role configuration rollback.
+model StaffActionApproval {
+  id String @id @default(uuid())
+  storeId String
+  applicantId String
+  approverId String?
+  action String
+  targetId String
+  requestId String
+  fingerprint String
+  payload String
+  beforeValue String?
+  result String?
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  executedAt DateTime?
+  @@unique([storeId, applicantId, requestId])
+  @@index([storeId, status, createdAt])
+}
+model StaffApprovalCredential {
+  userId String @id
+  pinHash String
+  failedAttempts Int @default(0)
+  lockedUntil DateTime?
+  updatedAt DateTime @updatedAt
 }

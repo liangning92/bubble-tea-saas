@@ -3,24 +3,25 @@ module.exports=async({page,browser,prisma,check,base,output,assertEventually})=>
  const origin='http://127.0.0.1:6311';
  await page.goto(origin+'/settings');
  await page.getByRole('button',{name:'Employee Permissions',exact:true}).click();await page.waitForURL('**/settings/permissions');
- await page.getByRole('button',{name:'Add Role',exact:true}).click();
- await page.getByLabel('Role Name',{exact:false}).fill('UI Finance Reader');
- await page.getByLabel('Permission Template',{exact:true}).selectOption('manager');
- while(await page.getByRole('button',{name:'Clear group',exact:true}).count())await page.getByRole('button',{name:'Clear group',exact:true}).first().click();
- await page.getByLabel('View finance and expenses',{exact:true}).check();
- await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('status').filter({hasText:'Roles and employee assignments saved.'}).waitFor();
- await page.reload();await page.getByLabel('View finance and expenses',{exact:true}).waitFor();assert.equal(await page.getByLabel('View finance and expenses',{exact:true}).isChecked(),true);
- assert.equal(await page.getByLabel('Create and edit finance records',{exact:true}).isChecked(),false);
+ await page.getByRole('button',{name:'Role templates',exact:true}).click();await page.getByRole('combobox',{name:'Role templates',exact:true}).selectOption('finance');
+ await page.getByRole('button',{name:'Duplicate role',exact:true}).click();await page.getByRole('textbox',{name:'Role name',exact:true}).fill('UI Finance Draft');
+ await page.getByRole('combobox',{name:'Create and edit finance records',exact:true}).selectOption('deny');await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('status').filter({hasText:'Draft saved; not active'}).waitFor();
+ assert.equal(await page.getByRole('combobox',{name:'Pay salaries',exact:true}).isDisabled(),true);
+ const draft=await check('GET','/api/staff-permissions?version=2&storeId=store');const role=draft.roles.find(r=>r.name==='UI Finance Draft');assert.ok(role);assert.equal(role.permissions['finance.write'],'deny');assert.equal(draft.active,false);
+ await page.reload();await page.getByRole('button',{name:'Role templates',exact:true}).click();await page.getByRole('combobox',{name:'Role templates',exact:true}).selectOption(role.id);assert.equal(await page.getByRole('textbox',{name:'Role name',exact:true}).inputValue(),'UI Finance Draft');assert.equal(await page.getByRole('combobox',{name:'Create and edit finance records',exact:true}).inputValue(),'deny');
  const employee=await check('POST','/api/staff',{storeId:'store',name:'UI Access Employee',phone:'081277702222',password:'SyntheticOnly2026',role:'manager'},201);
- const settings=await check('GET','/api/staff-permissions');const role=settings.roles.find(r=>r.name==='UI Finance Reader');assert.ok(role);
- await page.reload();await page.getByRole('button',{name:'Employee Assignments',exact:true}).click();
- await page.getByLabel('Role for UI Access Employee',{exact:true}).selectOption(role.id);
- await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByRole('status').filter({hasText:'Roles and employee assignments saved.'}).waitFor();
- await page.reload();await page.getByRole('button',{name:'Employee Assignments',exact:true}).click();
- assert.equal(await page.getByLabel('Role for UI Access Employee',{exact:true}).inputValue(),role.id);
- await page.getByRole('button',{name:'Change History',exact:true}).click();await page.getByText(/Revision \d+/).first().waitFor();
- await page.getByRole('button',{name:'Roles',exact:true}).click();
+ await page.reload();await page.getByRole('combobox',{name:'Role UI Access Employee',exact:true}).selectOption(role.id);await page.getByRole('dialog').getByRole('button',{name:'Confirm activation',exact:true}).click();
+ await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('status').filter({hasText:'Draft saved; not active'}).waitFor();await page.reload();assert.equal(await page.getByRole('combobox',{name:'Role UI Access Employee',exact:true}).inputValue(),role.id);
+ const savedDraft=await check('GET','/api/staff-permissions?version=2&storeId=store');assert.equal(savedDraft.active,false);assert.equal(savedDraft.assignments.find(a=>a.staffId===employee.id).roleId,role.id);
+ const checkpoint=await prisma.config.findUnique({where:{storeId_key:{storeId:'store',key:'staff.access.policy.v2'}}});
+ await page.getByRole('button',{name:'Preview and activate',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Confirm activation',exact:true}).click();await page.getByRole('status').filter({hasText:'Permissions activated'}).waitFor();assert.equal((await check('GET','/api/staff-permissions?version=2&storeId=store')).active,true);
+ await page.getByRole('button',{name:'Change history',exact:true}).click();await page.locator('main details').first().waitFor();
+ // Restore the owned fixture's inactive checkpoint before exercising legacy compatibility.
+ await prisma.config.update({where:{id:checkpoint.id},data:{value:checkpoint.value}});
  fs.mkdirSync(output,{recursive:true});await page.locator('main').screenshot({path:output+'/employee-permissions.png'});
+ // Until V2 activation, preserve and verify the existing read-only V1 assignment.
+ const legacy=await check('GET','/api/staff-permissions'),legacyRoleId=require('node:crypto').randomUUID();await check('PUT','/api/staff-permissions',{revision:legacy.revision,roles:[{id:legacyRoleId,name:'UI Finance Reader',description:'Synthetic legacy read-only compatibility',baseRole:'manager',permissions:['finance.read']}],assignments:[{staffId:employee.id,roleId:legacyRoleId}]});
+ console.log('PASS V2 draft role, denied finance mutation and owner-only salary payment control and employee assignment persist across reload without activation; explicit activation records history; inactive fixture checkpoint restored for legacy compatibility');
  // AI is part of the same settings shell, including deep-link refresh and save.
  await page.getByRole('button',{name:'AI permissions',exact:true}).click();await page.waitForURL('**/settings/ai');
  await page.getByRole('button',{name:'Employee Permissions',exact:true}).waitFor();

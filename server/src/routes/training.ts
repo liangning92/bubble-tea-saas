@@ -1,3 +1,4 @@
+import {declareAccessRoutes} from '../middlewares/staffAccessV2'
 import { trainingLibraryRouter } from './trainingLibrary'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -6,7 +7,7 @@ import { socketManager } from '../socket'
 
 const router = Router()
 
-router.use('/library', trainingLibraryRouter)
+router.use('/library', declareAccessRoutes('/api/training/library', trainingLibraryRouter))
 
 // 默认培训类别
 const DEFAULT_TRAINING_TYPES = [

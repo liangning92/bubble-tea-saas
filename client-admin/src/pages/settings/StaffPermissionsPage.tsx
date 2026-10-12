@@ -1,101 +1,44 @@
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { AlertCircle, CheckCircle, History, Loader2, Plus, Save, Shield, Trash2, Users } from 'lucide-react'
+import {useEffect,useState} from 'react'
+import {useTranslation} from 'react-i18next'
+import {useSearchParams} from 'react-router-dom'
 import api from '../../services/api'
-import { useAuthStore } from '../../stores/auth'
-
-type BaseRole = 'manager' | 'cashier' | 'staff'
-interface Role {id:string;name:string;description:string;baseRole:BaseRole;permissions:string[]}
-interface Assignment {staffId:string;roleId:string;originalRole?:BaseRole}
-interface Settings {
-  revision:number;roles:Role[];assignments:Assignment[]
-  catalog:Array<{key:string;group:string;roles:BaseRole[]}>
-  templates:Array<{baseRole:BaseRole;permissions:string[]}>
-  staff:Array<{id:string;name:string;employeeNumber:string;status:string;systemRole:string}>
-  history:Array<{id:string;createdAt:string;actorName:string;revision:number;roleCount:number;assignmentCount:number}>
-}
-export function StaffPermissionsPage() {
-  const {t,i18n}=useTranslation()
-  const {user}=useAuthStore()
-  const [data,setData]=useState<Settings|null>(null)
-  const [selected,setSelected]=useState('')
-  const [tab,setTab]=useState<'roles'|'employees'|'history'>('roles')
-  const [busy,setBusy]=useState(false)
-  const [dirty,setDirty]=useState(false)
-  const [message,setMessage]=useState<{error:boolean;text:string}|null>(null)
-  const [search,setSearch]=useState('')
-  const allowed=user?.role==='admin'&&!!user.storeId
-
-  const load=async()=>{
-    if(!allowed)return
-    setBusy(true);setMessage(null)
-    try {
-      const value=(await api.get('/staff-permissions')).data.data as Settings
-      setData(value);setDirty(false);setSelected(current=>value.roles.some(r=>r.id===current)?current:value.roles[0]?.id||'')
-    }catch{setMessage({error:true,text:t('staffAccess.loadFailed')})}
-    finally{setBusy(false)}
-  }
-  useEffect(()=>{setData(null);void load()},[user?.id,user?.storeId,user?.role])
-  const change=(value:Settings)=>{setData(value);setDirty(true);setMessage(null)}
-  const updateRole=(patch:Partial<Role>)=>{if(data)change({...data,roles:data.roles.map(r=>r.id===selected?{...r,...patch}:r)})}
-  const addRole=()=>{
-    if(!data)return
-    const id=crypto.randomUUID()
-    change({...data,roles:[...data.roles,{id,name:'',description:'',baseRole:'cashier',permissions:[...(data.templates.find(p=>p.baseRole==='cashier')?.permissions||[])]}]})
-    setSelected(id);setTab('roles')
-  }
-  const deleteRole=()=>{
-    if(!data)return
-    if(data.assignments.some(a=>a.roleId===selected)){setMessage({error:true,text:t('staffAccess.assignedDelete')});return}
-    const roles=data.roles.filter(r=>r.id!==selected);change({...data,roles});setSelected(roles[0]?.id||'')
-  }
-  const save=async()=>{
-    if(!data||busy||!allowed)return
-    if(data.roles.some(r=>!r.name.trim())||new Set(data.roles.map(r=>r.name.trim().toLocaleLowerCase())).size!==data.roles.length){setMessage({error:true,text:t('staffAccess.nameInvalid')});return}
-    setBusy(true);setMessage(null)
-    try {
-      await api.put('/staff-permissions',{revision:data.revision,roles:data.roles.map(r=>({...r,name:r.name.trim()})),assignments:data.assignments.map(({staffId,roleId})=>({staffId,roleId}))})
-      const saved=(await api.get('/staff-permissions')).data.data as Settings
-      setData(saved);setDirty(false);setMessage({error:false,text:t('staffAccess.saved')})
-    }catch(error:any){setMessage({error:true,text:t(error?.response?.status===409?'staffAccess.conflict':'staffAccess.saveFailed')})}
-    finally{setBusy(false)}
-  }
-  if(!allowed)return <div className="card max-w-6xl" role="alert">{t('staffAccess.adminOnly')}</div>
-  if(!data)return <div className="card max-w-6xl">{busy?<p role="status" className="flex items-center gap-2"><Loader2 className="animate-spin text-primary"/>{t('common.loading')}</p>:<><p role="alert" className="text-red-600">{message?.text}</p><button className="btn-primary mt-4" onClick={()=>void load()}>{t('common.refresh')}</button></>}</div>
-  const role=data.roles.find(r=>r.id===selected)
-  const groups=[...new Set(data.catalog.map(p=>p.group))]
-  return <section className="card max-w-6xl">
-    <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-      <div className="flex items-center gap-3"><div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center"><Shield className="text-primary" size={20}/></div><h2 className="text-lg font-semibold">{t('staffAccess.title')}</h2></div>
-      <button className="btn-primary flex items-center gap-2" disabled={busy||!dirty} onClick={()=>void save()}>{busy?<Loader2 size={18} className="animate-spin"/>:<Save size={18}/>} {t('common.save')}</button>
-    </div>
-    <p className="text-sm text-gray-500 mb-5">{t('staffAccess.hint')}</p>
-    {message&&<p role={message.error?'alert':'status'} className={`mb-4 rounded-lg px-3 py-2 flex items-start gap-2 text-sm ${message.error?'bg-red-50 text-red-700':'bg-green-50 text-green-700'}`}>{message.error?<AlertCircle size={18}/>:<CheckCircle size={18}/>} {message.text}</p>}
-    <div className="flex flex-wrap gap-2 border-b pb-4 mb-5">
-      {(['roles','employees','history'] as const).map(key=><button key={key} disabled={busy} onClick={()=>setTab(key)} aria-current={tab===key?'page':undefined} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${tab===key?'bg-primary text-white':'bg-gray-100 text-gray-600'}`}>{key==='roles'?<Shield size={16}/>:key==='employees'?<Users size={16}/>:<History size={16}/>} {t('staffAccess.'+key)}</button>)}
-    </div>
-    <fieldset disabled={busy}>
-      {tab==='roles'&&<div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-5">
-        <div className="space-y-3">
-          <button className="w-full py-2 border border-primary text-primary rounded-lg flex items-center justify-center gap-2" onClick={addRole}><Plus size={18}/>{t('staffAccess.addRole')}</button>
-          {data.roles.map(item=><button key={item.id} onClick={()=>setSelected(item.id)} className={`w-full text-left p-3 rounded-xl border ${selected===item.id?'border-primary bg-primary/5':'border-gray-200'}`}><span className="block font-medium">{item.name||t('staffAccess.unnamed')}</span><span className="block text-xs text-gray-500 mt-1">{t('staffAccess.assignedCount',{count:data.assignments.filter(a=>a.roleId===item.id).length})}</span></button>)}
-        </div>
-        {role?<div className="space-y-5 min-w-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="text-sm font-medium text-gray-700">{t('staffAccess.roleName')} *<input className="input mt-2" maxLength={60} value={role.name} onChange={e=>updateRole({name:e.target.value})}/></label>
-            <label className="text-sm font-medium text-gray-700">{t('staffAccess.template')}<select aria-label={t('staffAccess.template')} className="input mt-2" value={role.baseRole} onChange={e=>{const baseRole=e.target.value as BaseRole;updateRole({baseRole,permissions:[...(data.templates.find(p=>p.baseRole===baseRole)?.permissions||[])]})}}>{(['manager','cashier','staff'] as const).map(key=><option key={key} value={key}>{t('staffAccess.base.'+key)}</option>)}</select></label>
-          </div>
-          <label className="block text-sm font-medium text-gray-700">{t('staffAccess.description')}<textarea className="input mt-2" rows={2} maxLength={300} value={role.description} onChange={e=>updateRole({description:e.target.value})}/></label>
-          <p className="text-sm text-gray-500">{t('staffAccess.ceiling')}</p>
-          {groups.map(group=>{const permissions=data.catalog.filter(p=>p.group===group&&p.roles.includes(role.baseRole));if(!permissions.length)return null;return <fieldset key={group} className="rounded-xl border border-gray-200 px-4 pb-4"><legend className="px-2 text-sm font-semibold">{t('staffAccess.groups.'+group)}</legend><div className="flex justify-end mb-3"><button className="text-xs text-primary" onClick={()=>{const keys=permissions.map(p=>p.key),all=keys.every(p=>role.permissions.includes(p));updateRole({permissions:all?role.permissions.filter(p=>!keys.includes(p)):[...new Set([...role.permissions,...keys])]})}}>{t(permissions.every(p=>role.permissions.includes(p.key))?'staffAccess.clearGroup':'staffAccess.selectGroup')}</button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{permissions.map(permission=><label key={permission.key} className="flex items-center gap-3 text-sm text-gray-700"><input className="w-4 h-4 accent-primary" type="checkbox" checked={role.permissions.includes(permission.key)} onChange={e=>updateRole({permissions:e.target.checked?[...role.permissions,permission.key]:role.permissions.filter(p=>p!==permission.key)})}/>{t('staffAccess.permissions.'+permission.key)}</label>)}</div></fieldset>})}
-          <div className="flex justify-end"><button className="text-red-600 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-2 text-sm" onClick={deleteRole}><Trash2 size={16}/>{t('common.delete')}</button></div>
-        </div>:<p className="text-gray-500 py-12 text-center">{t('staffAccess.empty')}</p>}
-      </div>}
-      {tab==='employees'&&<div>
-        <label className="sr-only" htmlFor="permissions-search">{t('staffAccess.search')}</label><input id="permissions-search" className="input mb-4" placeholder={t('staffAccess.search')} value={search} onChange={e=>setSearch(e.target.value)}/>
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-gray-500"><th className="py-3">{t('staffAccess.employee')}</th><th className="py-3">{t('staffAccess.role')}</th></tr></thead><tbody>{data.staff.filter(s=>(s.name+' '+s.employeeNumber).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(staff=><tr key={staff.id} className="border-b last:border-0"><td className="py-3 pr-4"><p className="font-medium">{staff.name}</p><p className="text-xs text-gray-500">{staff.employeeNumber}</p></td><td className="py-3">{staff.systemRole==='admin'?<span className="text-gray-500">{t('staffAccess.owner')}</span>:<select aria-label={t('staffAccess.employeeRole',{name:staff.name})} className="input max-w-sm" value={data.assignments.find(a=>a.staffId===staff.id)?.roleId||''} onChange={e=>change({...data,assignments:[...data.assignments.filter(a=>a.staffId!==staff.id),...(e.target.value?[{staffId:staff.id,roleId:e.target.value}]:[])]})}><option value="">{t('staffAccess.systemDefault')}</option>{data.roles.map(r=><option key={r.id} value={r.id} disabled={staff.status!=='active'}>{r.name||t('staffAccess.unnamed')}</option>)}</select>}</td></tr>)}</tbody></table></div>
-      </div>}
-      {tab==='history'&&<div className="space-y-3">{data.history.length?data.history.map(entry=><div key={entry.id} className="rounded-xl bg-gray-50 p-4 text-sm"><p className="font-medium">{t('staffAccess.revision',{revision:entry.revision})} · {entry.actorName||t('staffAccess.owner')}</p><p className="text-gray-500 mt-1">{new Date(entry.createdAt).toLocaleString(i18n.language,{timeZone:'Asia/Jakarta'})} · {t('staffAccess.historyCount',{roles:entry.roleCount,employees:entry.assignmentCount})}</p></div>):<p className="text-gray-500 py-8 text-center">{t('staffAccess.noHistory')}</p>}</div>}
-    </fieldset>
-  </section>
+import {useAuthStore} from '../../stores/auth'
+import {staffAccessLabels,extraPermissionLabels,staffRoleLabel} from '../../../../shared/staffAccessLabels'
+type Mode='allow'|'deny'|'approval'
+type Role={id:string;name:string;description:string;permissions:Record<string,Mode>}
+type Binding={staffId:string;roleId:string|null;overrides:Record<string,Mode>}
+type Settings={version:2;revision:number;active:boolean;roles:Role[];assignments:Binding[];templates:Role[];catalog:{key:string;group:string;sensitive:boolean;ownerOnly?:boolean;scope:string;dependencies:string[]}[];staff:{id:string;name:string;employeeNumber:string;status:string;systemRole:string;currentModes?:Record<string,Mode>}[];history:any[]}
+export function StaffPermissionsPage(){
+ const {t,i18n}=useTranslation(),l=staffAccessLabels(i18n.language),extra=extraPermissionLabels(l),user=useAuthStore(s=>s.user),[params,setParams]=useSearchParams()
+ const [stores,setStores]=useState<{id:string;name:string}[]>([]),[storeId,setStoreId]=useState(params.get('storeId')||sessionStorage.getItem('staff-permissions-store:'+user?.id)||user?.storeId||''),[data,setData]=useState<Settings|null>(null),[tab,setTab]=useState('employees'),[search,setSearch]=useState(''),[filter,setFilter]=useState(''),[checked,setChecked]=useState<string[]>([]),[batchRole,setBatchRole]=useState('basic'),[employee,setEmployee]=useState(params.get('staffId')||''),[roleId,setRoleId]=useState('manager'),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[message,setMessage]=useState(''),[preview,setPreview]=useState<any>(null),[templateChange,setTemplateChange]=useState<{staffId:string;roleId:string}|null>(null),[latest,setLatest]=useState<Settings|null>(null)
+ const roleName=(r:Role)=>staffRoleLabel(r.id,r.name,l)
+ const label=(key:string)=>extra[key]||t('staffAccess.permissions.'+key,{defaultValue:key})
+ const load=async(id=storeId)=>{if(!id)return;setBusy(true);try{const r=await api.get('/staff-permissions',{params:{version:2,storeId:id}});setData(r.data.data);setDirty(false);setLatest(null)}catch{setMessage(l.loadFailed)}finally{setBusy(false)}}
+ useEffect(()=>{if(user?.role!=='admin')return;api.get('/staff-permissions/stores').then(r=>{setStores(r.data.data);if(!storeId&&r.data.data[0])setStoreId(r.data.data[0].id)}).catch(()=>setMessage(l.loadFailed))},[user?.id])
+ useEffect(()=>{if(storeId){sessionStorage.setItem('staff-permissions-store:'+user?.id,storeId);const next=new URLSearchParams(params);next.set('storeId',storeId);setParams(next,{replace:true})}setData(null);setChecked([]);setPreview(null);void load()},[storeId])
+ useEffect(()=>{const guard=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue=''}};window.addEventListener('beforeunload',guard);return()=>window.removeEventListener('beforeunload',guard)},[dirty])
+ const change=(v:Settings)=>{setData(v);setDirty(true);setMessage('');setPreview(null)}
+ const bind=(id:string,rid:string|null,overrides?:Record<string,Mode>)=>{if(!data)return;const old=data.assignments.find(a=>a.staffId===id);change({...data,assignments:[...data.assignments.filter(a=>a.staffId!==id),{staffId:id,roleId:rid,overrides:overrides||old?.overrides||{}}]})}
+ const body=()=>({version:2,revision:data!.revision,roles:data!.roles,assignments:data!.assignments})
+ const fail=async(e:any)=>{if(e?.response?.status===409){setMessage(l.conflict);try{setLatest((await api.get('/staff-permissions',{params:{version:2,storeId}})).data.data)}catch{}}else setMessage(e?.response?.data?.message||l.error)}
+ const save=async()=>{setBusy(true);try{const saved=await api.put('/staff-permissions',body(),{params:{storeId}});setData(previous=>previous?{...previous,revision:saved.data.data.revision}:previous);setDirty(false);setMessage(l.saved)}catch(e){await fail(e)}finally{setBusy(false)}}
+ const compare=async()=>{setBusy(true);try{setPreview((await api.post('/staff-permissions/preview',body(),{params:{storeId}})).data.data)}catch(e){await fail(e)}finally{setBusy(false)}}
+ const activate=async()=>{setBusy(true);let saved=false;try{await api.post('/staff-permissions/activate',{...body(),hash:preview.hash},{params:{storeId}});saved=true;setDirty(false);setPreview(null);const fresh=await api.get('/staff-permissions',{params:{version:2,storeId}});setData(fresh.data.data);setMessage(l.activated);window.dispatchEvent(new Event('staff-access-changed'))}catch(e){if(saved)setMessage(l.refreshFailed);else await fail(e)}finally{setBusy(false)}}
+ const binding=data?.assignments.find(a=>a.staffId===employee),selectedRole=data?.roles.find(r=>r.id===(binding?.roleId||'basic'))||data?.templates.find(r=>r.id==='basic'),editRole=data?.roles.find(r=>r.id===roleId)
+ const updatePermission=(target:'employee'|'role',key:string,value:string)=>{if(!data)return;const map={...(target==='employee'?binding?.overrides:editRole?.permissions)} as Record<string,Mode>;if(!value)delete map[key];else map[key]=value as Mode;if(value&&value!=='deny'){const base=target==='employee'?selectedRole?.permissions:{};for(const dep of data.catalog.find(p=>p.key===key)?.dependencies||[]){if(map[dep]==='deny'){setMessage(l.dependency);return}if(map[dep]!=='allow'&&base?.[dep]!=='allow')map[dep]='allow'}}if(target==='employee')bind(employee,binding?.roleId||null,map);else change({...data,roles:data.roles.map(r=>r.id===roleId?{...r,permissions:map}:r)})}
+ const permissionEditor=(target:'employee'|'role')=><div className="space-y-4">{[...new Set(data!.catalog.map(p=>p.group))].map(group=><section key={group} className="border rounded-xl p-3"><h3 className="font-semibold mb-3">{t('staffAccess.groups.'+group,{defaultValue:group})}</h3><div className="grid sm:grid-cols-2 gap-3">{data!.catalog.filter(p=>p.group===group).map(p=>{const override=binding?.overrides[p.key],base=selectedRole?.permissions[p.key]||'deny',value=target==='employee'?override||'':editRole?.permissions[p.key]||'deny';return <label key={p.key} className="text-sm flex justify-between gap-2 items-center"><span>{label(p.key)}<small className="block text-gray-500">{target==='employee'?`${l.active}: ${l[data!.staff.find(s=>s.id===employee)?.currentModes?.[p.key]||'deny']} · `:''}{target==='employee'?`${l.source}: ${override?l.personal:l.template} · ${l[(override||base) as Mode]}`:p.scope==='self'?l.basic:l.store}</small></span><select disabled={p.key==='personal.profile'||p.ownerOnly} className="input max-w-40" aria-label={label(p.key)} value={value} onChange={e=>updatePermission(target,p.key,e.target.value)}>{target==='employee'&&<option value="">{l.follow}</option>}<option value="allow">{l.allow}</option><option value="deny">{l.deny}</option>{p.sensitive&&<option value="approval">{l.approval}</option>}</select></label>})}</div></section>)}</div>
+ if(user?.role!=='admin')return <p role="alert">{l.ownerOnly}</p>
+ return <section className="card max-w-6xl space-y-5"><div className="flex flex-wrap gap-3 items-center justify-between"><h2 className="font-bold text-xl">{l.employees}</h2><select aria-label={l.store} className="input max-w-xs" value={storeId} disabled={busy} onChange={e=>{if(dirty&&!window.confirm(l.unsaved))return;setStoreId(e.target.value);setDirty(false)}}>{stores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+ {message&&<p role="status" className="p-3 bg-blue-50 break-words">{message}{message===l.refreshFailed&&<button className="btn-secondary ml-2" onClick={()=>void load()}>{l.retry}</button>}</p>}{latest&&<div className="bg-yellow-50 p-3"><p>{l.before}: v{latest.revision} · {l.roles}: {latest.roles.map(r=>r.name).join(', ')}</p><button className="btn-secondary" onClick={()=>{if(data)change({...data,revision:latest.revision});setLatest(null)}}>{l.preview}</button><button className="btn-secondary ml-2" onClick={()=>void load()}>{l.retry}</button></div>}
+ {!data?<button onClick={()=>void load()} disabled={busy}>{busy?t('common.loading'):l.retry}</button>:<><div className="flex flex-wrap gap-2"><span className="text-sm py-2">{data.active?l.active:l.legacy} · v{data.revision}{dirty?' · '+l.unsaved:''}</span><button className="btn-secondary ml-auto" disabled={busy||!dirty} onClick={()=>void save()}>{l.saveDraft}</button><button className="btn-primary" disabled={busy} onClick={()=>void compare()}>{l.preview}</button></div>
+ <nav className="flex gap-2 border-b pb-3">{['employees','roles','history'].map(key=><button key={key} className={tab===key?'btn-primary':'btn-secondary'} onClick={()=>{setTab(key);setEmployee('')}}>{l[key as 'employees'|'roles'|'history']}</button>)}</nav><fieldset disabled={busy}>
+ {tab==='employees'&&<div className="space-y-4"><div className="flex flex-wrap gap-3"><input aria-label={l.search} placeholder={l.search} className="input max-w-xs" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label={l.filter} className="input max-w-xs" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">{l.all}</option>{data.roles.map(r=><option value={r.id} key={r.id}>{roleName(r)}</option>)}</select></div><div className="flex gap-2"><select aria-label={l.assign} className="input max-w-xs" value={batchRole} onChange={e=>setBatchRole(e.target.value)}>{data.roles.map(r=><option value={r.id} key={r.id}>{roleName(r)}</option>)}</select><button className="btn-secondary" disabled={!checked.length} onClick={()=>{change({...data,assignments:[...data.assignments.filter(a=>!checked.includes(a.staffId)),...checked.map(staffId=>({staffId,roleId:batchRole,overrides:data.assignments.find(a=>a.staffId===staffId)?.overrides||{}}))]});setChecked([])}}>{l.assign} ({checked.length})</button></div>
+ <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th>{l.select}</th><th>{l.employees}</th><th>{l.role}</th><th>{l.exceptions}</th><th>{l.effective}</th></tr></thead><tbody>{data.staff.filter(s=>(s.name+' '+s.employeeNumber).toLowerCase().includes(search.toLowerCase())&&(!filter||(data.assignments.find(a=>a.staffId===s.id)?.roleId||'basic')===filter)).map(s=>{const a=data.assignments.find(a=>a.staffId===s.id);return <tr key={s.id} className="border-b"><td><input aria-label={l.select+' '+s.name} type="checkbox" disabled={s.systemRole==='admin'||s.status!=='active'} checked={checked.includes(s.id)} onChange={e=>setChecked(e.target.checked?[...checked,s.id]:checked.filter(id=>id!==s.id))}/></td><td className="py-3">{s.name}<small className="block text-gray-500">{s.employeeNumber} · {s.status} · {data.active?l.active:l.legacy}: {s.systemRole}</small></td><td>{s.systemRole==='admin'?l.ownerOnly:<select aria-label={l.role+' '+s.name} className="input" value={a?.roleId||''} disabled={s.status!=='active'} onChange={e=>setTemplateChange({staffId:s.id,roleId:e.target.value})}><option value="">{l.basic}</option>{data.roles.map(r=><option key={r.id} value={r.id}>{roleName(r)}</option>)}</select>}</td><td>{Object.keys(a?.overrides||{}).length}</td><td>{s.systemRole!=='admin'&&<button className="text-primary" disabled={s.status!=='active'} onClick={()=>setEmployee(s.id)}>{l.effective}</button>}</td></tr>})}</tbody></table></div>
+ {employee&&<div className="border rounded-xl p-4 space-y-4"><div className="flex justify-between"><h3 className="font-bold">{data.staff.find(s=>s.id===employee)?.name} · {l.effective}</h3><button onClick={()=>setEmployee('')}>{l.close}</button></div><select aria-label={l.copy} className="input max-w-xs" value="" onChange={e=>{const from=data.assignments.find(a=>a.staffId===e.target.value);bind(employee,from?.roleId||null,{...from?.overrides})}}><option value="">{l.copy}</option>{data.staff.filter(s=>s.id!==employee&&s.systemRole!=='admin').map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select>{permissionEditor('employee')}</div>}</div>}
+ {tab==='roles'&&<div className="space-y-4"><select className="input max-w-xs" aria-label={l.roles} value={roleId} onChange={e=>setRoleId(e.target.value)}>{data.roles.map(r=><option key={r.id} value={r.id}>{roleName(r)}</option>)}</select>{editRole&&<><div className="flex flex-wrap gap-3"><input aria-label={l.name} className="input max-w-xs" value={editRole.name} onChange={e=>change({...data,roles:data.roles.map(r=>r.id===roleId?{...r,name:e.target.value}:r)})}/><button className="btn-secondary" onClick={()=>{const id=crypto.randomUUID();change({...data,roles:[...data.roles,{...editRole,id,name:editRole.name+' (copy)',permissions:{...editRole.permissions}}]});setRoleId(id)}}>{l.add}</button><button className="btn-secondary text-red-600" onClick={()=>{if(data.assignments.some(a=>a.roleId===roleId)){setMessage(t('staffAccess.assignedDelete'));return}change({...data,roles:data.roles.filter(r=>r.id!==roleId)});setRoleId(data.roles.find(r=>r.id!==roleId)?.id||'')}}>{l.remove}</button></div>{permissionEditor('role')}</>}</div>}
+ {tab==='history'&&<div className="space-y-3">{data.history.length?data.history.map(h=><details className="bg-gray-50 p-3 rounded" key={h.id}><summary>{new Date(h.createdAt).toLocaleString(i18n.language,{timeZone:'Asia/Jakarta'})} · {h.userId}</summary><pre className="text-xs whitespace-pre-wrap break-all">{h.newValue}</pre></details>):l.none}</div>}
+ </fieldset></>}
+ {templateChange&&data&&<div role="dialog" aria-modal="true" className="fixed inset-0 bg-black/40 z-50 flex justify-center items-center"><div className="bg-white rounded-xl p-5 max-w-lg w-full space-y-3"><h3>{l.preview}</h3><p>{data.staff.find(s=>s.id===templateChange.staffId)?.name}: {l.before} {data.roles.find(r=>r.id===data.assignments.find(a=>a.staffId===templateChange.staffId)?.roleId)?.name||l.basic} → {l.after} {data.roles.find(r=>r.id===templateChange.roleId)?.name||l.basic}</p><p>{l.exceptions}: {l.follow}</p><button className="btn-primary" onClick={()=>{bind(templateChange.staffId,templateChange.roleId||null);setTemplateChange(null)}}>{l.confirm}</button><button className="btn-secondary ml-2" onClick={()=>setTemplateChange(null)}>{l.cancel}</button></div></div>}
+ {preview&&<div role="dialog" aria-modal="true" className="fixed inset-0 bg-black/40 z-50 flex justify-center items-center"><div className="bg-white rounded-xl p-5 max-w-4xl w-full max-h-[85vh] overflow-y-auto space-y-4"><h3 className="font-bold">{l.preview} · {l.changed}: {preview.changes.length}</h3>{preview.changes.map((c:any)=><details key={c.staffId} className="border rounded p-3"><summary>{c.name} · {c.employeeNumber} · {l.sensitive}: {c.sensitive.map(label).join(', ')||'-'}</summary><div className="grid sm:grid-cols-2 gap-3 text-sm"><div>{l.before}<pre className="whitespace-pre-wrap">{data?.catalog.map(p=>`${label(p.key)}: ${l[c.previous[p.key] as Mode]||'-'}`).join('\n')}</pre></div><div>{l.after}<div>{Object.entries(c.next).map(([k,v])=><p key={k}>{label(k)}: {l[v as Mode]}</p>)}</div></div></div></details>)}<button className="btn-primary" disabled={busy} onClick={()=>void activate()}>{l.confirm}</button><button className="btn-secondary ml-2" onClick={()=>setPreview(null)}>{l.cancel}</button></div></div>}
+ </section>
 }

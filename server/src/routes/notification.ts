@@ -4,13 +4,14 @@ import prisma from '../config/database'
 import { getStoreId } from '../utils/storeHelper'
 
 const router = Router()
+function employeeMessagesFor(req:AuthRequest){const user=req.user!;if(user.accessRole?.version===2)return !user.accessRole.permissions.includes('notifications.read');return ['staff','cashier'].includes(user.role)||!!(user.accessRole&&!user.accessRole.permissions.includes('notifications.read'))}
 
 // GET /api/notifications
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     const { type, status, limit = 50 } = req.query
-    const employeeMessages = ['staff','cashier'].includes(req.user!.role) || !!(req.user!.accessRole && !req.user!.accessRole.permissions.includes('notifications.read'))
+    const employeeMessages = employeeMessagesFor(req)
     const where: any = { storeId, ...(employeeMessages ? {memberId:null} : {}) }
     if (type) where.type = type
     if (status) where.status = status
@@ -54,7 +55,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
 // PUT /api/notifications/:id/read
 router.put('/:id/read', authenticate, async (req: AuthRequest, res) => {
   try {
-    const employeeMessages = ['staff','cashier'].includes(req.user!.role) || !!(req.user!.accessRole && !req.user!.accessRole.permissions.includes('notifications.read'))
+    const employeeMessages = employeeMessagesFor(req)
     const existing=await prisma.notification.findFirst({where:{id:req.params.id,storeId:req.user!.storeId,...(employeeMessages?{memberId:null}:{})}})
     if(!existing)return res.status(404).json({code:404,message:'Notification not found'})
     const notification = await prisma.notification.update({
@@ -73,7 +74,7 @@ router.put('/mark-all-read', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     await prisma.notification.updateMany({
-      where: { storeId, status: 'unread', ...(['staff','cashier'].includes(req.user!.role) || (req.user!.accessRole && !req.user!.accessRole.permissions.includes('notifications.read')) ? {memberId:null} : {}) },
+      where: { storeId, status: 'unread', ...(employeeMessagesFor(req) ? {memberId:null} : {}) },
       data: { status: 'read', readAt: new Date() }
     })
     res.json({ code: 200, message: 'All notifications marked as read', timestamp: new Date().toISOString() })

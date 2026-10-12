@@ -1,3 +1,5 @@
+import {payrollLabels} from '../../../shared/payrollLabels'
+import { probationLabels } from '../../../shared/probationLabels'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
@@ -8,12 +10,15 @@ import { downloadPayslip } from '../utils/payslip'
 import { formatCurrency } from '../utils/helpers'
 
 export function SalaryPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const probationText=probationLabels(i18n.language)
   const { user } = useAuthStore()
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [loadError, setLoadError] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
+  const [probation,setProbation]=useState<any>(null)
+  const [probationError,setProbationError]=useState(false)
   const [salary, setSalary] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -44,6 +49,14 @@ export function SalaryPage() {
     next.setMonth(next.getMonth() + 1)
     setCurrentMonth(next)
   }
+
+  useEffect(()=>{
+    let active=true;setProbation(null);setProbationError(false)
+    if(!user?.staffId)return
+    const month=`${currentMonth.getFullYear()}-${String(currentMonth.getMonth()+1).padStart(2,'0')}`
+    staffApi.getMyProbation(month).then(response=>{if(active)setProbation(response.data)}).catch(()=>{if(active)setProbationError(true)})
+    return ()=>{active=false}
+  },[user?.staffId,currentMonth,retryCount])
 
   if (loadError) return <LoadFailure retry={() => setRetryCount(count => count + 1)} />
 
@@ -88,6 +101,11 @@ export function SalaryPage() {
         </button>
       </div>
 
+      {probationError&&<p role="alert" className="p-4 text-red-600">{probationText.loadError}<button onClick={()=>setRetryCount(n=>n+1)}>↻</button></p>}
+      {probation&&<section className="m-4 bg-white rounded-xl border p-4 space-y-2 text-sm"><h2 className="font-bold text-base">{probationText[probation.status==='probation'?'probation':probation.status==='not_started'?'not_started':'regular']}</h2><p>{probationText.formal}: {probation.formalMonthlySalary===null?'-':formatCurrency(probation.formalMonthlySalary)}</p><p>{probationText.current}: {probation.currentMonthlySalary===null?'-':formatCurrency(probation.currentMonthlySalary)}</p>{probation.confirmationDate&&<p>{probationText.confirmation}: {probation.confirmationDate}</p>}
+      <h3 className="font-semibold">{probation.salaryStatus==='not_created'?probationText.estimated:probationText.recorded}</h3>
+      {probation.basis ? <><p>{probationText.monthDays}: {probation.basis.daysInMonth} · {probationText.eligible}: {probation.basis.eligibleDays}</p><p>{probationText.formula}</p>{probation.basis.segments?.map((s:any,i:number)=><p key={i}>{s.type==='probation'?probationText.probation:probationText.regular} · {s.startDate} — {s.endDate}<br/>{formatCurrency(s.monthlyRate)} × {s.days} / {probation.basis.daysInMonth} = {formatCurrency(s.amount)}</p>)}<p>{probation.basis.paidRestDays>0&&<>{payrollLabels(i18n.language).paidRestCredit}: {probation.basis.paidRestDays} · +{formatCurrency(probation.basis.paidRestAmount)}</>}</p><p className="font-bold">{probationText.total}: {formatCurrency(probation.basis.recordedBaseSalary??probation.basis.amount)}</p>{probation.basis.manualAdjustment&&<p>{probationText.manual}</p>}</> : <p>{probation.recordedBaseSalary===null?probationText.configError:formatCurrency(probation.recordedBaseSalary)}</p>}
+      <p className="text-gray-500">{probation.salaryStatus==='not_created'?probationText.preview:probationText.legacy}</p></section>}
       {/* Salary Content */}
       <div className="p-4">
         {isLoading ? (

@@ -1,3 +1,5 @@
+import { cupStickerTspl } from './cupSticker'
+import { parsePrinterNames } from './printerInventory'
 import { requestReceiptHandover } from './receiptHandover'
 import { renderTemplateReceipt } from './receiptRaster'
 import { WindowsRawPrinter } from './windowsRawPrinter'
@@ -826,7 +828,7 @@ function createCustomerWindow() {
 
   const targetDisplay = rightmostDisplay
 
-  const { width, height, x: screenX, y: screenY } = targetDisplay.workArea
+  const { width, height, x: screenX, y: screenY } = targetDisplay.bounds
 
   customerWindow = new BrowserWindow({
     width,
@@ -834,6 +836,7 @@ function createCustomerWindow() {
     x: screenX,
     y: screenY,
     fullscreen: true,
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: getResourcePath('dist-electron/electron/preload.js'),
@@ -849,6 +852,24 @@ function createCustomerWindow() {
   customerWindow.setMenu(null)
   customerWindow.setMenuBarVisibility(false)
   customerWindow.setAutoHideMenuBar(true)
+
+  // Use DIP bounds directly; Electron already accounts for the display DPI.
+  const displayWindow = customerWindow
+  const fitDisplay = () => {
+    if (displayWindow.isDestroyed()) return
+    const display = screen.getAllDisplays().find(item => item.id === targetDisplay.id)
+    if (!display) return
+    displayWindow.setBounds(display.bounds)
+    displayWindow.setFullScreen(true)
+  }
+  const onDisplayMetricsChanged = (_event: Electron.Event, display: Electron.Display) => {
+    if (display.id === targetDisplay.id) fitDisplay()
+  }
+  displayWindow.once('ready-to-show', fitDisplay)
+  screen.on('display-metrics-changed', onDisplayMetricsChanged)
+  displayWindow.once('closed', () => {
+    screen.removeListener('display-metrics-changed', onDisplayMetricsChanged)
+  })
 
   // 加载副屏界面
   if (isDev) {
@@ -882,150 +903,39 @@ function createCustomerWindow() {
 // ========== Printer Listing (Windows) ==========
 
 ipcMain.handle('list-printers', async () => {
-  if (process.platform !== 'win32') {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      try {
-        const sysPrinters = await mainWindow.webContents.getPrintersAsync()
-        const names = (sysPrinters || []).map(p => p.name).filter(Boolean)
-        return { printers: names, error: null }
-      } catch (err: any) {
-        return { printers: [], error: err?.message || 'Failed to get printers on macOS/Linux' }
-      }
-    }
-    return { printers: [], error: 'Window not available to query printers' }
+  const probes: Promise<string[]>[] = []
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    probes.push(new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Printer inventory timeout')), 5000)
+      mainWindow!.webContents.getPrintersAsync().then(printers => {
+        clearTimeout(timer); resolve(printers.map(p => p.name).filter(Boolean))
+      }, error => { clearTimeout(timer); reject(error) })
+    }))
   }
-
-  return new Promise((resolve) => {
-    const { exec } = require('child_process')
-    const allPrinters = new Set<string>()
-    let hasError = false
-    let methodsChecked = 0
-
-    const checkDone = () => {
-      methodsChecked++
-      if (methodsChecked >= 3) {
-        const result = Array.from(allPrinters)
-        console.log('[LIST-PRINTERS] Total found:', result.length, '->', result)
-        resolve({ printers: result, error: hasError ? 'Some methods failed' : null })
-      }
-    }
-
-    // Method 1: Get-Printer (standard Windows printers)
-    const cmd1 = 'powershell -Command "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"'
-    exec(cmd1, (error: any, stdout: string, stderr: string) => {
-      if (!error && stdout.trim()) {
-        try {
-          const trimmed = stdout.trim()
-          let parsed: string[]
-          if (trimmed.startsWith('[')) {
-            parsed = JSON.parse(trimmed)
-          } else if (trimmed.startsWith('{')) {
-            parsed = [JSON.parse(trimmed).Name]
-          } else {
-            parsed = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
-          }
-          parsed.forEach((p: string) => allPrinters.add(p))
-          console.log('[LIST-PRINTERS] Get-Printer found:', parsed.length)
-        } catch (e: any) {
-          console.error('[LIST-PRINTERS] Get-Printer parse error:', e.message)
-          hasError = true
-        }
-      } else if (error) {
-        console.error('[LIST-PRINTERS] Get-Printer error:', error.message)
-        hasError = true
-      }
-      checkDone()
-    })
-
-    // Method 2: WMI Win32_Printer (finds printers that Get-Printer misses)
-    const cmd2 = 'powershell -Command "Get-WmiObject Win32_Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"'
-    exec(cmd2, (error: any, stdout: string, stderr: string) => {
-      if (!error && stdout.trim()) {
-        try {
-          const trimmed = stdout.trim()
-          let parsed: string[]
-          if (trimmed.startsWith('[')) {
-            parsed = JSON.parse(trimmed)
-          } else if (trimmed.startsWith('{')) {
-            parsed = [JSON.parse(trimmed).Name]
-          } else {
-            parsed = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
-          }
-          parsed.forEach((p: string) => allPrinters.add(p))
-          console.log('[LIST-PRINTERS] WMI found:', parsed.length)
-        } catch (e: any) {
-          console.error('[LIST-PRINTERS] WMI parse error:', e.message)
-          hasError = true
-        }
-      } else if (error) {
-        console.error('[LIST-PRINTERS] WMI error:', error.message)
-        hasError = true
-      }
-      checkDone()
-    })
-
-    // Method 3: USB enumerate (find thermal printers connected as USB devices)
-    const cmd3 = 'powershell -Command "Get-PnpDevice -Class Printer -Status OK | Select-Object -ExpandProperty FriendlyName | ConvertTo-Json -Compress"'
-    exec(cmd3, (error: any, stdout: string, stderr: string) => {
-      if (!error && stdout.trim()) {
-        try {
-          const trimmed = stdout.trim()
-          let parsed: string[]
-          if (trimmed.startsWith('[')) {
-            parsed = JSON.parse(trimmed)
-          } else if (trimmed.startsWith('{')) {
-            parsed = [JSON.parse(trimmed).FriendlyName]
-          } else {
-            parsed = trimmed.split('\n').map((s: string) => s.trim()).filter(Boolean)
-          }
-          parsed.forEach((p: string) => allPrinters.add(p))
-          console.log('[LIST-PRINTERS] USB PnP found:', parsed.length)
-        } catch (e: any) {
-          console.error('[LIST-PRINTERS] USB PnP parse error:', e.message)
-          hasError = true
-        }
-      } else if (error) {
-        console.error('[LIST-PRINTERS] USB PnP error:', error.message)
-        hasError = true
-      }
-      checkDone()
-    })
-
-    // Method 4: Enumerate COM ports (USB virtual serial ports used by most thermal receipt printers)
-    const cmd4 = 'powershell -Command "Get-WmiObject Win32_SerialPort | Select-Object Name,DeviceID,Description | ConvertTo-Json -Compress"'
-    exec(cmd4, (error: any, stdout: string, stderr: string) => {
-      if (!error && stdout.trim()) {
-        try {
-          const trimmed = stdout.trim()
-          let ports: any[]
-          if (trimmed.startsWith('[')) {
-            ports = JSON.parse(trimmed)
-          } else if (trimmed.startsWith('{')) {
-            ports = [JSON.parse(trimmed)]
-          } else {
-            checkDone()
-            return
-          }
-          ports.forEach((port: any) => {
-            // Add both DeviceID (COMx) and Description as printer name
-            if (port.DeviceID) {
-              allPrinters.add(port.DeviceID)
-            }
-            if (port.Name && port.Name !== port.DeviceID) {
-              allPrinters.add(port.Name)
-            }
+  if (process.platform === 'win32') {
+    const { execFile } = require('child_process')
+    // Only real spool queues and direct COM targets can be printed to. USB PnP
+    // friendly names without an installed queue are not WinSpool destinations.
+    for (const query of [
+      'Get-Printer | Select-Object -ExpandProperty Name',
+      'Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name',
+      'Get-CimInstance Win32_SerialPort | Select-Object -ExpandProperty DeviceID'
+    ]) {
+      probes.push(new Promise((resolve, reject) => {
+        const script = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' + query + ' | ConvertTo-Json -Compress'
+        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+          { timeout: 10000, windowsHide: true, encoding: 'utf8' }, (error: any, stdout: string) => {
+            if (error) { reject(error); return }
+            try { resolve(parsePrinterNames(stdout)) } catch (err) { reject(err) }
           })
-          console.log('[LIST-PRINTERS] COM ports found:', ports.length)
-        } catch (e: any) {
-          console.error('[LIST-PRINTERS] COM port parse error:', e.message)
-          hasError = true
-        }
-      } else {
-        console.error('[LIST-PRINTERS] COM port enum error:', error?.message)
-      }
-      checkDone()
-    })
-  })
+      }))
+    }
+  }
+  const results = await Promise.allSettled(probes)
+  const printers = [...new Set(results.flatMap(r => r.status === 'fulfilled' ? r.value : []))].sort()
+  const failed = results.filter(r => r.status === 'rejected').length
+  writeCrash(`[LIST-PRINTERS] found=${printers.length}, failed=${failed}`)
+  return { printers, error: failed || !probes.length ? 'Printer discovery incomplete; check Windows printer driver and print spooler' : null }
 })
 
 // IPC 通信 - 订单状态同步到副屏
@@ -1833,38 +1743,7 @@ function generateShiftReportText(data: any): string {
  * 生成 TSPL 茶饮杯贴指令 (40mm x 30mm / 50mm x 30mm)
  */
 function generateCupStickerTspl(item: any): string {
-  const store = item.storeName || 'YOUME'
-  const displayNo = item.pickupNumber || item.orderNum || ''
-  const cupNo = item.cupIndex && item.totalCups ? `[${item.cupIndex}/${item.totalCups}]` : ''
-  const promoBadge = item.promoTag ? ` [${item.promoTag}]` : ''
-  const name = (item.productName || item.name || '').slice(0, 24)
-  const spec = item.specName || ''
-  const sugar = item.sugarLevelName ? `Sugar: ${item.sugarLevelName}` : ''
-  const ice = item.iceLevelName ? `Ice: ${item.iceLevelName}` : ''
-  const mods = [sugar, ice].filter(Boolean).join(' | ')
-  const addons = (item.addons || []).map((a: any) => `+${a.name || a}`).join(', ').slice(0, 30)
-  const time = item.time || formatDateTime().slice(11, 19)
-  const channel = item.channelName ? `(${item.channelName})` : ''
-
-  const widthMm = Number(item.stickerWidth) || 40
-  const heightMm = Number(item.stickerHeight) || 30
-  const gapMm = Number(item.stickerGap) || 2
-
-  const tspl = [
-    `SIZE ${widthMm} mm, ${heightMm} mm`,
-    `GAP ${gapMm} mm, 0 mm`,
-    'DIRECTION 1',
-    'CLS',
-    `TEXT 15,15,"TSS24.BF2",0,1,1,"${store} #${displayNo} ${cupNo}${promoBadge}"`,
-    `TEXT 15,48,"TSS24.BF2",0,1,1,"${name}"`,
-    spec ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${spec}  ${mods}"` : (mods ? `TEXT 15,80,"TSS24.BF2",0,1,1,"${mods}"` : ''),
-    addons ? `TEXT 15,112,"TSS24.BF2",0,1,1,"${addons}"` : '',
-    `TEXT 15,150,"2",0,1,1,"${time} ${channel}"`,
-    'PRINT 1,1',
-    ''
-  ].filter(Boolean).join('\r\n')
-
-  return tspl
+  return cupStickerTspl(item, formatDateTime().slice(11, 19))
 }
 
 /**

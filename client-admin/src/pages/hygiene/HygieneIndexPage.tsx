@@ -1,3 +1,5 @@
+import {useEmployeeNavigation} from '../../contexts/EmployeeAccess'
+import {permissionForPage} from '../../../../shared/StaffAccess'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -12,6 +14,7 @@ const tabs = [
 
 export function HygieneIndexPage() {
   const { t } = useTranslation()
+  const allowed=useEmployeeNavigation()
   const location = useLocation()
 
   const isActive = (path: string) => {
@@ -27,7 +30,7 @@ export function HygieneIndexPage() {
       {/* 二级导航 */}
       <div className="sticky top-0 bg-surface z-10 pb-4 border-b border-gray-200 mb-4">
         <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap">
-          {tabs.map(tab => (
+          {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => (
             <Link
               key={tab.key}
               to={`/hygiene${tab.path}`}

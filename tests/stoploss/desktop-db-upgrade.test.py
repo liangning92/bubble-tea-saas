@@ -130,6 +130,53 @@ class UpgradeTests(unittest.TestCase):
     def prepare(self, processes=lambda: []):
         return U.prepare(self.db, self.app, self.catalog, processes)
 
+    def employee_number_catalog(self):
+        template = self.root / 'empty.db'
+        with closing(sqlite3.connect(template)) as c, c:
+            c.execute('ALTER TABLE Staff ADD COLUMN employeeNumber TEXT')
+            c.execute('CREATE UNIQUE INDEX Staff_employeeNumber_key ON Staff(employeeNumber)')
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('ALTER TABLE Staff ADD COLUMN employeeNumber TEXT')
+        self.catalog = U.catalog_from_empty(template, 'a' * 40)
+
+    def test_employee_index_keeps_issued_number_and_enforces_uniqueness(self):
+        self.employee_number_catalog()
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('INSERT INTO Staff(id,employeeNumber) VALUES (?,?)',('worker','EMP005'))
+        self.prepare()
+        with closing(sqlite3.connect(self.db)) as c:
+            self.assertEqual(c.execute('SELECT employeeNumber FROM Staff WHERE id="worker"').fetchone()[0],'EMP005')
+            with self.assertRaises(sqlite3.IntegrityError):
+                c.execute('INSERT INTO Staff(id,employeeNumber) VALUES (?,?)',('other','EMP005'))
+
+    def test_duplicate_employee_numbers_refuse_upgrade_without_renumbering_or_data_loss(self):
+        self.employee_number_catalog()
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.executemany('INSERT INTO Staff(id,employeeNumber) VALUES (?,?)',[('one','EMP009'),('two','EMP009')])
+        before = U.digest(self.db)
+        with self.assertRaisesRegex(RuntimeError,'EMPLOYEE_NUMBER_DUPLICATE'):
+            self.prepare()
+        self.assertEqual(U.digest(self.db), before)
+        self.assertEqual(U.tree_manifest(self.app), self.app_before)
+
+    def test_permission_tables_are_additive_and_repeated_upgrade_preserves_approvals(self):
+        template = self.root / 'empty.db'
+        with closing(sqlite3.connect(template)) as c, c:
+            c.execute('CREATE TABLE StaffActionApproval (id TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT "pending")')
+            c.execute('CREATE TABLE StaffApprovalCredential (userId TEXT PRIMARY KEY, pinHash TEXT NOT NULL)')
+            c.execute('CREATE INDEX StaffActionApproval_status_idx ON StaffActionApproval(status)')
+        self.catalog = U.catalog_from_empty(template, 'a' * 40)
+        receipt = self.prepare()
+        self.assertTrue(pathlib.Path(receipt['databaseBackup']).exists())
+        with closing(sqlite3.connect(self.db)) as c, c:
+            self.assertEqual(c.execute('SELECT total FROM "Order" WHERE id="historical"').fetchone()[0],123.45)
+            c.execute('INSERT INTO StaffActionApproval(id,status) VALUES (?,?)',('approval','pending'))
+            c.execute('INSERT INTO StaffApprovalCredential(userId,pinHash) VALUES (?,?)',('fixture','synthetic-only'))
+        self.prepare()
+        with closing(sqlite3.connect(self.db)) as c:
+            self.assertEqual(c.execute('SELECT status FROM StaffActionApproval WHERE id="approval"').fetchone()[0],'pending')
+            self.assertEqual(c.execute('SELECT pinHash FROM StaffApprovalCredential WHERE userId="fixture"').fetchone()[0],'synthetic-only')
+
     def test_success_preserves_every_old_value_and_verified_backups(self):
         receipt = self.prepare()
         self.assertEqual(pathlib.Path(receipt['appBackup']), U.application_backup_path(self.app, receipt['nonce']))

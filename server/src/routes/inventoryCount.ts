@@ -22,8 +22,8 @@ const updateItemSchema = z.object({
   note: z.string().optional()
 })
 
-function visibleCount(count:any,role:string){
- if(!count||['admin','manager'].includes(role))return count
+function visibleCount(count:any,user:any){
+ if(!count||(user.accessRole?.version===2?user.accessRole.modes?.['cost.read']==='allow':['admin','manager'].includes(user.role)))return count
  return {...count,items:count.items.map((item:any)=>{const {varianceAmountEstimate,inventory,...rest}=item;const {avgCost,...visible}=inventory;return {...rest,inventory:visible}})}
 }
 // GET /api/inventory-counts
@@ -31,7 +31,7 @@ router.get('/', authenticate, authorize('admin', 'manager', 'staff', 'cashier'),
   try {
     const storeId = req.user!.storeId
     const counts = await InventoryCountService.getInventoryCounts(storeId)
-    res.json({ code: 200, data: { list: counts.map(c=>visibleCount(c,req.user!.role)) }, timestamp: new Date().toISOString() })
+    res.json({ code: 200, data: { list: counts.map(c=>visibleCount(c,req.user!)) }, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Get inventory counts error:', error)
     res.status(409).json({ code: 409, message: error.message || 'Failed to get inventory counts' })
@@ -43,7 +43,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager', 'staff', 'cashier
   try {
     const count = await InventoryCountService.getInventoryCountById(req.params.id,req.user!.storeId)
     if (!count) return res.status(404).json({ code: 404, message: 'Inventory count not found' })
-    res.json({ code: 200, data: visibleCount(count,req.user!.role), timestamp: new Date().toISOString() })
+    res.json({ code: 200, data: visibleCount(count,req.user!), timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Get inventory count error:', error)
     res.status(409).json({ code: 409, message: error.message || 'Failed to get inventory count' })
@@ -60,7 +60,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
       startDate: new Date(req.body.startDate),
       endDate: new Date(req.body.endDate)
     })
-    res.status(201).json({ code: 201, message: 'Inventory count created', data: visibleCount(count,req.user!.role), timestamp: new Date().toISOString() })
+    res.status(201).json({ code: 201, message: 'Inventory count created', data: visibleCount(count,req.user!), timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Create inventory count error:', error)
     res.status(409).json({ code: 409, message: error.message || 'Failed to create inventory count' })
@@ -88,7 +88,7 @@ router.put('/:id/item/:itemId', authenticate, authorize('admin', 'manager', 'sta
 router.post('/:id/complete', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const count = await InventoryCountService.completeInventoryCount(req.params.id, req.user!.staffId || req.user!.id,req.user!.storeId)
-    res.json({ code: 200, message: 'Inventory count completed', data: visibleCount(count,req.user!.role), timestamp: new Date().toISOString() })
+    res.json({ code: 200, message: 'Inventory count completed', data: visibleCount(count,req.user!), timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Complete inventory count error:', error)
     res.status(409).json({ code: 409, message: error.message || 'Failed to complete inventory count' })
@@ -99,7 +99,7 @@ router.post('/:id/complete', authenticate, authorize('admin', 'manager'), async 
 router.post('/:id/cancel', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     const count = await InventoryCountService.cancelInventoryCount(req.params.id,req.user!.storeId)
-    res.json({ code: 200, message: 'Inventory count cancelled', data: visibleCount(count,req.user!.role), timestamp: new Date().toISOString() })
+    res.json({ code: 200, message: 'Inventory count cancelled', data: visibleCount(count,req.user!), timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Cancel inventory count error:', error)
     res.status(409).json({ code: 409, message: error.message || 'Failed to cancel inventory count' })

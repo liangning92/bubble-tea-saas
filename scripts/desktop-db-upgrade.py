@@ -29,7 +29,7 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'")]
 CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes', 'Order_pickupNumber_idx nonunique index']
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
-CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns']
+CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns', 'StaffActionApproval and StaffApprovalCredential tables and indexes', 'Staff_employeeNumber_key unique index after duplicate-number validation']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
 LAST_DIAGNOSTIC = None
 LAST_STAGE = 'startup'
@@ -122,7 +122,8 @@ def integrity(c):
 def catalog_from_empty(db, source_sha):
     with closing(connection(db)) as c:
         integrity(c)
-        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference')) OR (type='index' AND tbl_name IN ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference') AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name")]}
+        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference')) OR (type='index' AND tbl_name IN ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference') AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name")]}
+        result['employeeNumberUnique'] = any(row[1] == 'Staff_employeeNumber_key' and row[2] == 1 for row in c.execute('PRAGMA index_list("Staff")'))
         for table in tables(c):
             if c.execute('SELECT count(*) FROM ' + quote(table)).fetchone()[0]:
                 fail('CATALOG_REQUIRES_EMPTY_TEMPLATE')
@@ -141,7 +142,7 @@ def supported_schema(c, catalog, allow_missing=True):
     actual_tables = set(tables(c))
     for table, expected in catalog['tables'].items():
         if table not in actual_tables:
-            if table in ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference') and allow_missing:
+            if table in ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference') and allow_missing:
                 continue
             fail('UNSUPPORTED_SCHEMA_MISSING_TABLE')
         fields = {r[1]: {'type': r[2].upper(), 'notnull': r[3], 'pk': r[5]}
@@ -151,6 +152,13 @@ def supported_schema(c, catalog, allow_missing=True):
                 continue
             if not compatible_column(table, name, fields.get(name), spec):
                 raise SchemaCompatibilityError(table, name, spec, fields.get(name))
+    if catalog.get('employeeNumberUnique'):
+        employee_index = next((row for row in c.execute('PRAGMA index_list("Staff")') if row[1] == 'Staff_employeeNumber_key'), None)
+        if employee_index:
+            if employee_index[2] != 1 or [r[2] for r in c.execute('PRAGMA index_info("Staff_employeeNumber_key")')] != ['employeeNumber']:
+                fail('UNSUPPORTED_EMPLOYEE_NUMBER_INDEX')
+        elif not allow_missing:
+            fail('EMPLOYEE_NUMBER_INDEX_REQUIRED')
     indexes = c.execute('PRAGMA index_list("Order")').fetchall()
     existing = next((row for row in indexes if row[1] == 'Order_pickupNumber_idx'), None)
     if existing:
@@ -762,10 +770,15 @@ def prepare(db, old_app, catalog, processes, registry=None, staged=None):
                     c.execute('ALTER TABLE '+quote(table)+' ADD COLUMN '+quote(name)+' '+declaration)
                     added_columns.append(table+'.'+name)
                     if table=='Order' and name=='pickupNumber': added_column=True
-            if any(table in catalog['tables'] and table not in tables(c) for table in ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference')):
+            if any(table in catalog['tables'] and table not in tables(c) for table in ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference')):
                 ddl=catalog.get('newTableDDL',[])
-                if not ddl or any(not any(table in statement for table in ('PaymentEvidence','LocalSchemaMigration','MediaAsset','ProductImage','MediaReference')) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
+                if not ddl or any(not any(table in statement for table in ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference')) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
                 for statement in ddl: c.execute(statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ', 1).replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ', 1).replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ', 1))
+            if catalog.get('employeeNumberUnique'):
+                duplicate = c.execute('SELECT 1 FROM "Staff" GROUP BY "employeeNumber" HAVING count(*)>1 LIMIT 1').fetchone()
+                if duplicate:
+                    fail('EMPLOYEE_NUMBER_DUPLICATE')
+                c.execute('CREATE UNIQUE INDEX IF NOT EXISTS "Staff_employeeNumber_key" ON "Staff"("employeeNumber")')
             added_index = not supported_schema(c, catalog, allow_missing=False)
             if added_index:
                 c.execute('CREATE INDEX "Order_pickupNumber_idx" ON "Order"("pickupNumber")')

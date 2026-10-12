@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('check-for-updates')
   },
 
+  getUpdateState: () => ipcRenderer.invoke('get-update-state'),
+
   // 下载更新
   downloadUpdate: () => {
     return ipcRenderer.invoke('download-update')

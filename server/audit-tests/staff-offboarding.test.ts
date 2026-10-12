@@ -1,0 +1,18 @@
+import {beforeEach,expect,jest,test} from '@jest/globals'
+jest.mock('../src/config/database',()=>({__esModule:true,default:{user:{findUnique:jest.fn(),count:jest.fn(),update:jest.fn()},staff:{findUnique:jest.fn(),update:jest.fn()},config:{findUnique:jest.fn()},$transaction:jest.fn()}}))
+jest.mock('../src/config/env',()=>({config:{jwt:{secret:'synthetic-test-only',expiresIn:'1h'}}}))
+jest.mock('../src/services/StaffPermissionService',()=>({assignedStaffAccess:jest.fn(async()=>null),updateStaffSystemRole:jest.fn(),StaffAccessError:class extends Error{}}))
+jest.mock('../src/services/ProbationService',()=>({...jest.requireActual<any>('../src/services/ProbationService'),saveEnrollment:jest.fn(async()=>({enabled:false})),refreshEmploymentPayroll:jest.fn(async()=>undefined)}))
+import prisma from '../src/config/database'
+import {login} from '../src/services/AuthService'
+import {authenticate} from '../src/middlewares/auth'
+import {staffRouter} from '../src/routes/staff'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+const d=prisma as any
+const response=()=>({statusCode:200,data:null as any,status(n:number){this.statusCode=n;return this},json(v:any){this.data=v;return this}})
+beforeEach(()=>{jest.clearAllMocks();d.config.findUnique.mockResolvedValue(null);d.$transaction.mockImplementation(async(fn:any)=>fn(d));d.user.update.mockResolvedValue({})})
+test('resigned employees cannot log in with a correct password',async()=>{d.user.findUnique.mockResolvedValue({password:await bcrypt.hash('synthetic123',4),staff:{status:'resigned'}});await expect(login({phone:'synthetic',password:'synthetic123'})).rejects.toThrow('Account is deactivated')})
+test('an existing JWT is rejected after resignation',async()=>{d.user.findUnique.mockResolvedValue({id:'u',updatedAt:new Date(0),staff:{status:'resigned'}});const token=jwt.sign({id:'u',role:'staff',issuedAtMs:Date.now()},'synthetic-test-only');const res=response(),next=jest.fn();await authenticate({headers:{authorization:'Bearer '+token}} as any,res as any,next);expect(res.statusCode).toBe(401);expect(next).not.toHaveBeenCalled()})
+test('offboarding retains history and invalidates login while calculating through the final day',async()=>{const record={id:'employee',userId:'eu',storeId:'s',hireDate:new Date('2026-09-01'),terminationDate:null,user:{role:'staff'}};d.staff.findUnique.mockResolvedValue(record);d.staff.update.mockImplementation(async({data}:any)=>({...record,...data}));const route=(staffRouter as any).stack.find((l:any)=>l.route?.path==='/:id'&&l.route.methods.put);const res=response();await route.route.stack.at(-1).handle({params:{id:'employee'},body:{status:'resigned',terminationDate:'2026-10-12'},user:{id:'admin',role:'admin',storeId:'s'}},res);expect(res.statusCode).toBe(200);expect(d.staff.update).toHaveBeenCalledWith({where:{id:'employee'},data:{status:'resigned',terminationDate:new Date('2026-10-12')}});expect(d.user.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:'eu'}}));const {refreshEmploymentPayroll}=await import('../src/services/ProbationService');expect(refreshEmploymentPayroll).toHaveBeenCalled()})
+test('current login cannot deactivate itself',async()=>{d.staff.findUnique.mockResolvedValue({id:'employee',userId:'admin',storeId:'s',user:{role:'admin'}});const route=(staffRouter as any).stack.find((l:any)=>l.route?.path==='/:id'&&l.route.methods.put);const res=response();await route.route.stack.at(-1).handle({params:{id:'employee'},body:{status:'inactive'},user:{id:'admin',role:'admin',storeId:'s'}},res);expect(res.statusCode).toBe(400);expect(d.staff.update).not.toHaveBeenCalled()})

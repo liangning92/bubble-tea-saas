@@ -48,3 +48,6 @@ __pycache__/
 *.pyc
 !docs/COMPREHENSIVE-REMEDIATION-MIGRATION.sql
 !docs/INVENTORY-LEDGER-MIGRATION.sql
+
+# Keep reviewed database migrations; generated SQL fixtures remain ignored.
+!server/prisma/migrations/**/migration.sql

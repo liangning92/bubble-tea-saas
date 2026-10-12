@@ -261,7 +261,7 @@ export function DashboardPage() {
           </div>
         </Link>
 
-        <Link to="/dashboard/shifts" aria-label={t('shiftReview.title')} className={cardClass}>
+        <Link to="/finance/revenue" aria-label={t('shiftReview.title')} className={cardClass}>
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-warning/10">
               <CalendarDays size={24} className="text-warning" />

@@ -1,3 +1,9 @@
+import { discoverPrinters } from '../utils/printerDiscovery'
+import {discountApprovalBasket} from '../../../shared/discountApprovalBasket'
+import api from '../services/api'
+import {useStaffAccess} from '../../../shared/StaffAccess'
+import {requestStaffApproval} from '../../../shared/StaffApprovalDialog'
+import {staffAccessLabels} from '../../../shared/staffAccessLabels'
 import { ShiftHandoverPreview } from '../components/ShiftHandoverPreview'
 import { OrderItemsTable } from '../components/OrderItemsTable'
 import { cachedActivityQuote } from '../utils/activityOfflineQuote'
@@ -184,6 +190,10 @@ interface DualScreenConfig {
 
 export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const { t, i18n } = useTranslation()
+  const access=useStaffAccess(),accessText=staffAccessLabels(i18n.language)
+  const [manualDiscountAmount,setManualDiscountAmount]=useState(0)
+  const [discountBasketId,setDiscountBasketId]=useState(()=>crypto.randomUUID())
+  const [manualDiscountGrant,setManualDiscountGrant]=useState<any>(null)
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
 
@@ -1437,23 +1447,27 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     fetchAppVersion()
   }, [loadConfig])
 
-  // 启动与登录后静默检测收银机连接的物理打印机并自动上报给服务端供Admin选配
+  // Refresh after USB hot-plug and keep the Admin inventory current.
   useEffect(() => {
+    let cancelled = false
+    let busy = false
     const silentDetectAndReport = async () => {
+      if (busy || cancelled) return
+      busy = true
       try {
-        if (!electronAPI?.getPrinters) return
-        const printers = await electronAPI.getPrinters()
-        if (printers && Array.isArray(printers) && printers.length > 0) {
-          const names = printers.map((p: any) => typeof p === 'string' ? p : p.name).filter(Boolean)
-          console.log('[POS] Auto-detected local printers on startup:', names)
-          const storeId = user?.storeId || localStorage.getItem('storeId') || ''
-          await posApi.reportPrinters(names, storeId)
-        }
+        const names = await discoverPrinters(electronAPI)
+        if (cancelled) return
+        setDetectedPrinters(names)
+        const storeId = user?.storeId || localStorage.getItem('storeId') || ''
+        if (storeId) await posApi.reportPrinters(names, storeId)
       } catch (err) {
-        console.warn('[POS] Failed to auto-report printers on startup:', err)
-      }
+        console.warn('[POS] Failed to auto-report printers:', err)
+      } finally { busy = false }
     }
-    silentDetectAndReport()
+    void silentDetectAndReport()
+    const interval = setInterval(() => { void silentDetectAndReport() }, 30000)
+    window.addEventListener('focus', silentDetectAndReport)
+    return () => { cancelled = true; clearInterval(interval); window.removeEventListener('focus', silentDetectAndReport) }
   }, [user?.storeId])
 
   // 定期轮询配置（Admin修改后自动同步，10秒间隔）
@@ -1920,7 +1934,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       shiftApi.list().then(res => {
         const available = Array.isArray(res.data?.data) ? res.data.data.filter((s: { key: string }) => s.key !== 'off') : []
         setActiveShifts(available)
-        setSelectedShiftType(current => available.some((s: { key: string }) => s.key === current) ? current : available[0]?.key || '')
+        setSelectedShiftType(current => available.some((s: { key: string }) => s.key === current) ? current : '')
       }).catch(() => {
         setActiveShifts([])
         setSelectedShiftType('')
@@ -2125,9 +2139,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const quoteInputKey=JSON.stringify(quoteInput)
   const currentQuote=unifiedQuote?.inputKey===quoteInputKey?unifiedQuote:null
   const subtotal=currentQuote?.subtotal??basketSubtotal
-  const tax=currentQuote?.tax??(taxSettings.enabled!==false?Math.round(Math.max(0,subtotal-discountAmount)*taxRate):0)
+  const tax=taxSettings.enabled!==false?Math.round(Math.max(0,(currentQuote?.finalAmount??subtotal-discountAmount)-manualDiscountAmount)*taxRate):0
   const pointsDiscount=currentQuote?Math.floor(currentQuote.pointsRedeemed/100):0
-  const total=currentQuote?.grandTotal??Math.max(0,subtotal+tax-discountAmount)
+  const total=Math.max(0,(currentQuote?.finalAmount??subtotal-discountAmount)-manualDiscountAmount+tax)
+  useEffect(()=>{setManualDiscountAmount(0);setManualDiscountGrant(null);setDiscountBasketId(crypto.randomUUID())},[quoteInputKey])
+  useEffect(()=>setManualDiscountGrant(null),[manualDiscountAmount])
   useEffect(()=>{
     let live=true
     if(!cart.length){lastActivityPrice.current=null;setActivityPriceNeedsConfirmation(false);setUnifiedQuote(null);setDiscountAmount(0);setAppliedPromotion(null);setGiftSelections({});setActivityGroupId('');return}
@@ -2429,18 +2445,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setDetectedPrinters([])
     setSelectedPrinterForSetup(null)
     try {
-      let printerList: string[] = []
-      if (electronAPI?.listPrinters) {
-        const result = await electronAPI.listPrinters()
-        if (result?.printers && Array.isArray(result.printers)) {
-          printerList = result.printers
-        }
-      } else if (electronAPI?.getPrinters) {
-        const raw = await electronAPI.getPrinters()
-        if (Array.isArray(raw)) {
-          printerList = raw.map((p: any) => typeof p === 'string' ? p : p.name).filter(Boolean)
-        }
-      }
+      const printerList = await discoverPrinters(electronAPI)
 
       console.log('[POS] Detected printers:', printerList)
       if (printerList.length > 0) {
@@ -2683,7 +2688,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           channelName: 'Dine-in',
           stickerWidth: labelPrinter?.stickerWidth || 40,
           stickerHeight: labelPrinter?.stickerHeight || 30,
-          stickerGap: labelPrinter?.stickerGap || 2,
+          stickerGap: labelPrinter?.stickerGap ?? 2,
         }],
         isTspl: true
       })
@@ -2846,9 +2851,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     const current = response.data?.data
     if (!current?.hasOpenShift || !current.shift?.id || current.shift.shift === 'off') throw Error('OPEN_SHIFT_REQUIRED')
   }
+  const openShiftModal = () => {
+    setSelectedShiftType('')
+    setShowShiftModal(true)
+  }
   const showOpenShiftRequired = () => setConfirmModal({
     isOpen: true, title: t('pos.shiftOpen'), message: t('pos.openShiftRequired'),
-    type: 'warning', onConfirm: () => setShowShiftModal(true)
+    type: 'warning', onConfirm: () => openShiftModal()
   })
   const beginPayment = async () => {
     if (paymentOpening.current || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate || !cartRef.current.length) return
@@ -2860,6 +2869,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       const now = new Date()
       setActivityRules(freshRules); setActivityClock(now)
       setCart(previous => previous.map(item => { const base = item.baseUnitPrice ?? item.unitPrice; return base === undefined ? item : {...item, unitPrice: activityPrice(freshRules,item.productId,base,selectedChannel?.code || 'DINE_IN',now)} }))
+      if(manualDiscountAmount&&!access.can('orders.discount')){
+        if(!navigator.onLine||!currentQuote||currentQuote.offline)throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+        const channel=(posChannels||[]).find(c=>c.id===selectedChannel?.id||c.code===selectedChannel?.code)
+        const basket={storeId:user?.storeId,staffId:user?.staff?.id||'default',discountBasketId,channelId:channel?.id&&channel.id.length>10?channel.id:undefined,memberId:member?.id,paymentMethod,taxEnabled:taxSettings.enabled!==false,discountAmount:discountAmount+manualDiscountAmount,pointsRedeemed:currentQuote.pointsRedeemed||0,activityQuoteSignature:currentQuote.signature,items:cart.map(item=>({productId:item.productId,specId:item.specId,quantity:item.quantity,unitPrice:currentQuote.items.find((i:any)=>i.productId===item.productId&&i.specId===item.specId)?.unitPrice??item.unitPrice,addons:item.addons.map(a=>({name:a.name,price:a.price,qty:a.qty}))}))}
+        const grant=await requestStaffApproval(api,{action:'orders.discount',targetId:discountBasketId,requestId:crypto.randomUUID(),payload:{amount:manualDiscountAmount,basket:discountApprovalBasket(basket),note:accessText.manualDiscount}});setManualDiscountGrant(grant)
+      }
       setPaymentModalOrderNum(getNextPickupNumber(selectedChannel?.code))
       setShowPaymentModal(true)
     } catch (error: any) {
@@ -2940,7 +2955,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
       activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
-      discountAmount,              // 折扣金额（客户端计算）
+      discountAmount:discountAmount+manualDiscountAmount,
+      manualDiscountAmount:manualDiscountAmount||undefined,
+      discountBasketId:manualDiscountAmount?discountBasketId:undefined,
+      approvalId:manualDiscountAmount?manualDiscountGrant?.id:undefined,
       pointsRedeemed: currentQuote?.pointsRedeemed||0,  // 仅扣减最终择优方案使用的积分
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
       pickupNumber: paymentModalOrderNum || getNextPickupNumber(selectedChannel?.code)
@@ -2973,6 +2991,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
+      if(manualDiscountAmount&&!navigator.onLine)throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+      if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
@@ -3052,6 +3072,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         }
       }
 
+      // Each output uses its own configured device; a stalled receipt must not block cup labels.
+      void printCupStickers(orderNum, cart, finalPickupNum)
       // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
       if (posReceipt.autoPrint !== false) {
         const printResult = await printReceipt(orderNum, {
@@ -3067,8 +3089,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       checkoutTiming('receipt_sent')
       // 打印厨房单
       printKitchenOrder(orderNum, cart, finalPickupNum)
-      // 打印茶饮单杯杯贴 (TSPL)
-      printCupStickers(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
       electronAPI?.sendOrderComplete?.(finalPickupNum || orderNum)
       // Display animation is ancillary; only the server verifies completed order eligibility.
@@ -3277,7 +3297,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           channelName: (selectedChannel as any)?.name || (selectedChannel ? t(selectedChannel.nameKey) : ''),
           stickerWidth: labelPrinter?.stickerWidth || 40,
           stickerHeight: labelPrinter?.stickerHeight || 30,
-          stickerGap: labelPrinter?.stickerGap || 2,
+          stickerGap: labelPrinter?.stickerGap ?? 2,
         })
         cupIndex++
       }
@@ -3289,8 +3309,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         stickers: stickerList,
         isTspl: true
       })
-      if (!result?.success) showToast(t('printerRouting.failed'), 'warning')
-    } catch { showToast(t('printerRouting.failed'), 'warning') }
+      if (!result?.success) showToast(t('pos.labelPrintFailed', 'Failed to print cup label') + (result?.error ? `: ${result.error}` : ''), 'warning')
+    } catch (err: any) { showToast(t('pos.labelPrintFailed', 'Failed to print cup label') + ': ' + (err?.message || ''), 'warning') }
   }
 
   // The generation survives acknowledgement, so even a delayed tab observes the invalidation.
@@ -3407,15 +3427,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 badge?: number
               }> = []
 
-              if (posLayout.showShift !== false) {
+              if (posLayout.showShift !== false && access.can('pos.shift')) {
                 toolbarButtons.push({
                   id: 'shift',
                   icon: <Users size={18} />,
                   labelKey: posLayout.toolbarLabels?.shift || 'toolbar.shift',
-                  onClick: () => setShowShiftModal(true)
+                  onClick: () => openShiftModal()
                 })
               }
-              if (posLayout.showAttendance !== false) {
+              if (posLayout.showAttendance !== false && access.can('personal.attendance')) {
                 toolbarButtons.push({
                   id: 'attendance',
                   icon: <QrCode size={18} />,
@@ -3440,7 +3460,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   onClick: openScan
                 })
               }
-              if (posLayout.showHistory !== false) {
+              if (posLayout.showHistory !== false && access.can('orders.read')) {
                 toolbarButtons.push({
                   id: 'history',
                   icon: <FileText size={18} />,
@@ -3457,7 +3477,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 })
               }
               // 费用按钮 - 记录每日临时支出
-              if (posLayout.showExpense !== false) {
+              if (posLayout.showExpense !== false && access.can('pos.expense')) {
                 toolbarButtons.push({
                   id: 'expense',
                   icon: <Receipt size={18} />,
@@ -3466,7 +3486,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 })
               }
               // 巡店卫生与员工任务
-              if (posLayout.showTasks === true) {
+              if (posLayout.showTasks === true && access.can('personal.tasks')) {
                 toolbarButtons.push({
                   id: 'tasks',
                   icon: <ClipboardList size={18} />,
@@ -3843,6 +3863,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <span>{formatCurrency(tax)}</span>
               </div>
             )}
+            <button type="button" className="text-primary text-sm" onClick={()=>navigate('/approvals')}>{accessText.approvals}</button>
+            {access.can('orders.discount',true)&&(access.role?.version===2||user?.role==='admin')&&<label className="block text-sm">{accessText.manualDiscount}<input aria-label={accessText.manualDiscount} type="number" min="0" max={currentQuote?.finalAmount||0} className="input" value={manualDiscountAmount} onChange={e=>setManualDiscountAmount(Math.max(0,Math.min(currentQuote?.finalAmount||0,Math.floor(Number(e.target.value)))))} /></label>}
             <ActivityPanel quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} />
             {quoteLoading&&<p className="text-sm text-gray-500">{t('activityPricing.loading','正在计算活动价格…')}</p>}
             {quoteError&&<p role="alert" className="text-sm text-red-600">{quoteError}</p>}
@@ -4592,7 +4614,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 交接班弹窗 */}
-      {showShiftModal && (
+      {showShiftModal && access.can('pos.shift') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => {if (!shiftClosing && !handoverLoading) {if(closedHandover) finishHandover(); else setShowShiftModal(false)}}}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
@@ -4629,6 +4651,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     </div>
                   </div>
 
+                  {activeShifts.length > 0 && !selectedShiftType && <p role="status" className="text-amber-700 mb-4">{t('pos.shiftSelectionRequired')}</p>}
                   {activeShifts.length === 0 && <p className="text-red-600 mb-4">{t('pos.shiftUnavailable')}</p>}
 
                   {/* 开班金额输入 */}
@@ -4647,7 +4670,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   <button
                     onClick={async () => {
                       if (!activeShifts.some(s => s.key === selectedShiftType)) {
-                        showToast(t('pos.shiftUnavailable'), 'error')
+                        showToast(t(activeShifts.length ? 'pos.shiftSelectionRequired' : 'pos.shiftUnavailable'), 'error')
                         return
                       }
                       const floatInput = document.getElementById('openFloatInput') as HTMLInputElement
@@ -4669,7 +4692,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       }
                     }}
                     disabled={!activeShifts.some(s => s.key === selectedShiftType)}
-                    className="w-full py-4 bg-green-500 text-white rounded-xl font-bold touch-feedback text-lg"
+                    className="w-full py-4 bg-green-500 text-white rounded-xl font-bold touch-feedback text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t('pos.confirmOpenShift')}
                   </button>
@@ -4900,7 +4923,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 历史记录弹窗 */}
-      {showHistoryModal && (
+      {showHistoryModal && access.can('orders.read') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowHistoryModal(false)}>
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
@@ -4998,7 +5021,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 现金管理弹窗 */}
-      {showCashModal && (
+      {showCashModal && access.can('pos.cash') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCashModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
@@ -5015,7 +5038,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 费用记录弹窗 */}
-      {showExpenseModal && (
+      {showExpenseModal && access.can('pos.expense') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
@@ -5255,7 +5278,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     setShowLogoutModal(false)
                     setIsLocked(false)
                     if (current.hasOpenShift) {
-                      setShowShiftModal(true)
+                      openShiftModal()
                     } else {
                       logout()
                     }

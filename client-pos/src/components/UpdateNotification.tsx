@@ -16,6 +16,8 @@ export function UpdateNotification({className = ''}: {className?: string}) {
   const manual = useRef(false)
   const installAfterDownload = useRef(false)
   const current = useRef('')
+  const activeStatus = useRef('idle')
+  const restoreState = useRef<(() => Promise<void>) | null>(null)
   useEffect(() => {
     const api = window.electronAPI
     if (!api) return
@@ -23,7 +25,7 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     window.addEventListener('pos-update-check-requested', manualCheck)
     let disposed = false
     void api.getAppVersion().then(version => {if (!disposed) {current.current = version; setCurrentVersion(version)}}).catch(() => {})
-    const offStatus = api.onUpdateStatus((next: string, value?: any) => {
+    const applyStatus = (next: string, value?: any) => {
       if (next === 'checking') {if (manual.current) {setStatus(next); setVisible(true)}; return}
       const installed = value?.currentVersion || current.current
       if (next === 'available' || next === 'downloaded') {
@@ -32,20 +34,40 @@ export function UpdateNotification({className = ''}: {className?: string}) {
           const dismissed = JSON.parse(localStorage.getItem(DISMISSED) || '{}')
           if (next === 'available' && dismissed.version === value.version && dismissed.until > Date.now() && !manual.current) return
         } catch {}
-        setInfo(value); setStatus(next); setError(null); setVisible(true)
-      } else if (next === 'up-to-date') {setStatus(next); setVisible(false); setInfo(null)}
-      else setStatus(next)
+        activeStatus.current = next; setInfo(value); setStatus(next); setError(null); setVisible(true)
+      } else if (next === 'up-to-date') {activeStatus.current = next; setStatus(next); setVisible(false); setInfo(null)}
+      else {activeStatus.current = next; setStatus(next); if (next === 'downloading' || next === 'preparing' || next === 'installing') setVisible(true)}
       if (next === 'available' || next === 'downloaded' || next === 'up-to-date') manual.current = false
-    })
+    }
+    const offStatus = api.onUpdateStatus(applyStatus)
     const offProgress = api.onUpdateProgress((value: any) => setProgress(value.percent || 0))
     const offError = api.onUpdateError((message: string) => {
       installAfterDownload.current = false
       useOrderStore.getState().setIsInstallingUpdate(false)
       setStatus('error'); setError(message)
-      if (manual.current) setVisible(true)
+      activeStatus.current = 'error'; setVisible(true)
       manual.current = false
     })
-    return () => {window.removeEventListener('pos-update-check-requested', manualCheck); disposed = true; offStatus?.(); offProgress?.(); offError?.()}
+    const readState = async () => {
+      if (!api.getUpdateState) return
+      try {
+        const state = await api.getUpdateState()
+        if (disposed || !state || state.status === 'idle') return
+        setProgress(state.progress || 0)
+        if (state.status === 'error') {
+          activeStatus.current = 'error'; setStatus('error'); setError(state.error || t('pos.updateError')); setVisible(true)
+          useOrderStore.getState().setIsInstallingUpdate(false)
+        } else applyStatus(state.status, {...state.info, currentVersion:state.currentVersion})
+      } catch { /* Older clients retain their event-based interface. */ }
+    }
+    restoreState.current = readState
+    void readState()
+    const poll = setInterval(() => {
+      if (['downloading','preparing'].includes(activeStatus.current)) void readState()
+    }, 2000)
+    const restoreWhenVisible = () => {if (document.visibilityState === 'visible') void readState()}
+    document.addEventListener('visibilitychange', restoreWhenVisible)
+    return () => {clearInterval(poll); restoreState.current = null; document.removeEventListener('visibilitychange', restoreWhenVisible); window.removeEventListener('pos-update-check-requested', manualCheck); disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
   useEffect(() => {
     if (status !== 'downloaded' || !installAfterDownload.current) return
@@ -75,9 +97,11 @@ export function UpdateNotification({className = ''}: {className?: string}) {
         const state = useOrderStore.getState()
         if (state.isCheckingOut || !window.dispatchEvent(new Event('pos-before-update', {cancelable: true}))) throw Error(t('updateFlow.busy'))
         installAfterDownload.current = true
-        setStatus('downloading')
+        activeStatus.current = 'downloading'
+        setStatus('downloading'); setProgress(0); setVisible(true)
         const result = await api.downloadUpdate()
         if (result === false) throw Error(t('pos.updateError'))
+        await restoreState.current?.()
       }
       if (action === 'show') {
         if (!(await api.showUpdateInstaller()).success) throw Error(t('updateFlow.fileMissing'))

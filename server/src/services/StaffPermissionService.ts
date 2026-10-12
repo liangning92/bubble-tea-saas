@@ -1,3 +1,4 @@
+import { readPolicyV2 } from './StaffPermissionV2Service'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { STAFF_PERMISSION_CATALOG, defaultStaffPermissions, StaffBaseRole } from './StaffPermissionCatalog'
@@ -41,6 +42,7 @@ export async function getStaffAccessSettings(actor:{id:string;role:string;storeI
   return {...policy,history,staff:staff.map(s=>({...s,systemRole:s.user.role,user:undefined})),catalog:STAFF_PERMISSION_CATALOG,templates:(['manager','cashier','staff'] as const).map(role=>({baseRole:role,permissions:defaultStaffPermissions(role)}))}
 }
 export async function saveStaffAccessSettings(actor:{id:string;role:string;storeId:string},body:unknown) {
+  if((await readPolicyV2(actor.storeId))?.active)throw new StaffAccessError('STAFF_ACCESS_V2_REQUIRED',409)
   if(actor.role!=='admin'||!actor.storeId)throw new StaffAccessError('STAFF_ACCESS_ADMIN_REQUIRED',403)
   const input=staffAccessInput.parse(body)
   if(new Set(input.roles.map(r=>r.id)).size!==input.roles.length || new Set(input.roles.map(r=>r.name.toLocaleLowerCase())).size!==input.roles.length)throw new StaffAccessError('STAFF_ACCESS_DUPLICATE_ROLE')
@@ -81,6 +83,7 @@ export async function updateStaffSystemRole(actor:{id:string;role:string;storeId
   return prisma.$transaction(async tx=>{
     const employee=await tx.staff.findUniqueOrThrow({where:{id:staffId},select:{storeId:true,userId:true}})
     await tx.store.update({where:{id:employee.storeId},data:{updatedAt:new Date()}})
+    if((await readPolicyV2(employee.storeId,tx))?.active)throw new StaffAccessError('STAFF_ACCESS_USE_EMPLOYEE_EDITOR',409)
     const policy=await readStaffAccess(employee.storeId,tx)
     if(policy.assignments.some(a=>a.staffId===staffId)){
       const updated={...policy,revision:policy.revision+1,assignments:policy.assignments.filter(a=>a.staffId!==staffId)}

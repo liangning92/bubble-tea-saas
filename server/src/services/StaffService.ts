@@ -1,3 +1,5 @@
+import { businessDate, WorkingDays, calculatePayrollBasis, getEnrollment, monthlyRateCents, getProbationRule, saveEnrollment } from './ProbationService'
+import { allocateEmployeeNumber } from './EmployeeNumberService'
 import { readWork, listWork } from './EmployeeWorkspaceStore'
 import { adjustmentPlan } from './SalaryAdjustmentService'
 import { salaryDepositPlan } from './SalaryDepositPlan'
@@ -70,6 +72,8 @@ export async function createStaff(data: {
   hourlyRate?: number
   weeklyHours?: number
   hireDate?: Date
+  probationEnabled?: boolean
+  confirmationDate?: string | null
   emergencyContact?: string
   emergencyPhone?: string
   bankAccount?: string
@@ -79,21 +83,23 @@ export async function createStaff(data: {
     throw new Error('Staff password must be 6–72 bytes')
   }
 
+  const hashed = await bcrypt.hash(data.password, 12)
+  return prisma.$transaction(async tx => {
   // First create the User
-  const user = await prisma.user.create({
+  const user = await tx.user.create({
     data: {
       phone: data.phone,
-      password: await bcrypt.hash(data.password, 12),
+      password: hashed,
       role: 'staff',
       storeId: data.storeId
     }
   })
 
   // Generate employee number
-  const employeeNumber = 'EMP' + Date.now().toString().slice(-6)
+  const employeeNumber = await allocateEmployeeNumber(tx)
 
   // Then create the Staff linked to the User
-  return prisma.staff.create({
+  const created = await tx.staff.create({
     data: {
       userId: user.id,
       storeId: data.storeId,
@@ -112,6 +118,10 @@ export async function createStaff(data: {
       bankName: data.bankName,
       status: 'active'
     }
+  })
+  const policy = await getProbationRule(tx,data.storeId)
+  await saveEnrollment(tx,created,data.probationEnabled ?? policy.enabled,data.confirmationDate)
+  return created
   })
 }
 
@@ -229,12 +239,12 @@ export async function getSchedule(staffId: string, date: Date) {
 }
 
 // Salary operations
-export async function calculateSalary(staffId: string, month: number, year: number) {
+export async function calculateSalary(staffId: string, month: number, year: number, manualDays?: WorkingDays) {
   if(!Number.isInteger(month)||month<1||month>12||!Number.isInteger(year)||year<2000||year>2100)throw new Error('INVALID_SALARY_PERIOD')
-  const startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
-  const endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
+  let startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
+  let endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
 
-  const [staff, attendances, attendanceRule] = await Promise.all([
+  const [staff, monthlyAttendances, attendanceRule] = await Promise.all([
     prisma.staff.findUnique({ where: { id: staffId } }),
     prisma.attendance.findMany({
       where: {
@@ -251,6 +261,9 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   ])
 
   if (!staff) throw new Error('Staff not found')
+  if(staff.hireDate)startDate=new Date(Math.max(startDate.getTime(),new Date(businessDate(staff.hireDate)+'T00:00:00+07:00').getTime()))
+  if(staff.terminationDate)endDate=new Date(Math.min(endDate.getTime(),new Date(businessDate(staff.terminationDate)+'T23:59:59.999+07:00').getTime()))
+  const attendances=monthlyAttendances.filter(a=>a.checkInTime>=startDate&&a.checkInTime<=endDate)
 
   // Use attendance rule or defaults
   const rule = attendanceRule
@@ -263,7 +276,11 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
 
   if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
-  const baseSalary = staff.baseSalary
+  const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`, manualDays)
+  const enrollment = await getEnrollment(prisma,staff)
+  const baseSalary = payrollBasis.amount
+  // Attendance proration changes payable days, not the contractual daily penalty rate.
+  const standardMonthlySalary = payrollBasis.eligibleDays ? payrollBasis.segments.reduce((sum,s)=>sum+s.monthlyRate*((s as {eligibleDays?:number}).eligibleDays??s.days),0)/payrollBasis.eligibleDays : staff.baseSalary
   let deductions = 0
   let bonuses = 0
   let depositDeductions: { staffDepositId: string; ruleName: string; amount: number; amountMinor: number }[] = []
@@ -280,7 +297,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
       checkOut: previous?.checkOut && (!attendance.checkOutTime || previous.checkOut > attendance.checkOutTime) ? previous.checkOut : attendance.checkOutTime })
   }
   const onLeave = (key: string) => leaves.some(leave => key >= formatDate(leave.startDate) && key <= formatDate(leave.endDate))
-  const dailySalary = baseSalary / 26
+  const dailySalary = standardMonthlySalary / 26
   const penalty = (type: string | undefined, count: number, fixed: number | null | undefined, ratio: number | null | undefined) => type === 'fixed' ? Math.round(count * (fixed || 0) / 100) : type === 'daily_rate' ? Math.round(count * dailySalary * (ratio ?? 1)) : 0
   const monthlyLateRule = await readWork(staff.storeId, `rule.${String(year)}-${String(month).padStart(2, '0')}`)
   const snapshots = await listWork(staff.storeId!, `attendance.${staffId}.`)
@@ -314,14 +331,16 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     }
   }
   deductions += latePenalty + penalty(rule?.earlyLeaveDeductionType, earlyLeaveDays, rule?.earlyLeaveDeductionFixed, rule?.earlyLeaveDeductionDailyRate)
-    + penalty(rule?.absenceDeductionType, absentDays, rule?.absenceDeductionFixed, rule?.absenceDeductionDailyRate)
-    + penalty(rule?.sickLeaveDeductionType, sickDays, rule?.sickLeaveDeductionFixed, rule?.sickLeaveDeductionDailyRate) + Math.round(unpaidDays * dailySalary)
+    // Non-worked days are already excluded from base pay; do not deduct them twice.
+
+  // A manually verified day count replaces incomplete attendance penalties.
+  if (manualDays) deductions = 0
 
   depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2, '0')}`)
   deductions += depositDeductions.reduce((sum, item) => sum + item.amount, 0)
 
   const featureConfig = await getStaffConfig(staff.storeId)
-  if (featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
+  if (!manualDays && featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
 
   const compensation = await adjustmentPlan(staff.storeId!,staffId,`${year}-${String(month).padStart(2,'0')}`)
   bonuses += compensation.rewards
@@ -329,9 +348,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
   const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId, status: 'approved', date: { gte: startDate, lte: endDate } } })
   const overtimeHours = approvedOvertime.reduce((sum, request) => sum + request.hours, 0)
-  const hourlyRate = baseSalary / 176
   const overtimePay = overtimeHours >= overtimeMinHours
-    ? Math.floor(overtimeHours * hourlyRate * overtimeRate)
+    ? Math.floor(approvedOvertime.reduce((sum, request)=>sum+request.hours*(monthlyRateCents(staff,enrollment,formatDate(request.date))/100/176)*overtimeRate,0))
     : 0
 
   return {
@@ -340,6 +358,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     month,
     year,
     baseSalary,
+    payrollBasis,
     workDays,
     lateDays,
     overtimeHours,

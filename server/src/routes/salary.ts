@@ -1,3 +1,5 @@
+import { isPayrollEmployee } from '../services/StaffIdentityService'
+import { workingDaysSchema, savePayrollBasis, savedPayrollBasis, calculatePayrollBasis, ProbationInputError } from '../services/ProbationService'
 import { adjustmentPlan, savedAdjustmentPlan, saveAdjustmentPlan, normalizeAdjustments, changeSalaryAdjustment, listSalaryAdjustments, voucherStatuses, periodLock, SalaryAdjustmentError } from '../services/SalaryAdjustmentService'
 import { normalizeSalaryDeposits, salaryDepositPlan, sameDepositPlan } from '../services/SalaryDepositPlan'
 import { requireResourceStore } from '../middlewares/resourceStore'
@@ -12,9 +14,19 @@ import { validateBody } from '../utils/validation'
 const router = Router()
 const money = z.number().int().min(0).max(2000000000)
 const depositPlan = z.array(z.object({ staffDepositId: z.string().min(1), amountMinor: z.number().int().positive().max(2000000000) })).max(20).default([])
-const salaryFields = z.object({ baseSalary: money, overtime: money.default(0), commission: money.default(0), bonus: money.default(0), deduction: money.default(0), status: z.literal('pending').optional(), depositDeductions: depositPlan, compensationAdjustmentIds:z.array(z.string().uuid()).max(200).default([]) }).refine(s => s.baseSalary + s.overtime + s.commission + s.bonus >= s.deduction, 'Deductions exceed gross salary')
-const createSalary = z.object({ staffId: z.string().min(1), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), baseSalary: money, overtime: money.default(0), commission: money.default(0), bonus: money.default(0), deduction: money.default(0), status: z.literal('pending').optional(), depositDeductions: depositPlan, compensationAdjustmentIds:z.array(z.string().uuid()).max(200).default([]) }).refine(s => s.baseSalary + s.overtime + s.commission + s.bonus >= s.deduction, 'Deductions exceed gross salary')
+const salaryFields = z.object({ manualCorrection:z.boolean().optional(), manualBaseSalary:z.boolean().optional(), workingDays: workingDaysSchema.optional(), autoBaseSalary: z.boolean().optional(), baseSalary: money, overtime: money.default(0), commission: money.default(0), bonus: money.default(0), deduction: money.default(0), status: z.literal('pending').optional(), depositDeductions: depositPlan, compensationAdjustmentIds:z.array(z.string().uuid()).max(200).default([]) }).refine(s => s.baseSalary + s.overtime + s.commission + s.bonus >= s.deduction, 'Deductions exceed gross salary')
+const createSalary = z.object({ manualCorrection:z.boolean().optional(), manualBaseSalary:z.boolean().optional(), workingDays: workingDaysSchema.optional(), autoBaseSalary: z.boolean().optional(), staffId: z.string().min(1), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), baseSalary: money, overtime: money.default(0), commission: money.default(0), bonus: money.default(0), deduction: money.default(0), status: z.literal('pending').optional(), depositDeductions: depositPlan, compensationAdjustmentIds:z.array(z.string().uuid()).max(200).default([]) }).refine(s => s.baseSalary + s.overtime + s.commission + s.bonus >= s.deduction, 'Deductions exceed gross salary')
+async function payrollEmployee(tx:any, staffId:string, automatic:boolean) {
+  if(automatic && !process.env.DATABASE_URL?.startsWith('file:')) await tx.$queryRaw`SELECT id FROM "Staff" WHERE id=${staffId} FOR UPDATE`
+  const staff=await tx.staff.findUniqueOrThrow({where:{id:staffId}})
+  if(!await isPayrollEmployee(tx,staff))throw new ProbationInputError('ACCOUNT_NOT_EMPLOYEE')
+  return staff
+}
 class SalaryConflict extends Error {}
+const payrollReviewReason=(error:any)=>{const code=error?.message;return ['STAFF_BASE_SALARY_REQUIRED','DEDUCTIONS_EXCEED_PAY','PAYROLL_AMOUNT_OUT_OF_RANGE','PROBATION_HIRE_DATE_REQUIRED','PROBATION_SALARY_EXCEEDS_FORMAL_SALARY','CONFIRMATION_BEFORE_HIRE','INVALID_PROBATION_DATE','SALARY_DEPOSIT_RECALC_REQUIRED','SALARY_ADJUSTMENTS_RECALC_REQUIRED','TERMINATION_BEFORE_HIRE'].includes(code)?code:'PAYROLL_CALCULATION_FAILED'}
+const reviewKey=(staffId:string,month:string)=>`salary.review.${staffId}.${month}`
+async function review(db:any,storeId:string,staffId:string,month:string){const row=await db.config.findUnique({where:{storeId_key:{storeId,key:reviewKey(staffId,month)}}});return row?JSON.parse(row.value):null}
+async function setReview(db:any,storeId:string,staffId:string,month:string,value:any){const key=reviewKey(staffId,month);await db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,category:'staff',value:JSON.stringify(value)},update:{value:JSON.stringify(value)}})}
 async function saveDepositPlan(tx: any, salary: any, items: Array<{ staffDepositId: string; amountMinor: number }>) {
   if (new Set(items.map(item => item.staffDepositId)).size !== items.length || items.reduce((sum, item) => sum + item.amountMinor, 0) > salary.deduction * 100) throw new DepositInputError('Deposit plan exceeds payroll deductions')
   for (const item of items) {
@@ -75,16 +87,73 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
       const saved = planMap.get(`salary.depositPlan.${salary.id}`) || []
       const expected = salary.status === 'pending' ? await salaryDepositPlan(salary.staffId, salary.month) : saved
       const compensation = await savedAdjustmentPlan(storeId!,salary.id)
-      return {...salary, compensationRewards:compensation.rewards,compensationPenalties:compensation.penalties,compensationItems:compensation.items,compensationAdjustmentIds:compensation.items.map((i:any)=>i.id),depositDeductionAmount:saved.reduce((sum:number,i:any)=>sum+Math.round(i.amountMinor/100),0), depositDeductions:saved, depositNeedsReview:!sameDepositPlan(saved,expected), expectedDepositAmount:expected.reduce((sum: number,item: any)=>sum+Math.round(item.amountMinor/100),0)}
+      return {...salary, payrollReview:salary.status==='pending'?await review(prisma,storeId!,salary.staffId,salary.month):null, payrollBasis:await savedPayrollBasis(prisma,storeId!,salary.id), compensationRewards:compensation.rewards,compensationPenalties:compensation.penalties,compensationItems:compensation.items,compensationAdjustmentIds:compensation.items.map((i:any)=>i.id),depositDeductionAmount:saved.reduce((sum:number,i:any)=>sum+Math.round(i.amountMinor/100),0), depositDeductions:saved, depositNeedsReview:!sameDepositPlan(saved,expected), expectedDepositAmount:expected.reduce((sum: number,item: any)=>sum+Math.round(item.amountMinor/100),0)}
     }))
+    if(req.query.includeUnrecorded==='true'){
+      if(typeof month!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new ProbationInputError('INVALID_SALARY_PERIOD')
+      const recorded=await prisma.salary.findMany({where:{staff:{storeId},month},select:{staffId:true}})
+      const ids=new Set(recorded.map(s=>s.staffId))
+      const monthStart=new Date(month+'-01T00:00:00+07:00'),monthEnd=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),1)-7*3600000)
+      const employees=await prisma.staff.findMany({where:{storeId,...(staffId?{id:String(staffId)}:{}),OR:[{status:'active'},{status:'resigned',terminationDate:{gte:monthStart}}]},include:{user:{select:{id:true,phone:true,role:true}}},orderBy:{employeeNumber:'asc'}})
+      if(!status || status==='unrecorded')for(const staff of employees){
+        if(!await isPayrollEmployee(prisma,staff)||ids.has(staff.id)||(staff.hireDate&&staff.hireDate>=monthEnd)||(staff.terminationDate&&staff.terminationDate<monthStart))continue
+        let calculation:any=null,calculationError=null
+        try{calculation=await calculateSalary(staff.id,Number(month.slice(5)),Number(month.slice(0,4)))}catch(error:any){calculationError=payrollReviewReason(error)}
+        const payrollReview=await review(prisma,storeId!,staff.id,month)|| (calculationError?{reason:calculationError}:calculation?.totalSalary<0?{reason:'DEDUCTIONS_EXCEED_PAY'}:null)
+        list.push({id:'unrecorded:'+staff.id,staffId:staff.id,month,staff,status:'unrecorded',baseSalary:calculation?.baseSalary||0,overtime:calculation?.overtimePay||0,commission:0,bonus:calculation?.bonuses||0,deduction:calculation?.deductions||0,finalAmount:calculation?.totalSalary||0,payrollBasis:calculation?.payrollBasis||null,compensationRewards:calculation?.compensation?.rewards||0,compensationPenalties:calculation?.compensation?.penalties||0,compensationItems:calculation?.compensation?.items||[],compensationAdjustmentIds:calculation?.compensationAdjustmentIds||[],depositDeductions:calculation?.depositDeductions||[],depositDeductionAmount:(calculation?.depositDeductions||[]).reduce((sum:number,item:any)=>sum+item.amount,0),payrollReview,calculationError} as any)
+      }
+    }
     res.json({ code: 200, data: { list } })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({ code: 400, message: error.message })
     if (error instanceof SalaryConflict) return res.status(409).json({ code: 409, message: error.message })
     console.error('Get salaries error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to get salaries' })
   }
+})
+
+// Create missing monthly drafts in one operation; existing and paid records stay intact.
+router.post('/prepare-month', authenticate, authorize('admin','manager'), validateBody(z.object({month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)})), async(req:AuthRequest,res)=>{
+ const month=req.body.month,storeId=req.user!.storeId!
+ try{
+  const monthStart=new Date(month+'-01T00:00:00+07:00'),monthEnd=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),1)-7*3600000)
+  const employees=await prisma.staff.findMany({where:{storeId,OR:[{status:'active'},{status:'resigned',terminationDate:{gte:monthStart}}]}})
+  const result:{created:number;updated:number;existing:number;skipped:Array<{staffId:string;name:string;reason:string}>}={created:0,updated:0,existing:0,skipped:[]}
+  for(const employee of employees){
+   if(!await isPayrollEmployee(prisma,employee)||(employee.hireDate&&employee.hireDate>=monthEnd)||(employee.terminationDate&&employee.terminationDate<monthStart))continue
+   try{
+    const current=await prisma.salary.findFirst({where:{staffId:employee.id,month}})
+    const isCorrected=(basis:any)=>basis&&(basis.manualCorrection||basis.manualAdjustment||basis.daysSource==='manual'||(!basis.daysSource&&basis.workingDays&&basis.payableDays<basis.eligibleDays))
+    if(current&&(current.status!=='pending'||isCorrected(await savedPayrollBasis(prisma,storeId,current.id)))){result.existing++;continue}
+    const preview=await calculateSalary(employee.id,Number(month.slice(5)),Number(month.slice(0,4)))
+    const created=await prisma.$transaction(async tx=>{
+     const staff=await payrollEmployee(tx,employee.id,true)
+     if(staff.storeId!==storeId)throw new SalaryConflict('STAFF_STORE_MISMATCH')
+     await periodLock(tx,storeId,staff.id,month)
+     const existing=await tx.salary.findFirst({where:{staffId:staff.id,month}})
+     if(existing&&(existing.status!=='pending'||isCorrected(await savedPayrollBasis(tx,storeId,existing.id))))return 'existing'
+     const basis=await calculatePayrollBasis(tx,staff,month)
+     const attendanceDeduction=Math.max(0,(preview.deductions||0)-(preview.compensation?.penalties||0)-(preview.depositDeductions||[]).reduce((sum,item)=>sum+item.amount,0))
+     const attendanceBonus=Math.max(0,(preview.bonuses||0)-(preview.compensation?.rewards||0))
+     const deposits=await normalizeSalaryDeposits(tx,staff.id,month,attendanceDeduction,[])
+     const adjustments=await normalizeAdjustments(tx,storeId,staff.id,month,attendanceBonus,deposits.deduction,[])
+     const finalAmount=basis.amount+preview.overtimePay+adjustments.bonus-adjustments.deduction
+     if(finalAmount<0||finalAmount>2000000000)throw new ProbationInputError(finalAmount<0?'DEDUCTIONS_EXCEED_PAY':'PAYROLL_AMOUNT_OUT_OF_RANGE')
+     const data={baseSalary:basis.amount,overtime:preview.overtimePay,commission:0,bonus:adjustments.bonus,deduction:adjustments.deduction,finalAmount,status:'pending'}
+     const salary=existing?await tx.salary.update({where:{id:existing.id},data}):await tx.salary.create({data:{staffId:staff.id,month,...data}})
+     await saveDepositPlan(tx,salary,deposits.items)
+     await saveAdjustmentPlan(tx,storeId,salary.id,adjustments.plan)
+     await savePayrollBasis(tx,salary,staff)
+     await setReview(tx,storeId,staff.id,month,null)
+     return existing?'updated':'created'
+    })
+    result[created]++
+   }catch(error:any){const reason=payrollReviewReason(error);if(reason==='PAYROLL_CALCULATION_FAILED')console.error('Payroll calculation failed',{staffId:employee.id,month},error);await setReview(prisma,storeId,employee.id,month,{reason});result.skipped.push({staffId:employee.id,name:employee.name,reason})}
+  }
+  res.json({code:200,data:result})
+ }catch(error:any){res.status(500).json({code:500,message:error.message||'Failed to prepare payroll'})}
 })
 
 // POST /api/salaries
@@ -95,20 +164,21 @@ router.post('/', authenticate, authorize('admin'), validateBody(createSalary), s
     const finalAmount = baseSalary + (overtime || 0) + (commission || 0) + (bonus || 0) - (deduction || 0)
 
     const salary = await prisma.$transaction(async tx => {
-      const staff = await tx.staff.findUniqueOrThrow({ where: { id: staffId }, select: { storeId: true } })
+      const staff = await payrollEmployee(tx,staffId,req.body.autoBaseSalary===true)
+      const effectiveBaseSalary = !req.body.manualBaseSalary && (req.body.autoBaseSalary || req.body.workingDays) ? (await calculatePayrollBasis(tx,staff,month,req.body.workingDays)).amount : baseSalary
       // Serialize creation for this employee and month, including across API instances.
       await tx.config.upsert({ where: { storeId_key: { storeId: staff.storeId, key: `salary.period.${staffId}.${month}` } },
         create: { storeId: staff.storeId, key: `salary.period.${staffId}.${month}`, value: month, category: 'staff' }, update: { value: month } })
       if (await tx.salary.findFirst({ where: { staffId, month } })) throw new SalaryConflict('Salary already exists for this employee and month')
       const plan = await normalizeSalaryDeposits(tx, staffId, month, deduction || 0, req.body.depositDeductions)
       const adjustments = await normalizeAdjustments(tx,staff.storeId!,staffId,month,bonus || 0,plan.deduction,req.body.compensationAdjustmentIds)
-      const gross = baseSalary + (overtime || 0) + (commission || 0) + adjustments.bonus
+      const gross = effectiveBaseSalary + (overtime || 0) + (commission || 0) + adjustments.bonus
       if (adjustments.deduction > gross || adjustments.bonus > 2000000000 || adjustments.deduction > 2000000000 || gross-adjustments.deduction > 2000000000) throw new DepositInputError('Deductions exceed gross salary')
       const created = await tx.salary.create({
       data: {
         staffId,
         month,
-        baseSalary,
+        baseSalary: effectiveBaseSalary,
         overtime: overtime || 0,
         commission: commission || 0,
         bonus: adjustments.bonus,
@@ -119,11 +189,14 @@ router.post('/', authenticate, authorize('admin'), validateBody(createSalary), s
       })
       await saveDepositPlan(tx, created, plan.items)
       await saveAdjustmentPlan(tx,staff.storeId!,created.id,adjustments.plan)
+      await savePayrollBasis(tx,created,staff,req.body.workingDays,req.body.manualCorrection===true)
+      await setReview(tx,staff.storeId,staff.id,month,null)
       return created
     })
 
     res.status(201).json({ code: 201, data: salary })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({ code: 400, message: error.message })
     if (error instanceof SalaryConflict) return res.status(409).json({ code: 409, message: error.message })
@@ -141,17 +214,18 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(sal
 
     const salary = await prisma.$transaction(async tx => {
       const existing = await tx.salary.findUniqueOrThrow({where:{id:req.params.id}})
-      const staff = await tx.staff.findUniqueOrThrow({where:{id:existing.staffId},select:{storeId:true}})
+      const staff = await payrollEmployee(tx,existing.staffId,req.body.autoBaseSalary===true)
+      const effectiveBaseSalary = !req.body.manualBaseSalary && (req.body.autoBaseSalary || req.body.workingDays) ? (await calculatePayrollBasis(tx,staff,existing.month,req.body.workingDays)).amount : baseSalary
       await periodLock(tx,staff.storeId!,existing.staffId,existing.month)
       if (existing.status !== 'pending') throw new SalaryConflict('Paid salary cannot be edited')
       const plan = await normalizeSalaryDeposits(tx, existing.staffId, existing.month, deduction || 0, req.body.depositDeductions)
       const adjustments = await normalizeAdjustments(tx,staff.storeId!,existing.staffId,existing.month,bonus || 0,plan.deduction,req.body.compensationAdjustmentIds)
-      const gross = baseSalary + (overtime || 0) + (commission || 0) + adjustments.bonus
+      const gross = effectiveBaseSalary + (overtime || 0) + (commission || 0) + adjustments.bonus
       if (adjustments.deduction > gross || adjustments.bonus > 2000000000 || adjustments.deduction > 2000000000 || gross-adjustments.deduction > 2000000000) throw new DepositInputError('Deductions exceed gross salary')
       const updated = await tx.salary.updateMany({
       where: { id: req.params.id, status: 'pending' },
       data: {
-        baseSalary,
+        baseSalary: effectiveBaseSalary,
         overtime: overtime || 0,
         commission: commission || 0,
         bonus: adjustments.bonus,
@@ -164,10 +238,13 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(sal
       const salary = await tx.salary.findUniqueOrThrow({ where: { id: req.params.id } })
       await saveDepositPlan(tx, salary, plan.items)
       await saveAdjustmentPlan(tx,staff.storeId!,salary.id,adjustments.plan)
+      await savePayrollBasis(tx,salary,staff,req.body.workingDays,req.body.manualCorrection===true)
+      await setReview(tx,staff.storeId,staff.id,salary.month,null)
       return salary
     })
     res.json({ code: 200, data: salary })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({ code: 400, message: error.message })
     if (error instanceof SalaryConflict) return res.status(409).json({ code: 409, message: error.message })
@@ -182,6 +259,13 @@ router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, asyn
     const salary = await prisma.$transaction(async tx => {
       const before = await tx.salary.findUniqueOrThrow({where:{id:req.params.id},include:{staff:{select:{storeId:true,name:true}}}})
       await periodLock(tx,before.staff.storeId!,before.staffId,before.month)
+      if(before.status==='pending'&&await review(tx,before.staff.storeId!,before.staffId,before.month))throw new SalaryConflict('SALARY_REVIEW_REQUIRED')
+      const basis=await savedPayrollBasis(tx,before.staff.storeId!,before.id)
+      if(before.status==='pending'&&basis?.employmentNeedsReview)throw new SalaryConflict('SALARY_EMPLOYMENT_RECALC_REQUIRED')
+      if(before.status==='pending'&&basis&&!basis.manualCorrection&&!basis.manualAdjustment&&basis.daysSource!=='manual'){
+        const current=await calculateSalary(before.staffId,Number(before.month.slice(5)),Number(before.month.slice(0,4)))
+        if(current.totalSalary<0)throw new SalaryConflict('SALARY_REVIEW_REQUIRED')
+      }
       const changed = await tx.salary.updateMany({ where: { id: req.params.id, status: 'pending' }, data: { status: 'paid' } })
       const salary = await tx.salary.findUniqueOrThrow({ where: { id: req.params.id } })
       if (changed.count === 1) {
@@ -206,6 +290,7 @@ router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, asyn
     })
     res.json({ code: 200, data: salary })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({ code: 400, message: error.message })
     if (error instanceof SalaryConflict) return res.status(409).json({ code: 409, message: error.message })
@@ -221,6 +306,7 @@ router.delete('/:id', authenticate, authorize('admin'), salaryStore, async (req:
     if (deleted.count !== 1) throw new SalaryConflict('Paid salary cannot be deleted')
     res.json({ code: 200, message: 'Salary deleted' })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({ code: 400, message: error.message })
     if (error instanceof SalaryConflict) return res.status(409).json({ code: 409, message: error.message })
@@ -238,6 +324,7 @@ router.get('/deposit-plan/:staffId', authenticate, authorize('admin', 'manager')
     const salary=await prisma.salary.findFirst({where:{staffId:req.params.staffId,month:req.query.month},select:{status:true}})
     res.json({code:200,data:{depositDeductions:items,amount:items.reduce((sum,item)=>sum+item.amount,0),salaryStatus:salary?.status||null,compensation}})
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({code:400,message:error.message})
     res.status(500).json({code:500,message:'Failed to load deposit plan'})
@@ -260,6 +347,7 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), s
     const result = await calculateSalary(staffId, monthNumber, year)
     res.json({ code: 200, data: { ...result, month, totalOvertimeHours: result.overtimeHours, deduction: result.deductions, finalAmount: result.totalSalary } })
   } catch (error: any) {
+    if (error instanceof ProbationInputError) return res.status(400).json({code:400,message:error.message})
     if (error instanceof SalaryAdjustmentError) return res.status(409).json({code:409,message:error.message})
     if (error instanceof DepositInputError) return res.status(400).json({ code: 400, message: error.message })
     if (error instanceof SalaryConflict) return res.status(409).json({ code: 409, message: error.message })

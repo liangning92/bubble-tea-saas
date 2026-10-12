@@ -1,0 +1,21 @@
+const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/strict');
+(async()=>{const origin=process.env.PROFILE_ORIGIN||'http://127.0.0.1:5191';const browser=await chromium.launch();try{
+const context=await browser.newContext({serviceWorkers:'block'});await context.addInitScript(()=>{sessionStorage.setItem('auth-storage',JSON.stringify({state:{token:'synthetic-only',isAuthenticated:true,user:{id:'owner',storeId:'a',role:'admin',staff:null}},version:0}));localStorage.setItem('bubble-tea-language','zh');window.print=()=>{}});
+const requests=[],errors=[];const row={id:'o',orderNumber:'TEST-0000',createdAt:'2026-10-12T01:00:00Z',items:[{productName:'珍珠奶茶',quantity:2}],finalAmount:24000,netAmount:20000,paymentMethod:'cash',status:'completed'};
+await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.protocol==='http:'&&url.origin!==origin)return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();requests.push(url);let data={list:[]};
+ if(req.method()!=='GET')throw Error('Read-only export test attempted mutation');
+ if(url.pathname==='/api/stores')data={list:[{id:'a',name:'Synthetic store'}]};
+ if(url.pathname==='/api/orders')data={list:[row],pagination:{page:Number(url.searchParams.get('page')||1),total:125,totalPages:2}};
+ if(url.pathname==='/api/orders/export-data')data={list:Array.from({length:125},(_,i)=>({...row,id:String(i),orderNumber:'TEST-'+String(i).padStart(4,'0')}))};
+ if(url.pathname==='/api/finance/shift-sessions')data={sessions:[{id:'s',windowStart:'2026-10-12T01:00:00Z',session:{shift:'morning',opener:{name:'Synthetic cashier'},definition:{nameZh:'早班'}}}]};
+ if(url.pathname.startsWith('/api/orders/')&&url.pathname!=='/api/orders/export-data')return route.fulfill({status:404,json:{code:404,message:'Unknown order endpoint'}});
+ return route.fulfill({json:{code:200,data}});
+});
+const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto(origin+'/finance/orders');await page.getByRole('button',{name:'导出 PDF',exact:true}).waitFor();
+await page.getByLabel('搜索订单',{exact:true}).fill('珍珠');await page.getByLabel('开始时间').fill('2026-10-12T08:00');await page.getByLabel('结束时间').fill('2026-10-12T16:00');await page.getByLabel('全部支付方式').selectOption('cash');await page.getByLabel('全部班次').selectOption('s');
+await page.getByRole('button',{name:'下一页',exact:true}).click();await expect.poll(()=>requests.some(u=>u.pathname==='/api/orders'&&u.searchParams.get('page')==='2'&&u.searchParams.get('search')==='珍珠'&&u.searchParams.get('shiftSessionId')==='s'&&u.searchParams.get('paymentMethod')==='cash')).toBe(true);
+assert.equal(requests.filter(u=>u.pathname==='/api/orders').at(-1).searchParams.get('startDate'),'2026-10-12T01:00:00.000Z');
+const popupPromise=page.waitForEvent('popup');await page.getByRole('button',{name:'导出 PDF',exact:true}).click();const popup=await popupPromise;await expect(popup.locator('tbody tr')).toHaveCount(125);assert.ok((await popup.locator('thead').innerText()).includes('数量'));
+await page.getByLabel('结束时间').fill('2026-10-11T16:00');await page.getByRole('alert').filter({hasText:/结束时间/}).waitFor();assert.equal(await page.getByRole('button',{name:'导出 PDF',exact:true}).isDisabled(),true);assert.deepEqual(errors,[]);
+console.log('PASS real admin order filters: combined search/shift/payment/WIB/pagination, full 125-order export via actual export-data endpoint, quantity column, invalid range and no runtime errors');
+}finally{await browser.close()}})().catch(error=>{console.error(error);process.exitCode=1});

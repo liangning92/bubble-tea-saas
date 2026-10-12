@@ -1,3 +1,7 @@
+import {StaffAccessProvider,useStaffAccess,permissionForPage} from '../../shared/StaffAccess'
+import {StaffApprovalInbox} from '../../shared/StaffApprovalInbox'
+import {StaffApprovalDialog} from '../../shared/StaffApprovalDialog'
+import {staffPermissionClient} from './services/api'
 import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
@@ -44,17 +48,22 @@ function LayoutWithNav({ children }: { children: React.ReactNode }) {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, token, user } = useAuthStore()
+  const access=useStaffAccess(),{t}=useTranslation()
   const location=useLocation()
   if (!isAuthenticated || !token || !user) { sessionStorage.setItem("employee-return",location.pathname); return <Navigate to="/login" replace /> }
+  if(!access.ready)return access.failed?<p role="alert">{t('staffAccessV2.denied')}<button onClick={()=>window.dispatchEvent(new Event('focus'))}>{t('common.refresh')}</button></p>:<RouteLoading />
+  if(!access.can(permissionForPage(location.pathname,true)!))return <p role="alert" className="p-6">{t('staffAccessV2.denied')}</p>
   return <>{children}</>
 }
 
 function App() {
+  const {user}=useAuthStore()
   return (
-    <Suspense fallback={<RouteLoading />}><Routes>
+    <StaffAccessProvider api={staffPermissionClient} actor={user?[user.id,user.storeId,'staff'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/><Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/attendance/appeals" element={<ProtectedRoute><LayoutWithNav><EmployeeAppealsPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/profile/documents" element={<ProtectedRoute><LayoutWithNav><EmployeeDocumentsPage /></LayoutWithNav></ProtectedRoute>} />
+      <Route path="/approvals" element={<ProtectedRoute><LayoutWithNav><StaffApprovalInbox api={staffPermissionClient} userId={user?.id||''}/></LayoutWithNav></ProtectedRoute>}/>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"
@@ -201,7 +210,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-    <Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense>
+    <Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense></StaffAccessProvider>
   )
 }
 

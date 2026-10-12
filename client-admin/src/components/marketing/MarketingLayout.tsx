@@ -1,3 +1,5 @@
+import {useEmployeeNavigation} from '../../contexts/EmployeeAccess'
+import {permissionForPage} from '../../../../shared/StaffAccess'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { languageIndex } from '../../../../shared/utils/activityLabels'
@@ -6,9 +8,10 @@ export type MarketingLink = { path: string; label: string }
 
 export function MarketingTabs({ items, primary = false }: { items: MarketingLink[]; primary?: boolean }) {
   const { pathname } = useLocation()
+  const allowed=useEmployeeNavigation()
   const active = [...items].sort((a, b) => b.path.length - a.path.length).find(item => pathname === item.path || pathname.startsWith(item.path + '/')) || items[0]
   return <nav aria-label={primary ? 'Marketing' : 'Marketing section'} className={primary ? 'marketing-primary-nav' : 'marketing-section-nav'}>
-    {items.map(item => <Link key={item.path} to={item.path} aria-current={active?.path === item.path ? 'page' : undefined}
+    {items.filter(item=>allowed(permissionForPage(item.path))).map(item => <Link key={item.path} to={item.path} aria-current={active?.path === item.path ? 'page' : undefined}
       className={primary ? `marketing-primary-link ${active?.path === item.path ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}` : `marketing-section-link ${active?.path === item.path ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
       {item.label}
     </Link>)}

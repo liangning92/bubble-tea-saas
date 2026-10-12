@@ -12,5 +12,7 @@
   "RefundRequest.selectedItemIds TEXT NOT NULL DEFAULT '[]'",
   "PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes",
   "Order_pickupNumber_idx nonunique index",
-  "Preserve compatible legacy INTEGER affinity for leave day Float columns"
+  "Preserve compatible legacy INTEGER affinity for leave day Float columns",
+  "StaffActionApproval and StaffApprovalCredential tables and indexes",
+  "Staff_employeeNumber_key unique index after duplicate-number validation"
 ]

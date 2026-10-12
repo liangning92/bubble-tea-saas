@@ -1,3 +1,4 @@
+import {requestStaffApproval} from '../../../shared/StaffApprovalDialog'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
@@ -23,7 +24,8 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    if(error.response?.data?.message==='STAFF_ACCESS_APPROVAL_REQUIRED' && error.config?.url?.includes('/balance/')){const match=error.config.url.match(/members\/([^/]+)\/balance\/(topup|deduct)/);if(match){const body=typeof error.config.data==='string'?JSON.parse(error.config.data):error.config.data;const result=await requestStaffApproval(api,{action:'members.balance',targetId:match[1],requestId:body.requestId||crypto.randomUUID(),payload:{amount:body.amount,type:match[2],note:body.note||'Member balance adjustment'}});return{...error.response,status:200,data:{code:200,data:JSON.parse(result.result)}}}}
     if(error.response?.status===403 && error.response?.data?.message?.startsWith('STAFF_ACCESS_')) window.dispatchEvent(new Event('staff-access-changed'))
     if (error.response && error.response.status === 401) {
       useAuthStore.getState().logout()
@@ -105,12 +107,14 @@ export const categoryApi = {
 
 // Orders
 export const orderApi = {
+  exportData: (params?: any) => api.get('/orders/export-data', { params }),
   receivedReceipts: () => api.get('/orders/received-receipts'),
   list: (params?: any) => api.get('/orders', { params }),
   get: (id: string) => api.get('/orders/' + id),
   create: (data: any) => api.post('/orders', data),
   updateStatus: (id: string, status: string) => api.put('/orders/' + id + '/status', { status }),
   refund: (id: string, reason?: string) => api.post('/orders/' + id + '/refund', { reason }),
+  updatePreparation: (id:string,status:string)=>api.put('/orders/kds/'+id+'/status',{status}),
   getKDS: (storeId: string, params?: any) => api.get('/orders/kds/list', { params: { storeId, ...params } })
 }
 
@@ -162,6 +166,10 @@ async function depositChange(operation: 'deduct' | 'refund', data: any) {
 
 // Staff
 export const staffApi = {
+  payrollRules:()=>api.get('/staff/payroll-rules'),
+  savePayrollRules:(data:any)=>api.put('/staff/payroll-rules',data),
+  probationRule: () => api.get('/staff/probation-rule'),
+  saveProbationRule: (data: any) => api.put('/staff/probation-rule', data),
   list: (params?: any) => api.get('/staff', { params }),
   get: (id: string) => api.get('/staff/' + id),
   create: (data: any) => api.post('/staff', data),
@@ -595,6 +603,7 @@ export const announcementApi = {
 
 // Salaries
 export const salaryApi = {
+  prepareMonth:(month:string)=>api.post('/salaries/prepare-month',{month}),
   adjustments: () => api.get('/salaries/adjustments'),
   createAdjustment: (data: any) => api.post('/salaries/adjustments',data),
   cancelAdjustment: (id: string) => api.post(`/salaries/adjustments/${id}/cancel`),
@@ -604,8 +613,8 @@ export const salaryApi = {
   update: (id: string, data: any) => api.put('/salaries/' + id, data),
   markPaid: (id: string) => api.put('/salaries/' + id + '/mark-paid'),
   delete: (id: string) => api.delete('/salaries/' + id),
-  calculate: (staffId: string, month: number, year: number) =>
-    api.get('/staff-salary/calculate/' + staffId, { params: { month, year } })
+  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}) =>
+    api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
 }
 
 // Marketing

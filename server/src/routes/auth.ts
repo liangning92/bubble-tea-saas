@@ -1,3 +1,4 @@
+import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
@@ -59,7 +60,7 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
           userId: user.id,
           storeId: store.id,
           name,
-          employeeNumber: `EMP${Date.now().toString().slice(-6)}`,
+          employeeNumber: await allocateEmployeeNumber(tx),
           position: 'Manager',
           status: 'active'
         }

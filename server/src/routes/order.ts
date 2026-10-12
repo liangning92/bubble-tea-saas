@@ -1,3 +1,4 @@
+import {readPolicyV2} from '../services/StaffPermissionV2Service'
 import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure } from '../services/ReceivedReceiptService'
 import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
@@ -57,6 +58,9 @@ const createOrderSchema = z.object({
   activityGroupId: z.string().optional(),
   activityGiftSelections: z.record(z.string()).optional(),
   discountAmount: z.number().int().min(0).optional().default(0),
+  manualDiscountAmount: z.number().int().positive().optional(),
+  discountBasketId:z.string().uuid().optional(),
+  approvalId: z.string().uuid().optional(),
   pointsRedeemed: z.number().int().min(0).optional().default(0),
   qrisExternalId: z.string().max(100).optional(),
   paymentEvidenceId: z.string().max(100).optional(),
@@ -77,35 +81,48 @@ const createOrderSchema = z.object({
 })
 
 // GET /api/orders
-router.get('/', authenticate, async (req: AuthRequest, res) => {
+const listOrders = async (req: AuthRequest, res: Response) => {
   try {
-    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search } = req.query
+    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search, productName, shiftSessionId } = req.query
 
+    const parsed = z.object({
+      startDate: z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(), endDate: z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
+      productName: z.string().max(200).optional(), shiftSessionId: z.string().max(100).optional(),
+      page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(10000).default(20)
+    }).safeParse({ startDate, endDate, productName, shiftSessionId, page, pageSize })
+    if (!parsed.success || (startDate && endDate && new Date(String(startDate)) > new Date(String(endDate)))) return res.status(400).json({ code: 400, message: 'INVALID_ORDER_FILTERS' })
+    if (storeId && !canAccessStore(req.user!, String(storeId))) return res.status(403).json({ code: 403, message: 'Store access denied' })
     const result = await OrderService.getOrders({
-      storeId: storeId as string,
+      storeId: (storeId || req.user!.storeId) as string,
       userId: req.user!.id,
       userRole: req.user!.role,
       status: status as string,
       paymentMethod: paymentMethod as string,
       channelId: channelId as string,
       search: search as string,
-      startDate: startDate as string,
-      endDate: endDate as string,
+      productName: parsed.data.productName,
+      shiftSessionId: parsed.data.shiftSessionId,
+      startDate: startDate && /^\d{4}-\d{2}-\d{2}$/.test(String(startDate)) ? String(startDate)+'T00:00:00+07:00' : startDate as string,
+      endDate: endDate && /^\d{4}-\d{2}-\d{2}$/.test(String(endDate)) ? String(endDate)+'T23:59:59.999+07:00' : endDate as string,
       date: date as string,
-      page: parseInt(page as string) || 1,
-      pageSize: parseInt(pageSize as string) || 20
+      page: req.path === '/export-data' ? 1 : parsed.data.page,
+      pageSize: req.path === '/export-data' ? 10001 : parsed.data.pageSize
     })
 
+    if (req.path === '/export-data' && result.list.length > 10000) return res.status(400).json({ code: 400, message: 'ORDER_EXPORT_TOO_LARGE' })
     res.json({
       code: 200,
       data: result,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_ORDER_SHIFT') return res.status(400).json({ code: 400, message: error.message })
     console.error('Get orders error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get orders' })
   }
-})
+}
+router.get('/', authenticate, listOrders)
+router.get('/export-data', authenticate, authorize('admin', 'manager'), listOrders)
 
 // GET /api/orders/refund-requests - 必须在 /:id 之前
 router.get('/refund-requests', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
@@ -312,6 +329,11 @@ router.post('/refund-request', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// Preparation-only endpoint for production staff; financial state changes remain forbidden.
+router.put('/kds/:id/status', authenticate, authorize('admin','manager','staff'), async(req:AuthRequest,res)=>{
+ try{const order=await prisma.order.findUnique({where:{id:req.params.id}});if(!checkOrderAccess(req,res,order))return;allowedPreviousOrderStatuses(req.body.status);const updated=await OrderService.updateOrderStatus(req.params.id,req.body.status);res.json({code:200,data:publicOrder(updated)})}catch(e:any){res.status(409).json({code:409,message:e.message})}
+})
+
 // PUT /api/orders/:id/status
 router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
@@ -361,6 +383,23 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// POST /api/orders/:id/void - retain receipt and audit evidence for erroneous/test sales.
+router.post('/:id/void', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const body = z.object({ reasonCode: z.enum(['error', 'test']), reason: z.string().trim().min(1).max(1000), noActualPayment: z.literal(true) }).safeParse(req.body)
+    if (!body.success) return res.status(400).json({ code: 400, message: 'INVALID_VOID_REASON' })
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } })
+    if (!checkOrderAccess(req, res, order)) return
+    await OrderService.voidOrder(req.params.id, body.data.reasonCode, body.data.reason, req.user!.staffId || req.user!.id)
+    res.json({ code: 200, message: 'Order voided' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to void order'
+    if (/^(VOID_|INVALID_VOID_|ORDER_ALREADY_REFUNDED|REFUND_REMAINING_ITEMS_REQUIRED|REPLICA_FINANCIAL_ACTION_LOCAL_ONLY)/.test(message)) return res.status(409).json({ code: 409, message })
+    console.error('Void order error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to void order' })
+  }
+})
+
 // POST /api/orders/:id/refund
 router.post('/:id/refund', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
@@ -396,8 +435,10 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
 
     if (!checkOrderAccess(req, res, request.order)) return
 
+    if((await readPolicyV2(request.order.storeId))?.active&&request.requestedBy===(req.user!.staffId||req.user!.id))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});
+    if(req.user!.accessRole?.version===2){if(request.requestedBy===(req.user!.staffId||req.user!.id))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});if(req.user!.accessRole.modes?.['orders.refund']!=='allow'||req.user!.accessRole.modes?.['approvals.approve']!=='allow')return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED'})}
     if(itemRefundRecord(request.selectedItemIds)){
-      const result=await approveItemRefund(request.id,{storeId:request.order.storeId,id:req.user!.staffId||req.user!.id,role:req.user!.role},req.body.verifiedPrepared===true,note)
+      const result=await approveItemRefund(request.id,{storeId:request.order.storeId,id:req.user!.staffId||req.user!.id,role:req.user!.accessRole?.version===2&&req.user!.role!=='admin'?'manager':req.user!.role},req.body.verifiedPrepared===true,note)
       return res.json({code:200,data:result,message:'Refund accounting approved; external payment is manual'})
     }
     const refundAmount = request.amount === 0 ? request.order.finalAmount : request.amount

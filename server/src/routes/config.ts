@@ -181,9 +181,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(confi
     if ((key === AI_POLICY_KEY || (key.startsWith(RECEIPT_SYNC_PREFIX)||key.startsWith(COUNT_OBSERVATION_PREFIX)))) return res.status(403).json({ code: 403, message: 'Use AI permissions endpoint' })
 
     const preparedValue = await prepareConfigValue(storeId, key, value)
-    const valueStr = typeof preparedValue === 'string' ? preparedValue : JSON.stringify(preparedValue)
-
-    const config = await prisma.$transaction(tx => saveMediaConfig(tx,storeId,key,value,category))
+    const config = await prisma.$transaction(tx => saveMediaConfig(tx,storeId,key,preparedValue,category))
 
     res.json({
       code: 200,
@@ -210,7 +208,7 @@ router.post('/batch', authenticate, authorize('admin', 'manager'), async (req: A
     if (configs.some((c: { key?: string }) => c?.key === 'paymentMethods') && storeId !== req.user!.storeId && req.user!.role !== 'admin') return res.status(403).json({ code: 403, message: 'Store access denied' })
     if (configs.some((c: any) => isTrainingLibraryKey(c?.key))) return res.status(403).json({code:403,message:'Protected training content'})
     const preparedConfigs = await Promise.all(configs.map(async (c: any) => ({ ...c, value: await prepareConfigValue(storeId, c.key, c.value) })))
-    await prisma.$transaction(async tx => {for(const c of configs) await saveMediaConfig(tx,storeId,c.key,c.value,c.category)})
+    await prisma.$transaction(async tx => {for(const c of preparedConfigs) await saveMediaConfig(tx,storeId,c.key,c.value,c.category)})
 
     res.json({
       code: 200,

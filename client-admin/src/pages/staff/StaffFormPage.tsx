@@ -1,4 +1,9 @@
-import { useState, useEffect } from 'react'
+import {useEmployeePermission,EmployeeAccessContext} from '../../contexts/EmployeeAccess'
+import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
+import { payrollLabels } from '../../../../shared/payrollLabels'
+import { jakartaInput } from '../../utils/orderExport'
+import { probationLabels } from '../../../../shared/probationLabels'
+import { useState, useEffect, useRef, useContext } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -6,18 +11,27 @@ import { staffApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { ArrowLeft, Key, X } from 'lucide-react'
 
-export function StaffFormPage() {
-  const { t } = useTranslation()
+export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onCancel?: () => void } = {}) {
+  const { t, i18n } = useTranslation()
+  const identityText = staffIdentityLabels(i18n.language)
+  const probationText = probationLabels(i18n.language)
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
+  const canWrite=useEmployeePermission('staff.write'),canSalary=useEmployeePermission('salary.write'),canBank=useEmployeePermission('staff.bank.read'),canPrivate=useEmployeePermission('staff.private.read')
+  const access=useContext(EmployeeAccessContext)
+  const canResetPassword=user?.role==='admin'||access.role?.version!==2
   const isEdit = !!id
+  const loadedStaffId = useRef<string>()
+  const probationRuleQuery = useQuery({queryKey:['probation-rule',user?.storeId],queryFn:()=>staffApi.probationRule()})
+  useEffect(()=>{if(!isEdit&&probationRuleQuery.data?.data?.data?.enabled)setForm(previous=>({...previous,probationEnabled:true}))},[isEdit,probationRuleQuery.data?.data?.data?.enabled])
   const [form, setForm] = useState({
     name: '',
     phone: '',
     password: '',
     role: 'staff',
+    payrollEmployee:true,
     position: '',
     email: '',
     address: '',
@@ -30,7 +44,10 @@ export function StaffFormPage() {
     baseSalary: '',
     hourlyRate: '',
     weeklyHours: '',
-    hireDate: ''
+    terminationDate: '',
+    hireDate: '',
+    probationEnabled: false,
+    confirmationDate: ''
   })
 
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -66,20 +83,24 @@ export function StaffFormPage() {
     resetPasswordMutation.mutate(newPassword)
   }
 
-  const { data: staffData } = useQuery({
+  const { data: staffData, isLoading, isError, refetch } = useQuery({
     queryKey: ['staff', id],
     queryFn: () => staffApi.get(id!),
-    enabled: !!id
+    enabled: !!id,
+    refetchOnWindowFocus: false
   })
 
   useEffect(() => {
     if (staffData?.data?.data) {
       const s = staffData.data.data
+      if (loadedStaffId.current === s.id) return
+      loadedStaffId.current = s.id
       setForm({
         name: s.name || '',
         phone: s.phone || s.user?.phone || '',
         password: '', // Password not shown in edit mode
-        role: s.user?.role || 'staff',
+        role: s.role || s.user?.role || 'staff',
+        payrollEmployee:s.payrollEmployee ?? (s.user?.role!=='admin'),
         position: s.position || '',
         email: s.email || '',
         address: s.address || '',
@@ -91,8 +112,11 @@ export function StaffFormPage() {
         employmentType: s.employmentType || 'full_time',
         baseSalary: s.baseSalary ?? '',
         hourlyRate: s.hourlyRate ?? '',
-        weeklyHours: s.weeklyHours || '',
-        hireDate: s.hireDate ? new Date(s.hireDate).toISOString().slice(0, 10) : ''
+        weeklyHours: s.weeklyHours ?? '',
+        terminationDate:s.terminationDate?jakartaInput(s.terminationDate).slice(0,10):'',
+        hireDate: s.hireDate ? jakartaInput(s.hireDate).slice(0, 10) : '',
+        probationEnabled: !!s.probation?.enabled,
+        confirmationDate: s.probation?.overrideConfirmationDate || ''
       })
     }
   }, [staffData])
@@ -113,9 +137,10 @@ export function StaffFormPage() {
   const updateMutation = useMutation({
     mutationFn: (data: any) => staffApi.update(id!, data),
     onError: showSaveError,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] })
-      navigate('/staff')
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['staff'] })
+      if (onSaved) onSaved()
+      else navigate(`/staff/${id}`)
     }
   })
 
@@ -126,13 +151,20 @@ export function StaffFormPage() {
 
     const submitData: any = { ...form }
     // Add storeId from current user
-    submitData.storeId = user?.storeId
+    submitData.storeId = staffData?.data?.data?.storeId || user?.storeId
 
 
     // Convert empty strings to appropriate values
     submitData.baseSalary = submitData.baseSalary === '' ? undefined : Number(submitData.baseSalary)
     submitData.hourlyRate = submitData.hourlyRate === '' ? undefined : Number(submitData.hourlyRate)
     submitData.weeklyHours = submitData.weeklyHours === '' ? undefined : Number(submitData.weeklyHours)
+    if(form.status==='resigned'&&(!form.terminationDate||(form.hireDate&&form.terminationDate<form.hireDate))){setSaveError(payrollLabels(i18n.language).terminationRequired);return}
+    if(isEdit)submitData.terminationDate=form.terminationDate||null
+    else delete submitData.terminationDate
+    if(form.role!=='admin')delete submitData.payrollEmployee
+    if(!form.payrollEmployee){submitData.probationEnabled=false;delete submitData.hireDate;delete submitData.baseSalary}
+    submitData.confirmationDate = form.payrollEmployee ? form.confirmationDate || null : undefined
+    if (submitData.probationEnabled && !form.hireDate) { setSaveError(probationText.hireRequired); return }
     if (submitData.hireDate === '') submitData.hireDate = undefined
     if (submitData.password === '') submitData.password = undefined
 
@@ -143,21 +175,38 @@ export function StaffFormPage() {
       return
     }
 
-    if (!submitData.storeId) {
+    if (!isEdit && !submitData.storeId) {
       alert('Store ID is missing. Please login again.')
       return
     }
 
-    if (isEdit) updateMutation.mutate(submitData)
+    if(!canSalary){for(const key of ['baseSalary','hourlyRate','weeklyHours','probationEnabled','confirmationDate'])delete submitData[key]}
+    if(!canBank){delete submitData.bankName;delete submitData.bankAccount}
+    if(!canPrivate){delete submitData.address;delete submitData.emergencyContact;delete submitData.emergencyPhone}
+    if (isEdit) {
+      // The employee already owns a store and login account. Update profile fields only.
+      delete submitData.storeId
+      delete submitData.phone
+      delete submitData.password
+      delete submitData.role
+      updateMutation.mutate(submitData)
+    }
     else createMutation.mutate(submitData)
   }
 
+  if(!canWrite)return <p role="alert">{t('staffAccessV2.denied')}</p>
+  if (isEdit && isLoading) return <p role="status" className="py-12 text-center">{t('common.loading')}</p>
+  if (isEdit && (isError || !staffData?.data?.data)) return <div role="alert" className="py-12 text-center">
+    <p>{t('common.error')}</p>
+    <button type="button" className="btn-secondary mt-4" onClick={() => refetch()}>↻</button>
+  </div>
+
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
+      {!onCancel && <div className="flex items-center gap-4 mb-6">
         <Link to="/staff" className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft size={20} /></Link>
         <h1 className="text-2xl font-bold text-gray-900">{isEdit ? t('staff.editStaff') : t('staff.addStaff')}</h1>
-      </div>
+      </div>}
 
       <div className="card max-w-3xl">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -228,6 +277,7 @@ export function StaffFormPage() {
                 required
               >
                 <option value="">{t('staff.select')}</option>
+                {form.position && !['manager', 'cashier', 'barista', 'kitchen'].includes(form.position) && <option value={form.position}>{form.position}</option>}
                 <option value="manager">{t('staff.manager')}</option>
                 <option value="cashier">{t('staff.cashier')}</option>
                 <option value="barista">{t('staff.barista')}</option>
@@ -249,6 +299,10 @@ export function StaffFormPage() {
             </div>
           </div>
 
+          {form.role==='admin' && <section className="bg-blue-50 rounded-xl p-4 space-y-2"><p className="font-medium">{identityText.identity}</p><p className="text-sm">{identityText.hint}</p><label className="flex gap-2"><input type="checkbox" checked={form.payrollEmployee} disabled={user?.role!=='admin'} onChange={e=>setForm({...form,payrollEmployee:e.target.checked,probationEnabled:e.target.checked&&!!probationRuleQuery.data?.data?.data?.enabled})}/>{identityText.employee}</label>{!form.payrollEmployee&&<p>{identityText.accountOnly}</p>}</section>}
+          {isEdit&&<p className="text-sm text-gray-600">{identityText.offboardHint}</p>}
+          {isEdit&&<label className="block text-sm">{payrollLabels(i18n.language).termination}<input type="date" min={form.hireDate||undefined} className="input" value={form.terminationDate} onChange={e=>setForm({...form,terminationDate:e.target.value})}/></label>}
+          {form.payrollEmployee&&<>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="staff-employmentType" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.employmentType')}</label>
@@ -274,7 +328,14 @@ export function StaffFormPage() {
             </div>
           </div>
 
-          <label htmlFor="staff-baseSalary" className="block text-sm">{t('salary.baseSalary')} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
+          <label htmlFor="staff-baseSalary" className="block text-sm">{probationText.formal} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" disabled={!canSalary} value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
+          <section className="bg-blue-50 rounded-xl p-4 space-y-3"><p className="text-sm">{probationText.contract}</p>
+          <label className="flex gap-2 items-center"><input type="checkbox" checked={form.probationEnabled} disabled={probationRuleQuery.isLoading || probationRuleQuery.isError || (!probationRuleQuery.data?.data?.data?.enabled && !staffData?.data?.data?.probation?.enabled)} onChange={e=>setForm({...form,probationEnabled:e.target.checked})}/>{probationText.enroll}</label>
+          {probationRuleQuery.isError&&<p role="alert">{probationText.loadError}<button type="button" onClick={()=>probationRuleQuery.refetch()}>↻</button></p>}
+          {!probationRuleQuery.data?.data?.data?.enabled&&<Link to="/staff/salary/probation-rules" className="text-primary underline text-sm">{probationText.needsRule}</Link>}
+          {form.probationEnabled&&<><p className="text-sm">{probationText.hireRequired}</p><label className="block text-sm">{probationText.override}<input type="date" min={form.hireDate||undefined} className="input" value={form.confirmationDate} onChange={e=>setForm({...form,confirmationDate:e.target.value})}/></label>{staffData?.data?.data?.probation?.confirmationDate&&<p className="text-sm">{probationText.confirmation}: {staffData.data.data.probation.confirmationDate}</p>}</>}
+          </section>
+          </>}
           {/* Part-time fields */}
           {(form.employmentType === 'part_time' || form.employmentType === 'intern') && (
             <div className="grid grid-cols-2 gap-4">
@@ -282,18 +343,18 @@ export function StaffFormPage() {
                 <label htmlFor="staff-weeklyHours" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.weeklyHours')}</label>
                 <input
                   id="staff-weeklyHours" type="number"
-                  value={form.weeklyHours}
+                  disabled={!canSalary} value={form.weeklyHours}
                   onChange={(e) => setForm({ ...form, weeklyHours: e.target.value })}
                   className="input"
-                  min="1"
-                  max="40"
+                  min="0"
+                  max="168"
                 />
               </div>
               <div>
                 <label htmlFor="staff-hourlyRate" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hourlyRate')} (IDR)</label>
                 <input
                   id="staff-hourlyRate" type="number"
-                  value={form.hourlyRate}
+                  disabled={!canSalary} value={form.hourlyRate}
                   onChange={(e) => setForm({ ...form, hourlyRate: e.target.value })}
                   className="input"
                   min="0"
@@ -316,7 +377,7 @@ export function StaffFormPage() {
               <label htmlFor="staff-address" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.address')}</label>
               <input
                 id="staff-address" type="text"
-                value={form.address}
+                disabled={!canPrivate} value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
                 className="input"
               />
@@ -330,7 +391,7 @@ export function StaffFormPage() {
                 <label htmlFor="staff-emergencyContact" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactName')}</label>
                 <input
                   id="staff-emergencyContact" type="text"
-                  value={form.emergencyContact}
+                  disabled={!canPrivate} value={form.emergencyContact}
                   onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })}
                   className="input"
                 />
@@ -339,7 +400,7 @@ export function StaffFormPage() {
                 <label htmlFor="staff-emergencyPhone" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactPhone')}</label>
                 <input
                   id="staff-emergencyPhone" type="tel"
-                  value={form.emergencyPhone}
+                  disabled={!canPrivate} value={form.emergencyPhone}
                   onChange={(e) => setForm({ ...form, emergencyPhone: e.target.value })}
                   className="input"
                 />
@@ -354,7 +415,7 @@ export function StaffFormPage() {
                 <label htmlFor="staff-bankName" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankName')}</label>
                 <input
                   id="staff-bankName" type="text"
-                  value={form.bankName}
+                  disabled={!canBank} value={form.bankName}
                   onChange={(e) => setForm({ ...form, bankName: e.target.value })}
                   className="input"
                 />
@@ -363,7 +424,7 @@ export function StaffFormPage() {
                 <label htmlFor="staff-bankAccount" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankAccount')}</label>
                 <input
                   id="staff-bankAccount" type="text"
-                  value={form.bankAccount}
+                  disabled={!canBank} value={form.bankAccount}
                   onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
                   className="input"
                 />
@@ -372,7 +433,7 @@ export function StaffFormPage() {
           </div>
 
           {/* Password Reset Section - only for edit mode */}
-          {isEdit && (
+          {isEdit && canResetPassword && (
             <div className="border-t pt-6">
               <h3 className="font-medium text-gray-900 mb-4">{t('staff.passwordReset')}</h3>
               <button
@@ -388,7 +449,7 @@ export function StaffFormPage() {
 
           <div className="flex gap-3 pt-4">
             <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="btn-primary">{t('common.save')}</button>
-            <Link to="/staff" className="btn-secondary">{t('common.cancel')}</Link>
+            {onCancel ? <button type="button" onClick={onCancel} className="btn-secondary" disabled={updateMutation.isPending}>{t('common.cancel')}</button> : <Link to={isEdit ? `/staff/${id}` : '/staff'} className="btn-secondary">{t('common.cancel')}</Link>}
           </div>
         </form>
       </div>

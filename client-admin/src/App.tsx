@@ -1,3 +1,4 @@
+import {StaffApprovalPage} from './pages/StaffApprovalPage'
 import { EmployeeWorkspacePage } from './pages/staff/EmployeeWorkspacePage'
 import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
@@ -46,6 +47,8 @@ const AttendanceRulesPage = lazy(() => import('./pages/staff/AttendanceRulesPage
 const ShiftConfigPage = lazy(() => import('./pages/staff/ShiftConfigPage').then(module => ({ default: module.ShiftConfigPage })))
 const ReimbursementListPage = lazy(() => import('./pages/staff/ReimbursementListPage').then(module => ({ default: module.ReimbursementListPage })))
 const ReimbursementTypeConfigPage = lazy(() => import('./pages/staff/ReimbursementTypeConfigPage').then(module => ({ default: module.ReimbursementTypeConfigPage })))
+const ProbationRulesPage = lazy(() => import('./pages/staff/ProbationRulesPage').then(module => ({ default: module.ProbationRulesPage })))
+const PayrollRulesPage = lazy(()=>import('./pages/staff/PayrollRulesPage').then(module=>({default:module.PayrollRulesPage})))
 const SalaryListPage = lazy(() => import('./pages/staff/SalaryListPage').then(module => ({ default: module.SalaryListPage })))
 const ShiftSwapListPage = lazy(() => import('./pages/staff/ShiftSwapListPage').then(module => ({ default: module.ShiftSwapListPage })))
 const AttendanceCorrectionListPage = lazy(() => import('./pages/staff/AttendanceCorrectionListPage').then(module => ({ default: module.AttendanceCorrectionListPage })))
@@ -138,7 +141,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function LegacyShiftRedirect() {
   const { search, hash } = useLocation()
-  return <Navigate to={`/dashboard/shifts${search}${hash}`} replace />
+  return <Navigate to={`/finance/revenue${search}${hash}`} replace />
 }
 
 function App() {
@@ -156,7 +159,7 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="dashboard/shifts" element={<ShiftReviewPage />} />
+        <Route path="dashboard/shifts" element={<LegacyShiftRedirect />} />
         <Route path="finance/shifts" element={<LegacyShiftRedirect />} />
         <Route path="pos-monitor" element={<POSMonitorPage />} />
 
@@ -241,7 +244,9 @@ function App() {
           <Route path="salary" element={<SalaryIndexPage />}>
             <Route index element={<SalaryListPage />} />
             <Route path="salary" element={<SalaryListPage />} />
+            <Route path="payroll-rules" element={<PayrollRulesPage />} />
             <Route path="deposit" element={<StaffDepositListPage />} />
+            <Route path="probation-rules" element={<ProbationRulesPage />} />
             <Route path="deposit-rules" element={<DepositRulesPage />} />
             <Route path="reimbursement" element={<ReimbursementListPage />} />
             <Route path="reimbursement/types" element={<ReimbursementTypeConfigPage />} />
@@ -343,6 +348,7 @@ function App() {
         <Route path="finance" element={<FinanceIndexPage />}>
           <Route index element={<Navigate to="/finance/revenue" replace />} />
           <Route path="revenue" element={<RevenuePage />} />
+          <Route path="revenue/shifts/:sessionId" element={<ShiftReviewPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="budgets" element={<BudgetPage />} />
           <Route path="orders" element={<OrderListPage />} />
@@ -365,6 +371,7 @@ function App() {
         <Route path="settings/pos" element={<SettingsPage />} />
         <Route path="settings/tv-screen" element={<SettingsPage />} />
         <Route path="settings/ai" element={<SettingsPage />} />
+        <Route path="approvals" element={<StaffApprovalPage />} />
         <Route path="settings/permissions" element={<SettingsPage />} />
 
         {/* 数据导入 */}
