@@ -279,7 +279,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`, manualDays)
   const enrollment = await getEnrollment(prisma,staff)
   const baseSalary = payrollBasis.amount
-  const standardMonthlySalary = payrollBasis.eligibleDays ? payrollBasis.segments.reduce((sum,s)=>sum+s.monthlyRate*s.days,0)/payrollBasis.eligibleDays : staff.baseSalary
+  // Attendance proration changes payable days, not the contractual daily penalty rate.
+  const standardMonthlySalary = payrollBasis.eligibleDays ? payrollBasis.segments.reduce((sum,s)=>sum+s.monthlyRate*((s as {eligibleDays?:number}).eligibleDays??s.days),0)/payrollBasis.eligibleDays : staff.baseSalary
   let deductions = 0
   let bonuses = 0
   let depositDeductions: { staffDepositId: string; ruleName: string; amount: number; amountMinor: number }[] = []

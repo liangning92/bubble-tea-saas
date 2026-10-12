@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 module.exports = async function staffWorkflows({ prisma, check, call, provider }) {
   const passed = [];
-  const staff = await check('POST','/api/staff',{storeId:'store',name:'Workflow Employee',phone:'081234569999',password:'SyntheticStaffOnly2026',position:'cashier',employmentType:'part_time',hourlyRate:25000,weeklyHours:20,baseSalary:3500000},201);
+  const staff = await check('POST','/api/staff',{storeId:'store',name:'Workflow Employee',phone:'081234569999',password:'SyntheticStaffOnly2026',hireDate:'2026-10-01',probationEnabled:false,position:'cashier',employmentType:'part_time',hourlyRate:25000,weeklyHours:20,baseSalary:3500000},201);
   await check('PUT','/api/staff/'+staff.id,{baseSalary:4000000,hourlyRate:30000,weeklyHours:24});
   const saved = await check('GET','/api/staff/'+staff.id);assert.equal(saved.baseSalary,4000000);assert.equal(saved.hourlyRate,30000);
   await check('PUT','/api/staff/'+staff.id,{baseSalary:-1},400);assert.equal((await prisma.staff.findUnique({where:{id:staff.id}})).baseSalary,4000000);
@@ -74,10 +74,10 @@ module.exports = async function staffWorkflows({ prisma, check, call, provider }
   await check('PUT','/api/overtime/'+foreignOT.id+'/approve',{},403,managerToken);
   const configuredAttendance=await check('POST','/api/attendance-rules',{name:'Workflow Actual Attendance Rule',workStartTime:'08:00',workEndTime:'16:00',gracePeriod:0,lateDeductionType:'fixed',lateDeductionFixed:500000,absenceDeductionType:'none',sickLeaveDeductionType:'none',overtimeRate:1.5,overtimeMinHours:0,isDefault:true},201);assert.equal(configuredAttendance.earlyLeaveDeductionType,'none');
   await check('PUT','/api/attendance-rules/'+configuredAttendance.id,{gracePeriod:-1},400);
-  const calc=await check('GET',`/api/staff-salary/calculate/${staff.id}?month=10&year=2026`);assert.equal(calc.baseSalary,4000000);assert.equal(calc.overtimeHours,2);
+  const calc=await check('GET',`/api/staff-salary/calculate/${staff.id}?month=10&year=2026`);assert.equal(calc.baseSalary,387097);assert.equal(calc.payrollBasis.workedDays,1);assert.equal(calc.payrollBasis.paidRestDays,2);assert.equal(calc.overtimeHours,2);
   const legacyCalc=await check('GET',`/api/salaries/calculate/${staff.id}?month=2026-10`);assert.equal(legacyCalc.finalAmount,calc.totalSalary);assert.equal(legacyCalc.deduction,calc.deductions);
   const batchCalc=await check('GET','/api/staff-management/payroll?month=10&year=2026');assert.equal(batchCalc.list.find(row=>row.staffId===staff.id).finalSalary,calc.totalSalary);
-  const salaryPayload={staffId:staff.id,month:'2026-10',baseSalary:4000000,overtime:200000,commission:50000,bonus:100000,deduction:50000};
+  const salaryPayload={manualCorrection:true,staffId:staff.id,month:'2026-10',baseSalary:4000000,overtime:200000,commission:50000,bonus:100000,deduction:50000};
   const payroll=await check('POST','/api/salaries',salaryPayload,201);
   await check('POST','/api/salaries',salaryPayload,409);
   await check('POST','/api/salaries',{...salaryPayload,month:'2026-13'},400);
@@ -150,9 +150,9 @@ module.exports = async function staffWorkflows({ prisma, check, call, provider }
   await check('POST','/api/leave/apply',{leaveType:'sick',startDate:'2026-09-04',endDate:'2026-09-04',totalDays:1},400,employeeToken);
   const sick=await check('POST','/api/leave/apply',{leaveType:'sick',startDate:'2026-09-04',endDate:'2026-09-04',totalDays:1,attachmentUrl:'/uploads/workflow-sick-proof.pdf'},201,employeeToken);await check('PUT','/api/leave/approve/'+sick.id,{});
   await prisma.schedule.create({data:{staffId:staff.id,date:new Date('2026-09-04T00:00:00Z'),shift:'morning'}});
-  const past=await check('GET',`/api/staff-salary/calculate/${staff.id}?month=9&year=2026`);assert.equal(past.latePenalty,5000);assert.equal(past.earlyLeaveDays,1);assert.equal(past.absentDays,1);assert.equal(past.sickDays,1);assert.equal(past.deductions,85000);
+  const past=await check('GET',`/api/staff-salary/calculate/${staff.id}?month=9&year=2026`);assert.equal(past.latePenalty,5000);assert.equal(past.earlyLeaveDays,1);assert.equal(past.absentDays,1);assert.equal(past.sickDays,1);assert.equal(past.payrollBasis.workedDays,1);assert.equal(past.baseSalary,260000);assert.equal(past.deductions,55000);
   await check('PUT','/api/attendance-rules/'+configuredAttendance.id,{earlyLeaveDeductionType:'none',absenceDeductionType:'none',sickLeaveDeductionType:'none'});await check('PUT','/api/staff/'+staff.id,{baseSalary:4000000});
-  passed.push('configured late/early/absence/sick penalties apply in IDR; approved sick leave is not double-counted as absence');
+  passed.push('monthly-rate early-leave deduction stays 50000 with one actual day; late penalty 5000; absence and sick days excluded from base pay are not deducted twice');
   for(const item of passed)console.log('PASS staff workflow: '+item);
   return {passed,staffId:staff.id};
 };
