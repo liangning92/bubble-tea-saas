@@ -137,7 +137,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function LegacyShiftRedirect() {
   const { search, hash } = useLocation()
-  return <Navigate to={`/dashboard/shifts${search}${hash}`} replace />
+  return <Navigate to={`/finance/revenue${search}${hash}`} replace />
 }
 
 function App() {
@@ -155,7 +155,7 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="dashboard/shifts" element={<ShiftReviewPage />} />
+        <Route path="dashboard/shifts" element={<LegacyShiftRedirect />} />
         <Route path="finance/shifts" element={<LegacyShiftRedirect />} />
         <Route path="pos-monitor" element={<POSMonitorPage />} />
 
@@ -340,6 +340,7 @@ function App() {
         <Route path="finance" element={<FinanceIndexPage />}>
           <Route index element={<Navigate to="/finance/revenue" replace />} />
           <Route path="revenue" element={<RevenuePage />} />
+          <Route path="revenue/shifts/:sessionId" element={<ShiftReviewPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="budgets" element={<BudgetPage />} />
           <Route path="orders" element={<OrderListPage />} />

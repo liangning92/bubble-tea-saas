@@ -6,7 +6,7 @@ import { ManualReceiptAmounts } from '../../components/ManualReceipts'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { RefreshCw, CalendarDays, AlertTriangle, ArrowLeft } from 'lucide-react'
 import api, { financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
@@ -27,12 +27,14 @@ const day = (d = new Date()) => new Date(d.getTime() + 7 * 3600000).toISOString(
 const shiftDay = (value: string, days: number) => day(new Date(new Date(value + 'T00:00:00+07:00').getTime() + days * 86400000))
 export function ShiftReviewPage() {
   const { t, i18n } = useTranslation()
+  const {sessionId}=useParams<{sessionId:string}>()
+  const [searchParams]=useSearchParams()
   const user = useAuthStore(s => s.user)
   const access = useQuery({ queryKey: ['shift-review-access', user?.id, user?.storeId], enabled: !!user && user.role !== 'admin', queryFn: async () => (await api.get('/staff-permissions/me')).data.data as { role: { permissions: string[] } | null } })
   const customRole = access.data?.role
   const allowed = !!user?.storeId && ['admin', 'manager'].includes(user.role) && (user.role === 'admin' || (!!access.data && !access.isError && (!customRole || customRole.permissions.includes('finance.read'))))
-  const [range, setRange] = useState({ startDate: day(), endDate: day() })
-  const [selection, setSelection] = useState<string | null>(null)
+  const [range, setRange] = useState({ startDate: searchParams.get('startDate') || day(), endDate: searchParams.get('endDate') || day() })
+  const [selection, setSelection] = useState<string | null>(sessionId || null)
   const [tab, setTab] = useState<Tab>('overview')
   const [page, setPage] = useState(1)
   const [reviewNote,setReviewNote]=useState('')
@@ -47,12 +49,12 @@ export function ShiftReviewPage() {
       if (!Array.isArray(result?.sessions) || !result?.unassigned?.summary || !result.asOf) throw Error('INVALID_SHIFT_REVIEW')
       return result
     } })
-  useEffect(() => { setSelection(null); setPage(1); setTab('overview') }, [range.startDate, range.endDate])
+  useEffect(() => { setSelection(sessionId || null); setPage(1); setTab('overview') }, [range.startDate, range.endDate, sessionId])
   useEffect(() => { setPage(1);setReviewNote('');setReviewError('') }, [selection, tab])
   const data = query.data
   const unmatched = data?.unassigned
   const hasUnmatched = unmatched && (unmatched.summary.orders + unmatched.summary.expenses + unmatched.summary.warnings > 0)
-  const selected = selection === 'unassigned' && hasUnmatched ? unmatched : data?.sessions.find(s => s.id === selection) || data?.sessions[data.sessions.length - 1] || (hasUnmatched ? unmatched : undefined)
+  const selected = sessionId ? data?.sessions.find(s=>s.id===sessionId) : selection === 'unassigned' && hasUnmatched ? unmatched : data?.sessions.find(s => s.id === selection) || data?.sessions[data.sessions.length - 1] || (hasUnmatched ? unmatched : undefined)
   const instant = (value: string) => new Date(value).toLocaleString(i18n.language === 'zh' ? 'zh-CN' : i18n.language, { timeZone: 'Asia/Jakarta', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
   const title = (row: Review) => row.session ? (i18n.language === 'zh' ? row.session.definition?.nameZh : i18n.language === 'id' ? row.session.definition?.nameId : row.session.definition?.name) || t(`shiftReview.${row.session.shift}`, { defaultValue: row.session.shift }) : t('shiftReview.unassigned')
   const categoryLabel = (key: string) => {
@@ -78,18 +80,19 @@ export function ShiftReviewPage() {
   const rows = selected && tab !== 'overview' ? tab === 'warnings' ? warningRows : selected[tab] : []
   const paged = rows.slice((page - 1) * 20, page * 20)
   return <div className="space-y-5" data-testid="shift-review-page">
-    <Link to="/dashboard" className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft size={16} />{t('dashboard.title')}</Link>
-    <header className="flex flex-wrap justify-between items-center gap-3"><h1 className="text-2xl font-bold">{t('shiftReview.title')}</h1><button className="btn-secondary flex items-center gap-2" disabled={query.isFetching || !valid} onClick={() => void query.refetch()}><RefreshCw size={16} />{t('common.refresh')}</button></header>
-    <section className="bg-white border rounded-xl p-4 flex flex-wrap items-end gap-3" aria-label={t('shiftReview.dateRange')}>
+    <Link to={`/finance/revenue?${new URLSearchParams({period:'custom',startDate:searchParams.get('returnStartDate') || range.startDate,endDate:searchParams.get('returnEndDate') || range.endDate})}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft size={16} />{t('revenueLayout.title')}</Link>
+    {!sessionId && <header className="flex flex-wrap justify-between items-center gap-3"><h1 className="text-2xl font-bold">{t('shiftReview.title')}</h1><button className="btn-secondary flex items-center gap-2" disabled={query.isFetching || !valid} onClick={() => void query.refetch()}><RefreshCw size={16} />{t('common.refresh')}</button></header>}
+    {!sessionId && <section className="bg-white border rounded-xl p-4 flex flex-wrap items-end gap-3" aria-label={t('shiftReview.dateRange')}>
       <CalendarDays size={20} className="mb-3 text-primary" /><label className="text-sm text-gray-600">{t('shiftReview.start')}<input aria-label={t('shiftReview.start')} type="date" value={range.startDate} max={range.endDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, startDate: e.target.value }))} /></label>
       <label className="text-sm text-gray-600">{t('shiftReview.end')}<input aria-label={t('shiftReview.end')} type="date" value={range.endDate} min={range.startDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, endDate: e.target.value }))} /></label>
       {(['today', 'yesterday', 'week'] as const).map(key => <button key={key} className="btn-secondary" onClick={() => shortcut(key)}>{t(`shiftReview.${key}`)}</button>)}
-    </section>
+    </section>}
     {!valid ? <p role="alert" className="text-red-600">{t('shiftReview.invalidRange')}</p> : query.isPending ? <p role="status">{t('common.loading')}</p> : query.isError ? <p role="alert" className="text-red-600">{t('shiftReview.failed')}</p> : <>
-      <div className="bg-white rounded-xl border overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr>{['shift', 'time', 'opener', 'revenue', 'orders', 'warnings', 'expenseAmount', 'status'].map(key => <th key={key} className="p-3 whitespace-nowrap">{key === 'products' ? t('shiftHandover.products') : t(`shiftReview.${key}`)}</th>)}<th /></tr></thead><tbody>
+      {!sessionId && <div className="bg-white rounded-xl border overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr>{['shift', 'time', 'opener', 'revenue', 'orders', 'warnings', 'expenseAmount', 'status'].map(key => <th key={key} className="p-3 whitespace-nowrap">{key === 'products' ? t('shiftHandover.products') : t(`shiftReview.${key}`)}</th>)}<th /></tr></thead><tbody>
         {[...(data?.sessions || []), ...(hasUnmatched ? [unmatched!] : [])].map(row => <tr key={row.id} className={`border-t ${selected?.id === row.id ? 'bg-pink-50' : ''}`}><td className="p-3 font-semibold">{title(row)}</td><td className="p-3 whitespace-nowrap">{instant(row.windowStart)} — {row.session?.status === 'open' ? t('shiftReview.ongoing') : instant(row.windowEnd)}</td><td className="p-3">{row.session?.opener.name || '—'}</td><td className="p-3 font-semibold">{money(row.summary.revenue)}</td><td className="p-3">{row.summary.orders}</td><td className={`p-3 ${(row.summary.warnings > 0 || row.cashWarning?.status === 'pending') ? 'text-amber-700 font-bold' : ''}`}>{row.summary.warnings + (row.cashWarning?.status === 'pending' ? 1 : 0)}{row.cashWarning?.status === 'pending' && <p className="text-xs text-red-600">{t('cashReconciliation.pending')}</p>}</td><td className="p-3">{money(row.summary.expenseAmount)}</td><td className="p-3">{row.session ? t(`shiftReview.${row.session.status}`) : t('shiftReview.reviewNeeded')}</td><td className="p-3"><button className="text-primary font-medium whitespace-nowrap" aria-pressed={selected?.id === row.id} onClick={() => { setSelection(row.id); setTab('overview') }}>{t('shiftReview.details')}</button></td></tr>)}
-      </tbody></table>{!data?.sessions.length && !hasUnmatched && <p className="p-6 text-gray-500">{t('shiftReview.empty')}</p>}</div>
+      </tbody></table>{!data?.sessions.length && !hasUnmatched && <p className="p-6 text-gray-500">{t('shiftReview.empty')}</p>}</div>}
       {hasUnmatched && <div role="status" className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3"><AlertTriangle className="text-amber-600 shrink-0" size={20} /><div><p className="font-semibold text-amber-900">{t('shiftReview.unassignedHint')}</p><button className="text-amber-800 underline mt-1" onClick={() => { setSelection('unassigned'); setTab('warnings') }}>{t('shiftReview.viewUnassigned')}</button></div></div>}
+      {sessionId && !selected && <p role="alert">{t('shiftReview.noRecords')}</p>}
       {selected && <section className="space-y-4" data-testid="shift-review-detail">
         <div className="flex flex-wrap justify-between items-end gap-2"><div><h2 className="text-xl font-bold">{title(selected)} · {t('shiftReview.details')}</h2><p className="text-sm text-gray-500 mt-1">{instant(selected.windowStart)} — {instant(selected.windowEnd)} · WIB</p></div><span className="text-sm text-gray-500">{t('shiftReview.updated')} {data && instant(data.asOf)}</span></div>
         {cards(selected)}
