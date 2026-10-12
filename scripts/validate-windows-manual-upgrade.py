@@ -16,6 +16,7 @@ import winreg
 import runpy
 import socket
 import threading
+import traceback
 import urllib.request
 
 assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
@@ -417,6 +418,11 @@ try:
     manifest_path.write_text(json.dumps(manifest, indent=2))
     COMPLETED = True
     print(json.dumps(report))
+except BaseException:
+    # The interactive NSIS child can detach the runner's console. Preserve
+    # the assertion even if Python's stderr is no longer visible to Actions.
+    pathlib.Path(os.environ['RUNNER_TEMP'], 'btps-upgrade-validator-error.txt').write_text(traceback.format_exc(), encoding='utf-8')
+    raise
 finally:
     # Remove only fixture roots created after absence assertions in this script.
     # On failure retain all synthetic artifacts for CI diagnosis.
