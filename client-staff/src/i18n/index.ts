@@ -1644,3 +1644,5 @@ i18n.use(initReactI18next).init({
 })
 
 export default i18n
+
+for(const [lang,values] of Object.entries({zh:{production:'制作订单',approvals:'审批中心',denied:'你没有访问此功能的权限，请联系老板'},en:{production:'Production orders',approvals:'Approval center',denied:'You do not have access to this feature. Contact the owner.'},id:{production:'Pesanan produksi',approvals:'Pusat persetujuan',denied:'Anda tidak memiliki izin. Hubungi pemilik.'}}))i18n.addResourceBundle(lang,'translation',{staffAccessV2:values},true,true)

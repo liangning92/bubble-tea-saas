@@ -2114,3 +2114,32 @@ model LocalSchemaMigration {
   backupPath String
   appliedAt DateTime @default(now())
 }
+
+
+// Permission approvals are durable records, independent of role configuration rollback.
+model StaffActionApproval {
+  id String @id @default(uuid())
+  storeId String
+  applicantId String
+  approverId String?
+  action String
+  targetId String
+  requestId String
+  fingerprint String
+  payload String
+  beforeValue String?
+  result String?
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  executedAt DateTime?
+  @@unique([storeId, applicantId, requestId])
+  @@index([storeId, status, createdAt])
+}
+model StaffApprovalCredential {
+  userId String @id
+  pinHash String
+  failedAttempts Int @default(0)
+  lockedUntil DateTime?
+  updatedAt DateTime @updatedAt
+}

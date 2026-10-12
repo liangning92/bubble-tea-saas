@@ -1,8 +1,9 @@
+import {useEmployeePermission,EmployeeAccessContext} from '../../contexts/EmployeeAccess'
 import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
 import { payrollLabels } from '../../../../shared/payrollLabels'
 import { jakartaInput } from '../../utils/orderExport'
 import { probationLabels } from '../../../../shared/probationLabels'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useContext } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +19,9 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
+  const canWrite=useEmployeePermission('staff.write'),canSalary=useEmployeePermission('salary.write'),canBank=useEmployeePermission('staff.bank.read'),canPrivate=useEmployeePermission('staff.private.read')
+  const access=useContext(EmployeeAccessContext)
+  const canResetPassword=user?.role==='admin'||access.role?.version!==2
   const isEdit = !!id
   const loadedStaffId = useRef<string>()
   const probationRuleQuery = useQuery({queryKey:['probation-rule',user?.storeId],queryFn:()=>staffApi.probationRule()})
@@ -176,6 +180,9 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
       return
     }
 
+    if(!canSalary){for(const key of ['baseSalary','hourlyRate','weeklyHours','probationEnabled','confirmationDate'])delete submitData[key]}
+    if(!canBank){delete submitData.bankName;delete submitData.bankAccount}
+    if(!canPrivate){delete submitData.address;delete submitData.emergencyContact;delete submitData.emergencyPhone}
     if (isEdit) {
       // The employee already owns a store and login account. Update profile fields only.
       delete submitData.storeId
@@ -187,6 +194,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
     else createMutation.mutate(submitData)
   }
 
+  if(!canWrite)return <p role="alert">{t('staffAccessV2.denied')}</p>
   if (isEdit && isLoading) return <p role="status" className="py-12 text-center">{t('common.loading')}</p>
   if (isEdit && (isError || !staffData?.data?.data)) return <div role="alert" className="py-12 text-center">
     <p>{t('common.error')}</p>
@@ -320,7 +328,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
             </div>
           </div>
 
-          <label htmlFor="staff-baseSalary" className="block text-sm">{probationText.formal} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
+          <label htmlFor="staff-baseSalary" className="block text-sm">{probationText.formal} (IDR)<input id="staff-baseSalary" className="input" type="number" min="0" disabled={!canSalary} value={form.baseSalary} onChange={e=>setForm({...form,baseSalary:e.target.value})}/></label>
           <section className="bg-blue-50 rounded-xl p-4 space-y-3"><p className="text-sm">{probationText.contract}</p>
           <label className="flex gap-2 items-center"><input type="checkbox" checked={form.probationEnabled} disabled={probationRuleQuery.isLoading || probationRuleQuery.isError || (!probationRuleQuery.data?.data?.data?.enabled && !staffData?.data?.data?.probation?.enabled)} onChange={e=>setForm({...form,probationEnabled:e.target.checked})}/>{probationText.enroll}</label>
           {probationRuleQuery.isError&&<p role="alert">{probationText.loadError}<button type="button" onClick={()=>probationRuleQuery.refetch()}>↻</button></p>}
@@ -335,7 +343,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <label htmlFor="staff-weeklyHours" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.weeklyHours')}</label>
                 <input
                   id="staff-weeklyHours" type="number"
-                  value={form.weeklyHours}
+                  disabled={!canSalary} value={form.weeklyHours}
                   onChange={(e) => setForm({ ...form, weeklyHours: e.target.value })}
                   className="input"
                   min="0"
@@ -346,7 +354,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <label htmlFor="staff-hourlyRate" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hourlyRate')} (IDR)</label>
                 <input
                   id="staff-hourlyRate" type="number"
-                  value={form.hourlyRate}
+                  disabled={!canSalary} value={form.hourlyRate}
                   onChange={(e) => setForm({ ...form, hourlyRate: e.target.value })}
                   className="input"
                   min="0"
@@ -369,7 +377,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
               <label htmlFor="staff-address" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.address')}</label>
               <input
                 id="staff-address" type="text"
-                value={form.address}
+                disabled={!canPrivate} value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
                 className="input"
               />
@@ -383,7 +391,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <label htmlFor="staff-emergencyContact" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactName')}</label>
                 <input
                   id="staff-emergencyContact" type="text"
-                  value={form.emergencyContact}
+                  disabled={!canPrivate} value={form.emergencyContact}
                   onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })}
                   className="input"
                 />
@@ -392,7 +400,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <label htmlFor="staff-emergencyPhone" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.contactPhone')}</label>
                 <input
                   id="staff-emergencyPhone" type="tel"
-                  value={form.emergencyPhone}
+                  disabled={!canPrivate} value={form.emergencyPhone}
                   onChange={(e) => setForm({ ...form, emergencyPhone: e.target.value })}
                   className="input"
                 />
@@ -407,7 +415,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <label htmlFor="staff-bankName" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankName')}</label>
                 <input
                   id="staff-bankName" type="text"
-                  value={form.bankName}
+                  disabled={!canBank} value={form.bankName}
                   onChange={(e) => setForm({ ...form, bankName: e.target.value })}
                   className="input"
                 />
@@ -416,7 +424,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <label htmlFor="staff-bankAccount" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.bankAccount')}</label>
                 <input
                   id="staff-bankAccount" type="text"
-                  value={form.bankAccount}
+                  disabled={!canBank} value={form.bankAccount}
                   onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
                   className="input"
                 />
@@ -425,7 +433,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
           </div>
 
           {/* Password Reset Section - only for edit mode */}
-          {isEdit && (
+          {isEdit && canResetPassword && (
             <div className="border-t pt-6">
               <h3 className="font-medium text-gray-900 mb-4">{t('staff.passwordReset')}</h3>
               <button

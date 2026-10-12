@@ -1,3 +1,5 @@
+import {staffAccessLabels,staffRoleLabel} from '../../../../shared/staffAccessLabels'
+import {useEmployeePermission} from '../../contexts/EmployeeAccess'
 import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useState } from 'react'
@@ -12,6 +14,8 @@ import { ArrowLeft, Mail, Phone, MapPin, Clock, User, AlertCircle, Shield } from
 export function StaffDetailPage() {
   const { t, i18n } = useTranslation()
   const probationText = probationLabels(i18n.language)
+  const accessText=staffAccessLabels(i18n.language)
+  const canWrite=useEmployeePermission('staff.write'),canSalary=useEmployeePermission('salary.read'),canBank=useEmployeePermission('staff.bank.read'),canPrivate=useEmployeePermission('staff.private.read')
   const { id } = useParams()
   const queryClient = useQueryClient()
 
@@ -117,11 +121,6 @@ export function StaffDetailPage() {
   const lateCount = thisMonthAttendances.filter((a: any) => a.status === 'late').length
   const presentCount = thisMonthAttendances.filter((a: any) => a.checkInTime).length
 
-  const handleOpenRoleModal = () => {
-    setSelectedRole(currentRole)
-    setShowRoleModal(true)
-  }
-
   const handleSaveRole = () => {
     updateRoleMutation.mutate(selectedRole)
   }
@@ -133,7 +132,7 @@ export function StaffDetailPage() {
           <ArrowLeft size={20} />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">{t('staff.staffDetails')}</h1>
-        {!editing && <button type="button" onClick={() => { setEditing(true); setSaved(false) }} className="btn-primary ml-auto">
+        {!editing && canWrite && <button type="button" onClick={() => { setEditing(true); setSaved(false) }} className="btn-primary ml-auto">
           {t('common.edit')}
         </button>}
       </div>
@@ -190,19 +189,20 @@ export function StaffDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">{t('staff.rolePermission')}</h3>
-            {user?.role === 'admin' && <button
-              onClick={handleOpenRoleModal}
+            {user?.role === 'admin' && <Link
+              to={`/settings/permissions?staffId=${id}&storeId=${staff.storeId}`}
               className="p-2 rounded-lg hover:bg-gray-100 text-primary"
               title={t('common.edit')}
             >
               <Shield size={18} />
-            </button>}
+            </Link>}
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-gray-500">{t('staff.systemRole')}</span>
               <span className="font-medium">{getRoleLabel(currentRole)}</span>
             </div>
+            {staff.accessRole&&<div className="flex justify-between items-center"><span className="text-gray-500">{accessText.role}</span><span className="font-medium">{staffRoleLabel(staff.accessRole.id,staff.accessRole.name,accessText)}</span></div>}
             <div className="text-xs text-gray-400">
               <p>• Admin: {t('staff.roleAdminDesc')}</p>
               <p>• Manager: {t('staff.roleManagerDesc')}</p>
@@ -216,10 +216,10 @@ export function StaffDetailPage() {
         <div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">{t('staff.employmentInfo')}</h3>
           <div className="space-y-4">
-            <div className="flex justify-between">
+            {canSalary&&<div className="flex justify-between">
               <span className="text-gray-500">{t('salary.baseSalary')}</span>
               <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID')}`}</span>
-            </div>
+            </div>}
             <div className="flex justify-between">
               <span className="text-gray-500">{t('staff.hireDate')}</span>
               <span className="font-medium">
@@ -251,13 +251,13 @@ export function StaffDetailPage() {
           </div>
         </div>
 
-        <div className="card">
+        {canSalary&&<div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">{probationText.title}</h3>
           <div className="space-y-3">
             <div className="flex justify-between"><span className="text-gray-500">{t('staff.status')}</span><span>{staff.probation?.enabled ? probationText[staff.probation.status as 'probation' | 'regular' | 'not_started'] || '-' : probationText.disabled}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">{probationText.confirmation}</span><span>{staff.probation?.confirmationDate || '-'}</span></div>
           </div>
-        </div>
+        </div>}
 
         {/* This Month Stats Card */}
         <div className="card">
@@ -275,7 +275,7 @@ export function StaffDetailPage() {
         </div>
 
         {/* Emergency Contact Card */}
-        <div className="card">
+        {canPrivate&&<div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">{t('staff.emergencyContact')}</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
@@ -287,10 +287,10 @@ export function StaffDetailPage() {
               <span className="font-medium">{staff.emergencyPhone || '-'}</span>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Bank Info Card */}
-        <div className="card">
+        {canBank&&<div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">{t('staff.bankInfo')}</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
@@ -302,10 +302,10 @@ export function StaffDetailPage() {
               <span className="font-medium">{staff.bankAccount || '-'}</span>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Recent Salary Card */}
-        <div className="card">
+        {canSalary&&<div className="card">
           <h3 className="font-semibold text-gray-900 mb-4">{t('staff.recentSalary')}</h3>
           {staff.salaries && staff.salaries.length > 0 ? (
             <div className="space-y-2">
@@ -319,7 +319,7 @@ export function StaffDetailPage() {
           ) : (
             <p className="text-gray-400 text-center py-4">{t('common.noData')}</p>
           )}
-        </div>
+        </div>}
       </div>}
 
       {/* Role Edit Modal */}

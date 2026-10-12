@@ -92,7 +92,7 @@ export function KDSPage() {
   // Update order status mutation
   const updateStatusMutation = useMutation({
     mutationFn: ({ orderId, status }: { orderId: string; status: string }) =>
-      orderApi.updateStatus(orderId, status),
+      orderApi.updatePreparation(orderId, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kds-orders'] })
     }

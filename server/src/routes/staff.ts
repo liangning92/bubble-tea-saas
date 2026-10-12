@@ -1,9 +1,10 @@
+import {userAccessV2} from '../services/StaffPermissionV2Service'
 import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
 import { getPayrollRules, savePayrollRules, payrollRuleSchema } from '../services/PayrollRuleService'
 import { refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
-import { updateStaffSystemRole } from '../services/StaffPermissionService'
+import { updateStaffSystemRole, StaffAccessError } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
 import { formatDate, startOfDay as wibDayStart, endOfDay as wibDayEnd, startOfWeek as wibWeekStart } from '../utils/dateUtils'
 import { parseDateBoundary } from '../utils/businessDate'
@@ -130,7 +131,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     res.json({
       code: 200,
       data: {
-        list: await Promise.all(staff.map(async s => ['admin', 'manager'].includes(req.user!.role) ? ({
+        list: await Promise.all(staff.map(async s => (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['staff.read']==='allow':['admin', 'manager'].includes(req.user!.role)) ? ({
           ...s,
           payrollEmployee: await isPayrollEmployee(prisma,s),
           probation: await staffProbation(prisma,s),
@@ -202,7 +203,8 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
         payrollEmployee: await isPayrollEmployee(prisma,staff),
         probation: await staffProbation(prisma, staff),
         phone: staff.user.phone,
-        role: staff.user.role
+        role: staff.user.role,
+        accessRole: staff.user.role==='admin'?null:await userAccessV2({role:staff.user.role,staffId:staff.id,storeId:staff.storeId}).then(access=>access?{id:access.id,name:access.name,revision:access.revision}:null)
       },
       timestamp: new Date().toISOString()
     })
@@ -389,6 +391,7 @@ router.put('/:id/role', authenticate, authorize('admin'), async (req: AuthReques
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if(error instanceof StaffAccessError)return res.status(error.status).json({code:error.status,message:error.message})
     console.error('Update role error:', error)
     res.status(500).json({ code: 500, message: 'Failed to update role' })
   }
@@ -588,7 +591,7 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
     const { staffId, startDate, endDate } = req.query
 
     const where: any = {staff:{storeId:req.user!.storeId}}
-    if (!['admin','manager'].includes(req.user!.role)) {
+    if (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['attendance.read']!=='allow':!['admin','manager'].includes(req.user!.role)) {
       if (staffId && staffId !== req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
       where.staffId = req.user!.staffId
     } else if (staffId) where.staffId = staffId as string
@@ -685,7 +688,7 @@ router.get('/schedule/list', authenticate, async (req: AuthRequest, res) => {
     const storeId = req.user!.storeId
 
     const where: any = {staff:{storeId:req.user!.storeId}}
-    if (!['admin','manager'].includes(req.user!.role)) {
+    if (req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['schedules.read']!=='allow':!['admin','manager'].includes(req.user!.role)) {
       if (staffId && staffId !== req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
       where.staffId = req.user!.staffId
     } else if (staffId) where.staffId = staffId as string

@@ -1,3 +1,4 @@
+import {consumeDiscountApproval} from './StaffActionApprovalService'
 import { quoteOfflineActivity } from './ActivityOfflineService'
 import { quoteActivities, enqueueActivityGrants, runActivityJobs, reverseActivityGrants, ensureMigrated } from './ActivityService'
 import { getActivityPriceRules } from './ActivityPricingService'
@@ -56,6 +57,9 @@ export interface CreateOrderData {
   activityGroupId?: string
   activityGiftSelections?: Record<string,string>
   discountAmount?: number
+  manualDiscountAmount?: number
+  discountBasketId?: string
+  approvalId?: string
   pointsRedeemed?: number    // 积分抵扣金额
   taxEnabled?: boolean       // 是否计算税费（根据客户端配置）
   paymentMethod: string
@@ -614,22 +618,23 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
 
   if (channel && channel.storeId !== data.storeId) throw new Error('CHANNEL_STORE_MISMATCH')
 
+  if(data.manualDiscountAmount && (!context?.actorId || !Number.isSafeInteger(data.manualDiscountAmount) || data.manualDiscountAmount<=0))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
   let unifiedQuote: Awaited<ReturnType<typeof quoteActivities>> & {offline?:boolean} | undefined
   if(data.activityOfflineToken){
     await ensureMigrated(data.storeId)
     unifiedQuote=await quoteOfflineActivity(data.storeId,{items:data.items,channelId:channel?.id,channel:data.activityChannelCode,paymentMethod:data.paymentMethod,taxEnabled:data.taxEnabled},data.activityOfflineToken,data.activityOccurredAt||'')
-    if(unifiedQuote.discount!==(data.discountAmount||0)||data.memberId||(data.pointsRedeemed||0)>0)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
+    if(unifiedQuote.discount!==((data.discountAmount||0)-(data.manualDiscountAmount||0))||data.memberId||(data.pointsRedeemed||0)>0)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
   }
   if (data.activityQuoteSignature) {
     await ensureMigrated(data.storeId)
     unifiedQuote = await quoteActivities(data.storeId, {items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested ?? data.pointsRedeemed,groupId:data.activityGroupId,giftSelections:data.activityGiftSelections,taxEnabled:data.taxEnabled})
-    if (unifiedQuote.signature !== data.activityQuoteSignature || unifiedQuote.pendingSelections.length || unifiedQuote.discount !== (data.discountAmount||0)+(unifiedQuote.pointsRedeemed ? Math.floor(unifiedQuote.pointsRedeemed/100) : 0) || unifiedQuote.pointsRedeemed !== (data.pointsRedeemed||0)) throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
+    if (unifiedQuote.signature !== data.activityQuoteSignature || unifiedQuote.pendingSelections.length || unifiedQuote.discount !== ((data.discountAmount||0)-(data.manualDiscountAmount||0))+(unifiedQuote.pointsRedeemed ? Math.floor(unifiedQuote.pointsRedeemed/100) : 0) || unifiedQuote.pointsRedeemed !== (data.pointsRedeemed||0)) throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
   }
   if(!unifiedQuote&&context?.validateActivityPricing&&data.status!=='suspended'){
     await ensureMigrated(data.storeId)
     const inferred=await quoteActivities(data.storeId,{items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,pointsRequested:data.pointsRedeemed,taxEnabled:data.taxEnabled})
-    const submitted=data.items.reduce((sum,i)=>sum+i.quantity*(i.unitPrice+(i.addons||[]).reduce((amount:any,a:any)=>amount+a.price*(a.qty||1),0)),0)-(data.discountAmount||0)-Math.floor((data.pointsRedeemed||0)/100)
-    if(inferred.pendingSelections.length||submitted!==inferred.finalAmount||inferred.discount!==(data.discountAmount||0)+Math.floor((data.pointsRedeemed||0)/100)||inferred.pointsRedeemed!==(data.pointsRedeemed||0)||data.items.some((i,index)=>i.unitPrice!==inferred.items[index].unitPrice))throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
+    const submitted=data.items.reduce((sum,i)=>sum+i.quantity*(i.unitPrice+(i.addons||[]).reduce((amount:any,a:any)=>amount+a.price*(a.qty||1),0)),0)-((data.discountAmount||0)-(data.manualDiscountAmount||0))-Math.floor((data.pointsRedeemed||0)/100)
+    if(inferred.pendingSelections.length||submitted!==inferred.finalAmount||inferred.discount!==((data.discountAmount||0)-(data.manualDiscountAmount||0))+Math.floor((data.pointsRedeemed||0)/100)||inferred.pointsRedeemed!==(data.pointsRedeemed||0)||data.items.some((i,index)=>i.unitPrice!==inferred.items[index].unitPrice))throw Error('ACTIVITY_PRICE_CHANGED: Refresh and confirm the new total before taking payment')
     unifiedQuote=inferred
   }
   const activityRules = !unifiedQuote && context?.validateActivityPricing ? await getActivityPriceRules(data.storeId) : []
@@ -771,6 +776,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   // Create order with transaction
   let created = false
   const persistOrder = () => prisma.$transaction(async (tx) => {
+    if(data.manualDiscountAmount)await consumeDiscountApproval(tx,context?.actorId||'',data)
     if (unifiedQuote && !unifiedQuote.offline) {
       if(data.memberId) await tx.member.updateMany({where:{id:data.memberId,storeId:data.storeId},data:{points:{increment:0}}})
       const fresh = await quoteActivities(data.storeId,{items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested ?? data.pointsRedeemed,groupId:data.activityGroupId,giftSelections:data.activityGiftSelections,taxEnabled:data.taxEnabled},tx)
@@ -952,10 +958,10 @@ export async function updateOrderStatus(orderId: string, status: string) {
 }
 
 // Refund order (idempotent, transactional, full rollback of points / coupons / cash)
-export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean }) {
+export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean },db:any=prisma) {
   const note = `Refund: ${reason || 'No reason provided'}`
 
-  const order = await prisma.$transaction(async (tx) => {
+  const operation = async (tx:any) => {
     // Idempotency guard: only flip status once (atomic conditional update)
     const flipped = await tx.order.updateMany({
       where: { id: orderId, status: { notIn: ['refunded', 'cancelled'] } },
@@ -1065,9 +1071,8 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
     await reverseActivityGrants(tx,o.storeId,o.id,0)
     // Prepared refunds never restore ingredients. Unprepared reversals above share this transaction.
     return o
-  })
-
-  return order
+  };
+  return db===prisma?prisma.$transaction(operation):operation(db)
 }
 
 // Create refund request (from POS)

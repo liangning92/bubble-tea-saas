@@ -139,7 +139,7 @@ router.post('/redeem', authenticate, async (req: AuthRequest, res) => {
     if (!staffId || !points || !reason) {
       return res.status(400).json({ code: 400, message: 'Missing required fields' })
     }
-    if (req.user!.role !== 'admin' && req.user!.role !== 'manager' && req.user!.staffId !== staffId) {
+    if ((req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['rewards.write']!=='allow':req.user!.role !== 'admin' && req.user!.role !== 'manager') && req.user!.staffId !== staffId) {
       return res.status(403).json({ code: 403, message: 'Can only redeem your own points' })
     }
     if (!await enforceStaffScope(req, res, staffId)) return
@@ -202,7 +202,7 @@ router.post('/process-expiry', authenticate, authorize('admin', 'manager'), asyn
 // GET /api/staff-points/rewards
 router.get('/rewards', authenticate, async (req: AuthRequest, res) => {
   try {
-    const result = await getRewards(req.user!.storeId, ['admin', 'manager'].includes(req.user!.role))
+    const result = await getRewards(req.user!.storeId, req.user!.accessRole?.version===2?req.user!.accessRole.modes?.['rewards.read']==='allow':['admin', 'manager'].includes(req.user!.role))
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })
   } catch (error) {
     if (error instanceof BusinessInputError) return res.status(400).json({ code: 400, message: error.message })

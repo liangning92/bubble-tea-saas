@@ -65,10 +65,10 @@ export async function requestItemRefund(params:{requestId:string;orderId:string;
   return tx.refundRequest.create({data:{id:params.requestId,orderId:params.orderId,reason:params.reason,reasonCode:params.reasonCode,requestedBy:params.requestedBy,amount:selected.amount,selectedItemIds:JSON.stringify({version:2,fingerprint:digest,items:selected.items,allItems:selected.allItems}),status:'pending'}})
  })
 }
-export async function approveItemRefund(requestId:string,actor:{storeId:string;id:string;role:string},verifiedPrepared:boolean,note?:string){
+export async function approveItemRefund(requestId:string,actor:{storeId:string;id:string;role:string},verifiedPrepared:boolean,note?:string,db:any=prisma){
  if(!['admin','manager'].includes(actor.role))throw Error('REFUND_APPROVAL_FORBIDDEN')
  if(!verifiedPrepared)throw Error('REFUND_CLASSIFICATION_REQUIRED')
- return prisma.$transaction(async tx=>{
+ const operation=async (tx:any)=>{
   const initial=await tx.refundRequest.findUnique({where:{id:requestId}})
   if(!initial)throw Error('REFUND_REQUEST_NOT_FOUND')
   // Lock before rereading approval or remaining quantities.
@@ -112,5 +112,5 @@ export async function approveItemRefund(requestId:string,actor:{storeId:string;i
   const remainingPaid=o.items.reduce((sum:number,i:any)=>{const used=(state.used.get(i.id)||0)+(stored.items.find(s=>s.itemId===i.id)?.quantity||0);return sum+unitRangeAmount(netAllocations.get(i.id)!,i.quantity,used,i.quantity-used)},0)
   await reverseActivityGrants(tx,o.storeId,o.id,remainingPaid,remainingItems)
   return tx.refundRequest.findUniqueOrThrow({where:{id:request.id}})
- })
+ };return db===prisma?prisma.$transaction(operation):operation(db)
 }

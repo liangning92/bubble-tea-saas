@@ -1,3 +1,5 @@
+import { enforceAccessV2 } from './staffAccessV2'
+import { userAccessV2, AccessV2Error } from '../services/StaffPermissionV2Service'
 import { assignedStaffAccess, StaffAccessError } from '../services/StaffPermissionService'
 import { staffPermissionForRequest } from '../services/StaffPermissionCatalog'
 import { Request, Response, NextFunction } from 'express'
@@ -14,10 +16,11 @@ export interface AuthUser {
   storeId: string
   staffId: string
   issuedAtMs: number
-  accessRole?: {id:string;name:string;baseRole:string;permissions:string[]} | null
+  accessRole?: {id:string;name:string;baseRole:string;permissions:string[];version?:number;modes?:Record<string,string>;sources?:Record<string,string>;scopes?:Record<string,string>;revision?:number} | null
 }
 
 export interface AuthRequest extends Request {
+  accessDeclaration?: any
   user?: AuthUser
   file?: any
   files?: any
@@ -162,8 +165,9 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })
     }
 
-    currentUser.accessRole = await assignedStaffAccess(currentUser)
-    if (currentUser.accessRole) {
+    currentUser.accessRole = await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+    if(currentUser.accessRole?.version===2){const denied=await enforceAccessV2(req,res,currentUser);if(denied)return denied}
+    if (currentUser.accessRole && currentUser.accessRole.version!==2) {
       const permission = staffPermissionForRequest(req.method, req.originalUrl || req.url, currentUser)
       if (permission && !currentUser.accessRole.permissions.includes(permission)) return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission})
       if (permission?.startsWith('personal.')) {
@@ -181,7 +185,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     req.user = currentUser
     return requireStoreAccess(req, res, next)
   } catch (error) {
-    if (error instanceof StaffAccessError) return res.status(error.status).json({code:error.status,message:error.message})
+    if (error instanceof StaffAccessError || error instanceof AccessV2Error) return res.status(error.status).json({code:error.status,message:error.message})
     return res.status(401).json({
       code: 401,
       message: 'Invalid or expired token'
@@ -199,6 +203,7 @@ export function authorize(...roles: Role[]) {
       })
     }
 
+    if (req.user.accessRole?.version===2 && req.accessDeclaration && !(req as any).accessDeclaration.ownerOnly) return next()
     if (roles.length > 0 && !roles.includes(req.user.role)) {
       return res.status(403).json({
         code: 403,
@@ -220,6 +225,7 @@ export function requirePermission(permission: Permission) {
       })
     }
 
+    if(req.user.accessRole?.version===2 && (req as any).accessDeclaration && !(req as any).accessDeclaration.ownerOnly) return next()
     if (!hasPermission(req.user.role, permission)) {
       return res.status(403).json({
         code: 403,

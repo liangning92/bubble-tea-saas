@@ -1,3 +1,5 @@
+import {useEmployeeNavigation} from '../../contexts/EmployeeAccess'
+import {permissionForPage} from '../../../../shared/StaffAccess'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
@@ -16,6 +18,7 @@ interface FinanceSettings {
 
 export function FinanceIndexPage() {
   const { t } = useTranslation()
+  const allowed=useEmployeeNavigation()
   const location = useLocation()
 
   const { user } = useAuthStore()
@@ -91,7 +94,7 @@ export function FinanceIndexPage() {
       {/* 二级导航 */}
       <div className="sticky top-0 bg-surface z-10 pb-4 border-b border-gray-200 mb-4">
         <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap">
-          {tabs.map(tab => {
+          {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => {
             const Icon = tab.icon
             return (
               <Link

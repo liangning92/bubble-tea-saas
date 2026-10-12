@@ -1,3 +1,4 @@
+import {StaffApprovalPage} from './pages/StaffApprovalPage'
 import { EmployeeWorkspacePage } from './pages/staff/EmployeeWorkspacePage'
 import { lazy, Suspense } from 'react'
 import { RouteLoading } from './components/RouteLoading'
@@ -367,6 +368,7 @@ function App() {
         <Route path="settings/pos" element={<SettingsPage />} />
         <Route path="settings/tv-screen" element={<SettingsPage />} />
         <Route path="settings/ai" element={<SettingsPage />} />
+        <Route path="approvals" element={<StaffApprovalPage />} />
         <Route path="settings/permissions" element={<SettingsPage />} />
 
         {/* 数据导入 */}

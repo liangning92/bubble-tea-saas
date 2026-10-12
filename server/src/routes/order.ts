@@ -1,3 +1,4 @@
+import {readPolicyV2} from '../services/StaffPermissionV2Service'
 import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure } from '../services/ReceivedReceiptService'
 import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
@@ -57,6 +58,9 @@ const createOrderSchema = z.object({
   activityGroupId: z.string().optional(),
   activityGiftSelections: z.record(z.string()).optional(),
   discountAmount: z.number().int().min(0).optional().default(0),
+  manualDiscountAmount: z.number().int().positive().optional(),
+  discountBasketId:z.string().uuid().optional(),
+  approvalId: z.string().uuid().optional(),
   pointsRedeemed: z.number().int().min(0).optional().default(0),
   qrisExternalId: z.string().max(100).optional(),
   paymentEvidenceId: z.string().max(100).optional(),
@@ -325,6 +329,11 @@ router.post('/refund-request', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// Preparation-only endpoint for production staff; financial state changes remain forbidden.
+router.put('/kds/:id/status', authenticate, authorize('admin','manager','staff'), async(req:AuthRequest,res)=>{
+ try{const order=await prisma.order.findUnique({where:{id:req.params.id}});if(!checkOrderAccess(req,res,order))return;allowedPreviousOrderStatuses(req.body.status);const updated=await OrderService.updateOrderStatus(req.params.id,req.body.status);res.json({code:200,data:publicOrder(updated)})}catch(e:any){res.status(409).json({code:409,message:e.message})}
+})
+
 // PUT /api/orders/:id/status
 router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
@@ -409,8 +418,10 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
 
     if (!checkOrderAccess(req, res, request.order)) return
 
+    if((await readPolicyV2(request.order.storeId))?.active&&request.requestedBy===(req.user!.staffId||req.user!.id))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});
+    if(req.user!.accessRole?.version===2){if(request.requestedBy===(req.user!.staffId||req.user!.id))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});if(req.user!.accessRole.modes?.['orders.refund']!=='allow'||req.user!.accessRole.modes?.['approvals.approve']!=='allow')return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED'})}
     if(itemRefundRecord(request.selectedItemIds)){
-      const result=await approveItemRefund(request.id,{storeId:request.order.storeId,id:req.user!.staffId||req.user!.id,role:req.user!.role},req.body.verifiedPrepared===true,note)
+      const result=await approveItemRefund(request.id,{storeId:request.order.storeId,id:req.user!.staffId||req.user!.id,role:req.user!.accessRole?.version===2&&req.user!.role!=='admin'?'manager':req.user!.role},req.body.verifiedPrepared===true,note)
       return res.json({code:200,data:result,message:'Refund accounting approved; external payment is manual'})
     }
     const refundAmount = request.amount === 0 ? request.order.finalAmount : request.amount

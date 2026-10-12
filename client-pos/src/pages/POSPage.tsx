@@ -1,4 +1,9 @@
 import { discoverPrinters } from '../utils/printerDiscovery'
+import {discountApprovalBasket} from '../../../shared/discountApprovalBasket'
+import api from '../services/api'
+import {useStaffAccess} from '../../../shared/StaffAccess'
+import {requestStaffApproval} from '../../../shared/StaffApprovalDialog'
+import {staffAccessLabels} from '../../../shared/staffAccessLabels'
 import { ShiftHandoverPreview } from '../components/ShiftHandoverPreview'
 import { OrderItemsTable } from '../components/OrderItemsTable'
 import { cachedActivityQuote } from '../utils/activityOfflineQuote'
@@ -185,6 +190,10 @@ interface DualScreenConfig {
 
 export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const { t, i18n } = useTranslation()
+  const access=useStaffAccess(),accessText=staffAccessLabels(i18n.language)
+  const [manualDiscountAmount,setManualDiscountAmount]=useState(0)
+  const [discountBasketId,setDiscountBasketId]=useState(()=>crypto.randomUUID())
+  const [manualDiscountGrant,setManualDiscountGrant]=useState<any>(null)
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
 
@@ -2130,9 +2139,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const quoteInputKey=JSON.stringify(quoteInput)
   const currentQuote=unifiedQuote?.inputKey===quoteInputKey?unifiedQuote:null
   const subtotal=currentQuote?.subtotal??basketSubtotal
-  const tax=currentQuote?.tax??(taxSettings.enabled!==false?Math.round(Math.max(0,subtotal-discountAmount)*taxRate):0)
+  const tax=taxSettings.enabled!==false?Math.round(Math.max(0,(currentQuote?.finalAmount??subtotal-discountAmount)-manualDiscountAmount)*taxRate):0
   const pointsDiscount=currentQuote?Math.floor(currentQuote.pointsRedeemed/100):0
-  const total=currentQuote?.grandTotal??Math.max(0,subtotal+tax-discountAmount)
+  const total=Math.max(0,(currentQuote?.finalAmount??subtotal-discountAmount)-manualDiscountAmount+tax)
+  useEffect(()=>{setManualDiscountAmount(0);setManualDiscountGrant(null);setDiscountBasketId(crypto.randomUUID())},[quoteInputKey])
+  useEffect(()=>setManualDiscountGrant(null),[manualDiscountAmount])
   useEffect(()=>{
     let live=true
     if(!cart.length){lastActivityPrice.current=null;setActivityPriceNeedsConfirmation(false);setUnifiedQuote(null);setDiscountAmount(0);setAppliedPromotion(null);setGiftSelections({});setActivityGroupId('');return}
@@ -2858,6 +2869,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       const now = new Date()
       setActivityRules(freshRules); setActivityClock(now)
       setCart(previous => previous.map(item => { const base = item.baseUnitPrice ?? item.unitPrice; return base === undefined ? item : {...item, unitPrice: activityPrice(freshRules,item.productId,base,selectedChannel?.code || 'DINE_IN',now)} }))
+      if(manualDiscountAmount&&!access.can('orders.discount')){
+        if(!navigator.onLine||!currentQuote||currentQuote.offline)throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+        const channel=(posChannels||[]).find(c=>c.id===selectedChannel?.id||c.code===selectedChannel?.code)
+        const basket={storeId:user?.storeId,staffId:user?.staff?.id||'default',discountBasketId,channelId:channel?.id&&channel.id.length>10?channel.id:undefined,memberId:member?.id,paymentMethod,taxEnabled:taxSettings.enabled!==false,discountAmount:discountAmount+manualDiscountAmount,pointsRedeemed:currentQuote.pointsRedeemed||0,activityQuoteSignature:currentQuote.signature,items:cart.map(item=>({productId:item.productId,specId:item.specId,quantity:item.quantity,unitPrice:currentQuote.items.find((i:any)=>i.productId===item.productId&&i.specId===item.specId)?.unitPrice??item.unitPrice,addons:item.addons.map(a=>({name:a.name,price:a.price,qty:a.qty}))}))}
+        const grant=await requestStaffApproval(api,{action:'orders.discount',targetId:discountBasketId,requestId:crypto.randomUUID(),payload:{amount:manualDiscountAmount,basket:discountApprovalBasket(basket),note:accessText.manualDiscount}});setManualDiscountGrant(grant)
+      }
       setPaymentModalOrderNum(getNextPickupNumber(selectedChannel?.code))
       setShowPaymentModal(true)
     } catch (error: any) {
@@ -2938,7 +2955,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
       activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
-      discountAmount,              // 折扣金额（客户端计算）
+      discountAmount:discountAmount+manualDiscountAmount,
+      manualDiscountAmount:manualDiscountAmount||undefined,
+      discountBasketId:manualDiscountAmount?discountBasketId:undefined,
+      approvalId:manualDiscountAmount?manualDiscountGrant?.id:undefined,
       pointsRedeemed: currentQuote?.pointsRedeemed||0,  // 仅扣减最终择优方案使用的积分
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
       pickupNumber: paymentModalOrderNum || getNextPickupNumber(selectedChannel?.code)
@@ -2971,6 +2991,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
+      if(manualDiscountAmount&&!navigator.onLine)throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+      if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
@@ -3405,7 +3427,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 badge?: number
               }> = []
 
-              if (posLayout.showShift !== false) {
+              if (posLayout.showShift !== false && access.can('pos.shift')) {
                 toolbarButtons.push({
                   id: 'shift',
                   icon: <Users size={18} />,
@@ -3413,7 +3435,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   onClick: () => openShiftModal()
                 })
               }
-              if (posLayout.showAttendance !== false) {
+              if (posLayout.showAttendance !== false && access.can('personal.attendance')) {
                 toolbarButtons.push({
                   id: 'attendance',
                   icon: <QrCode size={18} />,
@@ -3438,7 +3460,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   onClick: openScan
                 })
               }
-              if (posLayout.showHistory !== false) {
+              if (posLayout.showHistory !== false && access.can('orders.read')) {
                 toolbarButtons.push({
                   id: 'history',
                   icon: <FileText size={18} />,
@@ -3455,7 +3477,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 })
               }
               // 费用按钮 - 记录每日临时支出
-              if (posLayout.showExpense !== false) {
+              if (posLayout.showExpense !== false && access.can('pos.expense')) {
                 toolbarButtons.push({
                   id: 'expense',
                   icon: <Receipt size={18} />,
@@ -3464,7 +3486,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 })
               }
               // 巡店卫生与员工任务
-              if (posLayout.showTasks === true) {
+              if (posLayout.showTasks === true && access.can('personal.tasks')) {
                 toolbarButtons.push({
                   id: 'tasks',
                   icon: <ClipboardList size={18} />,
@@ -3841,6 +3863,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <span>{formatCurrency(tax)}</span>
               </div>
             )}
+            <button type="button" className="text-primary text-sm" onClick={()=>navigate('/approvals')}>{accessText.approvals}</button>
+            {access.can('orders.discount',true)&&(access.role?.version===2||user?.role==='admin')&&<label className="block text-sm">{accessText.manualDiscount}<input aria-label={accessText.manualDiscount} type="number" min="0" max={currentQuote?.finalAmount||0} className="input" value={manualDiscountAmount} onChange={e=>setManualDiscountAmount(Math.max(0,Math.min(currentQuote?.finalAmount||0,Math.floor(Number(e.target.value)))))} /></label>}
             <ActivityPanel quote={currentQuote} giftSelections={giftSelections} onGiftChange={setGiftSelections} />
             {quoteLoading&&<p className="text-sm text-gray-500">{t('activityPricing.loading','正在计算活动价格…')}</p>}
             {quoteError&&<p role="alert" className="text-sm text-red-600">{quoteError}</p>}
@@ -4590,7 +4614,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 交接班弹窗 */}
-      {showShiftModal && (
+      {showShiftModal && access.can('pos.shift') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => {if (!shiftClosing && !handoverLoading) {if(closedHandover) finishHandover(); else setShowShiftModal(false)}}}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
@@ -4899,7 +4923,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 历史记录弹窗 */}
-      {showHistoryModal && (
+      {showHistoryModal && access.can('orders.read') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowHistoryModal(false)}>
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
@@ -4997,7 +5021,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 现金管理弹窗 */}
-      {showCashModal && (
+      {showCashModal && access.can('pos.cash') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCashModal(false)}>
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b">
@@ -5014,7 +5038,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* 费用记录弹窗 */}
-      {showExpenseModal && (
+      {showExpenseModal && access.can('pos.expense') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">

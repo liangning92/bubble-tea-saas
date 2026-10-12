@@ -533,3 +533,5 @@ export const employeeApi = {
  file: async(id:string) => {const res=await http.get(`${API_BASE}/staff-work/files/${id}`,{headers:getAuthHeader(),responseType:'blob'});const url=URL.createObjectURL(res.data);const a=document.createElement('a');a.href=url;a.download='document'+(res.data.type==='application/pdf'?'.pdf':res.data.type==='image/png'?'.png':'.jpg');a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},
  permissions: async() => (await http.get(`${API_BASE}/staff-permissions/me`,{headers:getAuthHeader()})).data.data
 }
+
+export const staffPermissionClient={get:(path:string,config?:any)=>http.get(API_BASE+path,{...config,headers:getAuthHeader()}),post:(path:string,body:any,config?:any)=>http.post(API_BASE+path,body,{...config,headers:getAuthHeader()})}
