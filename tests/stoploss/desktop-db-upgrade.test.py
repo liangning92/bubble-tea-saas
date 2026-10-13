@@ -108,7 +108,7 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(template)) as c, c:
             c.execute('CREATE TABLE Leave (id TEXT PRIMARY KEY, totalDays REAL NOT NULL)')
             c.execute('CREATE TABLE LeaveBalance (id TEXT PRIMARY KEY, usedLeave REAL NOT NULL, usedSick REAL NOT NULL)')
-            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest']:
+            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem']:
                 fields=', '.join(U.quote(name)+' '+declaration for t,name,declaration in U.COLUMN_ADDITIONS if t==table)
                 c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY, '+fields+')')
             c.execute('CREATE TABLE PaymentEvidence (id TEXT PRIMARY KEY, orderId TEXT, image BLOB)')
@@ -120,7 +120,7 @@ class UpgradeTests(unittest.TestCase):
             c.execute('INSERT INTO LeaveBalance VALUES (?, ?, ?)', ('old-balance', 3, 4))
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB)')
             c.execute('INSERT INTO "Order" VALUES (?, ?, ?)', ('historical', 123.45, b'\x00\xff'))
-            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest']:
+            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem']:
                 c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY)')
         self.before = U.digest(self.db)
         self.app_before = U.tree_manifest(self.app)
@@ -191,6 +191,44 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as c, c:
             self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
+
+    def test_inventory_upgrade_keeps_purchase_children_and_all_old_values(self):
+        template = self.root / 'empty.db'
+        with closing(sqlite3.connect(template)) as c, c:
+            c.execute('ALTER TABLE PurchaseOrder ADD COLUMN supplierId TEXT')
+            c.execute('ALTER TABLE PurchaseOrderItem ADD COLUMN purchaseOrderId TEXT REFERENCES PurchaseOrder(id) ON DELETE CASCADE')
+            c.execute('CREATE UNIQUE INDEX "PurchaseOrder_requestId_key" ON PurchaseOrder(requestId)')
+            c.execute('CREATE UNIQUE INDEX "StockInLog_operationId_key" ON StockInLog(operationId)')
+            c.execute('CREATE UNIQUE INDEX "StockOutLog_operationId_key" ON StockOutLog(operationId)')
+            c.execute('CREATE TABLE OrderConsumptionSnapshot (id TEXT PRIMARY KEY, orderId TEXT NOT NULL, materials TEXT NOT NULL)')
+            c.execute('CREATE UNIQUE INDEX OrderConsumptionSnapshot_orderId_key ON OrderConsumptionSnapshot(orderId)')
+            c.execute('CREATE TABLE ConsumptionAlert (id TEXT PRIMARY KEY, storeId TEXT NOT NULL)')
+        self.catalog = U.catalog_from_empty(template, 'a' * 40)
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('ALTER TABLE PurchaseOrder ADD COLUMN supplierId TEXT NOT NULL DEFAULT "original-supplier"')
+            c.execute('ALTER TABLE PurchaseOrderItem ADD COLUMN purchaseOrderId TEXT REFERENCES PurchaseOrder(id) ON DELETE CASCADE')
+            c.execute('CREATE INDEX historical_purchase_supplier ON PurchaseOrder(supplierId)')
+            c.execute('INSERT INTO PurchaseOrder(id) VALUES ("old-purchase")')
+            c.execute('INSERT INTO PurchaseOrderItem(id,purchaseOrderId) VALUES ("old-item","old-purchase")')
+            c.execute('INSERT INTO Inventory(id) VALUES ("original-stock")')
+        receipt = self.prepare()
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('PRAGMA foreign_keys=ON')
+            self.assertEqual(c.execute('SELECT supplierId,source FROM PurchaseOrder WHERE id="old-purchase"').fetchone(), ('original-supplier', 'admin'))
+            self.assertEqual(c.execute('SELECT purchaseOrderId FROM PurchaseOrderItem WHERE id="old-item"').fetchone(), ('old-purchase',))
+            self.assertEqual(c.execute('SELECT id FROM Inventory').fetchall(), [('original-stock',)])
+            self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(), [])
+            self.assertIsNotNone(c.execute('SELECT name FROM sqlite_master WHERE name="historical_purchase_supplier"').fetchone())
+            c.execute('INSERT INTO PurchaseOrder(id,supplierId) VALUES ("online-purchase",NULL)')
+            c.execute('INSERT INTO OrderConsumptionSnapshot VALUES ("snapshot","order","[]")')
+            c.execute('INSERT INTO StockOutLog(id,operationId) VALUES ("actual","once")')
+            with self.assertRaises(sqlite3.IntegrityError):
+                c.execute('INSERT INTO StockOutLog(id,operationId) VALUES ("duplicate","once")')
+        self.prepare()
+        with closing(sqlite3.connect(self.db)) as c:
+            self.assertEqual(c.execute('SELECT materials FROM OrderConsumptionSnapshot WHERE id="snapshot"').fetchone(), ('[]',))
+            self.assertEqual(c.execute('SELECT count(*) FROM PurchaseOrderItem').fetchone()[0], 1)
 
     def test_deep_prisma_asset_stays_below_windows_backup_path_limit(self):
         folder = self.app / 'resources' / 'app.asar.unpacked' / 'server' / 'node_modules' / '.prisma' / 'client'

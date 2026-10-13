@@ -67,7 +67,7 @@ const { pathToFileURL } = require('node:url')
   staffEstimate=true;await staffPage.reload();await expect(staffPage.getByText('按整月在职日期预计；月底更正实际工作天数及考勤后结算。预计金额不计入应付工资。')).toBeVisible();await staffPage.screenshot({path:path.join(output,'staff-estimate-mobile.png'),fullPage:true})
   noRecord=true;await staffPage.getByRole('button',{name:'下个月'}).click();await expect(staffPage.getByText('工资测试员工',{exact:true})).toHaveCount(0)
   salary={...salary,status:'pending',baseSalary:123456,payrollBasis:{...salary.payrollBasis,version:1,confirmed:undefined,manualAdjustment:true,recordedBaseSalary:123456}}
-  await page.reload();await page.getByRole('button',{name:'更正',exact:true}).last().click();await expect(page.getByRole('spinbutton',{name:'本期基本工资'})).toHaveValue('123456')
+  await page.reload();await expect(page.locator('p').filter({hasText:'工资测试员工'})).toBeVisible();await page.getByRole('button',{name:'更正',exact:true}).last().click();await expect(page.getByRole('spinbutton',{name:'本期基本工资'})).toHaveValue('123456')
   await page.getByRole('button',{name:'取消',exact:true}).click()
   const legacyForecast=makeBasis()
   salary={...salary,baseSalary:0,finalAmount:0,payrollBasis:{...legacyForecast,version:1,daysSource:'attendance',workingDays:{probation:0,regular:0},manualCorrection:false,manualAdjustment:false},reestimate:{baseSalary:legacyForecast.amount,overtime:0,commission:0,bonus:50000,deduction:108000,finalAmount:legacyForecast.amount+50000-108000,originalFinalAmount:0,difference:legacyForecast.amount+50000-108000,payrollBasis:legacyForecast}}
