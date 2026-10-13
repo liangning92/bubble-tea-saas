@@ -1,3 +1,4 @@
+import {legacyTvDefaults} from '../services/TvSignageService'
 import { saveMediaConfig } from '../services/MediaService'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -20,7 +21,7 @@ const store=(req:AuthRequest)=>(req as any).tvStoreId||req.user!.storeId
 const run=(fn:(req:AuthRequest)=>Promise<any>)=>async(req:AuthRequest,res:any)=>{try{res.json({code:200,data:await fn(req)})}catch(e:any){res.status(e instanceof z.ZodError?400:409).json({code:409,message:e.message})}}
 router.get('/config',access,run(async req=>{
  const storeId=store(req);await ensureMigrated(storeId)
- const row=await prisma.config.findUnique({where:{storeId_key:{storeId,key}}});const cfg=normalizeTvConfig(row?JSON.parse(row.value):undefined)
+ const row=await prisma.config.findUnique({where:{storeId_key:{storeId,key}}});const cfg=await legacyTvDefaults(storeId,normalizeTvConfig(row?JSON.parse(row.value):undefined))
  const display=await publicActivities(storeId),activities=await listActivities(storeId),now=new Date()
  const lottery=activities.find(a=>a.type==='lottery'&&activityEligible(a,{now,channel:''},false))
  const dailySpecials=display.activities.filter(a=>a.type==='special_price').flatMap(a=>a.products.map(p=>({productId:p.id,dayOfWeek:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl.DateTimeFormat('en',{timeZone:a.timezone,weekday:'short'}).format(now)),productName:p.name,originalPrice:p.specs[0]?.price||0,specialPrice:a.rule.price||0,tag:a.name,imageUrl:a.imageUrl||p.image||'',description:a.description})))

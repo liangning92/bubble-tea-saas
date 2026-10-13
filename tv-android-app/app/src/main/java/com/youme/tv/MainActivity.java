@@ -109,9 +109,10 @@ public class MainActivity extends Activity {
     private boolean allowedServer(String value, boolean allowHttp) {
         try { URI u=new URI(value); if(u.getUserInfo()!=null||u.getFragment()!=null||u.getQuery()!=null||u.getHost()==null||!(u.getPath()==null||u.getPath().isEmpty()||u.getPath().equals("/")))return false;
             if("https".equals(u.getScheme()))return true;
-            String host=u.getHost();return allowHttp&&"http".equals(u.getScheme())&&host.matches("localhost|127\\..*|10\\..*|192\\.168\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*");
+            return allowHttp&&"http".equals(u.getScheme())&&privateHost(u.getHost());
         }catch(Exception e){return false;}
     }
+    private boolean privateHost(String host){if("localhost".equals(host))return true;String[] parts=host.split("\\.");if(parts.length!=4)return false;int[] values=new int[4];try{for(int i=0;i<4;i++){if(!parts[i].matches("[0-9]+"))return false;values[i]=Integer.parseInt(parts[i]);if(values[i]<0||values[i]>255)return false;}}catch(Exception e){return false;}return values[0]==10||values[0]==127||(values[0]==192&&values[1]==168)||(values[0]==172&&values[1]>=16&&values[1]<=31);}
     private String read(InputStream stream, int limit) throws Exception { if(stream==null)return "";try(InputStream input=stream;ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=input.read(b))!=-1){if(out.size()+n>limit)throw new IOException("RESPONSE_LIMIT");out.write(b,0,n);}return out.toString("UTF-8");} }
     private String digest(File file) throws Exception { MessageDigest md=MessageDigest.getInstance("SHA-256");try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)md.update(b,0,n);}StringBuilder s=new StringBuilder();for(byte v:md.digest())s.append(String.format(Locale.US,"%02x",v&255));return s.toString(); }
     private void atomic(File file,String value) throws Exception {File tmp=new File(file.getPath()+".tmp");try(FileOutputStream out=new FileOutputStream(tmp)){out.write(value.getBytes("UTF-8"));out.getFD().sync();}if(!tmp.renameTo(file))throw new IOException("CACHE_COMMIT_FAILED");}
@@ -130,7 +131,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void pair(String value) {try{JSONObject obj=new JSONObject(value);if(obj.getString("secret").matches("[a-f0-9]{64}"))prefs.edit().putString("pair",value).apply();}catch(Exception ignored){} }
         @JavascriptInterface public void clear() { reset(); }
         @JavascriptInterface public void server(final String value,boolean allowHttp) {if(!allowedServer(value,allowHttp))return;reset();prefs.edit().putString("server",value).putBoolean("allowHttp",allowHttp).apply();handler.post(new Runnable(){public void run(){web.loadUrl(LOCAL+"/tv/index.html");}});}
-        @JavascriptInterface public String cached() {for(String name:Arrays.asList("active.json","previous.json"))try{String value=verifiedCached(name);if(!value.isEmpty())return value;}catch(Exception ignored){}return "";}
+        @JavascriptInterface public String cached() {for(String name:Arrays.asList("active.json","previous.json"))try{String value=verifiedCached(name);if(!value.isEmpty()){final String direction=new JSONObject(value).getJSONObject("settings").getString("orientation");handler.post(new Runnable(){public void run(){setRequestedOrientation("portrait".equals(direction)?ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);}});return value;}}catch(Exception ignored){}return "";}
 
         @JavascriptInterface public void request(final int id,final String method,final String route,final String body) {
             final int epoch=generation;

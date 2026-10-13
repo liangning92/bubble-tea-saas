@@ -201,6 +201,7 @@ const server = http.createServer((req, res) => {
       "video-retained",
     );
     assert.ok((await page.locator("video").evaluate((v) => v.currentTime)) > 8);
+    data.version='d'.repeat(64);data.media=[{url:'/tv/missing.mp4',kind:'video',name:'Missing media'}];data.assets=[];await page.waitForFunction(()=>document.body.classList.contains('media-failed'));assert.equal(await page.locator('article').count(),8);
     await page.evaluate(() => {
       const d = JSON.parse(localStorage.getItem("tv.snapshot"));
       d.checkedAt = Date.now() - 25 * 3600000;

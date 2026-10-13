@@ -95,6 +95,20 @@ async function main() {
   await db.productChannelPrice.create({
     data: { productId: "p", channelId: "delivery", priceAdjustment: 1.2 },
   });
+  await db.store.create({
+    data: { id: "new-store", tenantId: "tenant", name: "New store" },
+  });
+  const newScreen = await db.tvScreen.create({
+    data: {
+      storeId: "new-store",
+      code: "FIRST",
+      name: "First TV",
+      config: "{}",
+    },
+  });
+  const first = await svc.signageSnapshot(newScreen);
+  assert.equal(first.channel.code, "DINE_IN");
+  assert.equal(await db.channel.count({ where: { storeId: "new-store" } }), 4);
   const settings = svc.screenSettings.parse({
       inherit: false,
       channelId: "dine",
@@ -261,6 +275,24 @@ async function main() {
     ).status,
     401,
   );
+  await db.config.create({
+    data: {
+      storeId: "store",
+      key: "tv_signage_defaults",
+      category: "marketing",
+      value: JSON.stringify({
+        ...settings,
+        selectedProductIds: ["p"],
+        marqueeText: "Unified ticker",
+      }),
+    },
+  });
+  const inherited = await svc.legacyTvDefaults("store", {
+    enabled: true,
+    mediaFiles: [],
+  });
+  assert.deepEqual(inherited.idleProductIds, ["p"]);
+  assert.equal(inherited.ticker.text, "Unified ticker");
   // Only the designated device receives authoritative, completed lottery results.
   await db.tvDevice.update({
     where: { id: claimed.deviceId },
@@ -281,6 +313,9 @@ async function main() {
       value: claimed.deviceId,
     },
   });
+  const registry = require("../../server/src/services/TvDeviceRegistry.ts");
+  assert.equal(await registry.hasDesignatedTv("store"), true);
+  assert.equal(await registry.hasDesignatedTv("foreign"), false);
   await activities.putRecord(
     db,
     "store",

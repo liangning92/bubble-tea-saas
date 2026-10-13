@@ -1,3 +1,4 @@
+import { getOrCreateStoreChannels } from "../services/ChannelBootstrap";
 import { legacyScreens, importLegacyScreen } from "../services/TvLegacyImport";
 import { Router } from "express";
 import { z } from "zod";
@@ -217,10 +218,9 @@ router.get(
   run(async (req) => {
     const storeId = req.user.storeId;
     return {
-      channels: await prisma.channel.findMany({
-        where: { storeId, status: "active" },
-        orderBy: { sortOrder: "asc" },
-      }),
+      channels: (await getOrCreateStoreChannels(storeId)).filter(
+        (c) => c.status === "active",
+      ),
       categories: await prisma.category.findMany({
         where: { storeId },
         orderBy: { sortOrder: "asc" },

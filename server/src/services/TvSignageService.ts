@@ -1,3 +1,4 @@
+import { getOrCreateStoreChannels } from "./ChannelBootstrap";
 import {
   createHash,
   createHmac,
@@ -297,10 +298,9 @@ export async function signageSnapshot(screen: any, db = prisma) {
       db.config.findUnique({
         where: { storeId_key: { storeId, key: "storeInfo" } },
       }),
-      db.channel.findMany({
-        where: { storeId, status: "active" },
-        orderBy: { sortOrder: "asc" },
-      }),
+      getOrCreateStoreChannels(storeId).then((rows) =>
+        rows.filter((c) => c.status === "active"),
+      ),
       listActivities(storeId),
     ]);
   if (!store) throw Error("TV_STORE_NOT_FOUND");
@@ -517,4 +517,36 @@ export async function acknowledgeTvEvents(device: any, ids: string[]) {
       deviceId: device.id,
       acknowledgedAt: new Date().toISOString(),
     });
+}
+
+// Old store-scoped display clients inherit the same default media/product choices.
+export async function legacyTvDefaults(storeId: string, previous: any) {
+  const row = await prisma.config.findUnique({
+    where: { storeId_key: { storeId, key: "tv_signage_defaults" } },
+  });
+  if (!row) return previous;
+  const settings = screenSettings.parse(JSON.parse(row.value)),
+    ids = [...settings.selectedMediaIds, ...settings.musicIds];
+  const assets = await prisma.mediaAsset.findMany({
+    where: { storeId, id: { in: ids } },
+  });
+  const file = (id: string) => {
+    const a = assets.find((a) => a.id === id);
+    return a
+      ? { mediaId: a.id, url: a.url, kind: a.kind, title: a.name }
+      : null;
+  };
+  return {
+    ...previous,
+    carouselIntervalSeconds: settings.mediaIntervalSeconds,
+    mediaFiles: settings.selectedMediaIds.map(file).filter(Boolean),
+    idleProductsEnabled: true,
+    idleProductIds: settings.selectedProductIds,
+    ticker: { enabled: !!settings.marqueeText, text: settings.marqueeText },
+    idleMusic: {
+      enabled: settings.musicEnabled,
+      volume: settings.volume,
+      tracks: settings.musicIds.map(file).filter(Boolean),
+    },
+  };
 }

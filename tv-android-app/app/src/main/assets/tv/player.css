@@ -250,3 +250,43 @@ dialog::backdrop {
   max-width: 15vw;
   object-fit: contain;
 }
+
+#media::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  background-image: var(--backdrop, none);
+  background-size: cover;
+  background-position: center;
+  filter: blur(24px);
+  opacity: 0.4;
+}
+#media > * {
+  position: relative;
+  z-index: 1;
+}
+
+#products {
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+.portrait #products {
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+article h3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.media-failed #content {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+.media-failed #media {
+  display: none;
+}
+.media-failed #products {
+  display: grid;
+}
+
+.media-failed #content{grid-template-rows:1fr}
