@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void pair(String value) {try{JSONObject obj=new JSONObject(value);if(obj.getString("secret").matches("[a-f0-9]{64}"))prefs.edit().putString("pair",value).apply();}catch(Exception ignored){} }
         @JavascriptInterface public void clear() { reset(); }
         @JavascriptInterface public void server(final String value,boolean allowHttp) {if(!allowedServer(value,allowHttp))return;reset();prefs.edit().putString("server",value).putBoolean("allowHttp",allowHttp).apply();handler.post(new Runnable(){public void run(){web.loadUrl(LOCAL+"/tv/index.html");}});}
-        @JavascriptInterface public String cached() {for(String name:Arrays.asList("active.json","previous.json"))try{String value=verifiedCached(name);if(!value.isEmpty())return value;}catch(Exception ignored){}return "";}
+        @JavascriptInterface public String cached() {for(String name:Arrays.asList("active.json","previous.json"))try{String value=verifiedCached(name);if(!value.isEmpty()){final String direction=new JSONObject(value).getJSONObject("settings").getString("orientation");handler.post(new Runnable(){public void run(){setRequestedOrientation("portrait".equals(direction)?ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);}});return value;}}catch(Exception ignored){}return "";}
 
         @JavascriptInterface public void request(final int id,final String method,final String route,final String body) {
             final int epoch=generation;
