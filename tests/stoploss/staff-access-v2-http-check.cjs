@@ -68,6 +68,7 @@ const root=path.resolve(__dirname,'../..'),deps=root+'/server/node_modules';cons
  // Employee work features do not depend on custom management/POS modes.
  await call('basic','GET','inventory',undefined,403);
  await call('basic','GET','inventory',undefined,200,true);
+ await call('cashier','GET','inventory',undefined,200,true);
  await call('basic','GET','inventory-counts',undefined,200,true);
  await call('basic','GET','products',undefined,200,true);
  await call('basic','GET','announcement/active',undefined,200,true);

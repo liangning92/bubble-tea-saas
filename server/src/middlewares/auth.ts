@@ -174,7 +174,14 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })
     }
 
-    currentUser.accessRole = currentUser.employeeApp ? employeeAppAccess(currentUser.role) : await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+    if (currentUser.employeeApp) {
+      currentUser.accessRole = employeeAppAccess(currentUser.role)
+      // Employee endpoints always use self-service identity semantics, including
+      // when a manager or owner opens the employee app with their own account.
+      currentUser.role = 'staff'
+    } else {
+      currentUser.accessRole = await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+    }
     if(currentUser.accessRole?.version===2 && !beforeRouting){const denied=await enforceAccessV2(req,res,currentUser);if(denied)return denied}
     if (currentUser.accessRole && currentUser.accessRole.version!==2) {
       const permission = staffPermissionForRequest(req.method, req.originalUrl || req.url, currentUser)
