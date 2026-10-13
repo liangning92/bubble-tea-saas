@@ -25,7 +25,7 @@ export default defineConfig({
         target: 'http://localhost:7072',
         changeOrigin: true
       },
-      '/tv': {
+      '^/tv(?:[/?]|$)': {
         target: 'http://localhost:7072',
         changeOrigin: true
       }
@@ -33,7 +33,7 @@ export default defineConfig({
   },
   preview: {
     proxy: {
-      '/tv': { target: 'http://localhost:7072', changeOrigin: true },
+      '^/tv(?:[/?]|$)': { target: 'http://localhost:7072', changeOrigin: true },
       '/api': {
         target: 'http://localhost:7072',
         changeOrigin: true

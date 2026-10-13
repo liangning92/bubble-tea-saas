@@ -8,7 +8,8 @@ const assets=[{id:'m1',name:'Tea image',kind:'image',mimeType:'image/png',size:1
 const row={productId:'p1',productName:product.name,categoryId:'c1',category:'Milk Tea',quantity:24,revenue:360000,cost:120000,orderCount:16,penetration:80,margin:66.67,matrixType:'star',previousQuantity:12,change:100,evidence:true,costKnown:true}
 const insight={overview:{productsSold:1,quantity:24,unsold:1,incomplete:0,orderCount:20},period:{timeZone:'Asia/Jakarta'},categories:[{id:'c1',name:'Milk Tea',quantity:24,revenue:360000}],top:[row],revenueTop:[row],matrix:[row],benchmarks:{avgQuantity:24,avgMargin:66.67},strategies:['star','plowhorse','puzzle','dog'].map(type=>({type,count:7,products:Array.from({length:5},(_,i)=>({...row,productId:type+'-'+i,productName:type+' '+(i+1),matrixType:type}))})),changes:[row],channels:[{channelId:'ch1',channel:'POS',productId:'p1',productName:product.name,quantity:24}],pairs:[],products:[{id:'p1',name:product.name}]}
 let uploadMode='success',pendingUpload=null,uploadRequests=0
-let detailsRequests=0,postedProduct=null,postedHardware=null
+let detailsRequests=0,postedProduct=null,postedHardware=null,postedTvDefaults=null
+let tvDefaults={inherit:false,channelId:'',orientation:'landscape',layoutTemplate:'split_media_menu',themeStyle:'international_dark',safeAreaPadding:1.5,mediaFitMode:'contain_blur',mediaIntervalSeconds:8,selectedMediaIds:[],selectedCategoryIds:[],selectedProductIds:[],selectedSpecIds:[],showActivities:true,activityDisplayType:'all',marqueeText:'',marqueeSpeed:3,musicIds:[],musicEnabled:false,volume:.4,pageSeconds:12}
 let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[{width:100,content:'media'}]},orderingLayout:{columns:[{width:100,content:'order'}]},carouselIntervalSeconds:6}}
 ;(async()=>{
  const browser=await chromium.launch({headless:true})
@@ -20,6 +21,9 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    let data={}
    if(pathname==='/api/media'&&req.method()==='POST'){uploadRequests++;assert.match(req.headers()['content-type'],/multipart\/form-data; boundary=/);if(uploadMode==='hang'){pendingUpload=route;return}if(uploadMode==='fail'){await route.fulfill({status:500,json:{code:500,message:'MEDIA_UPLOAD_FAILED'}});return}data={list:[assets[0]]}}
    else if(pathname==='/api/media')data={list:assets.filter(a=>u.searchParams.get('scene')==='library'||(u.searchParams.get('scene')==='product'||u.searchParams.get('kind')==='image'?a.kind==='image':a.kind!=='audio')),total:u.searchParams.get('scene')==='library'?3:2,page:1,pageSize:24}
+   else if(pathname==='/api/tv/screens'||pathname==='/api/tv/legacy')data=[]
+   else if(pathname==='/api/tv/options')data={channels:[{id:'ch1',name:'POS'}],categories:[{id:'c1',name:'Milk Tea'}],products:[product],media:assets}
+   else if(pathname==='/api/tv/defaults'){if(req.method()==='PUT'){postedTvDefaults=req.postDataJSON();tvDefaults=postedTvDefaults}data=tvDefaults}
    else if(pathname==='/api/categories')data=[{id:'c1',name:'Milk Tea',code:'TEA'}]
    else if(pathname==='/api/channels')data={list:[{id:'ch1',name:'POS'}]}
    else if(pathname==='/api/products'&&req.method()==='POST'){postedProduct=req.postDataJSON();data={...product,...postedProduct}}
@@ -111,13 +115,16 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  await page.waitForFunction(()=>!document.querySelector('form'))
  assert.deepEqual(postedProduct.mediaIds,['m1'])
  await page.goto(base+'/settings/tv-screen')
- await page.getByRole('button',{name:'从媒体库选择',exact:true}).click()
- const picker=page.getByRole('dialog',{name:'媒体库'})
- await picker.getByText('Store video',{exact:true}).waitFor()
- assert.equal(await picker.locator('audio').count(),0)
- await picker.getByRole('button',{name:'选择',exact:true}).last().click()
- await picker.getByRole('button',{name:'使用所选素材（1）',exact:true}).click()
- assert.equal(await page.locator('video').count(),1)
+ await page.getByRole('heading',{name:'电视大屏',exact:true}).waitFor()
+ await page.getByRole('button',{name:'门店默认内容',exact:true}).click()
+ assert.equal(await page.getByLabel('Store music',{exact:true}).count(),1)
+ await page.getByLabel('Store video',{exact:true}).check()
+ await page.getByRole('button',{name:'保存',exact:true}).click()
+ await page.waitForFunction(()=>!document.querySelector('form input[type="number"]'))
+ assert.deepEqual(postedTvDefaults.selectedMediaIds,['m4'])
+ await page.reload();await page.getByRole('button',{name:'门店默认内容',exact:true}).click()
+ assert.equal(await page.getByLabel('Store video',{exact:true}).isChecked(),true)
+ await page.getByRole('button',{name:'取消',exact:true}).click()
  await page.goto(base+'/settings/pos')
  await page.getByRole('button',{name:'显示',exact:true}).click()
  await page.getByText('共用素材库',{exact:true}).click()

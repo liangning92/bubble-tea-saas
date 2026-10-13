@@ -9,6 +9,7 @@
       pair: "Hubungkan TV",
       help: "Masukkan kode ini di Pengelolaan TV, pilih layar toko.",
       settings: "Pengaturan",
+      sound: "Aktifkan suara",
       server: "Alamat server",
       http: "Izinkan HTTP jaringan lokal",
       test: "Tes koneksi",
@@ -29,6 +30,7 @@
       pair: "Connect TV",
       help: "Enter this code in TV management and select the store screen.",
       settings: "Settings",
+      sound: "Enable sound",
       server: "Server address",
       http: "Allow local network HTTP",
       test: "Test connection",
@@ -49,6 +51,7 @@
       pair: "连接电视",
       help: "在电视管理中输入此配对码并选择门店屏幕。",
       settings: "连接设置",
+      sound: "启用声音",
       server: "服务器地址",
       http: "允许局域网HTTP",
       test: "测试连接",
@@ -89,7 +92,9 @@
     identity = state.identity && state.identity.token ? state.identity : null;
     language = state.language || language;
   }
-  let pairGeneration=0;
+  let pairGeneration = 0;
+  let failedMedia = new Set(),
+    mediaFailed = false;
   let reqId = 0;
   const pending = new Map();
   window.TVNativeResponse = function (id, status, body) {
@@ -172,21 +177,21 @@
   async function startPair() {
     if (pairing || identity) return;
     pairing = true;
-    const pairEpoch=pairGeneration;
+    const pairEpoch = pairGeneration;
     $("status").textContent = t("connecting");
     try {
       const json = await request("POST", "/api/tv/pair/request");
-      if(pairEpoch!==pairGeneration)return;
+      if (pairEpoch !== pairGeneration) return;
       if (!json.success) throw Error(json.message);
       if (native) native.pair(JSON.stringify(json.data));
       else sessionStorage.setItem("tv.pair", JSON.stringify(json.data));
       $("pin").textContent =
         json.data.pin.slice(0, 3) + " " + json.data.pin.slice(3);
       const session = json.data;
-      while (!identity && pairEpoch===pairGeneration) {
+      while (!identity && pairEpoch === pairGeneration) {
         await new Promise((r) => setTimeout(r, 3000));
         const result = await request("GET", "/api/tv/pair/check/" + session.id);
-        if(pairEpoch!==pairGeneration)return;
+        if (pairEpoch !== pairGeneration) return;
         if (result.data.expired) break;
         if (result.data.paired) {
           setIdentity(result.data);
@@ -198,8 +203,10 @@
       $("status").textContent = t("failed");
       recordError(e.message);
     } finally {
-      if(pairEpoch===pairGeneration){pairing = false;
-      if (!identity) setTimeout(startPair, 5000);}
+      if (pairEpoch === pairGeneration) {
+        pairing = false;
+        if (!identity) setTimeout(startPair, 5000);
+      }
     }
   }
   function recordError(message) {
@@ -259,7 +266,10 @@
       return asset
         ? "https://appassets.androidplatform.net/cache/" + asset.sha256
         : "";
-    return (url.startsWith("/") ? origin + url : url)+(asset?'?tv-sha='+asset.sha256:'');
+    return (
+      (url.startsWith("/") ? origin + url : url) +
+      (asset ? "?tv-sha=" + asset.sha256 : "")
+    );
   }
   function element(tag, text, cls) {
     const el = document.createElement(tag);
@@ -274,12 +284,21 @@
       maximumFractionDigits: 2,
     }).format(n);
   }
+  function productCards() {
+    return snapshot.menu.flatMap((p) => {
+      if (p.specs.length <= 3) return [p];
+      const cards = [];
+      for (let i = 0; i < p.specs.length; i += 3)
+        cards.push({ ...p, specs: p.specs.slice(i, i + 3) });
+      return cards;
+    });
+  }
   function renderProducts() {
     if (!snapshot) return;
     const grid = $("products");
     grid.replaceChildren();
     const count = snapshot.settings.orientation === "portrait" ? 6 : 8,
-      items = snapshot.menu.slice(page * count, (page + 1) * count);
+      items = productCards().slice(page * count, (page + 1) * count);
     if (!items.length) {
       page = 0;
       return;
@@ -432,6 +451,19 @@
   function playSlide() {
     clearTimeout(slideTimer);
     const section = $("media");
+    for (const old of section.children) {
+      old.onerror =
+        old.onended =
+        old.onloadeddata =
+        old.onwaiting =
+        old.onplaying =
+          null;
+      if (old.tagName === "VIDEO") {
+        old.pause();
+        old.removeAttribute("src");
+        old.load();
+      }
+    }
     section.replaceChildren();
     if (!snapshot) return;
     const items = snapshot.media.length
@@ -444,6 +476,12 @@
       return;
     }
     slide %= items.length;
+    for (
+      let tries = 0;
+      tries < items.length && failedMedia.has(items[slide].url);
+      tries++
+    )
+      slide = (slide + 1) % items.length;
     const item = items[slide],
       el = element(item.kind === "video" ? "video" : "img"),
       next = () => {
@@ -451,9 +489,24 @@
         playSlide();
       };
     el.src = assetUrl(item.url);
+    section.style.setProperty(
+      "--backdrop",
+      snapshot.settings.mediaFitMode === "contain_blur" && item.kind !== "video"
+        ? "url(" + JSON.stringify(el.src) + ")"
+        : "none",
+    );
     el.style.objectFit =
       snapshot.settings.mediaFitMode === "cover" ? "cover" : "contain";
     el.onerror = () => {
+      clearTimeout(slideTimer);
+      failedMedia.add(item.url);
+      if (items.every((m) => failedMedia.has(m.url))) {
+        mediaFailed = true;
+        recordError("MEDIA_ALL_FAILED");
+        section.replaceChildren(element("h2", snapshot.store.name));
+        if (snapshot.menu.length) document.body.classList.add("media-failed");
+        return;
+      }
       recordError("MEDIA:" + item.url);
       slideTimer = setTimeout(next, 1000);
     };
@@ -463,11 +516,18 @@
       el.playsInline = true;
       el.onended = next;
       el.onloadeddata = () => clearTimeout(slideTimer);
+      el.onwaiting = () => {
+        clearTimeout(slideTimer);
+        slideTimer = setTimeout(() => el.onerror(), 30000);
+      };
+      el.onplaying = () => clearTimeout(slideTimer);
       slideTimer = setTimeout(() => {
         recordError("VIDEO_TIMEOUT:" + item.url);
         next();
       }, 30000);
-      el.play().catch((e) => recordError(e.message));
+      el.play().catch((e) => {
+        if (e.name !== "AbortError") recordError(e.message);
+      });
     } else {
       el.alt = item.name;
       slideTimer = setTimeout(
@@ -477,10 +537,14 @@
     }
     section.append(el);
   }
+  let musicTimer,
+    failedMusic = new Set();
   let audio = null,
     audioIndex = 0;
   function music() {
+    clearTimeout(musicTimer);
     if (audio) {
+      audio.onended = audio.onerror = null;
       audio.pause();
       audio.remove();
       audio = null;
@@ -491,6 +555,17 @@
       !snapshot.screen.isActive
     )
       return;
+    for (
+      let tries = 0;
+      tries < snapshot.music.length &&
+      failedMusic.has(snapshot.music[audioIndex % snapshot.music.length].url);
+      tries++
+    )
+      audioIndex++;
+    if (snapshot.music.every((m) => failedMusic.has(m.url))) {
+      recordError("AUDIO_ALL_FAILED");
+      return;
+    }
     audio = element("audio");
     audio.volume = snapshot.settings.volume;
     audio.src = assetUrl(
@@ -500,9 +575,28 @@
       audioIndex++;
       music();
     };
-    audio.onerror = () => recordError("AUDIO_FAILED");
+    const currentAudio = audio,
+      track = snapshot.music[audioIndex % snapshot.music.length];
+    audio.onerror = () => {
+      if (audio !== currentAudio) return;
+      failedMusic.add(track.url);
+      recordError("AUDIO_FAILED");
+      audioIndex++;
+      musicTimer = setTimeout(music, 1000);
+    };
     document.body.append(audio);
-    audio.play().catch((e) => recordError("AUDIO:" + e.message));
+    audio
+      .play()
+      .then(() => {
+        $("enable-sound").hidden = true;
+      })
+      .catch((e) => {
+        if (audio !== currentAudio || e.name === "AbortError") return;
+        if (e.name === "NotAllowedError") {
+          $("enable-sound").textContent = t("sound");
+          $("enable-sound").hidden = false;
+        } else currentAudio.onerror();
+      });
   }
   function apply(data) {
     const changed = !snapshot || snapshot.version !== data.version;
@@ -529,12 +623,16 @@
     $("ticker").textContent = data.settings.marqueeText;
     $("ticker").style.animationDuration = 60 / data.settings.marqueeSpeed + "s";
     if (changed) {
+      failedMedia.clear();
+      failedMusic.clear();
+      mediaFailed = false;
+      errors = errors.filter((e) => e !== "MEDIA_ALL_FAILED");
       page = 0;
       slide = 0;
       clearInterval(pageTimer);
       if (data.screen.isActive) {
         renderProducts();
-        playSlide();
+        if(data.settings.layoutTemplate!=="menu_full")playSlide();else{clearTimeout(slideTimer);$("media").replaceChildren();}
         music();
         pageTimer = setInterval(() => {
           page =
@@ -542,7 +640,7 @@
             Math.max(
               1,
               Math.ceil(
-                snapshot.menu.length /
+                productCards().length /
                   (snapshot.settings.orientation === "portrait" ? 6 : 8),
               ),
             );
@@ -598,7 +696,10 @@
       const url = origin + asset.url + "?tv-sha=" + asset.sha256;
       let res = await cache.match(url);
       if (!res) {
-        res = await fetch(url, { cache:"no-store", signal: AbortSignal.timeout(60000) });
+        res = await fetch(url, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(60000),
+        });
         if (!res.ok) throw Error("ASSET_HTTP");
         const buffer = await res.arrayBuffer(),
           digest = Array.from(
@@ -686,14 +787,18 @@
       await request("POST", "/api/tv/device/heartbeat", {
         appVersion: native
           ? JSON.parse(native.state()).appVersion
-          : (window.TV_BUILD?.appVersion||"browser-development"),
-        sourceSha: native ? JSON.parse(native.state()).sourceSha : (window.TV_BUILD?.sourceSha||"development"),
+          : window.TV_BUILD?.appVersion || "browser-development",
+        sourceSha: native
+          ? JSON.parse(native.state()).sourceSha
+          : window.TV_BUILD?.sourceSha || "development",
         version: snapshot ? snapshot.version : "",
         desiredVersion,
         cacheState,
         playbackState: snapshot
           ? snapshot.screen.isActive
-            ? "playing"
+            ? mediaFailed
+              ? "failed"
+              : "playing"
             : "standby"
           : "failed",
         resolution: innerWidth + "x" + innerHeight,
@@ -740,6 +845,7 @@
     $("server").focus();
   }
   $("settings").onclick = openSetup;
+  $("enable-sound").onclick = music;
   window.TVOpenSettings = openSetup;
   window.addEventListener("keydown", (e) => {
     if (["m", "M", "Menu", "ContextMenu"].includes(e.key) || e.keyCode === 82) {
@@ -756,7 +862,10 @@
       const value = new URL($("server").value);
       validateServer(value);
       if (native) {
-        $("test-result").textContent = native.test(value.origin,$("allow-http").checked);
+        $("test-result").textContent = native.test(
+          value.origin,
+          $("allow-http").checked,
+        );
       } else {
         const res = await fetch(value.origin + "/api/health", {
           signal: AbortSignal.timeout(5000),
@@ -768,14 +877,28 @@
       $("test-result").textContent = t("error") + ": " + e.message;
     }
   };
+  function privateHost(host) {
+    if (host === "localhost") return true;
+    const parts = host.split(".");
+    if (
+      parts.length !== 4 ||
+      parts.some((p) => !/^\d+$/.test(p) || Number(p) > 255)
+    )
+      return false;
+    const [a, b] = parts.map(Number);
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 192 && b === 168) ||
+      (a === 172 && b >= 16 && b <= 31)
+    );
+  }
   function validateServer(value) {
     if (value.protocol === "https:") return;
     if (
       value.protocol !== "http:" ||
       !$("allow-http").checked ||
-      !/^localhost$|^127\.|^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(
-        value.hostname,
-      )
+      !privateHost(value.hostname)
     )
       throw Error("HTTPS_REQUIRED");
   }

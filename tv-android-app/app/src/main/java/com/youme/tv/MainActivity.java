@@ -109,9 +109,10 @@ public class MainActivity extends Activity {
     private boolean allowedServer(String value, boolean allowHttp) {
         try { URI u=new URI(value); if(u.getUserInfo()!=null||u.getFragment()!=null||u.getQuery()!=null||u.getHost()==null||!(u.getPath()==null||u.getPath().isEmpty()||u.getPath().equals("/")))return false;
             if("https".equals(u.getScheme()))return true;
-            String host=u.getHost();return allowHttp&&"http".equals(u.getScheme())&&host.matches("localhost|127\\..*|10\\..*|192\\.168\\..*|172\\.(1[6-9]|2[0-9]|3[01])\\..*");
+            return allowHttp&&"http".equals(u.getScheme())&&privateHost(u.getHost());
         }catch(Exception e){return false;}
     }
+    private boolean privateHost(String host){if("localhost".equals(host))return true;String[] parts=host.split("\\.");if(parts.length!=4)return false;int[] values=new int[4];try{for(int i=0;i<4;i++){if(!parts[i].matches("[0-9]+"))return false;values[i]=Integer.parseInt(parts[i]);if(values[i]<0||values[i]>255)return false;}}catch(Exception e){return false;}return values[0]==10||values[0]==127||(values[0]==192&&values[1]==168)||(values[0]==172&&values[1]>=16&&values[1]<=31);}
     private String read(InputStream stream, int limit) throws Exception { if(stream==null)return "";try(InputStream input=stream;ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=input.read(b))!=-1){if(out.size()+n>limit)throw new IOException("RESPONSE_LIMIT");out.write(b,0,n);}return out.toString("UTF-8");} }
     private String digest(File file) throws Exception { MessageDigest md=MessageDigest.getInstance("SHA-256");try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)md.update(b,0,n);}StringBuilder s=new StringBuilder();for(byte v:md.digest())s.append(String.format(Locale.US,"%02x",v&255));return s.toString(); }
     private void atomic(File file,String value) throws Exception {File tmp=new File(file.getPath()+".tmp");try(FileOutputStream out=new FileOutputStream(tmp)){out.write(value.getBytes("UTF-8"));out.getFD().sync();}if(!tmp.renameTo(file))throw new IOException("CACHE_COMMIT_FAILED");}

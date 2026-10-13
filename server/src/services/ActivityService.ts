@@ -1,3 +1,4 @@
+import {hasDesignatedTv} from './TvDeviceRegistry'
 import { deductInventory } from './OrderService'
 import { config as environment } from '../config/env'
 import { randomUUID, createHash, randomInt } from 'crypto'
@@ -285,7 +286,7 @@ export async function processActivityGrant(storeId:string,id:string){
  g.status=g.reward||g.prize?'ready':'issued';g.processedAt=new Date().toISOString();g.attempts++
  await casRecord(tx,row,g);return g
  })
- if(result?.prize){socketManager.emitTVLotteryTrigger(storeId,{eventId:result.id,orderNumber:result.orderNumber,prizeName:result.prize.name,prizeIndex:result.prizeIndex,prizes:displayPrizes(result.prizes)});socketManager.emitToStore(storeId,'marketing:entitlements:updated',{orderId:result.orderId})}
+ if(result?.prize){if(!await hasDesignatedTv(storeId))socketManager.emitTVLotteryTrigger(storeId,{eventId:result.id,orderNumber:result.orderNumber,prizeName:result.prize.name,prizeIndex:result.prizeIndex,prizes:displayPrizes(result.prizes)});socketManager.emitToStore(storeId,'marketing:entitlements:updated',{orderId:result.orderId})}
  if(result)notifyActivities(storeId)
  return result
 }

@@ -1,3 +1,4 @@
+import {getOrCreateStoreChannels} from '../services/ChannelBootstrap'
 import { parseDateBoundary } from '../utils/businessDate'
 import { publicOrder } from '../services/OrderReplayService'
 import { Router } from 'express'
@@ -25,43 +26,13 @@ const createChannelSchema = z.object({
 
 const updateChannelSchema = createChannelSchema.partial()
 
-// 默认渠道配置
-const DEFAULT_CHANNELS = [
-  { name: '堂食', code: 'DINE_IN', icon: '🍵', commission: 0, sortOrder: 1, availableDays: '1,2,3,4,5,6,7', availableHours: '08:00-22:00', minOrderAmount: 0, dailyOrderLimit: 0 },
-  { name: 'GoFood', code: 'GOFOOD', icon: '🟢', commission: 0.2, sortOrder: 2, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 25000, dailyOrderLimit: 50 },
-  { name: 'GrabFood', code: 'GRAB', icon: '🟡', commission: 0.2, sortOrder: 3, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 25000, dailyOrderLimit: 50 },
-  { name: 'ShopeeFood', code: 'SHOPEE', icon: '🟠', commission: 0.18, sortOrder: 4, availableDays: '1,2,3,4,5,6,7', availableHours: '09:00-21:00', minOrderAmount: 20000, dailyOrderLimit: 30 },
-]
-
 // GET /api/channels - 获取渠道列表
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { storeId } = req.query
     const targetStoreId = storeId as string || req.user!.storeId
 
-    let channels = await prisma.channel.findMany({
-      where: { storeId: targetStoreId },
-      orderBy: { sortOrder: 'asc' }
-    })
-
-    // 如果没有渠道，创建默认渠道
-    if (channels.length === 0) {
-      channels = await prisma.channel.createMany({
-        data: DEFAULT_CHANNELS.map(ch => ({
-          ...ch,
-          storeId: targetStoreId,
-          status: 'active'
-        }))
-      }).catch(async (error: unknown) => {
-        // Concurrent first reads may both bootstrap this store. Never overwrite the winner.
-        if ((error as { code?: string })?.code !== 'P2002') throw error
-        const existing = await prisma.channel.findMany({ where: { storeId: targetStoreId } })
-        if (!DEFAULT_CHANNELS.every(channel => existing.some(row => row.code === channel.code))) throw error
-      }).then(() => prisma.channel.findMany({
-        where: { storeId: targetStoreId },
-        orderBy: { sortOrder: 'asc' }
-      }))
-    }
+    const channels = await getOrCreateStoreChannels(targetStoreId)
 
     res.json({
       code: 200,
