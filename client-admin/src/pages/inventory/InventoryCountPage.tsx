@@ -1,10 +1,15 @@
+import { useStoreDateSettings } from '../../hooks/useStoreDateSettings'
+import { InventoryCountAdjustments } from '../../components/InventoryCountAdjustments'
+import { useSearchParams } from 'react-router-dom'
+import { EmployeeAccessContext, useEmployeePermission } from '../../contexts/EmployeeAccess'
+import { countStatuses, countStatusFilter } from '../../utils/inventoryCountFlow'
 import {PageHelp} from '../../components/PageHelp'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { inventoryApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { formatItemName } from '../../utils/helpers'
+import { formatItemName, formatDateTime } from '../../utils/helpers'
 import { Loader2, Plus, Package, Check, X, Clock, AlertTriangle, RotateCcw } from 'lucide-react'
 
 interface InventoryCount {
@@ -17,14 +22,15 @@ interface InventoryCount {
   notes?: string
   items: InventoryCountItem[]
   createdAt: string
+  updatedAt?: string
 }
 
 interface InventoryCountItem {
   id: string
   inventoryId: string
   systemQty: number
-  countedQty?: number
-  variance?: number
+  countedQty?: number | null
+  variance?: number | null
   countedAt?: string
   movementSinceObservation?:number
   varianceAmountEstimate?:number
@@ -39,44 +45,74 @@ interface InventoryCountItem {
   }
 }
 
-type TabType = 'list' | 'detail' | 'new'
-
 export function InventoryCountPage() {
   const { t, i18n } = useTranslation()
+  useStoreDateSettings()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const storeId = user?.storeId || ''
 
-  const [activeTab, setActiveTab] = useState<TabType>('list')
-  const [selectedCount, setSelectedCount] = useState<InventoryCount | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const countId = searchParams.get('countId') || ''
+  const statusFilter = countStatusFilter(searchParams.get('status'))
+  const access = useContext(EmployeeAccessContext)
+  const allowedCount = useEmployeePermission('inventory.count')
+  const v2 = access.role?.version === 2
+  const canCreate = allowedCount && (v2 || ['admin', 'manager', 'staff'].includes(user?.role || ''))
+  const canEdit = allowedCount && (v2 || ['admin', 'manager', 'staff', 'cashier'].includes(user?.role || ''))
+  const canSubmit = canCreate
+  const canApprove = allowedCount && (v2 || ['admin', 'manager'].includes(user?.role || ''))
+  const canReadCost = useEmployeePermission('cost.read') && (v2 || ['admin', 'manager'].includes(user?.role || ''))
+  const showList = () => setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('countId'); next.delete('itemId'); return next })
+  const openCount = (id: string) => setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('countId', id); next.delete('itemId'); return next })
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newCountForm, setNewCountForm] = useState({
-    period: 'monthly' as 'monthly' | 'quarterly' | 'annual',
+    period: 'ad_hoc' as 'ad_hoc' | 'monthly' | 'quarterly' | 'annual',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     notes: ''
   })
 
   // Fetch inventory counts
-  const { data: countsData, isLoading } = useQuery({
-    queryKey: ['inventory-counts'],
+  const { data: countsData, isLoading, isError: countsError } = useQuery({
+    queryKey: ['inventory-counts', storeId],
     queryFn: () => inventoryApi.getInventoryCounts(),
     enabled: !!storeId
   })
 
   const counts: InventoryCount[] = countsData?.data?.data?.list || []
 
-  useEffect(()=>{if(selectedCount){const latest=counts.find(c=>c.id===selectedCount.id);if(latest)setSelectedCount(latest)}},[countsData])
-  const showError=(error:any)=>{alert(error?.response?.data?.message||t('countFlow.refresh'));queryClient.invalidateQueries({queryKey:['inventory-counts']})}
+  const filteredCounts = counts.filter(count => statusFilter === 'all' || count.status === statusFilter)
+  const detailQuery = useQuery({
+    queryKey: ['inventory-count', storeId, countId],
+    queryFn: () => inventoryApi.getInventoryCount(countId),
+    enabled: !!storeId && !!countId,
+    retry: false
+  })
+  const selectedCount: InventoryCount | null = detailQuery.data?.data?.data || null
+  const refreshCounts = () => {
+    queryClient.invalidateQueries({ queryKey: ['inventory-counts', storeId] })
+    queryClient.invalidateQueries({ queryKey: ['inventory-count', storeId] })
+    queryClient.invalidateQueries({ queryKey: ['stock-logs'] })
+    queryClient.invalidateQueries({ queryKey: ['inventory-logs-comprehensive'] })
+    queryClient.invalidateQueries({ queryKey: ['inventory-all-items'] })
+    queryClient.invalidateQueries({ queryKey: ['inventory'] })
+  }
+  useEffect(() => {
+    const itemId = searchParams.get('itemId')
+    if (selectedCount && itemId) document.getElementById('count-item-' + itemId)?.scrollIntoView({ block: 'center' })
+  }, [selectedCount, searchParams])
+  const showError=(error:any)=>{alert(error?.response?.data?.message||t('countFlow.refresh'));refreshCounts()}
   // Create mutation
   const createMutation = useMutation({
     onError:showError,
     mutationFn: (data: any) => inventoryApi.createInventoryCount(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
+    onSuccess: (response) => {
+      refreshCounts()
+      if (response.data?.data?.id) openCount(response.data.data.id)
       setShowCreateModal(false)
       setNewCountForm({
-        period: 'monthly',
+        period: 'ad_hoc',
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0],
         notes: ''
@@ -90,9 +126,15 @@ export function InventoryCountPage() {
     mutationFn: ({ countId, itemId, data }: { countId: string; itemId: string; data: any }) =>
       inventoryApi.updateInventoryCountItem(countId, itemId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
-      queryClient.invalidateQueries({ queryKey: ['inventory-count', selectedCount?.id] })
+      refreshCounts()
+      queryClient.invalidateQueries({ queryKey: ['inventory-count', storeId, countId] })
     }
+  })
+
+  const submitMutation = useMutation({
+    mutationFn: (id: string) => inventoryApi.submitInventoryCount(id),
+    onError: showError,
+    onSuccess: refreshCounts
   })
 
   // Complete count mutation
@@ -100,9 +142,9 @@ export function InventoryCountPage() {
     onError:showError,
     mutationFn: (id: string) => inventoryApi.completeInventoryCount(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
+      refreshCounts()
       if (selectedCount) {
-        queryClient.invalidateQueries({ queryKey: ['inventory-count', selectedCount.id] })
+        queryClient.invalidateQueries({ queryKey: ['inventory-count', storeId, countId] })
       }
     }
   })
@@ -112,14 +154,13 @@ export function InventoryCountPage() {
     onError:showError,
     mutationFn: (id: string) => inventoryApi.cancelInventoryCount(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-counts'] })
-      setActiveTab('list')
-      setSelectedCount(null)
+      refreshCounts()
+      showList()
     }
   })
 
   const handleCreateCount = () => {
-    if (!storeId) return
+    if (!storeId || !canCreate || !newCountForm.startDate || !newCountForm.endDate || newCountForm.startDate > newCountForm.endDate) return
     createMutation.mutate({
       storeId,
       ...newCountForm,
@@ -129,7 +170,7 @@ export function InventoryCountPage() {
   }
 
   const handleUpdateItem = (item: InventoryCountItem, countedQty: number,note?:string) => {
-    if (!selectedCount) return
+    if (!selectedCount || !canEdit || selectedCount.status !== 'in_progress') return
     updateItemMutation.mutate({
       countId: selectedCount.id,
       itemId: item.id,
@@ -144,7 +185,7 @@ export function InventoryCountPage() {
   }
 
   const handleComplete = () => {
-    if (!selectedCount) return
+    if (!selectedCount || !canApprove || selectedCount.status !== 'pending_review') return
     if (!confirm(t('inventory.confirmCompleteCount'))) return
     completeMutation.mutate(selectedCount.id)
   }
@@ -177,63 +218,50 @@ export function InventoryCountPage() {
   // List View
   const renderListView = () => (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('inventoryFlow.countReview')}</h1>
-          <p className="text-sm text-gray-500 mt-1">{t('inventoryFlow.countHint')}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('inventoryCountWorkspace.title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('inventoryCountWorkspace.hint')}</p>
         </div>
-        <button
+        {canCreate && <button
           onClick={() => setShowCreateModal(true)}
           className="btn btn-primary flex items-center gap-2"
         >
           <Plus size={16} />
           {t('inventory.newCount')}
-        </button>
+        </button>}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card text-center">
-          <div className="text-3xl font-bold text-gray-600">{counts.length}</div>
-          <div className="text-sm text-gray-500">{t('inventory.totalCounts')}</div>
-        </div>
-        <div className="card text-center">
-          <div className="text-3xl font-bold text-orange-600">
-            {counts.filter(c => c.status === 'in_progress').length}
-          </div>
-          <div className="text-sm text-gray-500">{t('inventory.inProgress')}</div>
-        </div>
-        <div className="card text-center">
-          <div className="text-3xl font-bold text-green-600">
-            {counts.filter(c => c.status === 'completed').length}
-          </div>
-          <div className="text-sm text-gray-500">{t('inventory.completed')}</div>
-        </div>
+      <div role="tablist" aria-label={t('inventoryCountWorkspace.statusFilter')} className="flex flex-wrap gap-2">
+        {countStatuses.map(status => <button key={status} role="tab" aria-selected={statusFilter === status}
+          className={`px-4 py-2 rounded-lg text-sm ${statusFilter === status ? 'bg-primary text-white' : 'bg-white border text-gray-600'}`}
+          onClick={() => setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('status', status); return next })}>
+          {t('inventoryCountWorkspace.' + status)}{status !== 'adjustments' && ` (${status === 'all' ? counts.length : counts.filter(c => c.status === status).length})`}
+        </button>)}
       </div>
 
       {/* Count List */}
-      {isLoading ? (
+      {statusFilter === 'adjustments' ? <InventoryCountAdjustments storeId={storeId} /> : countsError ? <div className="card"><p role="alert">{t('inventoryCountWorkspace.historyFailed')}</p><button onClick={refreshCounts} className="btn btn-outline mt-3">{t('common.refresh')}</button></div> : isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      ) : counts.length === 0 ? (
+      ) : filteredCounts.length === 0 ? (
         <div className="card text-center py-12">
           <Package size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500">{t('inventory.noCounts')}</p>
-          <button onClick={() => setShowCreateModal(true)} className="btn btn-primary mt-4">
+          <p className="text-gray-500">{t(counts.length ? 'inventoryCountWorkspace.emptyStatus' : 'inventory.noCounts')}</p>
+          {canCreate && counts.length === 0 && <button onClick={() => setShowCreateModal(true)} className="btn btn-primary mt-4">
             {t('inventory.createFirst')}
-          </button>
+          </button>}
         </div>
       ) : (
         <div className="space-y-4">
-          {counts.map((count) => (
+          {filteredCounts.map((count) => (
             <button type="button" key={count.id} className="card w-full text-left hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => {
-                setSelectedCount(count)
-                setActiveTab('detail')
+                openCount(count.id)
               }}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-xl ${
                     count.status === 'completed' ? 'bg-green-100 text-green-600' :
@@ -270,17 +298,21 @@ export function InventoryCountPage() {
   const renderDetailView = () => {
     if (!selectedCount) return null
 
-    const varianceItems = selectedCount.items?.filter(i => i.variance !== 0 && i.variance !== undefined) || []
+    const varianceItems = selectedCount.items?.filter(i => typeof i.variance === 'number' && i.variance !== 0) || []
     const countedItems = selectedCount.items?.filter(i => i.countedQty !== undefined && i.countedQty !== null) || []
+
+    const busy = updateItemMutation.isPending || submitMutation.isPending || completeMutation.isPending || cancelMutation.isPending
+    const allCounted = countedItems.length === selectedCount.items.length && countedItems.length > 0
+    const reasonsPresent = varianceItems.every(item => !!item.note?.trim())
 
     return (
       <div className="space-y-6">
         <PageHelp>{t('countFlow.hint')}</PageHelp>
-        <button onClick={()=>queryClient.invalidateQueries({queryKey:['inventory-counts']})}>{t('countFlow.refresh')}</button>
+        <button onClick={refreshCounts}>{t('countFlow.refresh')}</button>
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <button onClick={() => { setActiveTab('list'); setSelectedCount(null) }} className="text-sm text-gray-500 hover:text-gray-700 mb-2">
+            <button onClick={showList} className="text-sm text-gray-500 hover:text-gray-700 mb-2">
               ← {t('common.back')}
             </button>
             <h1 className="text-2xl font-bold text-gray-900">{getPeriodLabel(selectedCount.period)}</h1>
@@ -291,20 +323,21 @@ export function InventoryCountPage() {
               </span>
             </div>
           </div>
-          <div className="flex gap-3">
-            {['in_progress','pending_review'].includes(selectedCount.status) && (
+          <div className="flex flex-wrap gap-3">
+            {canSubmit && ['in_progress','pending_review'].includes(selectedCount.status) && (
               <>
-                <button
+                {canApprove && <button
                   onClick={() => cancelMutation.mutate(selectedCount.id)}
-                  disabled={cancelMutation.isPending}
+                  disabled={busy}
                   className="btn btn-outline flex items-center gap-2"
                 >
                   <X size={16} />
                   {t('inventory.cancelCount')}
-                </button>
-                {(selectedCount.period!=='ad_hoc'||selectedCount.status==='pending_review')&&<button
+                </button>}
+                {canSubmit && selectedCount.status === 'in_progress' && <button type="button" className="btn btn-primary" disabled={busy || !allCounted || !reasonsPresent} onClick={() => submitMutation.mutate(selectedCount.id)}>{t('inventoryCountWorkspace.submitReview')}</button>}
+                {canApprove && selectedCount.status === 'pending_review' && <button
                   onClick={handleComplete}
-                  disabled={completeMutation.isPending || countedItems.length !== selectedCount.items.length}
+                  disabled={busy || !allCounted || !reasonsPresent}
                   className="btn btn-primary flex items-center gap-2"
                 >
                   {completeMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
@@ -315,6 +348,12 @@ export function InventoryCountPage() {
           </div>
         </div>
 
+        {selectedCount.status === 'completed' && <div className="card border-green-200 bg-green-50" data-testid="count-adjustment-result">
+          <h2 className="font-semibold">{t('inventoryCountWorkspace.adjustmentResult')}</h2>
+          <p className="text-sm mt-2">{t('inventoryCountWorkspace.appliedHint')}</p>
+          {selectedCount.updatedAt && <p className="text-sm mt-2">{t('inventoryCountWorkspace.appliedAt')}: {formatDateTime(selectedCount.updatedAt)}</p>}
+        </div>}
+
         {/* Summary Cards */}
         {['in_progress','pending_review'].includes(selectedCount.status) && (
           <div className="grid grid-cols-3 gap-4">
@@ -324,7 +363,7 @@ export function InventoryCountPage() {
             </div>
             <div className="card bg-red-50 border-red-200">
               <div className="text-2xl font-bold text-red-600">
-                {selectedCount.items?.length || 0 - countedItems.length}
+                {(selectedCount.items?.length || 0) - countedItems.length}
               </div>
               <div className="text-sm text-gray-500">{t('inventory.pending')}</div>
             </div>
@@ -373,16 +412,16 @@ export function InventoryCountPage() {
 
         {/* Items Table */}
         <div className="card">
-          <h3 className="font-medium mb-4">{t('inventory.countItems')}</h3>
+          <h3 className="font-medium mb-4">{t(selectedCount.status === 'completed' ? 'inventoryCountWorkspace.itemsAndAdjustments' : 'inventory.countItems')}</h3>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
+            <table className="w-full min-w-[860px]">
+              <thead className="whitespace-nowrap">
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3">{t('inventory.material')}</th>
                   <th className="pb-3 text-right">{t('countFlow.theory')}</th>
                   <th className="pb-3 text-right">{t('inventory.actualQty')}</th>
-                  <th className="pb-3 text-right">{t('inventory.varianceCol')}</th><th>{t('countFlow.movement')}</th><th>{t('countFlow.amount')}</th><th>{t('countFlow.reason')}</th>
-                  {selectedCount.status === 'in_progress' && (
+                  <th className="pb-3 text-right">{t(selectedCount.status === 'completed' ? 'inventoryCountWorkspace.appliedDelta' : 'inventory.varianceCol')}</th><th>{t('countFlow.movement')}</th>{canReadCost && <th>{t('countFlow.amount')}</th>}<th>{t('countFlow.reason')}</th>
+                  {canEdit && selectedCount.status === 'in_progress' && (
                     <th className="pb-3 text-center">{t('inventory.action')}</th>
                   )}
                 </tr>
@@ -394,7 +433,7 @@ export function InventoryCountPage() {
                     : null
 
                   return (
-                    <tr key={item.id} className="border-b last:border-0">
+                    <tr key={item.id} id={'count-item-' + item.id} className={`border-b last:border-0 ${searchParams.get('itemId') === item.id ? 'bg-blue-50' : ''}`}>
                       <td className="py-3">
                         <span className="font-medium">{formatItemName(item.inventory?.name || 'Unknown', i18n.language)}</span>
                         <span className="text-sm text-gray-500 ml-2">({item.inventory?.unit})</span>
@@ -418,8 +457,8 @@ export function InventoryCountPage() {
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
-                      <td>{item.movementSinceObservation??'—'}</td><td>{item.varianceAmountEstimate??'—'}</td><td>{item.note||'—'}</td>
-                      {selectedCount.status === 'in_progress' && (
+                      <td>{item.movementSinceObservation??'—'}</td>{canReadCost && <td>{item.varianceAmountEstimate??'—'}</td>}<td>{item.note||'—'}</td>
+                      {canEdit && selectedCount.status === 'in_progress' && (
                         <td className="py-3 text-center">
                           <CountItemInput
                             item={item}
@@ -454,6 +493,7 @@ export function InventoryCountPage() {
               onChange={(e) => setNewCountForm({ ...newCountForm, period: e.target.value as any })}
               className="input w-full"
             >
+              <option value="ad_hoc">{t('inventoryFlow.adHoc')}</option>
               <option value="monthly">{t('inventory.monthly')}</option>
               <option value="quarterly">{t('inventory.quarterly')}</option>
               <option value="annual">{t('inventory.annual')}</option>
@@ -499,7 +539,7 @@ export function InventoryCountPage() {
           </button>
           <button
             onClick={handleCreateCount}
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || !newCountForm.startDate || !newCountForm.endDate || newCountForm.startDate > newCountForm.endDate}
             className="btn btn-primary flex-1"
           >
             {createMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
@@ -512,8 +552,10 @@ export function InventoryCountPage() {
 
   return (
     <div>
-      {activeTab === 'list' && renderListView()}
-      {activeTab === 'detail' && renderDetailView()}
+      {!countId && renderListView()}
+      {countId && detailQuery.isLoading && <div className="py-12 flex justify-center"><Loader2 className="animate-spin" /></div>}
+      {countId && detailQuery.isError && <div className="card"><p>{t('inventoryCountWorkspace.unavailable')}</p><button className="btn btn-outline mt-3" onClick={showList}>{t('common.back')}</button></div>}
+      {countId && !detailQuery.isError && selectedCount && renderDetailView()}
       {showCreateModal && renderCreateModal()}
     </div>
   )
@@ -536,7 +578,7 @@ function CountItemInput({
 
   const handleSubmit = () => {
     const qty = parseFloat(value)
-    if (!isNaN(qty) && qty >= 0) {
+    if (Number.isFinite(qty) && qty >= 0) {
       onUpdate(qty,reason)
       setShowInput(false)
     }
@@ -547,6 +589,8 @@ function CountItemInput({
       <div className="flex items-center gap-2">
         <input
           type="number"
+          aria-label={t('inventory.actualQty')}
+          step="any"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -555,8 +599,8 @@ function CountItemInput({
           placeholder="0"
           disabled={isUpdating}
         />
-        <input className="input input-sm w-32" value={reason} onChange={e=>setReason(e.target.value)} placeholder={t('countFlow.reason')}/>
-        <button onClick={handleSubmit} disabled={isUpdating} className="btn btn-sm btn-primary">
+        <input aria-label={t('countFlow.reason')} className="input input-sm w-32" value={reason} onChange={e=>setReason(e.target.value)} placeholder={t('countFlow.reason')} disabled={isUpdating}/>
+        <button onClick={handleSubmit} aria-label={t('common.save')} disabled={isUpdating} className="btn btn-sm btn-primary">
           <Check size={14} />
         </button>
       </div>

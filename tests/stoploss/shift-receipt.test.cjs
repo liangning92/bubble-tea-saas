@@ -19,9 +19,9 @@ test('missing financial values never become zero or a staff shortage; deliberate
  assert.ok(!text.includes('Rp -900.000'),'inconsistent balances are not reconciled');
 });
 
-test('handover receipt includes reviewed financial fields and cashier signature on narrow and wide paper',()=>{
+test('handover receipt explicit print choices show financial fields independently of legacy summary flags',()=>{
  for(const paperSize of ['58mm','80mm'])for(const language of ['id','en','zh']){
- const text=renderer().shift({...report,paperSize,language,manualReceiptsCashBasis:'drawer_total',actualCash:500000,handoverFinancials:{totalRevenue:680000,actualCashReceived:320000,expenses:30000.25},summaryItems:{openFloat:false,closeCash:false}});
+ const text=renderer().shift({...report,paperSize,language,manualReceiptsCashBasis:'drawer_total',actualCash:500000,handoverFinancials:{totalRevenue:680000,actualCashReceived:320000,expenses:30000.25},summaryItems:{openFloat:false,closeCash:false},receiptItems:{openFloat:true,closeCash:true}});
  for(const value of ['680.000','320.000','30.000,25','500.000','420.000'])assert.ok(text.includes(value),value);
  assert.ok(text.includes('________________________'));for(const line of text.split('\n'))assert.ok(width(line)<=(paperSize==='80mm'?48:32),line);
  }

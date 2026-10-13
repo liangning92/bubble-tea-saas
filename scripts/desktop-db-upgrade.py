@@ -26,10 +26,20 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('Order','checkoutTaxAmount','INTEGER'), ('Staff','baseSalary','INTEGER'),
     ('Inventory','ledgerSequence','BIGINT NOT NULL DEFAULT 0'), ('Inventory','ledgerEpoch','BIGINT NOT NULL DEFAULT 0'),
     ('StockInLog','ledgerSequence','BIGINT'), ('StockOutLog','ledgerSequence','BIGINT'),
-    ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'")]
+    ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'"),
+    ('StockInLog','operationId','TEXT'), ('StockInLog','purchaseOrderId','TEXT'),
+    ('StockOutLog','operationId','TEXT'), ('StockOutLog','staffId','TEXT'),
+    ('PurchaseOrder','requestId','TEXT'), ('PurchaseOrder','requestFingerprint','TEXT'),
+    ('PurchaseOrder','source',"TEXT NOT NULL DEFAULT 'admin'"), ('PurchaseOrder','onlineOrderNumber','TEXT'),
+    ('PurchaseOrder','createdBy','TEXT'), ('PurchaseOrder','receivedBy','TEXT'),
+    ('PurchaseOrderItem','inputQuantity','REAL'), ('PurchaseOrderItem','inputUnit','TEXT'),
+    ('PurchaseOrderItem','inputUnitCost','INTEGER'), ('PurchaseOrderItem','packageSnapshot','TEXT')]
+NEW_TABLES = ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference','OrderConsumptionSnapshot','ConsumptionAlert')
+INVENTORY_INDEXES = ('StockInLog_operationId_key','StockOutLog_operationId_key','PurchaseOrder_requestId_key')
 CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes', 'Order_pickupNumber_idx nonunique index']
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
 CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns', 'StaffActionApproval and StaffApprovalCredential tables and indexes', 'Staff_employeeNumber_key unique index after duplicate-number validation']
+CHANGES += ['OrderConsumptionSnapshot and ConsumptionAlert tables and indexes', 'PurchaseOrder.supplierId nullable with historical rows and dependent records preserved', 'StockInLog_operationId_key, StockOutLog_operationId_key and PurchaseOrder_requestId_key unique indexes']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
 LAST_DIAGNOSTIC = None
 LAST_STAGE = 'startup'
@@ -122,7 +132,11 @@ def integrity(c):
 def catalog_from_empty(db, source_sha):
     with closing(connection(db)) as c:
         integrity(c)
-        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference')) OR (type='index' AND tbl_name IN ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference') AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name")]}
+        placeholders = ','.join('?' for _ in NEW_TABLES)
+        result = {'version': 2, 'sourceSha': source_sha, 'changes': CHANGES, 'tables': {}, 'newTableDDL': [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE (type='table' AND name IN ("+placeholders+")) OR (type='index' AND tbl_name IN ("+placeholders+") AND sql IS NOT NULL) ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END,name", NEW_TABLES + NEW_TABLES)]}
+        purchase = c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='PurchaseOrder'").fetchone()
+        result['purchaseTableDDL'] = purchase[0] if purchase else None
+        result['inventoryIndexDDL'] = [row[0] for row in c.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name IN (?,?,?) AND sql IS NOT NULL ORDER BY name", INVENTORY_INDEXES)]
         result['employeeNumberUnique'] = any(row[1] == 'Staff_employeeNumber_key' and row[2] == 1 for row in c.execute('PRAGMA index_list("Staff")'))
         for table in tables(c):
             if c.execute('SELECT count(*) FROM ' + quote(table)).fetchone()[0]:
@@ -142,12 +156,14 @@ def supported_schema(c, catalog, allow_missing=True):
     actual_tables = set(tables(c))
     for table, expected in catalog['tables'].items():
         if table not in actual_tables:
-            if table in ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference') and allow_missing:
+            if table in NEW_TABLES and allow_missing:
                 continue
             fail('UNSUPPORTED_SCHEMA_MISSING_TABLE')
         fields = {r[1]: {'type': r[2].upper(), 'notnull': r[3], 'pk': r[5]}
                   for r in c.execute('PRAGMA table_info(' + quote(table) + ')')}
         for name, spec in expected.items():
+            if allow_missing and table == 'PurchaseOrder' and name == 'supplierId' and fields.get(name) == {**spec, 'notnull': 1} and spec['notnull'] == 0:
+                continue
             if any(t==table and n==name for t,n,_ in COLUMN_ADDITIONS) and name not in fields and allow_missing:
                 continue
             if not compatible_column(table, name, fields.get(name), spec):
@@ -159,6 +175,15 @@ def supported_schema(c, catalog, allow_missing=True):
                 fail('UNSUPPORTED_EMPLOYEE_NUMBER_INDEX')
         elif not allow_missing:
             fail('EMPLOYEE_NUMBER_INDEX_REQUIRED')
+    for index, table, column in [('StockInLog_operationId_key','StockInLog','operationId'), ('StockOutLog_operationId_key','StockOutLog','operationId'), ('PurchaseOrder_requestId_key','PurchaseOrder','requestId')]:
+        if not any(quote(index) in ddl for ddl in catalog.get('inventoryIndexDDL', [])):
+            continue
+        actual = next((row for row in c.execute('PRAGMA index_list('+quote(table)+')') if row[1] == index), None)
+        if actual:
+            if actual[2] != 1 or [r[2] for r in c.execute('PRAGMA index_info('+quote(index)+')')] != [column]:
+                fail('UNSUPPORTED_INVENTORY_OPERATION_INDEX')
+        elif not allow_missing:
+            fail('INVENTORY_OPERATION_INDEX_REQUIRED')
     indexes = c.execute('PRAGMA index_list("Order")').fetchall()
     existing = next((row for row in indexes if row[1] == 'Order_pickupNumber_idx'), None)
     if existing:
@@ -770,10 +795,34 @@ def prepare(db, old_app, catalog, processes, registry=None, staged=None):
                     c.execute('ALTER TABLE '+quote(table)+' ADD COLUMN '+quote(name)+' '+declaration)
                     added_columns.append(table+'.'+name)
                     if table=='Order' and name=='pickupNumber': added_column=True
-            if any(table in catalog['tables'] and table not in tables(c) for table in ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference')):
+            if 'supplierId' in catalog['tables'].get('PurchaseOrder', {}):
+                fields = {r[1]: r[3] for r in c.execute('PRAGMA table_info("PurchaseOrder")')}
+                if fields.get('supplierId'):
+                    if set(fields) != set(catalog['tables']['PurchaseOrder']):
+                        fail('UNSUPPORTED_PURCHASE_REBUILD_COLUMNS')
+                    ddl = catalog.get('purchaseTableDDL')
+                    if not ddl or not ddl.startswith('CREATE TABLE "PurchaseOrder"'):
+                        fail('UNSUPPORTED_PURCHASE_DDL')
+                    # sqlite3 connections keep foreign_keys off; verify before the
+                    # narrow rebuild so child items cannot be deleted by a cascade.
+                    if c.execute('PRAGMA foreign_keys').fetchone()[0] != 0:
+                        fail('PURCHASE_REBUILD_REQUIRES_FOREIGN_KEYS_OFF')
+                    preserved = c.execute("SELECT sql FROM sqlite_master WHERE tbl_name='PurchaseOrder' AND type IN ('index','trigger') AND sql IS NOT NULL").fetchall()
+                    c.execute(ddl.replace('"PurchaseOrder"', '"__upgrade_PurchaseOrder"', 1))
+                    names = ','.join(quote(name) for name in fields)
+                    c.execute('INSERT INTO "__upgrade_PurchaseOrder" ('+names+') SELECT '+names+' FROM "PurchaseOrder"')
+                    c.execute('DROP TABLE "PurchaseOrder"')
+                    c.execute('ALTER TABLE "__upgrade_PurchaseOrder" RENAME TO "PurchaseOrder"')
+                    for (statement,) in preserved:
+                        c.execute(statement)
+            if any(table in catalog['tables'] and table not in tables(c) for table in NEW_TABLES):
                 ddl=catalog.get('newTableDDL',[])
-                if not ddl or any(not any(table in statement for table in ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference')) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
+                if not ddl or any(not any(table in statement for table in NEW_TABLES) for statement in ddl): fail('UNSUPPORTED_EVIDENCE_DDL')
                 for statement in ddl: c.execute(statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ', 1).replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ', 1).replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ', 1))
+            for statement in catalog.get('inventoryIndexDDL', []):
+                if not statement.startswith('CREATE UNIQUE INDEX ') or not any(quote(name) in statement for name in INVENTORY_INDEXES):
+                    fail('UNSUPPORTED_INVENTORY_INDEX_DDL')
+                c.execute(statement.replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ', 1))
             if catalog.get('employeeNumberUnique'):
                 duplicate = c.execute('SELECT 1 FROM "Staff" GROUP BY "employeeNumber" HAVING count(*)>1 LIMIT 1').fetchone()
                 if duplicate:
