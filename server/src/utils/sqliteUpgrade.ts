@@ -1,3 +1,4 @@
+import {inventoryFlowAdditions,inventoryFlowModels,inventoryFlowChecksum} from './inventoryFlowUpgrade'
 import {ledgerColumns,ledgerIndexes,sqliteLedgerTriggers,ledgerChecksum,assertLedgerInstalled} from './inventoryLedger'
 import { PrismaClient, Prisma } from '@prisma/client'
 import { createHash, randomUUID } from 'crypto'
@@ -30,12 +31,12 @@ async function columns(db:Database,table:string) {
 }
 async function checkBaseline(db:Database) {
  for(const model of Prisma.dmmf.datamodel.models){
-  if(['LocalSchemaMigration','PaymentEvidence','StaffActionApproval','StaffApprovalCredential'].includes(model.name))continue
+  if(['LocalSchemaMigration','PaymentEvidence','StaffActionApproval','StaffApprovalCredential',...inventoryFlowModels].includes(model.name))continue
   const table=model.dbName||model.name
   const names=(await columns(db,table)).map(c=>c.name)
   for(const field of model.fields.filter(field=>field.kind!=='object')){
    const name=field.dbName||field.name
-   if(!names.includes(name)&&![...additions,...ledgerColumns].some(([t,n])=>t===table&&n===name))throw new Error(`SQLITE_UPGRADE_UNSUPPORTED_BASELINE:${table}.${name}`)
+   if(!names.includes(name)&&![...additions,...ledgerColumns,...inventoryFlowAdditions].some(([t,n])=>t===table&&n===name))throw new Error(`SQLITE_UPGRADE_UNSUPPORTED_BASELINE:${table}.${name}`)
   }
  }
 }
@@ -69,7 +70,7 @@ export async function upgradeLocalSqlite(db:PrismaClient,databaseUrl:string) {
  const tables=await db.$queryRawUnsafe<Array<{name:string}>>("SELECT name FROM sqlite_master WHERE type='table' AND name='LocalSchemaMigration'")
  if(tables.length){
   const history=await db.$queryRawUnsafe<Array<{version:number;checksum:string}>>('SELECT version,checksum FROM "LocalSchemaMigration" ORDER BY version')
-  if(history.some(row=>!((Number(row.version)===1&&row.checksum===migrationChecksum)||(Number(row.version)===2&&row.checksum===ledgerChecksum))))throw new Error('SQLITE_UPGRADE_UNKNOWN_VERSION')
+  if(history.some(row=>!((Number(row.version)===1&&row.checksum===migrationChecksum)||(Number(row.version)===2&&row.checksum===ledgerChecksum)||(Number(row.version)===3&&row.checksum===inventoryFlowChecksum))))throw new Error('SQLITE_UPGRADE_UNKNOWN_VERSION')
   if(history.some(row=>Number(row.version)===2)){if(!history.some(row=>Number(row.version)===1))throw new Error('SQLITE_UPGRADE_UNKNOWN_VERSION');await verifyCurrent(db);await assertLedgerInstalled(db,true);return {applied:false,version:2}}
  }
  const databases=await db.$queryRawUnsafe<Array<{name:string;file:string}>>('PRAGMA database_list')
@@ -85,7 +86,7 @@ export async function upgradeLocalSqlite(db:PrismaClient,databaseUrl:string) {
  await db.$transaction(async tx=>{
   await tx.$executeRawUnsafe(ledgerDDL) // acquire SQLite write lock before inspecting history again
   const history=await tx.$queryRawUnsafe<Array<{version:number;checksum:string}>>('SELECT version,checksum FROM "LocalSchemaMigration"')
-  if(history.some(row=>!((Number(row.version)===1&&row.checksum===migrationChecksum)||(Number(row.version)===2&&row.checksum===ledgerChecksum))))throw new Error('SQLITE_UPGRADE_UNKNOWN_VERSION')
+  if(history.some(row=>!((Number(row.version)===1&&row.checksum===migrationChecksum)||(Number(row.version)===2&&row.checksum===ledgerChecksum)||(Number(row.version)===3&&row.checksum===inventoryFlowChecksum))))throw new Error('SQLITE_UPGRADE_UNKNOWN_VERSION')
   if(history.some(row=>Number(row.version)===2)){await verifyCurrent(tx);await assertLedgerInstalled(tx,true);return}
   for(const [table,name,type] of additions){
    if(!(await columns(tx,table)).some(c=>c.name===name))await tx.$executeRawUnsafe(`ALTER TABLE "${table}" ADD COLUMN "${name}" ${type}`)

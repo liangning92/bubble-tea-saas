@@ -8,7 +8,8 @@ const router = Router()
 
 const createSchema = z.object({
   storeId: z.string(),
-  period: z.enum(['monthly', 'quarterly', 'annual']),
+  period: z.enum(['monthly', 'quarterly', 'annual','ad_hoc']).default('ad_hoc'),
+  inventoryIds: z.array(z.string()).min(1).optional(),
   startDate: z.string(),
   endDate: z.string(),
   notes: z.string().optional()
@@ -51,11 +52,12 @@ router.get('/:id', authenticate, authorize('admin', 'manager', 'staff', 'cashier
 })
 
 // POST /api/inventory-counts
-router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createSchema), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize('admin', 'manager','staff'), validateBody(createSchema), async (req: AuthRequest, res) => {
   try {
     if(req.body.storeId!==req.user!.storeId)return res.status(403).json({code:403,message:'Store access denied'})
     const count = await InventoryCountService.createInventoryCount({
       ...req.body,
+      period:req.user!.role==='staff'?'ad_hoc':req.body.period,
       storeId:req.user!.storeId,
       startDate: new Date(req.body.startDate),
       endDate: new Date(req.body.endDate)
@@ -82,6 +84,11 @@ router.put('/:id/item/:itemId', authenticate, authorize('admin', 'manager', 'sta
     console.error('Update count item error:', error)
     res.status(409).json({ code: 409, message: error.message || 'Failed to update count item' })
   }
+})
+
+router.post('/:id/submit',authenticate,authorize('admin','manager','staff'),async(req:AuthRequest,res)=>{
+ try {const count=await InventoryCountService.submitInventoryCount(req.params.id,req.user!.storeId);res.json({code:200,data:visibleCount(count,req.user!)})}
+ catch(error:any){res.status(409).json({code:409,message:error.message})}
 })
 
 // POST /api/inventory-counts/:id/complete

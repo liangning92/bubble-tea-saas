@@ -51,3 +51,4 @@ __pycache__/
 
 # Keep reviewed database migrations; generated SQL fixtures remain ignored.
 !server/prisma/migrations/**/migration.sql
+!docs/EMPLOYEE-INVENTORY-FLOW-MIGRATION.sql

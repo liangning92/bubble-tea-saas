@@ -1,52 +1,12 @@
-import {useEmployeeNavigation} from '../../contexts/EmployeeAccess'
-import {permissionForPage} from '../../../../shared/StaffAccess'
-import { Link, Outlet, useLocation } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-
+import {useEmployeeNavigation} from '../../contexts/EmployeeAccess';
+import {permissionForPage} from '../../../../shared/StaffAccess';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 export function InventoryIndexPage() {
-  const { t } = useTranslation()
-  const allowed=useEmployeeNavigation()
-  const location = useLocation()
-
-  const tabs = [
-    {key:'consumption',label:t('varianceFlow.title'),path:'/inventory/consumption'},
-    {key:'count',label:t('countFlow.title'),path:'/inventory/count'},
-    { key: 'list', label: t('inventory.list'), path: '/inventory' },
-    { key: 'logs', label: t('inventory.logs'), path: '/inventory/logs' },
-    { key: 'process', label: t('inventory.process'), path: '/inventory/process' },
-    { key: 'alerts', label: t('inventory.alerts'), path: '/inventory/alerts' },
-    { key: 'restock', label: t('inventory.restock'), path: '/inventory/restock' },
-    { key: 'purchase-orders', label: t('purchases.purchaseOrders'), path: '/inventory/purchase-orders' },
-    { key: 'suppliers', label: t('inventory.suppliers'), path: '/inventory/suppliers' },
-  ]
-
-  const isActive = (path: string) => location.pathname === path
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* 固定在顶部 */}
-      <div className="sticky top-0 bg-surface z-10 pb-4 border-b border-gray-200 mb-4">
-        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap overflow-x-auto">
-          {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => (
-            <Link
-              key={tab.key}
-              to={tab.path}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                isActive(tab.path)
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* 内容区域 */}
-      <div className="flex-1 overflow-auto">
-        <Outlet />
-      </div>
-    </div>
-  )
+    const allowed=useEmployeeNavigation();
+    const visible=(entries:string[][])=>entries.filter(([,path])=>allowed(permissionForPage(path)||''));
+    const { t } = useTranslation(), location = useLocation();
+    const main = [['overview', '/inventory'], ['logs', '/inventory/logs'], ['countReview', '/inventory/count'], ['purchaseReceive', '/inventory/purchase-orders'], ['consumption', '/inventory/consumption'], ['alerts', '/inventory/alerts']];
+    const more = [['inventoryFlow.forecast','/inventory/forecast'], ['inventoryFlow.physicalAnalysis', '/inventory/physical-analysis'], ['inventory.process', '/inventory/process'], ['inventory.restock', '/inventory/restock'], ['inventory.suppliers', '/inventory/suppliers'], ['inventoryFlow.settings', '/inventory/alert-config']];
+    return <div className="flex flex-col h-full"><nav className="sticky top-0 bg-surface z-10 border-b mb-4 pb-3 space-y-2"><div className="flex flex-wrap gap-1 bg-white rounded-lg p-1">{visible(main).map(([key, path]) => <Link key={path} to={path} className={`px-4 py-2 rounded-md text-sm font-medium ${location.pathname === path ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{t(key==='alerts'?'inventoryAlerts.title':'inventoryFlow.' + key)}</Link>)}</div><details open={more.some(([, path]) => path === location.pathname)}><summary className="text-sm text-gray-500 cursor-pointer">{t('inventoryFlow.more')}</summary><div className="flex flex-wrap gap-3 pt-2">{visible(more).map(([key, path]) => <Link key={path} to={path} className={`text-sm ${location.pathname === path ? 'text-primary font-bold' : 'text-gray-500'}`}>{t(key)}</Link>)}</div></details></nav><div className="flex-1 overflow-auto"><Outlet /></div></div>;
 }

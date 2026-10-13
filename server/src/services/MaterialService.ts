@@ -1,3 +1,8 @@
+import {inventoryForecast} from './InventoryForecastService'
+import {getInventoryAlertConfig} from './InventoryAlertConfigService'
+import {getExpiringBatches} from './InventoryService'
+import {alignInventoryBatches,consumeInventoryBatches} from './InventoryBatchService'
+import {randomUUID} from 'crypto'
 import {convertQuantity,normalizedUnit} from '../utils/inventoryUnits'
 import prisma from '../config/database'
 
@@ -141,167 +146,31 @@ export async function updateInventory(id: string, data: Partial<{
 // 库存预警检查
 // ============================================
 export async function checkLowStockAlerts(storeId: string) {
-  const inventory = await prisma.inventory.findMany({
-    where: { storeId }
-  })
-
-  return inventory.filter(inv => {
-    if (inv.safetyStock > 0 && inv.currentStock <= inv.safetyStock) {
-      return true
-    }
-    if (inv.minStock > 0 && inv.currentStock <= inv.minStock) {
-      return true
-    }
-    return false
-  }).map(inv => ({
-    id: inv.id,
-    name: inv.name,
-    category: inv.category,
-    type: inv.type,
-    unit: inv.unit,
-    currentStock: inv.currentStock,
-    safetyStock: inv.safetyStock,
-    minStock: inv.minStock,
-    avgCost: inv.avgCost
-  }))
+  if(!(await getInventoryAlertConfig(storeId)).enableLowStockAlert)return []
+  const inventory=await prisma.inventory.findMany({where:{storeId}}),forecast=await inventoryForecast(storeId)
+  return forecast.filter(row=>row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,type:inventory.find(inv=>inv.id===row.inventoryId)?.type,minStock:inventory.find(inv=>inv.id===row.inventoryId)?.minStock}))
 }
 
 // ============================================
 // 过期预警检查
 // ============================================
 export async function checkExpiryAlerts(storeId: string, daysAhead: number = 7) {
-  const now = new Date()
-  const futureDate = new Date()
-  futureDate.setDate(now.getDate() + daysAhead)
-
-  const batches = await prisma.batch.findMany({
-    where: {
-      inventory: { storeId },
-      status: 'active',
-      expiryDate: {
-        lte: futureDate,
-        gte: now
-      }
-    },
-    include: {
-      inventory: { select: { id: true, name: true, unit: true } }
-    },
-    orderBy: { expiryDate: 'asc' }
-  })
-
-  return batches.map(batch => ({
-    id: batch.id,
-    batchNumber: batch.batchNumber,
-    inventoryId: batch.inventoryId,
-    inventoryName: batch.inventory.name,
-    quantity: batch.quantity,
-    unit: batch.inventory.unit,
-    expiryDate: batch.expiryDate,
-    daysUntilExpiry: Math.ceil((new Date(batch.expiryDate!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  }))
+  if(!Number.isInteger(daysAhead)||daysAhead<1||daysAhead>365)throw Error('INVALID_FORECAST_DAYS')
+  const now=new Date(),batches=await getExpiringBatches(storeId,daysAhead)
+  return batches.map(batch=>({id:batch.id,batchNumber:batch.batchNumber,inventoryId:batch.inventoryId,inventoryName:batch.inventory.name,quantity:batch.quantity,unit:batch.inventory.unit,expiryDate:batch.expiryDate,daysUntilExpiry:Math.ceil((batch.expiryDate!.getTime()-now.getTime())/86400000)}))
 }
 
 // ============================================
 // 计算补货建议
 // ============================================
-export async function calculateRestockSuggestions(storeId: string, daysAhead: number = 7) {
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - 30)
-
-  const orders = await prisma.order.findMany({
-    where: {
-      storeId,
-      status: 'completed',
-      createdAt: { gte: startDate }
-    },
-    include: { items: true }
-  })
-
-  const productSales: Record<string, { productId: string; quantity: number }> = {}
-  for (const order of orders) {
-    for (const item of order.items) {
-      if (!productSales[item.productId]) {
-        productSales[item.productId] = { productId: item.productId, quantity: 0 }
-      }
-      productSales[item.productId].quantity += item.quantity
-    }
-  }
-
-  const materialUsage: Record<string, { inventoryId: string; name: string; unit: string; dailyUsage: number }> = {}
-
-  for (const sale of Object.values(productSales)) {
-    const bomItems = await prisma.bOMItem.findMany({
-      where: { productId: sale.productId },
-      include: { inventory: true }
-    })
-
-    const dailyQty = sale.quantity / 30
-
-    for (const bom of bomItems) {
-      const inv = bom.inventory
-      if (!inv) continue
-
-      const ratio = inv.concentrateRatio || 1
-      const safeRatio = ratio === 0 ? 1 : ratio
-      const itemUnit = bom.unit || inv.unit || '个'
-      const isPerPiece = ['个', '支', '卷', 'pce', '件', '张'].includes(itemUnit)
-
-      let usagePerProduct = bom.quantity * dailyQty
-      if (!isPerPiece) {
-        usagePerProduct = usagePerProduct / safeRatio
-      }
-
-      if (!materialUsage[inv.id]) {
-        materialUsage[inv.id] = {
-          inventoryId: inv.id,
-          name: inv.name,
-          unit: inv.unit,
-          dailyUsage: 0
-        }
-      }
-
-      materialUsage[inv.id].dailyUsage += usagePerProduct
-    }
-  }
-
-  // Include inventory with a configured minimum/safety stock even when it had
-  // no sales in the lookback period, so suggestions stay tied to live stock.
-  const storeInventory = await prisma.inventory.findMany({ where: { storeId } })
-  for (const inv of storeInventory) {
-    if (!materialUsage[inv.id]) {
-      materialUsage[inv.id] = { inventoryId: inv.id, name: inv.name, unit: inv.unit, dailyUsage: 0 }
-    }
-  }
-
-  const suggestions = []
-  for (const usage of Object.values(materialUsage)) {
-    const inv = await prisma.inventory.findUnique({ where: { id: usage.inventoryId } })
-    if (!inv) continue
-
-    const neededQty = usage.dailyUsage * daysAhead
-    const currentStock = inv.currentStock
-    const targetStock = Math.max(neededQty, Number(inv.safetyStock || 0), Number(inv.minStock || 0))
-
-    if (currentStock < targetStock) {
-      const uncappedQty = Math.ceil(targetStock - currentStock)
-      const suggestQty = inv.maxStock > 0
-        ? Math.min(uncappedQty, Math.max(0, Math.ceil(inv.maxStock - currentStock)))
-        : uncappedQty
-      if (suggestQty <= 0) continue
-      suggestions.push({
-        inventoryId: inv.id,
-        name: inv.name,
-        category: inv.category,
-        unit: inv.unit,
-        currentStock: Math.round(currentStock * 100) / 100,
-        dailyUsage: Math.round(usage.dailyUsage * 100) / 100,
-        suggestQty,
-        suggestCost: suggestQty * Number(inv.avgCost || 0)
-      })
-    }
-  }
-
-  return suggestions.sort((a, b) => b.suggestCost - a.suggestCost)
+export async function calculateRestockSuggestions(storeId: string, daysAhead: number = 15) {
+  if(!Number.isInteger(daysAhead)||daysAhead<1||daysAhead>365)throw Error('INVALID_FORECAST_DAYS')
+  const forecast=await inventoryForecast(storeId),inventory=await prisma.inventory.findMany({where:{storeId}})
+  return forecast.flatMap(row=>{
+   const inv=inventory.find(material=>material.id===row.inventoryId)!,target=Math.max(row.effectiveSafetyStock,row.dailyUsage*daysAhead,inv.minStock||0)
+   const needed=Math.max(0,Math.ceil(target-row.currentStock)),suggestQty=inv.maxStock>0?Math.min(needed,Math.max(0,Math.ceil(inv.maxStock-row.currentStock))):needed
+   return suggestQty>0?[{...row,currentStock:Math.round(row.currentStock*100)/100,dailyUsage:Math.round(row.dailyUsage*100)/100,targetStock:target,suggestQty,suggestCost:suggestQty*Number(inv.avgCost||0)}]:[]
+  }).sort((a,b)=>b.suggestCost-a.suggestCost)
 }
 
 // ============================================
@@ -373,31 +242,39 @@ export async function executeProcessing(
     for (const input of recipe.items.filter(i => i.type === 'input')) {
       if (!input.inventoryId) continue
       const deductQty = input.quantity * multiplier
-      await tx.inventory.update({
-        where: { id: input.inventoryId },
-        data: { currentStock: { decrement: deductQty } }
-      })
+      const inv=await tx.inventory.findFirst({where:{id:input.inventoryId,storeId:recipe.storeId}})
+      if(!inv||deductQty<=0||inv.currentStock<deductQty)throw Error('Insufficient stock')
+      const changed=await tx.inventory.updateMany({where:{id:inv.id,currentStock:inv.currentStock},data:{currentStock:{decrement:deductQty}}})
+      if(changed.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
+      await consumeInventoryBatches(tx,inv,deductQty)
       await tx.stockOutLog.create({
         data: {
           inventoryId: input.inventoryId,
           quantity: deductQty,
           reason: 'process',
+          staffId,
           note: `加工: ${recipe.name} x${multiplier}`
         }
       })
     }
 
     // 添加产出到 outputInventory
-    await tx.inventory.update({
-      where: { id: recipe.outputInventory.id },
+    const output=await tx.inventory.findFirstOrThrow({where:{id:recipe.outputInventory.id,storeId:recipe.storeId}})
+    const received=await tx.inventory.updateMany({
+      where: { id: output.id,currentStock:output.currentStock,avgCost:output.avgCost },
       data: {
         currentStock: { increment: totalOutputQty },
         avgCost: outputUnitCost
       }
     })
+    if(received.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
+    await alignInventoryBatches(tx,output)
+    const batch=await tx.batch.create({data:{inventoryId:output.id,batchNumber:`PROCESS-${randomUUID()}`,quantity:totalOutputQty,unitCost:outputUnitCost,status:'active'}})
     await tx.stockInLog.create({
       data: {
         inventoryId: recipe.outputInventory.id,
+        batchId:batch.id,
+        staffId,
         quantity: totalOutputQty,
         unitCost: outputUnitCost,
         totalAmount: totalInputCost,

@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react'
 
-type LogTab = 'all' | 'in' | 'sold' | 'waste' | 'process' | 'adjust'
+type LogTab = 'withdrawal' | 'other' | 'all' | 'in' | 'sold' | 'waste' | 'process' | 'adjust'
 
 export function StockLogPage() {
   const { t, i18n } = useTranslation()
@@ -119,13 +119,15 @@ export function StockLogPage() {
     refetchInterval: 30000
   })
 
-  const rawLogs: any[] = logsData?.data?.data?.list || logsData?.data?.list || []
+  const rawLogs: any[] = (logsData?.data?.data?.list || logsData?.data?.list || []).map((log:any)=>{try{const data=JSON.parse(log.note||'null');return {...log,note:data?.note||data?.orderNumber||log.note}}catch{return log}})
 
   // Client-side filtering for rapid response
   const filteredLogs = useMemo(() => {
     return rawLogs.filter((log: any) => {
       // 1. Tab filter
-      if (activeTab === 'in') {
+      if (activeTab === 'withdrawal' || activeTab === 'other') {
+        if(log.type!=='stock_out'||log.reason!==activeTab)return false
+      } else if (activeTab === 'in') {
         if (log.type !== 'stock_in') return false
       } else if (activeTab === 'sold') {
         if (log.type !== 'stock_out' || log.reason !== 'sold') return false
@@ -176,7 +178,8 @@ export function StockLogPage() {
         totalInboundCost += amt
       } else if (log.type === 'stock_out') {
         const itemCost = Math.round(Number(log.quantity || 0) * avgCost)
-        if (log.reason === 'sold') {
+        if (['withdrawal','other'].includes(log.reason)) return <span className="badge badge-info">{t('inventoryFlow.'+log.reason)}</span>
+    if (log.reason === 'sold') {
           totalSalesCost += itemCost
         } else if (log.reason === 'loss' || log.reason === 'expired') {
           totalWasteCost += itemCost
@@ -252,12 +255,13 @@ export function StockLogPage() {
       other: t('inventory.lossOther')
     }
 
+    if(wasteForm.wasteType==='other'&&!wasteForm.note.trim()){alert(t('inventoryFlow.otherReason'));return}
     const fullNote = `[${wasteLabelMap[wasteForm.wasteType] || ''}] ${wasteForm.note || ''}`.trim()
 
     wasteMutation.mutate({
       inventoryId: wasteForm.inventoryId,
       quantity: qty,
-      reason: wasteForm.wasteType === 'expired' ? 'expired' : wasteForm.wasteType === 'manual' ? 'adjust' : 'loss',
+      reason: wasteForm.wasteType === 'expired' ? 'expired' : wasteForm.wasteType === 'other' ? 'other' : 'loss',
       note: fullNote
     })
   }
@@ -330,7 +334,7 @@ export function StockLogPage() {
         else if (log.reason === 'expired') reasonText = t('inventory.reasonExpired')
         else if (log.reason === 'loss') reasonText = t('inventory.reasonLoss')
         else if (log.reason === 'adjust') reasonText = t('inventory.reasonAdjust')
-        else reasonText = log.reason || '-'
+        else reasonText = ['withdrawal','other'].includes(log.reason)?t('inventoryFlow.'+log.reason):log.reason||'-'
       }
 
       const orderInfo = log.orderId ? orderMap.get(log.orderId) : null
@@ -407,6 +411,7 @@ export function StockLogPage() {
       return <span className="badge badge-success">{t('inventory.reasonPurchase')}</span>
     }
 
+    if (['withdrawal','other'].includes(log.reason)) return <span className="badge badge-info">{t('inventoryFlow.'+log.reason)}</span>
     if (log.reason === 'sold') {
       return <span className="badge badge-info">{t('inventory.reasonSold')}</span>
     }
@@ -498,6 +503,8 @@ export function StockLogPage() {
         {[
           { key: 'all', label: t('inventory.allLogs') },
           { key: 'in', label: t('inventory.inboundLogs') },
+          { key: 'withdrawal', label: t('inventoryFlow.withdrawal') },
+          { key: 'other', label: t('inventoryFlow.other') },
           { key: 'sold', label: t('inventory.salesLogs') },
           { key: 'waste', label: t('inventory.wasteLogs') },
           { key: 'process', label: t('inventory.processLogs') },
@@ -868,7 +875,6 @@ export function StockLogPage() {
                     onChange={(e) => setWasteForm({ ...wasteForm, wasteType: e.target.value })}
                     className="input w-full"
                   >
-                    <option value="manual">{t('inventory.reasonAdjust')}</option>
                     <option value="spill">{t('inventory.lossSpill')}</option>
                     <option value="spoiled">{t('inventory.lossSpoiled')}</option>
                     <option value="expired">{t('inventory.lossExpired')}</option>

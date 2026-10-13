@@ -7,6 +7,8 @@ import { isDisplayPublicRoute } from './utils/displayPublicRoute'
 import { legacyActivitiesRouter } from './routes/legacyActivities'
 import { activitiesRouter } from './routes/activities'
 import { startActivityWorker } from './services/ActivityService'
+import {startInventoryAlertScheduler} from './services/InventoryAlertCenterService'
+import {upgradeInventoryFlow} from './utils/inventoryFlowUpgrade'
 import { staffPermissionsRouter } from './routes/staffPermissions'
 import {startRecurringExpenseScheduler} from './services/RecurringExpenseService'
 import {batchImportRouter} from './routes/batchImport'
@@ -304,10 +306,11 @@ app.use(errorHandler)
 
 // Start Server with Socket.IO
 if (process.env.NODE_ENV !== 'test') {
-  upgradeLocalSqlite(prisma, config.databaseUrl).then(() => upgradeStaffAccessSqlite(prisma, config.databaseUrl)).then(() => {
+  upgradeLocalSqlite(prisma, config.databaseUrl).then(() => upgradeStaffAccessSqlite(prisma, config.databaseUrl)).then(() => upgradeInventoryFlow(prisma,config.databaseUrl)).then(() => {
   console.log('[Server] About to listen on port', config.port)
   httpServer.listen(config.port, '0.0.0.0', () => {
   startRecurringExpenseScheduler()
+  startInventoryAlertScheduler()
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║

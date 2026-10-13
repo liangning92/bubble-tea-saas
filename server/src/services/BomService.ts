@@ -1,3 +1,4 @@
+import {inventoryForecast} from './InventoryForecastService'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {convertQuantity} from '../utils/inventoryUnits'
 import {inventoryQuantityCost} from './InventoryQuantityService'
@@ -136,21 +137,10 @@ async function calculateBomCost(bomItems: {inventoryId:string;quantity:number;un
 }
 
 /**
- * 获取原料使用预测（根据历史销售）
+ * 获取原料使用预测（实际出库日均；旧数据保留估算标识）
  */
-export async function getMaterialUsageForecast(storeId: string, days: number = 30) {
-  if(!Number.isInteger(days)||days<1||days>365)throw new Error('INVALID_FORECAST_DAYS')
-  const settings=await getInventoryAlertConfig(storeId)
-  const startDate=new Date(Date.now()-days*86400000)
-  const materials=await prisma.inventory.findMany({where:{storeId},include:{stockOutLogs:{where:{createdAt:{gte:startDate},reason:{in:['sold','refund_unprepared']}}}}})
-  return materials.map(mat=>{
-    const totalUsage=mat.stockOutLogs.reduce((sum,log)=>sum+log.quantity,0)
-    const dailyUsage=Math.max(0,totalUsage)/days
-    const daysUntilStockOut=dailyUsage>0?Math.max(0,mat.currentStock/dailyUsage):null
-    return {inventoryId:mat.id,name:mat.name,unit:mat.unit,avgCost:Number(mat.avgCost),currentStock:mat.currentStock,totalUsage,dailyUsage,daysUntilStockOut,
-      suggestedReorderQty:dailyUsage>0?Math.max(0,dailyUsage*settings.lowStockWarningDays-mat.currentStock):null,
-      basis:'recorded_sales_ledger_estimate',historyDays:days}
-  }).sort((a,b)=>(a.daysUntilStockOut??Infinity)-(b.daysUntilStockOut??Infinity))
+export async function getMaterialUsageForecast(storeId:string,days=30,now=new Date()){
+ return inventoryForecast(storeId,days,now)
 }
 
 /** Forecast is advisory; no purchase or external notification is issued. */
@@ -158,7 +148,7 @@ export async function getLowStockAlerts(storeId:string,days:number=30){
  const settings=await getInventoryAlertConfig(storeId)
  if(!settings.enableLowStockAlert)return []
  return (await getMaterialUsageForecast(storeId,days))
-  .filter(mat=>mat.currentStock<=0||(mat.daysUntilStockOut!==null&&mat.daysUntilStockOut<=settings.lowStockWarningDays))
+  .filter(mat=>mat.currentStock<=mat.effectiveSafetyStock)
   .map(mat=>({...mat,urgency:mat.currentStock<=0||(mat.daysUntilStockOut!==null&&mat.daysUntilStockOut<=settings.lowStockCriticalDays)?'critical':'warning'}))
 }
 

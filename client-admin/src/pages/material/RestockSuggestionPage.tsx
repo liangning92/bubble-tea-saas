@@ -7,7 +7,7 @@ import { Loader2, ShoppingCart, AlertTriangle, CheckCircle } from 'lucide-react'
 
 export function RestockSuggestionPage() {
   const { t } = useTranslation()
-  const [days, setDays] = useState(7)
+  const [days, setDays] = useState(15)
 
   const { data: suggestionsData, isLoading } = useQuery({
     queryKey: ['restock-suggestions', days],
@@ -41,7 +41,7 @@ export function RestockSuggestionPage() {
           className="input w-40"
         >
           <option value={7}>7 {t('material.days') || 'days'}</option>
-          <option value={14}>14 {t('material.days') || 'days'}</option>
+          <option value={15}>15 {t('material.days') || 'days'}</option>
           <option value={30}>30 {t('material.days') || 'days'}</option>
         </select>
       </div>

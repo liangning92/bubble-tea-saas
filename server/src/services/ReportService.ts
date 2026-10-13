@@ -50,7 +50,7 @@ export async function getDashboardSummary(storeId: string, date?: Date) {
       include: { staff: { select: { name: true } } }
     }),
     // Low stock alerts based on consumption forecast
-    getLowStockAlerts(storeId, 7),
+    getLowStockAlerts(storeId, 30),
     // Consumption anomalies (variance > 10%)
     getConsumptionAnalysis({
       storeId,

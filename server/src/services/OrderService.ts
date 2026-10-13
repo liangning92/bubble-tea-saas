@@ -1,6 +1,7 @@
 import {consumeDiscountApproval} from './StaffActionApprovalService'
 import { quoteOfflineActivity } from './ActivityOfflineService'
 import { quoteActivities, enqueueActivityGrants, runActivityJobs, reverseActivityGrants, ensureMigrated } from './ActivityService'
+import { recordOrderConsumption, reverseOrderConsumption } from './OrderConsumptionService'
 import { getActivityPriceRules } from './ActivityPricingService'
 import { activityPrice } from '../utils/activityPricing'
 import { findOrderReplay as replayReceipt, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
@@ -140,188 +141,10 @@ export async function isNegativeStockAllowed(storeId: string, database:any=prism
   }
 }
 
-// Deduct inventory result type
-interface DeductResult {
-  success: boolean
-  error?: string
-  insufficientStock?: { inventoryId: string; name: string; available: number; needed: number }
-}
-
-// Recursive deduct inventory - handles multi-level BOM
-async function deductInventoryRecursive(
-  tx: any,
-  inventoryId: string,
-  qty: number,
-  orderId: string,
-  depth: number = 0,
-  allowNegative: boolean = false,
-  storeId?: string
-): Promise<DeductResult> {
-  // Prevent infinite recursion
-  if (depth > 10) {
-    return { success: false, error: `Max recursion depth reached for inventory: ${inventoryId}` }
-  }
-
-  const inv = await tx.inventory.findUnique({
-    where: { id: inventoryId }
-  })
-
-  if (!inv) {
-    return { success: false, error: `Inventory not found: ${inventoryId}` }
-  }
-
-  if (storeId && inv.storeId !== storeId) throw new Error('INVENTORY_STORE_MISMATCH')
-
-  // If raw_material, deduct directly (with stock check)
-  if (inv.type === 'raw_material' || inv.type === 'finished_goods' || (inv.type === 'semi_finished' && !inv.processRecipeId)) {
-    // 行业惯例（哗啦啦/客如云）：前台收银不能因账面库存滞后而拒单。
-    // 开启负库存销售时允许扣成负数，事后由店长补录入库/盘点对冲。
-    if (inv.currentStock < qty && !allowNegative) {
-      return {
-        success: false,
-        insufficientStock: {
-          inventoryId: inv.id,
-          name: inv.name,
-          available: inv.currentStock,
-          needed: qty
-        }
-      }
-    }
-    await tx.inventory.update({
-      where: { id: inventoryId },
-      data: { currentStock: { decrement: qty } }
-    })
-    await tx.stockOutLog.create({
-      data: {
-        inventoryId,
-        quantity: qty,
-        reason: 'sold',
-        note: JSON.stringify({version:1,ledgerUnit:inv.unit,ledgerQuantity:qty}),
-        orderId
-      }
-    })
-    return { success: true }
-  }
-
-  // If semi_finished, find the process recipe and recursively deduct inputs
-  if (inv.type === 'semi_finished' && inv.processRecipeId) {
-    const recipe = await tx.processRecipe.findUnique({
-      where: { id: inv.processRecipeId },
-      include: {
-        items: { include: { inventory: true } }
-      }
-    })
-
-    if (!recipe) {
-      return { success: false, error: `Process recipe not found for semi_finished inventory: ${inventoryId} (${inv.name})` }
-    }
-
-    // Find output item to determine ratio
-    const outputItem = recipe.items.find(i => i.type === 'output')
-    if (!outputItem || outputItem.quantity === 0) {
-      return { success: false, error: `No output item found in recipe: ${recipe.id}` }
-    }
-
-    if (recipe.storeId !== inv.storeId) throw new Error('INVENTORY_STORE_MISMATCH')
-    const outputRatio = outputItem.quantity
-    qty = convertQuantity(qty, inv.unit, recipe.outputUnit)
-
-    // Recursively deduct each input in the recipe
-    const inputs = recipe.items.filter(i => i.type === 'input')
-    for (const input of inputs) {
-      if (!input.inventoryId) continue
-      // Calculate how much of this input is needed for the requested qty
-      // If 1kg + 2600ml -> 2600ml output, and we need qty ml of output:
-      // input_qty = (qty / outputRatio) * input.quantity
-      const inputQty = (qty / outputRatio) * input.quantity
-      const result = await deductInventoryRecursive(tx, input.inventoryId, inputQty, orderId, depth + 1, allowNegative, storeId)
-      if (!result.success) return result
-    }
-    return { success: true }
-  }
-
-  throw new Error('INVENTORY_TYPE_UNSUPPORTED')
-}
-
-// Deduct inventory result
-interface DeductInventoryResult {
-  success: boolean
-  errors: string[]
-  lowStockWarnings?: Array<{
-    inventoryId: string
-    name: string
-    currentStock: number
-    safetyStock: number
-  }>
-}
-
-// Deduct inventory based on BOM (with recursive support and transaction)
-// Accepts optional tx parameter to reuse existing transaction (avoid nested transaction issue)
-export async function deductInventory(storeId: string, orderId: string, items: any[], tx?: any, options?:{allowNegative?:boolean}): Promise<DeductInventoryResult> {
-  const errors: string[] = []
-  const lowStockWarnings: Array<{
-    inventoryId: string
-    name: string
-    currentStock: number
-    safetyStock: number
-  }> = []
-
-  // Collect all inventory IDs used in this order for post-check
-  const usedInventoryIds = new Set<string>()
-
-  // 读取门店"允许负库存销售"开关（默认开启，避免高峰期因账面库存滞后卡单）
-  const allowNegative = options?.allowNegative ?? await isNegativeStockAllowed(storeId,tx||prisma)
-
-  // Use provided transaction or create new one
-  const doDeduct = async (transactionClient: any) => {
-    for (const item of items) {
-      const bomItems = await transactionClient.bOMItem.findMany({
-        where: { productId: item.productId },
-        include: { inventory: true }
-      })
-
-      for (const bom of bomItems) {
-        usedInventoryIds.add(bom.inventoryId)
-        const deductQty = convertQuantity(bom.quantity * item.quantity, bom.unit, bom.inventory.unit)
-        const result = await deductInventoryRecursive(transactionClient, bom.inventoryId, deductQty, orderId, 0, allowNegative, storeId)
-        if (!result.success) {
-          if (result.insufficientStock) {
-            const { name, available, needed } = result.insufficientStock
-            errors.push(`INVENTORY_INSUFFICIENT:${name}:${available}:${needed}`)
-          } else {
-            errors.push(result.error || 'Unknown error')
-          }
-          if (result.insufficientStock) throw new OrderBusinessRejection('INVENTORY_INSUFFICIENT', errors.join('; '))
-          throw new Error(errors.join('; '))
-        }
-      }
-    }
-  }
-
-  if (tx) {
-    await doDeduct(tx)
-  } else {
-    await prisma.$transaction(doDeduct)
-  }
-
-  // Post-order check: which used items are now below safetyStock
-  if (errors.length === 0) {
-    const usedInventories = await (tx||prisma).inventory.findMany({
-      where: { id: { in: Array.from(usedInventoryIds) } }
-    })
-    for (const inv of usedInventories) {
-      if ((inv.safetyStock > 0 && inv.currentStock <= inv.safetyStock) || inv.currentStock < 0) {
-        lowStockWarnings.push({
-          inventoryId: inv.id,
-          name: inv.name,
-          currentStock: inv.currentStock,
-          safetyStock: inv.safetyStock
-        })
-      }
-    }
-  }
-
-  return { success: errors.length === 0, errors, lowStockWarnings: lowStockWarnings.length > 0 ? lowStockWarnings : undefined }
+// Backwards-compatible service entrypoint; sales now record theory, never physical stock out.
+export async function deductInventory(storeId:string,orderId:string,items:any[],tx?:any,options?:{allowNegative?:boolean;consumptionKey?:string;consumedAt?:Date}){
+ const record=async(client:any)=>{await recordOrderConsumption(client,storeId,orderId,items,options);return {success:true,errors:[],lowStockWarnings:[]}}
+ return tx?record(tx):prisma.$transaction(record)
 }
 
 // Update member points (using configured PointsRule)
@@ -847,7 +670,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
     // Deduct inventory and get low stock warnings (skip for suspended orders)
     const inventoryResult = data.status === 'suspended'
       ? { success: true, errors: [], lowStockWarnings: [] }
-      : await deductInventory(data.storeId, newOrder.id, data.items, tx)
+      : await recordOrderConsumption(tx, data.storeId, newOrder.id, data.items).then(() => ({success:true, errors:[], lowStockWarnings:[]}))
 
     // 扣减积分抵扣（条件更新防并发重复使用；挂单不扣，恢复挂单时会重新下单）
     if (data.memberId && effectivePointsRedeemed > 0 && data.status !== 'suspended') {
@@ -998,6 +821,8 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
     if (approval?.restoreUnprepared) {
       const request = await tx.refundRequest.findUnique({ where: { id: approval.requestId } })
       if (!request || request.orderId !== o.id || request.reasonCode !== 'paid_unprepared' || request.status !== 'pending') throw new Error('INVALID_UNPREPARED_APPROVAL')
+      const theory = await tx.orderConsumptionSnapshot.findUnique({where:{orderId:o.id}})
+      if (theory) { await reverseOrderConsumption(tx, o.id) } else {
       // Reverse original quantities, including exploded subrecipes; never recalculate today's BOM.
       const deductions = await tx.stockOutLog.findMany({ where: { orderId: o.id, reason: 'sold' }, include: { inventory: true } })
       if (!deductions.length) throw new Error('REFUND_STOCK_EVIDENCE_REQUIRED')
@@ -1009,6 +834,7 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
         await tx.inventory.update({ where: { id: log.inventoryId }, data: { currentStock: { increment: log.quantity } } })
         // Signed stock-out reversal leaves average carrying cost unchanged; no invented purchase.
         await tx.stockOutLog.create({ data: { inventoryId: log.inventoryId, orderId: o.id, quantity: -log.quantity, reason: 'refund_unprepared', note: `Reverse ${log.id}; approved ${approval.requestId} by ${approval.approvedBy}` } })
+      }
       }
     }
 

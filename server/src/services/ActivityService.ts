@@ -297,7 +297,7 @@ export async function fulfilActivityGrant(storeId:string,id:string){
  if(g.status==='fulfilled')return g
  if(g.status!=='ready'||g.expiresAt<=new Date().toISOString())throw Error('ACTIVITY_GRANT_NOT_READY')
  const order=await tx.order.findUnique({where:{id:g.orderId}});if(order?.status!=='completed')throw Error('ACTIVITY_ORDER_REFUNDED')
- if(g.reward?.productId){const inventory=await deductInventory(storeId,g.orderId,[{productId:g.reward.productId,quantity:1}],tx,{allowNegative:false});if(!inventory.success)throw Error('ACTIVITY_REWARD_INVENTORY_INSUFFICIENT')}
+ if(g.reward?.productId){const inventory=await deductInventory(storeId,g.orderId,[{productId:g.reward.productId,quantity:1}],tx,{allowNegative:false,consumptionKey:`${g.orderId}:grant:${g.id||id}`,consumedAt:new Date()});if(!inventory.success)throw Error('ACTIVITY_REWARD_INVENTORY_INSUFFICIENT')}
  g.status='fulfilled';g.fulfilledAt=new Date().toISOString();await casRecord(tx,row,g);return g
  })
 }
