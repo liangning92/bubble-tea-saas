@@ -158,10 +158,11 @@ export const inventoryApi = {
   saveAlertConfig: (config: any) => api.put('/inventory/alert-config', config),
   // Inventory count
   getInventoryCounts: () => api.get('/inventory-counts'),
-  getInventoryCount: (id: string) => api.get('/inventory-counts/' + id),
+  getInventoryCount: (id: string) => api.get('/inventory-counts/' + encodeURIComponent(id)),
   createInventoryCount: (data: any) => api.post('/inventory-counts', data),
   updateInventoryCountItem: (countId: string, itemId: string, data: any) =>
     api.put('/inventory-counts/' + countId + '/item/' + itemId, data),
+  submitInventoryCount: (id: string) => api.post('/inventory-counts/' + encodeURIComponent(id) + '/submit'),
   completeInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/complete'),
   cancelInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/cancel')
 }

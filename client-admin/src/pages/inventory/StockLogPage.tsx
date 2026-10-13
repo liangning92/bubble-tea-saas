@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { countDetailUrl, inventoryLogDisplay, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange,calendarStart} from '../../utils/queryPeriods'
 import { useState, useMemo } from 'react'
@@ -16,7 +18,7 @@ import {
   Loader2
 } from 'lucide-react'
 
-type LogTab = 'withdrawal' | 'other' | 'all' | 'in' | 'sold' | 'waste' | 'process' | 'adjust'
+type LogTab = 'withdrawal' | 'other' | 'all' | 'in' | 'sold' | 'waste' | 'process'
 
 export function StockLogPage() {
   const dateSettings=useStoreDateSettings()
@@ -112,7 +114,7 @@ export function StockLogPage() {
     refetchInterval: 30000
   })
 
-  const rawLogs: any[] = (logsData?.data?.data?.list || logsData?.data?.list || []).map((log:any)=>{try{const data=JSON.parse(log.note||'null');return {...log,note:data?.note||data?.orderNumber||log.note}}catch{return log}})
+  const rawLogs: any[] = (logsData?.data?.data?.list || logsData?.data?.list || []).map(inventoryLogDisplay)
 
   // Client-side filtering for rapid response
   const filteredLogs = useMemo(() => {
@@ -130,9 +132,7 @@ export function StockLogPage() {
         const isProcessOut = log.type === 'stock_out' && log.reason === 'process'
         const isProcessIn = log.type === 'stock_in' && (log.note?.includes('加工') || log.note?.includes('Process') || log.note?.includes('Olahan'))
         if (!isProcessOut && !isProcessIn) return false
-      } else if (activeTab === 'adjust') {
-        const isAdjust = log.reason === 'adjust' || log.note?.toLowerCase().includes('adjustment') || log.type === 'adjustment'
-        if (!isAdjust) return false
+
       }
 
       // 2. Category filter
@@ -279,6 +279,7 @@ export function StockLogPage() {
 
   // Helper to format order number cleanly
   const renderDocNumber = (log: any) => {
+    if (log.countId) return <Link className="text-primary underline" to={countDetailUrl(log.countId, log.countItemId)}>{t('inventoryCountWorkspace.document')} {log.countId.slice(-8).toUpperCase()}</Link>
     if (log.orderId) {
       const orderInfo = orderMap.get(log.orderId)
       if (orderInfo) {
@@ -313,7 +314,8 @@ export function StockLogPage() {
         : Math.round(Number(log.quantity) * avgCost)
 
       let reasonText = ''
-      if (isStockIn) {
+      if (isInventoryAdjustment(log)) reasonText = t('inventory.reasonAdjust')
+      else if (isStockIn) {
         if (log.note?.includes('加工') || log.note?.includes('Process') || log.note?.includes('Olahan')) {
           reasonText = t('inventory.reasonProcessIn')
         } else if (log.note?.includes('期初') || log.note?.includes('Initial') || log.note?.includes('Awal')) {
@@ -326,23 +328,23 @@ export function StockLogPage() {
         else if (log.reason === 'process') reasonText = t('inventory.reasonProcess')
         else if (log.reason === 'expired') reasonText = t('inventory.reasonExpired')
         else if (log.reason === 'loss') reasonText = t('inventory.reasonLoss')
-        else if (log.reason === 'adjust') reasonText = t('inventory.reasonAdjust')
+        else if (log.reason === 'count_adjustment' || log.reason === 'adjust') reasonText = t('inventory.reasonAdjust')
         else reasonText = ['withdrawal','other'].includes(log.reason)?t('inventoryFlow.'+log.reason):log.reason||'-'
       }
 
       const orderInfo = log.orderId ? orderMap.get(log.orderId) : null
-      const docNumber = orderInfo
+      const docNumber = log.countId || (orderInfo
         ? (orderInfo.pickupNumber ? `[#${orderInfo.pickupNumber}] ${orderInfo.orderNumber}` : orderInfo.orderNumber)
-        : (log.orderId || log.batchId || '-')
+        : (log.orderId || log.batchId || '-'))
 
       return {
         [t('inventory.date')]: formatDateTime(log.createdAt),
         [t('inventory.docNumber')]: docNumber,
         [t('inventory.itemName')]: formatItemName(log.inventory?.name || '-', i18n.language),
         [t('inventory.category')]: getCategoryText(log.inventory?.category),
-        [t('inventory.type')]: isStockIn ? t('inventory.stockIn') : t('inventory.stockOut'),
+        [t('inventory.type')]: isInventoryAdjustment(log) ? t('inventory.reasonAdjust') : isStockIn ? t('inventory.stockIn') : t('inventory.stockOut'),
         [t('inventory.wasteReason')]: reasonText,
-        [t('inventory.changeAmount')]: `${isStockIn ? '+' : '-'}${log.quantity}`,
+        [t('inventory.changeAmount')]: log.stockDelta === null ? '-' : `${log.stockDelta > 0 ? '+' : ''}${log.stockDelta}`,
         [t('inventory.unit')]: log.inventory?.unit || '-',
         [t('inventory.unitCost')]: log.unitCost || avgCost,
         [t('inventory.totalCostValue')]: costValue,
@@ -394,6 +396,7 @@ export function StockLogPage() {
 
   // Standard reason badge following design specs
   const getReasonBadge = (log: any) => {
+    if (isInventoryAdjustment(log)) return <span className="badge">{t('inventory.reasonAdjust')}</span>
     if (log.type === 'stock_in') {
       if (log.note?.includes('加工') || log.note?.includes('Process') || log.note?.includes('Olahan')) {
         return <span className="badge badge-success">{t('inventory.reasonProcessIn')}</span>
@@ -417,7 +420,7 @@ export function StockLogPage() {
     if (log.reason === 'expired') {
       return <span className="badge badge-error">{t('inventory.reasonExpired')}</span>
     }
-    if (log.reason === 'adjust') {
+    if (log.reason === 'count_adjustment' || log.reason === 'adjust') {
       return <span className="badge">{t('inventory.reasonAdjust')}</span>
     }
     return <span className="badge">{log.reason || '-'}</span>
@@ -501,7 +504,6 @@ export function StockLogPage() {
           { key: 'sold', label: t('inventory.salesLogs') },
           { key: 'waste', label: t('inventory.wasteLogs') },
           { key: 'process', label: t('inventory.processLogs') },
-          { key: 'adjust', label: t('inventory.adjustLogs') }
         ].map(tab => (
           <button
             key={tab.key}
@@ -633,8 +635,8 @@ export function StockLogPage() {
                         {getReasonBadge(log)}
                       </td>
                       <td className="py-3 text-sm text-right px-4 whitespace-nowrap font-medium">
-                        <span className={isStockIn ? 'text-green-600' : 'text-red-600'}>
-                          {isStockIn ? '+' : '-'}{log.quantity.toLocaleString()} {log.inventory?.unit || ''}
+                        <span className={log.stockDelta >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          {log.stockDelta !== null && log.stockDelta > 0 ? '+' : ''}{log.stockDelta?.toLocaleString() ?? '—'} {log.inventory?.unit || ''}
                         </span>
                       </td>
                       <td className="py-3 text-sm text-right text-gray-600 px-4 whitespace-nowrap">
