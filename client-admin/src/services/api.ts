@@ -122,14 +122,22 @@ export const adminApi = {
 }
 
 // Inventory
+async function inventoryIntent(kind:'in'|'out',data:any){
+ const key='inventory.intent.'+JSON.stringify([useAuthStore.getState().user?.id,kind,data])
+ const operationId=localStorage.getItem(key)||crypto.randomUUID();localStorage.setItem(key,operationId)
+ const response=await api.post('/inventory/stock-'+kind,{...data,operationId});localStorage.removeItem(key);return response
+}
+
 export const inventoryApi = {
+  employeeConsumption: (params:any) => api.get('/inventory/employee-consumption',{params}),
+  consumptionAlerts: () => api.get('/inventory/consumption-alerts'),
   list: (params?: any) => api.get('/inventory', { params }),
   get: (id: string) => api.get('/inventory/' + id),
   create: (data: any) => api.post('/inventory', data),
   update: (id: string, data: any) => api.put('/inventory/' + id, data),
   delete: (id: string) => api.delete('/inventory/' + id),
-  stockIn: (data: any) => api.post('/inventory/stock-in', data),
-  stockOut: (data: any) => api.post('/inventory/stock-out', data),
+  stockIn: (data: any) => inventoryIntent('in',data),
+  stockOut: (data: any) => inventoryIntent('out',data),
   adjust: (id: string, data: any) => api.put('/inventory/' + id + '/adjust', data),
   logs: (params?: any) => api.get('/inventory/logs', { params }),
   logsStockIn: (params?: any) => api.get('/inventory/logs/stock-in', { params }),

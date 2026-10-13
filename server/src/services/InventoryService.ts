@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import {physicalInventoryVariance} from './InventoryVarianceService'
 import {convertQuantity,normalizedUnit,validatePackage,InventoryPackage} from '../utils/inventoryUnits'
 import { containsText } from '../utils/textSearch'
@@ -9,6 +10,7 @@ import prisma from '../config/database'
 function serializeBigInt(obj: any): any {
   if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
+  if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(serializeBigInt)
   if (typeof obj === 'object') {
     const result: any = {}
@@ -28,6 +30,7 @@ export interface InventoryFilter {
 }
 
 export interface StockOperation {
+  operationId?: string
   inventoryId: string
   storeId: string
   quantity: number
@@ -94,7 +97,17 @@ export async function getInventoryById(inventoryId: string) {
 export async function stockIn(data: StockOperation & { unitCost?: number }) {
   const { inventoryId, storeId, unitCost, note, staffId, supplierId } = data
 
-  return prisma.$transaction(async (tx) => {
+  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
+  const replay = async (tx:any) => {
+    if (!data.operationId) return null
+    const log = await tx.stockInLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
+    if (!log) return null
+    let saved:any;try{saved=JSON.parse(log.note||'null')}catch{}
+    if (log.inventory.storeId!==storeId||saved?.requestFingerprint!==fingerprint) throw Error('STOCK_IDEMPOTENCY_CONFLICT')
+    return serializeBigInt(log.inventory)
+  }
+  try { return await prisma.$transaction(async (tx) => {
+    const previous=await replay(tx);if(previous)return previous
     // Get current inventory
     const inventory = await tx.inventory.findFirst({
       where: { id: inventoryId, storeId }
@@ -104,6 +117,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
       throw new Error('Inventory not found')
     }
 
+    if(supplierId&&!await tx.supplier.findFirst({where:{id:supplierId,storeId}}))throw Error('SUPPLIER_STORE_MISMATCH')
     if(!Number.isFinite(data.quantity)||data.quantity<=0||unitCost!==undefined&&(!Number.isSafeInteger(unitCost)||unitCost<0))throw new Error('INVALID_STOCK_INPUT')
     const inputUnit=data.inputUnit||inventory.unit
     const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
@@ -113,15 +127,15 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     const totalAmount=Math.round((unitCost||0)*data.quantity)
     const baseCost=quantity>0?Math.round(totalAmount/quantity):0
     if(!Number.isSafeInteger(totalAmount)||totalAmount>2147483647||baseCost>2147483647)throw new Error('INVALID_STOCK_COST')
-    const logNote=JSON.stringify({version:1,kind:'receipt',inputQuantity:data.quantity,inputUnit,ledgerUnit:inventory.unit,ledgerQuantity:quantity,inputUnitCost:unitCost??0,pack,note:note||''})
+    const logNote=JSON.stringify({version:1,kind:'receipt',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit,ledgerUnit:inventory.unit,ledgerQuantity:quantity,inputUnitCost:unitCost??0,pack,note:note||''})
 
-    // Calculate new average cost only if unitCost is provided and positive
+    // Missing cost preserves the carrying average; an explicit zero is a free receipt.
     const avgCost = Number(inventory.avgCost)
     let newAvgCost = avgCost
-    if (unitCost && unitCost > 0) {
-      const totalCurrentValue = avgCost * inventory.currentStock
+    if (unitCost !== undefined) {
+      const totalCurrentValue = avgCost * Math.max(0,inventory.currentStock)
       const totalNewValue = totalAmount
-      newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (inventory.currentStock + quantity))
+      newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (Math.max(0,inventory.currentStock) + quantity))
     }
 
     const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:inventory.currentStock,avgCost:inventory.avgCost},data:{currentStock:{increment:quantity},avgCost:newAvgCost}})
@@ -132,6 +146,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     await tx.stockInLog.create({
       data: {
         inventoryId,
+        operationId: data.operationId,
         quantity,
         unitCost: baseCost,
         totalAmount,
@@ -141,15 +156,25 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
       }
     })
 
-    return updated
-  })
+    return serializeBigInt(updated)
+  }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw error}
 }
 
 // Stock out operation
 export async function stockOut(data: StockOperation) {
   const { inventoryId, storeId, reason, note, staffId, orderId } = data
 
-  return prisma.$transaction(async (tx) => {
+  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
+  const replay = async (tx:any) => {
+    if (!data.operationId) return null
+    const log = await tx.stockOutLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
+    if (!log) return null
+    let saved:any;try{saved=JSON.parse(log.note||'null')}catch{}
+    if (log.inventory.storeId!==storeId||saved?.requestFingerprint!==fingerprint) throw Error('STOCK_IDEMPOTENCY_CONFLICT')
+    return serializeBigInt(log.inventory)
+  }
+  try { return await prisma.$transaction(async (tx) => {
+    const previous=await replay(tx);if(previous)return previous
     // Get current inventory
     const inventory = await tx.inventory.findFirst({
       where: { id: inventoryId, storeId }
@@ -160,7 +185,9 @@ export async function stockOut(data: StockOperation) {
     }
 
     if(!Number.isFinite(data.quantity)||data.quantity<=0)throw new Error('INVALID_QUANTITY')
-    const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit)
+    const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
+    const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit,saved?validatePackage(JSON.parse(saved.value),inventory.unit):null)
+    if(reason==='other'&&!note?.trim())throw Error('OUT_REASON_REQUIRED')
     if (inventory.currentStock < quantity) {
       throw new Error('Insufficient stock')
     }
@@ -173,15 +200,17 @@ export async function stockOut(data: StockOperation) {
     await tx.stockOutLog.create({
       data: {
         inventoryId,
+        operationId: data.operationId,
+        staffId,
         quantity,
         reason,
-        note,
+        note:JSON.stringify({version:1,kind:'manual-out',note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
         orderId
       }
     })
 
-    return updated
-  })
+    return serializeBigInt(updated)
+  }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw error}
 }
 
 // Get low stock alerts (using safetyStock as threshold)

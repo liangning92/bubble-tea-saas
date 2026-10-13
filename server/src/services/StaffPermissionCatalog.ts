@@ -2,6 +2,7 @@ export type StaffBaseRole = 'manager' | 'cashier' | 'staff'
 const all: StaffBaseRole[] = ['manager', 'cashier', 'staff']
 const pos: StaffBaseRole[] = ['manager', 'cashier']
 const management: StaffBaseRole[] = ['manager']
+const purchasers: StaffBaseRole[] = ['manager','staff']
 export const STAFF_PERMISSION_CATALOG = [
   {key:'dashboard.read',group:'dashboard',roles:management},
   {key:'products.read',group:'products',roles:all},
@@ -12,8 +13,8 @@ export const STAFF_PERMISSION_CATALOG = [
   {key:'inventory.count',group:'inventory',roles:all},
   {key:'inventory.stockIn',group:'inventory',roles:all},
   {key:'inventory.stockOut',group:'inventory',roles:all},
-  {key:'purchases.read',group:'inventory',roles:management},
-  {key:'purchases.write',group:'inventory',roles:management},
+  {key:'purchases.read',group:'inventory',roles:purchasers},
+  {key:'purchases.write',group:'inventory',roles:purchasers},
   {key:'orders.read',group:'pos',roles:pos},
   {key:'orders.create',group:'pos',roles:pos},
   {key:'orders.refund',group:'pos',roles:management},

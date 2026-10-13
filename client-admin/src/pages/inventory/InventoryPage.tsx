@@ -21,6 +21,7 @@ export function InventoryPage() {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showEditItem, setShowEditItem] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
+  const [stockOutPurpose,setStockOutPurpose]=useState('withdrawal')
   const [stockForm, setStockForm] = useState({ quantity: '', unitCost: '', note: '', inputUnit:'' })
   const [addForm, setAddForm] = useState({ name: '', category: 'raw_material', type: 'raw_material', unit: 'kg', avgCost: '', safetyStock: '', processRecipeId: '' })
   const [search, setSearch] = useState('')
@@ -202,11 +203,12 @@ export function InventoryPage() {
 
   const handleStockOut = () => {
     if (!selectedItem) return
+    if(stockOutPurpose==='other'&&!stockForm.note.trim()){alert(t('inventoryFlow.otherReason'));return}
     stockOutMutation.mutate({
       inventoryId: selectedItem.id,
       storeId: user?.storeId,
       quantity: parseFloat(stockForm.quantity),
-      reason: 'adjust',
+      reason: stockOutPurpose,
       note: stockForm.note
     })
   }
@@ -729,6 +731,9 @@ export function InventoryPage() {
               </button>
             </div>
             <div className="space-y-4">
+              <label className="block">{t('inventoryFlow.purpose')}<select className="input w-full" value={stockOutPurpose} onChange={e=>setStockOutPurpose(e.target.value)}>{['withdrawal','loss','expired','other'].map(p=><option key={p} value={p}>{t('inventoryFlow.'+p)}</option>)}</select></label>
+              <p>{t('inventoryFlow.currentStock')}: {selectedItem.currentStock} {selectedItem.unit}</p>
+              <p>{t('inventoryFlow.afterStock')}: {selectedItem.currentStock-(Number(stockForm.quantity)||0)} {selectedItem.unit}</p>
               <div>
                 <label className="block text-sm font-medium mb-1">{t('inventory.quantity') || 'Quantity'} ({selectedItem.unit}) *</label>
                 <input

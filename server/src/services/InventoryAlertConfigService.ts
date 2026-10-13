@@ -78,5 +78,6 @@ export async function saveInventoryAlertConfig(
     }
   })
 
+  await prisma.config.deleteMany({where:{storeId,key:'employee_consumption_checkpoint'}})
   return updated
 }

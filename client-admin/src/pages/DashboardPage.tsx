@@ -1,3 +1,4 @@
+import {ConsumptionAlertsWidget} from '../components/ConsumptionAlertsWidget'
 import {PageHelp} from '../components/PageHelp'
 import { DashboardReadFailure } from '../components/DashboardReadState'
 import { useDashboardContext, dashboardLink, businessDay, validDashboard, requireRead, finiteNumber } from '../utils/dashboardNavigation'
@@ -437,6 +438,7 @@ export function DashboardPage() {
       </div>
 
       {/* ========== POS 操作预警 ========== */}
+      <ConsumptionAlertsWidget />
       <POSAlertsWidget storeId={storeId} asOf={asOf} />
 
       {/* ========== 最近订单 ========== */}

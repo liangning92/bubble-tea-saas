@@ -1,511 +1,130 @@
-import {Link} from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '../stores/auth'
-import { staffApi } from '../services/api'
-import { Search, Package, ArrowDownCircle, ArrowUpCircle, AlertTriangle, ChevronRight, X } from 'lucide-react'
-
-interface InventoryItem {
-  id: string
-  name: string
-  category: string
-  unit: string
-  currentStock: number
-  avgCost: number
-  safetyStock: number
-  type: string
-}
-
-interface StockLog {
-  id: string
-  inventoryId: string
-  quantity: number
-  reason: string
-  note?: string
-  createdAt: string
-  inventory?: { id: string; name: string; unit: string }
-}
-
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { ArrowDownCircle, ArrowUpCircle, ClipboardList, ShoppingCart, Package, Search, ChevronRight } from 'lucide-react';
+import { useAuthStore } from '../stores/auth';
+import { inventoryFlowApi, Material, materialUnits, stockQuantity, materialName } from '../services/inventoryFlow';
 export function InventoryPage() {
-  const { t } = useTranslation()
-  const { user } = useAuthStore()
-  const storeId = user?.storeId || ''
-
-  const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string>('')
-  const [showLowStockOnly, setShowLowStockOnly] = useState(false)
-
-  // Modal states
-  const [showStockInModal, setShowStockInModal] = useState(false)
-  const [showStockOutModal, setShowStockOutModal] = useState(false)
-  const [showLogsModal, setShowLogsModal] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
-  const [stockLogs, setStockLogs] = useState<StockLog[]>([])
-
-  // Form states
-  const [stockInQty, setStockInQty] = useState('')
-  const [stockInCost, setStockInCost] = useState('')
-  const [stockInNote, setStockInNote] = useState('')
-  const [stockOutQty, setStockOutQty] = useState('')
-  const [stockOutReason, setStockOutReason] = useState('adjust')
-  const [stockOutNote, setStockOutNote] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const categories = [
-    t('inventory.categoryTea'),
-    t('inventory.categoryMilk'),
-    t('inventory.categorySugar'),
-    t('inventory.categoryTopping'),
-    t('inventory.categoryJam'),
-    t('inventory.categorySyrup'),
-    t('inventory.categoryPackaging'),
-    t('inventory.categoryOther')
-  ]
-
-  useEffect(() => {
-    loadInventory()
-  }, [storeId])
-
-  const loadInventory = async () => {
-    if (!storeId) return
-    try {
-      setLoading(true)
-      const res = await staffApi.getInventoryList({ storeId })
-      if (res.code === 200) {
-        setInventory(res.data.list || [])
-      }
-    } catch (error: any) {
-      alert(error.message || t('inventory.loadFailed'))
-    } finally {
-      setLoading(false)
+    const { t, i18n } = useTranslation(), { user } = useAuthStore(), [params, setParams] = useSearchParams();
+    const action = params.get('action'), [items, setItems] = useState<Material[]>([]), [orders, setOrders] = useState<any[]>([]), [counts, setCounts] = useState<any[]>([]), [suppliers, setSuppliers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true), [error, setError] = useState(''), [message, setMessage] = useState(''), [search, setSearch] = useState(''), [category, setCategory] = useState(''), [low, setLow] = useState(false);
+    const lock = useRef(false), [busy, setBusy] = useState(false), [receiveOrder, setReceiveOrder] = useState<any>(null);
+    async function load() { setLoading(true); try {
+        const [stock, purchase, count] = await Promise.all([inventoryFlowApi.list(), inventoryFlowApi.purchases(), inventoryFlowApi.counts()]);
+        setItems(stock.data.list);
+        setOrders(purchase.data.list);
+        setCounts(count.data.list);
+        setError('');
     }
-  }
-
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCategory = !selectedCategory || item.category === selectedCategory
-    const matchesLowStock = !showLowStockOnly || item.currentStock <= item.safetyStock
-    return matchesSearch && matchesCategory && matchesLowStock
-  })
-
-  const handleStockIn = async () => {
-    if (!selectedItem || !stockInQty) {
-      alert(t('inventory.enterQuantity'))
-      return
+    catch {
+        setError(t('inventoryFlow.failed'));
     }
-    try {
-      setSubmitting(true)
-      const res = await staffApi.stockIn({
-        inventoryId: selectedItem.id,
-        storeId,
-        quantity: parseFloat(stockInQty),
-        unitCost: stockInCost ? parseFloat(stockInCost) : undefined,
-        note: stockInNote || undefined
-      })
-      if (res.code === 201) {
-        alert(t('inventory.stockInSuccess'))
-        setShowStockInModal(false)
-        resetStockInForm()
-        loadInventory()
-      } else {
-        alert(res.message || t('inventory.stockInFailed'))
-      }
-    } catch (error: any) {
-      alert(error.message || t('inventory.stockInFailed'))
-    } finally {
-      setSubmitting(false)
+    finally {
+        setLoading(false);
+    } }
+    useEffect(() => { void load(); inventoryFlowApi.suppliers().then(r => setSuppliers(r.data.list)).catch(() => { }); }, [user?.storeId]);
+    const pending = orders.filter(o => ['pending', 'approved', 'awaiting_receipt'].includes(o.status));
+    const active = counts.filter(c => ['in_progress', 'pending_review'].includes(c.status));
+    const name = (item: Material) => materialName(item.name, i18n.language);
+    async function receive() { if (!receiveOrder || lock.current)
+        return; lock.current = true; setBusy(true); setError(''); try {
+        await inventoryFlowApi.receive(receiveOrder.id);
+        setReceiveOrder(null);
+        setMessage(t('inventoryFlow.receiveSuccess'));
+        await load();
     }
-  }
-
-  const handleStockOut = async () => {
-    if (!selectedItem || !stockOutQty) {
-      alert(t('inventory.enterQuantity'))
-      return
+    catch {
+        setError(t('inventoryFlow.failed'));
     }
-    try {
-      setSubmitting(true)
-      const res = await staffApi.stockOut({
-        inventoryId: selectedItem.id,
-        storeId,
-        quantity: parseFloat(stockOutQty),
-        reason: stockOutReason,
-        note: stockOutNote || undefined
-      })
-      if (res.code === 200) {
-        alert(t('inventory.stockOutSuccess'))
-        setShowStockOutModal(false)
-        resetStockOutForm()
-        loadInventory()
-      } else {
-        alert(res.message || t('inventory.stockOutFailed'))
-      }
-    } catch (error: any) {
-      alert(error.message || t('inventory.stockOutFailed'))
-    } finally {
-      setSubmitting(false)
+    finally {
+        lock.current = false;
+        setBusy(false);
+    } }
+    const done = async (text: string) => { setMessage(text); setParams({}); await load(); };
+    return <main className="max-w-3xl mx-auto p-4 pb-24 space-y-5">
+  <header className="flex items-center justify-between"><h1 className="text-2xl font-bold">{t(action==='in'?'inventoryFlow.stockIn':action==='out'?'inventoryFlow.stockOut':action==='purchase'?'inventoryFlow.purchase':'inventoryFlow.title')}</h1><button onClick={load} disabled={loading} className="text-orange-600">{t('inventoryFlow.refresh')}</button></header>
+  {error && <div role="alert" className="bg-red-50 text-red-700 p-3 rounded-xl">{error}<button className="ml-2 underline" onClick={load}>{t('inventoryFlow.retry')}</button></div>}
+  {message && <p role="status" className="bg-green-50 text-green-700 p-3 rounded-xl">{message}</p>}
+  {!action && <div className="grid grid-cols-2 gap-3">{[
+            { key: 'in', label: 'stockIn', hint: 'inHint', Icon: ArrowDownCircle, color: 'text-green-600' },
+            { key: 'out', label: 'stockOut', hint: 'outHint', Icon: ArrowUpCircle, color: 'text-orange-600' },
+            { key: 'count', label: 'count', hint: 'countHint', Icon: ClipboardList, color: 'text-blue-600' },
+            { key: 'purchase', label: 'purchase', hint: 'purchaseHint', Icon: ShoppingCart, color: 'text-purple-600' }
+        ].map(({ key, label, hint, Icon, color }) => <Link key={key} to={key === 'count' ? '/inventory/count' : `/inventory?action=${key}`} className={`bg-white border rounded-2xl p-4 shadow-sm ${action === key ? 'ring-2 ring-orange-400' : ''}`}><Icon size={26} className={color}/><h2 className="font-bold text-lg mt-2">{t('inventoryFlow.' + label)}</h2><p className="text-xs text-gray-500 mt-1">{t('inventoryFlow.' + hint)}</p></Link>)}</div>}
+  {loading && <p role="status">{t('inventoryFlow.loading')}</p>}
+  {action && <Link className="block text-orange-600" to="/inventory">← {t('inventoryFlow.back')}</Link>}
+  {(action === 'in' || !action) && <section className="space-y-3"><h2 className="font-bold flex gap-2 items-center"><Package size={20}/>{t('inventoryFlow.awaiting')} <span className="text-orange-600">{pending.length}</span></h2>{!pending.length && !loading && <p className="text-sm text-gray-500">{t('inventoryFlow.noAwaiting')}</p>}{pending.map(order => <button key={order.id} onClick={() => setReceiveOrder(order)} className="w-full text-left bg-white border rounded-xl p-4"><div className="flex justify-between gap-2"><strong className="break-all">{order.onlineOrderNumber || order.orderNumber}</strong><ChevronRight className="shrink-0"/></div><p className="text-sm text-gray-500">{order.supplier?.name || t('inventoryFlow.noSupplier')} {order.expectedDate && ` · ${new Date(order.expectedDate).toLocaleDateString(i18n.language)}`}</p><p className="mt-2 text-sm">{order.items.map((i: any) => `${materialName(i.inventory?.name || '', i18n.language)} ${i.inputQuantity ?? i.quantity} ${i.inputUnit || i.inventory?.unit || ''}`).join(' · ')}</p></button>)}</section>}
+  {(action === 'in' || action === 'out') && <StockForm key={action} kind={action} items={items} onDone={done}/>}
+  {action === 'purchase' && <PurchaseForm items={items} suppliers={suppliers} onDone={done}/>}
+  {!action && <><section className="space-y-2"><h2 className="font-bold">{t('inventoryFlow.activeCounts')}</h2>{!active.length && !loading && <p className="text-sm text-gray-500">{t('inventoryFlow.noCounts')}</p>}{active.map(c => <Link key={c.id} to="/inventory/count" className="block bg-white rounded-xl border p-3">{t(c.status === 'pending_review' ? 'inventoryFlow.pendingReview' : 'inventoryFlow.inProgress')} · {t('inventoryFlow.progress', { done: c.items.filter((i: any) => i.countedAt).length, total: c.items.length })}</Link>)}</section>
+  <section className="space-y-3"><h2 className="font-bold">{t('inventoryFlow.inventoryList')}</h2><div className="flex gap-2 items-center bg-white rounded-xl border p-3"><Search size={18}/><input className="w-full outline-none" placeholder={t('inventoryFlow.search')} value={search} onChange={e => setSearch(e.target.value)}/></div><div className="flex gap-3 items-center"><select className="border rounded-lg p-2 min-w-0" aria-label={t('inventoryFlow.allCategories')} value={category} onChange={e => setCategory(e.target.value)}><option value="">{t('inventoryFlow.allCategories')}</option>{[...new Set(items.map(i => i.category))].map(c => <option key={c}>{c}</option>)}</select><label className="text-sm"><input type="checkbox" checked={low} onChange={e => setLow(e.target.checked)}/> {t('inventoryFlow.lowStock')}</label></div>
+  {items.filter(i => (!search || name(i).toLowerCase().includes(search.toLowerCase())) && (!category || i.category === category) && (!low || i.currentStock <= i.safetyStock)).map(i => <article key={i.id} className="bg-white border rounded-xl p-4 flex justify-between items-center gap-3"><div><h3 className="font-medium">{name(i)}</h3><p className={`text-sm ${i.currentStock <= i.safetyStock ? 'text-orange-600' : 'text-gray-500'}`}>{i.currentStock} {i.unit}</p></div><div className="flex gap-3 shrink-0"><Link className="text-green-700 text-sm" to={`/inventory?action=in&material=${i.id}`}>{t('inventoryFlow.stockIn')}</Link><Link className="text-orange-700 text-sm" to={`/inventory?action=out&material=${i.id}`}>{t('inventoryFlow.stockOut')}</Link></div></article>)}</section></>}
+  {receiveOrder && <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-3"><section role="dialog" aria-modal="true" aria-label={t('inventoryFlow.receiveAll')} className="bg-white rounded-2xl p-5 w-full max-w-lg max-h-[85vh] overflow-auto space-y-4"><h2 className="text-xl font-bold">{t('inventoryFlow.receiveAll')}</h2><p className="text-sm text-gray-500">{t('inventoryFlow.receiveHint')}</p>{receiveOrder.items.map((item: any) => <div key={item.id} className="border-b pb-2"><strong>{materialName(item.inventory?.name || '', i18n.language)}</strong><p>{item.inputQuantity ?? item.quantity} {item.inputUnit || item.inventory?.unit}</p><p className="text-sm text-gray-500">{t('inventoryFlow.converted')}: {item.quantity} {item.inventory?.unit}</p></div>)}{error && <p role="alert" className="text-red-700">{error}</p>}<button className="w-full bg-green-600 text-white rounded-xl py-3" disabled={busy} onClick={receive}>{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.receiveAll')}</button><button className="w-full py-2" disabled={busy} onClick={() => setReceiveOrder(null)}>{t('inventoryFlow.cancel')}</button></section></div>}
+ </main>;
+}
+function StockForm({ kind, items, onDone }: {
+    kind: 'in' | 'out';
+    items: Material[];
+    onDone: (message: string) => Promise<void>;
+}) {
+    const { t, i18n } = useTranslation(), [params] = useSearchParams(), { user } = useAuthStore();
+    const [id, setId] = useState(params.get('material') || ''), [qty, setQty] = useState(''), [unit, setUnit] = useState(''), [cost, setCost] = useState(''), [purpose, setPurpose] = useState('withdrawal'), [note, setNote] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), lock = useRef(false);
+    const material = items.find(i => i.id === id), inputUnit = unit || material?.unit || '', converted = stockQuantity(material, qty, inputUnit);
+    async function submit(event: React.FormEvent) { event.preventDefault(); setError(''); if (!material || !Number.isFinite(Number(qty)) || Number(qty) <= 0 || cost && (!Number.isSafeInteger(Number(cost)) || Number(cost) < 0)) {
+        setError(t('inventoryFlow.invalid'));
+        return;
+    } if (kind === 'out' && converted > material.currentStock) {
+        setError(t('inventoryFlow.insufficient'));
+        return;
+    } if (kind === 'out' && purpose === 'other' && !note.trim()) {
+        setError(t('inventoryFlow.otherReason'));
+        return;
+    } await confirm(); }
+    async function confirm() { if (lock.current)
+        return; lock.current = true; setBusy(true); try {
+        await inventoryFlowApi.stock(kind, { inventoryId: id, storeId: user?.storeId, quantity: Number(qty), inputUnit, ...(kind === 'in' ? { unitCost: cost ? Number(cost) : undefined } : { reason: purpose }), note });
+        await onDone(t('inventoryFlow.stockSaved'));
     }
-  }
-
-  const loadStockLogs = async (item: InventoryItem) => {
-    setSelectedItem(item)
-    try {
-      const res = await staffApi.getStockLogs({ inventoryId: item.id })
-      if (res.code === 200 && res.data) {
-        setStockLogs(res.data.list || [])
-        setShowLogsModal(true)
-      }
-    } catch (error: any) {
-      alert(error.message || t('inventory.loadLogsFailed'))
+    catch {
+        setError(t('inventoryFlow.failed'));
     }
-  }
-
-  const resetStockInForm = () => {
-    setStockInQty('')
-    setStockInCost('')
-    setStockInNote('')
-    setSelectedItem(null)
-  }
-
-  const resetStockOutForm = () => {
-    setStockOutQty('')
-    setStockOutReason('adjust')
-    setStockOutNote('')
-    setSelectedItem(null)
-  }
-
-  const openStockIn = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setShowStockInModal(true)
-  }
-
-  const openStockOut = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setShowStockOutModal(true)
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">{t('inventory.title')}</h1><Link to="/inventory/count" className="text-blue-600">{t('countFlow.title')}</Link>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowLowStockOnly(!showLowStockOnly)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                showLowStockOnly ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4 inline mr-1" />
-              {t('inventory.lowStock')}
-            </button>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="px-4 pb-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('inventory.searchPlaceholder')}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
-        </div>
-
-        {/* Category Filter */}
-        <div className="px-4 pb-3 flex gap-2 overflow-x-auto">
-          <button
-            onClick={() => setSelectedCategory('')}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-              !selectedCategory ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {t('inventory.all')}
-          </button>
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                selectedCategory === cat ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Inventory List */}
-      <div className="px-4 py-3 space-y-3">
-        {loading ? (
-          <div className="text-center py-8 text-gray-500">
-            <div className="animate-spin w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-            {t('common.loading')}
-          </div>
-        ) : filteredInventory.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-            <p>{t('inventory.noData')}</p>
-          </div>
-        ) : (
-          filteredInventory.map(item => (
-            <div key={item.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <div className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium text-gray-900">{item.name}</h3>
-                    <p className="text-sm text-gray-500 mt-0.5">{item.category} · {item.unit}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-lg font-semibold ${item.currentStock <= item.safetyStock ? 'text-orange-600' : 'text-gray-900'}`}>
-                      {item.currentStock.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {t('inventory.safetyStock')}: {item.safetyStock.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Low Stock Warning */}
-                {item.currentStock <= item.safetyStock && (
-                  <div className="mt-2 flex items-center text-orange-600 text-xs">
-                    <AlertTriangle className="w-3 h-3 mr-1" />
-                    {t('inventory.lowStockWarning')}
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="border-t border-gray-100 flex">
-                <button
-                  onClick={() => openStockIn(item)}
-                  className="flex-1 py-3 flex items-center justify-center text-green-600 hover:bg-green-50 active:bg-green-100 transition-colors"
-                >
-                  <ArrowDownCircle className="w-4 h-4 mr-1.5" />
-                  {t('inventory.stockIn')}
-                </button>
-                <button
-                  onClick={() => openStockOut(item)}
-                  className="flex-1 py-3 flex items-center justify-center text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors border-l border-gray-100"
-                >
-                  <ArrowUpCircle className="w-4 h-4 mr-1.5" />
-                  {t('inventory.stockOut')}
-                </button>
-                <button
-                  onClick={() => loadStockLogs(item)}
-                  className="py-3 px-4 flex items-center justify-center text-gray-400 hover:bg-gray-50 active:bg-gray-100 border-l border-gray-100"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Stock In Modal */}
-      {showStockInModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-slide-up">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockIn')}</h2>
-              <button onClick={() => { setShowStockInModal(false); resetStockInForm() }} className="p-2">
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-              <p className="font-medium">{selectedItem.name}</p>
-              <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
-              <p className="text-sm text-gray-500">
-                {t('inventory.currentStock')}: {selectedItem.currentStock.toLocaleString()}
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.quantity')} *
-                </label>
-                <input
-                  type="number"
-                  value={stockInQty}
-                  onChange={(e) => setStockInQty(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('attendance.quantityPlaceholder')}
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.unitCost')}
-                </label>
-                <input
-                  type="number"
-                  value={stockInCost}
-                  onChange={(e) => setStockInCost(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={selectedItem.avgCost ? selectedItem.avgCost.toString() : '0'}
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.note') || 'Note'}
-                </label>
-                <input
-                  type="text"
-                  value={stockInNote}
-                  onChange={(e) => setStockInNote(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('inventory.notePlaceholder')}
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleStockIn}
-              disabled={submitting || !stockInQty}
-              className="w-full mt-6 py-3 bg-green-500 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed active:bg-green-600 transition-colors"
-            >
-              {submitting ? t('common.submitting') : t('inventory.confirmStockIn')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Stock Out Modal */}
-      {showStockOutModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 animate-slide-up">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockOut')}</h2>
-              <button onClick={() => { setShowStockOutModal(false); resetStockOutForm() }} className="p-2">
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-              <p className="font-medium">{selectedItem.name}</p>
-              <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
-              <p className="text-sm text-gray-500">
-                {t('inventory.currentStock')}: {selectedItem.currentStock.toLocaleString()}
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.quantity')} *
-                </label>
-                <input
-                  type="number"
-                  value={stockOutQty}
-                  onChange={(e) => setStockOutQty(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('attendance.quantityPlaceholder')}
-                  min="0"
-                  max={selectedItem.currentStock}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.reason') || 'Reason'}
-                </label>
-                <select
-                  value={stockOutReason}
-                  onChange={(e) => setStockOutReason(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="adjust">{t('inventory.reasonAdjust') || 'Adjustment'}</option>
-                  <option value="process">{t('inventory.reasonProcess') || 'Processing'}</option>
-                  <option value="expired">{t('inventory.reasonExpired') || 'Expired'}</option>
-                  <option value="damaged">{t('inventory.reasonDamaged') || 'Damaged'}</option>
-                  <option value="waste">{t('inventory.reasonWaste') || 'Waste'}</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('inventory.note') || 'Note'}
-                </label>
-                <input
-                  type="text"
-                  value={stockOutNote}
-                  onChange={(e) => setStockOutNote(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder={t('inventory.notePlaceholder')}
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleStockOut}
-              disabled={submitting || !stockOutQty}
-              className="w-full mt-6 py-3 bg-red-500 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed active:bg-red-600 transition-colors"
-            >
-              {submitting ? t('common.submitting') || 'Submitting...' : t('inventory.confirmStockOut') || 'Confirm Stock Out'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Stock Logs Modal */}
-      {showLogsModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">{t('inventory.stockHistory') || 'Stock History'}</h2>
-              <button onClick={() => setShowLogsModal(false)} className="p-2">
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-
-            {selectedItem && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <p className="font-medium">{selectedItem.name}</p>
-                <p className="text-sm text-gray-500">{selectedItem.category} · {selectedItem.unit}</p>
-              </div>
-            )}
-
-            {stockLogs.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>{t('inventory.noLogs') || 'No stock history'}</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {stockLogs.map(log => (
-                  <div key={log.id} className="p-3 border border-gray-100 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className={`font-medium ${log.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {log.quantity > 0 ? '+' : ''}{log.quantity} {selectedItem?.unit}
-                        </p>
-                        <p className="text-xs text-gray-500">{log.reason}</p>
-                     </div>
-                      <p className="text-xs text-gray-400">
-                        {new Date(log.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                    {log.note && <p className="text-sm text-gray-500 mt-1">{log.note}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+    finally {
+        lock.current = false;
+        setBusy(false);
+    } }
+    return <form onSubmit={submit} className="bg-white border rounded-2xl p-4 space-y-4"><h2 className="font-bold text-lg">{t(kind === 'in' ? 'inventoryFlow.stockIn' : 'inventoryFlow.stockOut')}</h2><label className="block">{t('inventoryFlow.material')}<select className="border rounded-lg p-3 w-full mt-1" required value={id} disabled={busy} onChange={e => { setId(e.target.value); setUnit(''); }}><option value="">{t('inventoryFlow.chooseMaterial')}</option>{items.map(i => <option key={i.id} value={i.id}>{materialName(i.name, i18n.language)}</option>)}</select></label>
+ {material && <p className="bg-gray-50 rounded-lg p-3">{t('inventoryFlow.currentStock')}: {material.currentStock} {material.unit}</p>}
+ <div className="grid grid-cols-2 gap-3"><label>{t('inventoryFlow.quantity')}<input type="number" min="0.000000001" step="any" required disabled={busy} className="border rounded-lg p-3 w-full mt-1" value={qty} onChange={e => { setQty(e.target.value); }}/></label><label>{t('inventoryFlow.unit')}<select aria-label={t('inventoryFlow.unit')} className="border rounded-lg p-3 w-full mt-1" value={inputUnit} disabled={busy} onChange={e => { setUnit(e.target.value); }}>{materialUnits(material).map(u => <option key={u}>{u}</option>)}</select></label></div>
+ {kind === 'in' ? <label className="block">{t('inventoryFlow.unitCost')} (Rp / {inputUnit})<input type="number" min="0" step="1" value={cost} disabled={busy} className="border rounded-lg p-3 w-full mt-1" onChange={e => { setCost(e.target.value); }}/></label> : <label className="block">{t('inventoryFlow.purpose')}<select className="border rounded-lg p-3 w-full mt-1" value={purpose} disabled={busy} onChange={e => { setPurpose(e.target.value); }}>{['withdrawal', 'loss', 'expired', 'other'].map(p => <option key={p} value={p}>{t('inventoryFlow.' + p)}</option>)}</select></label>}
+ <label className="block">{t('inventoryFlow.note')}<textarea required={kind === 'out' && purpose === 'other'} value={note} disabled={busy} className="border rounded-lg p-3 w-full mt-1" onChange={e => { setNote(e.target.value); }}/></label>
+ {material && qty && <div className="bg-orange-50 p-3 rounded-xl"><p>{t('inventoryFlow.converted')}: {converted} {material.unit}</p><p>{t('inventoryFlow.afterStock')}: {material.currentStock + (kind === 'in' ? converted : -converted)} {material.unit}</p></div>}
+ {error && <p role="alert" className="text-red-700">{error}</p>}<button disabled={busy} className="w-full bg-orange-600 text-white rounded-xl py-3">{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.confirm')}</button>
+ </form>;
+}
+function PurchaseForm({ items, suppliers, onDone }: {
+    items: Material[];
+    suppliers: any[];
+    onDone: (message: string) => Promise<void>;
+}) {
+    const { t, i18n } = useTranslation(), { user } = useAuthStore(), [supplierId, setSupplier] = useState(''), [onlineOrderNumber, setOnlineOrder] = useState(''), [expectedDate, setExpected] = useState(''), [note, setNote] = useState('');
+    const [rows, setRows] = useState([{ inventoryId: '', quantity: '', unitCost: '', inputUnit: '' }]), [busy, setBusy] = useState(false), [error, setError] = useState(''), lock = useRef(false);
+    const setRow = (index: number, key: string, value: string) => setRows(rows.map((r, i) => i === index ? { ...r, [key]: value, ...(key === 'inventoryId' ? { inputUnit: '' } : {}) } : r));
+    async function submit(event: React.FormEvent) { event.preventDefault(); if (lock.current)
+        return; setError(''); if (rows.some(r => !r.inventoryId || !Number.isFinite(Number(r.quantity)) || Number(r.quantity) <= 0 || r.unitCost === '' || !Number.isSafeInteger(Number(r.unitCost)) || Number(r.unitCost) < 0) || new Set(rows.map(r => r.inventoryId)).size !== rows.length) {
+        setError(t('inventoryFlow.invalid'));
+        return;
+    } lock.current = true; setBusy(true); try {
+        await inventoryFlowApi.purchase({ storeId: user?.storeId, source: 'online', supplierId: supplierId || undefined, onlineOrderNumber: onlineOrderNumber || undefined, expectedDate: expectedDate || undefined, note, items: rows.map(r => ({ ...r, quantity: Number(r.quantity), unitCost: Number(r.unitCost), inputUnit: r.inputUnit || items.find(i => i.id === r.inventoryId)?.unit })) });
+        await onDone(t('inventoryFlow.purchaseSaved'));
+    }
+    catch {
+        setError(t('inventoryFlow.failed'));
+    }
+    finally {
+        lock.current = false;
+        setBusy(false);
+    } }
+    return <form onSubmit={submit} className="bg-white border rounded-2xl p-4 space-y-4"><h2 className="text-lg font-bold">{t('inventoryFlow.newPurchase')}</h2><p className="text-sm text-gray-500">{t('inventoryFlow.purchaseHint')}</p><fieldset disabled={busy} className="space-y-4"><label className="block">{t('inventoryFlow.supplier')}<select className="border rounded-lg p-3 w-full mt-1" value={supplierId} onChange={e => setSupplier(e.target.value)}><option value="">{t('inventoryFlow.noSupplier')}</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="block">{t('inventoryFlow.onlineOrder')}<input className="border rounded-lg p-3 w-full mt-1" value={onlineOrderNumber} onChange={e => setOnlineOrder(e.target.value)}/></label><label className="block">{t('inventoryFlow.expectedDate')}<input type="date" className="border rounded-lg p-3 w-full mt-1" value={expectedDate} onChange={e => setExpected(e.target.value)}/></label>
+ {rows.map((row, index) => { const material = items.find(i => i.id === row.inventoryId); return <section key={index} className="border rounded-xl p-3 space-y-3"><label className="block">{t('inventoryFlow.material')}<select required className="border rounded-lg p-2 w-full" value={row.inventoryId} onChange={e => setRow(index, 'inventoryId', e.target.value)}><option value="">{t('inventoryFlow.chooseMaterial')}</option>{items.map(i => <option key={i.id} value={i.id}>{materialName(i.name, i18n.language)}</option>)}</select></label><div className="grid grid-cols-2 gap-3"><label>{t('inventoryFlow.quantity')}<input required type="number" min="0.000000001" step="any" className="border rounded-lg p-2 w-full" value={row.quantity} onChange={e => setRow(index, 'quantity', e.target.value)}/></label><label>{t('inventoryFlow.unit')}<select className="border rounded-lg p-2 w-full" value={row.inputUnit || material?.unit || ''} onChange={e => setRow(index, 'inputUnit', e.target.value)}>{materialUnits(material).map(u => <option key={u}>{u}</option>)}</select></label></div><label className="block">{t('inventoryFlow.unitCost')} (Rp / {row.inputUnit || material?.unit})<input required type="number" min="0" step="1" className="border rounded-lg p-2 w-full" value={row.unitCost} onChange={e => setRow(index, 'unitCost', e.target.value)}/></label>{material && <p className="text-sm text-gray-500">{t('inventoryFlow.converted')}: {stockQuantity(material, row.quantity, row.inputUnit || material.unit)} {material.unit}</p>}{rows.length > 1 && <button type="button" className="text-red-600" onClick={() => setRows(rows.filter((_, i) => i !== index))}>{t('inventoryFlow.remove')}</button>}</section>; })}
+ <button type="button" className="text-orange-600" onClick={() => setRows([...rows, { inventoryId: '', quantity: '', unitCost: '', inputUnit: '' }])}>+ {t('inventoryFlow.addItem')}</button><label className="block">{t('inventoryFlow.note')}<textarea className="border rounded-lg p-3 w-full mt-1" value={note} onChange={e => setNote(e.target.value)}/></label><p className="font-bold">{t('inventoryFlow.total')}: Rp {rows.reduce((sum, r) => sum + Number(r.quantity) * Number(r.unitCost), 0).toLocaleString('id-ID')}</p></fieldset>{error && <p role="alert" className="text-red-700">{error}</p>}<button disabled={busy} className="w-full bg-purple-600 text-white rounded-xl py-3">{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.newPurchase')}</button></form>;
 }

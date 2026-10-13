@@ -1,15 +1,15 @@
 import {COUNT_OBSERVATION_PREFIX,captureCountBoundary} from '../utils/countObservation'
 import prisma from '../config/database'
-export interface CreateInventoryCountData {storeId:string;period:'monthly'|'quarterly'|'annual';startDate:Date;endDate:Date;notes?:string}
-const include={items:{include:{inventory:{select:{id:true,name:true,unit:true,currentStock:true,updatedAt:true,avgCost:true}}}}} as const
+export interface CreateInventoryCountData {storeId:string;period:'monthly'|'quarterly'|'annual'|'ad_hoc';startDate:Date;endDate:Date;notes?:string;inventoryIds?:string[]}
+const include={items:{orderBy:{inventoryId:'asc' as const},include:{inventory:{select:{id:true,name:true,unit:true,currentStock:true,updatedAt:true,avgCost:true}}}}} as const
 function view(count:any){
  if(!count)return null
  return {...count,items:count.items.map((item:any)=>({...item,inventory:{...item.inventory,avgCost:Number(item.inventory.avgCost)},movementSinceObservation:item.countedAt?item.inventory.currentStock-item.systemQty-(count.status==='completed'?(item.variance||0):0):null,varianceAmountEstimate:item.variance===null?null:Math.round(item.variance*Number(item.inventory.avgCost)),valuationBasis:'current_carrying_average_estimate'}))}
 }
 export async function getInventoryCounts(storeId:string){return (await prisma.inventoryCount.findMany({where:{storeId},include,orderBy:{createdAt:'desc'}})).map(view)}
 export async function getInventoryCountById(countId:string,storeId?:string){return view(await prisma.inventoryCount.findFirst({where:{id:countId,...(storeId?{storeId}:{})},include}))}
-async function lockCount(tx:any,countId:string,storeId:string){
- const changed=await tx.inventoryCount.updateMany({where:{id:countId,storeId,status:'in_progress'},data:{updatedAt:new Date()}})
+async function lockCount(tx:any,countId:string,storeId:string,statuses=['in_progress']){
+ const changed=await tx.inventoryCount.updateMany({where:{id:countId,storeId,status:{in:statuses}},data:{updatedAt:new Date()}})
  if(changed.count!==1)throw new Error('COUNT_NOT_ACTIVE_OR_STORE_MISMATCH')
 }
 export async function createInventoryCount(data:CreateInventoryCountData){
@@ -17,9 +17,11 @@ export async function createInventoryCount(data:CreateInventoryCountData){
  return prisma.$transaction(async tx=>{
   // Lock store row to prevent two simultaneous active sessions without a schema migration.
   await tx.store.update({where:{id:data.storeId},data:{updatedAt:new Date()}})
-  if(await tx.inventoryCount.findFirst({where:{storeId:data.storeId,status:'in_progress'}}))throw new Error('COUNT_ALREADY_ACTIVE')
-  const inventory=await tx.inventory.findMany({where:{storeId:data.storeId},select:{id:true,currentStock:true}})
-  return view(await tx.inventoryCount.create({data:{...data,status:'in_progress',items:{create:inventory.map(i=>({inventoryId:i.id,systemQty:i.currentStock}))}},include}))
+  if(await tx.inventoryCount.findFirst({where:{storeId:data.storeId,status:{in:['in_progress','pending_review']}}}))throw new Error('COUNT_ALREADY_ACTIVE')
+  const inventory=await tx.inventory.findMany({where:{storeId:data.storeId,...(data.inventoryIds?{id:{in:data.inventoryIds}}:{})},select:{id:true,currentStock:true}})
+  if(!inventory.length||data.inventoryIds&&(new Set(data.inventoryIds).size!==data.inventoryIds.length||inventory.length!==data.inventoryIds.length))throw Error('INVALID_COUNT_SELECTION')
+  const {inventoryIds,...fields}=data
+  return view(await tx.inventoryCount.create({data:{...fields,status:'in_progress',items:{create:inventory.map(i=>({inventoryId:i.id,systemQty:i.currentStock}))}},include}))
  })
 }
 export async function updateCountItem(countItemId:string,countedQty:number,countedBy:string,note:string|undefined,context:{countId:string;storeId:string;expectedStock:number;observedVersion:string}){
@@ -44,8 +46,9 @@ export async function updateCountItem(countItemId:string,countedQty:number,count
 export async function completeInventoryCount(countId:string,staffId:string,storeId:string){
  return prisma.$transaction(async tx=>{
   await tx.store.update({where:{id:storeId},data:{updatedAt:new Date()}})
-  await lockCount(tx,countId,storeId)
+  await lockCount(tx,countId,storeId,['in_progress','pending_review'])
   const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include:{items:{include:{inventory:true}}}})
+  if(count.period==='ad_hoc'&&count.status!=='pending_review')throw Error('COUNT_SUBMIT_REQUIRED')
   if(!count.items.length||count.items.some(i=>i.countedQty===null||!i.countedAt))throw new Error('COUNT_INCOMPLETE')
   for(const item of [...count.items].sort((a,b)=>a.inventoryId.localeCompare(b.inventoryId))){
    if(item.inventory.storeId!==storeId)throw new Error('COUNT_ITEM_STORE_MISMATCH')
@@ -64,4 +67,15 @@ export async function completeInventoryCount(countId:string,staffId:string,store
   return view(await tx.inventoryCount.update({where:{id:countId},data:{status:'completed'},include}))
  })
 }
-export async function cancelInventoryCount(countId:string,storeId:string){return prisma.$transaction(async tx=>{await lockCount(tx,countId,storeId);return tx.inventoryCount.update({where:{id:countId},data:{status:'cancelled'},include})})}
+export async function cancelInventoryCount(countId:string,storeId:string){return prisma.$transaction(async tx=>{await lockCount(tx,countId,storeId,['in_progress','pending_review']);return tx.inventoryCount.update({where:{id:countId},data:{status:'cancelled'},include})})}
+
+export async function submitInventoryCount(countId:string,storeId:string){
+ return prisma.$transaction(async tx=>{
+  const existing=await tx.inventoryCount.findFirst({where:{id:countId,storeId},include})
+  if(existing?.status==='pending_review')return view(existing)
+  await lockCount(tx,countId,storeId)
+  const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include})
+  if(!count.items.length||count.items.some(i=>i.countedQty===null||!i.countedAt))throw Error('COUNT_INCOMPLETE')
+  return view(await tx.inventoryCount.update({where:{id:countId},data:{status:'pending_review'},include}))
+ })
+}

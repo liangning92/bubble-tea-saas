@@ -11,18 +11,22 @@ const router = Router()
 // Validation schemas
 const createPOSchema = z.object({
   storeId: z.string(),
-  supplierId: z.string(),
+  supplierId: z.string().optional(),
+  source: z.enum(['admin','online']).optional(),
+  onlineOrderNumber: z.string().max(150).optional(),
+  requestId: z.string().uuid().optional(),
   expectedDate: z.string().optional(),
   note: z.string().optional(),
   items: z.array(z.object({
     inventoryId: z.string(),
-    quantity: z.number().positive(),
-    unitCost: z.number().int().positive()
+    quantity: z.number().finite().positive(),
+    inputUnit: z.string().max(30).optional(),
+    unitCost: z.number().int().min(0)
   })).min(1)
 })
 
 // GET /api/purchase-orders
-router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
     const { storeId, supplierId, status, startDate, endDate } = req.query
 
@@ -46,7 +50,7 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 })
 
 // GET /api/purchase-orders/pending
-router.get('/pending', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/pending', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     const orders = await PurchaseOrderService.getPendingPurchaseOrders(storeId)
@@ -63,7 +67,7 @@ router.get('/pending', authenticate, authorize('admin', 'manager'), async (req: 
 })
 
 // GET /api/purchase-orders/:id
-router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/:id', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const order = await PurchaseOrderService.getPurchaseOrderById(id)
@@ -84,10 +88,12 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 })
 
 // POST /api/purchase-orders
-router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createPOSchema), async (req: AuthRequest, res) => {
+router.post('/', authenticate, authorize('admin', 'manager', 'staff'), validateBody(createPOSchema), async (req: AuthRequest, res) => {
   try {
     const order = await PurchaseOrderService.createPurchaseOrder({
       ...req.body,
+      source: req.user!.role==='staff' ? 'online' : req.body.source,
+      createdBy: req.user!.staffId || req.user!.id,
       storeId: req.user!.role === 'admin' ? req.body.storeId : getStoreId(req),
       expectedDate: req.body.expectedDate ? new Date(req.body.expectedDate) : undefined
     })
@@ -125,11 +131,11 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // POST /api/purchase-orders/:id/receive
-router.post('/:id/receive', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/:id/receive', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
-    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId, req.user!.role === 'admin' ? undefined : getStoreId(req))
+    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId || req.user!.id, req.user!.role === 'admin' ? undefined : getStoreId(req))
 
     res.json({
       code: 200,
@@ -144,7 +150,7 @@ router.post('/:id/receive', authenticate, authorize('admin', 'manager'), async (
 })
 
 // DELETE /api/purchase-orders/:id
-router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, authorize('admin','manager'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { reason } = req.body

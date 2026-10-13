@@ -62,7 +62,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 // POST /api/process-recipes/:id/execute
 router.post('/:id/execute', authenticate, authorize('admin', 'manager', 'staff'), validateBody(executeSchema), async (req: AuthRequest, res) => {
   try {
-    const result = await ProcessRecipeService.executeRecipe(req.params.id, req.body.multiplier)
+    const result = await ProcessRecipeService.executeRecipe(req.params.id, req.body.multiplier,req.user!.staffId||req.user!.id,req.user!.storeId)
     res.json({ code: 200, message: 'Recipe executed', data: result, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Execute recipe error:', error)

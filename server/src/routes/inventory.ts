@@ -1,3 +1,4 @@
+import {employeeConsumption,getConsumptionAlerts} from '../services/EmployeeConsumptionService'
 import prisma from '../config/database'
 import { requireResourceStore } from '../middlewares/resourceStore'
 import { Router } from 'express'
@@ -15,6 +16,7 @@ const resourceAccess = requireResourceStore(req => prisma.inventory.findUnique({
 const stockInSchema = z.object({
   inventoryId: z.string(),
   storeId: z.string().optional(),
+  operationId: z.string().uuid().optional(),
   quantity: z.number().finite().positive(),
   inputUnit: z.string().min(1).max(30).optional(),
   unitCost: z.number().int().optional(),
@@ -26,13 +28,14 @@ const stockInSchema = z.object({
 const stockOutSchema = z.object({
   inventoryId: z.string(),
   storeId: z.string().optional(),
+  operationId: z.string().uuid().optional(),
   quantity: z.number().finite().positive(),
   inputUnit: z.string().min(1).max(30).optional(),
-  reason: z.enum(['sold', 'loss', 'adjust', 'expired', 'transfer']),
+  reason: z.enum(['withdrawal', 'loss', 'expired', 'other', 'sold', 'adjust', 'transfer']),
   note: z.string().optional(),
   staffId: z.string().optional(),
   orderId: z.string().optional()
-})
+}).refine(v => v.reason !== 'other' || !!v.note?.trim(), { message: 'OUT_REASON_REQUIRED' })
 
 const adjustSchema = z.object({
   newStock: z.number().min(0),
@@ -62,7 +65,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     const { storeId, categoryId, search, lowStock } = req.query
 
     const items = await InventoryService.getInventory({
-      storeId: storeId as string || req.user!.storeId,
+      storeId: getStoreId(req),
       categoryId: categoryId as string,
       search: search as string,
       lowStock: lowStock === 'true'
@@ -138,8 +141,8 @@ router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), v
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
-    console.error('Stock in error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to stock in' })
+    const status=error.message==='Inventory not found'?404:/CONCURRENT|IDEMPOTENCY/.test(error.message)?409:400
+    res.status(status).json({code:status,message:error.message||'Failed to stock in'})
   }
 })
 
@@ -147,6 +150,7 @@ router.post('/stock-in', authenticate, authorize('admin', 'manager', 'staff'), v
 router.post('/stock-out', authenticate, authorize('admin', 'manager', 'staff'), validateBody(stockOutSchema), async (req: AuthRequest, res) => {
   try {
     if (req.body.storeId && req.body.storeId !== req.user!.storeId) return res.status(403).json({ code: 403, message: 'Store access denied' })
+    if (['sold','adjust','transfer'].includes(req.body.reason)) return res.status(400).json({code:400,message:'USE_MANUAL_OUT_PURPOSE'})
     const item = await InventoryService.stockOut({
       ...req.body,
       storeId: req.user!.storeId,
@@ -160,8 +164,8 @@ router.post('/stock-out', authenticate, authorize('admin', 'manager', 'staff'), 
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
-    console.error('Stock out error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to stock out' })
+    const status=error.message==='Inventory not found'?404:/CONCURRENT|IDEMPOTENCY|Insufficient/.test(error.message)?409:400
+    res.status(status).json({code:status,message:error.message||'Failed to stock out'})
   }
 })
 
@@ -322,10 +326,18 @@ router.get('/batches/expiring', authenticate, authorize('admin', 'manager'), asy
 // 库存异常预警 - 理论消耗 vs 实际消耗对比
 // ============================================
 
+router.get('/employee-consumption',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+ try{if(typeof req.query.startDate!=='string'||typeof req.query.endDate!=='string')return res.status(400).json({code:400,message:'ANALYSIS_DATES_REQUIRED'});res.json({code:200,data:await employeeConsumption({storeId:getStoreId(req),startDate:req.query.startDate,endDate:req.query.endDate})})}
+ catch(error:any){res.status(400).json({code:400,message:error.message})}
+})
+router.get('/consumption-alerts',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+ try{const list=await getConsumptionAlerts(getStoreId(req));res.json({code:200,data:{list,count:list.length}})}catch(error:any){res.status(500).json({code:500,message:'ALERTS_LOAD_FAILED'})}
+})
+
 // GET /api/inventory/consumption-analysis
 router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.user!.storeId
+    const storeId = getStoreId(req)
     const { startDate, endDate, varianceThreshold, category } = req.query
 
     if (!startDate || !endDate) {
@@ -356,7 +368,7 @@ router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'),
 // GET /api/inventory/anomaly-summary
 router.get('/anomaly-summary', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.user!.storeId
+    const storeId = getStoreId(req)
     const { startDate, endDate, varianceThreshold, category } = req.query
 
     if (!startDate || !endDate) {

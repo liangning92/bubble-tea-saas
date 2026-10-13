@@ -7,6 +7,7 @@ import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 
 const StaffAdjustmentsPage = lazy(() => import('./pages/staff/StaffAdjustmentsPage').then(module => ({ default: module.StaffAdjustmentsPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
+const EmployeeConsumptionPage = lazy(() => import('./pages/inventory/EmployeeConsumptionPage').then(module => ({default:module.EmployeeConsumptionPage})))
 const ConsumptionAnalysisPage = lazy(() => import('./pages/inventory/ConsumptionAnalysisPage').then(module => ({ default: module.ConsumptionAnalysisPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
 const RegisterPage = lazy(() => import('./pages/RegisterPage').then(module => ({ default: module.RegisterPage })))
@@ -188,7 +189,8 @@ function App() {
           <Route path="consumption-analysis" element={<DashboardFeatureUnavailable />} />
           <Route path="alert-config" element={<StockAlertConfigPage />} />
           <Route path="count" element={<InventoryCountPage />} />
-          <Route path="consumption" element={<ConsumptionAnalysisPage />} />
+          <Route path="consumption" element={<EmployeeConsumptionPage />} />
+          <Route path="physical-analysis" element={<ConsumptionAnalysisPage />} />
           <Route path="restock" element={<RestockSuggestionPage />} />
           <Route path="suppliers" element={<SupplierListPage />} />
           <Route path="purchase-orders" element={<PurchaseOrderListPage />} />
