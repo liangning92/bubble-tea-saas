@@ -3,7 +3,7 @@ jest.mock('../src/config/database',()=>({__esModule:true,default:{staff:{findUni
 jest.mock('../src/config/env',()=>({config:{jwt:{secret:'synthetic-test-only'}}}))
 jest.mock('../src/services/StaffService',()=>({calculateSalary:jest.fn()}))
 jest.mock('../src/services/SalaryAdjustmentService',()=>({periodLock:jest.fn(async()=>undefined),saveAdjustmentPlan:jest.fn(async()=>undefined),normalizeAdjustments:jest.fn(async(_db:any,_store:any,_staff:any,_month:any,bonus:number,deduction:number)=>({bonus,deduction,plan:{items:[],rewards:0,penalties:0}})),SalaryAdjustmentError:class extends Error {}}))
-jest.mock('../src/services/SalaryDepositPlan',()=>({normalizeSalaryDeposits:jest.fn(async(_db:any,_staff:any,_month:any,deduction:number)=>({items:[],deduction}))}))
+jest.mock('../src/services/SalaryDepositPlan',()=>({salaryRefundPlan:jest.fn(async()=>({items:[],amount:0})),ensureOnboardingDeposit:jest.fn(async()=>{}),normalizeSalaryDeposits:jest.fn(async(_db:any,_staff:any,_month:any,deduction:number)=>({items:[],deduction}))}))
 import prisma from '../src/config/database'
 import {salaryRouter} from '../src/routes/salary'
 const db=prisma as any

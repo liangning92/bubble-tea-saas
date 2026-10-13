@@ -9,11 +9,13 @@ export const payrollCorrectionSchema = z.object({
   lateMode: z.enum(['rule','manual']),
   manualLateDeduction: z.number().int().min(0).max(2000000000).default(0),
   otherAttendanceDeduction: z.number().int().min(0).max(2000000000).default(0),
+  unpaidProbationDays: z.number().min(0).max(31).multipleOf(0.5).optional(),
+  unpaidRegularDays: z.number().min(0).max(31).multipleOf(0.5).optional(),
   reason: z.string().trim().min(1).max(1000),
 }).strict()
 export type PayrollCorrection = z.infer<typeof payrollCorrectionSchema>
 export const correctionKey = (staffId:string,month:string) => `salary.correction.${staffId}.${month}`
-export async function correctionPreview(db: Prisma.TransactionClient,storeId:string,month:string,input:Pick<PayrollCorrection,'lateMinutes'|'lateMode'|'manualLateDeduction'|'otherAttendanceDeduction'>) {
+export async function correctionPreview(db: Prisma.TransactionClient,storeId:string,month:string,input:Pick<PayrollCorrection,'lateMinutes'|'lateMode'|'manualLateDeduction'|'otherAttendanceDeduction'|'unpaidProbationDays'|'unpaidRegularDays'>) {
   const rule=await readWork<LateRule>(storeId,`rule.${month}`,db)
   const lateRuleRequired=input.lateMode==='rule' && input.lateMinutes>0 && !rule
   const lateDeduction=input.lateMode==='manual'?input.manualLateDeduction:rule?penaltyAmount(input.lateMinutes,rule):0

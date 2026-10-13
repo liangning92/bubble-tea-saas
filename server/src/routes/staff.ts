@@ -1,3 +1,5 @@
+import { ensureOnboardingDeposit } from '../services/SalaryDepositPlan'
+import { readPayslip } from '../services/SalaryPayslipService'
 import { calculateSalary } from '../services/StaffService'
 import {userAccessV2} from '../services/StaffPermissionV2Service'
 import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
@@ -273,6 +275,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 
       const rule = await getProbationRule(tx, storeId)
       await saveEnrollment(tx, newStaff, req.body.probationEnabled ?? rule.enabled, req.body.confirmationDate)
+      await ensureOnboardingDeposit(tx,newStaff)
       return newStaff
     })
 
@@ -343,6 +346,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(upd
       if(staff.terminationDate&&staff.hireDate&&staff.terminationDate<staff.hireDate)throw new ProbationInputError('TERMINATION_BEFORE_HIRE')
       if(req.body.payrollEmployee!==undefined)await saveStaffIdentity(tx,{...staff,user:existing.user},req.body.payrollEmployee)
       await saveEnrollment(tx, {...staff,user:existing.user}, req.body.probationEnabled, req.body.confirmationDate)
+      await ensureOnboardingDeposit(tx,{...staff,user:existing.user})
       if((hireDate!==undefined&&staff.hireDate?.getTime()!==existing.hireDate?.getTime())||(terminationDate!==undefined&&staff.terminationDate?.getTime()!==existing.terminationDate?.getTime()))if(await isPayrollEmployee(tx,{...staff,user:existing.user}))await refreshEmploymentPayroll(tx,staff)
       if (status !== undefined) {
         await tx.user.update({ where: { id: existing.userId }, data: { updatedAt: new Date() } })
@@ -1029,8 +1033,9 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
       orderBy: { createdAt: 'desc' }
     })
 
+    if(salaryRecord?.status==='paid'){const snapshot=await readPayslip(prisma,staff.storeId,salaryRecord.id);if(snapshot)return res.json({code:200,data:snapshot})}
     const savedBasis=salaryRecord?await savedPayrollBasis(prisma,staff.storeId,salaryRecord.id):null
-    if (!salaryRecord || salaryRecord.status==='pending'&&isLegacyAutomaticBasis(savedBasis)) {
+    if (!salaryRecord || salaryRecord.status==='pending'&&(isLegacyAutomaticBasis(savedBasis)||savedBasis?.daysSource==='estimate'&&!savedBasis?.confirmed)) {
       const calculation=await calculateSalary(staff.id,Number(targetMonth.slice(5)),Number(targetMonth.slice(0,4)))
       if(!calculation.payrollBasis.eligibleDays)return res.json({code:200,data:null})
       const deposits=calculation.depositDeductions.reduce((sum,item)=>sum+item.amount,0)
@@ -1072,7 +1077,7 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
       compensationRewards:compensation.rewards,compensationPenalties:compensation.penalties,compensationItems:compensation.items,depositDeductionAmount:depositAmount,otherDeductions:Math.max(0,salaryRecord.deduction-depositAmount-compensation.penalties-lateDeduction),
       commissions: salaryRecord.commission,
       deductions: salaryRecord.deduction,
-      totalSalary: salaryRecord.finalAmount,
+      totalSalary: salaryRecord.finalAmount,depositRefundAmount:basis?.depositRefund?.amount||0,settlementAmount:salaryRecord.finalAmount+(basis?.depositRefund?.amount||0),
       status: salaryRecord.status
     }
 

@@ -3,7 +3,8 @@ import { businessDate, WorkingDays, calculatePayrollBasis, getEnrollment, monthl
 import { allocateEmployeeNumber } from './EmployeeNumberService'
 import { readWork, listWork } from './EmployeeWorkspaceStore'
 import { adjustmentPlan } from './SalaryAdjustmentService'
-import { salaryDepositPlan } from './SalaryDepositPlan'
+import { unpaidLeavePlan } from './SalaryLeavePlan'
+import { salaryDepositPlan, salaryRefundPlan, ensureOnboardingDeposit } from './SalaryDepositPlan'
 import { getStaffConfig } from './StaffConfigService'
 import { formatDate, startOfDay } from '../utils/dateUtils'
 import { containsText } from '../utils/textSearch'
@@ -122,6 +123,7 @@ export async function createStaff(data: {
   })
   const policy = await getProbationRule(tx,data.storeId)
   await saveEnrollment(tx,created,data.probationEnabled ?? policy.enabled,data.confirmationDate)
+  await ensureOnboardingDeposit(tx,created)
   return created
   })
 }
@@ -339,8 +341,6 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   if(correctionBasis){latePenalty=correctionBasis.lateDeduction;deductions=latePenalty+correctionBasis.otherAttendanceDeduction}
   else if(daysSource==='estimate') deductions=0
 
-  depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2, '0')}`)
-  deductions += depositDeductions.reduce((sum, item) => sum + item.amount, 0)
 
   const featureConfig = await getStaffConfig(staff.storeId)
   if (daysSource==='attendance' && featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
@@ -354,11 +354,21 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   bonuses += compensation.rewards
   deductions += compensation.penalties
 
+  const leaveTypes = leaves.length ? await prisma.leaveType.findMany({where:{storeId:staff.storeId,paidLeave:false},select:{code:true}}) : []
+  const unpaidOverride = correction?.unpaidProbationDays !== undefined || correction?.unpaidRegularDays !== undefined
+    ? {probation:correction?.unpaidProbationDays || 0,regular:correction?.unpaidRegularDays || 0} : undefined
+  const unpaidLeave = daysSource==='estimate' ? unpaidLeavePlan(staff,enrollment,payrollBasis,leaves,new Set(['unpaid',...leaveTypes.map(t=>t.code)]),unpaidOverride) : {days:{probation:0,regular:0},deduction:0,source:'included_in_days'}
+  deductions += unpaidLeave.deduction
+
   const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId, status: 'approved', date: { gte: startDate, lte: endDate } } })
   const overtimeHours = approvedOvertime.reduce((sum, request) => sum + request.hours, 0)
   const overtimePay = overtimeHours >= overtimeMinHours
     ? Math.floor(approvedOvertime.reduce((sum, request)=>sum+request.hours*(monthlyRateCents(staff,enrollment,formatDate(request.date))/100/176)*overtimeRate,0))
     : 0
+
+  depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2,'0')}`, prisma, baseSalary+overtimePay+bonuses-deductions)
+  deductions += depositDeductions.reduce((sum,item)=>sum+item.amount,0)
+  const refund = await salaryRefundPlan(staffId, `${year}-${String(month).padStart(2,'0')}`)
 
   return {
     staffId,
@@ -366,7 +376,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     month,
     year,
     baseSalary,
-    payrollBasis: {...payrollBasis,correction:correctionBasis},
+    payrollBasis: {...payrollBasis,correction:correctionBasis,unpaidLeave,terminationDate:staff.terminationDate?businessDate(staff.terminationDate):null,settlementVersion:1},
+    unpaidLeaveDeduction:unpaidLeave.deduction,depositRefundAmount:refund.amount,depositRefunds:refund.items,settlementAmount:baseSalary+overtimePay+bonuses-deductions+refund.amount,
     workDays,
     lateDays,
     overtimeHours,

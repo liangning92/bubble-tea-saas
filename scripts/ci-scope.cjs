@@ -60,7 +60,7 @@ const browserChecks={
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
  finance:{scripts:['tests/stoploss/revenue-page-check.cjs'],components:['admin']},
- payroll:{scripts:['tests/stoploss/payroll-finance-page-check.cjs','tests/stoploss/payroll-estimate-page-check.cjs'],components:['admin','staff']},
+ payroll:{scripts:['tests/stoploss/payroll-finance-page-check.cjs','tests/stoploss/payroll-estimate-page-check.cjs','tests/stoploss/payroll-settlement-page-check.cjs'],components:['admin','staff']},
  media:{scripts:['tests/media-insights/browser-check.cjs'],components:['admin'],preview:{component:'admin',port:5187}},
  marketing:{scripts:['tests/stoploss/unified-activity-page-check.cjs','tests/stoploss/marketing-operations-page-check.cjs'],components:['admin','pos']},
  dashboard:{scripts:['tests/stoploss/admin-dashboard-page-check.cjs'],components:['admin']},

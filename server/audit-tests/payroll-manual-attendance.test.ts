@@ -3,7 +3,7 @@ jest.mock('../src/config/database',()=>({__esModule:true,default:{staff:{findUni
 jest.mock('../src/config/env',()=>({config:{database:{url:'file:synthetic.db'}}}))
 jest.mock('../src/services/EmployeeWorkspaceStore',()=>({readWork:jest.fn(async()=>null),listWork:jest.fn(async()=>[])}))
 jest.mock('../src/services/SalaryAdjustmentService',()=>({adjustmentPlan:jest.fn(async()=>({items:[],rewards:50000,penalties:20000}))}))
-jest.mock('../src/services/SalaryDepositPlan',()=>({salaryDepositPlan:jest.fn(async()=>[{amount:100000,amountMinor:10000000}])}))
+jest.mock('../src/services/SalaryDepositPlan',()=>({salaryRefundPlan:jest.fn(async()=>({items:[],amount:0})),ensureOnboardingDeposit:jest.fn(async()=>{}),salaryDepositPlan:jest.fn(async()=>[{amount:100000,amountMinor:10000000}])}))
 jest.mock('../src/services/StaffConfigService',()=>({getStaffConfig:jest.fn(async()=>({attendanceBonus:true}))}))
 import prisma from '../src/config/database'
 import {calculateSalary} from '../src/services/StaffService'

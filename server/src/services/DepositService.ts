@@ -116,6 +116,7 @@ export async function createStaffDeposit(data: {
   return prisma.staffDeposit.create({
     data: {
       ...data,
+      startDate: staff.hireDate || new Date(),
       status: 'active'
     }
   })
@@ -241,14 +242,15 @@ export async function processRefund(data: {
   note?: string
   processedBy: string
   requestId?: string
-}) {
+  fullSettlement?: boolean
+}, transaction?: Prisma.TransactionClient) {
   requireAmount(data.amount)
-  return prisma.$transaction(async tx => {
+  const apply = async (tx: Prisma.TransactionClient) => {
     const deposit = await tx.staffDeposit.findUnique({ where: { id: data.staffDepositId }, include: { depositRule: true } })
     if (!deposit) throw new DepositInputError('Staff deposit not found')
     const receipt = await depositReceipt(tx, deposit, 'refund', data)
     if (receipt?.logId) return tx.staffDepositRefund.findUniqueOrThrow({ where: { id: receipt.logId } })
-    const refundable = await calculateRefundAmount(deposit, new Date())
+    const refundable = data.fullSettlement ? Math.max(0, deposit.deductedAmount - deposit.refundedAmount) : await calculateRefundAmount(deposit, new Date())
     if (deposit.status === 'refunded' || data.amount > refundable) throw new DepositInputError('Refund exceeds eligible collected deposit')
     const fullyRefunded = data.amount === refundable
     const changed = await tx.staffDeposit.updateMany({
@@ -260,5 +262,6 @@ export async function processRefund(data: {
     const log = await tx.staffDepositRefund.create({ data: { staffDepositId: deposit.id, amount: data.amount, reason: data.reason, note: data.note, processedBy: data.processedBy } })
     if (receipt) await tx.config.update({ where: { storeId_key: { storeId: deposit.storeId, key: receipt.key } }, data: { value: JSON.stringify({ fingerprint: receipt.fingerprint, logId: log.id }) } })
     return log
-  })
+  }
+  return transaction ? apply(transaction) : prisma.$transaction(apply)
 }
