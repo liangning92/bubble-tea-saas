@@ -49,7 +49,7 @@ export async function salaryDepositPlan(staffId: string, period: string, db: Dat
     if (deposit.depositRule.deductionType === 'one_time') {
       const firstMonth = businessDate(staff?.hireDate || deposit.startDate).slice(0, 7)
       // Leaving cancels any uncollected balance, regardless of trial status.
-      if (period < firstMonth || (staff?.terminationDate && businessDate(staff.terminationDate).slice(0, 7) <= period)) continue
+      if (period < firstMonth || staff?.status==='resigned' || (staff?.terminationDate && (businessDate(staff.terminationDate).slice(0, 7) <= period || businessDate(staff.terminationDate)<businessDate(new Date())))) continue
       const pending = await db.salary.findMany({ where: { staffId, status: 'pending', month: { lt: period } }, select: { id: true } })
       let reserved = 0
       for (const salary of pending) {

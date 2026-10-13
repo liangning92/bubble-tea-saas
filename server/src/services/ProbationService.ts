@@ -10,7 +10,7 @@ const basisKey = (id: string) => `salary.probationBasis.${id}`
 export class ProbationInputError extends Error {}
 export const probationRuleSchema = z.object({ enabled: z.boolean(), durationUnit: z.enum(['days','months']), duration: z.number().int().min(1).max(730), salaryMode: z.enum(['fixed','percentage']), salaryValue: z.number().int().min(1).max(2000000000) }).refine(r => r.durationUnit !== 'months' || r.duration <= 24, 'Maximum 24 months').refine(r => r.salaryMode !== 'percentage' || r.salaryValue <= 100, 'Percentage must not exceed 100')
 export type ProbationRule = z.infer<typeof probationRuleSchema>
-type Employee = { id: string; storeId: string; baseSalary: number | null; hireDate: Date | null; terminationDate?: Date | null; userId?:string; user?:{role:string} }
+type Employee = { id: string; storeId: string; baseSalary: number | null; hireDate: Date | null; terminationDate?: Date | null; status?:string; userId?:string; user?:{role:string} }
 export type Enrollment = { exempt?: boolean; enabled: boolean; rule?: ProbationRule; confirmationDate?: string | null }
 async function read(db: DB, storeId: string, key: string) { const row = await db.config.findUnique({ where: {storeId_key:{storeId,key}} }); return row ? JSON.parse(row.value) : null }
 async function write(db: DB, storeId: string, key: string, value: unknown) { return db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value:JSON.stringify(value),category:'staff'},update:{value:JSON.stringify(value)}}) }
@@ -103,12 +103,18 @@ export async function refreshEmploymentPayroll(db: Prisma.TransactionClient, sta
    regular:Math.min(previous.workingDays.regular,available.segments.find(s=>s.type==='regular')?.days||0)
   }:undefined
   const basis=await calculatePayrollBasis(db,staff,salary.month,days)
-  const finalAmount=basis.amount+salary.overtime+salary.commission+salary.bonus-salary.deduction
+  const plans=await read(db,staff.storeId,`salary.depositPlan.${salary.id}`)||[]
+  const leaving=staff.terminationDate&&(staff.status==='resigned'||businessDate(staff.terminationDate).slice(0,7)<=salary.month||businessDate(staff.terminationDate)<businessDate(new Date()))
+  const cancelledDeposit=leaving?plans.reduce((sum:number,item:any)=>sum+Math.round(item.amountMinor/100),0):0
+  const deduction=salary.deduction-cancelledDeposit
+  if(deduction<0)throw new ProbationInputError('SALARY_DEPOSIT_RECALC_REQUIRED')
+  const finalAmount=basis.amount+salary.overtime+salary.commission+salary.bonus-deduction
   if(finalAmount<0)throw new ProbationInputError('SALARY_DEDUCTIONS_EXCEED_TERMINATION_PAY')
-  const changed=await db.salary.updateMany({where:{id:salary.id,status:'pending'},data:{baseSalary:basis.amount,finalAmount}})
+  const changed=await db.salary.updateMany({where:{id:salary.id,status:'pending'},data:{baseSalary:basis.amount,finalAmount,...(cancelledDeposit?{deduction}:{})}})
   if(changed.count){
-   await write(db,staff.storeId,`salary.employmentRevision.${salary.id}`,{previousBaseSalary:salary.baseSalary,previousFinalAmount:salary.finalAmount,previousBasis:previous,hireDate:staff.hireDate,terminationDate:staff.terminationDate,updatedAt:new Date().toISOString()})
-   await savePayrollBasis(db,{...salary,baseSalary:basis.amount},staff,days)
+   if(cancelledDeposit)await write(db,staff.storeId,`salary.depositPlan.${salary.id}`,[])
+   await write(db,staff.storeId,`salary.employmentRevision.${salary.id}`,{previousBaseSalary:salary.baseSalary,previousFinalAmount:salary.finalAmount,previousDeduction:salary.deduction,cancelledDeposit,previousBasis:previous,hireDate:staff.hireDate,terminationDate:staff.terminationDate,updatedAt:new Date().toISOString()})
+   await savePayrollBasis(db,{...salary,baseSalary:basis.amount},staff,days,false,previous?.settlementVersion===1?{settlementVersion:1,confirmed:false,daysSource:previous.daysSource,terminationDate:staff.terminationDate?businessDate(staff.terminationDate):null}:{})
   }
  }
 }
