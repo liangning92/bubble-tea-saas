@@ -112,6 +112,11 @@ jobs:
       - name: Rebuild native modules for Electron
         run: npx electron-rebuild
 
+      - name: Verify Windows startup without an external WebView2 runtime
+        run: |
+          node tests/stoploss/desktop-startup-runtime.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'POS startup runtime regression failed' }
+
       - name: Setup Python for fresh template generation
         uses: actions/setup-python@v5
         with:

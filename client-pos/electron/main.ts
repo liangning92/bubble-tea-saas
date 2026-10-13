@@ -23,7 +23,7 @@ if (process.platform === 'win32') {
     const selectedProfile = resolvePosDataProfile(currentProfile,app.getPath('appData'),process.env.LOCALAPPDATA)
     if (selectedProfile !== currentProfile) app.setPath('userData',selectedProfile)
   } catch {
-    dialog.showErrorBox('POS data requires verification', 'Multiple historical POS data directories were found. Keep the data and contact the manager.\n发现多个旧收银数据目录，请保留数据并联系负责人核验。')
+    dialog.showErrorBox('Data POS perlu diperiksa', 'Ditemukan beberapa folder data POS lama. Simpan data tersebut dan hubungi pengelola untuk pemeriksaan.')
     app.exit(73)
   }
 }
@@ -99,29 +99,6 @@ try {
       console.log('[PRINTER] electron-pos-printer load failed:', e?.message, e2?.message, e3?.message)
       log.error('[PRINTER] electron-pos-printer load failed:', e?.message, e2?.message, e3?.message)
     }
-  }
-}
-
-// 检测 WebView2 是否可用（Windows only）
-function checkWebView2(): boolean {
-  if (process.platform !== 'win32') return true
-  try {
-    // 检查注册表键：Everett 存储（WebView2 安装后写入）
-    const regKey = 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-    const { execSync } = require('child_process')
-    const result = execSync(
-      `reg query "${regKey}" /v pv 2>nul`,
-      { encoding: 'utf8', timeout: 5000 }
-    )
-    const match = result.match(/pv\s+REG_SZ\s+(\d+\.\d+\.\d+)/)
-    if (match) {
-      console.log('[WebView2] Runtime version:', match[1])
-      return true
-    }
-    return false
-  } catch {
-    // 注册表键不存在 = WebView2 未安装
-    return false
   }
 }
 
@@ -3004,28 +2981,17 @@ app.whenReady().then(async () => {
 
   // 警告：打印模块加载失败
   if (printerLoadFailed) {
-    const warningMsg = '打印模块（electron-pos-printer）未能成功加载。\n\n影响功能：\n- 小票打印可能无法工作\n- 钱箱可能无法打开\n\n建议：请重新安装应用程序。'
+    const warningMsg = 'Modul printer (electron-pos-printer) gagal dimuat.\n\nFungsi yang terdampak:\n- Pencetakan struk mungkin tidak berfungsi\n- Laci kas mungkin tidak dapat dibuka\n\nSilakan instal ulang aplikasi.'
     console.error('[Electron] Printer module warning:', warningMsg)
     dialog.showMessageBox({
       type: 'warning',
-      title: '打印模块加载失败',
+      title: 'Modul printer gagal dimuat',
       message: warningMsg,
-      buttons: ['确定']
+      buttons: ['OK']
     })
   }
 
-  // WebView2 检查（仅 Windows，Electron 28+ 已内置 WebView2 但旧系统可能缺失）
-  if (process.platform === 'win32') {
-    const webview2Available = checkWebView2()
-    console.log('[Electron] WebView2 available:', webview2Available)
-    if (!webview2Available) {
-      const msg = 'WebView2 运行时未安装。\n\n请先安装 Microsoft Edge WebView2 运行时：\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\n安装后请重新启动应用程序。'
-      console.error('[Electron] WebView2 MISSING:', msg)
-      dialog.showErrorBox('缺少 WebView2 运行时', msg)
-      app.quit()
-      return
-    }
-  }
+  // Electron ships Chromium; Windows WebView2 is not a POS startup dependency.
 
   // 注册全局快捷键：Ctrl+Shift+D 打开诊断页
   globalShortcut.register('CommandOrControl+Shift+D', () => {
