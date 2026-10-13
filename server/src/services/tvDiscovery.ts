@@ -1,6 +1,6 @@
 import dgram from 'dgram'
 import os from 'os'
-import config from '../config'
+import { config } from '../config/env'
 
 const DISCOVERY_PORT = 7078
 let socket: dgram.Socket | null = null

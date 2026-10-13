@@ -26,8 +26,8 @@ module.exports = {
     },
     {
       name: 'tea-admin',
-      script: path.join(WORKDIR, 'client-admin', 'node_modules', '.bin', 'vite'),
-      args: '--port 5173',
+      script: 'npm',
+      args: 'run dev',
       cwd: path.join(WORKDIR, 'client-admin'),
       interpreter: 'none',
       watch: false,
@@ -45,8 +45,8 @@ module.exports = {
     },
     {
       name: 'tea-pos',
-      script: path.join(WORKDIR, 'client-pos', 'node_modules', '.bin', 'vite'),
-      args: '--port 6063',
+      script: 'npm',
+      args: 'run dev',
       cwd: path.join(WORKDIR, 'client-pos'),
       interpreter: 'none',
       watch: false,
