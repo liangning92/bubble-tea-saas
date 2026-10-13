@@ -1,3 +1,4 @@
+import { resolveHandoverReceiptItems } from '../../../shared/utils/handoverReceipt'
 import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
@@ -4867,9 +4868,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                             closeNote: ''
                           })
                           try {
+                            const printConfig = (await posApi.getConfigs(user!.storeId!)).data?.data || {}
                             const target = printerTarget('receipt')
                             if (target && electronAPI?.sendPrintShiftReport) {
-                              const result = await electronAPI.sendPrintShiftReport({ ...closeResult.data?.data?.report, ...target, reportKind: 'handover', paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: closeResult.data?.data?.report?.cashierName ?? user?.staff?.name ?? null, shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
+                              const result = await electronAPI.sendPrintShiftReport({ ...closeResult.data?.data?.report, ...target, reportKind: 'handover', receiptItems: resolveHandoverReceiptItems(printConfig.shiftSettings), paperSize: posReceipt.paperSize || '80mm', language: lang || 'id', storeName: storeInfo.storeName || 'YOUME', cashierName: closeResult.data?.data?.report?.cashierName ?? user?.staff?.name ?? null, shiftType: closeResult.data?.data?.shift || '', openedAt: closeResult.data?.data?.openedAt, closedAt: closeResult.data?.data?.closedAt, actualCash, purchaseExpenses: closeResult.data?.data?.purchaseExpenses })
                               if (result?.success === false) throw Error(result.error || 'Print failed')
                             }
                           } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning') }

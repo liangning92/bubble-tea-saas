@@ -4,6 +4,31 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      handoverReceipt: {
+        "title": "Isi struk serah terima",
+        "hint": "Centang untuk tampil, hapus centang untuk sembunyi. Tersimpan otomatis; cetak tutup shift dan cetak ulang mengambil pengaturan terbaru. Judul dan catatan verifikasi tetap tampil.",
+        "storeName": "Nama toko",
+        "sessionId": "Referensi shift",
+        "cashierName": "Kasir",
+        "shiftType": "Shift",
+        "openedAt": "Waktu mulai",
+        "closedAt": "Waktu selesai",
+        "printedAt": "Waktu cetak",
+        "openFloat": "Kas awal",
+        "cashSales": "Penjualan tunai",
+        "qrisSales": "Penjualan QRIS",
+        "cashIn": "Kas masuk",
+        "cashOut": "Kas keluar",
+        "recordedBalance": "Saldo kas tercatat",
+        "closeCash": "Kas dihitung",
+        "expectedCash": "Kas seharusnya",
+        "variance": "Selisih kas",
+        "orderCount": "Pesanan selesai",
+        "cupCount": "Jumlah minuman",
+        "expenses": "Rincian dan total belanja shift",
+        "cashierSignature": "Tanda tangan kasir",
+        "supervisorSignature": "Tanda tangan supervisor"
+      },
       shiftReview: {
         "title": "Detail sif",
         "dateRange": "Rentang tanggal",
@@ -4010,6 +4035,31 @@ const resources = {
   },
   "en": {
     "translation": {
+      handoverReceipt: {
+        "title": "Handover receipt contents",
+        "hint": "Check to show, uncheck to hide. Saved automatically; closing and reprinting fetch the latest settings. Title and verification notices remain.",
+        "storeName": "Store name",
+        "sessionId": "Session reference",
+        "cashierName": "Cashier",
+        "shiftType": "Shift",
+        "openedAt": "Opened at",
+        "closedAt": "Closed at",
+        "printedAt": "Printed at",
+        "openFloat": "Opening float",
+        "cashSales": "Recorded cash sales",
+        "qrisSales": "Recorded QRIS",
+        "cashIn": "Recorded cash in",
+        "cashOut": "Recorded cash out",
+        "recordedBalance": "Recorded cash balance",
+        "closeCash": "Counted cash",
+        "expectedCash": "Expected cash",
+        "variance": "Cash variance",
+        "orderCount": "Completed orders",
+        "cupCount": "Item quantity",
+        "expenses": "Shift purchase details and total",
+        "cashierSignature": "Cashier signature",
+        "supervisorSignature": "Supervisor signature"
+      },
       shiftReview: {
         "title": "Shift details",
         "dateRange": "Date range",
@@ -7953,6 +8003,31 @@ const resources = {
   },
   "zh": {
     "translation": {
+      handoverReceipt: {
+        "title": "交接班小票内容",
+        "hint": "勾选显示，取消勾选隐藏。自动保存，收银机交班打印和补打时自动读取最新设置。标题和待核对提示保留。",
+        "storeName": "门店名称",
+        "sessionId": "班次凭据",
+        "cashierName": "交班员工",
+        "shiftType": "班次",
+        "openedAt": "开班时间",
+        "closedAt": "交班时间",
+        "printedAt": "打印时间",
+        "openFloat": "开班备用金",
+        "cashSales": "现金销售记录",
+        "qrisSales": "QRIS销售记录",
+        "cashIn": "现金存入记录",
+        "cashOut": "现金支出记录",
+        "recordedBalance": "记录推算现金",
+        "closeCash": "实际盘点现金",
+        "expectedCash": "钱箱应有现金",
+        "variance": "现金差额",
+        "orderCount": "完成订单记录",
+        "cupCount": "商品杯数记录",
+        "expenses": "本班采购报销明细及合计",
+        "cashierSignature": "收银员签字",
+        "supervisorSignature": "主管签字"
+      },
       shiftReview: {
         "title": "班次详情",
         "dateRange": "日期范围",

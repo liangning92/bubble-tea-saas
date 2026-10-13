@@ -1,3 +1,4 @@
+import { HandoverReceiptSettings } from '../../components/HandoverReceiptSettings'
 import { CustomerDisplayCanvas } from '../../../../shared/components/CustomerDisplayCanvas'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../../shared/utils/customerDisplayAppearance'
 import { CustomerDisplayLayout, CustomerLayoutColumn, CustomerLayoutRow, customerRows, equalPercents, customerBackground, customerTextColor } from '../../../../shared/components/CustomerDisplayLayout'
@@ -641,6 +642,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     requireSupervisorConfirm: false,
     showSummary: true,
     cashDifferenceLimit: 0,
+    receiptItems: {} as Record<string, boolean>,
     summaryItems: {
       orderCount: true,
       customerCount: true,
@@ -2217,6 +2219,11 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
               ))}
             </div>
           </div>
+          <HandoverReceiptSettings settings={shiftSettings} disabled={saveConfigMutation.isPending || isLoading} onChange={receiptItems => {
+            const updated = { ...shiftSettings, receiptItems }
+            setShiftSettings(updated)
+            handleSave('shiftSettings', updated)
+          }} />
         </div>
       )}
 

@@ -1994,6 +1994,7 @@ function generateShiftReportText(data: any): string {
   const label = (zh: string, en: string, id: string) => lang === 'zh' ? zh : lang === 'en' ? en : id
   const unknown = label('待核对', 'Unverified', 'Perlu diperiksa')
   const lines: string[] = []
+  const visible = (key: string) => typeof data.receiptItems?.[key] === 'boolean' ? data.receiptItems[key] : data.summaryItems?.[key] !== false
   const number = (value: unknown): value is number => Number.isSafeInteger(value)
   const wrap = (text: string) => {
     let row = ''
@@ -2017,40 +2018,39 @@ function generateShiftReportText(data: any): string {
     row(`${local.slice(8,10)}/${local.slice(5,7)}/${local.slice(0,4)}`, local.slice(11,19))
   }
   const separator = () => lines.push(repeatChar('-', width))
-  wrap(data.storeName || 'YOUME')
+  if (visible('storeName')) wrap(data.storeName || 'YOUME')
   wrap(label('交接班记录', 'SHIFT HANDOVER', 'SERAH TERIMA SHIFT'))
-  if (data.sessionId) { wrap(label('班次凭据', 'Session reference', 'Referensi shift')); wrap(String(data.sessionId)) }
+  if (visible('sessionId') && data.sessionId) { wrap(label('班次凭据', 'Session reference', 'Referensi shift')); wrap(String(data.sessionId)) }
   separator()
-  row(label('交班员工', 'Cashier', 'Kasir'), data.cashierName || unknown)
+  if (visible('cashierName')) row(label('交班员工', 'Cashier', 'Kasir'), data.cashierName || unknown)
   const names = data.shiftNames || {}
   const shiftName = (lang === 'zh' ? names.nameZh : lang === 'id' ? names.nameId : names.name) || names.name
   const fallback: Record<string,string> = {morning:label('早班','Morning','Pagi'),afternoon:label('午班','Afternoon','Siang'),evening:label('晚班','Evening','Sore'),night:label('夜班','Night','Malam')}
-  row(label('班次', 'Shift', 'Shift'), shiftName || fallback[data.shiftType] || data.shiftType || unknown)
-  time(label('开班时间', 'Opened', 'Mulai'), data.openedAt)
-  time(label('交班时间', 'Closed', 'Selesai'), data.closedAt)
-  time(label('打印时间', 'Printed', 'Dicetak'), new Date())
+  if (visible('shiftType')) row(label('班次', 'Shift', 'Shift'), shiftName || fallback[data.shiftType] || data.shiftType || unknown)
+  if (visible('openedAt')) time(label('开班时间', 'Opened', 'Mulai'), data.openedAt)
+  if (visible('closedAt')) time(label('交班时间', 'Closed', 'Selesai'), data.closedAt)
+  if (visible('printedAt')) time(label('打印时间', 'Printed', 'Dicetak'), new Date())
   separator()
   const evidence = data.summaryEvidence || {}
   const verified = evidence.verified === true
   wrap(label('销售及现金记录', 'SALES / CASH RECORDS', 'CATATAN PENJUALAN / KAS'))
   if (!verified) wrap(label('按开班至交班时间统计，待核对', 'Opening-to-close records; unverified', 'Catatan waktu shift; perlu diperiksa'))
-  const si = data.summaryItems || {}
-  if (si.openFloat !== false) money(label('开班备用金', 'Opening float', 'Kas awal'), data.openFloat)
-  if (si.cashSales !== false) money(label('现金销售记录', 'Recorded cash sales', 'Penjualan tunai'), evidence.cashSales)
-  if (si.qrisSales !== false) money(label('QRIS销售记录', 'Recorded QRIS', 'Penjualan QRIS'), evidence.qrisReceipts)
-  if (si.cashIn !== false) money(label('现金存入记录', 'Recorded cash in', 'Kas masuk'), evidence.cashIns)
-  if (si.cashOut !== false) money(label('现金支出记录', 'Recorded cash out', 'Kas keluar'), evidence.cashOuts)
+  if (visible('openFloat')) money(label('开班备用金', 'Opening float', 'Kas awal'), data.openFloat)
+  if (visible('cashSales')) money(label('现金销售记录', 'Recorded cash sales', 'Penjualan tunai'), evidence.cashSales)
+  if (visible('qrisSales')) money(label('QRIS销售记录', 'Recorded QRIS', 'Penjualan QRIS'), evidence.qrisReceipts)
+  if (visible('cashIn')) money(label('现金存入记录', 'Recorded cash in', 'Kas masuk'), evidence.cashIns)
+  if (visible('cashOut')) money(label('现金支出记录', 'Recorded cash out', 'Kas keluar'), evidence.cashOuts)
   const amounts = [data.openFloat,evidence.cashSales,evidence.cashIns,evidence.cashOuts]
   const recordedBalance = amounts.every(number) ? data.openFloat + evidence.cashSales + evidence.cashIns - evidence.cashOuts : null
-  money(label('记录推算现金', 'Recorded cash balance', 'Saldo kas tercatat'), recordedBalance)
-  if (si.closeCash !== false) money(label('实际盘点现金', 'Counted cash', 'Kas dihitung'), data.actualCash)
+  if (visible('recordedBalance')) money(label('记录推算现金', 'Recorded cash balance', 'Saldo kas tercatat'), recordedBalance)
+  if (visible('closeCash')) money(label('实际盘点现金', 'Counted cash', 'Kas dihitung'), data.actualCash)
   const expected = verified && number(data.expectedCash) && data.expectedCash === recordedBalance ? data.expectedCash : null
-  money(label('钱箱应有现金', 'Expected cash', 'Kas seharusnya'), expected)
-  money(label('现金差额', 'Variance', 'Selisih'), number(expected) && number(data.actualCash) ? data.actualCash - expected : null)
+  if (visible('expectedCash')) money(label('钱箱应有现金', 'Expected cash', 'Kas seharusnya'), expected)
+  if (visible('variance')) money(label('现金差额', 'Variance', 'Selisih'), number(expected) && number(data.actualCash) ? data.actualCash - expected : null)
   separator()
-  if (si.orderCount !== false) row(label('完成订单记录', 'Completed orders', 'Pesanan selesai'), number(evidence.orderCount) ? String(evidence.orderCount) : unknown)
-  row(label('商品杯数记录', 'Item quantity', 'Jumlah minuman'), number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
-  if (si.expenses !== false) {
+  if (visible('orderCount')) row(label('完成订单记录', 'Completed orders', 'Pesanan selesai'), number(evidence.orderCount) ? String(evidence.orderCount) : unknown)
+  if (visible('cupCount')) row(label('商品杯数记录', 'Item quantity', 'Jumlah minuman'), number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
+  if (visible('expenses')) {
     separator()
     wrap(label('本班采购报销', 'SHIFT PURCHASE EXPENSES', 'BELANJA SHIFT'))
     const purchases = data.purchaseExpenses
@@ -2062,10 +2062,14 @@ function generateShiftReportText(data: any): string {
   }
   if (!verified) { separator(); wrap(label('销售归属、离线上传及退款需核对', 'Review sales attribution, uploads and refunds', 'Periksa penjualan, unggahan dan refund')) }
   separator()
-  wrap(label('收银员签字:', 'Cashier sign:', 'Ttd Kasir:'))
-  lines.push('________________________', '')
-  wrap(label('主管签字:', 'Supervisor sign:', 'Ttd Supervisor:'))
-  lines.push('________________________')
+  if (visible('cashierSignature')) {
+    wrap(label('收银员签字:', 'Cashier sign:', 'Ttd Kasir:'))
+    lines.push('________________________', '')
+  }
+  if (visible('supervisorSignature')) {
+    wrap(label('主管签字:', 'Supervisor sign:', 'Ttd Supervisor:'))
+    lines.push('________________________')
+  }
   return lines.join('\n') + '\n\n\n'
 }
 
