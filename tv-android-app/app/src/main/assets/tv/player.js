@@ -1,0 +1,840 @@
+/* Shared browser / Android player. Backend determines prices; this module only
+ * filters cached schedules and formats published values. No client price calculation. */
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id),
+    native = window.TVNative;
+  const words = {
+    id: {
+      pair: "Hubungkan TV",
+      help: "Masukkan kode ini di Pengelolaan TV, pilih layar toko.",
+      settings: "Pengaturan",
+      server: "Alamat server",
+      http: "Izinkan HTTP jaringan lokal",
+      test: "Tes koneksi",
+      save: "Simpan",
+      unpair: "Lepaskan perangkat",
+      close: "Tutup",
+      offline: "Offline",
+      stale: "Harga sementara disembunyikan",
+      standby: "Selamat datang",
+      price: "Harga belum tersedia",
+      failed: "Konten belum tersedia. Periksa koneksi.",
+      confirm: "Lepaskan perangkat dan hapus cache?",
+      connecting: "Menghubungkan…",
+      error: "Gagal",
+      online: "Terhubung",
+    },
+    en: {
+      pair: "Connect TV",
+      help: "Enter this code in TV management and select the store screen.",
+      settings: "Settings",
+      server: "Server address",
+      http: "Allow local network HTTP",
+      test: "Test connection",
+      save: "Save",
+      unpair: "Unpair device",
+      close: "Close",
+      offline: "Offline",
+      stale: "Prices temporarily hidden",
+      standby: "Welcome",
+      price: "Price unavailable",
+      failed: "No content yet. Check connection.",
+      confirm: "Unpair device and clear cache?",
+      connecting: "Connecting…",
+      error: "Failed",
+      online: "Connected",
+    },
+    zh: {
+      pair: "连接电视",
+      help: "在电视管理中输入此配对码并选择门店屏幕。",
+      settings: "连接设置",
+      server: "服务器地址",
+      http: "允许局域网HTTP",
+      test: "测试连接",
+      save: "保存",
+      unpair: "解除绑定",
+      close: "关闭",
+      offline: "离线",
+      stale: "价格暂时隐藏",
+      standby: "欢迎光临",
+      price: "价格未配置",
+      failed: "暂无内容，请检查网络。",
+      confirm: "解除绑定并清除缓存？",
+      connecting: "正在连接…",
+      error: "失败",
+      online: "已连接",
+    },
+  };
+  let language = localStorage.getItem("tv.language") || "id",
+    snapshot = null,
+    online = false,
+    cacheState = "empty",
+    errors = [],
+    desiredVersion = "",
+    page = 0,
+    slide = 0,
+    pageTimer,
+    slideTimer,
+    clockTimer,
+    pairing = false,
+    fetching = false,
+    eventBusy = false,
+    pendingAck = JSON.parse(localStorage.getItem("tv.acks") || "[]");
+  let origin = location.origin,
+    identity = JSON.parse(localStorage.getItem("tv.identity") || "null");
+  if (native) {
+    const state = JSON.parse(native.state());
+    origin = state.server;
+    identity = state.identity && state.identity.token ? state.identity : null;
+    language = state.language || language;
+  }
+  let pairGeneration=0;
+  let reqId = 0;
+  const pending = new Map();
+  window.TVNativeResponse = function (id, status, body) {
+    const p = pending.get(id);
+    if (!p) return;
+    pending.delete(id);
+    clearTimeout(p.timer);
+    status >= 200 && status < 300
+      ? p.resolve(JSON.parse(body))
+      : p.reject(Object.assign(Error("HTTP " + status), { status }));
+  };
+  function t(key) {
+    return (words[language] || words.id)[key] || key;
+  }
+  function labels() {
+    document.documentElement.lang = language;
+    $("pair-title").textContent = t("pair");
+    $("pair-help").textContent = t("help");
+    ["settings", "test", "save", "unpair", "close"].forEach(
+      (id) => ($(id).textContent = t(id)),
+    );
+    $("setup-title").textContent = t("settings");
+    $("server-label").textContent = t("server");
+    $("http-label").textContent = t("http");
+  }
+  labels();
+  async function request(method, path, body) {
+    if (native)
+      return new Promise((resolve, reject) => {
+        const id = ++reqId;
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(Error("TIMEOUT"));
+        }, 45000);
+        pending.set(id, { resolve, reject, timer });
+        native.request(id, method, path, body ? JSON.stringify(body) : "");
+      });
+    const headers = { "Content-Type": "application/json" };
+    if (identity) headers["X-TV-Device-Token"] = identity.token;
+    const pair = JSON.parse(sessionStorage.getItem("tv.pair") || "null");
+    if (pair) headers["X-TV-Pair-Secret"] = pair.secret;
+    const res = await fetch(origin + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok)
+      throw Object.assign(Error("HTTP " + res.status), { status: res.status });
+    return res.json();
+  }
+  function setIdentity(value) {
+    identity = value;
+    if (native) native.identity(JSON.stringify(value));
+    else localStorage.setItem("tv.identity", JSON.stringify(value));
+  }
+  async function clearIdentity() {
+    pairGeneration++;
+    identity = null;
+    snapshot = null;
+    localStorage.removeItem("tv.identity");
+    localStorage.removeItem("tv.snapshot");
+    localStorage.removeItem("tv.acks");
+    pendingAck = [];
+    sessionStorage.removeItem("tv.pair");
+    if (native) native.clear();
+    else
+      for (const k of await caches.keys())
+        if (k.startsWith("tv-content-")) await caches.delete(k);
+    clearInterval(pageTimer);
+    clearTimeout(slideTimer);
+    $("media").replaceChildren();
+    $("promotions").replaceChildren();
+    $("lottery").hidden = true;
+    pairing = false;
+    $("display").hidden = true;
+    $("pair").hidden = false;
+    startPair();
+  }
+  async function startPair() {
+    if (pairing || identity) return;
+    pairing = true;
+    const pairEpoch=pairGeneration;
+    $("status").textContent = t("connecting");
+    try {
+      const json = await request("POST", "/api/tv/pair/request");
+      if(pairEpoch!==pairGeneration)return;
+      if (!json.success) throw Error(json.message);
+      if (native) native.pair(JSON.stringify(json.data));
+      else sessionStorage.setItem("tv.pair", JSON.stringify(json.data));
+      $("pin").textContent =
+        json.data.pin.slice(0, 3) + " " + json.data.pin.slice(3);
+      const session = json.data;
+      while (!identity && pairEpoch===pairGeneration) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const result = await request("GET", "/api/tv/pair/check/" + session.id);
+        if(pairEpoch!==pairGeneration)return;
+        if (result.data.expired) break;
+        if (result.data.paired) {
+          setIdentity(result.data);
+          await refresh();
+          break;
+        }
+      }
+    } catch (e) {
+      $("status").textContent = t("failed");
+      recordError(e.message);
+    } finally {
+      if(pairEpoch===pairGeneration){pairing = false;
+      if (!identity) setTimeout(startPair, 5000);}
+    }
+  }
+  function recordError(message) {
+    errors = [...errors.slice(-18), String(message).slice(0, 300)];
+  }
+  function estimatedTime() {
+    if (!snapshot || snapshot.timeTrusted === false) return null;
+    const checked = Number(snapshot.checkedAt),
+      wall = Date.now();
+    if (!checked || wall < checked - 60000) return null;
+    return Date.parse(snapshot.serverTime) + (wall - checked);
+  }
+  function freshPrices() {
+    const now = estimatedTime();
+    return now !== null && now <= Date.parse(snapshot.validUntil);
+  }
+  function eligible(a) {
+    const now = estimatedTime();
+    if (now === null || !freshPrices()) return false;
+    if (
+      (a.startsAt && now < Date.parse(a.startsAt)) ||
+      (a.endsAt && now >= Date.parse(a.endsAt))
+    )
+      return false;
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: a.timezone || snapshot.store.timezone,
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).formatToParts(new Date(now)),
+        get = (k) => parts.find((p) => p.type === k).value;
+      let day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+        get("weekday"),
+      );
+      const minute = Number(get("hour")) * 60 + Number(get("minute")),
+        minutes = (s) => Number(s.split(":")[0]) * 60 + Number(s.split(":")[1]);
+      if (a.dailyStart && a.dailyEnd) {
+        const start = minutes(a.dailyStart),
+          end = minutes(a.dailyEnd);
+        if (start < end) {
+          if (minute < start || minute >= end) return false;
+        } else {
+          if (minute >= end && minute < start) return false;
+          if (minute < end) day = (day + 6) % 7;
+        }
+      }
+      return !a.weekdays.length || a.weekdays.includes(day);
+    } catch {
+      return false;
+    }
+  }
+  function assetUrl(url) {
+    const asset = snapshot && snapshot.assets.find((a) => a.url === url);
+    if (native)
+      return asset
+        ? "https://appassets.androidplatform.net/cache/" + asset.sha256
+        : "";
+    return (url.startsWith("/") ? origin + url : url)+(asset?'?tv-sha='+asset.sha256:'');
+  }
+  function element(tag, text, cls) {
+    const el = document.createElement(tag);
+    if (text !== undefined) el.textContent = text;
+    if (cls) el.className = cls;
+    return el;
+  }
+  function money(n) {
+    return new Intl.NumberFormat(snapshot.store.locale, {
+      style: "currency",
+      currency: snapshot.store.currency,
+      maximumFractionDigits: 2,
+    }).format(n);
+  }
+  function renderProducts() {
+    if (!snapshot) return;
+    const grid = $("products");
+    grid.replaceChildren();
+    const count = snapshot.settings.orientation === "portrait" ? 6 : 8,
+      items = snapshot.menu.slice(page * count, (page + 1) * count);
+    if (!items.length) {
+      page = 0;
+      return;
+    }
+    for (const p of items) {
+      const card = element("article"),
+        info = element("div");
+      if (p.image) {
+        const img = element("img");
+        img.src = assetUrl(p.image);
+        img.alt = p.name;
+        img.onerror = () => {
+          img.remove();
+          recordError("IMAGE:" + p.id);
+        };
+        card.append(img);
+      }
+      info.append(element("small", p.category), element("h3", p.name));
+      if (freshPrices()) {
+        if (!p.specs.length) info.append(element("p", t("price")));
+        for (const spec of p.specs) {
+          const line = element("p");
+          line.append(element("small", spec.name + " "));
+          const promotion =
+            spec.activityId &&
+            snapshot.promotions.find((a) => a.id === spec.activityId);
+          const applicable =
+            !spec.activityId || (promotion && eligible(promotion));
+          if (applicable && spec.displayPrice < spec.basePrice)
+            line.append(element("del", money(spec.basePrice)));
+          line.append(
+            document.createTextNode(
+              money(applicable ? spec.displayPrice : spec.basePrice),
+            ),
+          );
+          info.append(line);
+        }
+      }
+      card.append(info);
+      grid.append(card);
+    }
+  }
+  function promotionText(a) {
+    const labels = {
+      zh: {
+        off: "优惠",
+        minimum: "最低消费",
+        member: "会员专享",
+        payment: "支付方式",
+        cup: "第几杯优惠",
+        buy: "购买",
+        get: "赠送",
+        conditions: "参与条件",
+        special: "特价",
+        bundle: "套餐",
+        gift: "赠品",
+        lottery: "订单抽奖",
+        points: "积分",
+        stamps: "集章",
+        coupon: "优惠券",
+        referral: "邀请奖励",
+        group: "拼团",
+        addon: "加料优惠",
+        upgrade: "升级优惠",
+      },
+      en: {
+        off: "off",
+        minimum: "Minimum spend",
+        member: "Members only",
+        payment: "Payment methods",
+        cup: "Cup offer",
+        buy: "Buy",
+        get: "Get",
+        conditions: "Eligibility",
+        special: "Special price",
+        bundle: "Bundle",
+        gift: "Gift",
+        lottery: "Order lottery",
+        points: "Points",
+        stamps: "Stamps",
+        coupon: "Coupon",
+        referral: "Referral reward",
+        group: "Group offer",
+        addon: "Topping offer",
+        upgrade: "Upgrade offer",
+      },
+      id: {
+        off: "diskon",
+        minimum: "Belanja minimum",
+        member: "Khusus anggota",
+        payment: "Metode pembayaran",
+        cup: "Penawaran gelas",
+        buy: "Beli",
+        get: "Gratis",
+        conditions: "Syarat",
+        special: "Harga spesial",
+        bundle: "Paket",
+        gift: "Hadiah",
+        lottery: "Undian pesanan",
+        points: "Poin",
+        stamps: "Stempel",
+        coupon: "Kupon",
+        referral: "Hadiah undangan",
+        group: "Penawaran kelompok",
+        addon: "Penawaran topping",
+        upgrade: "Penawaran peningkatan",
+      },
+    };
+    const l = labels[language] || labels.id,
+      r = a.rule || {},
+      parts = [];
+    if (r.price !== undefined) parts.push(l.special + ": " + money(r.price));
+    else if (r.percent !== undefined) parts.push(r.percent + "% " + l.off);
+    else if (r.amount !== undefined) parts.push(money(r.amount) + " " + l.off);
+    else parts.push(l[a.type] || l.conditions);
+    if (r.minAmount) parts.push(l.minimum + ": " + money(r.minAmount));
+    if (a.memberOnly || (a.memberLevels || []).length)
+      parts.push(
+        l.member +
+          ((a.memberLevels || []).length
+            ? " (" + a.memberLevels.join(", ") + ")"
+            : ""),
+      );
+    if ((a.paymentMethods || []).length)
+      parts.push(l.payment + ": " + a.paymentMethods.join(", "));
+    if (r.nth) parts.push(l.cup + ": " + r.nth);
+    if (r.buy) parts.push(l.buy + " " + r.buy + ", " + l.get + " " + r.get);
+    return [a.description, ...parts].filter(Boolean).join(" · ");
+  }
+  function renderPromotions() {
+    const box = $("promotions");
+    box.replaceChildren();
+    if (
+      !snapshot.screen.isActive ||
+      !snapshot.settings.showActivities ||
+      snapshot.settings.activityDisplayType === "badges_only"
+    )
+      return;
+    const active = snapshot.promotions.filter(eligible),
+      batch =
+        Math.floor(
+          (estimatedTime() || 0) / (snapshot.settings.pageSeconds * 1000),
+        ) % Math.max(1, Math.ceil(active.length / 3));
+    for (const a of active.slice(batch * 3, batch * 3 + 3)) {
+      const item = element("div");
+      item.append(element("strong", a.name), element("p", promotionText(a)));
+      box.append(item);
+    }
+  }
+  function playSlide() {
+    clearTimeout(slideTimer);
+    const section = $("media");
+    section.replaceChildren();
+    if (!snapshot) return;
+    const items = snapshot.media.length
+      ? snapshot.media
+      : snapshot.menu
+          .filter((p) => p.image)
+          .map((p) => ({ url: p.image, kind: "image", name: p.name }));
+    if (!items.length) {
+      section.append(element("h2", snapshot.store.name));
+      return;
+    }
+    slide %= items.length;
+    const item = items[slide],
+      el = element(item.kind === "video" ? "video" : "img"),
+      next = () => {
+        slide = (slide + 1) % items.length;
+        playSlide();
+      };
+    el.src = assetUrl(item.url);
+    el.style.objectFit =
+      snapshot.settings.mediaFitMode === "cover" ? "cover" : "contain";
+    el.onerror = () => {
+      recordError("MEDIA:" + item.url);
+      slideTimer = setTimeout(next, 1000);
+    };
+    if (item.kind === "video") {
+      el.autoplay = true;
+      el.muted = true;
+      el.playsInline = true;
+      el.onended = next;
+      el.onloadeddata = () => clearTimeout(slideTimer);
+      slideTimer = setTimeout(() => {
+        recordError("VIDEO_TIMEOUT:" + item.url);
+        next();
+      }, 30000);
+      el.play().catch((e) => recordError(e.message));
+    } else {
+      el.alt = item.name;
+      slideTimer = setTimeout(
+        next,
+        snapshot.settings.mediaIntervalSeconds * 1000,
+      );
+    }
+    section.append(el);
+  }
+  let audio = null,
+    audioIndex = 0;
+  function music() {
+    if (audio) {
+      audio.pause();
+      audio.remove();
+      audio = null;
+    }
+    if (
+      !snapshot.settings.musicEnabled ||
+      !snapshot.music.length ||
+      !snapshot.screen.isActive
+    )
+      return;
+    audio = element("audio");
+    audio.volume = snapshot.settings.volume;
+    audio.src = assetUrl(
+      snapshot.music[audioIndex % snapshot.music.length].url,
+    );
+    audio.onended = () => {
+      audioIndex++;
+      music();
+    };
+    audio.onerror = () => recordError("AUDIO_FAILED");
+    document.body.append(audio);
+    audio.play().catch((e) => recordError("AUDIO:" + e.message));
+  }
+  function apply(data) {
+    const changed = !snapshot || snapshot.version !== data.version;
+    snapshot = data;
+    language = data.store.locale.split("-")[0];
+    labels();
+    $("pair").hidden = true;
+    $("display").hidden = false;
+    $("brand").textContent = data.store.name;
+    $("store-logo").hidden = !data.store.logo;
+    if (data.store.logo) {
+      $("store-logo").src = assetUrl(data.store.logo);
+      $("store-logo").onerror = () => {
+        $("store-logo").hidden = true;
+      };
+    }
+    $("channel").textContent = data.channel.name;
+    document.body.className = [
+      data.settings.themeStyle,
+      data.settings.layoutTemplate,
+      data.settings.orientation,
+    ].join(" ");
+    $("display").style.padding = data.settings.safeAreaPadding + "vmin";
+    $("ticker").textContent = data.settings.marqueeText;
+    $("ticker").style.animationDuration = 60 / data.settings.marqueeSpeed + "s";
+    if (changed) {
+      page = 0;
+      slide = 0;
+      clearInterval(pageTimer);
+      if (data.screen.isActive) {
+        renderProducts();
+        playSlide();
+        music();
+        pageTimer = setInterval(() => {
+          page =
+            (page + 1) %
+            Math.max(
+              1,
+              Math.ceil(
+                snapshot.menu.length /
+                  (snapshot.settings.orientation === "portrait" ? 6 : 8),
+              ),
+            );
+          renderProducts();
+        }, data.settings.pageSeconds * 1000);
+      } else {
+        $("products").replaceChildren();
+        $("media").replaceChildren(element("h2", t("standby")));
+        clearTimeout(slideTimer);
+        if (audio) audio.pause();
+      }
+    }
+    renderPromotions();
+    updateClock();
+  }
+  let lastPriceState = "";
+  function updateClock() {
+    if (!snapshot) return;
+    $("clock").textContent = new Intl.DateTimeFormat(snapshot.store.locale, {
+      timeZone: snapshot.store.timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date());
+    $("network").textContent =
+      (online ? t("online") : t("offline")) +
+      (!freshPrices() ? " · " + t("stale") : "");
+    if (!snapshot.screen.isActive) return;
+    renderPromotions();
+    const priceState =
+      String(freshPrices()) +
+      snapshot.promotions
+        .filter(eligible)
+        .map((a) => a.id)
+        .join(",");
+    if (priceState !== lastPriceState) {
+      lastPriceState = priceState;
+      renderProducts();
+    }
+  }
+  async function browserCommit(data) {
+    const bytes = data.assets.reduce((n, a) => n + a.size, 0);
+    if (bytes > 1073741824) throw Error("CACHE_LIMIT");
+    const old = JSON.parse(localStorage.getItem("tv.snapshot") || "null");
+    if (
+      old &&
+      old.version !== data.version &&
+      bytes + old.assets.reduce((n, a) => n + a.size, 0) > 1073741824
+    )
+      throw Error("CACHE_LIMIT");
+    const name = "tv-content-" + data.version,
+      cache = await caches.open(name);
+    for (const asset of data.assets) {
+      const url = origin + asset.url + "?tv-sha=" + asset.sha256;
+      let res = await cache.match(url);
+      if (!res) {
+        res = await fetch(url, { cache:"no-store", signal: AbortSignal.timeout(60000) });
+        if (!res.ok) throw Error("ASSET_HTTP");
+        const buffer = await res.arrayBuffer(),
+          digest = Array.from(
+            new Uint8Array(await crypto.subtle.digest("SHA-256", buffer)),
+          )
+            .map((x) => x.toString(16).padStart(2, "0"))
+            .join("");
+        if (buffer.byteLength !== asset.size || digest !== asset.sha256)
+          throw Error("ASSET_CHECKSUM");
+        await cache.put(url, new Response(buffer, { headers: res.headers }));
+      }
+    }
+    if (old && old.version !== data.version)
+      localStorage.setItem("tv.previous", JSON.stringify(old));
+    localStorage.setItem("tv.snapshot", JSON.stringify(data));
+    for (const key of await caches.keys())
+      if (
+        key.startsWith("tv-content-") &&
+        key !== name &&
+        key !== "tv-content-" + (old && old.version)
+      )
+        await caches.delete(key);
+  }
+  window.TVCacheReady = function (raw) {
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    cacheState = "ready";
+    apply(data);
+  };
+  window.TVClockInvalid = function () {
+    if (snapshot) {
+      snapshot.timeTrusted = false;
+      updateClock();
+    }
+  };
+  window.TVCacheFailed = function (message) {
+    cacheState = "failed";
+    recordError(message);
+  };
+  async function refresh() {
+    if (!identity || fetching) return;
+    fetching = true;
+    try {
+      const result = await request("GET", "/api/tv/device/content");
+      if (!result.success) throw Error(result.message);
+      online = true;
+      const data = { ...result.data, checkedAt: Date.now() };
+      desiredVersion = data.version;
+      if (snapshot && snapshot.version === data.version) {
+        snapshot = {
+          ...snapshot,
+          serverTime: data.serverTime,
+          checkedAt: data.checkedAt,
+          validUntil: data.validUntil,
+          timeTrusted: true,
+        };
+        if (native) native.commit(JSON.stringify(snapshot));
+        else localStorage.setItem("tv.snapshot", JSON.stringify(snapshot));
+        updateClock();
+      } else {
+        cacheState = "downloading";
+        if (native) native.commit(JSON.stringify(data));
+        else {
+          await browserCommit(data);
+          cacheState = "ready";
+          apply(data);
+        }
+      }
+    } catch (e) {
+      online = false;
+      recordError(e.message);
+      if (e.status === 401) {
+        await clearIdentity();
+        return;
+      }
+      if (snapshot) updateClock();
+      else $("status").textContent = t("failed");
+    } finally {
+      fetching = false;
+      heartbeat();
+    }
+  }
+  async function heartbeat() {
+    if (!identity) return;
+    try {
+      await request("POST", "/api/tv/device/heartbeat", {
+        appVersion: native
+          ? JSON.parse(native.state()).appVersion
+          : (window.TV_BUILD?.appVersion||"browser-development"),
+        sourceSha: native ? JSON.parse(native.state()).sourceSha : (window.TV_BUILD?.sourceSha||"development"),
+        version: snapshot ? snapshot.version : "",
+        desiredVersion,
+        cacheState,
+        playbackState: snapshot
+          ? snapshot.screen.isActive
+            ? "playing"
+            : "standby"
+          : "failed",
+        resolution: innerWidth + "x" + innerHeight,
+        errors,
+        acknowledged: pendingAck,
+      });
+      pendingAck = [];
+      localStorage.setItem("tv.acks", "[]");
+    } catch {}
+  }
+  async function events() {
+    if (
+      !identity ||
+      !online ||
+      eventBusy ||
+      !snapshot ||
+      !snapshot.screen.isActive
+    )
+      return;
+    try {
+      const json = await request("GET", "/api/tv/device/events"),
+        event = json.data.find(
+          (e) =>
+            !pendingAck.includes(e.eventId) &&
+            Date.parse(e.expiresAt) > estimatedTime(),
+        );
+      if (!event) return;
+      eventBusy = true;
+      $("lottery-order").textContent = event.orderNumber;
+      $("lottery-prize").textContent = event.prizeName;
+      $("lottery").hidden = false;
+      setTimeout(() => {
+        $("lottery").hidden = true;
+        pendingAck.push(event.eventId);
+        localStorage.setItem("tv.acks", JSON.stringify(pendingAck));
+        eventBusy = false;
+        heartbeat();
+      }, 8000);
+    } catch {}
+  }
+  function openSetup() {
+    $("server").value = origin;
+    $("setup").showModal();
+    $("server").focus();
+  }
+  $("settings").onclick = openSetup;
+  window.TVOpenSettings = openSetup;
+  window.addEventListener("keydown", (e) => {
+    if (["m", "M", "Menu", "ContextMenu"].includes(e.key) || e.keyCode === 82) {
+      e.preventDefault();
+      openSetup();
+    }
+  });
+  window.TVServerTest = (status) => {
+    $("test-result").textContent =
+      status === 200 ? t("online") : t("error") + " HTTP " + status;
+  };
+  $("test").onclick = async () => {
+    try {
+      const value = new URL($("server").value);
+      validateServer(value);
+      if (native) {
+        $("test-result").textContent = native.test(value.origin,$("allow-http").checked);
+      } else {
+        const res = await fetch(value.origin + "/api/health", {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) throw Error("HTTP " + res.status);
+        $("test-result").textContent = t("online");
+      }
+    } catch (e) {
+      $("test-result").textContent = t("error") + ": " + e.message;
+    }
+  };
+  function validateServer(value) {
+    if (value.protocol === "https:") return;
+    if (
+      value.protocol !== "http:" ||
+      !$("allow-http").checked ||
+      !/^localhost$|^127\.|^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(
+        value.hostname,
+      )
+    )
+      throw Error("HTTPS_REQUIRED");
+  }
+  $("save").onclick = async () => {
+    try {
+      const value = new URL($("server").value);
+      validateServer(value);
+      if (value.origin !== origin) {
+        if (native) {
+          native.server(value.origin, $("allow-http").checked);
+          return;
+        }
+        await clearIdentity();
+        location.assign(value.origin + "/tv/");
+        return;
+      }
+      $("setup").close();
+    } catch (e) {
+      $("test-result").textContent = e.message;
+    }
+  };
+  $("unpair").onclick = () => {
+    if (confirm(t("confirm"))) {
+      $("setup").close();
+      clearIdentity();
+    }
+  };
+  async function boot() {
+    if (new URLSearchParams(location.search).get("preview") === "1") {
+      window.addEventListener("message", (e) => {
+        if (e.origin === location.origin && e.data.type === "tv-preview") {
+          online = true;
+          apply({ ...e.data.snapshot, checkedAt: Date.now() });
+        }
+      });
+      return;
+    }
+    if (!native && "serviceWorker" in navigator)
+      try {
+        await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      } catch (e) {
+        recordError(e.message);
+      }
+    const saved = native
+      ? native.cached()
+      : localStorage.getItem("tv.snapshot");
+    if (saved && identity)
+      try {
+        cacheState = "ready";
+        apply(JSON.parse(saved));
+      } catch (e) {
+        recordError(e.message);
+      }
+    if (identity) refresh();
+    else startPair();
+    setInterval(refresh, 8000);
+    setInterval(events, 5000);
+    clockTimer = setInterval(updateClock, 1000);
+  }
+  boot();
+  window.TVTest = { eligible, freshPrices, apply, displaySpec: renderProducts };
+})();

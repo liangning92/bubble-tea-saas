@@ -1,0 +1,252 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #0c1422;
+  color: #edf4ff;
+  font:
+    clamp(16px, 1.7vw, 32px) / 1.35 system-ui,
+    sans-serif;
+  overflow: hidden;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  padding: 0.55em 1em;
+  margin: 0.3em;
+  border: 0;
+  border-radius: 8px;
+  background: #296dc9;
+  color: white;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 4px solid #ffcf64;
+  outline-offset: 3px;
+}
+input {
+  padding: 0.4em;
+  width: 100%;
+  margin: 0.5em 0;
+}
+input[type="checkbox"] {
+  width: auto;
+}
+#pair {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 5vw;
+}
+#pin {
+  font-size: clamp(70px, 10vw, 180px);
+  letter-spacing: 0.15em;
+  color: #9ce5cc;
+}
+#display {
+  height: 100vh;
+  padding: 1.5vmin;
+  display: flex;
+  flex-direction: column;
+  gap: 1vmin;
+}
+#display[hidden],
+#pair[hidden],
+[hidden] {
+  display: none !important;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2vw;
+}
+h1 {
+  margin: 0;
+  font-size: 1.7em;
+}
+#channel,
+#network {
+  font-size: 0.65em;
+  color: #aebed4;
+}
+#content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 45% 55%;
+  min-height: 0;
+  overflow: hidden;
+}
+#media {
+  display: flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  min-width: 0;
+  background: #132036;
+  border-radius: 12px;
+  overflow: hidden;
+}
+#media img,
+#media video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+#products {
+  padding: 0 1.5vw;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1vmin;
+  align-content: stretch;
+  min-height: 0;
+}
+article {
+  padding: 1vmin;
+  border-radius: 10px;
+  background: #18243a;
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  min-width: 0;
+}
+article img {
+  width: 20%;
+  max-height: 12vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+article div {
+  flex: 1;
+  min-width: 0;
+}
+article h3 {
+  font-size: 0.95em;
+  margin: 0.2em 0;
+  overflow-wrap: anywhere;
+}
+article small {
+  font-size: 0.55em;
+  color: #bac7db;
+}
+article p {
+  margin: 0.25em 0;
+  font-weight: 750;
+  color: #a8f0d5;
+  font-size: 0.8em;
+}
+del {
+  font-size: 0.65em;
+  color: #aebed4;
+  margin-right: 0.5em;
+}
+aside {
+  font-size: 0.68em;
+  display: flex;
+  gap: 2vw;
+  color: #ffdd92;
+  max-height: 20vh;
+  overflow: hidden;
+}
+aside div {
+  flex: 1;
+}
+footer {
+  overflow: hidden;
+  min-height: 1.5em;
+  background: #16243a;
+  border-radius: 8px;
+  font-size: 0.75em;
+}
+#ticker {
+  display: inline-block;
+  white-space: nowrap;
+  padding-left: 100%;
+  animation: ticker 30s linear infinite;
+}
+@keyframes ticker {
+  to {
+    transform: translateX(-100%);
+  }
+}
+dialog {
+  max-width: 90vw;
+  width: 700px;
+  background: #1d2c42;
+  color: #fff;
+  border: 2px solid #6785ad;
+  border-radius: 14px;
+  font-size: 20px;
+}
+dialog::backdrop {
+  background: #000b;
+}
+#lottery {
+  position: fixed;
+  inset: 12vh 10vw;
+  z-index: 20;
+  background: #173850;
+  border: 6px solid #e9ca74;
+  border-radius: 24px;
+  text-align: center;
+  padding: 12vh 2vw;
+}
+#lottery strong {
+  font-size: 2.3em;
+}
+.portrait #content {
+  grid-template-columns: 1fr;
+  grid-template-rows: 42% 58%;
+}
+.portrait #products {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 1vmin;
+}
+.menu_full #content {
+  grid-template-columns: 1fr;
+}
+.menu_full #media {
+  display: none;
+}
+.media_loop #content,
+.portrait_media_loop #content {
+  display: block;
+}
+.media_loop #media,
+.portrait_media_loop #media {
+  height: 100%;
+}
+.media_loop #products,
+.portrait_media_loop #products {
+  display: none;
+}
+.creamy_morandi {
+  background: #efe5d8;
+  color: #39362e;
+}
+.creamy_morandi article,
+.creamy_morandi footer {
+  background: #ded0ba;
+}
+.creamy_morandi article p {
+  color: #386b50;
+}
+.dynamic_vivid {
+  background: #27153d;
+}
+.dynamic_vivid article {
+  background: #482447;
+}
+
+#store-logo {
+  height: 7vh;
+  max-width: 15vw;
+  object-fit: contain;
+}

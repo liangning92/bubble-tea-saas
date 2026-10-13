@@ -69,7 +69,8 @@ export async function adoptLegacyMedia(storeId: string) {
 export async function mediaReferences(db: any, asset: {id:string;url:string;storeId:string}) {
   const products=await db.product.findMany({where:{storeId:asset.storeId,OR:[{image:asset.url},{images:{some:{mediaId:asset.id}}}]},select:{id:true,name:true}})
   const configs=await db.config.findMany({where:{storeId:asset.storeId,OR:[{value:{contains:asset.id}},{value:{contains:asset.url}}]},select:{key:true}})
-  return [...products.map((p:any)=>({kind:'product',id:p.id,name:p.name})),...configs.map((c:any)=>({kind:'config',id:c.key,name:c.key}))]
+  const tvRefs=await db.mediaReference.findMany({where:{storeId:asset.storeId,mediaId:asset.id,configKey:{startsWith:'tv.'}}})
+  return [...tvRefs.map((r:any)=>({kind:'tv',id:r.configKey,name:r.configKey})),...products.map((p:any)=>({kind:'product',id:p.id,name:p.name})),...configs.map((c:any)=>({kind:'config',id:c.key,name:c.key}))]
 }
 export async function setProductImages(tx:any,productId:string,storeId:string,ids:string[]) {
   if(ids.length>5 || new Set(ids).size!==ids.length)throw Error('INVALID_PRODUCT_IMAGES')

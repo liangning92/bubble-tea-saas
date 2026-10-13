@@ -874,6 +874,15 @@ export const activitiesApi = {
 
 // TV & Media Library API
 export const tvApi = {
+  legacy: () => api.get('/tv/legacy'),
+  importLegacy: (sourceId: string) => api.post('/tv/legacy/import', {sourceId}),
+  options: () => api.get('/tv/options'),
+  defaults: () => api.get('/tv/defaults'),
+  saveDefaults: (data: any) => api.put('/tv/defaults', data),
+  preview: (id: string) => api.get(`/tv/screens/${id}/preview`),
+  claimDevice: (data: {pin: string;screenId: string}) => api.post('/tv/pair/claim', data),
+  revoke: (id: string) => api.post(`/tv/devices/${id}/revoke`),
+  interactive: (id: string) => api.post(`/tv/devices/${id}/interactive`),
   getMedia: (params?: { type?: string; category?: string; search?: string }) => api.get('/tv/media', { params }),
   uploadMedia: (formData: FormData) => api.post('/tv/media/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

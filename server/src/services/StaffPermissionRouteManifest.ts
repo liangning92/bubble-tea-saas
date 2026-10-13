@@ -8133,5 +8133,245 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "ownerOnly": false,
     "export": false,
     "personal": false
+  },
+  "POST /api/tv/pair/request": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/pair/check/:id": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/pair/claim": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/device/content": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/device/events": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/device/heartbeat": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/screens": {
+    "permission": "marketing.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/options": {
+    "permission": "marketing.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/defaults": {
+    "permission": "marketing.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "PUT /api/tv/defaults": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/screens": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "PUT /api/tv/screens/:id": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "DELETE /api/tv/screens/:id": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/screens/:id/push": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/screens/:id/preview": {
+    "permission": "marketing.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/devices/:id/revoke": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/devices/:id/interactive": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/display/:code": {
+    "permission": "marketing.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "GET /api/tv/legacy": {
+    "permission": "marketing.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
+  },
+  "POST /api/tv/legacy/import": {
+    "permission": "marketing.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false,
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": null,
+    "resource": null
   }
 }

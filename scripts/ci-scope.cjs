@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ tv:{paths:/(?:tv-android-app|server\/public\/tv|TvSignage|tvSchema|\/routes\/tv\.|\/pages\/tv\/|tv-signage|sync-tv-player)/i,tests:/tv-signage/i},
  media:{paths:/(?:ProductImageEditor|MediaLibrary|\/services\/media\.|\/routes\/media\.|MediaService|mediaFiles|imageOptimization|image-optimization|ProductInsights|productInsights|ProductAnalysisPage|\/media-insights\/|test-media-insights)/i,tests:/media|product-insights/i},
  products:{paths:/(?:\/pages\/products\/|\/routes\/product(?:Price)?\.|Product(?:Management)?Service|\/productStore\.|\/publicProduct\.|\/routes\/bom\.|BomService)/i,tests:/product|channel-bootstrap/i},
  orders:{paths:/(?:\/pages\/orders\/|\/routes\/order\.|OrderService|orderRequest|orderReceipt|orderExport|orderStatus|posCartState|cartAudit|\/cartStore\.)/i,tests:/order|cart-audit|pos-cart|cleared-cart/i},
@@ -56,6 +57,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs'],components:['admin']},
  inventory:{scripts:['tests/stoploss/inventory-count-workspace-page-check.cjs'],components:['admin']},
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
@@ -71,6 +73,7 @@ const browserChecks={
  training:{scripts:['tests/stoploss/training-management-page-check.cjs'],components:['admin','staff']},
 };
 const httpChecks={
+ tv:['tests/stoploss/tv-signage-integration.cjs'],
  orders:['tests/stoploss/order-receipt-http-check.cjs'],
  shifts:['tests/stoploss/shift-review-http-check.cjs','tests/stoploss/shift-correction-http-check.cjs','tests/stoploss/expense-save-http-check.cjs'],
  access:['tests/stoploss/staff-access-v2-http-check.cjs','tests/stoploss/employee-workspace-http-check.cjs'],

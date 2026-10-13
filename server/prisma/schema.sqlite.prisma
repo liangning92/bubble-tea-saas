@@ -2220,3 +2220,41 @@ model ConsumptionAlert {
   @@unique([storeId, businessDate, inventoryId])
   @@index([storeId, status, businessDate])
 }
+
+// Store-scoped TV signage. Codes are labels, never authentication credentials.
+model TvScreen {
+  id String @id @default(uuid())
+  storeId String
+  code String
+  name String
+  config String @default("{}")
+  revision Int @default(1)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  devices TvDevice[]
+  @@unique([storeId, code])
+  @@index([storeId])
+}
+model TvDevice {
+  id String @id @default(uuid())
+  storeId String
+  screenId String
+  screen TvScreen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  tokenHash String @unique
+  revoked Boolean @default(false)
+  report String @default("{}")
+  lastSeen DateTime?
+  createdAt DateTime @default(now())
+  @@index([storeId, screenId])
+}
+model TvPairSession {
+  id String @id @default(uuid())
+  pin String @unique
+  secretHash String
+  expiresAt DateTime
+  claimed Boolean @default(false)
+  deviceId String?
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+}

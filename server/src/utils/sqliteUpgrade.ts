@@ -1,3 +1,4 @@
+import {tvModels} from './tvSchemaUpgrade'
 import {inventoryFlowAdditions,inventoryFlowModels,inventoryFlowChecksum} from './inventoryFlowUpgrade'
 import {ledgerColumns,ledgerIndexes,sqliteLedgerTriggers,ledgerChecksum,assertLedgerInstalled} from './inventoryLedger'
 import { PrismaClient, Prisma } from '@prisma/client'
@@ -31,7 +32,7 @@ async function columns(db:Database,table:string) {
 }
 async function checkBaseline(db:Database) {
  for(const model of Prisma.dmmf.datamodel.models){
-  if(['LocalSchemaMigration','PaymentEvidence','StaffActionApproval','StaffApprovalCredential',...inventoryFlowModels].includes(model.name))continue
+  if(['LocalSchemaMigration','PaymentEvidence','StaffActionApproval','StaffApprovalCredential',...inventoryFlowModels,...tvModels].includes(model.name))continue
   const table=model.dbName||model.name
   const names=(await columns(db,table)).map(c=>c.name)
   for(const field of model.fields.filter(field=>field.kind!=='object')){

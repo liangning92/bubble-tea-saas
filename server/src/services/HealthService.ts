@@ -18,5 +18,5 @@ async function redisReady(raw:string):Promise<boolean>{
 export async function serviceHealth(){
  const db = await Promise.race([prisma.$queryRaw`SELECT 1`.then(()=>true,()=>false),new Promise<boolean>(resolve=>{const timer=setTimeout(()=>resolve(false),2000);timer.unref()})])
  const redis = process.env.REDIS_URL ? await redisReady(process.env.REDIS_URL).catch(()=>false) : null
- return {status:db&&redis!==false?'ok':'degraded',dependencies:{database:db?'ok':'unavailable',redis:redis===null?'not_configured':redis?'ok':'unavailable'},timestamp:new Date().toISOString(),service:'bubble-tea-api',version:process.env.APP_VERSION||'development',sourceSha:process.env.APP_SOURCE_SHA||null,capabilities:{orderReceipt:1,refundItems:2,inventoryCount:3,delivery:'pending'}}
+ return {status:db&&redis!==false?'ok':'degraded',dependencies:{database:db?'ok':'unavailable',redis:redis===null?'not_configured':redis?'ok':'unavailable'},timestamp:new Date().toISOString(),service:'bubble-tea-api',version:process.env.APP_VERSION||'development',sourceSha:process.env.APP_SOURCE_SHA||null,capabilities:{tvSignage:2,orderReceipt:1,refundItems:2,inventoryCount:3,delivery:'pending'}}
 }

@@ -52,3 +52,12 @@ __pycache__/
 # Keep reviewed database migrations; generated SQL fixtures remain ignored.
 !server/prisma/migrations/**/migration.sql
 !docs/EMPLOYEE-INVENTORY-FLOW-MIGRATION.sql
+
+# Android outputs and local SDK/signing state
+**/.gradle/
+tv-android-app/**/build/
+tv-android-app/local.properties
+*.jks
+*.keystore
+
+server/dist/

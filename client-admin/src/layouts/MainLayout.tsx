@@ -28,11 +28,12 @@ import { Suspense, useState, useEffect } from 'react'
 import { RouteLoading } from '../components/RouteLoading'
 
 // 一级导航模块
+const adminPagePermission=(path:string)=>['/tv-screens','/media-library','/settings/tv-screen'].some(p=>path===p||path.startsWith(p+'/'))?'marketing.read':permissionForPage(path)
 const navItems = [
   { path: '/dashboard', label: 'nav.dashboard', defaultLabel: '仪表盘', icon: LayoutDashboard },
   { path: '/products', label: 'nav.products', defaultLabel: '商品管理', icon: Package },
-  { path: '/tv-screens', label: 'nav.tvScreens', defaultLabel: '电视大屏', icon: Tv },
-  { path: '/media-library', label: 'nav.mediaLibrary', defaultLabel: '公共媒体库', icon: Film },
+  { path: '/tv-screens', label: 'tvTerminal.title', defaultLabel: 'TV', icon: Tv },
+  { path: '/media-library', label: 'tvTerminal.mediaLibrary', defaultLabel: 'Media', icon: Film },
   { path: '/inventory', label: 'nav.inventory', defaultLabel: '库存管理', icon: Warehouse },
   { path: '/finance', label: 'nav.finance', defaultLabel: '财务中心', icon: Wallet },
   { path: '/channels', label: 'nav.channels', defaultLabel: '销售渠道', icon: Link2 },
@@ -73,7 +74,7 @@ export function MainLayout() {
       '/dashboard':['dashboard.read'], '/products':['products.read'], '/inventory':['inventory.read'],
       '/finance':['finance.read','dashboard.read'], '/channels':['channels.read'],
       '/staff':['staff.read','attendance.read','schedules.read','salary.read','deposits.read','rewards.read','training.read'],
-      '/hygiene':['hygiene.read'], '/marketing':['marketing.read','members.read'], '/settings':[]
+      '/tv-screens':['marketing.read'], '/media-library':['marketing.read'], '/hygiene':['hygiene.read'], '/marketing':['marketing.read','members.read'], '/settings':[]
     }
     return (groups[item.path]||[]).some(permission=>customRole.permissions.includes(permission))
   })
@@ -160,7 +161,7 @@ export function MainLayout() {
               >
                 <item.icon size={22} />
                 {sidebarOpen && (
-                  <span className="font-medium">{t(item.label, (item as any).defaultLabel || item.label)}</span>
+                  <span className="font-medium">{String(t(item.label, (item as any).defaultLabel || item.label))}</span>
                 )}
               </Link>
             )
@@ -230,7 +231,7 @@ export function MainLayout() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="p-6">
-          {!ready ? access?.failed ? <div role="alert" className="card text-red-600">{t('common.error')}<button className="btn-primary ml-4" onClick={()=>window.location.reload()}>{t('common.refresh')}</button></div> : <RouteLoading /> : <Suspense fallback={<RouteLoading />}>{customRole?.version===2 && user?.role!=='admin' && permissionForPage(location.pathname) && !customRole.permissions.includes(permissionForPage(location.pathname)!) ? <div role="alert" className="card">{t('staffAccessV2.denied')}</div> : <Outlet />}</Suspense>}
+          {!ready ? access?.failed ? <div role="alert" className="card text-red-600">{t('common.error')}<button className="btn-primary ml-4" onClick={()=>window.location.reload()}>{t('common.refresh')}</button></div> : <RouteLoading /> : <Suspense fallback={<RouteLoading />}>{customRole?.version===2 && user?.role!=='admin' && adminPagePermission(location.pathname) && !customRole.permissions.includes(adminPagePermission(location.pathname)!) ? <div role="alert" className="card">{t('staffAccessV2.denied')}</div> : <Outlet />}</Suspense>}
         </div>
       </main>
     </div>

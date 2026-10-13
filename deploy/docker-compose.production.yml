@@ -77,6 +77,9 @@ services:
   api:
     image: ghcr.io/${GITHUB_REPOSITORY}/server:latest
     container_name: bubble-tea-api
+    volumes:
+      - tv_uploads:/app/uploads
+      - tv_legacy_data:/app/data
     environment:
       DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@db-primary:5432/bubble_tea
       REDIS_URL: redis://redis:6379
@@ -151,6 +154,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  tv_uploads:
+  tv_legacy_data:
   db_primary_data:
   db_replica_data:
   redis_data:

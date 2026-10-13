@@ -1,37 +1,41 @@
-plugins {
-    id 'com.android.application'
-}
+plugins { id 'com.android.application' }
 
+def releaseCode = System.getenv('TV_VERSION_CODE')
+def releaseName = System.getenv('TV_VERSION_NAME')
+def sourceSha = System.getenv('SOURCE_SHA') ?: 'development'
+def signingFile = System.getenv('TV_KEYSTORE_FILE')
 android {
     namespace 'com.youme.tv'
     compileSdk 34
-
     defaultConfig {
-        applicationId "com.youme.tv"
+        applicationId 'com.youme.tv'
         minSdk 21
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode releaseCode ? Integer.parseInt(releaseCode) : 1
+        versionName releaseName ?: 'development'
+        buildConfigField 'String', 'SOURCE_SHA', '"' + sourceSha + '"'
+        buildConfigField 'String', 'DEFAULT_SERVER', '"' + (System.getenv('TV_DEFAULT_SERVER') ?: 'https://api.aicube.online') + '"'
     }
-
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        production {
+            if (signingFile) {
+                storeFile file(signingFile)
+                storePassword System.getenv('TV_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('TV_KEY_ALIAS')
+                keyPassword System.getenv('TV_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
-        release {
-            minifyEnabled false
-            signingConfig signingConfigs.debug
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
+        release { minifyEnabled false; signingConfig signingConfigs.production }
     }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    applicationVariants.all { variant ->
-        variant.outputs.all {
-            outputFileName = "YOUME_TV_Signage.apk"
-        }
-    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
 }
-
-dependencies {
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name.toLowerCase().contains('release') }) {
+        if (!signingFile || !file(signingFile).isFile() || !releaseCode || !releaseName || !sourceSha.matches('[a-f0-9]{40}') || !System.getenv('TV_KEYSTORE_PASSWORD') || !System.getenv('TV_KEY_ALIAS') || !System.getenv('TV_KEY_PASSWORD')) {
+            throw new GradleException('Release requires persistent signing credentials, a monotonic version code and an exact source SHA')
+        }
+    }
 }
