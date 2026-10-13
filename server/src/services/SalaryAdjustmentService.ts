@@ -18,8 +18,9 @@ export async function voucherStatuses(storeId:string,items:SalaryAdjustment[],db
   const coupons=await db.coupon.findMany({where:{storeId,id:{in:items.flatMap(i=>i.couponId?[i.couponId]:[])}}})
   return items.map(i=>{const c=coupons.find(c=>c.id===i.couponId);return c?{...i,voucherStatus:c.status==='cancelled'?'cancelled':c.usedCount>0?'used':c.validUntil<=new Date()?'expired':'active'}:i})
 }
-export async function adjustmentPlan(storeId:string,staffId:string,month:string,db:DB=prisma) {
-  const items=(await listSalaryAdjustments(storeId,db)).filter(i=>i.staffId===staffId&&i.month===month&&i.status==='active'&&i.rewardMethod!=='voucher')
+export async function adjustmentPlan(storeId:string,staffId:string,month:string,db:DB=prisma, excludeMonthlyLate=false) {
+  const correction=await db.config.findUnique({where:{storeId_key:{storeId,key:`salary.correction.${staffId}.${month}`}}})
+  const items=(await listSalaryAdjustments(storeId,db)).filter(i=>i.staffId===staffId&&i.month===month&&i.status==='active'&&i.rewardMethod!=='voucher'&&(!(excludeMonthlyLate||correction)||i.id!==`late-${staffId}-${month}`))
   return {items,rewards:items.filter(i=>i.type==='reward').reduce((s,i)=>s+i.amount,0),penalties:items.filter(i=>i.type==='penalty').reduce((s,i)=>s+i.amount,0)}
 }
 export async function savedAdjustmentPlan(storeId:string,salaryId:string,db:DB=prisma) {

@@ -1,3 +1,4 @@
+import { payrollCorrectionSchema } from '../services/PayrollCorrectionService'
 import { workingDaysSchema, ProbationInputError } from '../services/ProbationService'
 import prisma from '../config/database'
 import { requireResourceStore } from '../middlewares/resourceStore'
@@ -19,11 +20,15 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), r
 
     const manualDays = req.query.probationDays !== undefined || req.query.regularDays !== undefined ? workingDaysSchema.safeParse({probation:Number(req.query.probationDays),regular:Number(req.query.regularDays)}) : null
     if(manualDays && !manualDays.success)return res.status(400).json({code:400,message:'INVALID_WORKING_DAYS'})
+    const correction=req.query.lateMinutes!==undefined?payrollCorrectionSchema.safeParse({lateMinutes:Number(req.query.lateMinutes),lateMode:req.query.lateMode||'rule',manualLateDeduction:Number(req.query.manualLateDeduction||0),otherAttendanceDeduction:Number(req.query.otherAttendanceDeduction||0),reason:'preview'}):null
+    if(correction&&!correction.success)return res.status(400).json({code:400,message:'INVALID_PAYROLL_CORRECTION'})
     const result = await calculateSalary(
       staffId,
       Number(month),
       Number(year),
-      manualDays?.success ? manualDays.data : undefined
+      manualDays?.success ? manualDays.data : undefined,
+      correction?.success?correction.data:undefined,
+      req.query.daysSource==='attendance'?'attendance':manualDays?'manual':'estimate'
     )
 
     res.json({ code: 200, data: result, timestamp: new Date().toISOString() })

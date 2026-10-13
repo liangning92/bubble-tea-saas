@@ -1,3 +1,4 @@
+import { correctionPreview, PayrollCorrection } from './PayrollCorrectionService'
 import { businessDate, WorkingDays, calculatePayrollBasis, getEnrollment, monthlyRateCents, getProbationRule, saveEnrollment } from './ProbationService'
 import { allocateEmployeeNumber } from './EmployeeNumberService'
 import { readWork, listWork } from './EmployeeWorkspaceStore'
@@ -239,7 +240,7 @@ export async function getSchedule(staffId: string, date: Date) {
 }
 
 // Salary operations
-export async function calculateSalary(staffId: string, month: number, year: number, manualDays?: WorkingDays) {
+export async function calculateSalary(staffId: string, month: number, year: number, manualDays?: WorkingDays, correction?: PayrollCorrection, daysSource: 'estimate'|'manual'|'attendance'=manualDays?'manual':'estimate') {
   if(!Number.isInteger(month)||month<1||month>12||!Number.isInteger(year)||year<2000||year>2100)throw new Error('INVALID_SALARY_PERIOD')
   let startDate = new Date(Date.UTC(year, month-1,1)-7*3600000)
   let endDate = new Date(Date.UTC(year,month,1)-7*3600000-1)
@@ -276,7 +277,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
 
   if(staff.baseSalary===null)throw new Error('STAFF_BASE_SALARY_REQUIRED')
-  const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`, manualDays)
+  const payrollBasis = await calculatePayrollBasis(prisma, staff, `${year}-${String(month).padStart(2,'0')}`, manualDays, daysSource)
   const enrollment = await getEnrollment(prisma,staff)
   const baseSalary = payrollBasis.amount
   // Attendance proration changes payable days, not the contractual daily penalty rate.
@@ -306,7 +307,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     return snapshot ? snapshot.minutes > 0 && !snapshot.exempt && !snapshot.needsReview : a.status === 'late' && schedules.some(s => formatDate(s.date) === formatDate(a.checkInTime))
   }).map(a => snapshots.find(s => s.attendanceId === a.id)?.businessDate || formatDate(a.checkInTime)).filter(key => !onLeave(key)))
   const lateDays = lateDates.size
-  const latePenalty = monthlyLateRule ? 0 : penalty(rule?.lateDeductionType, lateDays, rule?.lateDeductionFixed, rule?.lateDeductionDailyRate)
+  let latePenalty = daysSource==='estimate' || monthlyLateRule ? 0 : penalty(rule?.lateDeductionType, lateDays, rule?.lateDeductionFixed, rule?.lateDeductionDailyRate)
   const earlyLeaveDays = [...attendanceDays].filter(([key, day]) => {
     if (!day.checkOut || onLeave(key)) return false
     let end = new Date(`${key}T${rule?.workEndTime || '18:00'}:00+07:00`)
@@ -334,15 +335,22 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     // Non-worked days are already excluded from base pay; do not deduct them twice.
 
   // A manually verified day count replaces incomplete attendance penalties.
-  if (manualDays) deductions = 0
+  let correctionBasis = correction ? await correctionPreview(prisma,staff.storeId,`${year}-${String(month).padStart(2,'0')}`,correction) : null
+  if(correctionBasis){latePenalty=correctionBasis.lateDeduction;deductions=latePenalty+correctionBasis.otherAttendanceDeduction}
+  else if(daysSource==='estimate') deductions=0
 
   depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2, '0')}`)
   deductions += depositDeductions.reduce((sum, item) => sum + item.amount, 0)
 
   const featureConfig = await getStaffConfig(staff.storeId)
-  if (!manualDays && featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
+  if (daysSource==='attendance' && featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
 
-  const compensation = await adjustmentPlan(staff.storeId!,staffId,`${year}-${String(month).padStart(2,'0')}`)
+  const compensation = await adjustmentPlan(staff.storeId!,staffId,`${year}-${String(month).padStart(2,'0')}`,prisma,true)
+  if(!correction && daysSource!=='estimate' && monthlyLateRule){
+    const minutes=snapshots.filter(s=>s.businessDate?.slice(0,7)===`${year}-${String(month).padStart(2,'0')}`&&!s.exempt&&!s.needsReview&&s.recordedAt>=monthlyLateRule.effectiveAt).reduce((sum,s)=>sum+s.minutes,0)
+    correctionBasis=await correctionPreview(prisma,staff.storeId,`${year}-${String(month).padStart(2,'0')}`,{lateMinutes:minutes,lateMode:'rule',manualLateDeduction:0,otherAttendanceDeduction:deductions})
+    latePenalty=correctionBasis.lateDeduction;deductions+=latePenalty
+  }
   bonuses += compensation.rewards
   deductions += compensation.penalties
 
@@ -358,7 +366,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     month,
     year,
     baseSalary,
-    payrollBasis,
+    payrollBasis: {...payrollBasis,correction:correctionBasis},
     workDays,
     lateDays,
     overtimeHours,
@@ -367,7 +375,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     depositDeductions,
     compensation,
     compensationAdjustmentIds:compensation.items.map(item=>item.id),
-    latePenalty, earlyLeaveDays, absentDays, sickDays, unpaidDays,
+    latePenalty, earlyLeaveDays, absentDays:daysSource!=='attendance'?0:absentDays, sickDays, unpaidDays,
     calculationBasis: { workDaysPerMonth: 26, hoursPerMonth: 176 },
     bonuses,
     totalSalary: baseSalary + overtimePay + bonuses - deductions

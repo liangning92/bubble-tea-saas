@@ -1,7 +1,8 @@
+import { calculateSalary } from '../services/StaffService'
 import {userAccessV2} from '../services/StaffPermissionV2Service'
 import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
 import { getPayrollRules, savePayrollRules, payrollRuleSchema } from '../services/PayrollRuleService'
-import { refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
+import { isLegacyAutomaticBasis, refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { updateStaffSystemRole, StaffAccessError } from '../services/StaffPermissionService'
@@ -169,7 +170,7 @@ router.get('/salary/my/probation',authenticate,async(req:AuthRequest,res)=>{
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({code:400,message:'INVALID_SALARY_PERIOD'})
  const salary=await prisma.salary.findFirst({where:{staffId:staff.id,month},orderBy:{createdAt:'desc'}})
  const snapshot=salary?await savedPayrollBasis(prisma,staff.storeId,salary.id):null
- const basis=snapshot || (!salary&&staff.baseSalary!==null ? await calculatePayrollBasis(prisma,staff,month):null)
+ const basis=salary?.status==='pending'&&isLegacyAutomaticBasis(snapshot)&&staff.baseSalary!==null?await calculatePayrollBasis(prisma,staff,month):snapshot || (!salary&&staff.baseSalary!==null ? await calculatePayrollBasis(prisma,staff,month):null)
  res.json({code:200,data:{...await staffProbation(prisma,staff),basis,month,salaryStatus:salary?.status||'not_created',recordedBaseSalary:salary?.baseSalary??null}})
  }catch(error:any){res.status(error instanceof ProbationInputError?400:500).json({code:error instanceof ProbationInputError?400:500,message:error.message})}
 })
@@ -1028,12 +1029,12 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
       orderBy: { createdAt: 'desc' }
     })
 
-    if (!salaryRecord) {
-      return res.json({
-        code: 200,
-        data: null,
-        timestamp: new Date().toISOString()
-      })
+    const savedBasis=salaryRecord?await savedPayrollBasis(prisma,staff.storeId,salaryRecord.id):null
+    if (!salaryRecord || salaryRecord.status==='pending'&&isLegacyAutomaticBasis(savedBasis)) {
+      const calculation=await calculateSalary(staff.id,Number(targetMonth.slice(5)),Number(targetMonth.slice(0,4)))
+      if(!calculation.payrollBasis.eligibleDays)return res.json({code:200,data:null})
+      const deposits=calculation.depositDeductions.reduce((sum,item)=>sum+item.amount,0)
+      return res.json({code:200,data:{...calculation,month:targetMonth,status:salaryRecord?'pending':'unrecorded',originalFinalAmount:salaryRecord?.finalAmount,commissions:salaryRecord?.commission||0,totalSalary:calculation.totalSalary+(salaryRecord?.commission||0),compensationRewards:calculation.compensation.rewards,compensationPenalties:calculation.compensation.penalties,compensationItems:calculation.compensation.items,depositDeductionAmount:deposits,otherDeductions:Math.max(0,calculation.deductions-deposits-calculation.compensation.penalties-calculation.latePenalty)}})
     }
 
     // 查询该月份真实出勤与迟到记录
@@ -1055,18 +1056,20 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
     const compensation=await savedAdjustmentPlan(staff.storeId!,salaryRecord.id)
     const depositPlan=await prisma.config.findUnique({where:{storeId_key:{storeId:staff.storeId!,key:`salary.depositPlan.${salaryRecord.id}`}}})
     const depositAmount=(depositPlan?JSON.parse(depositPlan.value):[]).reduce((sum:number,item:any)=>sum+Math.round(item.amountMinor/100),0)
+    const basis=savedBasis
+    const lateDeduction=basis?.correction?.lateDeduction||0
     // Transform to match frontend expected format
     const salaryData = {
       staffName: staff.name,
       month: salaryRecord.month,
-      payrollBasis: await savedPayrollBasis(prisma,staff.storeId,salaryRecord.id),
+      payrollBasis:basis,latePenalty:lateDeduction,
       baseSalary: salaryRecord.baseSalary,
       workDays,
       lateDays,
       overtimeHours: approvedOvertime.reduce((sum, entry) => sum + entry.hours, 0),
       overtimePay: salaryRecord.overtime,
       bonuses: salaryRecord.bonus,
-      compensationRewards:compensation.rewards,compensationPenalties:compensation.penalties,compensationItems:compensation.items,depositDeductionAmount:depositAmount,otherDeductions:salaryRecord.deduction-depositAmount-compensation.penalties,
+      compensationRewards:compensation.rewards,compensationPenalties:compensation.penalties,compensationItems:compensation.items,depositDeductionAmount:depositAmount,otherDeductions:Math.max(0,salaryRecord.deduction-depositAmount-compensation.penalties-lateDeduction),
       commissions: salaryRecord.commission,
       deductions: salaryRecord.deduction,
       totalSalary: salaryRecord.finalAmount,

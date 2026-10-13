@@ -1,9 +1,11 @@
 import {beforeEach,expect,jest,test} from '@jest/globals'
-jest.mock('../src/config/database',()=>({__esModule:true,default:{order:{findMany:jest.fn()},expense:{findMany:jest.fn()},salary:{findMany:jest.fn()}}}))
+jest.mock('../src/config/database',()=>({__esModule:true,default:{order:{findMany:jest.fn()},expense:{findMany:jest.fn()},salary:{findMany:jest.fn()},config:{findUnique:jest.fn()}}}))
 import prisma from '../src/config/database'
 import {getProfitAnalysis} from '../src/services/FinanceService'
 const db=prisma as any
-beforeEach(()=>{jest.clearAllMocks();db.order.findMany.mockResolvedValue([]);db.expense.findMany.mockResolvedValue([])})
+beforeEach(()=>{jest.clearAllMocks();db.config.findUnique.mockResolvedValue({value:JSON.stringify({version:2,confirmed:true})});db.order.findMany.mockResolvedValue([]);db.expense.findMany.mockResolvedValue([])})
 const from=new Date('2026-10-01T00:00:00+07:00'),to=new Date('2026-10-31T23:59:59+07:00')
 test('pending wages are monthly costs before cash payment and linked payment does not double costs',async()=>{db.salary.findMany.mockResolvedValue([{month:'2026-10',finalAmount:1400000,status:'pending'},{month:'2026-10',finalAmount:700000,status:'paid'}]);const pending=await getProfitAnalysis('s',from,to);expect(pending.operatingCosts.salary).toBe(2100000);expect(pending.operatingCosts.pendingSalary).toBe(1400000);expect(pending.netProfit).toBe(-2100000);db.salary.findMany.mockResolvedValue([{month:'2026-10',finalAmount:1400000,status:'paid'},{month:'2026-10',finalAmount:700000,status:'paid'}]);db.expense.findMany.mockResolvedValue([{amount:140000000,category:'salary',type:'salary',referenceType:'salary'}]);const paid=await getProfitAnalysis('s',from,to);expect(paid.operatingCosts.salary).toBe(2100000);expect(paid.operatingCosts.pendingSalary).toBe(0);expect(paid.netProfit).toBe(pending.netProfit)})
 test('partial reporting ranges allocate salary costs without charging a whole month',async()=>{db.salary.findMany.mockResolvedValue([{month:'2026-10',finalAmount:3100000,status:'pending'}]);const result=await getProfitAnalysis('s',from,new Date('2026-10-07T23:59:59+07:00'));expect(result.operatingCosts.salary).toBe(700000);expect(result.operatingCosts.pendingSalary).toBe(700000)})
+
+test('unconfirmed automatic drafts and estimates do not accrue costs or payables',async()=>{db.config.findUnique.mockResolvedValue({value:JSON.stringify({version:1,daysSource:'attendance'})});db.salary.findMany.mockResolvedValue([{id:'auto',month:'2026-10',finalAmount:1400000,status:'pending'}]);const result=await getProfitAnalysis('s',from,to);expect(result.operatingCosts.salary).toBe(0);expect(result.operatingCosts.pendingSalary).toBe(0)})
