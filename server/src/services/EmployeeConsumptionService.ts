@@ -1,3 +1,4 @@
+import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { getInventoryAlertConfig } from './InventoryAlertConfigService';
 import { FLOW_CUTOVER_KEY, ensureInventoryFlow, ConsumptionMaterial, ConsumptionIssue } from './OrderConsumptionService';
@@ -13,7 +14,8 @@ export async function employeeConsumption(filter: {
     startDate: string;
     endDate: string;
 }, db: any = prisma) {
-    const start = parseDateBoundary(filter.startDate), end = parseDateBoundary(filter.endDate, true);
+    const {boundary,startOfDay}=await inventoryBusinessCalendar(filter.storeId,db);
+    const start = boundary(filter.startDate), end = boundary(filter.endDate, true);
     if (end < start)
         throw Error('INVALID_ANALYSIS_PERIOD');
     const setting = await getInventoryAlertConfig(filter.storeId);
@@ -57,7 +59,8 @@ export async function employeeConsumption(filter: {
     return { list, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
 }
 export async function checkConsumptionDay(storeId: string, businessDate: string, now = new Date()) {
-    if (parseDateBoundary(businessDate, true) >= startOfDay(now))
+    const {boundary,startOfDay}=await inventoryBusinessCalendar(storeId);
+    if (boundary(businessDate, true) >= startOfDay(now))
         throw Error('BUSINESS_DAY_NOT_CLOSED');
     const result = await employeeConsumption({ storeId, startDate: businessDate, endDate: businessDate });
     for (const row of result.list) {
@@ -83,12 +86,13 @@ export async function checkClosedConsumptionDays(now = new Date()) {
         const stores = await prisma.store.findMany({ select: { id: true } });
         for (const store of stores) {
             try {
+                const {startOfDay,addDays,formatDate,boundary}=await inventoryBusinessCalendar(store.id);
                 const cutover = await ensureInventoryFlow(store.id, prisma, now);
                 const settings = await getInventoryAlertConfig(store.id);
                 if (!settings.enableConsumptionAlert)
                     continue;
                 const checkpoint = await prisma.config.findUnique({ where: { storeId_key: { storeId: store.id, key: 'employee_consumption_checkpoint' } } });
-                let day = checkpoint ? addDays(parseDateBoundary(checkpoint.value), 1) : startOfDay(cutover);
+                let day = checkpoint ? addDays(boundary(checkpoint.value), 1) : startOfDay(cutover);
                 const today = startOfDay(now);
                 while (day < today) {
                     const date = formatDate(day);
@@ -100,7 +104,7 @@ export async function checkClosedConsumptionDays(now = new Date()) {
                 const dirty = await prisma.config.findMany({ where: { storeId: store.id, key: { startsWith: 'employee_consumption_dirty:' } } });
                 for (const record of dirty) {
                     const date = record.key.slice('employee_consumption_dirty:'.length);
-                    if (parseDateBoundary(date) >= today)
+                    if (boundary(date) >= today)
                         continue;
                     await checkConsumptionDay(store.id, date, now);
                     await prisma.config.deleteMany({ where: { storeId: store.id, key: record.key, value: record.value } });

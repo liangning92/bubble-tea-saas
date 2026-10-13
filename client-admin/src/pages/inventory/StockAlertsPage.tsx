@@ -1,3 +1,5 @@
+import {useStoreDateSettings} from '../../hooks/useStoreDateSettings';
+import {formatStoreDate} from '../../utils/storeDateTime';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +9,7 @@ import { formatItemName } from '../../utils/helpers';
 import { useDashboardContext } from '../../utils/dashboardNavigation';
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState';
 export function StockAlertsPage() {
+    const dateSettings=useStoreDateSettings();
     const { t, i18n } = useTranslation(), context = useDashboardContext(), qc = useQueryClient();
     const [status, setStatus] = useState('open'), [type, setType] = useState(''), [selected, setSelected] = useState<any>(null), [note, setNote] = useState(''), [expiry, setExpiry] = useState(''), [error, setError] = useState('');
     const query = useQuery({ queryKey: ['inventory-alert-center', context.storeId], enabled: context.valid, queryFn: () => inventoryApi.alertCenter(), refetchInterval: 60000 });
@@ -29,8 +32,8 @@ export function StockAlertsPage() {
  {d.businessDate && <p>{d.businessDate} · {t('inventoryFlow.theory')}: {n(d.theoreticalConsumption)} {d.unit} · {t('inventoryFlow.actualOut')}: {n(d.actualConsumption)} {d.unit} · {label('variance')}: {n(d.variancePercent)} {d.variancePercent === null ? '' : '%'}</p>}
  {a.type === 'count_variance' && <p>{t('inventoryFlow.currentStock')}: {n(d.systemQty)} {d.unit} · {t('inventory.actualQty')}: {n(d.countedQty)} {d.unit} · {label('variance')}: {n(d.variance)} {d.unit} ({n(d.variancePercent)}%)</p>}
  {a.type === 'excessive_loss' && <p>{label('loss')}: {n(d.lossUsage)} {d.unit} ({n(d.lossPercent)}%)</p>}
- {d.expectedDate && <p>{label('expectedDate')}: {new Date(d.expectedDate).toLocaleDateString(i18n.language)} · {d.orderNumber}</p>}
- {a.type.startsWith('expiry_') && <p>{d.batchNumber} · {label('quantity')}: {n(d.quantity)} {d.unit} · {label('expiryDate')}: {d.expiryDate ? new Date(d.expiryDate).toLocaleDateString(i18n.language) : '—'}</p>}
+ {d.expectedDate && <p>{label('expectedDate')}: {formatStoreDate(d.expectedDate,dateSettings)} · {d.orderNumber}</p>}
+ {a.type.startsWith('expiry_') && <p>{d.batchNumber} · {label('quantity')}: {n(d.quantity)} {d.unit} · {label('expiryDate')}: {d.expiryDate ? formatStoreDate(d.expiryDate,dateSettings) : '—'}</p>}
  {a.type === 'data_incomplete' && <p>{label(d.reason)}</p>}
  {a.handleNote && <p className="text-sm">{label(a.active ? 'activeHandled' : 'handled')} · {a.handleNote}</p>}
  <div className="flex flex-wrap gap-4 text-sm">{a.status === 'open' && <button className="text-primary" onClick={() => { setSelected({ ...a, action: 'handle' }); setError(''); }}>{label('handle')}</button>}{a.active && a.type === 'expiry_missing' && <button className="text-primary" onClick={() => { setSelected({ ...a, action: 'expiry' }); setError(''); }}>{label('fixExpiry')}</button>}{d.purchaseOrderId && <Link className="text-primary" to="/inventory/purchase-orders">{t('inventoryFlow.purchase')}</Link>}{d.countId && <Link className="text-primary" to="/inventory/count">{t('inventoryFlow.count')}</Link>}{a.type === 'consumption_variance' && <Link className="text-primary" to="/inventory/consumption">{t('inventoryFlow.consumption')}</Link>}</div></article>;

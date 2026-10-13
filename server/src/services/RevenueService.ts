@@ -1,3 +1,4 @@
+import { DEFAULT_TIMEZONE, calendarParts } from '../utils/storeDateSettings'
 import { loadOnlineHandoverRevenue } from './ShiftHandoverFinancials'
 import {netReceivedAmount} from '../utils/refundAllocation'
 import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
@@ -7,7 +8,7 @@ import { orderRequestFingerprint } from './OrderReplayService'
 import { RevenueDateError, businessCalendarDate } from '../utils/revenueDateRange'
 
 // Channel revenue by date range
-export async function getRevenueByChannel(storeId: string, startDate: Date, endDate: Date) {
+export async function getRevenueByChannel(storeId: string, startDate: Date, endDate: Date,timezone=DEFAULT_TIMEZONE) {
   const orders = await prisma.order.findMany({
     where: {
       storeId,
@@ -34,7 +35,7 @@ export async function getRevenueByChannel(storeId: string, startDate: Date, endD
     channelMap[channelName].orders += 1
   }
 
-  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate)
+  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate,timezone)
   for (const key of ['shopeefood','gofood'] as const) {
     const amount=handovers.reduce((sum,row)=>sum+row[key],0)
     if (amount) channelMap[key+'_manual']={revenue:amount,orders:0}
@@ -48,7 +49,7 @@ export async function getRevenueByChannel(storeId: string, startDate: Date, endD
 }
 
 // Get revenue summary by time period
-export async function getRevenueSummary(storeId: string, startDate: Date, endDate: Date) {
+export async function getRevenueSummary(storeId: string, startDate: Date, endDate: Date,timezone=DEFAULT_TIMEZONE) {
   const orders = await prisma.order.findMany({
     where: {
       storeId,
@@ -63,7 +64,7 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
 
   await requireVerifiedReceiptIncome(orders)
   const orderRevenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
-  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate)
+  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate,timezone)
   const shopeefood=handovers.reduce((sum,row)=>sum+row.shopeefood,0)
   const gofood=handovers.reduce((sum,row)=>sum+row.gofood,0)
   const totalRevenue = orderRevenue+shopeefood+gofood
@@ -79,10 +80,10 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
 }
 
 // Compare revenue between two periods
-export async function compareRevenue(storeId: string, currentStart: Date, currentEnd: Date, previousStart: Date, previousEnd: Date) {
+export async function compareRevenue(storeId: string, currentStart: Date, currentEnd: Date, previousStart: Date, previousEnd: Date,timezone=DEFAULT_TIMEZONE) {
   const [current, previous] = await Promise.all([
-    getRevenueSummary(storeId, currentStart, currentEnd),
-    getRevenueSummary(storeId, previousStart, previousEnd)
+    getRevenueSummary(storeId, currentStart, currentEnd,timezone),
+    getRevenueSummary(storeId, previousStart, previousEnd,timezone)
   ])
 
   const revenueChange = previous.revenue > 0
@@ -101,7 +102,7 @@ export async function compareRevenue(storeId: string, currentStart: Date, curren
 }
 
 // Get daily revenue trend
-export async function getDailyRevenue(storeId: string, startDate: Date, endDate: Date) {
+export async function getDailyRevenue(storeId: string, startDate: Date, endDate: Date,timezone=DEFAULT_TIMEZONE) {
   const orders = await prisma.order.findMany({
     where: {
       storeId,
@@ -120,7 +121,7 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
   const dailyMap: Record<string, { revenue: number; orders: number }> = {}
 
   for (const order of orders) {
-    const dateStr = businessCalendarDate(order.createdAt)
+    const dateStr = businessCalendarDate(order.createdAt,timezone)
     if (!dailyMap[dateStr]) {
       dailyMap[dateStr] = { revenue: 0, orders: 0 }
     }
@@ -128,10 +129,10 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
     dailyMap[dateStr].orders += 1
   }
 
-  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate)
+  const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate,timezone)
   const orderDaily=new Map(Object.entries(dailyMap).map(([day,value])=>[day,value.revenue]))
   for (const row of handovers) {
-    const day=businessCalendarDate(row.closedAt)
+    const day=businessCalendarDate(row.closedAt,timezone)
     dailyMap[day] ||= {revenue:0,orders:0}
     dailyMap[day].revenue += row.shopeefood+row.gofood
   }
@@ -146,9 +147,9 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
 }
 
 // Visits are independent of refund amounts; a completed/refunded purchase still occurred.
-export async function getPurchaseHours(storeId: string, startDate: Date, endDate: Date) {
-  const startDay = businessCalendarDate(startDate)
-  const endDay = businessCalendarDate(endDate)
+export async function getPurchaseHours(storeId: string, startDate: Date, endDate: Date,timezone=DEFAULT_TIMEZONE) {
+  const startDay = businessCalendarDate(startDate,timezone)
+  const endDay = businessCalendarDate(endDate,timezone)
   const first = Date.parse(`${startDay}T00:00:00Z`)
   const count = Math.round((Date.parse(`${endDay}T00:00:00Z`) - first) / 86400000) + 1
   if (count > 366) throw new RevenueDateError('Purchase analysis supports up to 366 calendar days')
@@ -175,13 +176,13 @@ export async function getPurchaseHours(storeId: string, startDate: Date, endDate
     const matched = receipt && receipt.fingerprint === order.requestFingerprint && receipt.amount === order.finalAmount
     const at = matched ? receipt.at : order.createdAt
     if (at < startDate || at > endDate) continue
-    const day = byDay.get(businessCalendarDate(at))!
-    const hour = new Date(at.getTime() + 7 * 3600000).getUTCHours()
+    const day = byDay.get(businessCalendarDate(at,timezone))!
+    const hour = calendarParts(at,timezone).hour
     const customers = order.customerCount > 0 ? order.customerCount : 1
     day.hours[hour].customers += customers
     day.hours[hour].orders += 1
     day.customers += customers
     day.orders += 1
   }
-  return { timezone: 'Asia/Jakarta', startDate: startDay, endDate: endDay, totalCustomers: days.reduce((sum, day) => sum + day.customers, 0), totalOrders: days.reduce((sum, day) => sum + day.orders, 0), days }
+  return { timezone, startDate: startDay, endDate: endDay, totalCustomers: days.reduce((sum, day) => sum + day.customers, 0), totalOrders: days.reduce((sum, day) => sum + day.orders, 0), days }
 }

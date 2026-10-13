@@ -1,3 +1,6 @@
+import {formatStoreDate} from '../../utils/storeDateTime'
+import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
+import {QUERY_PERIODS,QueryPeriod,queryCalendarRange} from '../../utils/queryPeriods'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -6,11 +9,10 @@ import { Loader2, TrendingUp, TrendingDown, Calendar } from 'lucide-react'
 
 export function HygieneStatsPage() {
   const { t } = useTranslation()
-  const [dateRange, setDateRange] = useState('7') // 7, 14, 30 days
+  const dateSettings=useStoreDateSettings()
+  const [dateRange, setDateRange] = useState<QueryPeriod>('week') // 7, 14, 30 days
 
-  const endDate = new Date().toISOString().split('T')[0]
-  const startDate = new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000)
-    .toISOString().split('T')[0]
+  const {startDate,endDate}=queryCalendarRange(dateRange,dateSettings.timezone)
 
   const { data: statsData, isLoading } = useQuery({
     queryKey: ['hygiene-stats-range', startDate, endDate],
@@ -41,10 +43,7 @@ export function HygieneStatsPage() {
     : 0
   const trend = secondHalfRate - firstHalfRate
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return `${date.getMonth() + 1}/${date.getDate()}`
-  }
+  const formatDate=(dateStr:string)=>formatStoreDate(dateStr,dateSettings)
 
   return (
     <div>
@@ -56,12 +55,10 @@ export function HygieneStatsPage() {
           <Calendar size={18} className="text-gray-400" />
           <select
             value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
+            onChange={(e) => setDateRange(e.target.value as QueryPeriod)}
             className="input w-32"
           >
-            <option value="7">{t('hygiene.last7Days')}</option>
-            <option value="14">{t('hygiene.last14Days')}</option>
-            <option value="30">{t('hygiene.last30Days')}</option>
+            {QUERY_PERIODS.map(period=><option key={period} value={period}>{t('queryPeriods.'+period)}</option>)}
           </select>
         </div>
       </div>

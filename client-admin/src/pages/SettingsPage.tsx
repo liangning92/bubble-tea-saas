@@ -1,3 +1,4 @@
+import {DATE_FORMATS,TIMEZONES} from '../utils/storeDateTime'
 import { TvScreenConfigPage } from './marketing/TvScreenConfigPage'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense } from 'react'
@@ -28,6 +29,8 @@ export function SettingsPage() {
     phone: '',
     email: '',
     storeLogo: '',
+    timezone:'Asia/Jakarta',
+    dateFormat:'YYYY-MM-DD',
   })
 
   // 加载店铺信息
@@ -48,7 +51,7 @@ export function SettingsPage() {
     mutationFn: (data: { key: string; value: any }) =>
       configApi.set(user?.storeId || '', data.key, data.value, 'store'),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config'] })
+      queryClient.invalidateQueries()
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
     }
@@ -223,6 +226,16 @@ export function SettingsPage() {
               />
             </div>
           </div>
+
+          <section className="mt-6 border-t pt-5" data-testid="store-date-settings">
+            <h3 className="font-semibold">{t('storeDates.title')}</h3>
+            <p className="mt-1 text-sm text-gray-500">{t('storeDates.hint')}</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="text-sm">{t('storeDates.timezone')}<select aria-label={t('storeDates.timezone')} className="input mt-2" value={storeInfo.timezone} onChange={e=>{const next={...storeInfo,timezone:e.target.value};setStoreInfo(next);handleSave('storeInfo',next)}}>{TIMEZONES.map(zone=><option key={zone} value={zone}>{zone}</option>)}</select></label>
+              <label className="text-sm">{t('storeDates.format')}<select aria-label={t('storeDates.format')} className="input mt-2" value={storeInfo.dateFormat} onChange={e=>{const next={...storeInfo,dateFormat:e.target.value};setStoreInfo(next);handleSave('storeInfo',next)}}>{DATE_FORMATS.map(format=><option key={format} value={format}>{format}</option>)}</select></label>
+            </div>
+            {saveMutation.isError && <p role="alert" className="mt-2 text-red-600">{t('common.error')}</p>}
+          </section>
 
           {/* 保存按钮 */}
           <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">

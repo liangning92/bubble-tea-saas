@@ -1,3 +1,5 @@
+import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
+import {queryInstantRange} from '../utils/queryPeriods'
 import { OrderItemRows } from '../components/OrderItemsTable'
 import {ConsumptionAlertsWidget} from '../components/ConsumptionAlertsWidget'
 import {PageHelp} from '../components/PageHelp'
@@ -70,7 +72,8 @@ function StatCard({
 
 // ========== POS 操作预警组件 ==========
 function POSAlertsWidget({storeId,asOf}: {storeId:string;asOf:string}) {
-  const range = businessDay(asOf)
+  const widgetDates=useStoreDateSettings()
+  const range = businessDay(asOf,widgetDates.timezone)
   const { t } = useTranslation()
   const navigate = useNavigate()
 
@@ -153,14 +156,17 @@ function POSAlertsWidget({storeId,asOf}: {storeId:string;asOf:string}) {
 }
 
 export function DashboardPage() {
+  const dateSettings=useStoreDateSettings()
   const context = useDashboardContext()
   const { t } = useTranslation()
   const navigate = useNavigate()
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['dashboard',context.storeId],
+    queryKey: ['dashboard',context.storeId,dateSettings],
     queryFn: async () => {const response=await reportApi.dashboard({storeId:context.storeId!});return requireRead(response,validDashboard(response.data?.data))},
-    enabled:context.valid
+    enabled:context.valid,
+    refetchInterval:30000,
+    refetchOnWindowFocus:'always'
   })
 
   const dashboard = data?.data?.data
@@ -179,11 +185,8 @@ export function DashboardPage() {
   const storeId=context.storeId!
   const asOf=dashboard.timestamp
   const currentContext={storeId,asOf,range:'current'}
-  const todayContext={storeId,asOf,...businessDay(asOf)}
-  const calendar = new Date(Date.parse(asOf) + 7 * 3600000)
-  const monthContext={storeId,asOf,
-    startDate:new Date(Date.UTC(calendar.getUTCFullYear(),calendar.getUTCMonth(),1)-7*3600000).toISOString(),
-    endDate:new Date(Date.UTC(calendar.getUTCFullYear(),calendar.getUTCMonth()+1,1)-7*3600000-1).toISOString()}
+  const todayContext={storeId,asOf,...businessDay(asOf,dateSettings.timezone)}
+  const monthContext={storeId,asOf,...queryInstantRange('month',dateSettings.timezone,new Date(asOf))}
   const cardClass="card block hover:shadow-md hover:ring-1 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-shadow"
 
   return (
@@ -475,7 +478,7 @@ export function DashboardPage() {
             <tbody>
               {dashboard?.recentOrders?.map((order: any) => (
                 <OrderItemRows key={order.id} items={order.items}
-                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, {storeId,asOf,...businessDay(order.createdAt)}))}
+                  onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, {storeId,asOf,...businessDay(order.createdAt,dateSettings.timezone)}))}
                   trailing={rowSpan => <>
                   <td rowSpan={rowSpan} className="py-3 pr-4 font-medium">
                     {formatCurrency(order.finalAmount)}
