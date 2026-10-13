@@ -1,7 +1,8 @@
+import { payrollPresentation, payrollStatus, isConfirmedBasis } from '../../../../shared/payrollPresentation'
+import { LateCalculation } from '../../../../shared/components/PayrollBasisDetails'
 import {Link} from 'react-router-dom'
 import { payrollIssueText, payrollLabels } from '../../../../shared/payrollLabels'
 import { PayrollBasisSummary } from '../../components/PayrollBasisSummary'
-import { probationLabels } from '../../../../shared/probationLabels'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,6 +21,7 @@ interface Salary {
   staffId: string
   month: string
   payrollReview?: {reason:string}|null
+  reestimate?: {baseSalary:number;finalAmount:number;difference:number;originalFinalAmount?:number;error?:string}
   calculationError?: string
   payrollBasis?: any
   compensationAdjustmentIds?: string[]
@@ -75,7 +77,15 @@ export function SalaryListPage() {
   const [payrollBasis,setPayrollBasis]=useState<any>(null)
   const [daysError,setDaysError]=useState(false)
   const [workingDays,setWorkingDays]=useState<{probation:string;regular:string}|null>(null)
-  const l=payrollLabels(i18n.language)
+  const l=payrollLabels(i18n.language),pl=payrollPresentation(i18n.language)
+  const [lateMinutes,setLateMinutes]=useState('0')
+  const [lateMode,setLateMode]=useState<'rule'|'manual'>('rule')
+  const [manualLateDeduction,setManualLateDeduction]=useState('0')
+  const [otherAttendanceDeduction,setOtherAttendanceDeduction]=useState('0')
+  const [correctionReason,setCorrectionReason]=useState('')
+  const [daySource,setDaySource]=useState<'manual'|'attendance'>('manual')
+  const [attendancePreview,setAttendancePreview]=useState<any>(null)
+  const appliedAttendanceAmount=useRef(0)
   const [saveError, setSaveError] = useState('')
   const [depositLoading, setDepositLoading] = useState(false)
   const [depositError, setDepositError] = useState('')
@@ -138,11 +148,10 @@ export function SalaryListPage() {
       params.month = filterMonth || getCurrentMonth()
       params.includeUnrecorded = true
       setPreparing(true);setPrepareMessage('')
-      await salaryApi.prepareMonth(params.month)
       if(sequence!==salaryLoadSequence.current)return
       const response = await salaryApi.list(params)
       if(sequence!==salaryLoadSequence.current)return
-      const rows=response.data?.data?.list||[]
+      const rows=(response.data?.data?.list||[]).map((row:Salary)=>row.reestimate&&!row.reestimate.error?{...row,...row.reestimate,payrollReview:row.payrollReview?{reason:'LEGACY_RECALC_REQUIRED'}:null}:row)
       setAllPayroll(rows)
       setSalaries(rows.filter((s:Salary)=>(!filterStaff||s.staffId===filterStaff)&&(!filterStatus||s.status===filterStatus)))
     } catch (error) {
@@ -191,14 +200,20 @@ export function SalaryListPage() {
 
   const handleOpenModal = (salary?: Salary) => {
     setDaysError(false)
+    setCorrectionReason('');setAttendancePreview(null)
     const basis=salary?.payrollBasis
-    skipInitialManualDays.current=!!salary&&salary.status!=='unrecorded'&&!!basis?.workingDays&&basis.daysSource!=='attendance'
-    setWorkingDays(basis && basis.daysSource!=='attendance' && (basis.workingDays || salary?.status==='unrecorded') ? {probation:String(basis.workingDays?.probation ?? basis.segments.filter((s:any)=>s.type==='probation').reduce((n:number,s:any)=>n+s.days,0)),regular:String(basis.workingDays?.regular ?? basis.segments.filter((s:any)=>s.type==='regular').reduce((n:number,s:any)=>n+s.days,0))} : null)
+    const correction=basis?.correction
+    setLateMinutes(String(correction?.lateMinutes||0));setLateMode(correction?.lateMode||'rule');setManualLateDeduction(String(correction?.manualLateDeduction||0));setOtherAttendanceDeduction(String(correction?.otherAttendanceDeduction||0))
+    setDaySource(basis?.daysSource==='attendance'?'attendance':'manual')
+    const legacyMonthlyLate=salary?.compensationItems?.find(item=>item.id===`late-${salary.staffId}-${salary.month}`)?.amount||0
+    appliedAttendanceAmount.current=(correction?.lateDeduction||0)+(correction?.otherAttendanceDeduction||0)+legacyMonthlyLate
+    skipInitialManualDays.current=!!salary&&salary.status!=='unrecorded'&&(basis?.version===2||basis?.manualAdjustment||basis?.manualCorrection||basis?.daysSource==='manual')
+    setWorkingDays(basis ? {probation:String(basis.workingDays?.probation ?? basis.segments.filter((s:any)=>s.type==='probation').reduce((n:number,s:any)=>n+s.days,0)),regular:String(basis.workingDays?.regular ?? basis.segments.filter((s:any)=>s.type==='regular').reduce((n:number,s:any)=>n+s.days,0))} : null)
     setPayrollBasis(salary?.payrollBasis||null)
     setSaveError('')
     setDepositError('')
-    appliedCompensation.current={rewards:salary?.compensationRewards||0,penalties:salary?.compensationPenalties||0}
-    setCompensationIds(salary?.compensationAdjustmentIds||[])
+    appliedCompensation.current={rewards:salary?.compensationRewards||0,penalties:Math.max(0,(salary?.compensationPenalties||0)-legacyMonthlyLate)}
+    setCompensationIds((salary?.compensationAdjustmentIds||[]).filter(id=>id!==`late-${salary?.staffId}-${salary?.month}`))
     appliedDepositAmount.current = (salary?.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0)
     setDepositPlan(salary ? { staffId: salary.staffId, month: salary.month, items: salary.depositDeductions || [] } : null)
     if (salary) {
@@ -232,84 +247,56 @@ export function SalaryListPage() {
     setEditingSalary(null)
   }
 
-  const handleAutoCalculate = async (useAttendance=false) => {
-    if (!formData.staffId || !formData.month) {
-      alert(t('staff.salary.selectStaffMonth'))
-      return
-    }
-
-    const contextKey = activeSalaryContext.current
-    setCalculating(true)
-    setSaveError('')
+  const previewCorrection = () => ({lateMinutes:Number(lateMinutes),lateMode,manualLateDeduction:Number(manualLateDeduction),otherAttendanceDeduction:Number(otherAttendanceDeduction)})
+  const importAttendance = async () => {
+    if(!formData.staffId||!formData.month)return
+    setCalculating(true);setSaveError('')
+    const context=`${formData.staffId}:${formData.month}`
     try {
-      const [year, month] = formData.month.split('-')
-      const response = await salaryApi.calculate(formData.staffId, parseInt(month), parseInt(year),!useAttendance&&workingDays?{probation:Number(workingDays.probation),regular:Number(workingDays.regular)}:undefined)
-      const data = response.data?.data
-
-      if (data && contextKey === activeSalaryContext.current) {
-        if(useAttendance)setWorkingDays(null)
-        setPayrollBasis(data.payrollBasis || null)
-        appliedCompensation.current=data.compensation || {rewards:0,penalties:0}
-        setCompensationIds(data.compensationAdjustmentIds || [])
-        appliedDepositAmount.current = (data.depositDeductions || []).reduce((sum: number, item: {amountMinor: number}) => sum + Math.round(item.amountMinor / 100), 0)
-        setDepositPlan({ staffId: formData.staffId, month: formData.month, items: data.depositDeductions || [] })
-        setFormData(prev => prev.staffId !== formData.staffId || prev.month !== formData.month ? prev : ({
-          ...prev,
-          baseSalary: String(data.baseSalary || 0),
-          overtime: String(data.overtimePay || 0),
-          commission: String(data.commission || 0),
-          bonus: String(data.bonuses || 0),
-          deduction: String(data.deductions || 0)
-        }))
-      }
-    } catch (error) {
-      console.error('Failed to calculate salary:', error)
-      if (contextKey === activeSalaryContext.current) setSaveError(t('staff.salary.calcFailed'))
-    } finally {
-      if (contextKey === activeSalaryContext.current) setCalculating(false)
-    }
+      const response=await salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4)),undefined,undefined,'attendance')
+      if(activeSalaryContext.current.startsWith(`true:${context}:`))setAttendancePreview(response.data.data)
+    }catch{setSaveError(t('staff.salary.calcFailed'))}finally{setCalculating(false)}
   }
-
+  const applyAttendance = () => {
+    const data=attendancePreview,basis=data.payrollBasis
+    setWorkingDays({probation:String(basis.attendanceDays.probation),regular:String(basis.attendanceDays.regular)})
+    setDaySource('attendance')
+    setLateMinutes(String(basis.correction?.lateMinutes||0));setLateMode(basis.correction?.lateMode||(data.latePenalty>0?'manual':'rule'));setManualLateDeduction(String(basis.correction?.manualLateDeduction??data.latePenalty??0))
+    setOtherAttendanceDeduction(String(basis.correction?.otherAttendanceDeduction??Math.max(0,data.deductions-(data.compensation?.penalties||0)-(data.depositDeductions||[]).reduce((sum:number,i:any)=>sum+i.amount,0)-(data.latePenalty||0))))
+    setAttendancePreview(null)
+  }
+  const [previewRevision,setPreviewRevision]=useState(0)
   useEffect(()=>{
-    if(editingSalary || workingDays)return
-    setPayrollBasis(null)
-    if(!showModal||editingSalary||!formData.staffId||!formData.month)return
-    let active=true
-    setCalculating(true); setSaveError('')
-    salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4))).then(response=>{
-      if(!active)return
-      const data=response.data?.data
-      if(!Number.isSafeInteger(data?.baseSalary)||!data?.payrollBasis)throw Error('INVALID_SALARY_CALCULATION')
-      setPayrollBasis(data.payrollBasis||null)
-      appliedCompensation.current=data.compensation||{rewards:0,penalties:0};setCompensationIds(data.compensationAdjustmentIds||[])
-      appliedDepositAmount.current=(data.depositDeductions||[]).reduce((sum:number,item:{amountMinor:number})=>sum+Math.round(item.amountMinor/100),0)
-      setDepositPlan({staffId:formData.staffId,month:formData.month,items:data.depositDeductions||[]})
-      setFormData(previous=>({...previous,baseSalary:String(data.baseSalary??0),overtime:String(data.overtimePay??0),bonus:String(data.bonuses??0),deduction:String(data.deductions??0)}))
-    }).catch(()=>{if(active){setSaveError(t('staff.salary.calcFailed'));setFormData(previous=>({...previous,baseSalary:''}))}}).finally(()=>{if(active)setCalculating(false)})
-    return ()=>{active=false}
-  },[showModal,editingSalary,formData.staffId,formData.month])
-
-  useEffect(()=>{
-    if(!showModal||!workingDays||!formData.staffId||!formData.month)return
+    if(!showModal||!formData.staffId||!formData.month)return
     if(skipInitialManualDays.current){skipInitialManualDays.current=false;return}
     let active=true
     setCalculating(true);setSaveError('');setDaysError(false)
-    const days={probation:Number(workingDays.probation),regular:Number(workingDays.regular)}
-    if(workingDays.probation===''||workingDays.regular===''){setSaveError(l.invalidDays);setDaysError(true);setCalculating(false);return}
-    salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4)),days).then(response=>{
+    const days=workingDays?{probation:Number(workingDays.probation),regular:Number(workingDays.regular)}:undefined
+    if((workingDays&&(workingDays.probation===''||workingDays.regular===''))||lateMinutes===''||manualLateDeduction===''||otherAttendanceDeduction===''){setSaveError(l.invalidDays);setDaysError(true);setCalculating(false);return}
+    const timer=setTimeout(()=>salaryApi.calculate(formData.staffId,Number(formData.month.slice(5)),Number(formData.month.slice(0,4)),days,previewCorrection(),days?daySource:undefined).then(response=>{
       if(!active)return
-      const data=response.data.data
-      setPayrollBasis(data.payrollBasis)
-      setFormData(previous=>({...previous,baseSalary:String(data.baseSalary),bonus:String(data.compensation?.rewards||0),deduction:String((data.compensation?.penalties||0)+(data.depositDeductions||[]).reduce((sum:number,item:any)=>sum+item.amount,0))}))
-    }).catch(()=>{if(active){setSaveError(l.invalidDays);setDaysError(true)}}).finally(()=>{if(active)setCalculating(false)})
-    return ()=>{active=false}
-  },[showModal,formData.staffId,formData.month,workingDays?.probation,workingDays?.regular])
+      const data=response.data.data,basis=data.payrollBasis
+      setPayrollBasis(basis)
+      const nextAttendance=(basis.correction?.lateDeduction||0)+(basis.correction?.otherAttendanceDeduction||0)
+      const nextComp=data.compensation||{rewards:0,penalties:0}
+      const nextDeposit=(data.depositDeductions||[]).reduce((sum:number,i:any)=>sum+i.amount,0)
+      const previousAttendance=appliedAttendanceAmount.current,previousComp=appliedCompensation.current,previousDeposit=appliedDepositAmount.current
+      appliedAttendanceAmount.current=nextAttendance;appliedCompensation.current=nextComp;appliedDepositAmount.current=nextDeposit
+      setCompensationIds(data.compensationAdjustmentIds||[])
+      setDepositPlan({staffId:formData.staffId,month:formData.month,items:data.depositDeductions||[]})
+      setFormData(previous=>({...previous,baseSalary:String(data.baseSalary),bonus:String(Math.max(0,Number(previous.bonus)-previousComp.rewards)+nextComp.rewards),deduction:String(Math.max(0,Number(previous.deduction)-previousAttendance-previousComp.penalties-previousDeposit)+nextAttendance+nextComp.penalties+nextDeposit)}))
+      if(basis.correction?.lateRuleRequired){setSaveError(pl.noRule);setDaysError(true)}
+    }).catch(()=>{if(active){setSaveError(t('staff.salary.calcFailed'));setDaysError(true)}}).finally(()=>{if(active)setCalculating(false)}),200)
+    return ()=>{active=false;clearTimeout(timer)}
+  },[showModal,formData.staffId,formData.month,workingDays?.probation,workingDays?.regular,lateMinutes,lateMode,manualLateDeduction,otherAttendanceDeduction,daySource,previewRevision])
 
   const handleSave = async () => {
     if (!formData.staffId || !formData.month || !formData.baseSalary) {
       alert(t('common.required'))
       return
     }
+
+    if(!correctionReason.trim()){setSaveError(pl.reasonRequired);return}
 
     if (saving || calculating || depositLoading || depositError || daysError) return
     if (Number(formData.deduction) < appliedDepositAmount.current+appliedCompensation.current.penalties || Number(formData.bonus)<appliedCompensation.current.rewards) {setSaveError(t('salaryDeposit.minimum')); return}
@@ -320,8 +307,11 @@ export function SalaryListPage() {
     try {
       const data = {
         manualCorrection:true,
+        daysSource:daySource,
+        correction:{...previewCorrection(),reason:correctionReason.trim()},
+        includedAttendanceDeduction:appliedAttendanceAmount.current,
         manualBaseSalary:!!payrollBasis && Number(formData.baseSalary)!==payrollBasis.amount,
-        workingDays: workingDays ? {probation:Number(workingDays.probation),regular:Number(workingDays.regular)} : undefined,
+        workingDays: workingDays ? {probation:Number(workingDays.probation),regular:Number(workingDays.regular)} : payrollBasis?{probation:payrollBasis.segments.filter((seg:any)=>seg.type==='probation').reduce((sum:number,seg:any)=>sum+seg.days,0),regular:payrollBasis.segments.filter((seg:any)=>seg.type==='regular').reduce((sum:number,seg:any)=>sum+seg.days,0)}:undefined,
         autoBaseSalary: !!payrollBasis && Number(formData.baseSalary) === payrollBasis.amount,
         compensationAdjustmentIds:compensationIds,
         storeId: user?.storeId,
@@ -360,10 +350,9 @@ export function SalaryListPage() {
     }
   }
 
-  const pendingSalaries = salaries.filter(s => s.status === 'pending')
+  const pendingSalaries = salaries.filter(s => s.status === 'pending' && isConfirmedBasis(s.payrollBasis))
   const paidSalaries = salaries.filter(s => s.status === 'paid')
-  const thisMonth = getCurrentMonth()
-  const thisMonthSalaries = salaries.filter(s => s.month === thisMonth && s.status!=='unrecorded')
+  const thisMonthSalaries = salaries.filter(s => s.status==='unrecorded'||s.status==='pending'&&!isConfirmedBasis(s.payrollBasis))
 
   const totalPending = pendingSalaries.reduce((sum, s) => sum + s.finalAmount, 0)
   const totalPaid = paidSalaries.reduce((sum, s) => sum + s.finalAmount, 0)
@@ -415,8 +404,8 @@ export function SalaryListPage() {
             className="flex-1 p-2 border border-gray-200 rounded-lg text-sm"
           >
             <option value="">{t('common.all')} {t('staff.salary.status')}</option>
-            <option value="pending">{t('staff.salary.pending')}</option>
-            <option value="unrecorded">{l.unrecorded}</option>
+            <option value="pending">{pl.confirmed}</option>
+            <option value="unrecorded">{pl.estimate}</option>
             <option value="paid">{t('staff.salary.paid')}</option>
           </select>
         </div>
@@ -433,7 +422,7 @@ export function SalaryListPage() {
           <p className="text-xl font-bold text-green-900">{formatCurrency(totalPaid)}</p>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <p className="text-blue-800 text-sm font-medium">{t('staff.salary.thisMonth')}</p>
+          <p className="text-blue-800 text-sm font-medium">{pl.estimatedTotal}</p>
           <p className="text-xl font-bold text-blue-900">{formatCurrency(thisMonthTotal)}</p>
         </div>
       </div>
@@ -463,7 +452,7 @@ export function SalaryListPage() {
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[salary.status]}`}>
-                  {salary.payrollReview ? (salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection) : salary.status === 'unrecorded' ? l.unrecorded : salary.status === 'pending' ? t('staff.salary.pending') : t('staff.salary.paid')}
+                  {salary.payrollReview ? (salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection) : payrollStatus(salary,i18n.language)}
                 </span>
               </div>
 
@@ -475,58 +464,25 @@ export function SalaryListPage() {
 
               {salary.payrollReview&&<p className="text-sm text-amber-700 mb-2">{payrollIssueText(i18n.language,salary.payrollReview.reason)}{salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'&&<Link className="ml-2 underline" to={'/staff/'+salary.staffId+'/edit'}>{l.configureSalary}</Link>}</p>}
               {salary.payrollBasis?.employmentNeedsReview&&<p role="alert" className="text-amber-700">{l.employmentReview}</p>}
+              <div className="mb-4"><p className="text-sm text-gray-500">{payrollStatus(salary,i18n.language)}</p><p className="text-3xl font-bold">{salary.calculationError?pl.salaryError:formatCurrency(salary.finalAmount)}</p></div>
+              {(salary.status==='unrecorded'||salary.payrollBasis?.daysSource==='estimate')&&<p className="text-sm text-blue-700 mb-4">{pl.estimateHint}</p>}
+              {salary.status==='pending'&&!salary.payrollBasis?.confirmed&&<p className="text-sm text-amber-700 mb-3">{pl.legacy}</p>}
+              {salary.reestimate&&<p className="text-sm text-blue-700 mb-3">{salary.reestimate.error?pl.salaryErrorHint:<>{pl.originalAmount}: {formatCurrency(salary.reestimate.originalFinalAmount??salary.finalAmount)} · {pl.difference}: {formatCurrency(salary.reestimate.difference)}</>}</p>}
+              <section className="border rounded-xl p-4 mb-3"><h3 className="font-semibold mb-3">{pl.breakdown}</h3><dl className="space-y-2 text-sm">
+                {[[pl.base,salary.baseSalary],[pl.overtime,salary.overtime],[pl.commission,salary.commission],[pl.reward,salary.bonus],[pl.lateDeduction,-(salary.payrollBasis?.correction?.lateDeduction||0)],[pl.penalty,-(salary.compensationPenalties||0)],[pl.deposit,-(salary.depositDeductionAmount||0)],[pl.otherDeduction,-Math.max(0,salary.deduction-(salary.payrollBasis?.correction?.lateDeduction||0)-(salary.compensationPenalties||0)-(salary.depositDeductionAmount||0))]].map(([label,amount])=><div className="flex justify-between gap-3" key={String(label)}><dt className="text-gray-500">{label}</dt><dd className={Number(amount)<0?'text-red-600':'font-medium'}>{formatCurrency(Number(amount)||0)}</dd></div>)}
+                <div className="flex justify-between border-t pt-2 font-semibold"><dt>{pl.totalDeduction}</dt><dd>{formatCurrency(salary.deduction)}</dd></div>
+              </dl></section>
+              {!!salary.compensationItems?.length&&<details className="text-sm mb-3"><summary>{t('compensation.title')}</summary><ul>{salary.compensationItems.map(item=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul></details>}
               <PayrollBasisSummary basis={salary.payrollBasis}/>
-              {(salary.depositDeductions?.length || 0) > 0 && <p className="text-sm text-red-600 mb-2">{t('staff.salary.depositPortion')}: {formatCurrency((salary.depositDeductions || []).reduce((sum, item) => sum + Math.round(item.amountMinor / 100), 0))}</p>}
-              {salary.depositNeedsReview && <p role="alert" className="text-sm text-amber-700 mb-2">{t('salaryDeposit.recalculate')} {formatCurrency(salary.expectedDepositAmount || 0)}</p>}
-              <div className="grid grid-cols-3 gap-2 mb-3 rounded-xl border p-3">
-                <div><p className="text-gray-500 text-sm">{t('compensation.reward')}</p><p className="font-bold text-green-700">+{formatCurrency(salary.bonus)}</p></div>
-                <div><p className="text-gray-500 text-sm">{t('compensation.penalty')}</p><p className="font-bold text-red-600">−{formatCurrency(salary.compensationPenalties || 0)}</p></div>
-                <div><p className="text-gray-500 text-sm">{t(salary.depositNeedsReview?'compensation.depositPending':'compensation.deposit')}</p><p className="font-bold text-amber-700">−{formatCurrency(salary.depositNeedsReview?salary.expectedDepositAmount || 0:salary.depositDeductionAmount || 0)}</p></div>
-              </div>
-              {!!salary.compensationItems?.length && <ul className="text-sm mb-3">{salary.compensationItems.map(item=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul>}
-              {/* Salary breakdown */}
-              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('staff.salary.baseSalary')}:</span>
-                  <span className="font-medium">{formatCurrency(salary.baseSalary)}</span>
-                </div>
-                {salary.overtime > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t('staff.salary.overtime')}:</span>
-                    <span className="font-medium">{formatCurrency(salary.overtime)}</span>
-                  </div>
-                )}
-                {salary.commission > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t('staff.salary.commission')}:</span>
-                    <span className="font-medium">{formatCurrency(salary.commission)}</span>
-                  </div>
-                )}
-                {salary.bonus > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t('staff.salary.bonus')}:</span>
-                    <span className="font-medium">{formatCurrency(salary.bonus)}</span>
-                  </div>
-                )}
-                {salary.deduction > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t('staff.salary.deduction')}:</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(salary.deduction)}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="text-2xl font-bold text-gray-900 mb-3">
-                {salary.payrollReview?(salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'?l.needsSalary:l.needsCorrection):formatCurrency(salary.finalAmount)}
-              </div>
-
+              {salary.depositNeedsReview&&<p className="text-sm text-amber-700">{t('salaryDeposit.recalculate')}</p>}
+              {salary.status==='pending'&&<p className="text-sm text-gray-500 my-3">{pl.paymentHint}</p>}
               <div className="flex gap-2">
                 {salary.status === 'unrecorded' && <button disabled={!canWrite || user?.role!=='admin'} onClick={()=>handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.correction}</button>}
                 {salary.status === 'pending' && <button disabled={!canWrite} onClick={() => handleOpenModal(salary)} className="py-2 px-3 text-sm border rounded-lg">{l.correction}</button>}
                 {salary.status === 'pending' && (
                   <button
                     onClick={() => handleMarkPaid(salary.id)}
-                    disabled={user?.role !== 'admin' || !!salary.payrollReview || salary.depositNeedsReview || salary.payrollBasis?.employmentNeedsReview}
+                    disabled={salary.month>=getCurrentMonth() || !salary.payrollBasis?.confirmed || user?.role !== 'admin' || !!salary.payrollReview || salary.depositNeedsReview || salary.payrollBasis?.employmentNeedsReview}
                     className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50 flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={16} />
@@ -584,9 +540,18 @@ export function SalaryListPage() {
                 />
               </div>
 
-              <p className="col-span-2 text-sm text-gray-500">{probationLabels(i18n.language).automatic}</p>
-              <div className="col-span-2"><PayrollBasisSummary basis={payrollBasis ? {...payrollBasis,recordedBaseSalary:Number(formData.baseSalary),manualAdjustment:Number(formData.baseSalary)!==payrollBasis.amount} : null}/></div>
-              <section className="border rounded-xl p-3 space-y-2"><h3 className="font-medium">{l.editDays}</h3><button type="button" disabled={calculating||!canWrite} className="text-sm text-blue-700" onClick={()=>handleAutoCalculate(true)}>{l.restore}</button><p className="text-sm text-gray-500">{l.dayHint}</p>{payrollBasis?.attendanceDays&&<p className="text-sm text-blue-700">{l.automaticDays}: {payrollBasis.attendanceDays.probation+payrollBasis.attendanceDays.regular} · {workingDays?l.manualSource:l.attendanceSource}</p>}{payrollBasis && ['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((s:any)=>s.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?probationLabels(i18n.language).probation:probationLabels(i18n.language).regular} ({l.max}: {segment.eligibleDays ?? segment.days})<input aria-label={type==='probation'?l.probationDays:l.regularDays} type="number" min="0" max={segment.eligibleDays ?? segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={workingDays?.[type as 'probation'|'regular'] ?? segment.days} onChange={e=>setWorkingDays(previous=>({...previous||{probation:String(payrollBasis.segments.find((s:any)=>s.type==='probation')?.days||0),regular:String(payrollBasis.segments.find((s:any)=>s.type==='regular')?.days||0)},[type]:e.target.value}))}/></label>})}</section>
+              <section className="border rounded-xl p-4 space-y-3"><h3 className="font-semibold">{l.editDays}</h3><p className="text-sm text-gray-500">{pl.daysHint}</p>
+                {payrollBasis&&['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((seg:any)=>seg.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?pl.probation:pl.regular} · {pl.employmentDays}: {segment.eligibleDays??segment.days}<input aria-label={type==='probation'?l.probationDays:l.regularDays} type="number" min="0" max={segment.eligibleDays??segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={workingDays?.[type as 'probation'|'regular']??segment.days} onChange={e=>{setDaySource('manual');setWorkingDays(previous=>({...previous||{probation:String(payrollBasis.segments.find((seg:any)=>seg.type==='probation')?.days||0),regular:String(payrollBasis.segments.find((seg:any)=>seg.type==='regular')?.days||0)},[type]:e.target.value}))}}/></label>})}
+                <button type="button" disabled={calculating||!canWrite} className="text-blue-700 text-sm underline" onClick={importAttendance}>{pl.importAttendance}</button>
+                {attendancePreview&&<div className="bg-blue-50 rounded-lg p-3 space-y-2"><p>{pl.workDays}: {attendancePreview.payrollBasis.workedDays} · {pl.base}: {formatCurrency(attendancePreview.baseSalary)}</p><p>{pl.lateMinutes}: {attendancePreview.payrollBasis.correction?.lateMinutes||0}</p><p className="text-sm">{pl.importHint}</p><div className="flex gap-4"><button type="button" onClick={applyAttendance}>{pl.applyAttendance}</button><button type="button" onClick={()=>setAttendancePreview(null)}>{pl.cancel}</button></div></div>}
+              </section>
+              <section className="border rounded-xl p-4 space-y-3"><label className="block text-sm">{pl.lateMinutes}<input aria-label={pl.lateMinutes} type="number" min="0" max="50000" step="1" value={lateMinutes} onChange={e=>setLateMinutes(e.target.value)} className="w-full p-2 border rounded-lg"/></label><select aria-label={pl.lateDeduction} value={lateMode} onChange={e=>setLateMode(e.target.value as 'rule'|'manual')} className="w-full p-2 border rounded-lg"><option value="rule">{pl.ruleLate}</option><option value="manual">{pl.manualLate}</option></select>
+                {lateMode==='manual'&&<label className="block text-sm">{pl.manualLate} (Rp)<input type="number" min="0" value={manualLateDeduction} onChange={e=>setManualLateDeduction(e.target.value)} className="w-full p-2 border rounded-lg"/></label>}
+                <LateCalculation correction={payrollBasis?.correction} language={i18n.language}/>
+                <label className="block text-sm">{pl.otherAttendance} (Rp)<input type="number" min="0" value={otherAttendanceDeduction} onChange={e=>setOtherAttendanceDeduction(e.target.value)} className="w-full p-2 border rounded-lg"/></label>
+                <label className="block text-sm">{pl.reason}<textarea value={correctionReason} maxLength={1000} onChange={e=>setCorrectionReason(e.target.value)} className="w-full p-2 border rounded-lg"/></label>
+              </section>
+              <PayrollBasisSummary basis={payrollBasis}/>
               {/* Base Salary */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -595,6 +560,7 @@ export function SalaryListPage() {
                 <div className="flex gap-2">
                   <input
                     type="number"
+                    aria-label={pl.base}
                     value={formData.baseSalary}
                     onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
                     className="flex-1 w-full p-3 border border-gray-200 rounded-xl"
@@ -603,7 +569,7 @@ export function SalaryListPage() {
                   />
                   <button
                     type="button"
-                    onClick={()=>handleAutoCalculate()}
+                    onClick={()=>setPreviewRevision(n=>n+1)}
                     disabled={!canWrite || calculating || depositLoading || !formData.staffId || !formData.month}
                     className="px-4 py-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1 text-sm font-medium"
                   >
@@ -665,6 +631,7 @@ export function SalaryListPage() {
                 </label>
                 <input
                   type="number"
+                  aria-label={pl.totalDeduction}
                   value={formData.deduction}
                   onChange={(e) => setFormData({ ...formData, deduction: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
@@ -675,7 +642,7 @@ export function SalaryListPage() {
 
               {depositLoading && <p role="status">{t('common.loading')}</p>}
               {depositError && <p role="alert" className="text-red-600">{depositError}</p>}
-              <p className="text-sm text-gray-500">{t('compensation.payrollHint')}</p>
+              <p className="text-sm text-gray-500">{pl.deductionHint}</p>
               <p className="text-sm text-gray-500">{t('salaryDeposit.hint')}</p>
               {depositPlan?.staffId === formData.staffId && depositPlan?.month === formData.month && depositPlan.items.length > 0 && <p className="text-sm text-gray-600">{t('staff.salary.depositPortion')}: {formatCurrency(depositPlan.items.reduce((sum, item) => sum + item.amountMinor, 0) / 100)}</p>}
               {/* Final Amount Preview */}
@@ -704,7 +671,7 @@ export function SalaryListPage() {
                   {saving ? (
                     <Loader2 size={20} className="animate-spin" />
                   ) : (
-                    t('common.save')
+                    pl.confirm
                   )}
                 </button>
               </div>

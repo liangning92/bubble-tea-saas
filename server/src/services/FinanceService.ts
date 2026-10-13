@@ -1,3 +1,4 @@
+import { savedPayrollBasis } from './ProbationService'
 import { requireVerifiedReceiptIncome } from './ReceiptFinancialEvidenceService'
 import { netReceivedAmount } from '../utils/refundAllocation'
 import prisma from '../config/database'
@@ -48,6 +49,15 @@ async function getTaxableRatio(storeId: string): Promise<number> {
 }
 
 // ==================== REVENUE ANALYSIS ====================
+
+async function confirmedPayroll<T extends {id:string;status:string}>(storeId:string,rows:T[]):Promise<T[]> {
+  const flags=await Promise.all(rows.map(async row=>{
+    if(row.status==='paid')return true
+    const basis=await savedPayrollBasis(prisma,storeId,row.id)
+    return basis?.version===2 ? basis.confirmed===true : !!(basis?.manualCorrection||basis?.manualAdjustment||basis?.daysSource==='manual')
+  }))
+  return rows.filter((_,index)=>flags[index])
+}
 
 export interface RevenueSummary {
   totalRevenue: number
@@ -192,7 +202,7 @@ export async function getHourlyRevenueDistribution(storeId: string, date: Date) 
 // ==================== PROFIT ANALYSIS ====================
 
 export async function getProfitAnalysis(storeId: string, startDate: Date, endDate: Date) {
-  const [orders, expenses, payroll] = await Promise.all([
+  const [orders, expenses, rawPayroll] = await Promise.all([
     prisma.order.findMany({
       where: {
         storeId,
@@ -204,9 +214,11 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
     prisma.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } }, select: { amount: true, category: true, type: true, referenceType: true } }),
     prisma.salary.findMany({
       where: { staff: { storeId }, month: { gte: formatDate(startDate).slice(0, 7), lte: formatDate(endDate).slice(0, 7) } },
-      select: { month: true, finalAmount: true, status:true }
+      select: { id:true, month: true, finalAmount: true, status:true }
     })
   ])
+
+  const payroll=await confirmedPayroll(storeId,rawPayroll)
 
   const revenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
   const cogs = orders.reduce((sum, o) =>
@@ -310,18 +322,20 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
   const monthAnchor=new Date(`${year}-${String(month).padStart(2,'0')}-01T00:00:00+07:00`)
   const startDate = startOfMonth(monthAnchor)
   const endDate = endOfMonth(monthAnchor)
-  const [orders, expenses, payroll, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
+  const [orders, expenses, rawPayroll, fixedAssets, bankAccounts, inventories, pendingPOs] = await Promise.all([
     prisma.order.findMany({
       where: { storeId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['completed', 'paid', 'refunded'] } },
       include: { items: true,refundRequests:{where:{status:{in:['approved','paid']}}} }
     }),
     prisma.expense.findMany({ where: { storeId, date: { gte: startDate, lte: endDate } } }),
-    prisma.salary.findMany({ where: { staff: { storeId }, month: `${year}-${String(month).padStart(2, '0')}` }, select: { finalAmount: true, status: true } }),
+    prisma.salary.findMany({ where: { staff: { storeId }, month: `${year}-${String(month).padStart(2, '0')}` }, select: { id:true, finalAmount: true, status: true } }),
     FixedAssetService.getDepreciationSchedule(storeId),
     prisma.bankAccount.findMany({ where: { storeId } }),
     prisma.inventory.findMany({ where: { storeId } }),
     prisma.purchaseOrder.aggregate({ where: { storeId, status: { in: ['pending', 'approved'] } }, _sum: { totalAmount: true } })
   ])
+
+  const payroll=await confirmedPayroll(storeId,rawPayroll)
 
   const revenue = orders.reduce((sum, order) => sum + netReceivedAmount(order), 0)
   const cost = orders.reduce((sum, order) => sum + (order.refundRequests.some(r => r.reasonCode === 'paid_unprepared') ? 0 : order.items.reduce((subtotal, item) => subtotal + (item.bomCost || 0) * item.quantity, 0)), 0)

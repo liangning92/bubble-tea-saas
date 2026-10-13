@@ -613,8 +613,8 @@ export const salaryApi = {
   update: (id: string, data: any) => api.put('/salaries/' + id, data),
   markPaid: (id: string) => api.put('/salaries/' + id + '/mark-paid'),
   delete: (id: string) => api.delete('/salaries/' + id),
-  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}) =>
-    api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
+  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}, correction?: {lateMinutes:number;lateMode:string;manualLateDeduction:number;otherAttendanceDeduction:number}, daysSource?: string) =>
+    api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...correction, daysSource, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
 }
 
 // Marketing
