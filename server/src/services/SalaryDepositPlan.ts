@@ -58,7 +58,13 @@ export async function salaryDepositPlan(staffId: string, period: string, db: Dat
       }
       // No second full charge while first-month wages are unpaid. Only a known
       // shortfall after a first-month allocation/collection carries forward.
-      if (period > firstMonth && deposit.deductedAmount === 0 && reserved === 0) continue
+      if (period > firstMonth && deposit.deductedAmount === 0 && reserved === 0) {
+        const firstSalary = await db.salary.findFirst({where:{staffId,month:firstMonth},select:{id:true}})
+        const allocation = firstSalary && await db.config.findUnique({where:{storeId_key:{storeId:deposit.storeId,key:`salary.depositPlan.${firstSalary.id}`}}})
+        // A saved empty allocation means the first wage had no funds available;
+        // its entire outstanding deposit still carries forward after that month.
+        if (!allocation) continue
+      }
       due = { shouldDeduct: true, amount: Math.max(0, deposit.totalAmount - deposit.deductedAmount - reserved) }
     }
     const amount = Math.min(budget, Math.round(due.amount / 100))
