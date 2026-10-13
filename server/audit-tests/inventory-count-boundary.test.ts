@@ -16,11 +16,12 @@ async function call(router:any,method:string,path:string,role='staff',body:any={
  for(const layer of route.stack){let next=false;await layer.handle(req,res,()=>{next=true});if(!next)break}return res
 }
 beforeEach(()=>jest.clearAllMocks())
-test('staff can observe with server identity but cannot create, complete or cancel counts',async()=>{
+test('staff can create and observe counts with server identity but cannot approve or cancel',async()=>{
  const body={countedQty:9,countedBy:'spoof',expectedStock:10,observedVersion:'2026-01-01T00:00:00.000Z',note:'physical'}
  expect((await call(inventoryCountRouter,'put','/:id/item/:itemId','staff',body)).statusCode).toBe(200)
  expect(service.updateCountItem).toHaveBeenCalledWith('item',9,'actual-staff','physical',{countId:'count',storeId:'a',expectedStock:10,observedVersion:body.observedVersion})
- for(const path of ['/','/:id/complete','/:id/cancel'])expect((await call(inventoryCountRouter,'post',path)).statusCode).toBe(403)
+ expect((await call(inventoryCountRouter,'post','/','staff',{storeId:'a',period:'ad_hoc',startDate:'2026-10-13',endDate:'2026-10-13'})).statusCode).toBe(201)
+ for(const path of ['/:id/complete','/:id/cancel'])expect((await call(inventoryCountRouter,'post',path)).statusCode).toBe(403)
  expect(service.completeInventoryCount).not.toHaveBeenCalled()
 })
 test('staff list hides carrying costs and administrator cannot create a foreign store session',async()=>{

@@ -126,14 +126,22 @@ export const adminApi = {
 }
 
 // Inventory
+async function inventoryIntent(kind:'in'|'out',data:any){
+ const key='inventory.intent.'+JSON.stringify([useAuthStore.getState().user?.id,kind,data])
+ const operationId=localStorage.getItem(key)||crypto.randomUUID();localStorage.setItem(key,operationId)
+ const response=await api.post('/inventory/stock-'+kind,{...data,operationId});localStorage.removeItem(key);return response
+}
+
 export const inventoryApi = {
+  employeeConsumption: (params:any) => api.get('/inventory/employee-consumption',{params}),
+  consumptionAlerts: () => api.get('/inventory/consumption-alerts'),
   list: (params?: any) => api.get('/inventory', { params }),
   get: (id: string) => api.get('/inventory/' + id),
   create: (data: any) => api.post('/inventory', data),
   update: (id: string, data: any) => api.put('/inventory/' + id, data),
   delete: (id: string) => api.delete('/inventory/' + id),
-  stockIn: (data: any) => api.post('/inventory/stock-in', data),
-  stockOut: (data: any) => api.post('/inventory/stock-out', data),
+  stockIn: (data: any) => inventoryIntent('in',data),
+  stockOut: (data: any) => inventoryIntent('out',data),
   adjust: (id: string, data: any) => api.put('/inventory/' + id + '/adjust', data),
   logs: (params?: any) => api.get('/inventory/logs', { params }),
   logsStockIn: (params?: any) => api.get('/inventory/logs/stock-in', { params }),
@@ -144,6 +152,9 @@ export const inventoryApi = {
   anomalySummary: (params: any) => api.get('/inventory/anomaly-summary', { params }),
   // Alert config
   getAlertConfig: () => api.get('/inventory/alert-config'),
+  alertCenter: () => api.get('/inventory/alert-center'),
+  handleAlert: (id: string, note: string) => api.post(`/inventory/alert-center/${id}/handle`, {note}),
+  setExpiry: (data: any) => api.put('/inventory/alert-center/expiry', data),
   saveAlertConfig: (config: any) => api.put('/inventory/alert-config', config),
   // Inventory count
   getInventoryCounts: () => api.get('/inventory-counts'),
@@ -613,8 +624,8 @@ export const salaryApi = {
   update: (id: string, data: any) => api.put('/salaries/' + id, data),
   markPaid: (id: string) => api.put('/salaries/' + id + '/mark-paid'),
   delete: (id: string) => api.delete('/salaries/' + id),
-  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}) =>
-    api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
+  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}, correction?: {lateMinutes:number;lateMode:string;manualLateDeduction:number;otherAttendanceDeduction:number}, daysSource?: string) =>
+    api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...correction, daysSource, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
 }
 
 // Marketing

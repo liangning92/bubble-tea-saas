@@ -1,3 +1,4 @@
+import {markConsumptionDayDirty} from './OrderConsumptionService'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
@@ -11,30 +12,31 @@ const id=z.string().min(1).max(128)
 const nullable=id.nullable()
 const time=z.string().datetime()
 const line=z.object({id,productId:id,specId:id,productName:z.string().max(500),specName:z.string().max(500),quantity:z.number().int().positive().max(10000),unitPrice:money,addons:z.string().max(10000),bomCost:money,createdAt:time}).strict()
+const consumption=z.object({materials:z.array(z.object({inventoryId:id,name:z.string().max(500),unit:z.string().min(1).max(30),quantity:z.number().finite().min(0).max(1e12)}).strict()).max(2000),issues:z.array(z.object({productId:id,inventoryId:id.optional(),code:z.string().max(200)}).strict()).max(2000),createdAt:time,reversedAt:time.nullable()}).strict()
 const proof=z.object({id,storeId:id,orderId:id,amount:money,uploadedBy:id,confirmedBy:id,createdAt:time,confirmedAt:time,verification:z.literal('staff_confirmed'),sha256:z.string().regex(/^[a-f0-9]{64}$/),mimeType:z.enum(['image/png','image/jpeg','image/webp']),image:z.string().max(7*1024*1024)}).strict()
 export const receiptEnvelope=z.object({version:z.literal(1),sourceId:z.string().uuid(),tenantId:id,order:z.object({
  id,storeId:id,staffId:id,memberId:nullable,channelId:nullable,orderNumber:id,pickupNumber:nullable,
  totalAmount:money,discountAmount:money,finalAmount:money,checkoutTaxAmount:money.nullable(),requestFingerprint:z.string().regex(/^v1:[a-f0-9]{64}$/).nullable(),
  paymentMethod:z.string().min(1).max(30),status:z.enum(['completed','paid','refunded','cancelled']),customerCount:z.number().int().min(1).max(10000),
  taxCategory:z.string().max(100).nullable(),platformOrderId:nullable,tableNumber:z.string().max(100).nullable(),callerPhone:z.string().max(100).nullable(),driverPickupTime:time.nullable(),purchaseOrderNo:nullable,socialRef:z.string().max(500).nullable(),note:z.string().max(10000).nullable(),createdAt:time,updatedAt:time,items:z.array(line).min(1).max(200)
-}).strict(),evidence:proof.nullable()}).strict()
+}).strict(),evidence:proof.nullable(),consumption:consumption.optional()}).strict()
 type ParsedReceipt=z.infer<typeof receiptEnvelope>
 // Project disables strictNullChecks; Zod infers optional keys although parse requires them.
-export type ReceiptEnvelope={version:1;sourceId:string;tenantId:string;order:Required<Omit<ParsedReceipt['order'],'items'>>&{items:Array<Required<z.infer<typeof line>>>};evidence:Required<z.infer<typeof proof>>|null}
+export type ReceiptEnvelope={version:1;sourceId:string;tenantId:string;order:Required<Omit<ParsedReceipt['order'],'items'>>&{items:Array<Required<z.infer<typeof line>>>};evidence:Required<z.infer<typeof proof>>|null;consumption?:z.infer<typeof consumption>}
 type LoadedOrder=Prisma.OrderGetPayload<{include:{items:true,paymentEvidence:true}}>
 const date=(value:Date|null)=>value?.toISOString()??null
-export function receiptFor(sourceId:string,tenantId:string,order:LoadedOrder):ReceiptEnvelope {
+export function receiptFor(sourceId:string,tenantId:string,order:LoadedOrder,snapshot?:{materials:string;issues:string;createdAt:Date;reversedAt:Date|null}|null):ReceiptEnvelope {
  const evidence=order.paymentEvidence
  return receiptEnvelope.parse({version:1,sourceId,tenantId,order:{
   id:order.id,storeId:order.storeId,staffId:order.staffId,memberId:order.memberId,channelId:order.channelId,orderNumber:order.orderNumber,pickupNumber:order.pickupNumber,
   totalAmount:order.totalAmount,discountAmount:order.discountAmount,finalAmount:order.finalAmount,checkoutTaxAmount:order.checkoutTaxAmount,requestFingerprint:order.requestFingerprint,
   paymentMethod:order.paymentMethod,status:order.status,customerCount:order.customerCount,taxCategory:order.taxCategory,platformOrderId:order.platformOrderId,tableNumber:order.tableNumber,callerPhone:order.callerPhone,driverPickupTime:date(order.driverPickupTime),purchaseOrderNo:order.purchaseOrderNo,socialRef:order.socialRef,note:order.note,createdAt:date(order.createdAt),updatedAt:date(order.updatedAt),
   items:order.items.map(i=>({id:i.id,productId:i.productId,specId:i.specId,productName:i.productName,specName:i.specName,quantity:i.quantity,unitPrice:i.unitPrice,addons:i.addons,bomCost:i.bomCost,createdAt:date(i.createdAt)})).sort((a,b)=>a.id.localeCompare(b.id))
- },evidence:evidence?{...evidence,createdAt:date(evidence.createdAt),confirmedAt:date(evidence.confirmedAt),image:evidence.image.toString('base64')}:null}) as ReceiptEnvelope
+ },evidence:evidence?{...evidence,createdAt:date(evidence.createdAt),confirmedAt:date(evidence.confirmedAt),image:evidence.image.toString('base64')}:null,...(snapshot?{consumption:{materials:JSON.parse(snapshot.materials),issues:JSON.parse(snapshot.issues),createdAt:date(snapshot.createdAt),reversedAt:date(snapshot.reversedAt)}}:{})}) as ReceiptEnvelope
 }
 const hash=(value:unknown)=>createHash('sha256').update(canonical(value)).digest('hex')
 export const receiptDigest=(receipt:ReceiptEnvelope)=>hash(receipt)
-function immutableDigest(receipt:ReceiptEnvelope){const {status,updatedAt,...order}=receipt.order;return hash({...receipt,order:{...order,items:[...order.items].sort((a,b)=>a.id.localeCompare(b.id))}})}
+function immutableDigest(receipt:ReceiptEnvelope){const {status,updatedAt,...order}=receipt.order;const frozen=receipt.consumption?{...receipt.consumption,reversedAt:null}:undefined;return hash({...receipt,...(frozen?{consumption:frozen}:{}),order:{...order,items:[...order.items].sort((a,b)=>a.id.localeCompare(b.id))}})}
 function conflict():never{throw new Error('RECEIPT_SYNC_CONFLICT')}
 
 export async function receiveReceipt(db:PrismaClient,input:unknown,storeId:string,actorId:string){
@@ -50,11 +52,12 @@ export async function receiveReceipt(db:PrismaClient,input:unknown,storeId:strin
   if(!store||store.tenantId!==receipt.tenantId)throw new Error('RECEIPT_STORE_MISMATCH')
   const existing=await tx.order.findUnique({where:{id:o.id},include:{items:true,paymentEvidence:true}})
   const record=await tx.config.findUnique({where:{storeId_key:{storeId,key:replicaKey(o.id)}}})
+  const existingSnapshot=await tx.orderConsumptionSnapshot.findUnique({where:{orderId:o.id}})
   const immutable=immutableDigest(receipt)
   if(existing||record){
    if(!existing||!record||existing.storeId!==storeId)conflict()
    const marker=JSON.parse(record.value)
-   if(marker.sourceId!==receipt.sourceId||marker.immutable!==immutable||immutableDigest(receiptFor(receipt.sourceId,receipt.tenantId,existing))!==immutable||existing.status!==marker.status)conflict()
+   if(marker.sourceId!==receipt.sourceId||marker.immutable!==immutable||immutableDigest(receiptFor(receipt.sourceId,receipt.tenantId,existing,existingSnapshot))!==immutable||existing.status!==marker.status)conflict()
    if(o.updatedAt===marker.sourceUpdatedAt&&o.status!==marker.status)conflict()
    if(o.updatedAt<=marker.sourceUpdatedAt)return {digest,orderId:o.id,replayed:true}
    if(o.status!==marker.status&&!(['paid','completed'].includes(marker.status)&&['completed','refunded','cancelled'].includes(o.status)))conflict()
@@ -69,6 +72,18 @@ export async function receiveReceipt(db:PrismaClient,input:unknown,storeId:strin
    const {items,createdAt,updatedAt,driverPickupTime,...fields}=o
    await tx.order.create({data:{...fields,createdAt:new Date(createdAt),updatedAt:new Date(updatedAt),driverPickupTime:driverPickupTime?new Date(driverPickupTime):null,items:{create:items.map(i=>({...i,createdAt:new Date(i.createdAt)}))}}})
    if(receipt.evidence){const {image:encoded,createdAt,confirmedAt,...fields}=receipt.evidence;await tx.paymentEvidence.create({data:{...fields,image:image!,createdAt:new Date(createdAt),confirmedAt:new Date(confirmedAt)}})}
+  }
+  if(receipt.consumption){
+   const snapshot=receipt.consumption
+   if(snapshot.reversedAt&&!['refunded','cancelled'].includes(o.status))conflict()
+   for(const material of snapshot.materials){
+    const inventory=await tx.inventory.findFirst({where:{id:material.inventoryId,storeId},select:{unit:true}})
+    if(!inventory||inventory.unit!==material.unit)throw Error('RECEIPT_CONSUMPTION_REFERENCES_MISSING')
+   }
+   const reversedAt=snapshot.reversedAt||(o.status==='cancelled'?o.updatedAt:null)
+   if(existingSnapshot?.reversedAt&&!reversedAt)conflict()
+   await tx.orderConsumptionSnapshot.upsert({where:{orderId:o.id},create:{storeId,orderId:o.id,materials:JSON.stringify(snapshot.materials),issues:JSON.stringify(snapshot.issues),createdAt:new Date(snapshot.createdAt),reversedAt:reversedAt?new Date(reversedAt):null},update:{reversedAt:reversedAt?new Date(reversedAt):null}})
+   await markConsumptionDayDirty(tx,storeId,new Date(snapshot.createdAt))
   }
   const value=JSON.stringify({version:1,sourceId:receipt.sourceId,immutable,status:o.status,sourceUpdatedAt:o.updatedAt,receivedBy:actorId})
   await tx.config.upsert({where:{storeId_key:{storeId,key:replicaKey(o.id)}},create:{storeId,key:replicaKey(o.id),value,category:'store'},update:{value}})
@@ -87,7 +102,8 @@ export async function sendReceipts(db:PrismaClient,storeId:string,cloudToken:str
    if(await db.config.findUnique({where:{storeId_key:{storeId,key:replicaKey(item.id)}}})){results.push({id:item.id,status:'replica'});continue}
    const order=await db.order.findUniqueOrThrow({where:{id:item.id},include:{items:true,paymentEvidence:true}})
    if(order.storeId!==storeId)throw new Error('RECEIPT_STORE_MISMATCH')
-   const receipt=receiptFor(sourceId,store.tenantId,order);const digest=receiptDigest(receipt)
+   const snapshot=await db.orderConsumptionSnapshot.findUnique({where:{orderId:order.id}});
+   const receipt=receiptFor(sourceId,store.tenantId,order,snapshot);const digest=receiptDigest(receipt)
    const key=RECEIPT_SYNC_PREFIX+'ack:'+item.id
    const ack=await db.config.findUnique({where:{storeId_key:{storeId,key}}})
    if(ack&&JSON.parse(ack.value).digest===digest){results.push({id:item.id,status:'unchanged'});continue}

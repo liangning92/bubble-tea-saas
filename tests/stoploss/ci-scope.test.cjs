@@ -70,3 +70,16 @@ test('scoped runner executes selected unit checks and leaves unrelated tests unt
  assert.equal(fs.readFileSync(marker,'utf8'),'selected');
  }finally{f.close()}
 });
+
+test('image encoder edits keep image regressions in scope without cashier or print suites',()=>{
+ const f=fixture();try{const p=selectScope(['server/src/utils/imageOptimization.ts'],f);assert.deepEqual(p.components,['api']);assert.deepEqual(p.domains,['media']);assert.ok(p.media);assert.deepEqual(p.http,[]);assert.deepEqual(p.browser,[])}finally{f.close()}
+});
+
+test('reading server entrypoint text does not make every API edit affect unrelated audits',()=>{
+ const f=fixture();try{
+  f.write('server/src/utils/imageOptimization.ts');f.write('server/src/index.ts',"import './utils/imageOptimization'")
+  f.write('server/audit-tests/ai-config-boundary.test.ts',"fs.readFileSync(path.resolve('server/src/index.ts'),'utf8')")
+  f.write('server/audit-tests/image-import.test.ts',"require(path.resolve('server/src/utils/imageOptimization.ts'))")
+  const p=selectScope(['server/src/utils/imageOptimization.ts'],f);assert.deepEqual(p.auditTests,['server/audit-tests/image-import.test.ts'])
+ }finally{f.close()}
+});

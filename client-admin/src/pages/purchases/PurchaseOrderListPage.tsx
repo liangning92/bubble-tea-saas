@@ -17,7 +17,8 @@ interface PurchaseOrderItem {
 interface PurchaseOrder {
   id: string
   orderNumber: string
-  supplierId: string
+  supplierId?: string
+  onlineOrderNumber?: string
   supplier?: { name: string }
   status: string
   totalAmount: number
@@ -41,9 +42,10 @@ interface Inventory {
 }
 
 const STATUS_CONFIG: Record<string, { labelKey: string; color: string; icon: any }> = {
-  pending: { labelKey: 'purchases.pending', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  approved: { labelKey: 'purchases.approved', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
-  received: { labelKey: 'purchases.received', color: 'bg-green-100 text-green-700', icon: Package },
+  awaiting_receipt: { labelKey: 'inventoryFlow.awaiting', color: 'bg-blue-100 text-blue-700', icon: Truck },
+  pending: { labelKey: 'inventoryFlow.pending', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  approved: { labelKey: 'inventoryFlow.approved', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
+  received: { labelKey: 'inventoryFlow.received', color: 'bg-green-100 text-green-700', icon: Package },
   cancelled: { labelKey: 'purchases.cancelled', color: 'bg-gray-100 text-gray-500', icon: XCircle }
 }
 
@@ -57,6 +59,7 @@ export function PurchaseOrderListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
+  const createRequest = useRef(crypto.randomUUID())
   const actionLock = useRef(new Set<string>())
   const [busyOrders, setBusyOrders] = useState(new Set<string>())
   const [actionError, setActionError] = useState('')
@@ -95,20 +98,21 @@ export function PurchaseOrderListPage() {
   const handleSave = async () => {
     if (actionLock.current.has('new')) return
     setActionError('')
-    const validItems = formData.items.filter(item => item.inventoryId && item.quantity > 0 && item.unitCost > 0)
-    if (!formData.supplierId || validItems.length !== formData.items.length) {
-      setActionError(t('purchases.pleaseFillSupplier'))
+    const validItems = formData.items.filter(item => item.inventoryId && item.quantity > 0 && item.unitCost >= 0)
+    if (validItems.length !== formData.items.length) {
+      setActionError(t('inventoryFlow.invalid'))
       return
     }
     actionLock.current.add('new')
     setBusyOrders(new Set(actionLock.current))
     try {
       await purchaseOrderApi.create({
-        storeId: user?.storeId, supplierId: formData.supplierId,
+        requestId: createRequest.current, storeId: user?.storeId, supplierId: formData.supplierId || undefined,
         expectedDate: formData.expectedDate || undefined, note: formData.note, items: validItems
       })
       setShowModal(false)
       resetForm()
+      createRequest.current = crypto.randomUUID()
       await loadData()
     } catch (error: any) {
       setActionError(error.response?.data?.message || t('purchases.failedCreate'))
@@ -144,8 +148,10 @@ export function PurchaseOrderListPage() {
     }
   }
 
-  const handleStatusChange = (id: string, status: string) => runOrderAction(id, () =>
-    status === 'received' ? purchaseOrderApi.receive(id) : purchaseOrderApi.updateStatus(id, status))
+  const handleStatusChange = (id: string, status: string) => {
+    if(status==='received'&&!confirm(t('inventoryFlow.confirmReceive')))return
+    return runOrderAction(id, () => status === 'received' ? purchaseOrderApi.receive(id) : purchaseOrderApi.updateStatus(id, status))
+  }
 
   const handleCancel = (id: string) => {
     if (!confirm(t('purchases.confirmCancel'))) return
@@ -218,7 +224,8 @@ export function PurchaseOrderListPage() {
             className="p-2 border border-gray-200 rounded-lg text-sm"
           >
             <option value="">{t('purchases.allStatus')}</option>
-            <option value="pending">{t('purchases.pending')}</option>
+            <option value="awaiting_receipt">{t('inventoryFlow.awaiting')}</option>
+            <option value="pending">{t('inventoryFlow.pending')}</option>
             <option value="approved">{t('purchases.approved')}</option>
             <option value="received">{t('purchases.received')}</option>
             <option value="cancelled">{t('purchases.cancelled')}</option>
@@ -245,7 +252,7 @@ export function PurchaseOrderListPage() {
               <div key={order.id} className="bg-white rounded-xl shadow-sm p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className="font-bold text-gray-900">{order.orderNumber}</p>
+                    <p className="font-bold text-gray-900">{order.onlineOrderNumber || order.orderNumber}</p>
                     <p className="text-sm text-gray-500">{order.supplier?.name || t('purchases.supplier')}</p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig.color} flex items-center gap-1`}>
@@ -308,15 +315,15 @@ export function PurchaseOrderListPage() {
                       </button>
                     </>
                   )}
-                  {order.status === 'approved' && (
+                  {['approved','awaiting_receipt'].includes(order.status) && (<><button disabled={busyOrders.has(order.id)} onClick={()=>handleCancel(order.id)} className="text-red-600 px-3">{t('purchases.cancel')}</button>
                     <button
                       disabled={busyOrders.has(order.id)}
                         onClick={() => handleStatusChange(order.id, 'received')}
                       className="flex-1 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-1"
                     >
                       <Truck size={16} />
-                      {t('purchases.markReceived')}
-                    </button>
+                      {t('inventoryFlow.receiveAll')}
+                    </button></>
                   )}
                 </div>
               </div>
@@ -327,7 +334,7 @@ export function PurchaseOrderListPage() {
 
       {/* Create PO Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white w-full max-w-2xl rounded-xl p-6 mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">{t('purchases.createNewPO')}</h2>
@@ -339,13 +346,13 @@ export function PurchaseOrderListPage() {
             {actionError && <div role="alert" className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg">{actionError}</div>}
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('purchases.suppliers')}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('inventoryFlow.supplier')}</label>
                 <select
                   value={formData.supplierId}
                   onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
                   className="w-full p-3 border border-gray-200 rounded-xl"
                 >
-                  <option value="">{t('purchases.selectSupplier')}</option>
+                  <option value="">{t('inventoryFlow.noSupplier')}</option>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}

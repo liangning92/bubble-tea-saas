@@ -1,3 +1,5 @@
+import {randomUUID} from 'crypto'
+import {consumeInventoryBatches,alignInventoryBatches} from './InventoryBatchService'
 import {convertQuantity} from '../utils/inventoryUnits'
 import prisma from '../config/database'
 
@@ -66,9 +68,9 @@ export async function createRecipe(data: {
 }
 
 // Execute recipe (process)
-export async function executeRecipe(recipeId: string, multiplier: number = 1) {
-  const recipe = await prisma.processRecipe.findUnique({
-    where: { id: recipeId },
+export async function executeRecipe(recipeId: string, multiplier: number = 1, staffId?:string, storeId?:string) {
+  const recipe = await prisma.processRecipe.findFirst({
+    where: { id: recipeId,...(storeId?{storeId}:{}) },
     include: {
       items: {
         include: { inventory: true }
@@ -77,6 +79,7 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
   })
 
   if (!recipe) throw new Error('Recipe not found')
+  if(!Number.isFinite(multiplier)||multiplier<=0)throw Error('INVALID_QUANTITY')
 
   const inputs = recipe.items.filter(i => i.type === 'input')
   const outputs = recipe.items.filter(i => i.type === 'output')
@@ -86,7 +89,8 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
     let totalInputCost = 0
     for (const input of inputs) {
       if (!input.inventoryId || !input.inventory) continue
-      const inv = input.inventory
+      const inv = await tx.inventory.findUniqueOrThrow({where:{id:input.inventoryId}})
+      if(inv.storeId!==recipe.storeId)throw Error('INVENTORY_STORE_MISMATCH')
       const deductQty = input.quantity * multiplier
       // Recipe inputs are stored in each input material's existing inventory unit.
       const unitCost = Number(inv.avgCost || 0)
@@ -94,15 +98,16 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
       totalInputCost += deductQty * unitCost
 
       // 扣减投入库存
-      await tx.inventory.update({
-        where: { id: input.inventoryId },
-        data: { currentStock: { decrement: deductQty } }
-      })
+      if(inv.currentStock<deductQty)throw Error('Insufficient stock')
+      const changed=await tx.inventory.updateMany({where:{id:input.inventoryId,storeId:recipe.storeId,currentStock:inv.currentStock},data:{currentStock:{decrement:deductQty}}})
+      if(changed.count!==1)throw Error('Insufficient stock')
+      await consumeInventoryBatches(tx,inv,deductQty)
       await tx.stockOutLog.create({
         data: {
           inventoryId: input.inventoryId,
           quantity: deductQty,
           reason: 'process',
+          staffId,
           note: `加工: ${recipe.name}`
         }
       })
@@ -164,16 +169,21 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1) {
         ? Math.round((Number(currentStock) * Number(currentAvgCost) + outputTotalCost) / newTotalStock)
         : Math.round(ledgerUnitCost)
 
-      await tx.inventory.update({
-        where: { id: outputInv.id },
+      const received=await tx.inventory.updateMany({
+        where: { id: outputInv.id,currentStock:outputInv.currentStock,avgCost:outputInv.avgCost },
         data: {
           currentStock: { increment: addQty },
           avgCost: newAvgCost
         }
       })
+      if(received.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
+      await alignInventoryBatches(tx,{...outputInv,currentStock,avgCost:currentAvgCost})
+      const batch=await tx.batch.create({data:{inventoryId:outputInv.id,batchNumber:`PROCESS-${randomUUID()}`,quantity:addQty,unitCost:Math.round(ledgerUnitCost),status:'active'}})
       await tx.stockInLog.create({
         data: {
           inventoryId: outputInv.id,
+          batchId:batch.id,
+          staffId,
           quantity: addQty,
           unitCost: Math.round(ledgerUnitCost),
           totalAmount: Math.round(outputTotalCost),

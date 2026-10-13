@@ -7,6 +7,7 @@ import { AuthRequest } from '../middlewares/auth'
  */
 export function getStoreId(req: AuthRequest): string {
   const userRole = req.user?.role || ''
+  if(req.user?.employeeApp)return req.user.storeId||''
   if (['admin', 'super_admin'].includes(userRole)) {
     return (req.query.storeId as string) || req.user?.storeId || ''
   }

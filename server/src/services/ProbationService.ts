@@ -62,7 +62,7 @@ export function payrollBasis(staff: Employee, enrollment: Enrollment, month: str
  return {version:1,month,proration:'calendar_days',timezone:'Asia/Jakarta',daysInMonth,eligibleDays:Math.max(0,until-begin),workingDays:workingDays||null,payableDays:segments.reduce((sum,s)=>sum+s.days,0),formalMonthlySalary:staff.baseSalary,confirmationDate:confirmation,rule:enrollment.enabled?enrollment.rule:null,segments,amount}
 }
 export async function staffProbation(db: DB, staff: Employee, now=new Date()) {const enrollment=await getEnrollment(db,staff),today=businessDate(now),hire=staff.hireDate?businessDate(staff.hireDate):null,end=hire?confirmationDay(hire,enrollment):null;return {...enrollment,status:hire&&today<hire?'not_started':end&&today<end?'probation':'regular',confirmationDate:end,overrideConfirmationDate:enrollment.confirmationDate||null,formalMonthlySalary:staff.baseSalary,currentMonthlySalary:staff.baseSalary===null?null:monthlyRateCents(staff,enrollment,today)/100} }
-export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, month: string, workingDays?: WorkingDays) {
+export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, month: string, workingDays?: WorkingDays, source: 'estimate'|'manual'|'attendance' = workingDays ? 'manual' : 'estimate') {
  if(!await isPayrollEmployee(db,staff))throw new ProbationInputError('ACCOUNT_NOT_EMPLOYEE')
  if(staff.baseSalary===null)throw new ProbationInputError('STAFF_BASE_SALARY_REQUIRED')
  const enrollment=await getEnrollment(db,staff),available=payrollBasis(staff,enrollment,month)
@@ -71,20 +71,20 @@ export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, mont
  const dates=new Set(records.filter(r=>r.status!=='absence').map(r=>businessDate(r.checkInTime)))
  const attendanceDays:WorkingDays={probation:0,regular:0}
  for(const date of dates){const segment=available.segments.find(s=>date>=s.startDate&&date<=s.endDate);if(segment)attendanceDays[segment.type]++}
- const basis=payrollBasis(staff,enrollment,month,workingDays||attendanceDays)
+ const basis=payrollBasis(staff,enrollment,month,workingDays || (source==='attendance'?attendanceDays:undefined))
  const rules=await getPayrollRules(db,staff.storeId)
  const fullMonthEligible=!!staff.hireDate&&businessDate(staff.hireDate)<=month+'-01'&&(!staff.terminationDate||dayNumber(businessDate(staff.terminationDate))>=dayNumber(month+'-01')+basis.daysInMonth-1)
- const paidRestDays=fullMonthEligible?Math.min(rules.paidRestDays,Math.max(0,basis.daysInMonth-basis.payableDays)):0
+ const paidRestDays=source!=='estimate'&&fullMonthEligible?Math.min(rules.paidRestDays,Math.max(0,basis.eligibleDays-basis.payableDays)):0
  // Fixed monthly credits have no leave dates. Across probation/regular rates,
  // use the month's employment-weighted rate and disclose the credit separately.
  const workNumerator=basis.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
  const monthNumerator=available.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
  const totalAmount=Math.round((workNumerator*basis.daysInMonth+monthNumerator*paidRestDays)/(100*basis.daysInMonth*basis.daysInMonth))
  const paidRestAmount=totalAmount-basis.amount
- return {...basis,workedAmount:basis.amount,amount:basis.amount+paidRestAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:workingDays?'manual':'attendance',attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
+ return {...basis,version:2,workedAmount:basis.amount,amount:basis.amount+paidRestAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:source,attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
 }
-export async function savePayrollBasis(db: PayrollDB, salary: {id:string;staffId:string;month:string;baseSalary:number}, staff: Employee, workingDays?: WorkingDays, manualCorrection=false) {if(staff.baseSalary===null)return
- const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays);await write(db,staff.storeId,basisKey(salary.id),{...basis,manualCorrection,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
+export async function savePayrollBasis(db: PayrollDB, salary: {id:string;staffId:string;month:string;baseSalary:number}, staff: Employee, workingDays?: WorkingDays, manualCorrection=false, metadata: Record<string,unknown> = {}) {if(staff.baseSalary===null)return
+ const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays, (metadata.daysSource as 'manual'|'attendance'|undefined) || (workingDays?'manual':'estimate'));await write(db,staff.storeId,basisKey(salary.id),{...basis,...metadata,manualCorrection,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
 export async function savedPayrollBasis(db: DB, storeId:string, salaryId:string) {return read(db,storeId,basisKey(salaryId))}
 
 // Rebase unpaid payroll when the employment dates change; payments remain historical.
@@ -112,3 +112,5 @@ export async function refreshEmploymentPayroll(db: Prisma.TransactionClient, sta
   }
  }
 }
+
+export const isLegacyAutomaticBasis=(basis:any)=>basis?.version!==2&&!basis?.manualCorrection&&!basis?.manualAdjustment&&basis?.daysSource!=='manual'

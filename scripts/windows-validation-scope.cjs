@@ -8,7 +8,7 @@ function selectScope(files, fullRegression = false) {
     /^client-pos\/src\/pages\/LoginPage\.tsx$/,
     /^client-pos\/src\/(electron|types\/electron)\.d\.ts$/,
     /^client-pos\/installer\.nsh$/,
-    /^(package|client-pos\/package)(-lock)?\.json$/,
+    /^(package|client-pos\/package|server\/package)(-lock)?\.json$/,
     /^electron-builder\.json$/,
     /^server\/prisma\//,
     /^server\/src\/index\.ts$/,

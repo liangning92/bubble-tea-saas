@@ -1,5 +1,5 @@
 import {beforeEach,expect,jest,test} from '@jest/globals'
-jest.mock('../src/config/database',()=>({__esModule:true,default:{staff:{findUniqueOrThrow:jest.fn()},attendance:{findMany:jest.fn()},salary:{findFirst:jest.fn(),create:jest.fn(),findUniqueOrThrow:jest.fn(),updateMany:jest.fn()},config:{findUnique:jest.fn(),upsert:jest.fn()},$transaction:jest.fn()}}))
+jest.mock('../src/config/database',()=>({__esModule:true,default:{staff:{findUniqueOrThrow:jest.fn()},attendance:{findMany:jest.fn()},salary:{findFirst:jest.fn(),create:jest.fn(),findUniqueOrThrow:jest.fn(),updateMany:jest.fn()},config:{findUnique:jest.fn(),upsert:jest.fn(),create:jest.fn()},$transaction:jest.fn()}}))
 jest.mock('../src/config/env',()=>({config:{jwt:{secret:'synthetic-test-only'}}}))
 jest.mock('../src/services/StaffService',()=>({calculateSalary:jest.fn()}))
 jest.mock('../src/services/SalaryAdjustmentService',()=>({periodLock:jest.fn(async()=>undefined),saveAdjustmentPlan:jest.fn(async()=>undefined),normalizeAdjustments:jest.fn(async(_db:any,_store:any,_staff:any,_month:any,bonus:number,deduction:number)=>({bonus,deduction,plan:{items:[],rewards:0,penalties:0}})),SalaryAdjustmentError:class extends Error {}}))
@@ -9,10 +9,43 @@ import {salaryRouter} from '../src/routes/salary'
 const db=prisma as any
 beforeEach(()=>{jest.clearAllMocks();process.env.DATABASE_URL='file:synthetic.db';db.staff.findUniqueOrThrow.mockResolvedValue({id:'a',storeId:'s',baseSalary:1300000,hireDate:new Date('2026-09-01'),terminationDate:null});db.config.findUnique.mockResolvedValue(null);db.attendance.findMany.mockResolvedValue([]);db.salary.findFirst.mockResolvedValue(null);db.salary.create.mockImplementation(async({data}:any)=>({...data,id:'salary'}));db.$transaction.mockImplementation(async(fn:any)=>fn(db))})
 function response(){return {statusCode:200,data:null as any,status(n:number){this.statusCode=n;return this},json(d:any){this.data=d;return this}}}
-const input={staffId:'a',month:'2026-10',workingDays:{probation:0,regular:18},manualCorrection:true,manualBaseSalary:true,autoBaseSalary:false,baseSalary:575000,overtime:0,commission:0,bonus:5000,deduction:2000,depositDeductions:[],compensationAdjustmentIds:[]}
+const input={includedAttendanceDeduction:0,staffId:'a',month:'2026-10',workingDays:{probation:0,regular:18},manualCorrection:true,manualBaseSalary:true,autoBaseSalary:false,baseSalary:575000,overtime:0,commission:0,bonus:5000,deduction:2000,depositDeductions:[],compensationAdjustmentIds:[]}
 test('a correction can override the calculated money amount while keeping workday bounds and a protected snapshot',async()=>{const layer=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/'&&l.route.methods.post);const res=response();await layer.route.stack.at(-1).handle({body:input,user:{id:'u',storeId:'s',role:'admin'}},res);expect(res.statusCode).toBe(201);expect(res.data.data.baseSalary).toBe(575000);expect(res.data.data.finalAmount).toBe(578000);const snapshot=db.config.upsert.mock.calls.find(([args]:any)=>args.create.key==='salary.probationBasis.salary')[0].create.value;expect(JSON.parse(snapshot)).toMatchObject({manualCorrection:true,manualAdjustment:true,daysSource:'manual',workingDays:{probation:0,regular:18},paidRestDays:2})})
 test('paid wages cannot be corrected through the update endpoint',async()=>{db.salary.findUniqueOrThrow.mockResolvedValue({id:'salary',staffId:'a',month:'2026-10',status:'paid'});const layer=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id'&&l.route.methods.put);const res=response();await layer.route.stack.at(-1).handle({params:{id:'salary'},body:input,user:{id:'u',storeId:'s',role:'admin'}},res);expect(res.statusCode).toBe(409);expect(db.salary.updateMany).not.toHaveBeenCalled()})
 
 test('an unresolved payroll review blocks payment before any salary or expense mutation',async()=>{db.salary.findUniqueOrThrow.mockResolvedValue({id:'salary',staffId:'a',month:'2026-10',status:'pending',staff:{storeId:'s',name:'Synthetic'}});db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.review.a.2026-10'?{value:JSON.stringify({reason:'DEDUCTIONS_EXCEED_PAY'})}:null);const layer=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/mark-paid');const res=response();await layer.route.stack.at(-1).handle({params:{id:'salary'},user:{id:'u',storeId:'s',role:'admin'}},res);expect(res.statusCode).toBe(409);expect(res.data.message).toBe('SALARY_REVIEW_REQUIRED');expect(db.salary.updateMany).not.toHaveBeenCalled()})
 
-test('an old browser cannot pay automatic wages that now have deductions exceeding earnings',async()=>{const {calculateSalary}=await import('../src/services/StaffService');(calculateSalary as any).mockResolvedValueOnce({totalSalary:-1000});db.salary.findUniqueOrThrow.mockResolvedValue({id:'salary',staffId:'a',month:'2026-10',status:'pending',staff:{storeId:'s',name:'Synthetic'}});db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({daysSource:'attendance',manualCorrection:false})}:null);const layer=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/mark-paid');const res=response();await layer.route.stack.at(-1).handle({params:{id:'salary'},user:{id:'u',storeId:'s',role:'admin'}},res);expect(res.statusCode).toBe(409);expect(res.data.message).toBe('SALARY_REVIEW_REQUIRED');expect(db.salary.updateMany).not.toHaveBeenCalled()})
+test('an old browser cannot pay automatic wages that now have deductions exceeding earnings',async()=>{const {calculateSalary}=await import('../src/services/StaffService');(calculateSalary as any).mockResolvedValueOnce({totalSalary:-1000});db.salary.findUniqueOrThrow.mockResolvedValue({id:'salary',staffId:'a',month:'2026-10',status:'pending',staff:{storeId:'s',name:'Synthetic'}});db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({daysSource:'attendance',manualCorrection:false})}:null);const layer=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/mark-paid');const res=response();await layer.route.stack.at(-1).handle({params:{id:'salary'},user:{id:'u',storeId:'s',role:'admin'}},res);expect(res.statusCode).toBe(409);expect(res.data.message).toBe('SALARY_CONFIRMATION_REQUIRED');expect(db.salary.updateMany).not.toHaveBeenCalled()})
+
+test('saving minute corrections twice replaces the dedicated deduction and saves input/rule audit snapshots',async()=>{
+ const values=new Map<string,any>()
+ values.set('employee.workspace.rule.2026-10',{month:'2026-10',enabled:true,mode:'interval',intervalMinutes:10,intervalAmount:5000,tiers:[],version:'v1'})
+ db.config.findUnique.mockImplementation(async({where}:any)=>values.has(where.storeId_key.key)?{value:JSON.stringify(values.get(where.storeId_key.key))}:null)
+ db.config.upsert.mockImplementation(async({create}:any)=>values.set(create.key,(()=>{try{return JSON.parse(create.value)}catch{return create.value}})()))
+ let record:any=null
+ db.salary.create.mockImplementation(async({data}:any)=>record={...data,id:'salary'})
+ db.salary.findUniqueOrThrow.mockImplementation(async()=>record)
+ db.salary.updateMany.mockImplementation(async({data}:any)=>{record={...record,...data};return {count:1}})
+ const correction={lateMinutes:35,lateMode:'rule',manualLateDeduction:0,otherAttendanceDeduction:7000,reason:'Verified month-end'}
+ const body={...input,manualBaseSalary:false,autoBaseSalary:true,workingDays:{probation:0,regular:18.5},correction,baseSalary:859677,deduction:23234,includedAttendanceDeduction:22000}
+ const create=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/'&&l.route.methods.post)
+ const first=response();await create.route.stack.at(-1).handle({body,user:{id:'u',storeId:'s',role:'admin'}},first)
+ expect(first.statusCode).toBe(201);expect(record.deduction).toBe(23234)
+ const update=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id'&&l.route.methods.put)
+ const second=response();await update.route.stack.at(-1).handle({params:{id:'salary'},body,user:{id:'u',storeId:'s',role:'admin'}},second)
+ expect(second.statusCode).toBe(200);expect(record.deduction).toBe(23234)
+ const basis=values.get('salary.probationBasis.salary')
+ expect(basis).toMatchObject({version:2,confirmed:true,workingDays:{probation:0,regular:18.5},correction:{lateMinutes:35,lateDeduction:15000,lateRule:{version:'v1'}}})
+ const audit=JSON.parse(db.config.create.mock.calls.at(-1)[0].data.value)
+ expect(audit.metadata.workingDays.regular).toBe(18.5);expect(audit.previous.payrollBasis.correction.lateMinutes).toBe(35);expect(audit.basis.correction.lateDeduction).toBe(15000)
+})
+test('a newly confirmed current-month payroll still cannot be marked paid',async()=>{
+ jest.useFakeTimers();jest.setSystemTime(new Date('2026-10-13T12:00:00+07:00'))
+ try{
+  db.salary.findUniqueOrThrow.mockResolvedValue({id:'salary',staffId:'a',month:'2026-10',status:'pending',staff:{storeId:'s',name:'Synthetic'}})
+  db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({version:2,confirmed:true})}:null)
+  const layer=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/mark-paid'),res=response()
+  await layer.route.stack.at(-1).handle({params:{id:'salary'},user:{id:'u',storeId:'s',role:'admin'}},res)
+  expect(res.statusCode).toBe(409);expect(res.data.message).toBe('SALARY_CONFIRMATION_REQUIRED');expect(db.salary.updateMany).not.toHaveBeenCalled()
+ }finally{jest.useRealTimers()}
+})

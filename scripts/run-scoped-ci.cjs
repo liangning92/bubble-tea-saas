@@ -21,6 +21,7 @@ async function browserCheck(check){
  case 'types':for(const service of plan.typecheck)run(npm,['run','typecheck:'+ (service==='api'?'server':service)]);if(plan.electronTypes)run(npm,['exec','--','tsc','--noEmit','-p','client-pos/tsconfig.electron.json']);break;
  case 'i18n':for(const service of plan.i18n)run(npm,['run','i18n:check:'+service]);break;
  case 'unit':
+  if(plan.inventoryFlow)node('scripts/check-employee-inventory-flow.cjs');
   if(plan.unitTests.length)run(process.execPath,['--test',...plan.unitTests]);
   if(plan.auditTests.length)run(npm,['exec','--prefix','server','--','jest','--config','server/jest.audit.config.cjs','--runInBand','--runTestsByPath',...plan.auditTests.map(f=>path.resolve(f))]);
   for(const file of plan.python)run('python3',[file],{PYTHONDONTWRITEBYTECODE:'1'});

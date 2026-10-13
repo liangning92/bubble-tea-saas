@@ -38,7 +38,7 @@ test('selected quantity allocation, exact request/approval retry, full cumulativ
  await approveItemRefund(rest.id,f.actor,true)
  const sum=await prisma.refundRequest.aggregate({where:{orderId:f.order.id,status:'approved'},_sum:{amount:true}})
  expect(sum._sum.amount).toBe(f.order.finalAmount);expect((await prisma.order.findUniqueOrThrow({where:{id:f.order.id}})).status).toBe('refunded')
- expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inventory.id}})).currentStock).toBe(92)
+ expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inventory.id}})).currentStock).toBe(100)
  expect((await prisma.member.findUniqueOrThrow({where:{id:f.member.id}})).points).toBe(1000)
  expect((await prisma.member.findUniqueOrThrow({where:{id:f.member.id}})).totalSpent).toBe(0)
  expect((await requestItemRefund(input)).id).toBe(r.id)
@@ -67,6 +67,7 @@ async function financialState(f:Awaited<ReturnType<typeof fixture>>) {
   stock:(await prisma.inventory.findUniqueOrThrow({where:{id:f.inventory.id}})).currentStock,
   cash:await prisma.cashEvent.findMany({where:{storeId:f.store.id},orderBy:{id:'asc'}}),
   points:await prisma.pointLog.findMany({where:{memberId:f.member.id},orderBy:{id:'asc'}}),
+  consumption:await prisma.orderConsumptionSnapshot.findUnique({where:{orderId:f.order.id}}),
   reversals:await prisma.stockOutLog.findMany({where:{orderId:f.order.id,reason:'refund_unprepared'}}),
   requests:await prisma.refundRequest.findMany({where:{orderId:f.order.id},orderBy:{id:'asc'}})
  }
@@ -87,10 +88,11 @@ test('actual database failure rolls back partial approval, points and cash; retr
  await approveItemRefund(r.id,f.actor,true);await approveItemRefund(r.id,f.actor,true)
  expect((await prisma.cashEvent.findMany({where:{storeId:f.store.id,type:'cash_out'}})).map(x=>x.amount)).toEqual([111])
 })
-test('unprepared full approval reverses original sold quantities once despite changed BOM; failure rolls everything back',async()=>{
+test('unprepared full approval reverses frozen consumption once despite changed BOM; failure rolls everything back',async()=>{
  const f=await fixture(),r=await createRefundRequest({requestId:randomUUID(),orderId:f.order.id,reason:'Not started',requestedBy:'actor',reasonCode:'paid_unprepared',selectedItemIds:f.order.items.map(i=>i.id)})
  const sold=await prisma.stockOutLog.findMany({where:{orderId:f.order.id,reason:'sold'}})
- expect(sold.map(x=>x.quantity).sort()).toEqual([2,6])
+ expect(sold).toEqual([])
+ expect(JSON.parse((await prisma.orderConsumptionSnapshot.findUniqueOrThrow({where:{orderId:f.order.id}})).materials)[0].quantity).toBe(8)
  await prisma.bOMItem.updateMany({where:{productId:f.product.id},data:{quantity:99}})
  const approval={requestId:r.id,approvedBy:f.actor.id,restoreUnprepared:true}
  const before=await financialState(f),release=await rejectCash(f.store.id)
@@ -99,8 +101,8 @@ test('unprepared full approval reverses original sold quantities once despite ch
  expect(raced.filter(x=>x.status==='fulfilled')).toHaveLength(1)
  expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inventory.id}})).currentStock).toBe(100)
  const reversals=await prisma.stockOutLog.findMany({where:{orderId:f.order.id,reason:'refund_unprepared'}})
- expect(reversals).toHaveLength(2);expect(reversals.map(x=>x.quantity).sort()).toEqual([-2,-6])
- for(const log of sold)expect(reversals.some(x=>x.quantity===-log.quantity&&x.note!.includes(log.id))).toBe(true)
+ expect(reversals).toEqual([])
+ expect((await prisma.orderConsumptionSnapshot.findUniqueOrThrow({where:{orderId:f.order.id}})).reversedAt).not.toBeNull()
  expect(await prisma.stockInLog.count({where:{inventoryId:f.inventory.id}})).toBe(0)
  expect((await prisma.cashEvent.findMany({where:{storeId:f.store.id,type:'cash_out'}})).map(x=>x.amount)).toEqual([555])
  expect((await prisma.member.findUniqueOrThrow({where:{id:f.member.id}})).points).toBe(1000)
@@ -109,7 +111,7 @@ test('missing allocation or original sold evidence blocks without fabricating va
  const f=await fixture();await prisma.order.update({where:{id:f.order.id},data:{checkoutTaxAmount:null}})
  await expect(requestItemRefund({...f.base,requestId:randomUUID(),items:[{itemId:f.line.id,quantity:1}]})).rejects.toThrow('EVIDENCE_REQUIRED')
  const r=await createRefundRequest({requestId:randomUUID(),orderId:f.order.id,reason:'Not started',requestedBy:'actor',reasonCode:'paid_unprepared',selectedItemIds:f.order.items.map(i=>i.id)})
- await prisma.stockOutLog.updateMany({where:{orderId:f.order.id},data:{note:null}})
+ await prisma.orderConsumptionSnapshot.delete({where:{orderId:f.order.id}})
  const before=await financialState(f)
  await expect(refundOrder(f.order.id,'Not started','actor',555,{requestId:r.id,approvedBy:'admin',restoreUnprepared:true})).rejects.toThrow('STOCK_EVIDENCE_REQUIRED')
  expect(await financialState(f)).toEqual(before)

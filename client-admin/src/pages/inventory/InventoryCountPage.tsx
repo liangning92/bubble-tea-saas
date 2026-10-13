@@ -151,6 +151,8 @@ export function InventoryCountPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'pending_review':
+        return <span className="badge badge-warning">{t('inventoryFlow.pendingReview')}</span>
       case 'completed':
         return <span className="badge badge-success">{t('inventory.completed')}</span>
       case 'in_progress':
@@ -167,6 +169,7 @@ export function InventoryCountPage() {
       case 'monthly': return t('inventory.monthly')
       case 'quarterly': return t('inventory.quarterly')
       case 'annual': return t('inventory.annual')
+      case 'ad_hoc': return t('inventoryFlow.adHoc')
       default: return period
     }
   }
@@ -176,8 +179,8 @@ export function InventoryCountPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('inventory.inventoryCount')}</h1>
-          <p className="text-sm text-gray-500 mt-1">{t('inventory.inventoryCountDesc')}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('inventoryFlow.countReview')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('inventoryFlow.countHint')}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -224,7 +227,7 @@ export function InventoryCountPage() {
       ) : (
         <div className="space-y-4">
           {counts.map((count) => (
-            <div key={count.id} className="card hover:shadow-md transition-shadow cursor-pointer"
+            <button type="button" key={count.id} className="card w-full text-left hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => {
                 setSelectedCount(count)
                 setActiveTab('detail')
@@ -234,11 +237,11 @@ export function InventoryCountPage() {
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-xl ${
                     count.status === 'completed' ? 'bg-green-100 text-green-600' :
-                    count.status === 'in_progress' ? 'bg-orange-100 text-orange-600' :
+                    ['in_progress','pending_review'].includes(count.status) ? 'bg-orange-100 text-orange-600' :
                     'bg-gray-100 text-gray-600'
                   }`}>
                     {count.status === 'completed' ? <Check size={24} /> :
-                     count.status === 'in_progress' ? <Clock size={24} /> :
+                     ['in_progress','pending_review'].includes(count.status) ? <Clock size={24} /> :
                      <X size={24} />}
                   </div>
                   <div>
@@ -256,7 +259,7 @@ export function InventoryCountPage() {
                   </span>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -289,7 +292,7 @@ export function InventoryCountPage() {
             </div>
           </div>
           <div className="flex gap-3">
-            {selectedCount.status === 'in_progress' && (
+            {['in_progress','pending_review'].includes(selectedCount.status) && (
               <>
                 <button
                   onClick={() => cancelMutation.mutate(selectedCount.id)}
@@ -299,21 +302,21 @@ export function InventoryCountPage() {
                   <X size={16} />
                   {t('inventory.cancelCount')}
                 </button>
-                <button
+                {(selectedCount.period!=='ad_hoc'||selectedCount.status==='pending_review')&&<button
                   onClick={handleComplete}
-                  disabled={completeMutation.isPending || countedItems.length === 0}
+                  disabled={completeMutation.isPending || countedItems.length !== selectedCount.items.length}
                   className="btn btn-primary flex items-center gap-2"
                 >
                   {completeMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                  {t('inventory.completeCount')}
-                </button>
+                  {t('inventoryFlow.approveCount')}
+                </button>}
               </>
             )}
           </div>
         </div>
 
         {/* Summary Cards */}
-        {selectedCount.status === 'in_progress' && (
+        {['in_progress','pending_review'].includes(selectedCount.status) && (
           <div className="grid grid-cols-3 gap-4">
             <div className="card bg-green-50 border-green-200">
               <div className="text-2xl font-bold text-green-600">{countedItems.length}</div>

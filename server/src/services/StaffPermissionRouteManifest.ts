@@ -1,15 +1,6 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
-  "GET /api/announcement/active": {permission:"personal.messages",ownerOnly:false,export:false,personal:true,legacyRoles:["manager","cashier","staff"],legacyPermission:"personal.messages",resource:null},
-
-  "GET /api/media": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess
-  "POST /api/media": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess
-  "PATCH /api/media/:id": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess
-  "DELETE /api/media/:id": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess
-  "GET /api/media/:id/references": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess
-  "GET /api/product-analysis/insights": {permission:"products.read", ownerOnly:false, export:false, personal:false},
-  "GET /api/product-analysis/insights/details": {permission:"products.read", ownerOnly:false, export:false, personal:false},
-  "GET /api/product-analysis/insights/preferences/:productId": {permission:"products.read", ownerOnly:false, export:false, personal:false},  "POST /api/auth/register": {
+  "POST /api/auth/register": {
     "legacyRoles": [
       "manager",
       "cashier",
@@ -790,6 +781,66 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "GET /api/inventory/batches/expiring": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.read",
+    "resource": null,
+    "permission": "inventory.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/inventory/alert-center": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.read",
+    "resource": null,
+    "permission": "inventory.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/inventory/alert-center/:id/handle": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.write",
+    "resource": null,
+    "permission": "inventory.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "PUT /api/inventory/alert-center/expiry": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.write",
+    "resource": null,
+    "permission": "inventory.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/inventory/employee-consumption": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.read",
+    "resource": null,
+    "permission": "inventory.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/inventory/consumption-alerts": {
     "legacyRoles": [
       "admin",
       "manager"
@@ -4239,6 +4290,24 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/product-analysis/insights": {
+    "permission": "products.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/product-analysis/insights/details": {
+    "permission": "products.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/product-analysis/insights/preferences/:productId": {
+    "permission": "products.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/product-analysis/recipes": {
     "legacyRoles": [
       "admin",
@@ -4807,6 +4876,36 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/media": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/media": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "PATCH /api/media/:id": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/media/:id/references": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "DELETE /api/media/:id": {
+    "permission": null,
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/addons": {
     "legacyRoles": [
       "manager",
@@ -4914,6 +5013,19 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
       "manager",
       "staff",
       "cashier"
+    ],
+    "legacyPermission": "inventory.count",
+    "resource": null,
+    "permission": "inventory.count",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/inventory-counts/:id/submit": {
+    "legacyRoles": [
+      "admin",
+      "manager",
+      "staff"
     ],
     "legacyPermission": "inventory.count",
     "resource": null,
@@ -7148,6 +7260,84 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "POST /api/payments/evidence": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "orders.create",
+    "resource": null,
+    "permission": "orders.create",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/payments/evidence/:id": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "orders.read",
+    "resource": null,
+    "permission": "orders.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/payments/order/:orderId/evidence": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "orders.read",
+    "resource": null,
+    "permission": "orders.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/payments/qris/create": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "orders.create",
+    "resource": null,
+    "permission": "orders.create",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/payments/qris/webhook": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "orders.create",
+    "resource": null,
+    "permission": "orders.create",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/payments/qris/status/:externalId": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "orders.read",
+    "resource": null,
+    "permission": "orders.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/ai/permissions/:storeId": {
     "legacyRoles": [
       "manager",
@@ -7641,6 +7831,77 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "ownerOnly": false,
     "export": false,
     "personal": true
+  },
+  "GET /api/announcement": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "personal.messages",
+    "resource": null,
+    "permission": "personal.messages",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "POST /api/announcement": {
+    "legacyRoles": [
+      "admin"
+    ],
+    "legacyPermission": "notifications.write",
+    "resource": null,
+    "permission": "notifications.write",
+    "ownerOnly": true,
+    "export": false,
+    "personal": false
+  },
+  "DELETE /api/announcement/:id": {
+    "legacyRoles": [
+      "admin"
+    ],
+    "legacyPermission": "notifications.write",
+    "resource": null,
+    "permission": "notifications.write",
+    "ownerOnly": true,
+    "export": false,
+    "personal": false
+  },
+  "PUT /api/announcement/:id": {
+    "legacyRoles": [
+      "admin"
+    ],
+    "legacyPermission": "notifications.write",
+    "resource": null,
+    "permission": "notifications.write",
+    "ownerOnly": true,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/announcement/active": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.messages",
+    "resource": null,
+    "permission": "personal.messages",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "GET /api/announcement/hygiene/pending": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "notifications.read",
+    "resource": null,
+    "permission": "notifications.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
   },
   "GET /api/hardware/printers": {
     "legacyRoles": [

@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
- media:{paths:/(?:ProductImageEditor|MediaLibrary|\/services\/media\.|\/routes\/media\.|MediaService|mediaFiles|ProductInsights|productInsights|ProductAnalysisPage|\/media-insights\/|test-media-insights)/i,tests:/media|product-insights/i},
+ media:{paths:/(?:ProductImageEditor|MediaLibrary|\/services\/media\.|\/routes\/media\.|MediaService|mediaFiles|imageOptimization|image-optimization|ProductInsights|productInsights|ProductAnalysisPage|\/media-insights\/|test-media-insights)/i,tests:/media|product-insights/i},
  products:{paths:/(?:\/pages\/products\/|\/routes\/product(?:Price)?\.|Product(?:Management)?Service|\/productStore\.|\/publicProduct\.|\/routes\/bom\.|BomService)/i,tests:/product|channel-bootstrap/i},
  orders:{paths:/(?:\/pages\/orders\/|\/routes\/order\.|OrderService|orderRequest|orderReceipt|orderExport|orderStatus|posCartState|cartAudit|\/cartStore\.)/i,tests:/order|cart-audit|pos-cart|cleared-cart/i},
  payment:{paths:/(?:\/routes\/payment\.|PaymentService|Checkout|checkout|payment|\/pages\/POSPage\.|\/stores\/pos\.)/i,tests:/payment|checkout|order-request-replay/i},
@@ -32,7 +32,7 @@ function sources(root){
  return result;
 }
 function reverseDependencies(root,files,changed=[]){
- const known=new Set([...files,...changed]),reverse=new Map();
+ const known=new Set([...files,...changed]),reverse=new Map(),inspection=new Map();
  const resolve=(file,reference)=>{
   const candidates=[];
   if(reference.startsWith('.'))candidates.push(path.posix.normalize(path.posix.join(path.posix.dirname(file),reference)));
@@ -40,15 +40,26 @@ function reverseDependencies(root,files,changed=[]){
   else if(/^(?:server|shared|client-(?:admin|pos|staff)|scripts|tests|\.github)\//.test(reference))candidates.push(reference.replace(/^server\/dist\//,'server/src/'));
   for(const base of candidates)for(const target of [base,base.replace(/\.[cm]?js$/,'.ts'),...['.ts','.tsx','.cjs','.js','/index.ts','/index.tsx'].map(ext=>base+ext)])if(known.has(target))return target;
  };
- for(const file of files){const text=fs.readFileSync(path.join(root,file),'utf8');for(const match of text.matchAll(/\b(?:from|import)\s*(?:\(\s*)?['"]([^'"\r\n]+)['"]|\b(?:require|readFileSync|readFile|readModule|loadModule|compile|load|resolve)\(\s*['"]([^'"\r\n]+)['"]/g)){const target=resolve(file,match[1]||match[2]);if(target){if(!reverse.has(target))reverse.set(target,new Set());reverse.get(target).add(file)}}}
- return reverse;
+ for(const file of files){const text=fs.readFileSync(path.join(root,file),'utf8');for(const match of text.matchAll(/\b(from|import)\s*(?:\(\s*)?['"]([^'"\r\n]+)['"]|\b(require|readFileSync|readFile|readModule|loadModule|compile|load|resolve)\(\s*['"]([^'"\r\n]+)['"]/g)){
+  const target=resolve(file,match[2]||match[4]);if(!target)continue
+  const method=match[1]||match[3],prefix=text.slice(Math.max(0,match.index-60),match.index)
+  // A source-text assertion depends on that file's text, not everything it imports.
+  const shallow=method==='readFileSync'||method==='readFile'||(method==='resolve'&&!/require\(\s*(?:path\.)?$/.test(prefix))
+  const graph=shallow?inspection:reverse;if(!graph.has(target))graph.set(target,new Set());graph.get(target).add(file)
+ }}
+ return {reverse,inspection};
 }
-function impactedFiles(files,reverse){const affected=new Set(files),queue=[...files];for(let i=0;i<queue.length;i++)for(const consumer of reverse.get(queue[i])||[])if(!affected.has(consumer)){affected.add(consumer);queue.push(consumer)}return affected;}
+function impactedFiles(files,{reverse,inspection}){
+ const affected=new Set(files),queue=[...files];
+ for(const file of files)for(const consumer of inspection.get(file)||[])affected.add(consumer)
+ for(let i=0;i<queue.length;i++)for(const consumer of reverse.get(queue[i])||[])if(!affected.has(consumer)){affected.add(consumer);queue.push(consumer)}
+ return affected;
+}
 const browserChecks={
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
  finance:{scripts:['tests/stoploss/revenue-page-check.cjs'],components:['admin']},
- payroll:{scripts:['tests/stoploss/payroll-finance-page-check.cjs'],components:['admin']},
+ payroll:{scripts:['tests/stoploss/payroll-finance-page-check.cjs','tests/stoploss/payroll-estimate-page-check.cjs'],components:['admin','staff']},
  media:{scripts:['tests/media-insights/browser-check.cjs'],components:['admin'],preview:{component:'admin',port:5187}},
  marketing:{scripts:['tests/stoploss/unified-activity-page-check.cjs','tests/stoploss/marketing-operations-page-check.cjs'],components:['admin','pos']},
  dashboard:{scripts:['tests/stoploss/admin-dashboard-page-check.cjs'],components:['admin']},
@@ -85,7 +96,7 @@ function selectScope(files,{root=process.cwd(),full=false}={}){
  const electronTypes=files.some(file=>/^client-pos\/(?:electron\/|tsconfig\.electron\.json)/.test(file));
  if(full){for(const service of SERVICES){services.add(service);typecheck.add(service);builds.add(service);if(service!=='api')i18n.add(service)}}
  const order=list=>SERVICES.filter(s=>list.has(s));
- return {mode:full?'full':'scoped',files,domains:selectedDomains.sort(),components:order(services),typecheck:order(typecheck),electronTypes,i18n:order(i18n),build:order(builds),unitTests:unitTests.sort(),auditTests:auditTests.sort(),media,http,python,browser,needsDependencies:typecheck.size>0||unitTests.length>0||auditTests.length>0||media||http.length>0||python.length>0,needsServer:typecheck.has('api')||auditTests.length>0||media||http.length>0,needsBrowser:browser.length>0,unmappedCode:files.filter(file=>/^(?:server\/src|client-(?:admin|pos|staff)\/src|shared)\//.test(file)&&!Object.values(domains).some(rule=>rule.paths.test(file))),note:'Unmapped code still receives affected-component type checks. Review the listed tests before confirming a build; full regression is opt-in.'};
+ return {mode:full?'full':'scoped',files,domains:selectedDomains.sort(),components:order(services),typecheck:order(typecheck),electronTypes,i18n:order(i18n),build:order(builds),unitTests:unitTests.sort(),auditTests:auditTests.sort(),media,inventoryFlow:files.some(file=>/OrderConsumption|EmployeeConsumption|InventoryAlert|InventoryForecast|inventoryFlowUpgrade|audit-flow-tests|check-employee-inventory-flow/.test(file)),http,python,browser,needsDependencies:typecheck.size>0||unitTests.length>0||auditTests.length>0||media||http.length>0||python.length>0,needsServer:typecheck.has('api')||auditTests.length>0||media||http.length>0,needsBrowser:browser.length>0,unmappedCode:files.filter(file=>/^(?:server\/src|client-(?:admin|pos|staff)\/src|shared)\//.test(file)&&!Object.values(domains).some(rule=>rule.paths.test(file))),note:'Unmapped code still receives affected-component type checks. Review the listed tests before confirming a build; full regression is opt-in.'};
 }
 function planRange(base,head,{root=process.cwd(),full=false}={}){
  if(!/^[a-f0-9]{40}$/.test(head||''))throw Error('HEAD_SHA must be a full source SHA');

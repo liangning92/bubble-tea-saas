@@ -755,6 +755,8 @@ model StockInLog {
   ledgerSequence BigInt?
   inventoryId String
   inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  operationId String?   @unique
+  purchaseOrderId String?
   batchId     String? // 可选：关联批次
   quantity    Float
   unitCost    Int // 入库单价(分)
@@ -774,6 +776,8 @@ model StockOutLog {
   inventoryId String
   inventory   Inventory @relation(fields: [inventoryId], references: [id])
   quantity    Float
+  operationId String?   @unique
+  staffId     String?
   reason      String // sold | loss | adjust | expired
   orderId     String?
   note        String?
@@ -811,9 +815,15 @@ model PurchaseOrder {
   id           String              @id @default(cuid())
   storeId      String
   store        Store               @relation(fields: [storeId], references: [id])
-  supplierId   String
-  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  supplierId   String?
+  supplier     Supplier?           @relation(fields: [supplierId], references: [id])
   orderNumber  String              @unique
+  requestId    String?             @unique
+  requestFingerprint String?
+  source       String              @default("admin")
+  onlineOrderNumber String?
+  createdBy    String?
+  receivedBy   String?
   status       String              @default("pending") // pending | approved | received | cancelled
   totalAmount  Int                 @default(0)
   expectedDate DateTime?
@@ -832,6 +842,10 @@ model PurchaseOrderItem {
   quantity        Float
   unitCost        Int
   receivedQty     Float         @default(0)
+  inputQuantity   Float?
+  inputUnit       String?
+  inputUnitCost   Int?
+  packageSnapshot String?
   createdAt       DateTime      @default(now())
 }
 
@@ -2180,4 +2194,29 @@ model StaffApprovalCredential {
   failedAttempts Int @default(0)
   lockedUntil DateTime?
   updatedAt DateTime @updatedAt
+}
+
+// Immutable sale-time recipe snapshot, separate from the physical stock ledger.
+model OrderConsumptionSnapshot {
+  id String @id @default(cuid())
+  storeId String
+  orderId String @unique
+  materials String
+  issues String
+  reversedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([storeId, createdAt])
+}
+
+model ConsumptionAlert {
+  id String @id @default(cuid())
+  storeId String
+  inventoryId String
+  businessDate String
+  status String
+  detail String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([storeId, businessDate, inventoryId])
+  @@index([storeId, status, businessDate])
 }

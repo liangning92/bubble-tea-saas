@@ -1,0 +1,1 @@
+module.exports={rootDir:'.',testEnvironment:'node',testMatch:['<rootDir>/audit-flow-tests/**/*.test.ts'],transform:{'^.+\\.ts$':['ts-jest',{tsconfig:{module:'CommonJS',esModuleInterop:true},diagnostics:true}]},maxWorkers:1,cache:false,testTimeout:30000,setupFiles:['<rootDir>/audit-flow-tests/safety.cjs']}
