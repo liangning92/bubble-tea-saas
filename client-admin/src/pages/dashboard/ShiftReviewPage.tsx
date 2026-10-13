@@ -1,6 +1,7 @@
 import { ShiftCorrection } from '../../components/ShiftCorrection'
 import { OrderItemRows } from '../../components/OrderItemsTable'
 import { ShiftHandoverFinancials } from '../../components/ShiftHandoverFinancials'
+import { ShiftCashBreakdown } from '../../components/ShiftCashBreakdown'
 import { ShiftCashReconciliation, ShiftCashWarning, formatShiftCash } from '../../../../shared/utils/shiftCashReconciliation'
 import { ManualReceiptAmounts } from '../../components/ManualReceipts'
 import { useEffect, useState } from 'react'
@@ -97,6 +98,7 @@ export function ShiftReviewPage() {
         <div className="flex flex-wrap justify-between items-end gap-2"><div><h2 className="text-xl font-bold">{title(selected)} · {t('shiftReview.details')}</h2><p className="text-sm text-gray-500 mt-1">{instant(selected.windowStart)} — {instant(selected.windowEnd)} · WIB</p></div><span className="text-sm text-gray-500">{t('shiftReview.updated')} {data && instant(data.asOf)}</span></div>
         {cards(selected)}
         {selected.handoverFinancials && <ShiftHandoverFinancials amounts={selected.handoverFinancials} />}
+        {selected.session?.status === 'closed' && <ShiftCashBreakdown reconciliation={selected.cashReconciliation} actualCash={selected.cashWarning?.actualCash ?? selected.session.actualCash} recordedDifference={selected.cashWarning?.difference ?? selected.session.cashDifference} manualQris={selected.manualReceipts?.qris ?? null} />}
         {user?.role === 'admin' && selected.session && ['open','closed'].includes(selected.session.status) && <ShiftCorrection key={selected.id+selected.session.updatedAt} id={selected.id} session={selected.session} receipts={selected.manualReceipts} refresh={()=>query.refetch()} />}
         {selected.cashWarning?.status === 'pending' && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4" data-testid="shift-cash-warning">
           <h3 className="font-bold text-amber-900">{t('cashReconciliation.pending')}</h3>
