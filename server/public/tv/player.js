@@ -351,7 +351,7 @@
         cup: "第几杯优惠",
         buy: "购买",
         get: "赠送",
-        conditions: "参与条件",
+        conditions: "参与条件", birthday:"生日限定",welcome:"首次购买",people:"人",couponClaim:"领取优惠券",couponPurchase:"购买后获得优惠券",limit:"每位会员限次",
         special: "特价",
         bundle: "套餐",
         gift: "赠品",
@@ -372,7 +372,7 @@
         cup: "Cup offer",
         buy: "Buy",
         get: "Get",
-        conditions: "Eligibility",
+        conditions: "Eligibility",birthday:"Birthday only",welcome:"First purchase",people:"people",couponClaim:"Claim coupon",couponPurchase:"Coupon after purchase",limit:"Per-member limit",
         special: "Special price",
         bundle: "Bundle",
         gift: "Gift",
@@ -393,7 +393,7 @@
         cup: "Penawaran gelas",
         buy: "Beli",
         get: "Gratis",
-        conditions: "Syarat",
+        conditions: "Syarat",birthday:"Khusus ulang tahun",welcome:"Pembelian pertama",people:"orang",couponClaim:"Klaim kupon",couponPurchase:"Kupon setelah pembelian",limit:"Batas per anggota",
         special: "Harga spesial",
         bundle: "Paket",
         gift: "Hadiah",
@@ -410,7 +410,7 @@
     const l = labels[language] || labels.id,
       r = a.rule || {},
       parts = [];
-    if (r.price !== undefined) parts.push(l.special + ": " + money(r.price));
+    if (r.price !== undefined) parts.push((a.type==="bundle"?l.bundle:a.type==="group"?l.group:l.special) + ": " + money(r.price));
     else if (r.percent !== undefined) parts.push(r.percent + "% " + l.off);
     else if (r.amount !== undefined) parts.push(money(r.amount) + " " + l.off);
     else parts.push(l[a.type] || l.conditions);
@@ -426,7 +426,16 @@
       parts.push(l.payment + ": " + a.paymentMethods.join(", "));
     if (r.nth) parts.push(l.cup + ": " + r.nth);
     if (r.buy) parts.push(l.buy + " " + r.buy + ", " + l.get + " " + r.get);
-    return [a.description, ...parts].filter(Boolean).join(" · ");
+    if(a.products?.length)parts.push(a.products.slice(0,2).map(p=>p.name+(p.quantity?' ×'+p.quantity:'')+(p.specs?.length?' ('+p.specs.map(s=>s.name).join('/')+')':'')).join(' + ')+(a.products.length>2?' +…':''));
+    if(r.participants)parts.push(r.participants+' '+l.people);
+    if(['birthday','welcome'].includes(a.type))parts.push(l[a.type]);
+    if(r.perMemberLimit)parts.push(l.limit+': '+r.perMemberLimit);
+    if(a.type==='coupon')parts.push(r.couponTrigger==='claim'?l.couponClaim:l.couponPurchase);
+    if(a.type==='points')parts.push(l.points+(r.multiplier?' ×'+r.multiplier:'')+(r.points?' +'+r.points:''));
+    if(r.stampsRequired)parts.push(l.stamps+': '+r.stampsRequired);
+    if(r.addonNames?.length)parts.push(r.addonNames.join(', '));
+    if(r.tiers?.length)parts.push(r.tiers.map(t=>l.minimum+' '+money(t.minAmount)+' → '+(t.percent!==undefined?t.percent+'% '+l.off:money(t.amount)+' '+l.off)).join(' / '));
+    return [...parts, a.description].filter(Boolean).join(" · ");
   }
   function renderPromotions() {
     const box = $("promotions");
