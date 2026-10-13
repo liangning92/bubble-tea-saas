@@ -1,6 +1,6 @@
 import { beforeEach, expect, jest, test } from '@jest/globals'
 jest.mock('../src/config/database',()=>({__esModule:true,default:{},prisma:{}}))
-import { payrollBasis } from '../src/services/ProbationService'
+import { payrollBasis, refreshEmploymentPayroll } from '../src/services/ProbationService'
 import { unpaidLeavePlan } from '../src/services/SalaryLeavePlan'
 import { ensureOnboardingDeposit, salaryDepositPlan, salaryRefundPlan } from '../src/services/SalaryDepositPlan'
 import { retainPayslip, readPayslip } from '../src/services/SalaryPayslipService'
@@ -49,4 +49,19 @@ test('paid payslip preserves original identity, rates and refund total across la
 test('a zero first wage allocation carries the full outstanding deposit forward',async()=>{
  await ensureOnboardingDeposit(db,staff);values.set('salary.depositPlan.first','[]');salaries=[{id:'first',month:'2026-10',status:'paid'}]
  expect((await salaryDepositPlan(staff.id,'2026-11',db,1400000))[0].amount).toBe(300000)
+})
+
+test('seven-day resignation spanning month end cancels deductions even in unpaid earlier-month wages',async()=>{
+ jest.useFakeTimers();jest.setSystemTime(new Date('2026-10-02T12:00:00+07:00'))
+ try{staff.hireDate=new Date('2026-09-25T00:00:00+07:00');await ensureOnboardingDeposit(db,staff);staff.terminationDate=new Date('2026-10-01T00:00:00+07:00');staff.status='resigned'
+ expect(await salaryDepositPlan(staff.id,'2026-09',db,260000)).toEqual([]);expect(await salaryRefundPlan(staff.id,'2026-10',db)).toEqual({items:[],amount:0})
+ }finally{jest.useRealTimers()}
+})
+
+test('resigning after seven days cancels planned uncollected deposits before rebasing pending wages',async()=>{
+ staff.hireDate=new Date('2026-10-01');values.set('staff.probation.rule',JSON.stringify(policy));values.set('salary.probationBasis.salary',JSON.stringify({version:2,settlementVersion:1,daysSource:'estimate',confirmed:false,manualCorrection:false}));values.set('salary.depositPlan.salary',JSON.stringify([{staffDepositId:'deposit',amountMinor:30000000}]))
+ const old={id:'salary',staffId:staff.id,month:'2026-10',status:'pending',baseSalary:1300000,overtime:0,commission:0,bonus:0,deduction:300000,finalAmount:1000000}
+ db.salary.findMany=jest.fn(async()=>[old]);db.salary.findUnique=jest.fn(async()=>old);db.salary.updateMany=jest.fn(async()=>({count:1}));db.attendance={findMany:jest.fn(async()=>[])}
+ await refreshEmploymentPayroll(db,{...staff,status:'resigned',terminationDate:new Date('2026-10-07')})
+ expect(db.salary.updateMany).toHaveBeenCalledWith({where:{id:'salary',status:'pending'},data:{baseSalary:293548,finalAmount:293548,deduction:0}});expect(JSON.parse(values.get('salary.depositPlan.salary')!)).toEqual([])
 })
