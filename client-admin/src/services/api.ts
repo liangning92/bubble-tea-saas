@@ -312,6 +312,7 @@ export const reimbursementApi = {
   get: (id: string) => api.get('/reimbursement/' + id),
   approve: (id: string) => api.put('/reimbursement/approve/' + id),
   reject: (id: string, reason?: string) => api.put('/reimbursement/reject/' + id, { reason }),
+  payslip: (id:string) => api.get(`/salaries/${id}/payslip`),
   markPaid: (id: string) => api.put('/reimbursement/mark-paid/' + id)
 }
 
@@ -623,9 +624,10 @@ export const salaryApi = {
   list: (params?: any) => api.get('/salaries', { params }),
   create: (data: any) => api.post('/salaries', data),
   update: (id: string, data: any) => api.put('/salaries/' + id, data),
+  payslip: (id:string) => api.get(`/salaries/${id}/payslip`),
   markPaid: (id: string) => api.put('/salaries/' + id + '/mark-paid'),
   delete: (id: string) => api.delete('/salaries/' + id),
-  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}, correction?: {lateMinutes:number;lateMode:string;manualLateDeduction:number;otherAttendanceDeduction:number}, daysSource?: string) =>
+  calculate: (staffId: string, month: number, year: number, workingDays?: {probation:number;regular:number}, correction?: {lateMinutes:number;lateMode:string;manualLateDeduction:number;otherAttendanceDeduction:number;unpaidProbationDays?:number;unpaidRegularDays?:number}, daysSource?: string) =>
     api.get('/staff-salary/calculate/' + staffId, { params: { month, year, ...correction, daysSource, ...(workingDays ? {probationDays:workingDays.probation,regularDays:workingDays.regular} : {}) } })
 }
 

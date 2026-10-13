@@ -84,7 +84,7 @@ export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, mont
  return {...basis,version:2,workedAmount:basis.amount,amount:basis.amount+paidRestAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:source,attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
 }
 export async function savePayrollBasis(db: PayrollDB, salary: {id:string;staffId:string;month:string;baseSalary:number}, staff: Employee, workingDays?: WorkingDays, manualCorrection=false, metadata: Record<string,unknown> = {}) {if(staff.baseSalary===null)return
- const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays, (metadata.daysSource as 'manual'|'attendance'|undefined) || (workingDays?'manual':'estimate'));await write(db,staff.storeId,basisKey(salary.id),{...basis,...metadata,manualCorrection,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
+ const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays, (metadata.daysSource as 'estimate'|'manual'|'attendance'|undefined) || (workingDays?'manual':'estimate'));await write(db,staff.storeId,basisKey(salary.id),{...basis,...metadata,manualCorrection,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
 export async function savedPayrollBasis(db: DB, storeId:string, salaryId:string) {return read(db,storeId,basisKey(salaryId))}
 
 // Rebase unpaid payroll when the employment dates change; payments remain historical.

@@ -20,7 +20,7 @@ router.get('/calculate/:staffId', authenticate, authorize('admin', 'manager'), r
 
     const manualDays = req.query.probationDays !== undefined || req.query.regularDays !== undefined ? workingDaysSchema.safeParse({probation:Number(req.query.probationDays),regular:Number(req.query.regularDays)}) : null
     if(manualDays && !manualDays.success)return res.status(400).json({code:400,message:'INVALID_WORKING_DAYS'})
-    const correction=req.query.lateMinutes!==undefined?payrollCorrectionSchema.safeParse({lateMinutes:Number(req.query.lateMinutes),lateMode:req.query.lateMode||'rule',manualLateDeduction:Number(req.query.manualLateDeduction||0),otherAttendanceDeduction:Number(req.query.otherAttendanceDeduction||0),reason:'preview'}):null
+    const correction=req.query.lateMinutes!==undefined?payrollCorrectionSchema.safeParse({lateMinutes:Number(req.query.lateMinutes),lateMode:req.query.lateMode||'rule',manualLateDeduction:Number(req.query.manualLateDeduction||0),otherAttendanceDeduction:Number(req.query.otherAttendanceDeduction||0),unpaidProbationDays:req.query.unpaidProbationDays===undefined?undefined:Number(req.query.unpaidProbationDays),unpaidRegularDays:req.query.unpaidRegularDays===undefined?undefined:Number(req.query.unpaidRegularDays),reason:'preview'}):null
     if(correction&&!correction.success)return res.status(400).json({code:400,message:'INVALID_PAYROLL_CORRECTION'})
     const result = await calculateSalary(
       staffId,
