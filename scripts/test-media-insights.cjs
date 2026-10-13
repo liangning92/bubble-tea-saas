@@ -12,7 +12,7 @@ try{
  fs.copyFileSync(`${temp}/test.db`,`${temp}/template.db`)
  run('python3',['tests/media-insights/sqlite-upgrade-check.py',`${temp}/template.db`])
  run(process.execPath,['--import',loader,'tests/media-insights/translations-check.cjs'])
- run(process.execPath,['--import',loader,'--test','server/audit-tests/product-insights.check.ts','server/audit-tests/media-library.check.ts'])
+ run(process.execPath,['--import',loader,'--test','server/audit-tests/product-insights.check.ts','server/audit-tests/media-library.check.ts','server/audit-tests/image-optimization.check.ts'])
 }catch(error){console.error(error.message);process.exitCode=1}
 finally{
  const restored=spawnSync(process.execPath,[prisma,'generate','--schema','server/prisma/schema.prisma'],{cwd:root,env,stdio:'inherit'})
