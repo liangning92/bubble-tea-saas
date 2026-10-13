@@ -1,16 +1,28 @@
+import {isEmployeeAppRoute} from '../services/EmployeeAppAccess'
 import {ACCESS_ROUTE_MANIFEST} from '../services/StaffPermissionRouteManifest'
 import {redactAccessData} from '../services/StaffPermissionV2Core'
 import prisma from '../config/database'
 // Declarations attach to the concrete Express route, not the requested URL.
 export function declareAccessRoutes(base:string,router:any){
- for(const layer of router.stack||[]){const route=layer.route;if(!route)continue;const path=base+(route.path==='/'?'':route.path);const specs=Object.fromEntries(Object.keys(route.methods).map(method=>[method,ACCESS_ROUTE_MANIFEST[method.toUpperCase()+' '+path]||{permission:'__unclassified__',ownerOnly:false,export:false,personal:false}]));route.accessSpecs=specs;const methods={...route.methods};route.all((req:any,_res:any,next:any)=>{req.accessDeclaration=specs[req.method.toLowerCase()]||specs.get;next()});const guard=route.stack.pop();route.methods=methods;route.stack.unshift(guard)}
+ for(const layer of router.stack||[]){const route=layer.route;if(!route)continue;const path=base+(route.path==='/'?'':route.path);const specs=Object.fromEntries(Object.keys(route.methods).map(method=>[method,{...(ACCESS_ROUTE_MANIFEST[method.toUpperCase()+' '+path]||{permission:'__unclassified__',ownerOnly:false,export:false,personal:false}),routeKey:method.toUpperCase()+' '+path}]));route.accessSpecs=specs;const methods={...route.methods};route.all(async(req:any,res:any,next:any)=>{
+  req.accessDeclaration=specs[req.method.toLowerCase()]||specs.get
+  try {
+   if(req.user?.accessRole?.version===2){const denied=await enforceAccessV2(req,res,req.user);if(denied)return denied}
+   next()
+  } catch(error){next(error)}
+ });const guard=route.stack.pop();route.methods=methods;route.stack.unshift(guard)}
  router.use((req:any,_res:any,next:any)=>{const find=(stack:any[],path:string):any=>{for(const layer of stack){if(!layer.match(path))continue;if(layer.route&&(layer.route.methods[req.method.toLowerCase()]||req.method==='HEAD'&&layer.route.methods.get))return layer.route.accessSpecs?.[req.method==='HEAD'?'get':req.method.toLowerCase()];if(layer.handle?.stack){const found=find(layer.handle.stack,path.slice(layer.path.length)||'/');if(found)return found}}};req.accessDeclaration=find(router.stack.filter((x:any)=>x!==router.stack[0]),req.path);next()});const entry=router.stack.pop();router.stack.unshift(entry);return router
 }
 export async function enforceAccessV2(req:any,res:any,user:any){
  const access=user.accessRole,spec=req.accessDeclaration
  if(!spec)return res.status(403).json({code:403,message:'STAFF_ACCESS_UNDECLARED_ROUTE'})
+ if(user.employeeApp){
+  if(!isEmployeeAppRoute(spec.routeKey,spec))return res.status(403).json({code:403,message:'EMPLOYEE_APP_MANAGEMENT_ROUTE_DENIED'})
+  if(spec.permission)access.modes[spec.permission]='allow'
+  if(spec.export)access.modes['data.export']='allow'
+ }
  const permission=spec.permission==='personal.tasks'&&['GET','HEAD'].includes(req.method)&&access.modes['hygiene.read']==='allow'?'hygiene.read':spec.permission
- const scopeSelf=spec.personal&&permission!=='hygiene.read'
+ const scopeSelf=(spec.personal||user.employeeApp&&spec.routeKey==='GET /api/auth/me')&&permission!=='hygiene.read'
  if(spec.ownerOnly)return res.status(403).json({code:403,message:'STAFF_ACCESS_OWNER_REQUIRED'})
  if(permission&&access.modes[permission]!=='allow')return res.status(403).json({code:403,message:access.modes[permission]==='approval'?'STAFF_ACCESS_APPROVAL_REQUIRED':'STAFF_ACCESS_PERMISSION_DENIED',permission})
  if(spec.export&&access.modes['data.export']!=='allow')return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission:'data.export'})
@@ -21,7 +33,7 @@ export async function enforceAccessV2(req:any,res:any,user:any){
   const bodies=Array.isArray(req.body)?req.body:[req.body];
   for(const body of bodies){if(!body||typeof body!=='object')continue;if(permission==='orders.create'&&body.staffId&&body.staffId!==user.staffId)return res.status(403).json({code:403,message:'STAFF_ACCESS_ACTOR_MISMATCH'});for(const [field,model]of [['memberId','member'],['staffId','staff'],['orderId','order'],['inventoryId','inventory'],['productId','product']]){if(typeof body[field]!=='string'||!body[field])continue;const target=await (prisma as any)[model].findUnique({where:{id:body[field]},select:{storeId:true}});if(!target||target.storeId!==user.storeId)return res.status(404).json({code:404,message:'STAFF_ACCESS_TARGET_NOT_FOUND'})}}
  }
- if(scopeSelf){const ids=[req.query.staffId,req.body?.staffId,req.params.staffId].filter(Boolean);if(ids.some(id=>id!==user.staffId))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})}
+ if(scopeSelf||user.employeeApp){const ids=[req.query.staffId,req.body?.staffId,req.params.staffId].filter(Boolean);if(ids.some(id=>id!==user.staffId))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})}
  // All identity updates and payroll writes have independent field grants.
  if(spec.permission==='staff.write'){
   const fields=Object.keys(req.body||{}),denied=(fields.some(k=>/salary|hourlyRate|probation|confirmationDate/i.test(k))&&access.modes['salary.write']!=='allow')||(fields.some(k=>/^bank/.test(k))&&access.modes['staff.bank.read']!=='allow')||(fields.some(k=>['address','emergencyContact','emergencyPhone'].includes(k))&&access.modes['staff.private.read']!=='allow')

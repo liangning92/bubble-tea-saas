@@ -93,7 +93,7 @@ import { startMarketingScheduler } from './services/MarketingSchedulerService'
 import { errorHandler } from './middlewares/errorHandler'
 import { notFoundHandler } from './middlewares/notFound'
 import { socketManager } from './socket'
-import { authenticate, AuthRequest } from './middlewares/auth'
+import { authenticateBeforeRouting, AuthRequest } from './middlewares/auth'
 import { deliveryRouter } from './routes/delivery'
 
 const app = express()
@@ -174,7 +174,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-TV-Display-Token']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-TV-Display-Token', 'X-Client-App']
 }))
 app.use(morgan('dev', {
   skip: (_req, res) => process.env.LOCAL_POS_EMBEDDED === '1' && res.statusCode < 400
@@ -226,7 +226,7 @@ app.use('/api', (req, res, next) => {
     '/payments/qris/webhook', '/health', '/version'
   ])
   if (publicPaths.has(apiPath) || isDisplayPublicRoute(req.method, apiPath)) return next()
-  return authenticate(req as AuthRequest, res, next)
+  return authenticateBeforeRouting(req as AuthRequest, res, next)
 })
 app.use('/api/stores', declareAccessRoutes('/api/stores', storeRouter))
 app.use('/api/categories', declareAccessRoutes('/api/categories', categoryRouter))

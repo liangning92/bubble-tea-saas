@@ -1,3 +1,4 @@
+import { employeeAppAccess } from '../services/EmployeeAppAccess'
 import { enforceAccessV2 } from './staffAccessV2'
 import { userAccessV2, AccessV2Error } from '../services/StaffPermissionV2Service'
 import { assignedStaffAccess, StaffAccessError } from '../services/StaffPermissionService'
@@ -16,6 +17,7 @@ export interface AuthUser {
   storeId: string
   staffId: string
   issuedAtMs: number
+  employeeApp?: boolean
   accessRole?: {id:string;name:string;baseRole:string;permissions:string[];version?:number;modes?:Record<string,string>;sources?:Record<string,string>;scopes?:Record<string,string>;revision?:number} | null
 }
 
@@ -122,7 +124,13 @@ export function canViewField(user: AuthUser, field: 'salary' | 'bomCost' | 'addr
 }
 
 // Authentication middleware
-export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+// Global API entry authenticates identity before Express has matched a route.
+// V2 route permissions are enforced by the concrete declared route guard.
+export async function authenticateBeforeRouting(req: AuthRequest, res: Response, next: NextFunction) {
+  return authenticate(req, res, next, true)
+}
+
+export async function authenticate(req: AuthRequest, res: Response, next: NextFunction, beforeRouting = false) {
   if (req.user) return requireStoreAccess(req, res, next)
   try {
     const authHeader = req.headers.authorization
@@ -159,14 +167,15 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       role: user.role as Role,
       storeId: user.staff?.storeId || user.storeId || '',
       staffId: user.staff?.id || '',
-      issuedAtMs: decoded.issuedAtMs
+      issuedAtMs: decoded.issuedAtMs,
+      employeeApp: req.headers['x-client-app'] === 'employee'
     }
     if (decoded.role !== currentUser.role || decoded.storeId !== currentUser.storeId || decoded.staffId !== currentUser.staffId) {
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })
     }
 
-    currentUser.accessRole = await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
-    if(currentUser.accessRole?.version===2){const denied=await enforceAccessV2(req,res,currentUser);if(denied)return denied}
+    currentUser.accessRole = currentUser.employeeApp ? employeeAppAccess(currentUser.role) : await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+    if(currentUser.accessRole?.version===2 && !beforeRouting){const denied=await enforceAccessV2(req,res,currentUser);if(denied)return denied}
     if (currentUser.accessRole && currentUser.accessRole.version!==2) {
       const permission = staffPermissionForRequest(req.method, req.originalUrl || req.url, currentUser)
       if (permission && !currentUser.accessRole.permissions.includes(permission)) return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission})
@@ -247,7 +256,7 @@ export function requireStoreAccess(req: AuthRequest, res: Response, next: NextFu
   }
 
   // Admin can access all stores
-  if (req.user.role === 'admin') {
+  if (req.user.role === 'admin' && !req.user.employeeApp) {
     return next()
   }
 

@@ -2,17 +2,18 @@
 const fs=require('fs'),path=require('path'),os=require('os'),assert=require('node:assert/strict'),crypto=require('crypto'),{execFileSync:exec}=require('child_process');
 const root=path.resolve(__dirname,'../..'),deps=root+'/server/node_modules';const Module=require('module');process.env.NODE_PATH=deps+':'+root+'/node_modules';Module._initPaths();const ts=require('typescript'),express=require('express'),jwt=require('jsonwebtoken'),bcrypt=require('bcryptjs');const dir=fs.mkdtempSync('/tmp/staff-access-v2-fixture-'),port=55573;let pg=false,db,server;
 (async()=>{try{
- exec('/usr/local/bin/initdb',['-D',dir+'/pg','--auth=trust','--no-locale','-E','UTF8'],{stdio:'ignore'});exec('/usr/local/bin/pg_ctl',['-D',dir+'/pg','-l',dir+'/pg.log','-o',`-h 127.0.0.1 -p ${port} -k ${dir}`,'-w','start'],{stdio:'ignore'});pg=true;exec('/usr/local/bin/createdb',['-h','127.0.0.1','-p',String(port),'staff_access_synthetic']);
- const schema=path.resolve(root,'../recovery/staff-access-v2-20261013/test-schema.sql');exec('/usr/local/bin/psql',['-h','127.0.0.1','-p',String(port),'-d','staff_access_synthetic','-v','ON_ERROR_STOP=1','-f',schema],{stdio:'ignore'});
+ exec((process.platform==='darwin'?'/usr/local/bin/initdb':'initdb'),['-D',dir+'/pg','--auth=trust','--no-locale','-E','UTF8'],{stdio:'ignore'});exec((process.platform==='darwin'?'/usr/local/bin/pg_ctl':'pg_ctl'),['-D',dir+'/pg','-l',dir+'/pg.log','-o',`-h 127.0.0.1 -p ${port} -k ${dir}`,'-w','start'],{stdio:'ignore'});pg=true;exec((process.platform==='darwin'?'/usr/local/bin/createdb':'createdb'),['-h','127.0.0.1','-p',String(port),'staff_access_synthetic']);
+
  process.env.DATABASE_URL=`postgresql://${os.userInfo().username}@127.0.0.1:${port}/staff_access_synthetic`;process.env.JWT_SECRET=crypto.randomBytes(32).toString('hex');process.env.NODE_ENV='test';process.env.UPLOADS_PATH=dir+'/uploads';
+ exec(process.execPath,[root+'/server/node_modules/prisma/build/index.js','db','push','--schema',root+'/server/prisma/schema.prisma','--skip-generate'],{env:{...process.env},stdio:'ignore'});
  const {PrismaClient}=require('@prisma/client');db=new PrismaClient({datasources:{db:{url:process.env.DATABASE_URL}}});const dbFile=root+'/server/src/config/database.ts';require.cache[dbFile]={id:dbFile,filename:dbFile,loaded:true,exports:{__esModule:true,default:db,prisma:db}};
  require.extensions['.ts']=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true,resolveJsonModule:true}}).outputText,file);
  await db.tenant.create({data:{id:'tenant',name:'Synthetic tenant'}});for(const id of ['store','foreign'])await db.store.create({data:{id,tenantId:'tenant',name:id}});
  const password=await bcrypt.hash('SyntheticPassword2026',4);for(const [id,role] of [['owner','admin'],['manager','staff'],['cashier','cashier'],['production','staff'],['inventory','staff'],['finance','staff'],['basic','staff'],['foreign','staff']]){await db.user.create({data:{id,phone:'synthetic-'+id,password,role,storeId:id==='owner'?null:id==='foreign'?'foreign':'store'}});if(id!=='owner')await db.staff.create({data:{id:id+'-staff',userId:id,storeId:id==='foreign'?'foreign':'store',name:'Synthetic '+id,employeeNumber:'SYN-'+id,baseSalary:3000000,bankAccount:'PRIVATE',bankName:'PRIVATE',address:'PRIVATE',hireDate:new Date('2026-10-01T00:00:00+07:00')}})}
  await db.category.create({data:{id:'category',storeId:'store',name:'Tea',code:'TEA'}});await db.product.create({data:{id:'product',storeId:'store',categoryId:'category',name:'Tea',code:'PRODUCT'}});await db.spec.create({data:{id:'spec',productId:'product',name:'Regular',price:10000,isDefault:true}});await db.member.create({data:{id:'member',storeId:'store',phone:'member',name:'Synthetic member',balance:100000}});
- const app=express();app.use(express.json());const {declareAccessRoutes}=require(root+'/server/src/middlewares/staffAccessV2.ts');for(const [prefix,file,name] of [['staff-permissions','staffPermissions','staffPermissionsRouter'],['staff','staff','staffRouter'],['orders','order','orderRouter'],['marketing','marketing','marketingRouter'],['inventory','inventory','inventoryRouter'],['products','product','productRouter'],['training','training','trainingRouter'],['hygiene','hygiene','hygieneRouter'],['marketing/activities','activities','activitiesRouter'],['config','config','configRouter']])app.use('/api/'+prefix,declareAccessRoutes('/api/'+prefix,require(root+'/server/src/routes/'+file+'.ts')[name]));app.use((e,_req,res,_next)=>res.status(500).json({message:e.message}));server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
+ const app=express();app.use(express.json());const {declareAccessRoutes}=require(root+'/server/src/middlewares/staffAccessV2.ts');const {authenticateBeforeRouting}=require(root+'/server/src/middlewares/auth.ts');app.use('/api',authenticateBeforeRouting);for(const [prefix,file,name] of [['staff-permissions','staffPermissions','staffPermissionsRouter'],['staff','staff','staffRouter'],['orders','order','orderRouter'],['marketing','marketing','marketingRouter'],['inventory','inventory','inventoryRouter'],['products','product','productRouter'],['training','training','trainingRouter'],['hygiene','hygiene','hygieneRouter'],['marketing/activities','activities','activitiesRouter'],['config','config','configRouter'],['shifts','shift','shiftRouter'],['staff-work','employeeWorkspace','employeeWorkspaceRouter'],['inventory-counts','inventoryCount','inventoryCountRouter'],['announcement','announcement','default'],['leave','leave','leaveRouter'],['leave-types','leaveType','leaveTypeRouter'],['reimbursement','reimbursement','reimbursementRouter'],['reimbursement-types','reimbursementType','reimbursementTypeRouter'],['staff-points','staffPoint','staffPointRouter'],['deposit','deposit','depositRouter'],['staff-correction','staffCorrection','staffCorrectionRouter'],['shift-swap','staffCorrection','shiftSwapRouter'],['overtime','staffCorrection','overtimeRouter'],['attendance-rules','attendanceRule','attendanceRuleRouter'],['notifications','notification','notificationRouter']])app.use('/api/'+prefix,declareAccessRoutes('/api/'+prefix,require(root+'/server/src/routes/'+file+'.ts')[name]));app.use((e,_req,res,_next)=>res.status(500).json({message:e.message}));server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
  const token=id=>jwt.sign({id,phone:'synthetic-'+id,role:id==='owner'?'admin':['cashier'].includes(id)?'cashier':'staff',storeId:id==='owner'?'':id==='foreign'?'foreign':'store',staffId:id==='owner'?'':id+'-staff',issuedAtMs:Date.now()+1000},process.env.JWT_SECRET,{expiresIn:'20m'});
- const call=async(id,method,url,body,status=200)=>{const r=await fetch(origin+'/api/'+url,{method,headers:{authorization:'Bearer '+token(id),'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();assert.equal(r.status,status,method+' '+url+' '+JSON.stringify(data));return data.data};
+ const call=async(id,method,url,body,status=200,employee=false)=>{const r=await fetch(origin+'/api/'+url,{method,headers:{authorization:'Bearer '+token(id),...(employee?{'x-client-app':'employee'}:{}),'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();assert.equal(r.status,status,method+' '+url+' '+JSON.stringify(data));return data.data};
  let state=await call('owner','GET','staff-permissions?version=2&storeId=store');assert.equal(state.active,false);assert.equal(state.roles.length,6);assert.equal((await call('cashier','GET','staff-permissions/me')).role,null);
  const policy={version:2,revision:0,roles:state.roles,assignments:['manager','cashier','production','inventory','finance','basic'].map(id=>({staffId:id+'-staff',roleId:id,overrides:{}}))};
  await call('owner','PUT','staff-permissions?storeId=store',policy);policy.revision++;assert.equal((await call('cashier','GET','staff-permissions/me')).role,null,'draft must not activate');let preview=await call('owner','POST','staff-permissions/preview?storeId=store',policy);assert.equal(preview.changes.length,6);assert.equal(preview.legacy,true);
@@ -57,11 +58,40 @@ const root=path.resolve(__dirname,'../..'),deps=root+'/server/node_modules';cons
  const basicAccess=(await call('basic','GET','staff-permissions/me')).role;
  for(const key of basics)assert.equal(basicAccess.modes[key],'allow');
  await call('basic','GET','staff/overview/monthly');
+ await call('basic','GET','shifts');
+ await call('basic','GET','staff-work/my/dashboard');
+ await call('basic','GET','training/my');
+ await call('basic','GET','training/categories');
+ await call('basic','GET','training/library');
+ await call('basic','GET','hygiene/tasks/my');
+ await call('basic','GET','staff/attendance/today?staffId=cashier-staff',undefined,403);
+ // Employee work features do not depend on custom management/POS modes.
+ await call('basic','GET','inventory',undefined,403);
+ await call('basic','GET','inventory',undefined,200,true);
+ await call('basic','GET','inventory-counts',undefined,200,true);
+ await call('basic','GET','products',undefined,200,true);
+ await call('basic','GET','announcement/active',undefined,200,true);
+ await call('basic','GET','staff-work/my/dashboard',undefined,200,true);
+ await call('basic','GET','staff/salary/my?month=10&year=2026',undefined,200,true);
+ for(const url of ['leave/my','leave/balance','leave-types','reimbursement/my','reimbursement-types','staff-points/my','staff-points/logs/my','staff-points/rewards/available','deposit/staff/my','deposit/staff/my/logs','deposit/rules','staff-correction/my','shift-swap/my','overtime/my','attendance-rules','notifications'])await call('basic','GET',url,undefined,200,true);
+ const savedPolicy=await db.config.findUnique({where:{storeId_key:{storeId:'store',key:'staff.access.policy.v2'}}});
+ await db.config.update({where:{id:savedPolicy.id},data:{value:'invalid configuration'}});
+ await call('basic','GET','staff-work/my/dashboard',undefined,200,true);
+ await call('basic','GET','inventory',undefined,200,true);
+ await call('basic','GET','staff-permissions/me',undefined,503);
+ await db.config.update({where:{id:savedPolicy.id},data:{value:savedPolicy.value}});
+
+ await call('basic','GET','staff/attendance/today?staffId=cashier-staff',undefined,403,true);
+ await call('basic','GET','inventory?storeId=foreign',undefined,403,true);
+ await call('basic','GET','staff',undefined,403,true);
+ await call('basic','GET','orders/kds/list',undefined,403,true);
+ await call('cashier','POST','marketing/members/member/balance/deduct',{amount:1000,note:'Denied',requestId:crypto.randomUUID()},403,true);
+
  await call('basic','GET','staff/attendance/today');
  await call('basic','GET','staff/schedule/my');
  await call('basic','GET','staff/salary/my?month=10&year=2026');
  await call('basic','GET','staff',undefined,403);
  policy.assignments=policy.assignments.filter(a=>a.staffId!=='cashier-staff');preview=await call('owner','POST','staff-permissions/preview?storeId=store',policy);await call('owner','POST','staff-permissions/activate?storeId=store',{...policy,hash:preview.hash});assert.equal((await call('cashier','GET','staff-permissions/me')).role.id,'basic');await call('cashier','GET','orders/kds/list',undefined,403);assert.equal((await db.user.findUnique({where:{id:'cashier'}})).role,'cashier');await call('owner','PUT','staff/cashier-staff/role',{role:'manager'},409);
- console.log('PASS V2 real PostgreSQL + HTTP: drafts/activation/global owner/store scope/effective modes/privacy/production/refund requests/remote and onsite approval/idempotency/revocation/expiry/transaction rollback/dependencies/conflicts/basic fallback');
+ console.log('PASS production global authentication, independent employee app data, malformed-policy isolation, unchanged POS/management restrictions; V2 real PostgreSQL + HTTP: drafts/activation/global owner/store scope/effective modes/privacy/production/refund requests/remote and onsite approval/idempotency/revocation/expiry/transaction rollback/dependencies/conflicts/basic fallback');
  if(process.env.V2_BROWSER_SCRIPT){process.env.V2_TEST_ORIGIN=origin;process.env.V2_TEST_TOKEN=token('owner');await require(process.env.V2_BROWSER_SCRIPT)({origin,db,token,policy})}
-}finally{if(server)await new Promise(r=>server.close(r));if(db)await db.$disconnect();if(pg)exec('/usr/local/bin/pg_ctl',['-D',dir+'/pg','-m','immediate','stop'],{stdio:'ignore'});fs.rmSync(dir,{recursive:true,force:true})}})().catch(e=>{console.error(e);process.exit(1)})
+}finally{if(server)await new Promise(r=>server.close(r));if(db)await db.$disconnect();if(pg)exec((process.platform==='darwin'?'/usr/local/bin/pg_ctl':'pg_ctl'),['-D',dir+'/pg','-m','immediate','stop'],{stdio:'ignore'});fs.rmSync(dir,{recursive:true,force:true})}})().catch(e=>{console.error(e);process.exit(1)})

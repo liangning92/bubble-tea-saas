@@ -27,7 +27,7 @@ export function TrainingLibrary({ token, recordsPath, embedded = false }: { toke
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setError(false); setModules([]); setAssessment(null); setStandards([]); setSelected(null)
-    fetch('/api/training/library', { headers: { Authorization: `Bearer ${token || ''}` }, signal: controller.signal })
+    fetch('/api/training/library', { headers: { 'X-Client-App': 'employee', Authorization: `Bearer ${token || ''}` }, signal: controller.signal })
       .then(async response => { if (!response.ok) throw Error('Library unavailable'); return response.json() })
       .then(body => { if (!Array.isArray(body.data?.modules)) throw Error('Invalid library'); setModules(body.data.modules); setAssessment(body.data.assessment || null); setStandards(body.data.standardsToConfirm || []) })
       .catch(e => { if (e.name !== 'AbortError') setError(true) })

@@ -1,5 +1,6 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
+  "GET /api/announcement/active": {permission:"personal.messages",ownerOnly:false,export:false,personal:true,legacyRoles:["manager","cashier","staff"],legacyPermission:"personal.messages",resource:null},
 
   "GET /api/media": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess
   "POST /api/media": {permission:null, ownerOnly:false, export:false, personal:false}, // scene grants enforced by mediaAccess

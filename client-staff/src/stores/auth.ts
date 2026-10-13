@@ -37,7 +37,7 @@ export const useAuthStore = create<AuthState>()(
         clearMemoryDrafts()
         const token=useAuthStore.getState().token
         const configured=(import.meta.env.VITE_API_BASE_URL||'/api').replace(/\/$/,'');const base=configured.endsWith('/api')?configured:configured+'/api'
-        if(token)void fetch(base+'/staff-work/my/subscription',{method:'DELETE',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({id:sessionStorage.getItem('employee-push-id')}),keepalive:true}).catch(()=>{})
+        if(token)void fetch(base+'/staff-work/my/subscription',{method:'DELETE',headers:{'X-Client-App':'employee',Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({id:sessionStorage.getItem('employee-push-id')}),keepalive:true}).catch(()=>{})
         void navigator.serviceWorker?.getRegistration().then(async registration=>{await(await registration?.pushManager.getSubscription())?.unsubscribe()}).catch(()=>{})
         Object.keys(sessionStorage).filter(k=>k.startsWith('employee-draft.')).forEach(k=>sessionStorage.removeItem(k))
         sessionStorage.removeItem('employee-push-id')

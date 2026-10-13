@@ -1,4 +1,3 @@
-import {useStaffAccess,permissionForPage} from '../../../shared/StaffAccess'
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -32,7 +31,6 @@ export function BottomNav() {
     navigate = useNavigate(),
     location = useLocation(),
     active = modulePath(location.pathname);
-  const access=useStaffAccess()
   const tabs = [
     ["/", "nav.home", Home],
     ["/inventory", "workspace.navInventory", Package],
@@ -43,7 +41,7 @@ export function BottomNav() {
   ] as const;
   return (
     <nav aria-label={t("nav.home")} className="employee-bottom-nav">
-      {tabs.filter(([path])=>access.can(permissionForPage(path,true)!)).map(([path, key, Icon]) => (
+      {tabs.map(([path, key, Icon]) => (
         <button
           key={path}
           onClick={() => navigate(path)}

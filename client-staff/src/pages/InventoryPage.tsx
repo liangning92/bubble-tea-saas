@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../stores/auth";
-import { staffApi, employeeApi } from "../services/api";
+import { staffApi } from "../services/api";
 import {
   Search,
   Package,
@@ -41,20 +41,6 @@ export function InventoryPage() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const storeId = user?.storeId || "";
-  const [access, setAccess] = useState<any>(undefined);
-  useEffect(() => {
-    employeeApi
-      .permissions()
-      .then(setAccess)
-      .catch(() => setAccess(null));
-  }, [user?.staffId]);
-  const can = (key: string) =>
-    access !== undefined &&
-    access !== null &&
-    (access.role
-      ? access.role.permissions.includes(key)
-      : key === "inventory.count" ||
-        ["admin", "manager", "staff"].includes(user?.role || ""));
   const [feedback, setFeedback] = useState("");
 
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -262,7 +248,7 @@ export function InventoryPage() {
           subtitle={t("ui.inventoryHint")}
           icon={Package}
           actions={
-            can("inventory.count") && (
+            (
               <Link to="/inventory/count" className="font-semibold">
                 {t("countFlow.title")}
               </Link>
@@ -375,8 +361,6 @@ export function InventoryPage() {
               {/* Action Buttons */}
               <div className="border-t border-gray-100 flex">
                 <button
-                  disabled={!can("inventory.stockIn")}
-                  hidden={!can("inventory.stockIn")}
                   onClick={() => openStockIn(item)}
                   className="flex-1 py-3 flex items-center justify-center text-green-600 hover:bg-green-50 active:bg-green-100 transition-colors"
                 >
@@ -384,8 +368,6 @@ export function InventoryPage() {
                   {t("inventory.stockIn")}
                 </button>
                 <button
-                  disabled={!can("inventory.stockOut")}
-                  hidden={!can("inventory.stockOut")}
                   onClick={() => openStockOut(item)}
                   className="flex-1 py-3 flex items-center justify-center text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors border-l border-gray-100"
                 >

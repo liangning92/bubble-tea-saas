@@ -8,7 +8,7 @@ export function TrainingVideo({ id, token }: { id: string; token: string | null 
     setUrl(''); setError(false)
     if (!requested) return
     const controller = new AbortController(); let blobUrl = ''
-    fetch('/api/training/library/videos/' + id, { headers: { Authorization: 'Bearer ' + token }, signal: controller.signal, cache: 'no-store' })
+    fetch('/api/training/library/videos/' + id, { headers: { 'X-Client-App': 'employee', Authorization: 'Bearer ' + token }, signal: controller.signal, cache: 'no-store' })
       .then(async response => { if (!response.ok) throw Error('Video unavailable'); return response.blob() })
       .then(blob => { if (!controller.signal.aborted) { blobUrl = URL.createObjectURL(blob); setUrl(blobUrl) } })
       .catch(e => { if (e.name !== 'AbortError') setError(true) })

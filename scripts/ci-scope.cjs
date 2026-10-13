@@ -45,6 +45,7 @@ function reverseDependencies(root,files,changed=[]){
 }
 function impactedFiles(files,reverse){const affected=new Set(files),queue=[...files];for(let i=0;i<queue.length;i++)for(const consumer of reverse.get(queue[i])||[])if(!affected.has(consumer)){affected.add(consumer);queue.push(consumer)}return affected;}
 const browserChecks={
+ staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
  finance:{scripts:['tests/stoploss/revenue-page-check.cjs'],components:['admin']},
  payroll:{scripts:['tests/stoploss/payroll-finance-page-check.cjs'],components:['admin']},

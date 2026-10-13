@@ -142,6 +142,11 @@ jobs:
           INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=sqlite node tests/stoploss/workflow-http-check.cjs
           INTENT_RUNTIME="$runtime" INTENT_DEPS="$RECEIPT_DEPS" INTENT_PROVIDER=postgresql node tests/stoploss/workflow-http-check.cjs
 
+      - name: Verify employee app endpoints through global authentication and concrete route guards
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          node tests/stoploss/staff-access-v2-http-check.cjs
+
       - name: Verify audited transaction and authorization regressions
         run: npx --prefix server jest --config server/jest.audit.config.cjs --runInBand
 

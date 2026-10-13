@@ -20,7 +20,7 @@ http.interceptors.response.use(response => response, error => {
 
 const getAuthHeader = () => {
   const token = useAuthStore.getState().token
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  return token ? { Authorization: `Bearer ${token}`, 'X-Client-App': 'employee' } : {}
 }
 
 async function loadShiftSettings() {
@@ -534,4 +534,5 @@ export const employeeApi = {
  permissions: async() => (await http.get(`${API_BASE}/staff-permissions/me`,{headers:getAuthHeader()})).data.data
 }
 
-export const staffPermissionClient={get:(path:string,config?:any)=>http.get(API_BASE+path,{...config,headers:getAuthHeader()}),post:(path:string,body:any,config?:any)=>http.post(API_BASE+path,body,{...config,headers:getAuthHeader()})}
+const approvalHeaders=()=>({...getAuthHeader(),'X-Client-App':'pos'})
+export const staffPermissionClient={get:(path:string,config?:any)=>http.get(API_BASE+path,{...config,headers:approvalHeaders()}),post:(path:string,body:any,config?:any)=>http.post(API_BASE+path,body,{...config,headers:approvalHeaders()})}
