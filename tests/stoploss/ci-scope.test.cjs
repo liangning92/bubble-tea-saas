@@ -83,3 +83,12 @@ test('reading server entrypoint text does not make every API edit affect unrelat
   const p=selectScope(['server/src/utils/imageOptimization.ts'],f);assert.deepEqual(p.auditTests,['server/audit-tests/image-import.test.ts'])
  }finally{f.close()}
 });
+
+test('additive TV models do not select unrelated sales/payroll checks, existing schema changes still do',()=>{
+ const f=fixture();try{
+  const git=(...args)=>execFileSync('git',args,{cwd:f.root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();git('init');git('config','user.email','test@example.invalid');git('config','user.name','Fixture');
+  f.write('server/prisma/schema.prisma','model Store {\n id String @id\n}\n');git('add','.');git('commit','-m','base');const base=git('rev-parse','HEAD');
+  f.write('server/src/services/TvSignageService.ts','export const tv=true');f.write('server/prisma/schema.prisma','model Store {\n id String @id\n}\n// Store-scoped TV signage.\nmodel TvScreen {\n id String @id\n config String @default("{}")\n}\n');git('add','.');git('commit','-m','TV');let p=planRange(base,git('rev-parse','HEAD'),f);assert.equal(p.tvSchemaOnly,true);assert.ok(p.domains.includes('tv'));assert.ok(!p.domains.includes('payroll'));assert.ok(!p.domains.includes('payment'));
+  f.write('server/prisma/schema.prisma','model Store {\n id String @id\n salary Int\n}\nmodel TvScreen {\n id String @id\n}\n');git('add','.');git('commit','-m','existing field');p=planRange(base,git('rev-parse','HEAD'),f);assert.equal(p.tvSchemaOnly,false);assert.ok(p.domains.includes('payroll'));
+ }finally{f.close()}
+});

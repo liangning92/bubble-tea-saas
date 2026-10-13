@@ -33,6 +33,7 @@ export default defineConfig({
   },
   preview: {
     proxy: {
+      '/tv': { target: 'http://localhost:7072', changeOrigin: true },
       '/api': {
         target: 'http://localhost:7072',
         changeOrigin: true

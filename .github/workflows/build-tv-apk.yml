@@ -1,110 +1,100 @@
-name: Build Android TV APK
-
+name: Build verified Android TV APK
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: '版本号 (例如: 1.0.0，留空则自动生成)'
-        required: false
-        default: ''
-  push:
-    paths:
-      - 'tv-android-app/**'
-      - '.github/workflows/build-tv-apk.yml'
-
+      reviewed_sha:
+        description: Exact source SHA
+        required: true
+      base_sha:
+        description: Verified comparison baseline
+        required: true
+      verification_run_id:
+        description: Successful ordinary CI run for this exact SHA
+        required: true
+      confirmed:
+        type: boolean
+        default: false
+      publish:
+        type: boolean
+        default: false
 permissions:
-  contents: write
-
+  contents: read
+  actions: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+  group: tv-apk-${{ github.sha }}
+  cancel-in-progress: false
 jobs:
-  build-apk:
-    name: Build Xiaomi TV APK
+  verify-build:
+    if: inputs.confirmed && inputs.reviewed_sha == github.sha
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      actions: read
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate exact baseline and source
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$BASE_SHA" "$SOURCE_SHA"
+      - name: Require completed ordinary CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+          VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+        run: node .github/scripts/check-tv-ci.cjs
+      - run: npm ci --prefix server
+      - run: npm ci
+      - run: npm run db:generate
+      - run: node tests/stoploss/tv-signage-integration.cjs
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/stoploss/tv-signage-page-check.cjs
+      - run: node tests/stoploss/tv-signage-admin-page-check.cjs
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+          distribution: temurin
+      - uses: android-actions/setup-android@v3
         with:
           packages: 'platforms;android-34 build-tools;34.0.0'
-
-      - name: Set Version
-        id: set_version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION="$(date +'%Y.%m.%d').${GITHUB_RUN_NUMBER}"
-          fi
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Building YOUME TV APK version: ${VERSION}"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Build APK with Gradle
-        run: |
-          cd tv-android-app
-          # 如果没有 gradlew 包装器，自动初始化 gradle wrapper 并编译
-          if [ ! -f "./gradlew" ]; then
-            gradle wrapper
-            chmod +x ./gradlew
-          fi
-          ./gradlew assembleRelease --stacktrace
-
-      - name: Locate Output APK
-        id: locate_apk
-        run: |
-          APK_FILE=$(find tv-android-app/app/build/outputs/apk -name "*.apk" | head -n 1)
-          if [ -z "$APK_FILE" ]; then
-            echo "❌ 未找到构建成功的 APK 文件！"
-            exit 1
-          fi
-          echo "找到 APK: $APK_FILE"
-          cp "$APK_FILE" ./YOUME_TV_Signage.apk
-          echo "APK_PATH=./YOUME_TV_Signage.apk" >> $GITHUB_ENV
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: YOUME-TV-Signage-APK
-          path: ./YOUME_TV_Signage.apk
-          retention-days: 14
-
-      - name: Publish to GitHub Release
+      - uses: gradle/actions/wrapper-validation@v3
+      - name: Build with persistent production signing
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TV_KEYSTORE_BASE64: ${{ secrets.TV_KEYSTORE_BASE64 }}
+          TV_KEYSTORE_PASSWORD: ${{ secrets.TV_KEYSTORE_PASSWORD }}
+          TV_KEY_ALIAS: ${{ secrets.TV_KEY_ALIAS }}
+          TV_KEY_PASSWORD: ${{ secrets.TV_KEY_PASSWORD }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
-          TAG_NAME="tv-v${{ env.VERSION }}"
-          echo "发布 Release: $TAG_NAME"
-
-          # 检查 Release 是否已存在
-          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG_NAME 已存在，覆盖更新 APK..."
-          else
-            gh release create "$TAG_NAME" \
-              --title "YOUME TV 大屏客户端 v${{ env.VERSION }}" \
-              --notes "📺 **小米电视 / Android TV 商业大屏客户端**
-- 100% 沉浸全屏，无边框、无顶部输入栏
-- 开机通电自启、硬件常亮不休眠
-- 离线持久化缓存，断网持续播放
-- 6位 PIN 码免遥控器打字配对
-- 遥控器 Menu 键支持自定义切换 SaaS 云端或私有服务器" \
-              --repo "$GITHUB_REPOSITORY"
-          fi
-
-          gh release upload "$TAG_NAME" "./YOUME_TV_Signage.apk" --repo "$GITHUB_REPOSITORY" --clobber
-          echo "✅ 成功上传 YOUME_TV_Signage.apk 至 GitHub Releases ($TAG_NAME)"
+          test -n "$TV_KEYSTORE_BASE64"
+          export TV_KEYSTORE_FILE="$RUNNER_TEMP/tv-release.jks"
+          printf '%s' "$TV_KEYSTORE_BASE64" | base64 --decode > "$TV_KEYSTORE_FILE"
+          chmod 600 "$TV_KEYSTORE_FILE"
+          export TV_VERSION_CODE="$GITHUB_RUN_NUMBER"
+          export TV_VERSION_NAME="2.0.$GITHUB_RUN_NUMBER"
+          bash tv-android-app/build-apk.sh
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose tv-android-app/app/build/outputs/apk/release/app-release.apk
+          mkdir verified-tv
+          cp tv-android-app/app/build/outputs/apk/release/app-release.apk verified-tv/Store-TV.apk
+          sha256sum verified-tv/Store-TV.apk > verified-tv/SHA256SUMS
+          printf '{"sourceSha":"%s","versionCode":%s,"versionName":"%s"}\n' "$SOURCE_SHA" "$TV_VERSION_CODE" "$TV_VERSION_NAME" > verified-tv/manifest.json
+          rm "$TV_KEYSTORE_FILE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tv-verified-${{ github.sha }}
+          path: verified-tv/
+      - name: Publish these verified bytes
+        if: inputs.publish && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          TAG="tv-v2.0.$GITHUB_RUN_NUMBER"
+          gh release create "$TAG" verified-tv/Store-TV.apk verified-tv/SHA256SUMS verified-tv/manifest.json --target "$SOURCE_SHA" --title "Store TV 2.0.$GITHUB_RUN_NUMBER" --notes "Store-scoped pairing, product and activity display, verified offline media. Source: $SOURCE_SHA"

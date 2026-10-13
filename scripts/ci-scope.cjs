@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ tv:{paths:/(?:tv-android-app|server\/public\/tv|TvSignage|tvSchema|\/routes\/tv\.|\/pages\/tv\/|tv-signage|sync-tv-player)/i,tests:/tv-signage/i},
  media:{paths:/(?:ProductImageEditor|MediaLibrary|\/services\/media\.|\/routes\/media\.|MediaService|mediaFiles|imageOptimization|image-optimization|ProductInsights|productInsights|ProductAnalysisPage|\/media-insights\/|test-media-insights)/i,tests:/media|product-insights/i},
  products:{paths:/(?:\/pages\/products\/|\/routes\/product(?:Price)?\.|Product(?:Management)?Service|\/productStore\.|\/publicProduct\.|\/routes\/bom\.|BomService)/i,tests:/product|channel-bootstrap/i},
  orders:{paths:/(?:\/pages\/orders\/|\/routes\/order\.|OrderService|orderRequest|orderReceipt|orderExport|orderStatus|posCartState|cartAudit|\/cartStore\.)/i,tests:/order|cart-audit|pos-cart|cleared-cart/i},
@@ -56,6 +57,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs'],components:['admin']},
  inventory:{scripts:['tests/stoploss/inventory-count-workspace-page-check.cjs'],components:['admin']},
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
@@ -71,19 +73,20 @@ const browserChecks={
  training:{scripts:['tests/stoploss/training-management-page-check.cjs'],components:['admin','staff']},
 };
 const httpChecks={
+ tv:['tests/stoploss/tv-signage-integration.cjs'],
  orders:['tests/stoploss/order-receipt-http-check.cjs'],
  shifts:['tests/stoploss/shift-review-http-check.cjs','tests/stoploss/shift-correction-http-check.cjs','tests/stoploss/expense-save-http-check.cjs'],
  access:['tests/stoploss/staff-access-v2-http-check.cjs','tests/stoploss/employee-workspace-http-check.cjs'],
 };
-function selectScope(files,{root=process.cwd(),full=false}={}){
+function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}){
  const all=sources(root),reverse=reverseDependencies(root,all,files),affected=impactedFiles(files,reverse);
- const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(name==='ci'||!domains.ci.paths.test(file)))).map(([name])=>name);
+ const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&domains.tv.paths.test(file)))).map(([name])=>name);
  const services=new Set(),typecheck=new Set(),i18n=new Set();
  for(const file of affected){const client=file.match(/^client-(admin|pos|staff)\//);if(client){typecheck.add(client[1]);if(files.includes(file))services.add(client[1])}if(/^server\/(?:src|prisma|package|tsconfig|Dockerfile)/.test(file)){typecheck.add('api');if(files.includes(file))services.add('api')}}
  // Shared code affects the clients that import it; standalone shared assets affect all clients.
  if(files.some(file=>file.startsWith('shared/'))){for(const component of typecheck)services.add(component);if(!services.size)for(const service of ['admin','pos','staff']){services.add(service);typecheck.add(service)}}
  if(files.some(file=>/^(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json)$/.test(file))){for(const service of SERVICES){services.add(service);typecheck.add(service)}for(const name of Object.keys(domains).filter(name=>!['ci','i18n'].includes(name)))if(!selectedDomains.includes(name))selectedDomains.push(name)}
- if(files.some(file=>file.startsWith('server/prisma/')||/^server\/src\/(?:index|config\/database)\./.test(file))){services.add('api');typecheck.add('api');for(const name of ['orders','payment','refunds','shifts','payroll','staff','access','inventory','marketing','media'])if(!selectedDomains.includes(name))selectedDomains.push(name)}
+ if(files.some(file=>file.startsWith('server/prisma/')||/^server\/src\/(?:index|config\/database)\./.test(file))){services.add('api');typecheck.add('api');for(const name of (tvSchemaOnly?['access','marketing','media','tv']:['orders','payment','refunds','shifts','payroll','staff','access','inventory','marketing','media']))if(!selectedDomains.includes(name))selectedDomains.push(name)}
  for(const service of typecheck)if(service!=='api')i18n.add(service);
  const unitTests=all.filter(file=>/^tests\/stoploss\/.*\.test\.cjs$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
  const auditTests=all.filter(file=>/^server\/audit-tests\/.*\.test\.ts$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
@@ -108,7 +111,10 @@ function planRange(base,head,{root=process.cwd(),full=false}={}){
  if(base===head&&!full)throw Error('BASE_SHA must precede HEAD_SHA for scoped checks');
  git('merge-base','--is-ancestor',base,head);
  const files=git('diff','--no-renames','--name-only','-z',base,head).split('\0').filter(Boolean);
- return {...selectScope(files,{root,full}),baseSha:base,headSha:head};
+ const stripTvModels=text=>text.replace(/\/\/ Store-scoped TV signage[^\n]*\n/g,'').replace(/^model Tv(?:Screen|Device|PairSession) \{[\s\S]*?^\}\s*/gm,'').trimEnd();
+ const schemaFiles=files.filter(file=>/^server\/prisma\/schema(?:\.sqlite)?\.prisma$/.test(file));
+ const tvSchemaOnly=files.includes('server/src/services/TvSignageService.ts')&&schemaFiles.length>0&&schemaFiles.every(file=>{const previous=git('show',`${base}:${file}`),current=git('show',`${head}:${file}`);return !/^model Tv(?:Screen|Device|PairSession) /m.test(previous)&&stripTvModels(previous)===stripTvModels(current)});
+ return {...selectScope(files,{root,full,tvSchemaOnly}),tvSchemaOnly,baseSha:base,headSha:head};
 }
 function imageMatrix(components){return {include:components.map(service=>({service,context:service==='api'?'server':'.',dockerfile:service==='api'?'server/Dockerfile':`client-${service}/Dockerfile`}))};}
 module.exports={selectScope,planRange,imageMatrix,SERVICES};

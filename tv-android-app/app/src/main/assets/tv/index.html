@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TV</title>
+    <link rel="stylesheet" href="./player.css" />
+  </head>
+  <body>
+    <section id="pair">
+      <h1 id="pair-title"></h1>
+      <p id="pair-help"></p>
+      <strong id="pin">··· ···</strong>
+      <p id="status" role="status"></p>
+      <button id="settings"></button>
+    </section>
+    <main id="display" hidden>
+      <header>
+        <img id="store-logo" alt="" hidden />
+        <div>
+          <h1 id="brand"></h1>
+          <span id="channel"></span>
+        </div>
+        <span id="network"></span><time id="clock"></time>
+      </header>
+      <div id="content">
+        <section id="media"></section>
+        <section id="products"></section>
+      </div>
+      <aside id="promotions"></aside>
+      <footer><span id="ticker"></span></footer>
+    </main>
+    <dialog id="setup">
+      <form method="dialog">
+        <h2 id="setup-title"></h2>
+        <label id="server-label" for="server"></label
+        ><input id="server" type="url" autocomplete="off" /><label
+          ><input id="allow-http" type="checkbox" /><span
+            id="http-label"
+          ></span></label
+        ><button id="test" type="button"></button
+        ><button id="save" type="button"></button
+        ><button id="unpair" type="button"></button><button id="close"></button>
+        <p id="test-result" role="status"></p>
+      </form>
+    </dialog>
+    <div id="lottery" hidden>
+      <h2 id="lottery-order"></h2>
+      <strong id="lottery-prize"></strong>
+    </div>
+    <script src="./build.js" defer></script>
+    <script src="./player.js" defer></script>
+  </body>
+</html>

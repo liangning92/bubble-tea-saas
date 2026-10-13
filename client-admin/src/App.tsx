@@ -373,7 +373,7 @@ function App() {
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<SettingsPage />} />
-        <Route path="settings/tv-screen" element={<SettingsPage />} />
+        <Route path="settings/tv-screen" element={<Navigate to="/tv-screens" replace />} />
         <Route path="settings/ai" element={<SettingsPage />} />
         <Route path="approvals" element={<StaffApprovalPage />} />
         <Route path="settings/permissions" element={<SettingsPage />} />

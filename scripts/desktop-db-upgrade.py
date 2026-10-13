@@ -34,7 +34,7 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('PurchaseOrder','createdBy','TEXT'), ('PurchaseOrder','receivedBy','TEXT'),
     ('PurchaseOrderItem','inputQuantity','REAL'), ('PurchaseOrderItem','inputUnit','TEXT'),
     ('PurchaseOrderItem','inputUnitCost','INTEGER'), ('PurchaseOrderItem','packageSnapshot','TEXT')]
-NEW_TABLES = ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference','OrderConsumptionSnapshot','ConsumptionAlert')
+NEW_TABLES = ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference','OrderConsumptionSnapshot','ConsumptionAlert','TvScreen','TvDevice','TvPairSession')
 INVENTORY_INDEXES = ('StockInLog_operationId_key','StockOutLog_operationId_key','PurchaseOrder_requestId_key')
 CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes', 'Order_pickupNumber_idx nonunique index']
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}

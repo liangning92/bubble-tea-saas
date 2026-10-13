@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${IMAGE_OWNER,,}/bubble-tea-${SERVICE}:sha-${SOURCE_SHA}"
-          docker build -f "$DOCKERFILE" --label "org.opencontainers.image.revision=${SOURCE_SHA}" "$BUILD_CONTEXT" -t "$IMAGE"
+          docker build -f "$DOCKERFILE" --build-arg "SOURCE_SHA=${SOURCE_SHA}" --label "org.opencontainers.image.revision=${SOURCE_SHA}" "$BUILD_CONTEXT" -t "$IMAGE"
           test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
           mkdir -p verified-image
           docker save "$IMAGE" -o verified-image/image.tar

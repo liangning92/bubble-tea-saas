@@ -1,3 +1,4 @@
+import {upgradeTvSchema} from './utils/tvSchemaUpgrade'
 import { mediaRouter } from './routes/media'
 import {upgradeStaffAccessSqlite} from './utils/staffAccessSqliteUpgrade'
 import { declareAccessRoutes } from './middlewares/staffAccessV2'
@@ -93,7 +94,6 @@ import syncRouter from './routes/sync'
 import { tvRouter } from './routes/tv'
 import { startHygieneScheduler } from './services/SchedulerService'
 import { startMarketingScheduler } from './services/MarketingSchedulerService'
-import { startTvDiscoveryService } from './services/tvDiscovery'
 import { errorHandler } from './middlewares/errorHandler'
 import { notFoundHandler } from './middlewares/notFound'
 import { socketManager } from './socket'
@@ -178,7 +178,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-TV-Display-Token', 'X-Client-App']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-TV-Display-Token', 'X-Client-App', 'X-TV-Device-Token', 'X-TV-Pair-Secret']
 }))
 app.use(morgan('dev', {
   skip: (_req, res) => process.env.LOCAL_POS_EMBEDDED === '1' && res.statusCode < 400
@@ -199,7 +199,7 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(uploadsPath))
 // Serve TV display client
 const tvPublicPath = path.join(__dirname, '../public/tv')
-app.use('/tv', express.static(tvPublicPath))
+app.use('/tv', (_req,res,next)=>{res.setHeader('Cache-Control','no-cache');res.setHeader('Service-Worker-Allowed','/tv/');next()}, express.static(tvPublicPath))
 
 // Readiness checks verify dependencies used by the running service.
 app.get(['/health','/api/health'], async (_req,res)=>{
@@ -235,10 +235,9 @@ app.use('/api', (req, res, next) => {
   if (
     publicPaths.has(apiPath) ||
     isDisplayPublicRoute(req.method, apiPath) ||
-    apiPath.startsWith('/tv/display') ||
-    apiPath.startsWith('/tv/pair/request') ||
-    apiPath.startsWith('/tv/pair/check') ||
-    apiPath.startsWith('/tv/screens')
+    (req.method === 'POST' && apiPath === '/tv/pair/request') ||
+    (req.method === 'GET' && /^\/tv\/pair\/check\/[a-f0-9-]+$/.test(apiPath)) ||
+    /^\/tv\/device(?:\/|$)/.test(apiPath)
   ) return next()
   return authenticateBeforeRouting(req as AuthRequest, res, next)
 })
@@ -319,7 +318,7 @@ app.use(errorHandler)
 
 // Start Server with Socket.IO
 if (process.env.NODE_ENV !== 'test') {
-  upgradeLocalSqlite(prisma, config.databaseUrl).then(() => upgradeStaffAccessSqlite(prisma, config.databaseUrl)).then(() => upgradeInventoryFlow(prisma,config.databaseUrl)).then(() => {
+  upgradeLocalSqlite(prisma, config.databaseUrl).then(() => upgradeStaffAccessSqlite(prisma, config.databaseUrl)).then(() => upgradeInventoryFlow(prisma,config.databaseUrl)).then(() => upgradeTvSchema(prisma,config.databaseUrl)).then(() => {
   console.log('[Server] About to listen on port', config.port)
   httpServer.listen(config.port, '0.0.0.0', () => {
   startRecurringExpenseScheduler()
@@ -359,14 +358,7 @@ if (process.env.NODE_ENV !== 'test') {
   startActivityWorker()
   console.log('[Server] Marketing scheduler started')
 
-  // 启动电视大屏局域网零配置自动发现服务
-  console.log('[Server] Starting TV auto-discovery service...')
-  try {
-    startTvDiscoveryService()
-    console.log('[Server] TV auto-discovery service started')
-  } catch (err: any) {
-    console.warn('[Server] TV auto-discovery service failed to start:', err?.message)
-  }
+
   })
   }).catch(async error => {
     console.error('[Schema] Startup blocked; database upgrade failed:', error.message)

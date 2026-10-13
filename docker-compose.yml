@@ -36,6 +36,9 @@ services:
     container_name: bubble-tea-api
     ports:
       - "3000:3000"
+    volumes:
+      - tv_uploads:/app/uploads
+      - tv_legacy_data:/app/data
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/bubble_tea
       REDIS_URL: redis://redis:6379
@@ -86,6 +89,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  tv_uploads:
+  tv_legacy_data:
   postgres_data:
   redis_data:
 
