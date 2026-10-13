@@ -11,31 +11,52 @@ on:
         description: 'User has confirmed this exact SHA and component'
         type: boolean
         default: false
+      base_sha:
+        description: 'Full SHA of the confirmed comparison/release baseline (required for scoped checks)'
+        type: string
+        required: false
+      full_regression:
+        description: 'Explicitly run the entire historical regression suite'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  scope:
     if: inputs.confirmed == true && inputs.reviewed_sha == github.sha
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      has_images: ${{ steps.select.outputs.has_images }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: select
+        name: Select only affected image services
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          FULL_REGRESSION: ${{ inputs.full_regression }}
+        run: node scripts/ci-scope.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-scope-${{ github.sha }}
+          path: ci-scope.json
+          retention-days: 3
+  verify:
+    needs: scope
+    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha && needs.scope.outputs.has_images == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - service: api
-            context: server
-            dockerfile: server/Dockerfile
-          - service: admin
-            context: .
-            dockerfile: client-admin/Dockerfile
-          - service: pos
-            context: .
-            dockerfile: client-pos/Dockerfile
-          - service: staff
-            context: .
-            dockerfile: client-staff/Dockerfile
+      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

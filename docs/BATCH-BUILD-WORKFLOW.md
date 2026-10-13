@@ -10,7 +10,7 @@
 
 ## GitHub 配置
 
-ci.yml、build-windows.yml、docker-publish.yml 移除 push/pull_request 触发，仅保留 workflow_dispatch；要求 reviewed_sha 和 confirmed。作业仅在 confirmed=true 且 reviewed_sha=github.sha 时执行。现有构建检查步骤与发布门禁保留。
+ci.yml、build-windows.yml、docker-publish.yml 移除 push/pull_request 触发，仅保留 workflow_dispatch；要求 reviewed_sha 和 confirmed。作业仅在 confirmed=true 且 reviewed_sha=github.sha 时执行。精确源码、人工确认及发布产物门禁保留。默认检查范围按差异选择；历史全量检查保留为明确选择的入口。
 
 这些配置提交到 GitHub 后才生效；启用之前普通推送仍可能触发旧工作流。不得用“提交代码但不构建”的授权触发旧的自动构建。首次安装规则可以在提交消息中使用 GitHub 支持的 [skip ci] 跳过 push/pull_request；需检查当前仓库其他触发器，若分支保护要求旧自动 CI，应相应调整 required checks，不能声称已通过。
 
@@ -32,3 +32,21 @@ ci.yml、build-windows.yml、docker-publish.yml 移除 push/pull_request 触发�
 
 GitHub 手动构建：https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow
 项目指令：https://learn.chatgpt.com/docs/agent-configuration/agents-md
+
+## 默认按改动范围检查
+
+- `ci.yml` 和 `docker-publish.yml` 的 `base_sha` 是本次清单已确认的完整发布/比较基准；`reviewed_sha` 是完整目标 SHA。基准必须是目标的祖先。日常手动运行默认 `full_regression=false`；缺少基准直接失败，不回退整套检查。比较覆盖基准之后的全部提交，并包含改名与删除的两侧路径。
+- `scripts/ci-scope.cjs` 生成类型检查、翻译检查、相关单元/audit 测试、接口及页面检查的实际列表。共享模块会追踪真实导入它的消费者；根依赖或数据库结构等公共基础变化会扩大到实际受影响范围。没有已匹配回归的代码仍执行对应组件类型检查，并在 `unmappedCode` 中报告覆盖待补充项，不用无关历史回归填充。
+- 产品图片和产品分析修改：API/后台类型检查、后台翻译、媒体/分析及产品相关测试、对应后台页面检查；不执行收银、支付、打印或 Windows 历史升级回归。
+- 后台/API 修改不构建 Windows POS。Docker 根据变化只选择 `api`、`admin`、`pos`、`staff` 中受影响的镜像；相关浏览器测试可能额外构建其确实需要的客户端，但不把这些客户端自动加入发布范围。
+- `release-docker.yml` 默认 `services=auto`，只发布所选验证运行实际提供的镜像；也可明确选择逗号分隔的子集。缺少、过期或空产物以及重复/未知服务会拒绝发布，不要求无关服务有镜像。
+- Windows 构建必须传入此前已确认 Windows 源码的 `base_sha`，用于选取正常检查、安装升级检查和小票检查；不再因为手动事件没有 `github.event.before` 而自动扩大为安装器检查。`full_legacy_regression=true` 仍须用户明确选择。
+- 只有用户明确要求全量检查时，才设置 `full_regression=true` 执行历史全套 CI，或构建全部云端镜像。不能为了通过门禁把无关测试作为小修改的发布前置。
+
+先在目标提交的干净 checkout 预览范围（只读，不构建）：
+
+```sh
+BASE_SHA=<完整已确认基准SHA> HEAD_SHA=<完整目标SHA> node scripts/ci-scope.cjs
+```
+
+确认清单后，手动 CI 和 Docker 均传入同一组 `base_sha`、`reviewed_sha` 和 `confirmed=true`。CI 保存 `ci-scope-<目标SHA>`，Docker 保存 `docker-scope-<目标SHA>`，便于核对实际执行范围。发布仍须使用同一目标 SHA 的成功验证运行。

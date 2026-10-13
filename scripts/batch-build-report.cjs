@@ -1,5 +1,6 @@
 // Read-only inventory. Human approval and remote/other-task checks stay with the agent.
 const { execFileSync } = require('node:child_process');
+const { selectScope } = require('./ci-scope.cjs');
 function git(...args) {
   return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trimEnd();
 }
@@ -24,6 +25,8 @@ function report(base, target) {
     baseSha: base, targetSha: target, commits, files,
     components: [...new Set(files.map(file => file.split('/')[0]))].sort(),
     diffCheck,
+    suggestedCiScope: selectScope(files),
+    scopePreviewMatchesTargetCheckout: git('rev-parse', 'HEAD') === target && git('status', '--short') === '',
     currentWorktree: { headSha: git('rev-parse', 'HEAD'), status: git('status', '--short') },
     pendingRemoteAndOtherTaskChecks: ['Unmerged PRs', 'Unpushed commits', 'Other worktrees or clones', 'Component-specific checks'],
     approved: false,

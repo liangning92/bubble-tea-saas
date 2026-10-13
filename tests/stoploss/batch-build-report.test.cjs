@@ -46,6 +46,7 @@ test('all ordinary builds require manual exact-source confirmation', () => {
     assert.deepEqual([...triggers.matchAll(/^  (\w+):/gm)].map(match => match[1]), ['workflow_dispatch']);
     assert.match(triggers, /      reviewed_sha:\n(?:        .*\n)*        required: true/);
     assert.match(triggers, /      confirmed:\n(?:        .*\n)*        type: boolean\n        default: false/);
-    assert.ok(workflow.includes(`  ${job}:\n    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha\n`));
+    const declaration = workflow.split(`  ${job}:\n`)[1].split('    runs-on:')[0];
+    assert.match(declaration, /if: inputs.confirmed == true && inputs.reviewed_sha == github.sha(?: && needs.scope.outputs.has_images == 'true')?\n/);
   }
 });

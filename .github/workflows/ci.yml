@@ -11,10 +11,79 @@ on:
         description: 'User has confirmed this exact SHA and component'
         type: boolean
         default: false
+      base_sha:
+        description: 'Full SHA of the confirmed comparison/release baseline (required for scoped checks)'
+        type: string
+        required: false
+      full_regression:
+        description: 'Explicitly run the entire historical regression suite'
+        type: boolean
+        default: false
 
 jobs:
   verify:
     if: inputs.confirmed == true && inputs.reviewed_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Select checks from the confirmed baseline to the exact source
+        id: scope
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          FULL_REGRESSION: ${{ inputs.full_regression }}
+        run: node scripts/ci-scope.cjs
+      - name: Install only selected dependency sets
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.dependencies == 'true'
+        run: npm ci
+      - name: Install API test dependencies and generate client
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.server == 'true'
+        run: |
+          npm ci --prefix server
+          npm run db:generate
+      - name: Type-check affected components
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.dependencies == 'true'
+        run: node scripts/run-scoped-ci.cjs types
+      - name: Check affected translations
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.dependencies == 'true'
+        run: node scripts/run-scoped-ci.cjs i18n
+      - name: Run related unit and audit regressions
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.dependencies == 'true'
+        run: node scripts/run-scoped-ci.cjs unit
+      - name: Run related media and product-analysis regressions
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.server == 'true'
+        run: node scripts/run-scoped-ci.cjs media
+      - name: Run related HTTP regressions with disposable databases
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.server == 'true'
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          node scripts/run-scoped-ci.cjs http
+      - name: Build only clients needed by selected browser checks
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.browser == 'true'
+        run: node scripts/run-scoped-ci.cjs build
+      - name: Install Chromium only for selected browser checks
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.browser == 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Run related browser regressions
+        if: steps.scope.outputs.full != 'true' && steps.scope.outputs.browser == 'true'
+        run: node scripts/run-scoped-ci.cjs browser
+      - name: Save the actual selected check scope
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-scope-${{ github.sha }}
+          path: ci-scope.json
+          retention-days: 14
+
+  verify_full:
+    needs: verify
+    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha && inputs.full_regression == true
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

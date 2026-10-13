@@ -8,7 +8,8 @@ function fixture(component='docker') {
   const artifacts=component==='docker'?['api','admin','pos','staff'].map(s=>`docker-verified-${sha}-${s}`):['BTPS-build-dist','BTPS-validation-evidence'];
   const data={
     [`compare/${sha}...master`]:{status:'ahead',base_commit:{sha}},
-    [`actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=100`]:{workflow_runs:[{head_sha:sha,status:'completed',conclusion:'success'}]},
+    [`actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=100`]:{workflow_runs:[{id:111,head_sha:sha,status:'completed',conclusion:'success'}]},
+    'actions/runs/111/jobs?per_page=100':{jobs:[{name:'verify',status:'completed',conclusion:'success'}]},
     'actions/runs/123':{head_sha:sha,path:`.github/workflows/${component==='docker'?'docker-publish':'build-windows'}.yml`,status:'completed',conclusion:'success',event:'workflow_dispatch'},
     'actions/runs/123/artifacts?per_page=100':{artifacts:artifacts.map(name=>({name,expired:false,size_in_bytes:1}))},
   };
@@ -50,4 +51,28 @@ test('automatic build paths contain no release or registry publication',()=>{
  assert.doesNotMatch(cloud,/docker build|docker push -a|:latest/);
  assert.match(cloud,/docker load/);
  assert.match(cloud,/imageTarSha256/);
+});
+
+test('Docker auto publication follows the selected run rather than requiring four services',async()=>{
+ const f=fixture();f.context.services='auto';
+ f.data['actions/runs/123/artifacts?per_page=100'].artifacts=f.data['actions/runs/123/artifacts?per_page=100'].artifacts.slice(0,2);
+ assert.deepEqual((await checkReleaseSource(f.context,f.get)).services,['api','admin']);
+});
+test('explicit Docker subset publishes only requested verified services',async()=>{
+ const f=fixture();f.context.services='admin';
+ assert.deepEqual((await checkReleaseSource(f.context,f.get)).services,['admin']);
+});
+for(const services of ['api,unknown','api,api','','pos'])test('scoped Docker publication rejects unavailable or invalid selection '+services,async()=>{
+ const f=fixture();f.context.services=services;
+ f.data['actions/runs/123/artifacts?per_page=100'].artifacts=f.data['actions/runs/123/artifacts?per_page=100'].artifacts.slice(0,2);
+ await assert.rejects(checkReleaseSource(f.context,f.get));
+});
+test('auto selection does not silently omit expired images from a selected run',async()=>{
+ const f=fixture();f.context.services='auto';f.data['actions/runs/123/artifacts?per_page=100'].artifacts[0].expired=true;
+ await assert.rejects(checkReleaseSource(f.context,f.get),/Missing verified artifact/);
+});
+
+test('a successful workflow whose confirmation gate skipped all checks cannot authorize publication',async()=>{
+ const f=fixture();f.data['actions/runs/111/jobs?per_page=100'].jobs[0].conclusion='skipped';
+ await assert.rejects(checkReleaseSource(f.context,f.get),/not executed and passed/);
 });
