@@ -321,7 +321,7 @@ export function DashboardPage() {
               {t('dashboard.lowStockAlert')}
             </h2>
             <button
-              onClick={() => navigate(dashboardLink('/inventory/alerts',{...currentContext,forecastDays:'7'}))}
+              onClick={() => navigate(dashboardLink('/inventory/forecast',{...currentContext,forecastDays:'7'}))}
               className="text-sm text-primary hover:text-primary-hover font-medium"
             >
               {t('dashboardNavigation.forecastAlerts')} →
