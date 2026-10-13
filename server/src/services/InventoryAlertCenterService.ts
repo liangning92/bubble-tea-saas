@@ -1,3 +1,4 @@
+import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { inventoryForecast } from './InventoryForecastService';
 import { getInventoryAlertConfig } from './InventoryAlertConfigService';
@@ -26,6 +27,7 @@ type Candidate = Pick<InventoryAlertEvent, 'type' | 'resourceId' | 'severity' | 
 const keyFor = (type: string, resource: string) => 'inventoryAlert:' + createHash('sha256').update(type + ':' + resource).digest('hex');
 const rank = { info: 0, warning: 1, critical: 2 };
 export async function calculateInventoryAlerts(storeId: string, now = new Date()): Promise<Candidate[]> {
+    const {startOfDay,addDays,endOfDay,formatDate}=await inventoryBusinessCalendar(storeId);
     const settings = await getInventoryAlertConfig(storeId), forecasts = await inventoryForecast(storeId, 30, now);
     const inventory = await prisma.inventory.findMany({ where: { storeId }, include: { batches: { where: { status: 'active', quantity: { gt: 0 } } } } });
     const orders = await prisma.purchaseOrder.findMany({ where: { storeId, status: { in: ['pending', 'approved', 'awaiting_receipt'] } }, include: { items: true } });
@@ -173,6 +175,7 @@ export async function checkInventoryAlertCenters(now = new Date()) {
         await checkClosedConsumptionDays(now);
         for (const store of await prisma.store.findMany({ select: { id: true } })) {
             try {
+                const {formatDate}=await inventoryBusinessCalendar(store.id);
                 const settings = await getInventoryAlertConfig(store.id), previous = await prisma.config.findUnique({ where: { storeId_key: { storeId: store.id, key: 'inventory_alert_center_checked_at' } } }), last = previous ? new Date(previous.value) : null;
                 if (!last || !Number.isFinite(last.getTime()) || formatDate(last) !== formatDate(now) || now.getTime() - last.getTime() >= settings.autoCheckIntervalHours * 3600000)
                     await refreshInventoryAlerts(store.id, now);

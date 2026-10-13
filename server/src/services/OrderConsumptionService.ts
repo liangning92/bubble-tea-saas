@@ -1,3 +1,4 @@
+import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { convertQuantity } from '../utils/inventoryUnits';
 import { formatDate } from '../utils/dateUtils';
@@ -78,6 +79,7 @@ export async function recordOrderConsumption(tx: any, storeId: string, orderId: 
         } });
 }
 export async function markConsumptionDayDirty(tx: any, storeId: string, at: Date) {
+    const {formatDate}=await inventoryBusinessCalendar(storeId,tx);
     const key = 'employee_consumption_dirty:' + formatDate(at), value = randomUUID();
     await tx.config.upsert({ where: { storeId_key: { storeId, key } }, create: { storeId, key, value, category: 'inventory' }, update: { value } });
 }

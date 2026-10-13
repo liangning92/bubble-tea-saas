@@ -1,3 +1,4 @@
+import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { getInventoryAlertConfig } from './InventoryAlertConfigService';
 import { FLOW_CUTOVER_KEY } from './OrderConsumptionService';
@@ -7,6 +8,7 @@ const DAY = 86400000;
 export async function inventoryForecast(storeId: string, days = 30, now = new Date(), db: any = prisma) {
     if (!Number.isInteger(days) || days < 1 || days > 365)
         throw Error('INVALID_FORECAST_DAYS');
+    const {startOfDay,addDays,dayCount}=await inventoryBusinessCalendar(storeId,db);
     const settings = await getInventoryAlertConfig(storeId), end = startOfDay(now), windowStart = addDays(end, -days);
     const config = await db.config.findUnique({ where: { storeId_key: { storeId, key: FLOW_CUTOVER_KEY } } });
     const cutover = config ? new Date(config.value) : null;
@@ -19,7 +21,7 @@ export async function inventoryForecast(storeId: string, days = 30, now = new Da
     return materials.map((mat: any) => {
         const history = first.find((row: any) => row.inventoryId === mat.id);
         const sampleStart = history ? new Date(Math.max(windowStart.getTime(), startOfDay(history._min.createdAt).getTime())) : null;
-        const historyDays = sampleStart ? Math.min(days, Math.max(1, Math.round((end.getTime() - sampleStart.getTime()) / DAY))) : 0;
+        const historyDays = sampleStart ? Math.min(days, Math.max(1, dayCount(sampleStart,end))) : 0;
         const entries = logs.filter((row: any) => row.inventoryId === mat.id);
         const totalUsage = Math.max(0, entries.reduce((sum: number, row: any) => sum + row.quantity, 0));
         const dailyUsage = historyDays > 0 ? totalUsage / historyDays : 0;

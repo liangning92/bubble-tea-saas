@@ -1,3 +1,6 @@
+import {QUERY_PERIODS,QueryPeriod} from '../../utils/queryPeriods'
+import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
+import {formatStoreDate,storeCalendarDate} from '../../utils/storeDateTime'
 import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -15,8 +18,8 @@ import {PageHelp} from '../../components/PageHelp'
 interface ChannelData { channel:string; revenue:number; orders:number; avgOrderValue:number }
 interface RevenueTotals { orderRevenue?:number;shopeefood?:number;gofood?:number; revenue:number; orders:number; avgOrderValue:number }
 interface Summary { current:RevenueTotals; previous:RevenueTotals; revenueChange:number; ordersChange:number; comparisonRange?:{startDate:string;endDate:string;adjusted:boolean} }
-type Period = 'today' | 'week' | 'month' | 'custom'
-const periods: Period[] = ['today','week','month','custom']
+type Period = QueryPeriod | 'custom'
+const periods: Period[] = [...QUERY_PERIODS,'custom']
 const CHANNEL_ICONS = {pos:ShoppingBag,gofood:Bike,grabfood:Bike,shopee:ShoppingBag,tokopedia:Store,dine_in:Utensils,takeaway:Store,cash:CreditCard}
 const CHANNEL_LABELS: Record<string,string> = {shopeefood_manual:'ShopeeFood',gofood_manual:'GoFood',pos:'POS',gofood:'GoFood',grabfood:'GrabFood',shopee:'ShopeeFood',tokopedia:'Tokopedia',dine_in:'Dine In',takeaway:'Takeaway',cash:'Cash'}
 const validDate = (value:string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value
@@ -34,6 +37,7 @@ function readSummary(value: unknown): Summary {
 
 export function RevenuePage() {
   const {t, i18n}=useTranslation()
+  const dateSettings=useStoreDateSettings()
   const user=useAuthStore(state=>state.user)
   const storeId=user?.storeId
   const canRead=user?.role==='admin'||user?.role==='manager'
@@ -55,7 +59,7 @@ export function RevenuePage() {
       const data=response.data?.data
       const configs=Array.isArray(data)?data:Array.isArray(data?.data)?data.data:[]
       const preference=configs.find((row:{key:string;value:string})=>row.key==='revenue.defaultPeriod')?.value || data?.['revenue.defaultPeriod']
-      if (active && version===manualSelection.current && ['today','week','month'].includes(preference)) setPeriod(preference)
+      if (active && version===manualSelection.current && QUERY_PERIODS.includes(preference)) setPeriod(preference)
     }).catch(()=>{})
     return ()=>{active=false}
   },[storeId,canRead,navigationPeriod])
@@ -74,35 +78,35 @@ export function RevenuePage() {
   // This immutable parameter snapshot is shared by the table and its summary.
   const params=period==='custom'?{storeId,period,startDate:customDateRange.start,endDate:customDateRange.end}:{storeId,period}
   const selected=useQuery({
-    queryKey:['revenue-selected',storeId,user?.role,params],
+    queryKey:['revenue-selected',storeId,user?.role,params,dateSettings],
     enabled:!!storeId && canRead && validSelection,
     queryFn:async()=>{
       const [channels,summary]=await Promise.all([revenueApi.byChannel(params),revenueApi.summary(params)])
       return {channels:readChannels(channels.data?.data),summary:readSummary(summary.data?.data)}
     },
   })
-  const handovers=useQuery({queryKey:['revenue-handovers',storeId,user?.role,params],enabled:!!storeId && canRead && validSelection,
+  const handovers=useQuery({queryKey:['revenue-handovers',storeId,user?.role,params,dateSettings],enabled:!!storeId && canRead && validSelection,
     queryFn:async()=>{const data=(await api.get('/revenue/handover-receipts',{params})).data?.data; if(!Array.isArray(data?.list)||!data?.totals) throw Error('INVALID_HANDOVER_RECEIPTS'); return data as {range:{startDate:string;endDate:string};actualCashReceived:number|null;totals:ManualReceiptAmounts;list:{id:string;shift:string;openedAt:string;closedAt:string;definition:{name:string;nameZh:string|null;nameId:string|null}|null;actualCashReceived:number|null;onlineRevenueCounted:boolean;manualReceipts:ManualReceiptAmounts|null;manualReceiptsCashBasis?:string}[]} }
   })
   const purchases=useQuery({
-    queryKey:['revenue-purchase-hours',storeId,user?.role,params],
+    queryKey:['revenue-purchase-hours',storeId,user?.role,params,dateSettings],
     enabled:!!storeId && canRead && validSelection,
     queryFn:async()=>readPurchaseHours((await revenueApi.purchaseHours(params)).data?.data),
   })
-  const label=period==='custom'?`${customDateRange.start} — ${customDateRange.end}`:t(`finance.${period==='today'?'today':period==='week'?'thisWeek':'thisMonth'}`)
+  const label=period==='custom'?`${formatStoreDate(customDateRange.start,dateSettings)} — ${formatStoreDate(customDateRange.end,dateSettings)}`:t('queryPeriods.'+period)
   const summary=selected.data?.summary
   const channels=selected.data?.channels||[]
   const change=(value:number)=>value===0?<span>-</span>:<span className={`inline-flex items-center gap-1 ${value>0?'text-green-600':'text-red-600'}`}>{value>0?<TrendingUp size={12}/>:<TrendingDown size={12}/>} {value>0?'+':''}{value}%</span>
 
   if (!storeId) return <DashboardReadFailure scope />
   if (!canRead) return <p role="alert" data-testid="revenue-role-denied">{t('revenueRange.permissionDenied')}</p>
-  const time=(value:string)=>new Date(value).toLocaleString(i18n.language,{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})
+  const time=(value:string)=>formatStoreDate(value,dateSettings,true)
   return <div className="space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <h1 className="text-2xl font-bold text-gray-900">{t('revenueLayout.title')}</h1>
       <div className="inline-flex gap-1 rounded-xl bg-gray-100 p-1" aria-label={t('revenueRange.selectedRange')}>
         {periods.map(value=><button key={value} type="button" aria-pressed={period===value} onClick={()=>void handlePeriodChange(value)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${period===value?'bg-primary text-white shadow-sm':'text-gray-600 hover:bg-white'}`}>
-          {value==='custom'&&<Calendar size={14} className="inline mr-1"/>}{t(value==='custom'?'common.custom':`finance.${value==='today'?'today':value==='week'?'thisWeek':'thisMonth'}`)}
+          {value==='custom'&&<Calendar size={14} className="inline mr-1"/>}{t(value==='custom'?'common.custom':'queryPeriods.'+value)}
         </button>)}
       </div>
     </header>
@@ -118,16 +122,16 @@ export function RevenuePage() {
           <div className="rounded-2xl bg-white border border-emerald-100 p-6 shadow-sm lg:col-span-2">
             <div className="flex items-center justify-between gap-4"><p className="text-sm font-medium text-gray-500">{label} · {t('revenueLayout.netRevenue')}</p><div className="rounded-xl bg-emerald-50 p-2.5"><DollarSign size={22} className="text-emerald-600"/></div></div>
             <p data-testid="revenue-primary-value" className={`mt-3 text-3xl sm:text-4xl xl:text-5xl font-bold tracking-tight tabular-nums break-words ${summary.current.revenue<0?'text-red-600':'text-gray-900'}`}>{formatCurrency(summary.current.revenue)}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs"><span className="font-semibold">{change(summary.revenueChange)}</span><span className="text-gray-500">{t('revenueLayout.vsPrevious')}</span><span className="ml-auto text-gray-400">WIB</span></div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs"><span className="font-semibold">{change(summary.revenueChange)}</span><span className="text-gray-500">{t('revenueLayout.vsPrevious')}</span><span className="ml-auto text-gray-400">{dateSettings.timezone}</span></div>
           </div>
           <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('common.orders')}</p><p data-testid="revenue-order-value" className="mt-5 text-3xl font-bold tabular-nums text-gray-900">{summary.current.orders.toLocaleString(i18n.language)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
           <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('finance.avgOrderValue')}</p><p data-testid="revenue-average-value" className="mt-5 text-xl xl:text-2xl font-bold tabular-nums break-words text-gray-900">{formatCurrency(summary.current.avgOrderValue)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
         </div>
-        {summary.comparisonRange?.adjusted&&<PageHelp><p data-testid="revenue-comparison-adjusted">{t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {time(summary.comparisonRange.startDate)} — {time(summary.comparisonRange.endDate)} (WIB)</p></PageHelp>}
+        {summary.comparisonRange?.adjusted&&<PageHelp><p data-testid="revenue-comparison-adjusted">{t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {time(summary.comparisonRange.startDate)} — {time(summary.comparisonRange.endDate)} ({dateSettings.timezone})</p></PageHelp>}
         {validSelection && <div className="space-y-3">{handovers.isPending ? <p role="status">{t('common.loading')}</p> : handovers.isError ? <p role="alert">{t('manualReceipts.failed')}</p> : handovers.data && <>
       <ManualReceipts hideCash actualCashReceived={handovers.data.actualCashReceived} hint={t('revenueHandover.hint')} amounts={handovers.data.list.some(row=>row.manualReceipts) ? handovers.data.totals : null} />
-      <p className="text-xs text-gray-500">{t('manualReceipts.closed')} · WIB · {label}</p>
-      {handovers.data.list.length === 0 ? <p className="text-sm text-gray-500">{t('manualReceipts.empty')}</p> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead><tr><th className="p-3 text-left">{t('manualReceipts.closed')}</th><th className="p-3 text-left">{t('manualReceipts.shift')}</th><th className="p-3 text-right">{t('revenueHandover.actualCash')}</th>{(['qris','shopeefood','gofood'] as const).map(key=><th key={key} className="p-3 text-right">{t('manualReceipts.'+key)}</th>)}</tr></thead><tbody>{handovers.data.list.map(row=><tr key={row.id} className="border-t"><td className="p-3 whitespace-nowrap">{time(row.closedAt)}</td><td className="p-3"><Link className="font-semibold text-primary hover:underline" to={`/finance/revenue/shifts/${encodeURIComponent(row.id)}?${new URLSearchParams({period:'custom',startDate:new Date(new Date(row.openedAt).getTime()+7*3600000).toISOString().slice(0,10),endDate:new Date(new Date(row.closedAt).getTime()+7*3600000).toISOString().slice(0,10),returnStartDate:handovers.data!.range.startDate,returnEndDate:handovers.data!.range.endDate})}`}>{(i18n.language.startsWith('zh') ? row.definition?.nameZh : i18n.language.startsWith('id') ? row.definition?.nameId : row.definition?.name) || t('shiftReview.'+row.shift,{defaultValue:row.shift})}</Link></td><td className="p-3 text-right whitespace-nowrap font-semibold text-emerald-700">{row.actualCashReceived === null ? t('manualReceipts.missing') : formatCurrency(row.actualCashReceived)}</td>{(['qris','shopeefood','gofood'] as const).map(key=><td key={key} className="p-3 text-right whitespace-nowrap">{key!=='qris' && !row.onlineRevenueCounted ? '—' : row.manualReceipts ? formatCurrency(row.manualReceipts[key]) : t('manualReceipts.missing')}</td>)}</tr>)}</tbody></table></div>}
+      <p className="text-xs text-gray-500">{t('manualReceipts.closed')} · {dateSettings.timezone} · {label}</p>
+      {handovers.data.list.length === 0 ? <p className="text-sm text-gray-500">{t('manualReceipts.empty')}</p> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead><tr><th className="p-3 text-left">{t('manualReceipts.closed')}</th><th className="p-3 text-left">{t('manualReceipts.shift')}</th><th className="p-3 text-right">{t('revenueHandover.actualCash')}</th>{(['qris','shopeefood','gofood'] as const).map(key=><th key={key} className="p-3 text-right">{t('manualReceipts.'+key)}</th>)}</tr></thead><tbody>{handovers.data.list.map(row=><tr key={row.id} className="border-t"><td className="p-3 whitespace-nowrap">{time(row.closedAt)}</td><td className="p-3"><Link className="font-semibold text-primary hover:underline" to={`/finance/revenue/shifts/${encodeURIComponent(row.id)}?${new URLSearchParams({period:'custom',startDate:storeCalendarDate(row.openedAt,dateSettings.timezone),endDate:storeCalendarDate(row.closedAt,dateSettings.timezone),returnStartDate:handovers.data!.range.startDate,returnEndDate:handovers.data!.range.endDate})}`}>{(i18n.language.startsWith('zh') ? row.definition?.nameZh : i18n.language.startsWith('id') ? row.definition?.nameId : row.definition?.name) || t('shiftReview.'+row.shift,{defaultValue:row.shift})}</Link></td><td className="p-3 text-right whitespace-nowrap font-semibold text-emerald-700">{row.actualCashReceived === null ? t('manualReceipts.missing') : formatCurrency(row.actualCashReceived)}</td>{(['qris','shopeefood','gofood'] as const).map(key=><td key={key} className="p-3 text-right whitespace-nowrap">{key!=='qris' && !row.onlineRevenueCounted ? '—' : row.manualReceipts ? formatCurrency(row.manualReceipts[key]) : t('manualReceipts.missing')}</td>)}</tr>)}</tbody></table></div>}
     </>}</div>}
     {purchases.isError ? <div data-testid="purchase-analysis-error"><DashboardReadFailure retry={()=>purchases.refetch()}/></div> : purchases.isPending ? <p role="status">{t('common.loading')}</p> : <PurchaseHoursAnalysis key={`${storeId}:${period}:${purchases.data.startDate}:${purchases.data.endDate}`} data={purchases.data}/>}
         {channels.length===0?<p className="card text-gray-500">{t('common.noData')}</p>:<>

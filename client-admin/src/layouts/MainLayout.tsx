@@ -1,5 +1,6 @@
 import {permissionForPage} from '../../../shared/StaffAccess'
 import {StaffApprovalDialog} from '../../../shared/StaffApprovalDialog'
+import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import { EmployeeAccessContext } from '../contexts/EmployeeAccess'
 import api from '../services/api'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
@@ -38,6 +39,7 @@ const navItems = [
 ]
 
 export function MainLayout() {
+  useStoreDateSettings()
   const { t, i18n } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()

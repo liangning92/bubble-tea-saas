@@ -4,11 +4,12 @@ const ts=require('typescript'),fs=require('node:fs'),vm=require('node:vm');
 function moduleAt(path, deps){
  const module={exports:{}};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,
- {module,exports:module.exports,require:name=>{if(name in deps)return deps[name];throw Error('Unexpected dependency '+name);},console:{error:()=>{},warn:()=>{}},Date,Set});
+ {module,exports:module.exports,require:name=>{if(name in deps)return deps[name];if(name.endsWith('/storeDateSettings'))return moduleAt('server/src/utils/storeDateSettings.ts',{});throw Error('Unexpected dependency '+name);},console:{error:()=>{},warn:()=>{}},Date,Set});
  return module.exports;
 }
 const auth={authenticate:(req,res,next)=>next(),authorize:(...roles)=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({message:'Forbidden'})};
 function routes(path,db,extra={}){
+ if(!db.$transaction)db.$transaction=async run=>run(db);
  const handlers={};const router={};for(const method of ['get','post','put','delete'])router[method]=(url,...fns)=>{handlers[method+url]=fns;};
  moduleAt(path,{'../services/MediaService':{saveMediaConfig:async(tx,storeId,key,value,category)=>tx.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value:typeof value==='string'?value:JSON.stringify(value),category},update:{value:typeof value==='string'?value:JSON.stringify(value),category}})},'../services/StaffPermissionV2Service':{readPolicyV2:async()=>null},'../utils/receiptLogoConfig':moduleAt('server/src/utils/receiptLogoConfig.ts',{}),'zod':require('../../server/node_modules/zod'),'../services/ShiftHandoverFinancials':moduleAt('server/src/services/ShiftHandoverFinancials.ts',{'./ShiftManualReceipts':moduleAt('server/src/services/ShiftManualReceipts.ts',{'zod':require('../../server/node_modules/zod'),'../utils/dailyOnlineRevenue':moduleAt('server/src/utils/dailyOnlineRevenue.ts',{'./revenueDateRange':moduleAt('server/src/utils/revenueDateRange.ts',{})}),'../utils/revenueDateRange':moduleAt('server/src/utils/revenueDateRange.ts',{})})}),'../services/ShiftCashReconciliation':moduleAt('server/src/services/ShiftCashReconciliation.ts',{'zod':require('../../server/node_modules/zod'),'../utils/refundAllocation':moduleAt('server/src/utils/refundAllocation.ts',{})}),'../services/ShiftManualReceipts':moduleAt('server/src/services/ShiftManualReceipts.ts',{'zod':require('../../server/node_modules/zod'),'../utils/dailyOnlineRevenue':moduleAt('server/src/utils/dailyOnlineRevenue.ts',{'./revenueDateRange':moduleAt('server/src/utils/revenueDateRange.ts',{})}),'../utils/revenueDateRange':moduleAt('server/src/utils/revenueDateRange.ts',{})}),'../services/ExpenseService':{getExpenseCategories:async()=>[]},'../services/PosExpenseService':{summarizeShiftPurchases:async()=>({total:0,count:0,items:[],recordedOnly:true})},'../utils/configAccess':moduleAt('server/src/utils/configAccess.ts',{}),'../services/ReceivedReceiptService':{markReceivedReceiptFailure:async()=>{}},'../services/ItemRefundService':{},'../utils/orderStatusPolicy':{},'../utils/refundPolicy':{},'../utils/countObservation':{COUNT_OBSERVATION_PREFIX:'inventory.count.'},'../services/ReceiptSyncService':{RECEIPT_SYNC_PREFIX:'receiptSync.'},'../services/AiPermissionService':{AI_POLICY_KEY:'ai.policy'},'../services/OrderReplayService':moduleAt('server/src/services/OrderReplayService.ts',{'crypto':require('node:crypto'),'../config/database':{__esModule:true,default:db}}),'../services/OrderBusinessRejection':moduleAt('server/src/services/OrderBusinessRejection.ts',{}),'express':{Router:()=>router},'../middlewares/auth':auth,'../config/database':{__esModule:true,default:db,prisma:db},'../utils/dateUtils':{},'../utils/businessDate':moduleAt('server/src/utils/businessDate.ts',{'zod':require('../../server/node_modules/zod'),'./dateUtils':moduleAt('server/src/utils/dateUtils.ts',{})}),'../services/ShiftSummaryEvidence':moduleAt('server/src/services/ShiftSummaryEvidence.ts',{}),...extra});
  return async (key,req)=>{const res={code:200,status(n){this.code=n;return this;},json(data){this.data=data;return this;}};
@@ -81,6 +82,7 @@ test('admin toggle normalizes a disabled default and repeated saves keep the nor
 });
 test('config routes enforce manager store scope and cashier write permission',async()=>{
  let writes=0;const db={$transaction:async operation=>typeof operation==='function'?operation(db):Promise.all(operation),config:{upsert:async()=>{writes++;return {key:'paymentMethods'};},findMany:async()=>[]}};
+ db.$transaction=async run=>run(db);
  const run=routes('server/src/routes/config.ts',db,{'zod':require('zod'),'../utils/validation':{validateBody:()=>auth.authenticate},'../services/TrainingLibraryStore':{isTrainingLibraryKey:()=>false,ordinaryConfigWhere:{}},'../services/StaffConfigService':{}});
  const body={storeId:'store-b',key:'paymentMethods',value:{cash:true},category:'pos'};
  assert.equal((await run('post/',{user,body})).code,403);
@@ -132,4 +134,11 @@ test('historical off session is readable and closable without active configurati
  const run=routes('server/src/routes/posCash.ts',db,{'../utils/dateUtils':{startOfTodayJakarta:()=>new Date('2026-10-06T17:00:00Z')}});
  const read=await run('get/shifts/current',{user});assert.equal(read.code,200);assert.equal(read.data.data.shift.shift,'off');assert.equal(read.data.data.hasOpenShift,true);
  const closed=await run('post/shifts/close',{user,body:{actualCash:100}});assert.equal(closed.code,200);assert.equal(updated.where.id,'historic-off');assert.equal(updated.data.status,'closed');assert.equal(events[0].data.shift,'off');
+});
+test('store timezone/date settings reject invalid values before any configuration write',async()=>{
+ let writes=0;const db={config:{upsert:async()=>{writes++;return {key:'storeInfo',category:'store'}},findMany:async()=>[]}};
+ const run=routes('server/src/routes/config.ts',db,{'zod':require('zod'),'../utils/validation':{validateBody:()=>auth.authenticate},'../services/TrainingLibraryStore':{isTrainingLibraryKey:()=>false,ordinaryConfigWhere:{}},'../services/StaffConfigService':{}});
+ const actor={...user,role:'admin'};
+ for(const value of [{timezone:'Not/AZone'},{dateFormat:'unsupported'}]){const response=await run('post/',{user:actor,body:{storeId:actor.storeId,key:'storeInfo',value,category:'store'}});assert.equal(response.code,400);assert.equal(writes,0);}
+ const response=await run('post/',{user:actor,body:{storeId:actor.storeId,key:'storeInfo',value:{storeName:'Preserved',timezone:'America/New_York',dateFormat:'DD/MM/YYYY'},category:'store'}});assert.equal(response.code,200);assert.equal(writes,1);
 });

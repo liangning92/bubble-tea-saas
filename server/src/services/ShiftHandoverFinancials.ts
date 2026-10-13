@@ -7,8 +7,8 @@ export function shiftHandoverFinancials(drawerTotal:number|null, openFloat:numbe
     totalRevenue:orderRevenue+shopeefood+gofood,
     cashFormula:'drawerTotal-openFloat', revenueFormula:'orderRevenue+shopeefood+gofood'}
 }
-export async function loadOnlineHandoverRevenue(db:Pick<PrismaClient,'shiftSession'|'config'|'shift'>,storeId:string,start:Date,end:Date) {
-  const {list}=await getHandoverReceipts(db,storeId,start,end)
+export async function loadOnlineHandoverRevenue(db:Pick<PrismaClient,'shiftSession'|'config'|'shift'>,storeId:string,start:Date,end:Date,timezone='Asia/Jakarta') {
+  const {list}=await getHandoverReceipts(db,storeId,start,end,timezone)
   return list.filter(row=>row.onlineRevenueCounted && row.manualReceipts).map(row=>({
     sessionId:row.id,closedAt:row.closedAt!,shopeefood:row.manualReceipts!.shopeefood,gofood:row.manualReceipts!.gofood
   }))
