@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'fs'
+import sharp from 'sharp'
+import { uploadRouter } from '../src/routes/upload'
 import path from 'path'
 import express from 'express'
 import request from 'supertest'
@@ -11,8 +13,8 @@ import { inspectMedia, mediaPath, localUploadPath } from '../src/utils/mediaFile
 import { getInsights } from '../src/services/ProductInsightsService'
 import * as products from '../src/services/ProductService'
 if(!process.env.DATABASE_URL?.startsWith('file:/tmp/media-product-')||!process.env.UPLOADS_PATH?.startsWith('/tmp/media-product-'))throw Error('USE_DISPOSABLE_MEDIA_TEST_DATABASE_AND_UPLOADS')
-const png=Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.alloc(24)])
-const app=express();app.use(express.json());app.use((req:any,_res,next)=>{req.user={id:'test-user',storeId:req.get('X-Test-Store')||'media-a',role:req.get('X-Test-Role')||'admin',staffId:'',...(req.get('X-Test-Permissions')?{accessRole:{permissions:JSON.parse(req.get('X-Test-Permissions')!)}}:{})};next()});app.use('/api/media',mediaRouter)
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWP4z9DQAMIMMAYASegH/eJzaysAAAAASUVORK5CYII=','base64')
+const app=express();app.use(express.json());app.use((req:any,_res,next)=>{req.user={id:'test-user',storeId:req.get('X-Test-Store')||'media-a',role:req.get('X-Test-Role')||'admin',staffId:'',...(req.get('X-Test-Permissions')?{accessRole:{permissions:JSON.parse(req.get('X-Test-Permissions')!)}}:{})};next()});app.use('/api/media',mediaRouter);app.use('/api/upload',uploadRouter)
 let categoryId:string,productId:string
 const tenant='media-test-tenant'
 test.before(async()=>{
@@ -122,4 +124,27 @@ test('database-backed insights unify summary, lazy details, preferences and stor
  await assert.rejects(()=>getInsights('media-b',{days:30},{productId}),/PRODUCT_NOT_FOUND/)
  const filtered:any=await getInsights('media-a',{days:30,channelId:'foreign-channel'})
  assert.equal(filtered.overview.quantity,0)
+})
+
+test('media, legacy product and customer-display uploads store one optimized image with matching metadata',async()=>{
+ const image=await sharp({create:{width:1280,height:720,channels:4,background:'#ffaabb80'}}).png({compressionLevel:0}).toBuffer()
+ for(const [endpoint,field,scene]of [['/api/media','files','product'],['/api/upload/product','images','product'],['/api/upload/dualScreen','files','display']]){
+  const response=await request(app).post(endpoint).query({scene}).attach(field,image,'screen.png')
+  assert.equal(response.status,200,JSON.stringify(response.body))
+  const asset=response.body.data.list?.[0]||response.body.data.files[0]
+  assert.equal(asset.mimeType,'image/webp');assert.ok(asset.url.endsWith('.webp'));assert.ok(asset.size<image.length)
+  const stored=fs.readFileSync(mediaPath(asset.storagePath));assert.equal(asset.size,stored.length)
+  const meta=await sharp(stored).metadata();assert.equal(meta.width,1280);assert.equal(meta.height,720);assert.ok(meta.hasAlpha)
+  assert.equal((await request(app).delete('/api/media/'+asset.id)).status,200)
+ }
+ assert.deepEqual(fs.readdirSync(mediaPath('.media-pending')),[])
+})
+test('a database failure cleans optimized files and pending originals',async()=>{
+ const before=fs.readdirSync(mediaPath('media')).sort()
+ const image=await sharp({create:{width:800,height:600,channels:4,background:'#abcdef'}}).png({compressionLevel:0}).toBuffer()
+ const transaction=prisma.$transaction
+ ;(prisma as any).$transaction=(fn:any)=>transaction.call(prisma,async(tx:any)=>{await fn(tx);throw Error('SYNTHETIC_COMMIT_FAILURE')})
+ let response:any
+ try{response=await request(app).post('/api/media').query({scene:'product'}).attach('files',image,'screen.png')}finally{prisma.$transaction=transaction}
+ assert.equal(response.status,400);assert.deepEqual(fs.readdirSync(mediaPath('media')).sort(),before);assert.deepEqual(fs.readdirSync(mediaPath('.media-pending')),[])
 })

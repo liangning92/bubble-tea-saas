@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { optimizeUploadedImage } from '../utils/imageOptimization'
 import { randomUUID } from 'crypto'
 import prisma from '../config/database'
 import { inspectFile, localUploadPath, mediaPath, uploadRoot } from '../utils/mediaFiles'
@@ -11,15 +12,16 @@ export async function saveMediaFiles(storeId: string, uploadedBy: string, files:
       const type = await inspectFile(file.path)
       if (!type || !allowed.includes(type.kind)) throw Error('INVALID_MEDIA_TYPE')
       if (file.size > (type.kind==='image'?5:50)*1024*1024) throw Error('MEDIA_TOO_LARGE')
-      checked.push({file,type})
+      const optimized = await optimizeUploadedImage(file.path,type)
+      checked.push({file,type:optimized.type,size:optimized.size})
     }
     await fs.promises.mkdir(mediaPath('media'),{recursive:true})
     return await prisma.$transaction(async tx => {
       const result=[]
-      for (const {file,type} of checked) {
+      for (const {file,type,size} of checked) {
         const storagePath=`media/${randomUUID()}${type.ext}`
         await fs.promises.rename(file.path,mediaPath(storagePath)); created.push(storagePath)
-        result.push(await tx.mediaAsset.create({data:{storeId,uploadedBy,name:file.originalname.slice(0,200),kind:type.kind,mimeType:type.mimeType, size:file.size,storagePath,url:`/uploads/${storagePath}`} as any}))
+        result.push(await tx.mediaAsset.create({data:{storeId,uploadedBy,name:file.originalname.slice(0,200),kind:type.kind,mimeType:type.mimeType, size,storagePath,url:`/uploads/${storagePath}`} as any}))
       }
       return result
     })
