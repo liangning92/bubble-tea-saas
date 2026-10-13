@@ -111,9 +111,9 @@ function planRange(base,head,{root=process.cwd(),full=false}={}){
  if(base===head&&!full)throw Error('BASE_SHA must precede HEAD_SHA for scoped checks');
  git('merge-base','--is-ancestor',base,head);
  const files=git('diff','--no-renames','--name-only','-z',base,head).split('\0').filter(Boolean);
- const stripTvModels=text=>text.replace(/\/\/ Store-scoped TV signage[^\n]*\n/g,'').replace(/model Tv(?:Screen|Device|PairSession) \{[^}]*\}\s*/g,'').trimEnd();
+ const stripTvModels=text=>text.replace(/\/\/ Store-scoped TV signage[^\n]*\n/g,'').replace(/^model Tv(?:Screen|Device|PairSession) \{[\s\S]*?^\}\s*/gm,'').trimEnd();
  const schemaFiles=files.filter(file=>/^server\/prisma\/schema(?:\.sqlite)?\.prisma$/.test(file));
- const tvSchemaOnly=files.includes('server/src/services/TvSignageService.ts')&&schemaFiles.length>0&&schemaFiles.every(file=>stripTvModels(git('show',`${base}:${file}`))===stripTvModels(git('show',`${head}:${file}`)));
+ const tvSchemaOnly=files.includes('server/src/services/TvSignageService.ts')&&schemaFiles.length>0&&schemaFiles.every(file=>{const previous=git('show',`${base}:${file}`),current=git('show',`${head}:${file}`);return !/^model Tv(?:Screen|Device|PairSession) /m.test(previous)&&stripTvModels(previous)===stripTvModels(current)});
  return {...selectScope(files,{root,full,tvSchemaOnly}),tvSchemaOnly,baseSha:base,headSha:head};
 }
 function imageMatrix(components){return {include:components.map(service=>({service,context:service==='api'?'server':'.',dockerfile:service==='api'?'server/Dockerfile':`client-${service}/Dockerfile`}))};}
