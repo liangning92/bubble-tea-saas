@@ -100,7 +100,7 @@ router.get('/alerts/expiry', authenticate, async (req: AuthRequest, res) => {
 // 补货建议
 router.get('/suggestions/restock', authenticate, async (req: AuthRequest, res) => {
   try {
-    const days = req.query.days ? parseInt(req.query.days as string) : 7
+    const days = req.query.days ? parseInt(req.query.days as string) : 15
     const suggestions = await materialService.calculateRestockSuggestions(req.user!.storeId, days)
     res.json({ code: 200, data: suggestions })
   } catch (error: any) {

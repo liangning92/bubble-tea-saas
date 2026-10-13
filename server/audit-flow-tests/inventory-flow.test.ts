@@ -196,3 +196,11 @@ test('old sales without new snapshots still reverse their certified original phy
  await refundOrder(sale.id,'verified',undefined,undefined,{requestId:refund.id,approvedBy:'admin',restoreUnprepared:true})
  expect(await balance(f.inventory.id)).toBe(100);expect((await prisma.stockOutLog.findFirstOrThrow({where:{orderId:sale.id,reason:'refund_unprepared'}})).quantity).toBe(-0.025)
 })
+test('HTTP alert acknowledgement and expiry edits are manager-only and reject foreign resources',async()=>{
+ const f=await fixture(),foreign=await fixture(),staff='Bearer '+await token(f),manager='Bearer '+await token(f,'manager')
+ expect((await request(httpServer).get('/api/inventory/alert-center').set('Authorization',staff)).status).toBe(403)
+ const loaded=await request(httpServer).get('/api/inventory/alert-center').set('Authorization',manager);expect(loaded.status).toBe(200);expect(loaded.body.data.list.every((a:any)=>!a.detail.inventoryId||a.detail.inventoryId===f.inventory.id)).toBe(true)
+ expect((await request(httpServer).get('/api/inventory/alert-center').query({storeId:foreign.store.id}).set('Authorization',manager)).status).not.toBe(200)
+ expect((await request(httpServer).put('/api/inventory/alert-center/expiry').set('Authorization',manager).send({inventoryId:foreign.inventory.id,expiryDate:'2026-10-20'})).status).toBe(409)
+ const event=loaded.body.data.list[0];expect(event).toBeDefined();expect((await request(httpServer).post(`/api/inventory/alert-center/${event.id}/handle`).set('Authorization',staff).send({note:'staff'})).status).toBe(403);expect((await request(httpServer).post(`/api/inventory/alert-center/${event.id}/handle`).set('Authorization',manager).send({note:'Manager checked'})).status).toBe(200)
+})

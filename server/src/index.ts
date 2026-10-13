@@ -1,4 +1,4 @@
-import {startConsumptionScheduler} from './services/EmployeeConsumptionService'
+import {startInventoryAlertScheduler} from './services/InventoryAlertCenterService'
 import {upgradeInventoryFlow} from './utils/inventoryFlowUpgrade'
 import { staffPermissionsRouter } from './routes/staffPermissions'
 import {startRecurringExpenseScheduler} from './services/RecurringExpenseService'
@@ -295,7 +295,7 @@ if (process.env.NODE_ENV !== 'test') {
   console.log('[Server] About to listen on port', config.port)
   httpServer.listen(config.port, '0.0.0.0', () => {
   startRecurringExpenseScheduler()
-  startConsumptionScheduler()
+  startInventoryAlertScheduler()
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║

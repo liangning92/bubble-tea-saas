@@ -22,7 +22,7 @@ export function InventoryPage() {
   const [showEditItem, setShowEditItem] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [stockOutPurpose,setStockOutPurpose]=useState('withdrawal')
-  const [stockForm, setStockForm] = useState({ quantity: '', unitCost: '', note: '', inputUnit:'' })
+  const [stockForm, setStockForm] = useState({ quantity: '', unitCost: '', note: '', inputUnit:'', expiryDate:'' })
   const [addForm, setAddForm] = useState({ name: '', category: 'raw_material', type: 'raw_material', unit: 'kg', avgCost: '', safetyStock: '', processRecipeId: '' })
   const [search, setSearch] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
@@ -77,7 +77,7 @@ export function InventoryPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory-alerts'] })
       setShowStockIn(false)
       setSelectedItem(null)
-      setStockForm({ quantity: '', unitCost: '', note: '', inputUnit:'' })
+      setStockForm({ quantity: '', unitCost: '', note: '', inputUnit:'', expiryDate:'' })
     }
   })
 
@@ -88,7 +88,7 @@ export function InventoryPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory-alerts'] })
       setShowStockOut(false)
       setSelectedItem(null)
-      setStockForm({ quantity: '', unitCost: '', note: '', inputUnit:'' })
+      setStockForm({ quantity: '', unitCost: '', note: '', inputUnit:'', expiryDate:'' })
     }
   })
 
@@ -197,7 +197,7 @@ export function InventoryPage() {
       quantity: parseFloat(stockForm.quantity),
       inputUnit:stockForm.inputUnit||selectedItem.unit,
       unitCost: stockForm.unitCost === '' ? undefined : Number(stockForm.unitCost),
-      note: stockForm.note
+      note: stockForm.note, expiryDate:stockForm.expiryDate||undefined
     })
   }
 
@@ -402,7 +402,7 @@ export function InventoryPage() {
               </thead>
               <tbody>
                 {filteredInventory.map((item: any) => {
-                  const isLow = item.isLowStock || item.currentStock <= (item.safetyStock || 0)
+                  const isLow = item.isLowStock || item.currentStock <= (item.effectiveSafetyStock ?? item.safetyStock ?? 0)
                   return (
                     <tr key={item.id} className={`border-b last:border-0 hover:bg-gray-50 ${isLow ? 'bg-red-50/30' : ''}`}>
                       <td className="py-3 pr-4">
@@ -417,7 +417,7 @@ export function InventoryPage() {
                       </td>
                       <td className="py-3 px-2 text-right text-gray-500">{item.unit}</td>
                       <td className="py-3 px-2 text-right">{formatCurrency(item.avgCost)}</td>
-                      <td className="py-3 px-2 text-right text-gray-500">{item.safetyStock || 0}</td>
+                      <td className="py-3 px-2 text-right text-gray-500">{Number((item.effectiveSafetyStock ?? item.safetyStock ?? 0).toFixed(3))} {item.unit}</td>
                       <td className="py-3 pl-4">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -676,6 +676,7 @@ export function InventoryPage() {
               <label className="block">{t('inventoryUnits.input')}<select className="input w-full" value={stockForm.inputUnit||selectedItem.unit} onChange={e=>setStockForm({...stockForm,inputUnit:e.target.value,unitCost:''})}>
                 {[...new Set([selectedItem.unit,...(['kg','g'].includes(selectedItem.unit.toLowerCase())?['kg','g']:['l','ml'].includes(selectedItem.unit.toLowerCase())?['L','ml']:[]),...(selectedItem.packaging?.unit?[selectedItem.packaging.unit]:[])])].map(unit=><option key={unit}>{unit}</option>)}
               </select></label>
+              <label className="block text-sm">{t('inventoryAlerts.expiryDate')}<input type="date" className="input w-full" value={stockForm.expiryDate} onChange={e=>setStockForm({...stockForm,expiryDate:e.target.value})}/></label>
               <p className="text-sm">{t('inventoryUnits.cost')} ({stockForm.inputUnit||selectedItem.unit})</p>
               <div>
                 <label className="block text-sm font-medium mb-1">{t('inventory.quantity') || 'Quantity'} ({stockForm.inputUnit||selectedItem.unit}) *</label>

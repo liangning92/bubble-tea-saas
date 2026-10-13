@@ -95,7 +95,7 @@ export function inventoryCountContract(db:any){
  })
  test('low stock uses recorded ledger units and saved thresholds, enable and validated interval',async()=>{
   const f=await fixture();await db.inventory.update({where:{id:f.inventory.id},data:{currentStock:5}})
-  await db.stockOutLog.create({data:{inventoryId:f.inventory.id,quantity:30,reason:'sold'}})
+  await db.stockOutLog.create({data:{inventoryId:f.inventory.id,quantity:30,reason:'sold',createdAt:new Date(Date.now()-30*86400000)}})
   await saveInventoryAlertConfig(f.store.id,{lowStockWarningDays:6,lowStockCriticalDays:2,autoCheckIntervalHours:8})
   expect((await getMaterialUsageForecast(f.store.id,30))[0].dailyUsage).toBe(1)
   expect((await getLowStockAlerts(f.store.id,30))[0].urgency).toBe('warning')

@@ -148,6 +148,9 @@ export const inventoryApi = {
   anomalySummary: (params: any) => api.get('/inventory/anomaly-summary', { params }),
   // Alert config
   getAlertConfig: () => api.get('/inventory/alert-config'),
+  alertCenter: () => api.get('/inventory/alert-center'),
+  handleAlert: (id: string, note: string) => api.post(`/inventory/alert-center/${id}/handle`, {note}),
+  setExpiry: (data: any) => api.put('/inventory/alert-center/expiry', data),
   saveAlertConfig: (config: any) => api.put('/inventory/alert-config', config),
   // Inventory count
   getInventoryCounts: () => api.get('/inventory-counts'),

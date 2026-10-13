@@ -1,3 +1,4 @@
+import {inventoryForecast} from '../services/InventoryForecastService'
 import { parseDateBoundary } from '../utils/businessDate'
 import {requireVerifiedReceiptIncome} from '../services/ReceiptFinancialEvidenceService'
 import { Router } from 'express'
@@ -199,6 +200,8 @@ router.get('/inventory', authenticate, authorize('admin', 'manager'), async (req
       }
     })
 
+    const forecasts=(await Promise.all([...new Set(inventory.map(item=>item.storeId))].map(id=>inventoryForecast(id)))).flat()
+    const safety=(item:any)=>forecasts.find(row=>row.inventoryId===item.id)?.effectiveSafetyStock??item.safetyStock
     const stats = inventory.map(item => ({
       id: item.id,
       name: item.name,
@@ -207,8 +210,8 @@ router.get('/inventory', authenticate, authorize('admin', 'manager'), async (req
       currentStock: item.currentStock,
       avgCost: item.avgCost,
       totalValue: Number(item.currentStock) * Number(item.avgCost),
-      safetyStock: item.safetyStock,
-      isLowStock: item.currentStock <= item.safetyStock,
+      safetyStock: safety(item),
+      isLowStock: item.currentStock <= safety(item),
       lastIn: item.stockInLogs[0] || null,
       lastOut: item.stockOutLogs[0] || null
     }))
@@ -323,18 +326,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
     const monthProfit = monthRevenue - monthCost
 
     // ============ 库存预警 ============
-    const allInventory = await prisma.inventory.findMany({
-      where: { storeId }
-    })
-    const lowStockItems = allInventory
-      .filter(i => i.currentStock <= i.safetyStock)
-      .map(i => ({
-        id: i.id,
-        name: i.name,
-        currentStock: i.currentStock,
-        unit: i.unit,
-        safetyStock: i.safetyStock
-      }))
+    const lowStockItems = (await inventoryForecast(storeId)).filter(i=>i.currentStock<=i.effectiveSafetyStock).map(i=>({id:i.id,name:i.name,currentStock:i.currentStock,unit:i.unit,safetyStock:i.effectiveSafetyStock}))
 
     // ============ 员工情况 ============
     const staffList = await prisma.staff.findMany({

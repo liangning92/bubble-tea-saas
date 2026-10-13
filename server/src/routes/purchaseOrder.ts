@@ -131,11 +131,11 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // POST /api/purchase-orders/:id/receive
-router.post('/:id/receive', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
+router.post('/:id/receive', authenticate, authorize('admin', 'manager', 'staff'),validateBody(z.object({items:z.array(z.object({itemId:z.string(),expiryDate:z.string().optional(),manufacturingDate:z.string().optional()})).optional()})), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
-    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId || req.user!.id, req.user!.role === 'admin' ? undefined : getStoreId(req))
+    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId || req.user!.id, req.user!.role === 'admin' ? undefined : getStoreId(req),req.body.items)
 
     res.json({
       code: 200,

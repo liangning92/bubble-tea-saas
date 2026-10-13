@@ -1,3 +1,5 @@
+import {randomUUID} from 'crypto'
+import {consumeInventoryBatches,alignInventoryBatches} from './InventoryBatchService'
 import {convertQuantity} from '../utils/inventoryUnits'
 import prisma from '../config/database'
 
@@ -87,7 +89,7 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1, st
     let totalInputCost = 0
     for (const input of inputs) {
       if (!input.inventoryId || !input.inventory) continue
-      const inv = input.inventory
+      const inv = await tx.inventory.findUniqueOrThrow({where:{id:input.inventoryId}})
       if(inv.storeId!==recipe.storeId)throw Error('INVENTORY_STORE_MISMATCH')
       const deductQty = input.quantity * multiplier
       // Recipe inputs are stored in each input material's existing inventory unit.
@@ -96,8 +98,10 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1, st
       totalInputCost += deductQty * unitCost
 
       // 扣减投入库存
-      const changed=await tx.inventory.updateMany({where:{id:input.inventoryId,storeId:recipe.storeId,currentStock:{gte:deductQty}},data:{currentStock:{decrement:deductQty}}})
+      if(inv.currentStock<deductQty)throw Error('Insufficient stock')
+      const changed=await tx.inventory.updateMany({where:{id:input.inventoryId,storeId:recipe.storeId,currentStock:inv.currentStock},data:{currentStock:{decrement:deductQty}}})
       if(changed.count!==1)throw Error('Insufficient stock')
+      await consumeInventoryBatches(tx,inv,deductQty)
       await tx.stockOutLog.create({
         data: {
           inventoryId: input.inventoryId,
@@ -165,16 +169,20 @@ export async function executeRecipe(recipeId: string, multiplier: number = 1, st
         ? Math.round((Number(currentStock) * Number(currentAvgCost) + outputTotalCost) / newTotalStock)
         : Math.round(ledgerUnitCost)
 
-      await tx.inventory.update({
-        where: { id: outputInv.id },
+      const received=await tx.inventory.updateMany({
+        where: { id: outputInv.id,currentStock:outputInv.currentStock,avgCost:outputInv.avgCost },
         data: {
           currentStock: { increment: addQty },
           avgCost: newAvgCost
         }
       })
+      if(received.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
+      await alignInventoryBatches(tx,{...outputInv,currentStock,avgCost:currentAvgCost})
+      const batch=await tx.batch.create({data:{inventoryId:outputInv.id,batchNumber:`PROCESS-${randomUUID()}`,quantity:addQty,unitCost:Math.round(ledgerUnitCost),status:'active'}})
       await tx.stockInLog.create({
         data: {
           inventoryId: outputInv.id,
+          batchId:batch.id,
           staffId,
           quantity: addQty,
           unitCost: Math.round(ledgerUnitCost),

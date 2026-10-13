@@ -1,3 +1,4 @@
+import {alignInventoryBatches,receiptBatchDates} from './InventoryBatchService'
 import prisma from '../config/database';
 import { calculateProductCost } from './ProductService';
 import { convertQuantity, validatePackage } from '../utils/inventoryUnits';
@@ -114,7 +115,7 @@ export async function updatePurchaseOrderStatus(orderId: string, status: string,
     return prisma.$transaction(async (tx) => { const order = await scopedOrder(tx, orderId, storeId); const changed = await tx.purchaseOrder.updateMany({ where: { id: order.id, status: 'pending' }, data: { status: 'approved' } }); if (!changed.count)
         throw new PurchaseOrderError('Only pending orders can be approved'); return tx.purchaseOrder.findUnique({ where: { id: order.id } }); });
 }
-export async function receivePurchaseOrder(orderId: string, staffId: string, storeId?: string) {
+export async function receivePurchaseOrder(orderId: string, staffId: string, storeId?: string, datesByItem:Array<{itemId:string;manufacturingDate?:string;expiryDate?:string}>=[]) {
     return prisma.$transaction(async (tx) => {
         const order = await scopedOrder(tx, orderId, storeId);
         if (order.status === 'received')
@@ -122,10 +123,14 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
         const claimed = await tx.purchaseOrder.updateMany({ where: { id: order.id, status: { in: ['pending', 'approved', 'awaiting_receipt'] } }, data: { status: 'received', receivedDate: new Date(), receivedBy: staffId } });
         if (!claimed.count)
             throw new PurchaseOrderError('Purchase order is already received or cancelled');
+        if(datesByItem.some(row=>!order.items.some((item:any)=>item.id===row.itemId))||new Set(datesByItem.map(row=>row.itemId)).size!==datesByItem.length)throw new PurchaseOrderError('INVALID_RECEIPT_ITEMS',400)
         for (const item of order.items) {
             const inventory = await tx.inventory.findFirst({ where: { id: item.inventoryId, storeId: order.storeId } });
             if (!inventory)
                 throw new PurchaseOrderError('Inventory does not belong to this store', 400);
+            const metadata=datesByItem.find(row=>row.itemId===item.id)
+            const dates=receiptBatchDates(metadata?.manufacturingDate,metadata?.expiryDate)
+            await alignInventoryBatches(tx,inventory)
             const quantity = item.quantity;
             if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isSafeInteger(item.unitCost) || item.unitCost < 0)
                 throw new PurchaseOrderError('Invalid purchase quantity or cost', 400);
@@ -138,7 +143,7 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
             if (!changed.count)
                 throw new PurchaseOrderError('Inventory changed during receiving; retry this order');
             await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQty: quantity } });
-            const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}`, quantity, unitCost: item.unitCost, status: 'active' } });
+            const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}`, quantity, unitCost: item.unitCost, status: 'active',...dates } });
             await tx.stockInLog.create({ data: { inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: item.unitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
         }
         const rows = await tx.bOMItem.findMany({ where: { inventoryId: { in: order.items.map((i: any) => i.inventoryId) } }, select: { productId: true } });

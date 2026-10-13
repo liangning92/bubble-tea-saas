@@ -1,3 +1,5 @@
+import {refreshInventoryAlerts,handleInventoryAlert} from '../services/InventoryAlertCenterService'
+import {setBatchExpiry} from '../services/InventoryBatchService'
 import {employeeConsumption,getConsumptionAlerts} from '../services/EmployeeConsumptionService'
 import prisma from '../config/database'
 import { requireResourceStore } from '../middlewares/resourceStore'
@@ -16,6 +18,8 @@ const resourceAccess = requireResourceStore(req => prisma.inventory.findUnique({
 const stockInSchema = z.object({
   inventoryId: z.string(),
   storeId: z.string().optional(),
+  expiryDate:z.string().optional(),
+  manufacturingDate:z.string().optional(),
   operationId: z.string().uuid().optional(),
   quantity: z.number().finite().positive(),
   inputUnit: z.string().min(1).max(30).optional(),
@@ -325,6 +329,16 @@ router.get('/batches/expiring', authenticate, authorize('admin', 'manager'), asy
 // ============================================
 // 库存异常预警 - 理论消耗 vs 实际消耗对比
 // ============================================
+
+router.get('/alert-center',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await refreshInventoryAlerts(getStoreId(req))})}catch(error:any){res.status(500).json({code:500,message:'ALERTS_LOAD_FAILED'})}
+})
+router.post('/alert-center/:id/handle',authenticate,authorize('admin','manager'),validateBody(z.object({note:z.string().trim().min(1).max(1000)})),async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await handleInventoryAlert(getStoreId(req),req.params.id,req.user!.staffId||req.user!.id,req.body.note)})}catch(error:any){res.status(409).json({code:409,message:error.message})}
+})
+router.put('/alert-center/expiry',authenticate,authorize('admin','manager'),validateBody(z.object({inventoryId:z.string(),batchId:z.string().optional(),expiryDate:z.string().trim().min(1),manufacturingDate:z.string().optional()})),async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await setBatchExpiry(getStoreId(req),req.body.inventoryId,req.body.batchId,req.body.expiryDate,req.body.manufacturingDate)})}catch(error:any){res.status(409).json({code:409,message:error.message})}
+})
 
 router.get('/employee-consumption',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
  try{if(typeof req.query.startDate!=='string'||typeof req.query.endDate!=='string')return res.status(400).json({code:400,message:'ANALYSIS_DATES_REQUIRED'});res.json({code:200,data:await employeeConsumption({storeId:getStoreId(req),startDate:req.query.startDate,endDate:req.query.endDate})})}

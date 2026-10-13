@@ -1,4 +1,7 @@
-import { createHash } from 'crypto'
+import {getInventoryAlertConfig} from './InventoryAlertConfigService'
+import {inventoryForecast} from './InventoryForecastService'
+import {alignInventoryBatches,consumeInventoryBatches,receiptBatchDates,availableBatches} from './InventoryBatchService'
+import { createHash,randomUUID } from 'crypto'
 import {physicalInventoryVariance} from './InventoryVarianceService'
 import {convertQuantity,normalizedUnit,validatePackage,InventoryPackage} from '../utils/inventoryUnits'
 import { containsText } from '../utils/textSearch'
@@ -30,6 +33,8 @@ export interface InventoryFilter {
 }
 
 export interface StockOperation {
+  expiryDate?:string
+  manufacturingDate?:string
   operationId?: string
   inventoryId: string
   storeId: string
@@ -61,15 +66,17 @@ export async function getInventory(filter: InventoryFilter) {
   })
 
   const packages=await prisma.config.findMany({where:{key:{startsWith:'inventoryPackage:'},...(filter.storeId?{storeId:filter.storeId}:{})}})
+  const forecasts=filter.storeId?await inventoryForecast(filter.storeId):[]
   const enriched=items.map(item=>{
     const saved=packages.find(p=>p.storeId===item.storeId&&p.key===`inventoryPackage:${item.id}`)
     let packaging:InventoryPackage|null=null
     try{if(saved)packaging=validatePackage(JSON.parse(saved.value),item.unit)}catch{}
-    return {...item,packaging}
+    const forecast=forecasts.find((row:any)=>row.inventoryId===item.id)
+    return {...item,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
   })
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
-    return serializeBigInt(enriched.filter(item => item.currentStock <= item.safetyStock))
+    return serializeBigInt(enriched.filter(item => item.currentStock <= item.effectiveSafetyStock))
   }
 
   return serializeBigInt(enriched)
@@ -97,7 +104,7 @@ export async function getInventoryById(inventoryId: string) {
 export async function stockIn(data: StockOperation & { unitCost?: number }) {
   const { inventoryId, storeId, unitCost, note, staffId, supplierId } = data
 
-  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
   const replay = async (tx:any) => {
     if (!data.operationId) return null
     const log = await tx.stockInLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
@@ -138,15 +145,19 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
       newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (Math.max(0,inventory.currentStock) + quantity))
     }
 
+    const dates=receiptBatchDates(data.manufacturingDate,data.expiryDate)
+    await alignInventoryBatches(tx,inventory)
     const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:inventory.currentStock,avgCost:inventory.avgCost},data:{currentStock:{increment:quantity},avgCost:newAvgCost}})
     if(changed.count!==1)throw new Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
     const updated=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
 
+    const batch=await tx.batch.create({data:{inventoryId,batchNumber:`IN-${data.operationId||randomUUID()}`,quantity,unitCost:baseCost,status:'active',...dates}})
     // Create stock in log
     await tx.stockInLog.create({
       data: {
         inventoryId,
         operationId: data.operationId,
+        batchId:batch.id,
         quantity,
         unitCost: baseCost,
         totalAmount,
@@ -164,7 +175,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
 export async function stockOut(data: StockOperation) {
   const { inventoryId, storeId, reason, note, staffId, orderId } = data
 
-  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
   const replay = async (tx:any) => {
     if (!data.operationId) return null
     const log = await tx.stockOutLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
@@ -192,10 +203,11 @@ export async function stockOut(data: StockOperation) {
       throw new Error('Insufficient stock')
     }
 
-    const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:{gte:quantity}},data:{currentStock:{decrement:quantity}}})
+    const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:inventory.currentStock},data:{currentStock:{decrement:quantity}}})
     if(changed.count!==1)throw new Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
     const updated=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
 
+    await consumeInventoryBatches(tx,inventory,quantity)
     // Create stock out log
     await tx.stockOutLog.create({
       data: {
@@ -214,25 +226,10 @@ export async function stockOut(data: StockOperation) {
 }
 
 // Get low stock alerts (using safetyStock as threshold)
-export async function getLowStockAlerts(storeId: string) {
-  const inventory = await prisma.inventory.findMany({
-    where: { storeId }
-  })
-
-  return inventory
-    .filter(item => item.currentStock <= item.safetyStock)
-    .map(item => ({
-      id: item.id,
-      name: item.name,
-      currentStock: item.currentStock,
-      safetyStock: item.safetyStock,
-      avgCost: item.avgCost,
-      category: item.category,
-      unit: item.unit,
-      shortage: item.safetyStock - item.currentStock,
-      estimatedRestockCost: Math.round((item.safetyStock - item.currentStock) * Number(item.avgCost))
-    }))
-    .sort((a, b) => a.shortage - b.shortage)
+export async function getLowStockAlerts(storeId:string){
+ const settings=await getInventoryAlertConfig(storeId)
+ if(!settings.enableLowStockAlert)return []
+ return (await inventoryForecast(storeId)).filter(row=>row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,shortage:row.suggestedReorderQty,estimatedRestockCost:Math.round(row.suggestedReorderQty*row.avgCost)}))
 }
 
 // Adjust inventory (for inventory count correction)
@@ -544,31 +541,9 @@ export async function getBatches(storeId: string, inventoryId?: string) {
 
 // Get expiring batches (for shelf life alerts)
 export async function getExpiringBatches(storeId: string, daysAhead: number = 7) {
-  const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() + daysAhead)
-
-  const inventory = await prisma.inventory.findMany({
-    where: { storeId, shelfLife: { gt: 0 } }
-  })
-
-  const expiringBatches = []
-  for (const inv of inventory) {
-    const batches = await prisma.batch.findMany({
-      where: {
-        inventoryId: inv.id,
-        status: 'active',
-        expiryDate: { lte: cutoffDate }
-      },
-      include: {
-        inventory: { select: { id: true, name: true, unit: true, shelfLife: true } }
-      }
-    })
-    expiringBatches.push(...batches)
-  }
-
-  return expiringBatches.sort((a, b) =>
-    (a.expiryDate?.getTime() || 0) - (b.expiryDate?.getTime() || 0)
-  )
+  const now=new Date(),cutoffDate=new Date(now.getTime()+daysAhead*86400000)
+  const inventory=await prisma.inventory.findMany({where:{storeId},include:{batches:{where:{status:'active',quantity:{gt:0}}}}})
+  return inventory.flatMap(inv=>availableBatches(inv.batches,inv.currentStock).filter(batch=>batch.quantity>0&&batch.expiryDate&&batch.expiryDate<=cutoffDate).map(batch=>({...batch,inventory:{id:inv.id,name:inv.name,unit:inv.unit,shelfLife:inv.shelfLife}}))).sort((a,b)=>a.expiryDate!.getTime()-b.expiryDate!.getTime())
 }
 
 // ============================================

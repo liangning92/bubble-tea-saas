@@ -16,11 +16,12 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
 }
 export const inventoryFlowApi = {
     list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers/dropdown'),
-    purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string) => post(`/purchase-orders/${id}/receive`, {}),
+    purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),
     stock: (kind: 'in' | 'out', data: Record<string, unknown>) => intent(`/inventory/stock-${kind}`, data, 'operationId'),
     startCount: (data: unknown) => post('/inventory-counts', data), submitCount: (id: string) => post(`/inventory-counts/${id}/submit`, {})
 };
 export interface Material {
+    effectiveSafetyStock?: number; dynamicSafetyStock?: number; forecastHistoryDays?: number; daysUntilStockOut?: number | null;
     id: string;
     name: string;
     category: string;
