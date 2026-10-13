@@ -90,8 +90,10 @@ import { default as announcementRouter } from './routes/announcement'
 import { campaignCategoryRouter } from './routes/campaignCategory'
 import { hardwareRouter } from './routes/hardware'
 import syncRouter from './routes/sync'
+import { tvRouter } from './routes/tv'
 import { startHygieneScheduler } from './services/SchedulerService'
 import { startMarketingScheduler } from './services/MarketingSchedulerService'
+import { startTvDiscoveryService } from './services/tvDiscovery'
 import { errorHandler } from './middlewares/errorHandler'
 import { notFoundHandler } from './middlewares/notFound'
 import { socketManager } from './socket'
@@ -195,6 +197,9 @@ app.use('/uploads', (req, res, next) => {
   catch { return res.sendStatus(400) }
   next()
 }, express.static(uploadsPath))
+// Serve TV display client
+const tvPublicPath = path.join(__dirname, '../public/tv')
+app.use('/tv', express.static(tvPublicPath))
 
 // Readiness checks verify dependencies used by the running service.
 app.get(['/health','/api/health'], async (_req,res)=>{
@@ -227,7 +232,14 @@ app.use('/api', (req, res, next) => {
     '/sync/connect', '/sync/full', '/sync/status',
     '/payments/qris/webhook', '/health', '/version'
   ])
-  if (publicPaths.has(apiPath) || isDisplayPublicRoute(req.method, apiPath)) return next()
+  if (
+    publicPaths.has(apiPath) ||
+    isDisplayPublicRoute(req.method, apiPath) ||
+    apiPath.startsWith('/tv/display') ||
+    apiPath.startsWith('/tv/pair/request') ||
+    apiPath.startsWith('/tv/pair/check') ||
+    apiPath.startsWith('/tv/screens')
+  ) return next()
   return authenticateBeforeRouting(req as AuthRequest, res, next)
 })
 app.use('/api/stores', declareAccessRoutes('/api/stores', storeRouter))
@@ -299,6 +311,7 @@ app.use('/api/staff-permissions', declareAccessRoutes('/api/staff-permissions', 
 app.use('/api/announcement', declareAccessRoutes('/api/announcement', announcementRouter))
 app.use('/api/hardware', declareAccessRoutes('/api/hardware', hardwareRouter))
 app.use('/api/sync', declareAccessRoutes('/api/sync', syncRouter))
+app.use('/api/tv', declareAccessRoutes('/api/tv', tvRouter))
 
 // Error Handling
 app.use(notFoundHandler)
@@ -345,6 +358,15 @@ if (process.env.NODE_ENV !== 'test') {
   startMarketingScheduler()
   startActivityWorker()
   console.log('[Server] Marketing scheduler started')
+
+  // 启动电视大屏局域网零配置自动发现服务
+  console.log('[Server] Starting TV auto-discovery service...')
+  try {
+    startTvDiscoveryService()
+    console.log('[Server] TV auto-discovery service started')
+  } catch (err: any) {
+    console.warn('[Server] TV auto-discovery service failed to start:', err?.message)
+  }
   })
   }).catch(async error => {
     console.error('[Schema] Startup blocked; database upgrade failed:', error.message)

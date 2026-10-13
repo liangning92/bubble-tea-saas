@@ -17,7 +17,8 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: '7072',
-        DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/bubble_tea',
+        DATABASE_URL: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/bubble_tea',
+        CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:6063,http://localhost:7072,http://127.0.0.1:5173,http://127.0.0.1:6063,http://127.0.0.1:7072',
       },
       error_file: '../logs/tea-server-err.log',
       out_file: '../logs/tea-server-out.log',

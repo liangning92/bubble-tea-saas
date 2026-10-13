@@ -7,7 +7,8 @@ import { useAuthStore } from './stores/auth'
 import { MainLayout } from './layouts/MainLayout'
 import { DashboardFeatureUnavailable } from './components/DashboardReadState'
 
-const MediaLibraryPage = lazy(() => import('./pages/marketing/MediaLibraryPage').then(m => ({ default: m.MediaLibraryPage })))
+const TVScreensPage = lazy(() => import('./pages/tv/TVScreensPage').then(module => ({ default: module.TVScreensPage })))
+const MediaLibraryPage = lazy(() => import('./pages/tv/MediaLibraryPage').then(m => ({ default: m.MediaLibraryPage })))
 const MessageLogPage = lazy(() => import('./pages/marketing/MessageLogPage').then(module => ({default:module.MessageLogPage})))
 const MarketingOverviewPage = lazy(() => import('./pages/marketing/MarketingOverviewPage').then(module => ({ default: module.MarketingOverviewPage })))
 const ActivitiesPage = lazy(() => import('./pages/marketing/ActivitiesPage').then(module => ({ default: module.ActivitiesPage })))
@@ -376,6 +377,10 @@ function App() {
         <Route path="settings/ai" element={<SettingsPage />} />
         <Route path="approvals" element={<StaffApprovalPage />} />
         <Route path="settings/permissions" element={<SettingsPage />} />
+
+        {/* 电视大屏 & 公共媒体库 */}
+        <Route path="tv-screens" element={<TVScreensPage />} />
+        <Route path="media-library" element={<MediaLibraryPage />} />
 
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />

@@ -24,6 +24,10 @@ export default defineConfig({
       '/uploads': {
         target: 'http://localhost:7072',
         changeOrigin: true
+      },
+      '/tv': {
+        target: 'http://localhost:7072',
+        changeOrigin: true
       }
     }
   },
