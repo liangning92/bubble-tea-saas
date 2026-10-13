@@ -7,6 +7,10 @@ on:
         description: 'Explicitly publish verified immutable SHA tags (never latest)'
         type: boolean
         default: false
+      services:
+        description: 'auto publishes only services present in the selected verified run; or comma-separated api,admin,pos,staff'
+        type: string
+        default: 'auto'
       source_sha:
         description: 'Full 40-character verified source SHA already in master history'
         required: true
@@ -29,6 +33,7 @@ jobs:
     outputs:
       sha: ${{ steps.source.outputs.sha }}
       run_id: ${{ steps.source.outputs.run_id }}
+      services: ${{ steps.source.outputs.services }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,6 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_SHA: ${{ inputs.source_sha }}
           VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+          RELEASE_SERVICES: ${{ inputs.services }}
         run: node .github/scripts/check-release-source.cjs docker
 
   publish:
@@ -53,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api, admin, pos, staff]
+        service: ${{ fromJSON(needs.gate.outputs.services) }}
     steps:
       - uses: actions/download-artifact@v4
         with:

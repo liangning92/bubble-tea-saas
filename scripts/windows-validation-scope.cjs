@@ -34,16 +34,18 @@ if (require.main === module) {
   const base = process.env.BASE_SHA;
   const head = process.env.HEAD_SHA;
   const requested = process.env.FULL_LEGACY_REGRESSION;
-  if (!head) throw Error('Expected base and head commits');
+  if (!/^[a-f0-9]{40}$/.test(head || '')) throw Error('Expected full source HEAD_SHA');
   const fullRegression = requested === 'true';
   let scope;
   let receiptCheck;
   if (!base || /^0+$/.test(base)) {
-    // A manual build without a comparison commit must not infer a narrow scope.
-    scope = fullRegression ? 'legacy' : 'installer';
+    if (!fullRegression) throw Error('Scoped Windows validation requires the confirmed full BASE_SHA');
+    scope = 'legacy';
     receiptCheck = true;
   } else {
-    const changed = execFileSync('git', ['diff', '--name-only', base, head], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+    if (!/^[a-f0-9]{40}$/.test(base)) throw Error('Expected full comparison BASE_SHA');
+    execFileSync('git', ['merge-base', '--is-ancestor', base, head]);
+    const changed = execFileSync('git', ['diff', '--no-renames', '--name-only', base, head], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
     scope = selectScope(changed, fullRegression);
     receiptCheck = needsReceiptCheck(changed, fullRegression);
     process.stdout.write(`Changed files: ${changed.join(', ') || '(none)'}\n`);

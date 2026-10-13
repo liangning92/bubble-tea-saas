@@ -11,6 +11,10 @@ on:
         description: 'User has confirmed this exact SHA and component'
         type: boolean
         default: false
+      base_sha:
+        description: 'Full SHA of the confirmed previous Windows source; limits installer and receipt checks'
+        type: string
+        required: true
       version:
         description: 'Version (空=自动生成，例: 2026.10.293)'
         required: false
@@ -67,7 +71,7 @@ jobs:
       - name: Select checks for the changed files
         id: validation
         env:
-          BASE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ inputs.base_sha }}
           HEAD_SHA: ${{ github.sha }}
           FULL_LEGACY_REGRESSION: ${{ inputs.full_legacy_regression }}
         run: |
