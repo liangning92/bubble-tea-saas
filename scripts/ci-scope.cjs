@@ -63,7 +63,7 @@ const browserChecks={
  media:{scripts:['tests/media-insights/browser-check.cjs'],components:['admin'],preview:{component:'admin',port:5187}},
  marketing:{scripts:['tests/stoploss/unified-activity-page-check.cjs','tests/stoploss/marketing-operations-page-check.cjs'],components:['admin','pos']},
  dashboard:{scripts:['tests/stoploss/admin-dashboard-page-check.cjs'],components:['admin']},
- receipt:{scripts:['tests/stoploss/receipt-layout-page-check.cjs','tests/stoploss/receipt-handover-ui-check.cjs'],components:['admin','pos']},
+ receipt:{scripts:['tests/stoploss/receipt-layout-page-check.cjs','tests/stoploss/receipt-handover-ui-check.cjs','tests/stoploss/handover-receipt-settings-page-check.cjs'],components:['admin','pos']},
  barcode:{scripts:['tests/stoploss/barcode-page-check.cjs'],components:['pos']},
  display:{scripts:['tests/stoploss/customer-display-parity-page-check.cjs','tests/stoploss/independent-logo-page-check.cjs'],components:['pos','admin']},
  offline:{scripts:['tests/stoploss/continuous-offline-page-check.cjs'],components:['pos']},
