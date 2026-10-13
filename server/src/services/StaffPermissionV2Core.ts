@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { STAFF_PERMISSION_CATALOG } from './StaffPermissionCatalog'
+import { STAFF_BASIC_PERMISSIONS, STAFF_PERMISSION_CATALOG } from './StaffPermissionCatalog'
 export type AccessMode = 'allow' | 'deny' | 'approval'
 export const modeSchema=z.enum(['allow','deny','approval'])
 const extra=[['orders.refund.request','pos'],['orders.refund.approve','pos'],['production.read','pos'],['production.write','pos'],['members.balance','members'],['orders.discount','pos'],['approvals.approve','other'],['salary.pay','staff'],['staff.bank.read','staff'],['staff.private.read','staff'],['cost.read','inventory'],['profit.read','finance'],['data.export','other']] as const
@@ -25,8 +25,8 @@ export function effectiveAccess(policy:PolicyV2,staffId:string){
  const base=role?.permissions||defaultRolesV2.find(r=>r.id==='basic')!.permissions
  const modes:Record<string,AccessMode>={},sources:Record<string,string>={}
  for(const p of permissionCatalog){modes[p.key]=binding?.overrides[p.key]??base[p.key]??'deny';sources[p.key]=binding?.overrides[p.key]?'personal':role?'role':'basic'}
- // Authentication, identity and a safe landing page always remain available.
- modes['personal.profile']='allow'
+ // Self-service stays available even when old templates or overrides deny it.
+ for(const key of STAFF_BASIC_PERMISSIONS){modes[key]='allow';sources[key]='basic'}
  return {version:2 as const,id:role?.id||'basic',name:role?.name||'普通员工',baseRole:'staff',permissions:Object.keys(modes).filter(k=>modes[k]==='allow'),modes,sources,scopes:Object.fromEntries(permissionCatalog.map(p=>[p.key,p.scope])),revision:policy.revision}
 }
 export function validatePolicyV2(input:ReturnType<typeof policyInputV2.parse>){

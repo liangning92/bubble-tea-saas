@@ -47,6 +47,20 @@ const root=path.resolve(__dirname,'../..'),deps=root+'/server/node_modules';cons
  await db.staffActionApproval.update({where:{id:pending.id},data:{expiresAt:new Date(Date.now()-1000)}});await call('manager','POST',`staff-permissions/approvals/${pending.id}/approve`,{},409);assert.equal((await db.staffActionApproval.findUnique({where:{id:pending.id}})).status,'pending');
  const failed=await call('cashier','POST','staff-permissions/approvals',{...intent,requestId:crypto.randomUUID(),payload:{...intent.payload,amount:999999}});await call('manager','POST',`staff-permissions/approvals/${failed.id}/approve`,{},500);assert.equal((await db.staffActionApproval.findUnique({where:{id:failed.id}})).status,'pending');assert.equal((await db.member.findUnique({where:{id:'member'}})).balance,98000);
  await call('owner','POST','staff-permissions/preview?storeId=store',{...policy,revision:0},409);const invalid=structuredClone(policy);invalid.assignments[0].overrides={'orders.read':'deny'};await call('owner','POST','staff-permissions/preview?storeId=store',invalid,400);
+ // Old templates and explicit overrides cannot remove employee self-service.
+ const basics=require(root+'/server/src/services/StaffPermissionCatalog.ts').STAFF_BASIC_PERMISSIONS;
+ const deniedBasics=Object.fromEntries(basics.map(key=>[key,'deny']));
+ policy.roles.find(role=>role.id==='basic').permissions=deniedBasics;
+ policy.assignments.find(binding=>binding.staffId==='basic-staff').overrides=deniedBasics;
+ preview=await call('owner','POST','staff-permissions/preview?storeId=store',policy);
+ await call('owner','POST','staff-permissions/activate?storeId=store',{...policy,hash:preview.hash});policy.revision++;
+ const basicAccess=(await call('basic','GET','staff-permissions/me')).role;
+ for(const key of basics)assert.equal(basicAccess.modes[key],'allow');
+ await call('basic','GET','staff/overview/monthly');
+ await call('basic','GET','staff/attendance/today');
+ await call('basic','GET','staff/schedule/my');
+ await call('basic','GET','staff/salary/my?month=10&year=2026');
+ await call('basic','GET','staff',undefined,403);
  policy.assignments=policy.assignments.filter(a=>a.staffId!=='cashier-staff');preview=await call('owner','POST','staff-permissions/preview?storeId=store',policy);await call('owner','POST','staff-permissions/activate?storeId=store',{...policy,hash:preview.hash});assert.equal((await call('cashier','GET','staff-permissions/me')).role.id,'basic');await call('cashier','GET','orders/kds/list',undefined,403);assert.equal((await db.user.findUnique({where:{id:'cashier'}})).role,'cashier');await call('owner','PUT','staff/cashier-staff/role',{role:'manager'},409);
  console.log('PASS V2 real PostgreSQL + HTTP: drafts/activation/global owner/store scope/effective modes/privacy/production/refund requests/remote and onsite approval/idempotency/revocation/expiry/transaction rollback/dependencies/conflicts/basic fallback');
  if(process.env.V2_BROWSER_SCRIPT){process.env.V2_TEST_ORIGIN=origin;process.env.V2_TEST_TOKEN=token('owner');await require(process.env.V2_BROWSER_SCRIPT)({origin,db,token,policy})}
