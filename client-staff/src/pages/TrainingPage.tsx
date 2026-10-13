@@ -63,7 +63,7 @@ interface TrainingCategory {
 export function TrainingPage() {
   const { t, i18n } = useTranslation();
   const { user, token } = useAuthStore();
-  const catalogue = useTrainingCatalogue(token, user?.storeId);
+  const catalogue = useTrainingCatalogue(token, user?.storeId, 'employee');
   const w = trainingCopy(i18n.language);
   const progressVersion = catalogue.revision || "1";
   const progressScope = `${user?.storeId}:${user?.staffId}:${progressVersion}`;

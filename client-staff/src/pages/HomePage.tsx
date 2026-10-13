@@ -1,5 +1,4 @@
 import {Link} from 'react-router-dom'
-import {useStaffAccess,permissionForPage} from '../../../shared/StaffAccess'
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -23,7 +22,6 @@ import { staffApi, employeeApi } from "../services/api";
 import { EmployeeActions } from "../components/EmployeeActions";
 import { QRCameraScannerModal } from "../components/QRCameraScannerModal";
 export function HomePage() {
-  const access=useStaffAccess()
   const { t, i18n } = useTranslation(),
     navigate = useNavigate(),
     { user } = useAuthStore();
@@ -291,7 +289,7 @@ export function HomePage() {
           </span>
         </div>
         <div className="workspace-list">
-          {taskRows.filter(({path})=>access.can(permissionForPage(path,true)!)).map(
+          {taskRows.map(
             ({ path, title, subtitle, count, icon: Icon, tone }) => (
               <button
                 className="workspace-row"

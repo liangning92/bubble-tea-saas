@@ -1,9 +1,7 @@
-import {useStaffAccess,permissionForPage} from '../../../shared/StaffAccess'
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Clock, ShieldCheck, Package, BookOpen, User } from "lucide-react";
 export function EmployeeActions() {
-  const access=useStaffAccess()
   const navigate = useNavigate(),
     { t } = useTranslation();
   const actions = [
@@ -15,7 +13,7 @@ export function EmployeeActions() {
   ] as const;
   return (
     <section aria-label={t("home.quickActions")} className="home-actions">
-      {actions.filter(([path])=>access.can(permissionForPage(path,true)!)).map(([path, key, subtitle, Icon, tone]) => (
+      {actions.map(([path, key, subtitle, Icon, tone]) => (
         <button
           key={path}
           onClick={() => navigate(path)}
