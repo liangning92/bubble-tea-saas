@@ -426,6 +426,7 @@ export function ProductListPage() {
                       <td className="py-3 pr-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
+                            aria-label={t('common.edit')}
                             onClick={() => openEditModal(product)}
                             className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 inline-block"
                           >

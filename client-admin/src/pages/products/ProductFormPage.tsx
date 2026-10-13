@@ -1,3 +1,4 @@
+import { ProductImageGallery } from '../../components/ProductImageGallery'
 import { MediaPicker } from '../../components/MediaLibrary'
 import { mediaUploadError, mediaApi } from '../../services/media'
 import { useState, useEffect, useCallback } from 'react'
@@ -382,6 +383,7 @@ export function ProductFormPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {t('products.image')}
             </label>
+            <ProductImageGallery images={uploadedImages} />
             <button type="button" className="btn mb-3" disabled={uploadedImages.length>=5} onClick={()=>setShowMediaPicker(true)}>{t('media.choose')}</button>
             {showMediaPicker&&<MediaPicker scene="product" max={5-uploadedImages.length} onClose={()=>setShowMediaPicker(false)} onSelect={assets=>{setUploadedImages(prev=>[...prev.filter(i=>i.mediaId),...assets.filter(a=>!prev.some(i=>i.mediaId===a.id)).map(a=>({mediaId:a.id,url:a.url}))].slice(0,5));setShowMediaPicker(false)}} />}
             <div

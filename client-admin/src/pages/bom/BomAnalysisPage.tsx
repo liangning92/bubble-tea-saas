@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { bomApi, receiptMediaUrl } from '../../services/api'
+import { ProductImageGallery } from '../../components/ProductImageGallery'
+import { bomApi } from '../../services/api'
 import { formatCurrency, formatItemName } from '../../utils/helpers'
 import { Loader2, Package, Search, Edit3 } from 'lucide-react'
 
@@ -10,7 +11,6 @@ export function BomAnalysisPage() {
   const { t, i18n } = useTranslation()
   const [searchParams,setSearchParams]=useSearchParams()
   const requestedProductId=searchParams.get('productId')
-  const [activeImage,setActiveImage]=useState(0)
   const [specId,setSpecId]=useState('')
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -60,7 +60,7 @@ export function BomAnalysisPage() {
     if(requested) setSelectedProduct(match||null)
     else if(!selectedProduct || !filteredProducts.some((p:any)=>p.id===selectedProduct.id))setSelectedProduct(filteredProducts[0]||null)
   },[filteredProducts,searchParams])
-  useEffect(()=>{setActiveImage(0);setSpecId('')},[selectedProduct?.id])
+  useEffect(()=>{setSpecId('')},[selectedProduct?.id])
   const images=detail?.images?.length?detail.images:detail?.image?[{url:detail.image}]:[]
   const selectedSpec=detail?.specs?.find((s:any)=>s.id===specId)||detail?.specs?.find((s:any)=>s.isDefault)||detail?.specs?.[0]
   const sellingPrice = selectedSpec?.price ?? currentProduct?.sellingPrice ?? 0
@@ -226,7 +226,7 @@ export function BomAnalysisPage() {
             )}
 
             {currentProduct && <div className="card space-y-3">
-              {images.length ? <><img src={receiptMediaUrl(images[activeImage]?.url||images[0].url)} alt={currentProduct.name} className="w-full max-h-80 object-contain rounded-lg" /><div className="flex gap-2">{images.map((img:any,index:number)=><button type="button" key={img.mediaId||img.url} aria-label={`${currentProduct.name} ${index+1}`} aria-pressed={activeImage===index} onClick={()=>setActiveImage(index)} className={`border-2 rounded-lg ${activeImage===index?'border-primary':'border-transparent'}`}><img src={receiptMediaUrl(img.url)} alt="" className="w-16 h-16 object-cover rounded" /></button>)}</div></> : <p className="text-sm text-gray-400">{t('media.noImage')}</p>}
+              {images.length ? <ProductImageGallery key={currentProduct.id} images={images} name={currentProduct.name} /> : <p className="text-sm text-gray-400">{detailLoading ? t('common.loading') : t('media.noImage')}</p>}
               {!!detail?.specs?.length && <select aria-label={t('insights.specs')} className="input w-auto" value={selectedSpec?.id||''} onChange={e=>setSpecId(e.target.value)}>{detail.specs.map((spec:any)=><option key={spec.id} value={spec.id}>{spec.name}</option>)}</select>}
               <Link className="text-primary text-sm" to={`/products/${currentProduct.id}/edit`}>{t('common.edit')}</Link>
             </div>}
