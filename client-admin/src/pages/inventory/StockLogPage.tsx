@@ -1,3 +1,4 @@
+import { ActorName, actorText } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { Link } from 'react-router-dom'
 import { countDetailUrl, inventoryLogDisplay, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
@@ -353,7 +354,8 @@ export function StockLogPage() {
         [t('inventory.unit')]: log.inventory?.unit || '-',
         [t('inventory.unitCost')]: log.unitCost || avgCost,
         [t('inventory.totalCostValue')]: costValue,
-        [t('inventory.operatorOrSupplier')]: log.supplier?.name || log.staffId || '-',
+        [t('inventoryActors.operator')]: actorText(log.operator, log.staffId, t),
+        [t('purchases.supplier')]: log.supplier?.name || '-',
         [t('inventory.notes')]: log.note || '-'
       }
     })
@@ -651,7 +653,7 @@ export function StockLogPage() {
                         {costValue ? formatCurrency(costValue) : '-'}
                       </td>
                       <td className="py-3 text-sm text-gray-600 px-4 whitespace-nowrap">
-                        {log.supplier?.name || log.staffId || '-'}
+                        <ActorName actor={log.operator} id={log.staffId}/>{log.supplier?.name && <div className="text-xs text-gray-500 mt-1">{t('purchases.supplier')}: {log.supplier.name}</div>}
                       </td>
                       <td className="py-3 text-sm text-gray-500 pl-4 max-w-xs truncate" title={log.note || ''}>
                         {log.note || '-'}

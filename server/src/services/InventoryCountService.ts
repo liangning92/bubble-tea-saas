@@ -1,3 +1,4 @@
+import {loadInventoryActors} from '../utils/inventoryActors'
 import {COUNT_OBSERVATION_PREFIX,captureCountBoundary} from '../utils/countObservation'
 import prisma from '../config/database'
 export interface CreateInventoryCountData {storeId:string;period:'monthly'|'quarterly'|'annual'|'ad_hoc';startDate:Date;endDate:Date;notes?:string;inventoryIds?:string[]}
@@ -6,8 +7,12 @@ function view(count:any){
  if(!count)return null
  return {...count,items:count.items.map((item:any)=>({...item,inventory:{...item.inventory,avgCost:Number(item.inventory.avgCost)},movementSinceObservation:item.countedAt?item.inventory.currentStock-item.systemQty-(count.status==='completed'?(item.variance||0):0):null,varianceAmountEstimate:item.variance===null?null:Math.round(item.variance*Number(item.inventory.avgCost)),valuationBasis:'current_carrying_average_estimate'}))}
 }
-export async function getInventoryCounts(storeId:string){return (await prisma.inventoryCount.findMany({where:{storeId},include,orderBy:{createdAt:'desc'}})).map(view)}
-export async function getInventoryCountById(countId:string,storeId?:string){return view(await prisma.inventoryCount.findFirst({where:{id:countId,...(storeId?{storeId}:{})},include}))}
+async function people(counts:any[],storeId:string){
+ const actors=await loadInventoryActors(prisma,storeId,counts.flatMap(c=>c.items.map((i:any)=>i.countedBy)))
+ return counts.map(c=>({...c,items:c.items.map((i:any)=>({...i,countedByActor:actors.get(i.countedBy)||null}))}))
+}
+export async function getInventoryCounts(storeId:string){return people((await prisma.inventoryCount.findMany({where:{storeId},include,orderBy:{createdAt:'desc'}})).map(view),storeId)}
+export async function getInventoryCountById(countId:string,storeId?:string){const count=view(await prisma.inventoryCount.findFirst({where:{id:countId,...(storeId?{storeId}:{})},include}));return count?(await people([count],count.storeId))[0]:null}
 async function lockCount(tx:any,countId:string,storeId:string,statuses=['in_progress']){
  const changed=await tx.inventoryCount.updateMany({where:{id:countId,storeId,status:{in:statuses}},data:{updatedAt:new Date()}})
  if(changed.count!==1)throw new Error('COUNT_NOT_ACTIVE_OR_STORE_MISMATCH')

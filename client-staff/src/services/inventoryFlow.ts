@@ -17,6 +17,7 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
     return result;
 }
 export const inventoryFlowApi = {
+    logs: () => get('/inventory/logs?limit=100'),
     list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers/dropdown'),
     purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),
     stock: (kind: 'in' | 'out', data: Record<string, unknown>) => intent(`/inventory/stock-${kind}`, data, 'operationId'),

@@ -1,3 +1,4 @@
+import { ActorName, InventoryActor } from '../../components/InventoryActor';
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -17,6 +18,10 @@ interface PurchaseOrderItem {
 interface PurchaseOrder {
   id: string
   orderNumber: string
+  createdBy?: string
+  receivedBy?: string
+  createdByActor?: InventoryActor | null
+  receivedByActor?: InventoryActor | null
   supplierId?: string
   onlineOrderNumber?: string
   supplier?: { name: string }
@@ -254,6 +259,8 @@ export function PurchaseOrderListPage() {
                   <div>
                     <p className="font-bold text-gray-900">{order.onlineOrderNumber || order.orderNumber}</p>
                     <p className="text-sm text-gray-500">{order.supplier?.name || t('purchases.supplier')}</p>
+                    <p className="text-sm text-gray-500 mt-1">{t('inventoryActors.buyer')}: <ActorName actor={order.createdByActor} id={order.createdBy}/></p>
+                    {order.status === 'received' && <p className="text-sm text-gray-500">{t('inventoryActors.receiver')}: <ActorName actor={order.receivedByActor} id={order.receivedBy}/></p>}
                   </div>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig.color} flex items-center gap-1`}>
                     <StatusIcon size={14} />

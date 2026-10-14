@@ -1,3 +1,4 @@
+import {loadInventoryActors} from '../utils/inventoryActors';
 import {alignInventoryBatches,receiptBatchDates} from './InventoryBatchService'
 import prisma from '../config/database';
 import { calculateProductCost } from './ProductService';
@@ -14,11 +15,12 @@ export class PurchaseOrderError extends Error {
     constructor(message: string, public statusCode = 409) { super(message); }
 }
 const include = { supplier: { select: { id: true, name: true } }, items: true };
-async function view(order: any, db: any = prisma) {
+async function view(order: any, db: any = prisma, suppliedActors?: Awaited<ReturnType<typeof loadInventoryActors>>) {
     if (!order)
         return null;
     const inventory = await db.inventory.findMany({ where: { storeId: order.storeId, id: { in: order.items.map((i: any) => i.inventoryId) } }, select: { id: true, name: true, unit: true } });
-    return { ...order, items: order.items.map((i: any) => ({ ...i, inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
+    const actors = suppliedActors || await loadInventoryActors(db, order.storeId, [order.createdBy, order.receivedBy]);
+    return { ...order, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
 }
 export async function getPurchaseOrders(filter: PurchaseOrderFilter) {
     const where: any = { storeId: filter.storeId };
@@ -31,7 +33,9 @@ export async function getPurchaseOrders(filter: PurchaseOrderFilter) {
     if (filter.startDate || filter.endDate)
         where.createdAt = { gte: filter.startDate, lte: filter.endDate };
     const orders = await prisma.purchaseOrder.findMany({ where, include, orderBy: { createdAt: 'desc' } });
-    return Promise.all(orders.map(o => view(o)));
+    const byStore = new Map<string, Awaited<ReturnType<typeof loadInventoryActors>>>();
+    for (const storeId of [...new Set(orders.map(o => o.storeId))]) byStore.set(storeId, await loadInventoryActors(prisma, storeId, orders.filter(o => o.storeId === storeId).flatMap(o => [o.createdBy, o.receivedBy])));
+    return Promise.all(orders.map(o => view(o, prisma, byStore.get(o.storeId))));
 }
 export async function getPurchaseOrderById(orderId: string) { return view(await prisma.purchaseOrder.findUnique({ where: { id: orderId }, include })); }
 export async function getPendingPurchaseOrders(storeId: string) { return getPurchaseOrders({ storeId, status: 'awaiting_receipt' }); }
