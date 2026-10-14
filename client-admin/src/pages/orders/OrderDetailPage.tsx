@@ -101,7 +101,7 @@ export function OrderDetailPage() {
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">{t('orders.date')}:</span> <span className="font-medium">{formatDateTime(order.createdAt)}</span></div>
-              <div><span className="text-gray-500">{t('orders.payment')}:</span> <span className="font-medium uppercase">{order.paymentMethod}</span></div>
+              <div><span className="text-gray-500">{t('orders.payment')}:</span> <span className="font-medium">{order.paymentMethod?.toLowerCase()==='cash'?t('uiDesign.cash'):order.paymentMethod?.toUpperCase()}</span></div>
               {order.paymentMethod === 'qris' && <PaymentEvidencePanel orderId={order.id} />}
               {order.member &&<div><span className="text-gray-500">{t('orders.customer')}:</span> <span className="font-medium">{order.member.name} ({order.member.phone})</span></div>}
            </div>

@@ -19,7 +19,7 @@ export function ResourcePicker({ label, options, value, onChange, single = false
     </div>
     <div className="p-3 space-y-3">
       <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-gray-400" /><input aria-label={l('搜索','Search','Cari') + ' ' + label} className="input pl-9" value={search} onChange={event => setSearch(event.target.value)} placeholder={l('搜索名称或编码','Search name or code','Cari nama atau kode')} /></div>
+        <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-gray-400" /><input aria-label={l('搜索','Search','Cari') + ' ' + label} className="input pl-9" value={search} onChange={event => setSearch(event.target.value)} placeholder={l('搜索名称或编码','Search name or code','Cari nama atau kode')}  data-dialog-search="true" /></div>
         {groups.length > 0 && <select aria-label={l('分类筛选','Category filter','Filter kategori') + ' ' + label} className="input sm:w-44" value={group} onChange={event => setGroup(event.target.value)}><option value="">{l('全部分类','All categories','Semua kategori')}</option>{groups.map(name => <option key={name}>{name}</option>)}</select>}
       </div>
       {!single && visible.length > 0 && <button type="button" className="text-xs text-primary" onClick={() => onChange([...new Set([...value, ...visible.map(option => option.id)])].slice(0, limit))}>{l('选择筛选结果','Select filtered results','Pilih hasil filter')} ({visible.length})</button>}
