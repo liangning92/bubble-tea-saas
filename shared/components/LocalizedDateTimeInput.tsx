@@ -35,7 +35,7 @@ export const LocalizedDateTimeInput = forwardRef<HTMLInputElement, Props>(functi
   const hasDate = type !== 'time'
   const hasTime = type === 'time' || type === 'datetime-local'
   const selectedDate = current.slice(0, 10)
-  const time = type === 'time' ? current : current.split('T')[1] || ''
+  const time = type === 'time' ? current || String(min || '') : current.split('T')[1] || String(min || '').split('T')[1] || ''
   const hour = time.split(':')[0] || '00'
   const minute = time.split(':')[1] || '00'
   const lower = String(min || '')
@@ -209,9 +209,9 @@ export const LocalizedDateTimeInput = forwardRef<HTMLInputElement, Props>(functi
         <label>{copy.minute}<select aria-label={copy.minute} value={minute} onChange={e => selectTime(hour, e.target.value)}>{Array.from({ length: 60 }, (_, m) => <option key={m} value={pad(m)}>{pad(m)}</option>)}</select></label>
       </div>}
       <div className="localized-datetime-actions">
-        <button type="button" onClick={() => change('')}>{copy.clear}</button>
+        <button type="button" onClick={() => { change(''); setOpen(false); input.current?.focus() }}>{copy.clear}</button>
         {hasDate && <button type="button" disabled={!allowed(type === 'month' ? isoDate(new Date()).slice(0, 7) : type === 'datetime-local' ? `${isoDate(new Date())}T${time || '00:00'}` : isoDate(new Date()))} onClick={() => selectDate(type === 'month' ? isoDate(new Date()).slice(0, 7) : isoDate(new Date()))}>{copy.today}</button>}
-        <button type="button" onClick={() => { setOpen(false); input.current?.focus() }}>{copy.done}</button>
+        <button type="button" onClick={() => { if (type === 'time' && !current && draft === null) selectTime(hour, minute); setOpen(false); input.current?.focus() }}>{copy.done}</button>
       </div>
     </div>, document.body)}
   </>
