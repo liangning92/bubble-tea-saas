@@ -1,6 +1,6 @@
 import dateLocaleI18n from '../../i18n'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
-import { ActorName, InventoryActor } from '../../components/InventoryActor';
+import { ActorName, CountOperators, InventoryActor } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
 import { useStoreDateSettings } from "../../hooks/useStoreDateSettings";
 import { InventoryCountAdjustments } from "../../components/InventoryCountAdjustments";
@@ -442,6 +442,7 @@ export function InventoryCountPage() {
                       {new Date(count.startDate).toLocaleDateString(dateLocaleI18n.language)} -{" "}
                       {new Date(count.endDate).toLocaleDateString(dateLocaleI18n.language)}
                     </div>
+                    <CountOperators items={count.items || []}/>
                     {count.notes && (
                       <div className="text-sm text-gray-400 mt-1">
                         {count.notes}
@@ -502,6 +503,7 @@ export function InventoryCountPage() {
             <h1 className="text-2xl font-bold text-gray-900">
               {getPeriodLabel(selectedCount.period)}
             </h1>
+            <CountOperators items={selectedCount.items || []}/>
             <div className="flex items-center gap-4 mt-2">
               {getStatusBadge(selectedCount.status)}
               <span className="text-sm text-gray-500">
