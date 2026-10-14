@@ -75,6 +75,7 @@ const browserChecks={
  training:{scripts:['tests/stoploss/training-management-page-check.cjs'],components:['admin','staff']},
 };
 const httpChecks={
+ finance:['tests/stoploss/revenue-query-http-check.cjs'],
  tv:['tests/stoploss/tv-signage-integration.cjs'],
  orders:['tests/stoploss/order-receipt-http-check.cjs'],
  shifts:['tests/stoploss/shift-review-http-check.cjs','tests/stoploss/shift-correction-http-check.cjs','tests/stoploss/expense-save-http-check.cjs'],

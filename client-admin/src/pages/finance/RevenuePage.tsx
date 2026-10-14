@@ -1,149 +1,76 @@
-import { RevenueLiveShifts } from './RevenueLiveShifts'
-import {QUERY_PERIODS,QueryPeriod,queryCalendarRange} from '../../utils/queryPeriods'
-import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
-import {formatStoreDate,storeCalendarDate} from '../../utils/storeDateTime'
-import { useState, useEffect, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { expenseCategoryName } from '../../../../shared/utils/expenseCategories'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ManualReceipts, ManualReceiptAmounts } from '../../components/ManualReceipts'
-import api, { revenueApi, configApi } from '../../services/api'
+import { Link, useSearchParams } from 'react-router-dom'
+import api from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
+import { useStoreDateSettings } from '../../hooks/useStoreDateSettings'
+import { formatStoreDate, storeCalendarDate } from '../../utils/storeDateTime'
+import { QUERY_PERIODS, QueryPeriod } from '../../utils/queryPeriods'
 import { formatCurrency } from '../../utils/helpers'
-import { finiteNumber, requireRead, validInstant } from '../../utils/dashboardNavigation'
-import { DashboardReadFailure } from '../../components/DashboardReadState'
-import {TrendingUp, TrendingDown, ShoppingBag, Bike, Store, Utensils, CreditCard, Calendar, DollarSign} from 'lucide-react'
 import { PurchaseHoursAnalysis, readPurchaseHours } from './PurchaseHoursAnalysis'
-import {PageHelp} from '../../components/PageHelp'
+import { DashboardReadFailure } from '../../components/DashboardReadState'
 
-interface ChannelData { channel:string; revenue:number; orders:number; avgOrderValue:number }
-interface RevenueTotals { orderRevenue?:number;shopeefood?:number;gofood?:number; revenue:number; orders:number; avgOrderValue:number }
-interface Summary { current:RevenueTotals; previous:RevenueTotals; revenueChange:number; ordersChange:number; comparisonRange?:{startDate:string;endDate:string;adjusted:boolean} }
-type Period = QueryPeriod | 'custom'
-const periods: Period[] = [...QUERY_PERIODS,'custom']
-const CHANNEL_ICONS = {pos:ShoppingBag,gofood:Bike,grabfood:Bike,shopee:ShoppingBag,tokopedia:Store,dine_in:Utensils,takeaway:Store,cash:CreditCard}
-const CHANNEL_LABELS: Record<string,string> = {shopeefood_manual:'ShopeeFood',gofood_manual:'GoFood',pos:'POS',gofood:'GoFood',grabfood:'GrabFood',shopee:'ShopeeFood',tokopedia:'Tokopedia',dine_in:'Dine In',takeaway:'Takeaway',cash:'Cash'}
-const validDate = (value:string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value
-const validTotals = (value:RevenueTotals) => !!value && finiteNumber(value.revenue) && finiteNumber(value.orders) && finiteNumber(value.avgOrderValue)
-function readChannels(value: unknown): ChannelData[] {
-  const rows = value as ChannelData[]
-  return requireRead(rows,Array.isArray(rows) && rows.every(row=>typeof row.channel==='string' && validTotals(row)))
-}
-function readSummary(value: unknown): Summary {
-  const summary=value as Summary
-  const range=summary?.comparisonRange
-  const validRange=!range || (validInstant(range.startDate) && validInstant(range.endDate) && Date.parse(range.startDate)<=Date.parse(range.endDate) && typeof range.adjusted==='boolean')
-  return requireRead(summary,validRange && !!summary && validTotals(summary.current) && validTotals(summary.previous) && finiteNumber(summary.revenueChange) && finiteNumber(summary.ordersChange))
-}
-
-export function RevenuePage() {
-  const {t, i18n}=useTranslation()
-  const dateSettings=useStoreDateSettings()
-  const user=useAuthStore(state=>state.user)
-  const storeId=user?.storeId
-  const canRead=user?.role==='admin'||user?.role==='manager'
-  const [searchParams]=useSearchParams()
-  const requestedPeriod=searchParams.get('period')
-  const navigationPeriod=requestedPeriod && periods.includes(requestedPeriod as Period) ? requestedPeriod as Period : undefined
-  const [period,setPeriod]=useState<Period>(navigationPeriod || 'today')
-  const [customDateRange,setCustomDateRange]=useState({start:searchParams.get('startDate')||'',end:searchParams.get('endDate')||''})
-  const manualSelection=useRef(0)
-  const [preferenceError,setPreferenceError]=useState(false)
-
-  useEffect(()=>{
-    if (navigationPeriod) { setPeriod(navigationPeriod); return }
-    if (!storeId || !canRead) return
-    setPreferenceError(false)
-    let active=true
-    const version=manualSelection.current
-    configApi.get(storeId).then(response=>{
-      const data=response.data?.data
-      const configs=Array.isArray(data)?data:Array.isArray(data?.data)?data.data:[]
-      const preference=configs.find((row:{key:string;value:string})=>row.key==='revenue.defaultPeriod')?.value || data?.['revenue.defaultPeriod']
-      if (active && version===manualSelection.current && QUERY_PERIODS.includes(preference)) setPeriod(preference)
-    }).catch(()=>{})
-    return ()=>{active=false}
-  },[storeId,canRead,navigationPeriod])
-
-  const handlePeriodChange = async (value:Period) => {
-    manualSelection.current+=1
-    const version=manualSelection.current
-    setPeriod(value)
-    setPreferenceError(false)
-    if (!storeId || value==='custom') return
-    try {await configApi.set(storeId,'revenue.defaultPeriod',value,'finance')}
-    catch {if (version===manualSelection.current && useAuthStore.getState().user?.storeId===storeId) setPreferenceError(true)}
-  }
-  const validCustom=validDate(customDateRange.start) && validDate(customDateRange.end) && customDateRange.start<=customDateRange.end
-  const validSelection=period!=='custom'||validCustom
-  // This immutable parameter snapshot is shared by the table and its summary.
-  const params=period==='custom'?{storeId,period,startDate:customDateRange.start,endDate:customDateRange.end}:{storeId,period}
-  const selected=useQuery({
-    queryKey:['revenue-selected',storeId,user?.role,params,dateSettings],
-    enabled:!!storeId && canRead && validSelection,refetchInterval:30000,
-    queryFn:async()=>{
-      const [channels,summary]=await Promise.all([revenueApi.byChannel(params),revenueApi.summary(params)])
-      return {channels:readChannels(channels.data?.data),summary:readSummary(summary.data?.data)}
-    },
-  })
-  const handovers=useQuery({queryKey:['revenue-handovers',storeId,user?.role,params,dateSettings],enabled:!!storeId && canRead && validSelection,refetchInterval:30000,
-    queryFn:async()=>{const data=(await api.get('/revenue/handover-receipts',{params})).data?.data; if(!Array.isArray(data?.list)||!data?.totals) throw Error('INVALID_HANDOVER_RECEIPTS'); return data as {range:{startDate:string;endDate:string};actualCashReceived:number|null;totals:ManualReceiptAmounts;list:{id:string;shift:string;openedAt:string;closedAt:string;definition:{name:string;nameZh:string|null;nameId:string|null}|null;actualCashReceived:number|null;onlineRevenueCounted:boolean;manualReceipts:ManualReceiptAmounts|null;manualReceiptsCashBasis?:string}[]} }
-  })
-  const purchases=useQuery({
-    queryKey:['revenue-purchase-hours',storeId,user?.role,params,dateSettings],
-    enabled:!!storeId && canRead && validSelection,refetchInterval:30000,
-    queryFn:async()=>readPurchaseHours((await revenueApi.purchaseHours(params)).data?.data),
-  })
-  const label=period==='custom'?`${formatStoreDate(customDateRange.start,dateSettings)} — ${formatStoreDate(customDateRange.end,dateSettings)}`:t('queryPeriods.'+period)
-  const summary=selected.data?.summary
-  const channels=selected.data?.channels||[]
-  const change=(value:number)=>value===0?<span>-</span>:<span className={`inline-flex items-center gap-1 ${value>0?'text-green-600':'text-red-600'}`}>{value>0?<TrendingUp size={12}/>:<TrendingDown size={12}/>} {value>0?'+':''}{value}%</span>
-
-  if (!storeId) return <DashboardReadFailure scope />
-  if (!canRead) return <p role="alert" data-testid="revenue-role-denied">{t('revenueRange.permissionDenied')}</p>
-  const time=(value:string)=>formatStoreDate(value,dateSettings,true)
-  return <div className="space-y-6">
-    <header className="flex flex-wrap items-center justify-between gap-4">
-      <h1 className="text-2xl font-bold text-gray-900">{t('revenueLayout.title')}</h1>
-      <div className="inline-flex gap-1 rounded-xl bg-gray-100 p-1" aria-label={t('revenueRange.selectedRange')}>
-        {periods.map(value=><button key={value} type="button" aria-pressed={period===value} onClick={()=>void handlePeriodChange(value)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${period===value?'bg-primary text-white shadow-sm':'text-gray-600 hover:bg-white'}`}>
-          {value==='custom'&&<Calendar size={14} className="inline mr-1"/>}{t(value==='custom'?'common.custom':'queryPeriods.'+value)}
-        </button>)}
-      </div>
-    </header>
-    {period==='custom'&&<div className="flex flex-wrap items-center gap-3 rounded-xl bg-white border border-gray-200 p-4">
-      <label className="text-sm text-gray-600">{t('revenueRange.startDate')}<input aria-label={t('revenueRange.startDate')} type="date" value={customDateRange.start} onChange={e=>setCustomDateRange(prev=>({...prev,start:e.target.value}))} className="input ml-2"/></label>
-      <span className="text-gray-400">—</span>
-      <label className="text-sm text-gray-600">{t('revenueRange.endDate')}<input aria-label={t('revenueRange.endDate')} type="date" value={customDateRange.end} onChange={e=>setCustomDateRange(prev=>({...prev,end:e.target.value}))} className="input ml-2"/></label>
-    </div>}
-    {preferenceError&&<PageHelp><p role="status">{t('revenueRange.preferenceFailed')}</p></PageHelp>}
-    <RevenueLiveShifts storeId={storeId} role={user?.role} enabled={validSelection} range={period==='custom'?{startDate:customDateRange.start,endDate:customDateRange.end}:queryCalendarRange(period,dateSettings.timezone)} />
-    <section className="space-y-6" data-testid="revenue-selected-range">
-      {!validSelection?<p role="alert" data-testid="revenue-range-invalid" className="card text-amber-700">{t('revenueRange.invalidRange')}</p>:selected.isError?<DashboardReadFailure retry={()=>selected.refetch()} />:selected.isPending?<p role="status">{t('common.loading')}</p>:summary&&<>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4" data-testid="revenue-selected-summary">
-          <div className="rounded-2xl bg-white border border-emerald-100 p-6 shadow-sm lg:col-span-2">
-            <div className="flex items-center justify-between gap-4"><p className="text-sm font-medium text-gray-500">{label} · {t('revenueLayout.netRevenue')}</p><div className="rounded-xl bg-emerald-50 p-2.5"><DollarSign size={22} className="text-emerald-600"/></div></div>
-            <p data-testid="revenue-primary-value" className={`mt-3 text-3xl sm:text-4xl xl:text-5xl font-bold tracking-tight tabular-nums break-words ${summary.current.revenue<0?'text-red-600':'text-gray-900'}`}>{formatCurrency(summary.current.revenue)}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs"><span className="font-semibold">{change(summary.revenueChange)}</span><span className="text-gray-500">{t('revenueLayout.vsPrevious')}</span><span className="ml-auto text-gray-400">{dateSettings.timezone}</span></div>
-          </div>
-          <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('common.orders')}</p><p data-testid="revenue-order-value" className="mt-5 text-3xl font-bold tabular-nums text-gray-900">{summary.current.orders.toLocaleString(i18n.language)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
-          <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm"><p className="text-sm text-gray-500">{t('finance.avgOrderValue')}</p><p data-testid="revenue-average-value" className="mt-5 text-xl xl:text-2xl font-bold tabular-nums break-words text-gray-900">{formatCurrency(summary.current.avgOrderValue)}</p><p className="mt-4 text-xs text-gray-400">{label}</p></div>
-        </div>
-        {summary.comparisonRange?.adjusted&&<PageHelp><p data-testid="revenue-comparison-adjusted">{t('revenueRange.comparisonAdjusted')} {t('revenueRange.comparisonRange')}: {time(summary.comparisonRange.startDate)} — {time(summary.comparisonRange.endDate)} ({dateSettings.timezone})</p></PageHelp>}
-        {validSelection && <div className="space-y-3">{handovers.isPending ? <p role="status">{t('common.loading')}</p> : handovers.isError ? <p role="alert">{t('manualReceipts.failed')}</p> : handovers.data && <>
-      <ManualReceipts hideCash actualCashReceived={handovers.data.actualCashReceived} hint={t('revenueHandover.hint')} amounts={handovers.data.list.some(row=>row.manualReceipts) ? handovers.data.totals : null} />
-      <p className="text-xs text-gray-500">{t('manualReceipts.closed')} · {dateSettings.timezone} · {label}</p>
-      {handovers.data.list.length === 0 ? <p className="text-sm text-gray-500">{t('manualReceipts.empty')}</p> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead><tr><th className="p-3 text-left">{t('manualReceipts.closed')}</th><th className="p-3 text-left">{t('manualReceipts.shift')}</th><th className="p-3 text-right">{t('revenueHandover.actualCash')}</th>{(['qris','shopeefood','gofood'] as const).map(key=><th key={key} className="p-3 text-right">{t('manualReceipts.'+key)}</th>)}</tr></thead><tbody>{handovers.data.list.map(row=><tr key={row.id} className="border-t"><td className="p-3 whitespace-nowrap">{time(row.closedAt)}</td><td className="p-3"><Link className="font-semibold text-primary hover:underline" to={`/finance/revenue/shifts/${encodeURIComponent(row.id)}?${new URLSearchParams({period:'custom',startDate:storeCalendarDate(row.openedAt,dateSettings.timezone),endDate:storeCalendarDate(row.closedAt,dateSettings.timezone),returnStartDate:handovers.data!.range.startDate,returnEndDate:handovers.data!.range.endDate})}`}>{(i18n.language.startsWith('zh') ? row.definition?.nameZh : i18n.language.startsWith('id') ? row.definition?.nameId : row.definition?.name) || t('shiftReview.'+row.shift,{defaultValue:row.shift})}</Link></td><td className="p-3 text-right whitespace-nowrap font-semibold text-emerald-700">{row.actualCashReceived === null ? t('manualReceipts.missing') : formatCurrency(row.actualCashReceived)}</td>{(['qris','shopeefood','gofood'] as const).map(key=><td key={key} className="p-3 text-right whitespace-nowrap">{key!=='qris' && !row.onlineRevenueCounted ? '—' : row.manualReceipts ? formatCurrency(row.manualReceipts[key]) : t('manualReceipts.missing')}</td>)}</tr>)}</tbody></table></div>}
-    </>}</div>}
-    {purchases.isError ? <div data-testid="purchase-analysis-error"><DashboardReadFailure retry={()=>purchases.refetch()}/></div> : purchases.isPending ? <p role="status">{t('common.loading')}</p> : <PurchaseHoursAnalysis key={`${storeId}:${period}:${purchases.data.startDate}:${purchases.data.endDate}`} data={purchases.data}/>}
-        {channels.length===0?<p className="card text-gray-500">{t('common.noData')}</p>:<>
-          <section className="rounded-2xl bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between"><h2 className="text-lg font-semibold">{t('revenueLayout.channelDetails')}</h2><span className="text-xs text-gray-400">{label}</span></div><div className="overflow-x-auto"><table className="w-full text-sm" data-testid="revenue-selected-table">
-            <thead className="bg-gray-50 text-gray-500"><tr><th className="px-6 py-3 text-left font-medium">{t('finance.channel')}</th><th className="px-6 py-3 text-right font-medium">{t('revenueLayout.netRevenue')}</th><th className="px-6 py-3 text-right font-medium">{t('common.orders')}</th><th className="px-6 py-3 text-right font-medium">{t('finance.avgOrderValue')}</th></tr></thead>
-            <tbody>{channels.map(row=>{const Icon=CHANNEL_ICONS[row.channel as keyof typeof CHANNEL_ICONS]||Store;return <tr key={row.channel} className="border-t border-gray-100 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-700"><Icon size={17} className="inline mr-2 text-gray-400"/>{CHANNEL_LABELS[row.channel]||row.channel}</td><td className="px-6 py-4 text-right font-semibold tabular-nums">{formatCurrency(row.revenue)}</td><td className="px-6 py-4 text-right tabular-nums">{row.channel.endsWith('_manual') ? '—' : row.orders}</td><td className="px-6 py-4 text-right tabular-nums">{row.channel.endsWith('_manual') ? '—' : formatCurrency(row.avgOrderValue)}</td></tr>})}</tbody>
-            <tfoot className="bg-gray-50 border-t border-gray-200 font-semibold"><tr><td className="px-6 py-4">{t('common.total')}</td><td className="px-6 py-4 text-right tabular-nums">{formatCurrency(summary.current.revenue)}</td><td className="px-6 py-4 text-right tabular-nums">{summary.current.orders}</td><td className="px-6 py-4 text-right tabular-nums">{formatCurrency(summary.current.avgOrderValue)}</td></tr></tfoot>
-          </table></div></section>
-        </>}
-      </>}
-    </section>
-  </div>
+type Label={name:string;nameZh?:string|null;nameId?:string|null}
+type Option=Label&{value:string;group:string;labelKey:string;paymentFilter:boolean;channelFilter:boolean}
+type Filter={period:QueryPeriod|'custom';startDate?:string;endDate?:string;dataset:string;paymentMethod?:string;channelId?:string}
+type Options={datasets:Option[];payments:string[];channels:{id:string;name:string}[]}
+type Row={id:string;kind:string;date:string;amount:number|null;reference:string;paymentMethod:string|null;channelId:string|null;channel:Label|null;category:string|null;sessionId:string|null;source:string;dateBasis:string;legacyDate:boolean}
+type Shift={id:string;shift:string;status:string;openedAt:string;closedAt:string|null;windowEnd:string;opener:string;definition:Label|null;filteredAmount:number;filteredCount:number;missingCount:number}
+type Result={filter:Filter;selected:Option;range:{startDate:string;endDate:string;timezone:string};asOf:string;summary:{amount:number;count:number;missingCount:number;legacyDateCount:number;orderCount:number};breakdown:{key:string;label:Label|null;amount:number;count:number;missingCount:number}[];rows:Row[];pagination:{page:number;pageSize:number;total:number;pages:number};shifts:Shift[];unassignedCount:number}
+const initial=(params:URLSearchParams):Filter=>({period:([...QUERY_PERIODS,'custom'].includes(params.get('period')||'')?params.get('period'):'today') as Filter['period'],dataset:params.get('dataset')||'net',...(params.get('period')==='custom'?{startDate:params.get('startDate')||'',endDate:params.get('endDate')||''}:{}),...(params.get('paymentMethod')?{paymentMethod:params.get('paymentMethod')!}:{}),...(params.get('channelId')?{channelId:params.get('channelId')!}:{})})
+const parameters=(filter:Filter)=>Object.fromEntries(Object.entries(filter).filter(([,value])=>value!==undefined&&value!=='')) as Record<string,string>
+const valid=(f:Filter)=>f.period!=='custom'||!!f.startDate&&!!f.endDate&&[f.startDate,f.endDate].every(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d)&&f.startDate<=f.endDate&&(Date.parse(f.endDate)-Date.parse(f.startDate))/86400000<366
+export function RevenuePage(){
+ const {t,i18n}=useTranslation(),settings=useStoreDateSettings(),user=useAuthStore(s=>s.user),[search,setSearch]=useSearchParams()
+ const [applied,setApplied]=useState<Filter>(()=>initial(search)),[draft,setDraft]=useState<Filter>(()=>initial(search)),[page,setPage]=useState(()=>Math.max(1,Number(search.get('page'))||1)),[submittedInvalid,setSubmittedInvalid]=useState(false)
+ const allowed=!!user?.storeId&&['admin','manager'].includes(user.role),storeId=user?.storeId
+ useEffect(()=>{const f=initial(search);setApplied(f);setDraft(f);setPage(Math.max(1,Number(search.get('page'))||1))},[search])
+ const options=useQuery({queryKey:['revenue-query-options',user?.id,storeId],enabled:allowed,queryFn:async()=>{const d=(await api.get('/revenue/query-options')).data?.data as Options;if(!Array.isArray(d?.datasets)||!Array.isArray(d?.channels)||!Array.isArray(d?.payments))throw Error('INVALID_QUERY_OPTIONS');return d}})
+ const result=useQuery({queryKey:['revenue-query',user?.id,storeId,applied,page,settings],enabled:allowed&&valid(applied),refetchInterval:30000,queryFn:async()=>{const d=(await api.get('/revenue/query',{params:{...parameters(applied),page}})).data?.data as Result;if(!d?.summary||!Number.isFinite(d.summary.amount)||!Number.isFinite(d.summary.count)||!Array.isArray(d.rows)||!Array.isArray(d.shifts)||!Array.isArray(d.breakdown)||!d.pagination||!d.range||!Number.isFinite(Date.parse(d.asOf)))throw Error('INVALID_REVENUE_QUERY');return d}})
+ useEffect(()=>{if(result.data && page>result.data.pagination.pages)setPage(result.data.pagination.pages)},[result.data,page])
+ const data=submittedInvalid?undefined:result.data,choice=options.data?.datasets.find(o=>o.value===draft.dataset)
+ const orderData=applied.dataset==='net'||applied.dataset==='orders'||applied.dataset.startsWith('payment:')||applied.dataset.startsWith('channel:')
+ const purchases=useQuery({queryKey:['revenue-purchase-hours',user?.id,storeId,applied,settings],enabled:allowed&&valid(applied)&&orderData,refetchInterval:30000,queryFn:async()=>readPurchaseHours((await api.get('/revenue/purchase-hours',{params:{...parameters(applied),paymentMethod:applied.dataset.startsWith('payment:')?applied.dataset.slice(8):applied.paymentMethod,channelId:applied.dataset.startsWith('channel:')?applied.dataset.slice(8):applied.channelId}})).data?.data)})
+ const label=(item:Label)=> (i18n.language.startsWith('zh')?item.nameZh:i18n.language.startsWith('id')?item.nameId:item.name)||item.name
+ const optionLabel=(o:Option)=>o.value.startsWith('payment:')?['cash','qris'].includes(o.name)?t('revenueQuery.'+o.name):o.name.toUpperCase():o.value.startsWith('expense:')?expenseCategoryName({key:o.value.slice(8),labelEn:o.name,labelZh:o.nameZh||undefined,labelId:o.nameId||undefined},i18n.language):o.value.startsWith('channel:')&&o.value!=='channel:none'?label(o):t('revenueQuery.'+o.labelKey)
+ const source=(key:string)=>key.startsWith('manual:')?t('revenueQuery.'+({cash:'manualCash',qris:'manualQris',shopeefood:'shopeefood',gofood:'gofood'}[key.slice(7)]||key)):t('revenueQuery.'+key,{defaultValue:key})
+ const time=(value:string)=>formatStoreDate(value,settings,true)
+ const apply=(f:Filter)=>{if(!valid(f)){setSubmittedInvalid(true);return}if(JSON.stringify(parameters(f))===JSON.stringify(parameters(applied)) && page===1)void result.refetch();setSubmittedInvalid(false);setPage(1);setSearch(parameters(f));setApplied(f);setDraft(f)}
+ const changeDataset=(dataset:string)=>{const o=options.data?.datasets.find(o=>o.value===dataset);setDraft(f=>({...f,dataset,paymentMethod:o?.paymentFilter?f.paymentMethod:undefined,channelId:o?.channelFilter?f.channelId:undefined}))}
+ const detailLink=(s:Shift)=>`/finance/revenue/shifts/${encodeURIComponent(s.id)}?${new URLSearchParams({startDate:storeCalendarDate(s.openedAt,settings.timezone),endDate:storeCalendarDate(s.windowEnd,settings.timezone),returnQuery:new URLSearchParams({...parameters(applied),page:String(page)}).toString()})}`
+ if(!storeId)return <DashboardReadFailure scope />
+ if(!allowed)return <p role="alert">{t('revenueRange.permissionDenied')}</p>
+ return <div className="space-y-5" data-testid="revenue-query-page">
+  <h1 className="text-2xl font-bold">{t('revenueLayout.title')}</h1>
+  <section data-testid="revenue-selected-summary" className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   <div className="rounded-2xl bg-white border border-emerald-100 p-6 md:col-span-2"><p className="text-sm text-gray-500">{data?optionLabel(data.selected):t('revenueQuery.amount')}</p><p className="mt-3 text-4xl font-bold tabular-nums" data-testid="revenue-primary-value">{result.isError?'—':data?formatCurrency(data.summary.amount):t('common.loading')}</p>{data&&<p className="mt-3 text-sm text-gray-500">{data.range.startDate} — {data.range.endDate} · {data.range.timezone}{!!data.summary.missingCount&&' · '+t('revenueQuery.missing')}</p>}</div>
+   <div className="rounded-2xl bg-white border p-6"><p className="text-sm text-gray-500">{t('revenueQuery.count')}</p><p className="mt-3 text-3xl font-bold" data-testid="revenue-order-value">{result.isError?'—':data?.summary.count??'—'}</p>{data&&<p className="text-xs text-gray-500 mt-3">{t('shiftReview.updated')} {time(data.asOf)}</p>}</div>
+  </section>
+  <form data-testid="revenue-query-filters" className="rounded-xl border bg-white p-4 space-y-4" onSubmit={e=>{e.preventDefault();apply(draft)}}>
+   <div className="flex flex-wrap gap-2">{[...QUERY_PERIODS,'custom' as const].map(period=><button key={period} type="button" aria-pressed={draft.period===period} className={draft.period===period?'btn-primary':'btn-secondary'} onClick={()=>setDraft(f=>({...f,period,startDate:period==='custom'?f.startDate||storeCalendarDate(new Date(),settings.timezone):undefined,endDate:period==='custom'?f.endDate||storeCalendarDate(new Date(),settings.timezone):undefined}))}>{t(period==='custom'?'common.custom':'queryPeriods.'+period)}</button>)}</div>
+   <div className="flex flex-wrap items-end gap-3">
+    {draft.period==='custom'&&<><label>{t('revenueRange.startDate')}<input aria-label={t('revenueRange.startDate')} className="input block mt-1" type="date" value={draft.startDate||''} onChange={e=>setDraft(f=>({...f,startDate:e.target.value}))}/></label><label>{t('revenueRange.endDate')}<input aria-label={t('revenueRange.endDate')} className="input block mt-1" type="date" value={draft.endDate||''} onChange={e=>setDraft(f=>({...f,endDate:e.target.value}))}/></label></>}
+    <label>{t('revenueQuery.dataset')}<select data-testid="revenue-dataset" aria-label={t('revenueQuery.dataset')} className="input block mt-1" value={draft.dataset} onChange={e=>changeDataset(e.target.value)}>{['revenue','payment','channel','refund','expense','handover'].map(group=><optgroup key={group} label={t('revenueQuery.'+group)}>{options.data?.datasets.filter(o=>o.group===group).map(o=><option key={o.value} value={o.value}>{optionLabel(o)}</option>)}</optgroup>)}</select></label>
+    {choice?.paymentFilter&&<label>{t('revenueQuery.payment')}<select aria-label={t('revenueQuery.payment')} className="input block mt-1" value={draft.paymentMethod||''} onChange={e=>setDraft(f=>({...f,paymentMethod:e.target.value||undefined}))}><option value="">{t('revenueQuery.all')}</option>{options.data?.payments.map(p=><option key={p} value={p}>{p.toUpperCase()}</option>)}</select></label>}
+    {choice?.channelFilter&&<label>{t('revenueQuery.channel')}<select aria-label={t('revenueQuery.channel')} className="input block mt-1" value={draft.channelId||''} onChange={e=>setDraft(f=>({...f,channelId:e.target.value||undefined}))}><option value="">{t('revenueQuery.all')}</option>{options.data?.channels.map(c=><option key={c.id} value={c.id}>{c.id==='none'?t('revenueQuery.pos'):c.name}</option>)}</select></label>}
+    <button type="submit" className="btn-primary" disabled={options.isPending||options.isError}>{t('revenueQuery.query')}</button><button type="button" className="btn-secondary" onClick={()=>apply({period:'today',dataset:'net'})}>{t('revenueQuery.reset')}</button>
+   </div>
+   {(submittedInvalid||!valid(applied))&&<p role="alert" data-testid="revenue-range-invalid" className="text-red-600">{t('revenueQuery.invalid')}</p>}
+   {options.isError&&<DashboardReadFailure retry={()=>options.refetch()}/>}
+  </form>
+  {result.isError?<DashboardReadFailure retry={()=>result.refetch()}/>:!data?<p role="status">{t('common.loading')}</p>:<>
+   <section className="space-y-3" data-testid="revenue-query-details"><h2 className="text-lg font-semibold">{t('revenueQuery.details')}</h2><p className="text-sm text-gray-500">{t('revenueQuery.applied')}: {optionLabel(data.selected)}{applied.paymentMethod?' · '+applied.paymentMethod.toUpperCase():''}{applied.channelId?' · '+(options.data?.channels.find(c=>c.id===applied.channelId)?.name||applied.channelId):''}</p>
+    {!!data.summary.missingCount&&<p role="status" className="text-amber-700">{t('revenueQuery.missingHint',{count:data.summary.missingCount})}</p>}{!!data.summary.legacyDateCount&&<p role="status" className="text-amber-700">{t('revenueQuery.legacyHint',{count:data.summary.legacyDateCount})}</p>}
+    <div className="overflow-x-auto rounded-xl bg-white border"><table className="w-full text-sm" data-testid="revenue-selected-table"><thead className="bg-gray-50 text-left"><tr>{['dateBasis','reference','source','payment','channel','amount'].map(k=><th key={k} className="p-3">{t('revenueQuery.'+k)}</th>)}</tr></thead><tbody>{data.rows.map(r=><tr key={r.id} className="border-t"><td className="p-3 whitespace-nowrap">{time(r.date)}<p className="text-xs text-gray-500">{t('revenueQuery.'+r.dateBasis)}</p></td><td className="p-3">{r.reference}</td><td className="p-3">{source(r.source)}{r.category&&<p>{r.category}</p>}</td><td className="p-3">{r.paymentMethod?.toUpperCase()||'—'}</td><td className="p-3">{r.channel?label(r.channel):r.kind==='order'||r.kind==='refund'?t('revenueQuery.pos'):'—'}</td><td className="p-3 font-semibold whitespace-nowrap">{r.amount===null?t('revenueQuery.missing'):formatCurrency(r.amount)}</td></tr>)}</tbody><tfoot className="bg-gray-50"><tr><td colSpan={5} className="p-3">{t('common.total')} · {data.summary.count}</td><td className="p-3 font-bold">{formatCurrency(data.summary.amount)}</td></tr></tfoot></table>{!data.rows.length&&<p className="p-4 text-gray-500">{t('revenueQuery.empty')}</p>}</div>
+    <div className="flex justify-end gap-3 items-center"><button className="btn-secondary" disabled={page<=1||result.isFetching} onClick={()=>setPage(p=>p-1)}>{t('shiftReview.previous')}</button><span>{t('revenueQuery.page',data.pagination)}</span><button className="btn-secondary" disabled={page>=data.pagination.pages||result.isFetching} onClick={()=>setPage(p=>p+1)}>{t('shiftReview.next')}</button></div>
+    {!!data.breakdown.length&&<div className="rounded-xl bg-white border p-4"><h3 className="font-semibold">{t('revenueQuery.breakdown')}</h3><div className="flex flex-wrap gap-6 mt-3">{data.breakdown.map(b=><div key={b.key}><p className="text-sm text-gray-500">{b.label?label(b.label):b.key==='none'?t('revenueQuery.pos'):source(b.key)}</p><p className="font-semibold">{formatCurrency(b.amount)} · {b.count}</p></div>)}</div></div>}
+   </section>
+   <section data-testid="revenue-live-shifts" className="space-y-3"><h2 className="text-lg font-semibold">{t('shiftReview.title')}</h2><p className="text-xs text-gray-500">{t('revenueQuery.fullShift')}</p>{!!data.unassignedCount&&<p className="text-amber-700">{t('revenueQuery.unassigned',{count:data.unassignedCount})}</p>}
+    <div className="overflow-x-auto rounded-xl bg-white border"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr>{['shift','time','opener'].map(k=><th key={k} className="p-3">{t('shiftReview.'+k)}</th>)}<th className="p-3">{t('revenueQuery.filteredAmount')}</th><th className="p-3">{t('revenueQuery.filteredCount')}</th><th className="p-3">{t('shiftReview.status')}</th><th/></tr></thead><tbody>{data.shifts.map(s=><tr key={s.id} data-testid={'live-shift-'+s.id} className="border-t"><td className="p-3">{s.definition?label(s.definition):s.shift}</td><td className="p-3 whitespace-nowrap">{time(s.openedAt)} — {s.status==='open'?t('shiftReview.ongoing'):time(s.windowEnd)}</td><td className="p-3">{s.opener}</td><td className="p-3 font-semibold">{formatCurrency(s.filteredAmount)}{s.missingCount>0&&' · '+t('revenueQuery.missing')}</td><td className="p-3">{s.filteredCount}</td><td className="p-3">{t('shiftReview.'+s.status)}</td><td className="p-3"><Link className="text-primary font-semibold" to={detailLink(s)}>{t('shiftReview.details')}</Link></td></tr>)}</tbody></table>{!data.shifts.length&&<p className="p-4">{t('shiftReview.empty')}</p>}</div>
+   </section>
+  </>}
+  {orderData?(purchases.isError?<DashboardReadFailure retry={()=>purchases.refetch()}/>:purchases.isPending?<p role="status">{t('common.loading')}</p>:<PurchaseHoursAnalysis data={purchases.data}/>):<p className="text-sm text-gray-500">{t('revenueQuery.notApplicable')}</p>}
+ </div>
 }

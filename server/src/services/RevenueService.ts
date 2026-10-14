@@ -147,7 +147,7 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
 }
 
 // Visits are independent of refund amounts; a completed/refunded purchase still occurred.
-export async function getPurchaseHours(storeId: string, startDate: Date, endDate: Date,timezone=DEFAULT_TIMEZONE) {
+export async function getPurchaseHours(storeId: string, startDate: Date, endDate: Date,timezone=DEFAULT_TIMEZONE,filters:{paymentMethod?:string;channelId?:string}={}) {
   const startDay = businessCalendarDate(startDate,timezone)
   const endDay = businessCalendarDate(endDate,timezone)
   const first = Date.parse(`${startDay}T00:00:00Z`)
@@ -165,12 +165,13 @@ export async function getPurchaseHours(storeId: string, startDate: Date, endDate
     if (!Number.isFinite(at.getTime()) || row.key !== RECEIVED_RECEIPT_PREFIX + receipt.orderNumber) throw new Error('PURCHASE_RECEIPT_TIME_INVALID')
     receipts.set(receipt.orderNumber, { at, fingerprint: orderRequestFingerprint(receipt.request), amount: receipt.grandTotal })
   }
+  const scope = {storeId,...(filters.paymentMethod?{paymentMethod:filters.paymentMethod}:{}),...(filters.channelId?{channelId:filters.channelId==='none'?null:filters.channelId}:{})}
   const select = { id: true, orderNumber: true, createdAt: true, customerCount: true, requestFingerprint: true, finalAmount: true }
   const status = { in: ['completed', 'paid', 'refunded'] }
-  const orders = await prisma.order.findMany({ where: { storeId, status, createdAt: { gte: startDate, lte: endDate } }, select })
+  const orders = await prisma.order.findMany({ where: { ...scope, status, createdAt: { gte: startDate, lte: endDate } }, select })
   const known = new Set(orders.map(order => order.orderNumber))
   const delayed = [...receipts].filter(([number, receipt]) => !known.has(number) && receipt.at >= startDate && receipt.at <= endDate).map(([number]) => number)
-  for (let offset = 0; offset < delayed.length; offset += 500) orders.push(...await prisma.order.findMany({ where: { storeId, status, orderNumber: { in: delayed.slice(offset, offset + 500) } }, select }))
+  for (let offset = 0; offset < delayed.length; offset += 500) orders.push(...await prisma.order.findMany({ where: { ...scope, status, orderNumber: { in: delayed.slice(offset, offset + 500) } }, select }))
   for (const order of orders) {
     const receipt = receipts.get(order.orderNumber)
     const matched = receipt && receipt.fingerprint === order.requestFingerprint && receipt.amount === order.finalAmount
