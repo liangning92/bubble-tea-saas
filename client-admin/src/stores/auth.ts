@@ -66,7 +66,7 @@ function validSession(token: unknown, user: unknown): user is User {
     const candidate = user as User
     return Number.isFinite(payload.exp) && payload.exp * 1000 > Date.now()
       && payload.id === candidate.id && payload.role === candidate.role
-      && (payload.storeId ?? null) === candidate.storeId
+      && (payload.storeId || null) === (candidate.storeId || null)
   } catch { return false }
 }
 
