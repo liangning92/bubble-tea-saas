@@ -424,6 +424,20 @@ const { chromium, expect } = require("@playwright/test"),
     await page.goto(origin + '/products/recipes?productId=recipe-fixture');
     await expect(page.getByRole('cell',{name:'Rp 4.957',exact:true})).toBeVisible();
     await page.screenshot({path:path.join(out,'recipe-saved-detail.png')});
+    // Switching UI language must not reload or silently discard a recipe draft.
+    await page.setViewportSize({width:1440,height:900});
+    await page.goto(origin + '/products/recipe-fixture/recipe');
+    await page.getByRole('textbox',{name:'Quantity',exact:true}).first().fill('0.2');
+    let languageNavigations=0;
+    page.on('framenavigated',frame=>{if(frame===page.mainFrame()) languageNavigations++;});
+    const savedWriteCount=writes.length;
+    for (const [language,quantity,save] of [['id','Jumlah','Simpan'],['zh','数量','保存'],['en','Quantity','Save']]) {
+      await page.locator('aside select').selectOption(language);
+      await expect(page.getByRole('button',{name:save,exact:true})).toBeVisible();
+      await expect(page.getByRole('textbox',{name:quantity,exact:true}).first()).toHaveValue('0.2');
+      assert.equal(languageNavigations,0,'language switches must preserve the current document and draft');
+    }
+    assert.equal(writes.length,savedWriteCount,'language switches never save business data');
     assert.deepEqual(errors, []);
     console.log(
       "PASS production UI: full-width mobile drawer, dialog focus/Escape, TV search/drafts, media preview, price zero/empty/failure/bulk review, explicit store save, inventory grouping.",
