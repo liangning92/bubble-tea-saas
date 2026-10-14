@@ -1,3 +1,4 @@
+import { consumeUpgradeSession } from './upgradeSession'
 import { cupStickerTspl } from './cupSticker'
 import { parsePrinterNames } from './printerInventory'
 import { requestReceiptHandover } from './receiptHandover'
@@ -211,6 +212,8 @@ if (process.env.ELECTRON_DISABLE_GPU !== '1') {
 
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
+// The customer display must not consume the main cashier's one-time session.
+ipcMain.handle('consume-upgrade-session',event=>event.sender===mainWindow?.webContents?consumeUpgradeSession():null)
 let customerWindow: BrowserWindow | null = null
 
 // 本地 Express 服务器进程（用于打包后的桌面版本）
@@ -773,6 +776,9 @@ function createMainWindow() {
     if (customerWindow) {
       customerWindow.close()
     }
+    // Offscreen receipt windows must not leave Windows POS alive without a
+    // cashier window. Quitting also shuts down the local API normally.
+    if (process.platform !== 'darwin') app.quit()
   })
 
   console.log('[Electron] Main window created')
@@ -2968,11 +2974,10 @@ if (!gotTheLock) {
 app.on('second-instance', () => {
   // 延迟聚焦到主窗口（等待 whenReady 完成）
   setTimeout(() => {
-    const { BrowserWindow } = require('electron')
-    const wins = BrowserWindow.getAllWindows()
-    if (wins.length > 0) {
-      const win = wins[0]
+    const win = mainWindow
+    if (win && !win.isDestroyed()) {
       if (win.isMinimized()) win.restore()
+      win.show()
       win.focus()
     }
   }, 1000)

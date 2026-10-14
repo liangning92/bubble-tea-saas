@@ -4,6 +4,8 @@ import { HashRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
+import {useAuthStore} from './stores/auth'
+import {backendIdentity,currentBackendIdentity} from './utils/backendIdentity'
 import { ToastProvider } from './components/ui/Toast'
 import './index.css'
 import './i18n'
@@ -18,18 +20,24 @@ const queryClient = new QueryClient({
   }
 })
 
-// Initialize ConnectionManager for smart API reconnection
-// This runs in the background and manages API connectivity
-connectionManager.startHealthCheck(30000)  // Check every 30 seconds
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <HashRouter>
-          <ToastProvider><App /></ToastProvider>
-        </HashRouter>
-      </QueryClientProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
-)
+async function start(){
+  try {
+    const raw=await window.electronAPI?.consumeUpgradeSession?.()
+    if(raw){
+      const restored=JSON.parse(raw)
+      if(restored.state?.isAuthenticated && backendIdentity(restored.state.apiUrl)===currentBackendIdentity()){
+        sessionStorage.setItem('pos-auth',raw)
+        await useAuthStore.persist.rehydrate()
+      }
+    }
+  }catch{/* Unavailable or expired handoffs use the normal login screen. */}
+  connectionManager.startHealthCheck(30000)
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <ErrorBoundary><QueryClientProvider client={queryClient}><HashRouter>
+        <ToastProvider><App /></ToastProvider>
+      </HashRouter></QueryClientProvider></ErrorBoundary>
+    </React.StrictMode>
+  )
+}
+void start()

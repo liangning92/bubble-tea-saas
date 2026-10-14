@@ -4,6 +4,7 @@ import {mkdir, open, readFile, stat} from 'fs/promises'
 import {createHash, randomUUID} from 'crypto'
 import {spawn} from 'child_process'
 import path from 'path'
+import {saveUpgradeSession,clearUpgradeSession} from './upgradeSession'
 import {isNewerUpdate} from '../src/utils/updateVersion'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -186,7 +187,7 @@ export function setupUpdater(window: BrowserWindow, hooks: {prepare:()=>Promise<
 
   autoUpdater.on('error', (err: any) => {
     downloadInProgress = false
-    if(installing){installing=false;try{installationHooks.resume()}catch{}}
+    if(installing){installing=false;void clearUpgradeSession().catch(()=>{});try{installationHooks.resume()}catch{}}
     log('error', 'Error:', err.message)
     sendToRenderer('update-error', err.message)
   })
@@ -278,6 +279,7 @@ function setupIpcHandlers() {
 
   // Install update and restart
   ipcMain.handle('install-update', async (_event, snapshot: any) => {
+    if (_event.sender !== mainWindow?.webContents) return false
     if (installing) return false
     installing = true
     let prepared = false
@@ -299,6 +301,7 @@ function setupIpcHandlers() {
       const handle = await open(file,'wx',0o600)
       try {await handle.writeFile(bytes);await handle.sync()} finally {await handle.close()}
       if (createHash('sha256').update(await readFile(file)).digest('hex') !== createHash('sha256').update(bytes).digest('hex')) throw Error('UPDATE_BACKUP_VERIFY_FAILED')
+      await saveUpgradeSession(await mainWindow?.webContents.executeJavaScript("sessionStorage.getItem('pos-auth')"))
       prepared = true
       await installationHooks.prepare()
       if (existsSync(upgradeHelper())) await runUpgradeHelper('refresh-stage', installer)
@@ -308,6 +311,7 @@ function setupIpcHandlers() {
       autoUpdater.quitAndInstall(true,true)
       return true
     } catch (error:any) {
+      await clearUpgradeSession().catch(()=>{})
       if (prepared) {try{installationHooks.resume()}catch{}}
       installing = false
       sendToRenderer('update-error',error.message || 'UPDATE_INSTALL_FAILED')

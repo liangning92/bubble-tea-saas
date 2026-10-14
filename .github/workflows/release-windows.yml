@@ -56,6 +56,9 @@ jobs:
           const manifest=JSON.parse(fs.readFileSync('evidence/desktop-template-manifest.json','utf8'));
           const compatibility=JSON.parse(fs.readFileSync('evidence/desktop-compatibility-report.json','utf8'));
           const guard=JSON.parse(fs.readFileSync('evidence/desktop-upgrade-gate-report.json','utf8'));
+          const resume=JSON.parse(fs.readFileSync('evidence/upgrade-session-validation.json','utf8'));
+          assert.equal(resume.sourceSha,process.env.RELEASE_SHA);
+          for(const key of ['passed','syntheticOnly','encrypted','oneTime','separateProcesses','accountAndBackendPreserved'])assert.equal(resume[key],true);
           const manual=JSON.parse(fs.readFileSync('evidence/desktop-manual-upgrade-report.json','utf8'));
           assert.equal(manual.sourceSha,process.env.RELEASE_SHA);
           assert.equal(manual.allCriticalCasesPassed,true);

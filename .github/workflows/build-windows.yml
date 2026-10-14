@@ -196,6 +196,15 @@ jobs:
           DEBUG: electron-builder
         run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
 
+      - name: Verify exact packaged encrypted upgrade login handoff
+        if: ${{ !inputs.skip_validation }}
+        run: |
+          $sessionProfile = Join-Path $env:RUNNER_TEMP "btps-session-owned-${{ github.run_id }}"
+          npx electron scripts/validate-upgrade-session.cjs --resources release/win-unpacked/resources --profile $sessionProfile --phase save
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged upgrade session save failed' }
+          npx electron scripts/validate-upgrade-session.cjs --resources release/win-unpacked/resources --profile $sessionProfile --phase restore
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged upgrade session restart verification failed' }
+
       - name: Verify exact packaged receipt renderer without physical printing
         if: ${{ !inputs.skip_validation && steps.validation.outputs.RECEIPT_CHECK == 'true' }}
         run: |
@@ -296,3 +305,4 @@ jobs:
             desktop-compatibility-report.json
             desktop-upgrade-gate-report.json
             desktop-manual-upgrade-report.json
+            upgrade-session-validation.json
