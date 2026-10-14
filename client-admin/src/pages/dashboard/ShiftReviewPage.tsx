@@ -44,7 +44,7 @@ export function ShiftReviewPage() {
   const [reviewError,setReviewError]=useState('')
   const days = (Date.parse(range.endDate) - Date.parse(range.startDate)) / 86400000
   const valid = !!range.startDate && !!range.endDate && days >= 0 && days < 31
-  const query = useQuery({ queryKey: ['shift-review', user?.storeId, customRole, range,dateSettings], enabled: allowed && valid,
+  const query = useQuery({ queryKey: ['shift-review', user?.storeId, customRole, range,dateSettings], enabled: allowed && valid,refetchInterval:30000,
     queryFn: async () => {
       const response = await financeApi.shiftSessions(range)
       const result = response.data?.data as Result
