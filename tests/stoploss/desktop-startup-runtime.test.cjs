@@ -65,3 +65,43 @@ test('ambiguous historical profiles retain the blocking data safety guard in Ind
   assert.equal(errors[0][0], 'Data POS perlu diperiksa');
   assert.doesNotMatch(JSON.stringify(errors), /[\u3400-\u9fff]/);
 });
+
+function secondLaunch(mainWindow) {
+  const begin = source.indexOf("app.on('second-instance', () => {");
+  const end = source.indexOf('// 应用启动', begin);
+  let handler;
+  const hiddenReceipt = {focus() {throw Error('Hidden receipt window must never receive cashier focus');}};
+  vm.runInNewContext(source.slice(begin, end), {
+    app: {on: (_name, callback) => {handler = callback;}}, mainWindow,
+    BrowserWindow: {getAllWindows: () => [hiddenReceipt, mainWindow]},
+    require: () => ({BrowserWindow: {getAllWindows: () => [hiddenReceipt, mainWindow]}}),
+    setTimeout: callback => callback(),
+  });
+  handler();
+}
+
+test('launching POS again restores the cashier even when a hidden receipt window exists first', () => {
+  const actions = [];
+  secondLaunch({isDestroyed: () => false, isMinimized: () => true,
+    restore: () => actions.push('restore'), show: () => actions.push('show'), focus: () => actions.push('focus')});
+  assert.deepEqual(actions, ['restore', 'show', 'focus']);
+});
+
+test('missing or destroyed cashier is never replaced by a hidden renderer as the focus target', () => {
+  secondLaunch(null);
+  secondLaunch({isDestroyed: () => true});
+});
+
+test('closing Windows cashier exits normally even if a receipt renderer remains alive', () => {
+  const begin = source.indexOf("  mainWindow.on('closed', () => {");
+  const end = source.indexOf("  console.log('[Electron] Main window created')", begin);
+  let handler;
+  const actions = [];
+  vm.runInNewContext(source.slice(begin, end), {
+    mainWindow: {on: (_name, callback) => {handler = callback;}},
+    customerWindow: {close: () => actions.push('customer-close')},
+    process: {platform: 'win32'}, app: {quit: () => actions.push('normal-quit')},
+  });
+  handler();
+  assert.deepEqual(actions, ['customer-close', 'normal-quit']);
+});

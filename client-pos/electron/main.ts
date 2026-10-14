@@ -776,6 +776,9 @@ function createMainWindow() {
     if (customerWindow) {
       customerWindow.close()
     }
+    // Offscreen receipt windows must not leave Windows POS alive without a
+    // cashier window. Quitting also shuts down the local API normally.
+    if (process.platform !== 'darwin') app.quit()
   })
 
   console.log('[Electron] Main window created')
@@ -2971,11 +2974,10 @@ if (!gotTheLock) {
 app.on('second-instance', () => {
   // 延迟聚焦到主窗口（等待 whenReady 完成）
   setTimeout(() => {
-    const { BrowserWindow } = require('electron')
-    const wins = BrowserWindow.getAllWindows()
-    if (wins.length > 0) {
-      const win = wins[0]
+    const win = mainWindow
+    if (win && !win.isDestroyed()) {
       if (win.isMinimized()) win.restore()
+      win.show()
       win.focus()
     }
   }, 1000)
