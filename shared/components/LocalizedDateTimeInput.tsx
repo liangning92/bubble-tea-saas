@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState, type InputHTMLAttributes, type ChangeEvent } from 'react'
+import React, { forwardRef, useEffect, useRef, useState, type InputHTMLAttributes, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import './LocalizedDateTimeInput.css'
