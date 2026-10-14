@@ -13,7 +13,7 @@ export async function inventoryForecast(storeId: string, days = 30, now = new Da
     const config = await db.config.findUnique({ where: { storeId_key: { storeId, key: FLOW_CUTOVER_KEY } } });
     const cutover = config ? new Date(config.value) : null;
     const reasons = cutover ? ACTUAL_OUT_REASONS : ['sold', 'refund_unprepared'];
-    const materials = await db.inventory.findMany({ where: { storeId }, orderBy: { name: 'asc' } });
+    const materials = await db.inventory.findMany({ where: { storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}] }, orderBy: { name: 'asc' } });
     const first = await db.stockOutLog.groupBy({ by: ['inventoryId'], where: { inventory: { storeId }, reason: { in: reasons }, quantity: { gt: 0 }, createdAt: { lt: end, ...(cutover ? { gte: cutover } : {}) } }, _min: { createdAt: true }, _max: { createdAt: true } });
     const latest = await db.stockOutLog.groupBy({ by: ['inventoryId'], where: { inventory: { storeId }, reason: { in: reasons }, quantity: { gt: 0 }, createdAt: { lte: now, ...(cutover ? { gte: cutover } : {}) } }, _max: { createdAt: true } });
     const start = new Date(Math.max(windowStart.getTime(), cutover?.getTime() || 0));

@@ -40,13 +40,16 @@ export async function employeeConsumption(filter: {
         if (issues.length)
             incomplete = true;
         for (const material of JSON.parse(snapshot.materials) as ConsumptionMaterial[]) {
+            // Old snapshots recorded the processed quantity before its recipe was linked.
+            // Keep that evidence intact and do not compare it to raw withdrawals as if equivalent.
+            if(inventory.some((i:any)=>i.id===material.inventoryId&&i.type==='semi_finished'&&i.processRecipeId))incomplete=true;
             const previous = materials.get(material.inventoryId);
             if (previous && previous.unit !== material.unit)
                 incomplete = true;
             materials.set(material.inventoryId, { quantity: (previous?.quantity || 0) + material.quantity, unit: material.unit });
         }
     }
-    const list = inventory.map((item: any) => {
+    const list = inventory.filter((i:any)=>i.type!=='semi_finished'||!i.processRecipeId).map((item: any) => {
         const totals: {
             [key: string]: number;
         } = { withdrawal: 0, loss: 0, expired: 0, other: 0, process: 0 };

@@ -76,7 +76,7 @@ export function InventoryIndexPage() {
         },
         {
           path: "/inventory/consumption",
-          name: l("员工领用", "Staff consumption", "Konsumsi staf"),
+          name: l("实际领用与理论用量", "Actual vs theoretical use", "Aktual vs teori"),
         },
       ],
     },

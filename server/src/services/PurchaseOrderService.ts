@@ -1,3 +1,4 @@
+import {recalculateInventoryConsumers} from './InventoryQuantityService';
 import {loadInventoryActors} from '../utils/inventoryActors';
 import {alignInventoryBatches,receiptBatchDates} from './InventoryBatchService'
 import prisma from '../config/database';
@@ -81,6 +82,7 @@ export async function createPurchaseOrder(data: {
                 const inventory = await tx.inventory.findFirst({ where: { id: item.inventoryId, storeId: data.storeId } });
                 if (!inventory)
                     throw new PurchaseOrderError('Inventory does not belong to this store', 400);
+                if(inventory.type==='semi_finished'&&inventory.processRecipeId)throw new PurchaseOrderError('PROCESS_OUTPUT_IS_CONVERSION_ONLY',400);
                 if (!Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isSafeInteger(item.unitCost) || item.unitCost < 0)
                     throw new PurchaseOrderError('Invalid quantity or cost', 400);
                 const saved = await tx.config.findUnique({ where: { storeId_key: { storeId: data.storeId, key: `inventoryPackage:${inventory.id}` } } });
@@ -132,6 +134,7 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
             const inventory = await tx.inventory.findFirst({ where: { id: item.inventoryId, storeId: order.storeId } });
             if (!inventory)
                 throw new PurchaseOrderError('Inventory does not belong to this store', 400);
+            if(inventory.type==='semi_finished'&&inventory.processRecipeId)throw new PurchaseOrderError('PROCESS_OUTPUT_IS_CONVERSION_ONLY',400);
             const metadata=datesByItem.find(row=>row.itemId===item.id)
             const dates=receiptBatchDates(metadata?.manufacturingDate,metadata?.expiryDate)
             await alignInventoryBatches(tx,inventory)
@@ -150,9 +153,7 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
             const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}`, quantity, unitCost: item.unitCost, status: 'active',...dates } });
             await tx.stockInLog.create({ data: { inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: item.unitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
         }
-        const rows = await tx.bOMItem.findMany({ where: { inventoryId: { in: order.items.map((i: any) => i.inventoryId) } }, select: { productId: true } });
-        for (const productId of [...new Set(rows.map(i => i.productId))])
-            await tx.product.update({ where: { id: productId }, data: { costPrice: await calculateProductCost(productId, tx) } });
+        await recalculateInventoryConsumers(tx,order.items.map((i:any)=>i.inventoryId));
         return tx.purchaseOrder.findUnique({ where: { id: order.id }, include });
     });
 }

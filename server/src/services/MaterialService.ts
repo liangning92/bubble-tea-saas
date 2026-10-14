@@ -1,3 +1,6 @@
+import * as InventoryService from './InventoryService'
+import {executeRecipe} from './ProcessRecipeService'
+import {loadInventoryActors} from '../utils/inventoryActors'
 import {inventoryForecast} from './InventoryForecastService'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {getExpiringBatches} from './InventoryService'
@@ -98,22 +101,7 @@ export async function createInventory(data: {
   shelfLife?: number
   processRecipeId?: string
 }) {
-  return prisma.inventory.create({
-    data: {
-      storeId: data.storeId,
-      name: data.name,
-      category: data.category,
-      type: data.type || 'raw_material',
-      unit: data.unit,
-      avgCost: data.avgCost || 0,
-      concentrateRatio: data.concentrateRatio || 1,
-      safetyStock: data.safetyStock || 0,
-      minStock: data.minStock || 0,
-      maxStock: data.maxStock || 0,
-      shelfLife: data.shelfLife || 0,
-      processRecipeId: data.processRecipeId || null
-    }
-  })
+  return InventoryService.createInventory(data)
 }
 
 // ============================================
@@ -133,13 +121,7 @@ export async function updateInventory(id: string, data: Partial<{
 }>) {
   const permitted=new Set(['name','category','type','unit','avgCost','concentrateRatio','safetyStock','minStock','maxStock','shelfLife','processRecipeId'])
   if(Object.keys(data).some(key=>!permitted.has(key)))throw new Error('INVENTORY_METADATA_FIELD_NOT_ALLOWED')
-  const current=await prisma.inventory.findUniqueOrThrow({where:{id}})
-  if(data.unit!==undefined&&normalizedUnit(data.unit)!==normalizedUnit(current.unit))throw new Error('INVENTORY_UNIT_IMMUTABLE')
-  delete data.unit
-  return prisma.inventory.update({
-    where: { id },
-    data
-  })
+  return InventoryService.updateInventory(id,data)
 }
 
 // ============================================
@@ -180,144 +162,25 @@ export async function executeProcessing(
   recipeId: string,
   staffId: string,
   multiplier: number = 1,
-  note?: string
+  note?: string,
+  storeId?:string,
+  operationId?:string
 ) {
-  const recipe = await prisma.processRecipe.findUnique({
-    where: { id: recipeId },
-    include: {
-      items: { include: { inventory: true } },
-      store: { select: { id: true } },
-      outputInventory: true  // 产出半成品库存
-    }
-  })
-
-  if (!recipe) throw new Error('Recipe not found')
-  if (!recipe.outputInventory) throw new Error('Recipe has no output inventory configured')
-
-  const inputItems: any[] = []
-  let totalInputCost = 0
-
-  // 计算投入成本
-  for (const input of recipe.items.filter(i => i.type === 'input')) {
-    const inv = input.inventory
-    if (!inv) continue
-    const deductQty = input.quantity * multiplier
-    const itemUnit=inv.unit
-    const unitCost=Number(inv.avgCost||0)
-
-    const cost = Number(deductQty) * unitCost
-    totalInputCost += cost
-
-    inputItems.push({
-      inventoryId: inv.id,
-      name: inv.name,
-      unit: itemUnit,
-      quantity: deductQty,
-      unitCost: Math.round(Number(unitCost)),
-      cost: Math.round(Number(cost))
-    })
-  }
-
-  // 计算产出总量
-  let totalOutputQty = 0
-  for (const output of recipe.items.filter(i => i.type === 'output')) {
-    totalOutputQty += output.quantity * multiplier
-  }
-  totalOutputQty=convertQuantity(totalOutputQty,recipe.outputUnit,recipe.outputInventory.unit)
-  const outputUnitCost = totalOutputQty > 0 ? Math.round(totalInputCost / totalOutputQty) : 0
-
-  // 构建产出记录（使用 outputInventory）
-  const outputItems = [{
-    inventoryId: recipe.outputInventory.id,
-    name: recipe.outputInventory.name,
-    unit: recipe.outputInventory.unit,
-    quantity: totalOutputQty,
-    unitCost: outputUnitCost,
-    cost: totalInputCost
-  }]
-
-  // 事务执行
-  return prisma.$transaction(async (tx) => {
-    // 扣减投入原料
-    for (const input of recipe.items.filter(i => i.type === 'input')) {
-      if (!input.inventoryId) continue
-      const deductQty = input.quantity * multiplier
-      const inv=await tx.inventory.findFirst({where:{id:input.inventoryId,storeId:recipe.storeId}})
-      if(!inv||deductQty<=0||inv.currentStock<deductQty)throw Error('Insufficient stock')
-      const changed=await tx.inventory.updateMany({where:{id:inv.id,currentStock:inv.currentStock},data:{currentStock:{decrement:deductQty}}})
-      if(changed.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
-      await consumeInventoryBatches(tx,inv,deductQty)
-      await tx.stockOutLog.create({
-        data: {
-          inventoryId: input.inventoryId,
-          quantity: deductQty,
-          reason: 'process',
-          staffId,
-          note: `加工: ${recipe.name} x${multiplier}`
-        }
-      })
-    }
-
-    // 添加产出到 outputInventory
-    const output=await tx.inventory.findFirstOrThrow({where:{id:recipe.outputInventory.id,storeId:recipe.storeId}})
-    const received=await tx.inventory.updateMany({
-      where: { id: output.id,currentStock:output.currentStock,avgCost:output.avgCost },
-      data: {
-        currentStock: { increment: totalOutputQty },
-        avgCost: outputUnitCost
-      }
-    })
-    if(received.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
-    await alignInventoryBatches(tx,output)
-    const batch=await tx.batch.create({data:{inventoryId:output.id,batchNumber:`PROCESS-${randomUUID()}`,quantity:totalOutputQty,unitCost:outputUnitCost,status:'active'}})
-    await tx.stockInLog.create({
-      data: {
-        inventoryId: recipe.outputInventory.id,
-        batchId:batch.id,
-        staffId,
-        quantity: totalOutputQty,
-        unitCost: outputUnitCost,
-        totalAmount: totalInputCost,
-        note: `加工产出: ${recipe.name} x${multiplier}`
-      }
-    })
-
-    // 记录加工日志
-    const log = await tx.processingLog.create({
-      data: {
-        storeId: recipe.store.id,
-        recipeId: recipe.id,
-        staffId,
-        multiplier,
-        inputItems: JSON.stringify(inputItems),
-        outputItems: JSON.stringify(outputItems),
-        totalInputCost,
-        totalOutputCost: totalInputCost,
-        note
-      }
-    })
-
-    return {
-      id: log.id,
-      recipeName: recipe.name,
-      multiplier,
-      inputItems,
-      outputItems,
-      totalInputCost,
-      totalOutputCost: totalInputCost
-    }
-  })
+  return executeRecipe(recipeId,multiplier,staffId,storeId,operationId,note)
 }
 
 // ============================================
 // 获取加工历史
 // ============================================
 export async function getProcessingHistory(storeId: string, limit: number = 50) {
-  return prisma.processingLog.findMany({
+  const logs = await prisma.processingLog.findMany({
     where: { storeId },
     orderBy: { createdAt: 'desc' },
-    take: limit
+    take: Math.max(1,Math.min(200,limit||50)),
+    include:{recipe:{select:{name:true}}}
   })
+  const actors=await loadInventoryActors(prisma,storeId,logs.map(l=>l.staffId))
+  return logs.map(l=>({...l,operator:actors.get(l.staffId)||null}))
 }
 
 // ============================================

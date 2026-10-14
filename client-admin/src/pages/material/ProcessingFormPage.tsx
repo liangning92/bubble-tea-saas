@@ -1,3 +1,4 @@
+import {inventoryInputUnits,defaultInventoryInputUnit,inventoryLedgerQuantity} from '../../utils/inventoryInputUnits'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -16,8 +17,8 @@ export function ProcessingFormPage() {
 
   const [form, setForm] = useState({
     name: '',
-    outputUnit: 'ml',
-    inputs: [{ inventoryId: '', quantity: 0 }],
+    outputUnit: 'kg',
+    inputs: [{ inventoryId: '', quantity: 0, inputUnit:'' }],
     outputs: [{ name: '', quantity: 0 }]
   })
 
@@ -37,14 +38,14 @@ export function ProcessingFormPage() {
       const recipe = recipeData.data.data
       const inputs = recipe.items
         .filter((i: any) => i.type === 'input')
-        .map((i: any) => ({ inventoryId: i.inventoryId, quantity: i.quantity }))
+        .map((i: any) => ({ inventoryId: i.inventoryId, quantity: i.quantity, inputUnit:i.inventory?.unit||'' }))
       const outputs = recipe.items
         .filter((i: any) => i.type === 'output')
         .map((i: any) => ({ name: i.name || recipe.outputName || '', quantity: i.quantity }))
       setForm({
         name: recipe.name || '',
         outputUnit: recipe.outputUnit || 'ml',
-        inputs: inputs.length > 0 ? inputs : [{ inventoryId: '', quantity: 0 }],
+        inputs: inputs.length > 0 ? inputs : [{ inventoryId: '', quantity: 0, inputUnit:'' }],
         outputs: outputs.length > 0 ? outputs : [{ name: '', quantity: 0 }]
       })
     }
@@ -63,7 +64,7 @@ export function ProcessingFormPage() {
   const materials = materialsData?.data?.data?.list || []
 
   const addInput = () => {
-    setForm({ ...form, inputs: [...form.inputs, { inventoryId: '', quantity: 0 }] })
+    setForm({ ...form, inputs: [...form.inputs, { inventoryId: '', quantity: 0, inputUnit:'' }] })
   }
 
   const removeInput = (index: number) => {
@@ -72,7 +73,7 @@ export function ProcessingFormPage() {
 
   const updateInput = (index: number, field: string, value: any) => {
     const newInputs = [...form.inputs]
-    newInputs[index] = { ...newInputs[index], [field]: value }
+    newInputs[index] = { ...newInputs[index], [field]: value, ...(field==='inventoryId'?{quantity:0,inputUnit:defaultInventoryInputUnit(materials.find((m:any)=>m.id===value)||{unit:'g'})}:{}) }
     setForm({ ...form, inputs: newInputs })
   }
 
@@ -92,7 +93,7 @@ export function ProcessingFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const validInputs = form.inputs.filter(i => i.inventoryId && i.quantity > 0)
+    const validInputs = form.inputs.filter(i => i.inventoryId && i.quantity > 0).map(i=>({inventoryId:i.inventoryId,quantity:inventoryLedgerQuantity(i.quantity,materials.find((m:any)=>m.id===i.inventoryId),i.inputUnit||materials.find((m:any)=>m.id===i.inventoryId)?.unit)}))
     const validOutputs = form.outputs.filter(o => o.name && o.quantity > 0)
 
     if (isEdit) {
@@ -132,8 +133,9 @@ export function ProcessingFormPage() {
           {isEdit ? t('material.editRecipe') || 'Edit Recipe' : t('material.addRecipe') || 'Add Recipe'}
         </h2>
 
+        <p className="text-sm bg-blue-50 rounded-lg p-3 mb-4">{t('inventoryProcessing.definition')}</p>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {t('material.recipeName') || 'Recipe Name'} *
@@ -156,6 +158,7 @@ export function ProcessingFormPage() {
                 onChange={(e) => setForm({ ...form, outputUnit: e.target.value })}
                 className="input w-full"
               >
+                <option value="kg">kg</option><option value="L">L</option>
                 <option value="ml">{t('material.unitMl')}</option>
                 <option value="g">{t('material.unitG')}</option>
                 <option value="pcs">{t('material.unitPiece')}</option>
@@ -179,7 +182,7 @@ export function ProcessingFormPage() {
                   <select
                     value={input.inventoryId}
                     onChange={(e) => updateInput(idx, 'inventoryId', e.target.value)}
-                    className="input flex-1"
+                    required className="input flex-1 min-w-0"
                   >
                     <option value="">{t('material.selectMaterial')}</option>
                     {materials.map((m: any) => (
@@ -187,12 +190,13 @@ export function ProcessingFormPage() {
                     ))}
                   </select>
                   <input
-                    type="number"
+                    type="number" min="0.000000001" step="any" required
                     value={input.quantity}
                     onChange={(e) => updateInput(idx, 'quantity', parseFloat(e.target.value) || 0)}
                     className="input w-24"
                     placeholder={t('bom.inputQuantityPlaceholder')}
                   />
+                  <select aria-label={t('inventoryProcessing.unit')} className="input w-20" value={input.inputUnit||materials.find((m:any)=>m.id===input.inventoryId)?.unit||'kg'} onChange={e=>updateInput(idx,'inputUnit',e.target.value)}>{(input.inventoryId?inventoryInputUnits(materials.find((m:any)=>m.id===input.inventoryId)||{unit:'g'}):['kg']).map(u=><option key={u}>{u}</option>)}</select>
                   {form.inputs.length > 1 && (
                     <button type="button" onClick={() => removeInput(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded">
                       <Trash2 size={18} />
@@ -220,11 +224,11 @@ export function ProcessingFormPage() {
                     type="text"
                     value={output.name}
                     onChange={(e) => updateOutput(idx, 'name', e.target.value)}
-                    className="input flex-1"
+                    className="input flex-1 min-w-0"
                     placeholder={t('bom.outputNamePlaceholder')}
                   />
                   <input
-                    type="number"
+                    type="number" min="0.000000001" step="any" required
                     value={output.quantity}
                     onChange={(e) => updateOutput(idx, 'quantity', parseFloat(e.target.value) || 0)}
                     className="input w-24"
@@ -240,6 +244,7 @@ export function ProcessingFormPage() {
             </div>
           </div>
 
+          {(createMutation.isError||updateMutation.isError)&&<p role="alert" className="text-red-700">{t('inventoryProcessing.editError')}</p>}
           <div className="flex gap-3 justify-end pt-4 border-t">
             <button type="button" onClick={() => navigate('/inventory/process')} className="btn-secondary">
               {t('common.cancel')}

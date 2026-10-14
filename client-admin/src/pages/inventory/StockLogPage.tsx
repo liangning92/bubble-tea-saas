@@ -75,7 +75,7 @@ export function StockLogPage() {
     queryFn: () => inventoryApi.list({ pageSize: 500 }),
     staleTime: 60000
   })
-  const inventoryItems: any[] = inventoryData?.data?.data?.list || []
+  const inventoryItems: any[] = (inventoryData?.data?.data?.list || []).filter((i:any)=>i.type!=='semi_finished'||!i.processRecipeId)
 
   // Fetch suppliers for dropdown
   const { data: suppliersData } = useQuery({
@@ -167,14 +167,13 @@ export function StockLogPage() {
     let totalWasteCost = 0
 
     rawLogs.forEach((log: any) => {
-      const avgCost = Number(log.inventory?.avgCost || 0)
+      const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
       if (log.type === 'stock_in') {
         const amt = Number(log.totalAmount || (log.quantity * (log.unitCost || avgCost)))
         totalInboundCost += amt
       } else if (log.type === 'stock_out') {
-        const itemCost = Math.round(Number(log.quantity || 0) * avgCost)
-        if (['withdrawal','other'].includes(log.reason)) return <span className="badge badge-info">{t('inventoryFlow.'+log.reason)}</span>
-    if (log.reason === 'sold') {
+        const itemCost = log.totalAmount ?? Math.round(Number(log.quantity || 0) * avgCost)
+        if (log.reason === 'sold') {
           totalSalesCost += itemCost
         } else if (log.reason === 'loss' || log.reason === 'expired') {
           totalWasteCost += itemCost
@@ -314,7 +313,7 @@ export function StockLogPage() {
 
     const rows = filteredLogs.map((log: any) => {
       const isStockIn = log.type === 'stock_in'
-      const avgCost = Number(log.inventory?.avgCost || 0)
+      const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
       const costValue = isStockIn
         ? (log.totalAmount || Math.round(Number(log.quantity) * Number(log.unitCost || avgCost)))
         : Math.round(Number(log.quantity) * avgCost)
@@ -616,8 +615,8 @@ export function StockLogPage() {
               <tbody>
                 {filteredLogs.map((log: any) => {
                   const isStockIn = log.type === 'stock_in'
-                  const avgCost = Number(log.inventory?.avgCost || 0)
-                  const unitCost = log.unitCost !== undefined && log.unitCost !== null && log.unitCost > 0
+                  const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
+                  const unitCost = log.unitCost !== undefined && log.unitCost !== null && log.unitCost >= 0
                     ? Number(log.unitCost)
                     : avgCost
                   const costValue = isStockIn

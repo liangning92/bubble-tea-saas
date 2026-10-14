@@ -7,9 +7,9 @@ import * as ProcessRecipeService from '../services/ProcessRecipeService'
 const router = Router()
 
 const createSchema = z.object({
-  storeId: z.string(),
+  storeId: z.string().optional(),
   name: z.string().min(1),
-  outputUnit: z.string(),
+  outputUnit: z.enum(['g','kg','ml','L','pcs']),
   inputs: z.array(z.object({
     inventoryId: z.string(),
     quantity: z.number().positive()
@@ -17,15 +17,17 @@ const createSchema = z.object({
   outputs: z.array(z.object({
     name: z.string(),
     quantity: z.number().positive()
-  }))
+  })).min(1).max(1)
 })
 
 const executeSchema = z.object({
-  multiplier: z.number().positive().optional().default(1)
+  multiplier: z.number().positive().optional().default(1),
+  operationId: z.string().uuid().optional(),
+  note:z.string().max(1000).optional()
 })
 
 // GET /api/process-recipes
-router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
     const recipes = await ProcessRecipeService.getRecipes(storeId)
@@ -37,9 +39,9 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthReq
 })
 
 // GET /api/process-recipes/:id
-router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/:id', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
-    const recipe = await ProcessRecipeService.getRecipeById(req.params.id)
+    const recipe = await ProcessRecipeService.getRecipeById(req.params.id,req.user!.storeId)
     if (!recipe) return res.status(404).json({ code: 404, message: 'Recipe not found' })
     res.json({ code: 200, data: recipe, timestamp: new Date().toISOString() })
   } catch (error: any) {
@@ -51,7 +53,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 // POST /api/process-recipes
 router.post('/', authenticate, authorize('admin', 'manager'), validateBody(createSchema), async (req: AuthRequest, res) => {
   try {
-    const recipe = await ProcessRecipeService.createRecipe(req.body)
+    const recipe = await ProcessRecipeService.createRecipe({...req.body,storeId:req.user!.storeId})
     res.status(201).json({ code: 201, message: 'Recipe created', data: recipe, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Create recipe error:', error)
@@ -62,8 +64,8 @@ router.post('/', authenticate, authorize('admin', 'manager'), validateBody(creat
 // POST /api/process-recipes/:id/execute
 router.post('/:id/execute', authenticate, authorize('admin', 'manager', 'staff'), validateBody(executeSchema), async (req: AuthRequest, res) => {
   try {
-    const result = await ProcessRecipeService.executeRecipe(req.params.id, req.body.multiplier,req.user!.staffId||req.user!.id,req.user!.storeId)
-    res.json({ code: 200, message: 'Recipe executed', data: result, timestamp: new Date().toISOString() })
+    const result = await ProcessRecipeService.executeRecipe(req.params.id, req.body.multiplier,req.user!.staffId||req.user!.id,req.user!.storeId,req.body.operationId,req.body.note)
+    res.json({ code: 200, message: 'Recipe executed', data: {...result,inputItems:JSON.parse(result.inputItems).map((i:any)=>({inventoryId:i.inventoryId,name:i.name,unit:i.unit,quantity:i.quantity})),outputItems:JSON.parse(result.outputItems),note:req.body.note||''}, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Execute recipe error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to execute recipe' })
@@ -71,9 +73,9 @@ router.post('/:id/execute', authenticate, authorize('admin', 'manager', 'staff')
 })
 
 // PUT /api/process-recipes/:id
-router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, authorize('admin', 'manager'), validateBody(createSchema.omit({storeId:true}).partial().extend({status:z.enum(['active','inactive']).optional()})), async (req: AuthRequest, res) => {
   try {
-    const recipe = await ProcessRecipeService.updateRecipe(req.params.id, req.body)
+    const recipe = await ProcessRecipeService.updateRecipe(req.params.id, req.body,req.user!.storeId)
     res.json({ code: 200, message: 'Recipe updated', data: recipe, timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Update recipe error:', error)
@@ -84,7 +86,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
 // DELETE /api/process-recipes/:id
 router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
   try {
-    await ProcessRecipeService.deleteRecipe(req.params.id)
+    await ProcessRecipeService.deleteRecipe(req.params.id,req.user!.storeId)
     res.json({ code: 200, message: 'Recipe deleted', timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Delete recipe error:', error)

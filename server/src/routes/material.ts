@@ -112,8 +112,8 @@ router.get('/suggestions/restock', authenticate, async (req: AuthRequest, res) =
 router.post('/process/:recipeId/execute', authenticate, async (req: AuthRequest, res) => {
   try {
     const { multiplier, note } = req.body
-    const staffId = req.user!.staffId || ''
-    const result = await materialService.executeProcessing(req.params.recipeId, staffId, multiplier, note)
+    const staffId = req.user!.staffId || req.user!.id
+    const result = await materialService.executeProcessing(req.params.recipeId, staffId, multiplier, note,req.user!.storeId,req.body.operationId)
     res.json({ code: 200, data: result })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })

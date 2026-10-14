@@ -92,7 +92,7 @@ export function PurchaseOrderListPage() {
       ])
       setOrders(ordersRes.data?.data?.list || [])
       setSuppliers(suppliersRes.data?.data?.list || [])
-      setInventory(inventoryRes.data?.data?.list || [])
+      setInventory((inventoryRes.data?.data?.list || []).filter((i:any)=>i.type!=='semi_finished'||!i.processRecipeId))
     } catch (error) {
       console.error('Failed to load data:', error)
     } finally {

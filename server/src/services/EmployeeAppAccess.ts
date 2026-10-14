@@ -6,6 +6,7 @@ export const EMPLOYEE_APP_WORK_ROUTES = new Set([
   'GET /api/auth/me', 'PUT /api/auth/password',
   'GET /api/shifts', 'GET /api/attendance-rules',
   'GET /api/products', 'GET /api/training/library/videos/:id',
+  'GET /api/process-recipes', 'GET /api/process-recipes/:id', 'POST /api/process-recipes/:id/execute',
   'GET /api/inventory', 'GET /api/inventory/:id',
   'GET /api/inventory/logs/stock-in', 'GET /api/inventory/logs/stock-out',
   'GET /api/inventory/alerts/low-stock',

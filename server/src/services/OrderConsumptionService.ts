@@ -37,8 +37,9 @@ export async function recordOrderConsumption(tx: any, storeId: string, orderId: 
         if (!inventory)
             throw Error('INVENTORY_STORE_MISMATCH');
         if (inventory.type === 'semi_finished' && inventory.processRecipeId) {
-            const recipe = await tx.processRecipe.findFirst({ where: { id: inventory.processRecipeId, storeId }, include: { items: true } });
-            const output = recipe?.items.find((i: any) => i.type === 'output');
+            const recipe = await tx.processRecipe.findFirst({ where: { id: inventory.processRecipeId, storeId,status:'active' }, include: { items: true } });
+            const outputs=recipe?.items.filter((i:any)=>i.type==='output')||[];
+            const output = outputs.length===1?outputs[0]:null;
             const inputs = recipe?.items.filter((i: any) => i.type === 'input') || [];
             if (!output || output.quantity <= 0 || !inputs.length)
                 throw Error('RECIPE_INCOMPLETE');

@@ -5061,7 +5061,8 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
   "GET /api/process-recipes": {
     "legacyRoles": [
       "admin",
-      "manager"
+      "manager",
+      "staff"
     ],
     "legacyPermission": "inventory.read",
     "resource": null,
@@ -5073,7 +5074,8 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
   "GET /api/process-recipes/:id": {
     "legacyRoles": [
       "admin",
-      "manager"
+      "manager",
+      "staff"
     ],
     "legacyPermission": "inventory.read",
     "resource": null,

@@ -17,12 +17,12 @@ export function inventoryCostReview(db:any){
   expect(JSON.parse((await db.orderConsumptionSnapshot.findUniqueOrThrow({where:{orderId:sale.id}})).materials)[0].quantity).toBeCloseTo(0.025,9)
   expect(sale.items[0].bomCost).toBe(250);expect((await db.inventory.findUnique({where:{id:inv.id}})).currentStock).toBe(2)
  })
- test.each([[1000,1,100],[300,0.3,333]])('processing cost100/%sg converts before rounding to %skg',async(outputQty,expectedQty,expectedCost)=>{
+ test.each([1000,300])('processing cost100/%sg records yield while deducting raw inputs only',async(outputQty)=>{
   const s=await store(),name=randomUUID();const input=await db.inventory.create({data:{storeId:s.id,name:'Input',category:'tea',unit:'pcs',currentStock:5,avgCost:100}})
   const output=await db.inventory.create({data:{storeId:s.id,name,category:'tea',type:'semi_finished',unit:'kg',currentStock:0,avgCost:0}})
   const recipe=await db.processRecipe.create({data:{storeId:s.id,name:'Synthetic',outputUnit:'g',items:{create:[{type:'input',inventoryId:input.id,quantity:1},{type:'output',name,quantity:outputQty}]}}})
-  await executeRecipe(recipe.id)
-  const actual=await db.inventory.findUnique({where:{id:output.id}}),log=await db.stockInLog.findFirst({where:{inventoryId:output.id}})
-  expect(actual.currentStock).toBeCloseTo(expectedQty,9);expect(Number(actual.avgCost)).toBe(expectedCost);expect(log.unitCost).toBe(expectedCost);expect(log.totalAmount).toBe(100)
+  await executeRecipe(recipe.id,1,'synthetic',s.id)
+  const actual=await db.inventory.findUnique({where:{id:output.id}}),log=await db.processingLog.findFirstOrThrow({where:{recipeId:recipe.id}})
+  expect(actual.currentStock).toBe(0);expect(log.totalInputCost).toBe(100);expect(JSON.parse(log.outputItems)[0]).toMatchObject({quantity:outputQty,unit:'g',accounting:'conversion_only'});expect(await db.stockInLog.count({where:{inventoryId:output.id}})).toBe(0);expect((await db.inventory.findUniqueOrThrow({where:{id:input.id}})).currentStock).toBe(4)
  })
 }

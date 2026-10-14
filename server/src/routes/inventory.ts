@@ -51,6 +51,8 @@ const createInventorySchema = z.object({
   storeId: z.string(),
   name: z.string().min(1),
   category: z.string(),
+  type: z.enum(['raw_material','semi_finished','finished_goods']).optional(),
+  processRecipeId: z.string().nullable().optional(),
   unit: z.string(),
   currentStock: z.number().int().optional(),
   avgCost: z.number().int().optional(),
