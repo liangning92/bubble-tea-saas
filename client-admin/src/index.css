@@ -230,7 +230,7 @@ body {
 .admin-dialog-header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: white; border-bottom: 1px solid var(--color-border); padding: 16px 20px; }
 .admin-dialog-header button { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 8px; }
 .admin-dialog-body { padding: 20px; }
-.admin-dialog-body > .p-6, .admin-dialog-body > .p-4 { padding: 0; }
+.admin-workspace .admin-dialog-body > .p-6, .admin-workspace .admin-dialog-body > .p-4 { padding: 0; }
 .admin-dialog-footer { position: sticky; bottom: -20px; z-index: 2; background: white; border-top: 1px solid var(--color-border); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 16px 0; margin-top: 16px; }
 .admin-dialog-footer button { min-height: 40px; border-radius: 8px; }
 .admin-dialog-footer [data-dialog-close] { order: 0; }

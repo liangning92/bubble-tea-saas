@@ -200,7 +200,7 @@ export function ChannelListPage() {
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 font-medium">{t('channels.name')}</th>
                   <th className="pb-3 font-medium">{t('channels.code')}</th>
-                  <th className="pb-3 font-medium">{t('channels.commission')}</th>
+                  <th className="text-right tabular-nums pb-3 font-medium">{t('channels.commission')}</th>
                   <th className="pb-3 font-medium">{t('channels.status')}</th>
                   <th className="pb-3 font-medium">{t('common.actions')}</th>
                 </tr>

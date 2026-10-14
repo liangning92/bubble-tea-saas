@@ -39,3 +39,5 @@ test('refund policy awaits confirmation and blocks invalid legacy or partial req
  assert.equal(await module.exports.confirmPreparedRefund(request,key=>key),false);assert.equal(confirmations,1);
  for(const file of ['OrderListPage.tsx','RefundRequestListPage.tsx'])assert.match(fs.readFileSync('client-admin/src/pages/orders/'+file,'utf8'),/await confirmPreparedRefund\(/);
 });
+
+test('unknown API cost responses are not displayed as free inventory',()=>{assert.equal(costs.readBreakdownCost({type:'unknown',cost:0}),null);assert.equal(costs.readBreakdownCost({type:'semi_finished'}),null);assert.equal(costs.readBreakdownCost({type:'raw_material',cost:0}),0);assert.equal(costs.recipeRowCost({inventoryId:'x',quantityStr:'2',cost:1.234,rowTotal:2}),2)});

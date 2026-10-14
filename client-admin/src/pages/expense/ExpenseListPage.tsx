@@ -1010,7 +1010,7 @@ export function ExpenseListPage() {
                   <tr className="text-left text-sm text-gray-500 border-b bg-gray-50">
                     <th className="p-4 font-medium">{t('reimbursement.staff')}</th>
                     <th className="p-4 font-medium">{t('reimbursement.type')}</th>
-                    <th className="p-4 font-medium">{t('reimbursement.amount')}</th>
+                    <th className="text-right tabular-nums p-4 font-medium">{t('reimbursement.amount')}</th>
                     <th className="p-4 font-medium">{t('reimbursement.description')}</th>
                     <th className="p-4 font-medium">{t('reimbursement.status')}</th>
                     <th className="p-4 font-medium">{t('reimbursement.date')}</th>

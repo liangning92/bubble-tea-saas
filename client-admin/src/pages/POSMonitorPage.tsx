@@ -86,7 +86,7 @@ function ClearedCartDetails({ log }: { log: any }) {
       <div className="mt-2 overflow-x-auto"><table className="w-full text-sm">
         <thead><tr className="text-gray-500 border-b"><th className="py-2 text-left">{t('posMonitor.cartProduct')}</th><th className="px-3 text-right">{t('posMonitor.cartQuantity')}</th><th className="px-3 text-right">{t('posMonitor.cartUnitPrice')}</th><th className="text-right">{t('posMonitor.cartLineTotal')}</th></tr></thead>
         <tbody>{items.map((item: any, index: number) => <tr key={`${item.id}-${index}`} className="border-b last:border-0">
-          <td className="py-3"><p className="font-medium">{item.productName}</p><p className="text-xs text-gray-500">{[item.specName, item.options].filter(Boolean).join(' · ')}</p>{item.addons?.length > 0 && <p className="text-xs text-gray-500">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}</td>
+          <td className="text-right tabular-nums py-3"><p className="font-medium">{item.productName}</p><p className="text-xs text-gray-500">{[item.specName, item.options].filter(Boolean).join(' · ')}</p>{item.addons?.length > 0 && <p className="text-xs text-gray-500">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}</td>
           <td className="px-3 text-right">{item.quantity}</td><td className="px-3 text-right whitespace-nowrap">{typeof item.unitPrice === 'number' ? formatCurrency(item.unitPrice) : '—'}</td><td className="text-right whitespace-nowrap">{typeof item.lineTotal === 'number' ? formatCurrency(item.lineTotal) : '—'}</td>
         </tr>)}</tbody>
       </table></div>
@@ -317,7 +317,7 @@ export function POSMonitorPage() {
                         <th className="py-2 pl-3 text-right">{t('posMonitor.cartLineTotal')}</th>
                       </tr></thead>
                       <tbody>{session.items.map((item: any, index: number) => <tr key={`${item.id}-${index}`} className="border-b border-gray-100">
-                        <td className="py-3 pr-4"><p className="font-medium">{item.productName}</p>
+                        <td className="text-right tabular-nums py-3 pr-4"><p className="font-medium">{item.productName}</p>
                           {item.specName && <p className="text-xs text-gray-500 mt-1">{item.specName}{item.options ? ` · ${item.options}` : ''}</p>}
                           {Array.isArray(item.addons) && item.addons.length > 0 && <p className="text-xs text-gray-500 mt-1">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}
                         </td>

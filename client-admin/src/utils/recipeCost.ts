@@ -14,6 +14,11 @@ export function finiteCost(value: unknown): number | null {
   return Number.isFinite(number) && number >= 0 ? number : null
 }
 
+export function readBreakdownCost(response: { type?: string; cost?: unknown } | null | undefined): number | null {
+  if (!response || response.type === 'unknown') return null
+  return finiteCost(response.cost)
+}
+
 export function recipeRowCost(row: RecipeCostRow): number | null {
   if (!row.inventoryId) return 0
   if (row.costPending || row.costFailed) return null

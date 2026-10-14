@@ -224,14 +224,14 @@ export function DiscountRulePage() {
                       <div className="font-medium text-gray-900">{rule.name}</div>
                       <div className="text-xs text-gray-400">Priority: {rule.priority}</div>
                     </td>
-                    <td className="py-3">
+                    <td className="text-right tabular-nums py-3">
                       <span className="text-gray-700 text-sm">
                         {isCupRule(rule.discountType)
                           ? `${t('marketing.minCups')}: ${rule.minOrderAmount || 2} ${t('marketing.cups')}`
                           : `${t('marketing.minOrderAmount')}: ${formatCurrency(rule.minOrderAmount)}`}
                       </span>
                     </td>
-                    <td className="py-3">
+                    <td className="text-right tabular-nums py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                         rule.discountType === 'bogo'
                           ? 'bg-purple-100 text-purple-700'

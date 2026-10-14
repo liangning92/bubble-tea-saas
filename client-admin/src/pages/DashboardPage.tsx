@@ -469,7 +469,7 @@ export function DashboardPage() {
               <tr className="text-left text-sm text-gray-500 border-b">
                 <th className="pb-3 font-medium">{t('shiftHandover.products')}</th>
                 <th className="pb-3 px-4 text-right font-medium">{t('shiftReview.quantity')}</th>
-                <th className="pb-3 font-medium">{t('dashboard.amount')}</th>
+                <th className="text-right tabular-nums pb-3 font-medium">{t('dashboard.amount')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.payment')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.status')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.time')}</th>
@@ -480,7 +480,7 @@ export function DashboardPage() {
                 <OrderItemRows key={order.id} items={order.items}
                   onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, {storeId,asOf,...businessDay(order.createdAt,dateSettings.timezone)}))}
                   trailing={rowSpan => <>
-                  <td rowSpan={rowSpan} className="py-3 pr-4 font-medium">
+                  <td rowSpan={rowSpan} className="text-right tabular-nums py-3 pr-4 font-medium">
                     {formatCurrency(order.finalAmount)}
                   </td>
                   <td rowSpan={rowSpan} className="py-3 pr-4">

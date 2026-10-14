@@ -685,7 +685,7 @@ export function InventoryCountPage() {
                     )}
                   </th>
                   <th>{t("countFlow.movement")}</th>
-                  {canReadCost && <th>{t("countFlow.amount")}</th>}
+                  {canReadCost && <th className="text-right tabular-nums">{t("countFlow.amount")}</th>}
                   <th>{t("countFlow.reason")}</th>
                   {canEdit && selectedCount.status === "in_progress" && (
                     <th className="pb-3 text-center">

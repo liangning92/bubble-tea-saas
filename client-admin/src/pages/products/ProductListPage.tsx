@@ -394,10 +394,10 @@ export function ProductListPage() {
                   <th className="pb-3 pl-3 w-24">{t('products.code')}</th>
                   <th className="pb-3 w-40">{t('products.name')}</th>
                   <th className="pb-3 w-28">{t('products.category')}</th>
-                  <th className="pb-3 text-left w-24">{t('products.cost')}</th>
-                  <th className="pb-3 text-left w-24">{t('products.price')}</th>
-                  <th className="pb-3 text-left w-20">{t('products.margin')}</th>
-                  <th className="pb-3 text-left w-24">{t('products.profit')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.cost')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.price')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-20">{t('products.margin')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.profit')}</th>
                   <th className="pb-3 text-center w-20">{t('products.status')}</th>
                   <th className="pb-3 pr-3 text-center w-24">{t('common.edit')}</th>
                 </tr>

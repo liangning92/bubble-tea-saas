@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { bomApi, inventoryApi, productApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatDisplayQuantity } from '../../utils/itemDisplayName'
-import { finiteCost, recipeRowCost, recipeTotalCost } from '../../utils/recipeCost'
+import { finiteCost, readBreakdownCost, recipeRowCost, recipeTotalCost } from '../../utils/recipeCost'
 import { formatCurrency, formatItemName } from '../../utils/helpers'
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronDown, ChevronRight,
@@ -80,14 +80,14 @@ export function RecipeEditPage() {
   })
 
   // 获取产品BOM明细
-  const { data: bomData, isLoading: bomLoading } = useQuery({
+  const { data: bomData, isLoading: bomLoading, isError: bomError, refetch: reloadBom } = useQuery({
     queryKey: ['bom-product', id],
     queryFn: () => bomApi.getProductDetail(id!),
     enabled: !!id
   })
 
   // 获取库存列表
-  const { data: inventoryData, isLoading: inventoryLoading } = useQuery({
+  const { data: inventoryData, isLoading: inventoryLoading, isError: inventoryError, refetch: reloadInventory } = useQuery({
     queryKey: ['inventory'],
     queryFn: () => inventoryApi.list({ pageSize: 500 })
   })
@@ -164,10 +164,11 @@ export function RecipeEditPage() {
     setBomItems(prev => prev.map((item, i) => i === index ? { ...item, costPending: true, costFailed: false } : item))
     try {
       const res = await bomApi.getInventoryBreakdown(inventoryId, quantity, unit)
-      if (res.data.code !== 200 || finiteCost(res.data.data?.cost) === null) throw new Error('Invalid cost response')
+      const responseCost = readBreakdownCost(res.data.data)
+      if (res.data.code !== 200 || responseCost === null) throw new Error('Invalid cost response')
       if (res.data.code === 200) {
         setBomItems(prev => prev.map((item, i) =>
-          i === index && item.inventoryId === inventoryId && Number(item.quantityStr) === quantity && (!unit || item.unit === unit) ? { ...item, costBreakdown: { ...res.data.data, cost: Number(res.data.data.cost) }, costPending: false, costFailed: false } : item
+          i === index && item.inventoryId === inventoryId && Number(item.quantityStr) === quantity && (!unit || item.unit === unit) ? { ...item, cost: quantity > 0 ? responseCost! / quantity : null, costBreakdown: { ...res.data.data, cost: responseCost! }, costPending: false, costFailed: false } : item
         ))
       }
     } catch (e) {
@@ -323,6 +324,10 @@ export function RecipeEditPage() {
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     )
+  }
+
+  if (bomError || inventoryError) {
+    return <div className="p-6 space-y-4"><p role="alert">{costReview} · {t('common.error')}</p><button type="button" className="btn-secondary" onClick={() => { reloadBom(); reloadInventory() }}>{t('uiDesign.retry')}</button></div>
   }
 
   if (!selectedProduct) {

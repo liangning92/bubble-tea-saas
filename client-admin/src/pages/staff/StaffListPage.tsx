@@ -191,7 +191,7 @@ export function StaffListPage() {
                   <th className="pb-3 font-medium">{t('staff.phone')}</th>
                   <th className="pb-3 font-medium">{t('staff.position')}</th>
                   <th className="pb-3 font-medium">{t('staff.employmentType')}</th>
-                  <th className="pb-3 font-medium">{t('salary.baseSalary')}</th>
+                  <th className="text-right tabular-nums pb-3 font-medium">{t('salary.baseSalary')}</th>
                   <th className="pb-3 font-medium">{t('staff.status')}</th>
                   <th className="pb-3 font-medium">{t('common.actions')}</th>
                 </tr>

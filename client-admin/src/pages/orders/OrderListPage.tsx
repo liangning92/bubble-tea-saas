@@ -255,11 +255,11 @@ export function OrderListPage() {
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 pr-4 font-medium">{t('shiftHandover.products')}</th>
-                  <th className="pb-3 px-2 text-left font-medium whitespace-nowrap">{t('shiftReview.quantity')}</th>
+                  <th className="text-right tabular-nums pb-3 px-2 text-left font-medium whitespace-nowrap">{t('shiftReview.quantity')}</th>
                   <th className="pb-3 pl-6 font-medium">{t('channels.channel') || 'Channel'}</th>
                   <th className="pb-3 font-medium">{t('orders.date')}</th>
                   <th className="pb-3 font-medium">{t('orders.customer')}</th>
-                  <th className="pb-3 font-medium">{t('orders.amount')}</th>
+                  <th className="text-right tabular-nums pb-3 font-medium">{t('orders.amount')}</th>
                   <th className="pb-3 font-medium">{t('orders.payment')}</th>
                   <th className="pb-3 font-medium">{t('orders.status')}</th>
                 </tr>
@@ -277,7 +277,7 @@ export function OrderListPage() {
                     {items.map((item, index) => (
                       <tr key={index}>
                         <td className="py-3 pr-4 text-sm text-gray-800 max-w-sm break-words">{item.productName}</td>
-                        <td className="py-3 px-2 text-left text-sm text-gray-800 tabular-nums whitespace-nowrap">{item.quantity ?? '-'}</td>
+                        <td className="text-right tabular-nums py-3 px-2 text-left text-sm text-gray-800 tabular-nums whitespace-nowrap">{item.quantity ?? '-'}</td>
                         {index === 0 && (
                           <>
                             <td rowSpan={items.length} className="py-3 pl-6 pr-4">
@@ -290,7 +290,7 @@ export function OrderListPage() {
                             </td>
                             <td rowSpan={items.length} className="py-3 pr-4 text-sm">{formatDateTime(order.createdAt)}</td>
                             <td rowSpan={items.length} className="py-3 pr-4">{order.member?.name || order.staff?.name || '-'}</td>
-                            <td rowSpan={items.length} className="py-3 pr-4 font-medium">{formatCurrency(order.finalAmount ?? order.total)}</td>
+                            <td rowSpan={items.length} className="text-right tabular-nums py-3 pr-4 font-medium">{formatCurrency(order.finalAmount ?? order.total)}</td>
                             <td rowSpan={items.length} className="py-3 pr-4 capitalize">{order.paymentMethod==='cash'?t('uiDesign.cash'):order.paymentMethod==='qris'?'QRIS':order.paymentMethod}</td>
                             <td rowSpan={items.length} className="py-3 pr-4"><span className={`badge ${getStatusBadge(order.status)} capitalize`}>{t('orders.'+order.status,{defaultValue:order.status})}</span></td>
                           </>
