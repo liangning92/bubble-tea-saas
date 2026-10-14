@@ -1,7 +1,10 @@
-import { Children, cloneElement, isValidElement, ReactNode, useEffect, useRef, useState } from 'react'
+import { Children, cloneElement, createContext, isValidElement, ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
+
+const AdminDialogDirtyContext = createContext<() => void>(() => {})
+export const useAdminDialogDirty = () => useContext(AdminDialogDirtyContext)
 
 export function AdminDialog({ title, children, onClose, className = 'max-w-4xl', busy = false, trackChanges = false, chrome = false }: {
   title: string; children: ReactNode; onClose: () => void; className?: string; busy?: boolean; trackChanges?: boolean; chrome?: boolean
@@ -80,11 +83,11 @@ export function AdminDialog({ title, children, onClose, className = 'max-w-4xl',
         if (!ref.current?.contains(e.target as Node)) return
         if (pending.current) { e.preventDefault(); e.stopPropagation(); return }
         const button = (e.target as HTMLElement).closest('button')
-        if (trackChanges && button && button.getAttribute('data-dialog-close') !== 'true' && (/添加|删除|计算|新增|移除|\b(?:add|remove|calculate|delete|tambah|hapus|hitung)\b/i.test(button.textContent || '') || button.querySelector('.lucide-trash-2') || button.textContent?.includes(t('media.choose')))) dirty.current = true
+        if (trackChanges && button && button.getAttribute('data-dialog-close') !== 'true' && (/添加|删除|计算|新增|移除|\b(?:add|remove|calculate|delete|tambah|hapus|hitung)\b/i.test(button.textContent || '') || button.querySelector('.lucide-trash-2'))) dirty.current = true
         if (trackChanges && button?.getAttribute('data-dialog-close') === 'true') { e.preventDefault(); e.stopPropagation(); requestClose.current() }
       }}>
       {chrome && <header className="admin-dialog-header"><h2>{title}</h2><button type="button" aria-label={t('common.close', 'Close')} disabled={working} onClick={() => requestClose.current()}><X size={20}/></button></header>}
-      <div className={chrome ? 'admin-dialog-body' : undefined} hidden={discard}>{protectActions(children)}</div>
+      <div className={chrome ? 'admin-dialog-body' : undefined} hidden={discard}><AdminDialogDirtyContext.Provider value={() => { dirty.current = true }}>{protectActions(children)}</AdminDialogDirtyContext.Provider></div>
       {discard && <section className="p-5 space-y-4"><h2>{copy.title}</h2><p>{copy.message}</p><div className="flex flex-wrap justify-end gap-2"><button type="button" data-keep-editing className="btn-secondary" onClick={() => { setDiscard(false); ref.current?.focus() }}>{copy.keep}</button><button type="button" className="btn-danger" onClick={() => close.current()}>{copy.discard}</button></div></section>}
     </div>
   </div>, document.body)

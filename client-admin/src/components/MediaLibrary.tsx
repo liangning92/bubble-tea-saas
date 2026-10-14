@@ -118,7 +118,7 @@ export function MediaLibrary({
           placeholder={t("media.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-        />
+         data-dialog-search="true" />
         <select
           aria-label={t("media.type")}
           className="input w-auto"
