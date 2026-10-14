@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -246,7 +247,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.date')} *</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}

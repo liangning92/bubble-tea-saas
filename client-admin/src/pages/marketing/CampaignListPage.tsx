@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -251,7 +252,7 @@ export function CampaignListPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.startDate')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={newCampaign.startDate}
                     onChange={(e) => setNewCampaign({ ...newCampaign, startDate: e.target.value })}
@@ -260,7 +261,7 @@ export function CampaignListPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.endDate')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={newCampaign.endDate}
                     onChange={(e) => setNewCampaign({ ...newCampaign, endDate: e.target.value })}

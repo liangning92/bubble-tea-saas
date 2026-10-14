@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -146,11 +147,11 @@ export function CampaignEditPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.startDate')} *</label>
-              <input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} className="input" />
+              <LocalizedDateTimeInput type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} className="input" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.endDate')}</label>
-              <input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} className="input" />
+              <LocalizedDateTimeInput type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} className="input" />
             </div>
           </div>
           {isEdit && (

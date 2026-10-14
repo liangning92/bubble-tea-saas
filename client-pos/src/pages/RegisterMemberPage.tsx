@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -175,7 +176,7 @@ export function RegisterMemberPage() {
             {t('member.birthday')}
           </label>
           <div className="relative">
-            <input
+            <LocalizedDateTimeInput
               type="date"
               value={form.birthday}
               onChange={(e) => setForm(prev => ({ ...prev, birthday: e.target.value }))}

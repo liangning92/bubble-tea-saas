@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -270,7 +271,7 @@ export function AttendanceRulesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.workStartTime')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.workStartTime}
                     onChange={e => setFormData({ ...formData, workStartTime: e.target.value })}
@@ -279,7 +280,7 @@ export function AttendanceRulesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.workEndTime')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.workEndTime}
                     onChange={e => setFormData({ ...formData, workEndTime: e.target.value })}

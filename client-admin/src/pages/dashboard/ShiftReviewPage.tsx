@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import {QUERY_PERIODS,QueryPeriod,queryCalendarRange} from '../../utils/queryPeriods'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {formatStoreDate,storeCalendarDate} from '../../utils/storeDateTime'
@@ -82,8 +83,8 @@ export function ShiftReviewPage() {
     <Link to={`/finance/revenue?${searchParams.get('returnQuery') || new URLSearchParams({period:'custom',startDate:searchParams.get('returnStartDate') || range.startDate,endDate:searchParams.get('returnEndDate') || range.endDate}).toString()}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft size={16} />{t('revenueLayout.title')}</Link>
     {!sessionId && <header className="flex flex-wrap justify-between items-center gap-3"><h1 className="text-2xl font-bold">{t('shiftReview.title')}</h1><button className="btn-secondary flex items-center gap-2" disabled={query.isFetching || !valid} onClick={() => void query.refetch()}><RefreshCw size={16} />{t('common.refresh')}</button></header>}
     {!sessionId && <section className="bg-white border rounded-xl p-4 flex flex-wrap items-end gap-3" aria-label={t('shiftReview.dateRange')}>
-      <CalendarDays size={20} className="mb-3 text-primary" /><label className="text-sm text-gray-600">{t('shiftReview.start')}<input aria-label={t('shiftReview.start')} type="date" value={range.startDate} max={range.endDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, startDate: e.target.value }))} /></label>
-      <label className="text-sm text-gray-600">{t('shiftReview.end')}<input aria-label={t('shiftReview.end')} type="date" value={range.endDate} min={range.startDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, endDate: e.target.value }))} /></label>
+      <CalendarDays size={20} className="mb-3 text-primary" /><label className="text-sm text-gray-600">{t('shiftReview.start')}<LocalizedDateTimeInput aria-label={t('shiftReview.start')} type="date" value={range.startDate} max={range.endDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, startDate: e.target.value }))} /></label>
+      <label className="text-sm text-gray-600">{t('shiftReview.end')}<LocalizedDateTimeInput aria-label={t('shiftReview.end')} type="date" value={range.endDate} min={range.startDate || undefined} className="input block mt-1" onChange={e => setRange(r => ({ ...r, endDate: e.target.value }))} /></label>
       {QUERY_PERIODS.map(key => <button key={key} className="btn-secondary" onClick={() => shortcut(key)}>{t('queryPeriods.'+key)}</button>)}
     </section>}
     {!valid ? <p role="alert" className="text-red-600">{t('shiftReview.invalidRange')}</p> : query.isPending ? <p role="status">{t('common.loading')}</p> : query.isError ? <p role="alert" className="text-red-600">{t('shiftReview.failed')}</p> : <>

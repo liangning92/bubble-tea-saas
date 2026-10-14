@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -296,7 +297,7 @@ export function ShiftConfigPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {t('staff.startTime')} *
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.startTime}
                     onChange={e => setFormData({ ...formData, startTime: e.target.value })}
@@ -307,7 +308,7 @@ export function ShiftConfigPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {t('staff.endTime')} *
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.endTime}
                     onChange={e => setFormData({ ...formData, endTime: e.target.value })}

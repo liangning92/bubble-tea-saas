@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
@@ -346,7 +347,7 @@ export function CouponListPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.validFrom}
                     onChange={e => setForm({ ...form, validFrom: e.target.value })}
@@ -355,7 +356,7 @@ export function CouponListPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.validUntil}
                     onChange={e => setForm({ ...form, validUntil: e.target.value })}
@@ -452,7 +453,7 @@ export function CouponListPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.validFrom}
                     onChange={e => setForm({ ...form, validFrom: e.target.value })}
@@ -461,7 +462,7 @@ export function CouponListPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.validUntil}
                     onChange={e => setForm({ ...form, validUntil: e.target.value })}

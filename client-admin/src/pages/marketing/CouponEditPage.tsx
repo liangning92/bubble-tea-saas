@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -120,11 +121,11 @@ export function CouponEditPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')} *</label>
-              <input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} className="input" />
+              <LocalizedDateTimeInput type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} className="input" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')} *</label>
-              <input type="date" value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} className="input" />
+              <LocalizedDateTimeInput type="date" value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} className="input" />
             </div>
           </div>
           <div>

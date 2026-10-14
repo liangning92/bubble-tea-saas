@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import {payrollLabels} from '../../../shared/payrollLabels'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
@@ -493,7 +494,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-amber-700 mb-2">{payrollLabels(i18n.language).weekendRule}</p><label className="block text-base font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
@@ -502,7 +503,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
             </div>
             <div>
               <label className="block text-base font-medium text-gray-700 mb-1">{t('leave.endDate')}</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}

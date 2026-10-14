@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, actorText } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { Link } from 'react-router-dom'
@@ -546,14 +547,14 @@ export function StockLogPage() {
 
         {datePreset === 'custom' && (
           <div className="flex items-center gap-2">
-            <input
+            <LocalizedDateTimeInput
               type="date"
               value={customStartDate}
               onChange={(e) => setCustomStartDate(e.target.value)}
               className="input w-36"
             />
             <span className="text-gray-400 text-sm">{t('inventory.to')}</span>
-            <input
+            <LocalizedDateTimeInput
               type="date"
               value={customEndDate}
               onChange={(e) => setCustomEndDate(e.target.value)}

@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { payrollLabels } from '../../../../shared/payrollLabels'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -187,14 +188,14 @@ export function FinanceReportsPage() {
               <button onClick={() => setQuickDateRange(30)} className="btn btn-sm btn-outline">30 {t('finance.days')}</button>
               <button onClick={() => setQuickDateRange(90)} className="btn btn-sm btn-outline">90 {t('finance.days')}</button>
               <div className="flex gap-2 ml-4">
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={dateRange.startDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
                   className="input input-sm w-36"
                 />
                 <span className="text-gray-500">-</span>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={dateRange.endDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
@@ -387,14 +388,14 @@ export function FinanceReportsPage() {
               <button onClick={() => setQuickDateRange(30)} className="btn btn-sm btn-outline">30 {t('finance.days')}</button>
               <button onClick={() => setQuickDateRange(90)} className="btn btn-sm btn-outline">90 {t('finance.days')}</button>
               <div className="flex gap-2 ml-4">
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={dateRange.startDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
                   className="input input-sm w-36"
                 />
                 <span className="text-gray-500">-</span>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={dateRange.endDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}

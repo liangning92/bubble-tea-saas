@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -303,7 +304,7 @@ export function TimedSpecialPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.startDate')} *</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.startTime}
                     onChange={(e) => setForm({ ...form, startTime: e.target.value })}
@@ -313,7 +314,7 @@ export function TimedSpecialPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.endDate')} *</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.endTime}
                     onChange={(e) => setForm({ ...form, endTime: e.target.value })}
