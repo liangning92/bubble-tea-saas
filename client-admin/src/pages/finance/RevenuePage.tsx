@@ -37,7 +37,7 @@ export function RevenuePage(){
  const optionLabel=(o:Option)=>o.value.startsWith('payment:')?['cash','qris'].includes(o.name)?t('revenueQuery.'+o.name):o.name.toUpperCase():o.value.startsWith('expense:')?expenseCategoryName({key:o.value.slice(8),labelEn:o.name,labelZh:o.nameZh||undefined,labelId:o.nameId||undefined},i18n.language):o.value.startsWith('channel:')&&o.value!=='channel:none'?label(o):t('revenueQuery.'+o.labelKey)
  const source=(key:string)=>key.startsWith('manual:')?t('revenueQuery.'+({cash:'manualCash',qris:'manualQris',shopeefood:'shopeefood',gofood:'gofood'}[key.slice(7)]||key)):t('revenueQuery.'+key,{defaultValue:key})
  const time=(value:string)=>formatStoreDate(value,settings,true)
- const apply=(f:Filter)=>{if(!valid(f)){setSubmittedInvalid(true);return}setSubmittedInvalid(false);setPage(1);setSearch(parameters(f));setApplied(f);setDraft(f)}
+ const apply=(f:Filter)=>{if(!valid(f)){setSubmittedInvalid(true);return}if(JSON.stringify(parameters(f))===JSON.stringify(parameters(applied)) && page===1)void result.refetch();setSubmittedInvalid(false);setPage(1);setSearch(parameters(f));setApplied(f);setDraft(f)}
  const changeDataset=(dataset:string)=>{const o=options.data?.datasets.find(o=>o.value===dataset);setDraft(f=>({...f,dataset,paymentMethod:o?.paymentFilter?f.paymentMethod:undefined,channelId:o?.channelFilter?f.channelId:undefined}))}
  const detailLink=(s:Shift)=>`/finance/revenue/shifts/${encodeURIComponent(s.id)}?${new URLSearchParams({startDate:storeCalendarDate(s.openedAt,settings.timezone),endDate:storeCalendarDate(s.windowEnd,settings.timezone),returnQuery:new URLSearchParams({...parameters(applied),page:String(page)}).toString()})}`
  if(!storeId)return <DashboardReadFailure scope />

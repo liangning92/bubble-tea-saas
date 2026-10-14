@@ -25,7 +25,7 @@ export async function revenueQueryOptions(db:DB,storeId:string,canRefund=true) {
   db.config.findMany({where:{storeId,key:{in:['pos.paymentMethods','paymentMethods','pos.payment.methods','payment.methods']}},select:{value:true}})
  ])
  const payments=new Set(['cash','qris',...methods.map(m=>m.paymentMethod)])
- for(const row of paymentConfig)try{const p=JSON.parse(row.value);if(p&&typeof p==='object'&&!Array.isArray(p)){for(const [key,enabled] of Object.entries(p))if(enabled===true)payments.add(key)};if(Array.isArray(p))for(const method of p){const key=typeof method==='string'?method:method?.key;if(typeof key==='string')payments.add(key)}}catch{}
+ for(const row of paymentConfig)try{const p=JSON.parse(row.value);if(p&&typeof p==='object'&&!Array.isArray(p)){for(const [key,enabled] of Object.entries(p))if(enabled===true && (payments.has(key)||['cash','qris','gopay','ovo','dana','shopeepay','debit','member','credit','bank_transfer','transfer'].includes(key)))payments.add(key)};if(Array.isArray(p))for(const method of p){const key=typeof method==='string'?method:method?.key;if(typeof key==='string')payments.add(key)}}catch{}
  let categories:{key:string;label?:string;labelEn?:string;labelZh?:string;labelId?:string}[]=DEFAULT_EXPENSE_CATEGORIES
  try{if(categoryConfig?.value){const parsed=JSON.parse(categoryConfig.value);if(Array.isArray(parsed))categories=parsed.filter(c=>typeof c?.key==='string')}}catch{}
  const categoryKeys=new Set([...categories.map(c=>c.key),...expenseRows.map(e=>e.category)])
