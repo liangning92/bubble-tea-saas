@@ -1,3 +1,6 @@
+import { ProductDisplayPicker } from '../../components/ProductDisplayPicker'
+import { DisplayProductMedia } from '../../../../shared/components/DisplayProductMedia'
+import { resolveDisplayProducts, ProductDisplayMedia } from '../../../../shared/utils/customerDisplayProducts'
 import { MediaPicker } from '../../components/MediaLibrary'
 import { LogoSettingsDialog, LogoColor, LogoSources } from '../../components/LogoSettingsDialog'
 import { HandoverReceiptSettings } from '../../components/HandoverReceiptSettings'
@@ -7,13 +10,13 @@ import { CustomerDisplayLayout, CustomerLayoutColumn, CustomerLayoutRow, custome
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { configApi, uploadApi, receiptTemplateApi, receiptMediaUrl } from '../../services/api'
+import { configApi, uploadApi, receiptTemplateApi, receiptMediaUrl, activitiesApi } from '../../services/api'
 import { ReceiptTemplateEditor } from '../../components/ReceiptTemplateEditor'
 import { useAuthStore } from '../../stores/auth'
 import { CheckCircle, Loader2, Smartphone, LayoutGrid, CreditCard, Volume2, Tag, Layers, Users, Receipt, Wallet, Printer, RefreshCw, Upload, X } from 'lucide-react'
 import axios from 'axios'
 import { CustomerDisplayLogo, CustomerDisplayLogoStyle, customerDisplayLogoColor } from '../../../../shared/components/CustomerDisplayLogo'
-import { customerDisplayMedia } from '../../../../shared/utils/customerDisplayMedia'
+import { customerDisplayMedia, displayMediaKey } from '../../../../shared/utils/customerDisplayMedia'
 import { PromotionText, PromotionTextStyle } from '../../../../shared/components/PromotionText'
 
 type POSSubTab = 'layout' | 'toolbar' | 'channels' | 'tax' | 'quickAmounts' | 'sound' | 'display' | 'shift' | 'payment' | 'receipt' | 'hardware'
@@ -29,7 +32,7 @@ const Toggle: React.FC<{ enabled: boolean; onChange: () => void }> = ({ enabled,
 )
 
 // Media file type
-interface MediaFile {
+interface MediaFile extends ProductDisplayMedia {
   mediaId?: string
   url: string
   filename: string
@@ -46,6 +49,7 @@ const DualScreenMediaUpload: React.FC<{
 }> = ({ mediaFiles, onUpload, onRemove, onMediaFilesChange }) => {
   const { t } = useTranslation()
   const [showPicker,setShowPicker]=useState(false)
+  const [showProducts,setShowProducts]=useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -135,6 +139,8 @@ const DualScreenMediaUpload: React.FC<{
 
       {/* Preview Grid */}
       <button type="button" className="btn" onClick={()=>setShowPicker(true)}>{t('media.choose')}</button>
+      <button type="button" className="btn" onClick={()=>setShowProducts(true)}>{t('media.chooseProduct')}</button>
+      {showProducts&&<ProductDisplayPicker onClose={()=>setShowProducts(false)} onSelect={file=>{const merge=(current:MediaFile[])=>[...current.filter(item=>!(item.productId===file.productId&&item.specId===file.specId)),file];if(onMediaFilesChange)onMediaFilesChange(merge);else onUpload(merge(mediaFiles));setShowProducts(false)}}/>}
       {showPicker&&<MediaPicker scene="display" onClose={()=>setShowPicker(false)} onSelect={assets=>{
         const added=assets.map(a=>({mediaId:a.id,url:a.url,filename:a.name,mimetype:a.mimeType,isVideo:a.kind==='video'}))
         const merge=(current:MediaFile[])=>[...current,...added.filter(a=>!current.some(f=>f.mediaId===a.mediaId))]
@@ -341,7 +347,9 @@ export const DualScreenPreview: React.FC<{
   const [currentIndex, setCurrentIndex] = useState(0)
   const appearance = customerDisplayAppearance(dualScreen, previewState)
   const promotions = appearance.promotions || ['🧋', '🍓', '💳', '🎁']
-  const mediaFiles = dualScreen.mediaFiles || []
+  const configuredFiles: MediaFile[] = dualScreen.mediaFiles || []
+  const catalog = useQuery({queryKey:['display-product-catalog'],queryFn:()=>activitiesApi.resources().then(response=>response.data.data.products),enabled:configuredFiles.some(file=>file.productId),refetchInterval:15000})
+  const mediaFiles = useMemo(()=>catalog.data ? resolveDisplayProducts(configuredFiles,catalog.data) : configuredFiles,[configuredFiles,catalog.data])
   const background = appearance.backgroundColor
   const textColor = customerTextColor(background)
 
@@ -388,7 +396,7 @@ export const DualScreenPreview: React.FC<{
           return currentMedia?.isVideo ? (
             <video src={receiptMediaUrl(currentMedia.url)} className="w-full h-full" style={{ background: regionBackground, objectFit: appearance.mediaFit === 'contain' ? 'contain' : 'cover' }} autoPlay loop muted />
           ) : (
-            <img src={receiptMediaUrl(currentMedia?.url)} alt="" className="w-full h-full" style={{ background: regionBackground, objectFit: appearance.mediaFit === 'contain' ? 'contain' : 'cover' }} />
+            currentMedia ? <DisplayProductMedia media={{...currentMedia,url:receiptMediaUrl(currentMedia.url)}} fit={appearance.mediaFit === 'contain' ? 'contain' : 'cover'} background={regionBackground}/> : null
           )
         }
         return (
@@ -1877,7 +1885,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                       }}>
                         <option value="">{t('posSettings.firstMedia')}</option>
                         {(hardwareSettings.dualScreen.mediaFiles || []).map((file: MediaFile, index: number) => (
-                          <option key={file.url} value={file.url}>{index + 1}. {file.filename} {file.isVideo ? '(Video)' : ''}</option>
+                          <option key={displayMediaKey(file)} value={displayMediaKey(file)}>{index + 1}. {file.filename} {file.isVideo ? '(Video)' : ''}</option>
                         ))}
                       </select>
                     </label>

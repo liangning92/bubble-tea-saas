@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { Search, X, Package } from 'lucide-react'
 import { useMarketingCopy } from './MarketingLayout'
 
-export interface ResourceOption { id: string; name: string; subtitle?: string; group?: string }
+export interface ResourceOption { id: string; name: string; subtitle?: string; group?: string; image?: string }
 
 export function ResourcePicker({ label, options, value, onChange, single = false, limit = 100, loading = false }: {
   label: string; options: ResourceOption[]; value: string[]; onChange: (ids: string[]) => void; single?: boolean; limit?: number; loading?: boolean
@@ -26,7 +26,7 @@ export function ResourcePicker({ label, options, value, onChange, single = false
       <div className="max-h-56 overflow-auto divide-y divide-gray-100">
         {loading ? <p className="py-6 text-center text-sm text-gray-500">{l('正在加载…','Loading…','Memuat…')}</p> : visible.length === 0 ? <p className="py-6 text-center text-sm text-gray-500">{l('没有匹配的选项','No matching options','Tidak ada pilihan yang cocok')}</p> : visible.map(option => <label key={option.id} className={`flex items-center gap-3 px-2 py-3 rounded cursor-pointer hover:bg-gray-50 ${value.includes(option.id) ? 'bg-primary/5' : ''}`}>
           <input type="checkbox" checked={value.includes(option.id)} disabled={!single && !value.includes(option.id) && value.length >= limit} onChange={() => toggle(option.id)} />
-          <Package size={18} className="text-gray-400 shrink-0" /><span className="min-w-0"><span className="block text-sm font-medium text-gray-900 break-words">{option.name}</span>{option.subtitle && <span className="block text-xs text-gray-500">{option.subtitle}</span>}</span>
+          {option.image ? <img src={option.image} alt="" className="w-12 h-12 object-contain shrink-0 rounded"/> : <Package size={18} className="text-gray-400 shrink-0" />}<span className="min-w-0"><span className="block text-sm font-medium text-gray-900 break-words">{option.name}</span>{option.subtitle && <span className="block text-xs text-gray-500">{option.subtitle}</span>}</span>
         </label>)}
       </div>
       {value.length > 0 && <div className="flex flex-wrap gap-2 border-t border-border pt-3">{value.map(selectedId => <span key={selectedId} className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs text-gray-700">{options.find(option => option.id === selectedId)?.name || l('已关联的停用资源','Linked inactive resource','Sumber nonaktif terkait')}<button type="button" aria-label={l('移除','Remove','Hapus') + ' ' + (options.find(option => option.id === selectedId)?.name || selectedId)} onClick={() => onChange(value.filter(item => item !== selectedId))}><X size={12} /></button></span>)}</div>}

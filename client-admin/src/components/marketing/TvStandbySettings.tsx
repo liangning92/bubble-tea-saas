@@ -1,6 +1,7 @@
+import { formatCurrency } from '../../utils/helpers'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { activitiesApi, uploadApi } from '../../services/api'
+import { activitiesApi, uploadApi, receiptMediaUrl } from '../../services/api'
 import { TvScreenConfig } from '../../../../shared/utils/tvScreenConfig'
 import { MarketingError, useMarketingCopy } from './MarketingLayout'
 import { ResourcePicker } from './ResourcePicker'
@@ -14,7 +15,7 @@ export function TvStandbySettings({ config, onChange, onUploadingChange }: {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const products = useQuery({ queryKey: ['tv-standby-products'], queryFn: () => activitiesApi.resources().then(response => response.data.data.products) })
-  const options = (products.data || []).filter((product: any) => product.image).map((product: any) => ({ id: product.id, name: product.name, subtitle: product.code, group: product.category?.name }))
+  const options = (products.data || []).filter((product: any) => product.image).map((product: any) => ({ id: product.id, name: product.name, subtitle: `${product.code || ''} · ${product.specs?.length ? formatCurrency(Math.min(...product.specs.map((spec:any)=>spec.price))) : ''}`, image: receiptMediaUrl(product.image), group: product.category?.name }))
   const updateMusic = (changes: Partial<TvScreenConfig['idleMusic']>) => onChange({ idleMusic: { ...config.idleMusic, ...changes } })
   const upload = async (files: FileList | null) => {
     if (!files?.length) return

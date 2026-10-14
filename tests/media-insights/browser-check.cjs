@@ -8,7 +8,7 @@ const assets=[{id:'m1',name:'Tea image',kind:'image',mimeType:'image/png',size:1
 const row={productId:'p1',productName:product.name,categoryId:'c1',category:'Milk Tea',quantity:24,revenue:360000,cost:120000,orderCount:16,penetration:80,margin:66.67,matrixType:'star',previousQuantity:12,change:100,evidence:true,costKnown:true}
 const insight={overview:{productsSold:1,quantity:24,unsold:1,incomplete:0,orderCount:20},period:{timeZone:'Asia/Jakarta'},categories:[{id:'c1',name:'Milk Tea',quantity:24,revenue:360000}],top:[row],revenueTop:[row],matrix:[row],benchmarks:{avgQuantity:24,avgMargin:66.67},strategies:['star','plowhorse','puzzle','dog'].map(type=>({type,count:7,products:Array.from({length:5},(_,i)=>({...row,productId:type+'-'+i,productName:type+' '+(i+1),matrixType:type}))})),changes:[row],channels:[{channelId:'ch1',channel:'POS',productId:'p1',productName:product.name,quantity:24}],pairs:[],products:[{id:'p1',name:product.name}]}
 let uploadMode='success',pendingUpload=null,uploadRequests=0
-let detailsRequests=0,postedProduct=null,postedHardware=null,postedTvDefaults=null
+let detailsRequests=0,postedProduct=null,postedHardware=null,saveMode='success',postedTvDefaults=null
 let tvDefaults={inherit:false,channelId:'',orientation:'landscape',layoutTemplate:'split_media_menu',themeStyle:'international_dark',safeAreaPadding:1.5,mediaFitMode:'contain_blur',mediaIntervalSeconds:8,selectedMediaIds:[],selectedCategoryIds:[],selectedProductIds:[],selectedSpecIds:[],showActivities:true,activityDisplayType:'all',marqueeText:'',marqueeSpeed:3,musicIds:[],musicEnabled:false,volume:.4,pageSeconds:12}
 let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[{width:100,content:'media'}]},orderingLayout:{columns:[{width:100,content:'order'}]},carouselIntervalSeconds:6}}
 ;(async()=>{
@@ -28,6 +28,12 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    else if(pathname==='/api/channels')data={list:[{id:'ch1',name:'POS'}]}
    else if(pathname==='/api/products'&&req.method()==='POST'){postedProduct=req.postDataJSON();data={...product,...postedProduct}}
    else if(pathname==='/api/products')data={list:[product]}
+   else if(pathname==='/api/products/p1'&&req.method()==='PUT'){
+     if(saveMode==='fail'){await route.fulfill({status:500,json:{code:500,message:'SAVE_FAILED'}});return}
+     postedProduct=req.postDataJSON();Object.assign(product,postedProduct)
+     product.images=(postedProduct.mediaIds||[]).map((id,index)=>({mediaId:id,url:assets.find(a=>a.id===id).url,position:index}))
+     data=product
+   }
    else if(pathname==='/api/products/p1')data=product
    else if(pathname==='/api/bom/products')data={list:[{...product,category:'Milk Tea'}]}
    else if(pathname==='/api/bom/products/p1')data={...product,category:'Milk Tea',totalBomCost:5000,bomDetails:[{inventoryId:'i1',name:'Tea',unit:'g',quantity:10,costPerUnit:500,totalCost:5000,inventoryType:'raw_material'}]}
@@ -41,11 +47,36 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    else if(pathname==='/api/config')data={hardwareSettings:hardwareConfig}
    else if(pathname==='/api/receipt-templates')data=[]
    else if(pathname==='/api/marketing/tv-screen/config')data={enabled:true,storeName:'YOUME',welcomeText:'Welcome',carouselIntervalSeconds:6,layout:{columns:[{width:60,content:'media'},{width:40,content:'specials'}]},mediaFiles:[],dailySpecials:[],lottery:{enabled:false,triggerMinOrderAmount:50000,title:'Lucky',subtitle:'',prizes:[]},ticker:{enabled:false,text:''}}
-   else if(pathname==='/api/marketing/activities/resources')data={products:[],channels:[],members:[],coupons:[],rewards:[]}
+   else if(pathname==='/api/marketing/activities/resources')data={products:[product],channels:[],members:[],coupons:[],rewards:[]}
    else if(pathname.includes('list')||pathname.includes('addons'))data={list:[]}
    await route.fulfill({json:{code:200,data}})
  })
  await page.route('**/uploads/**',route=>route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=','base64')}))
+ if(process.env.PRODUCT_GALLERY_ONLY!=='1') {
+   const originalProduct=JSON.parse(JSON.stringify(product))
+   product.images=[];product.image=''
+   await page.goto(base+'/products/p1/edit')
+   await page.waitForFunction(()=>document.querySelector('form input[type="text"]')?.value==='Brown Sugar Pearl Tea')
+   uploadMode='hang'
+   await page.locator('form input[type="file"]').first().setInputFiles({name:'tea.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=','base64')})
+   await page.waitForFunction(()=>document.querySelector('form button[type="submit"]')?.disabled)
+   assert.equal(await page.locator('form button[type="submit"]').isDisabled(),true)
+   while(!pendingUpload)await new Promise(resolve=>setTimeout(resolve,10))
+   await pendingUpload.fulfill({json:{code:200,data:{list:[assets[0]]}}});pendingUpload=null;uploadMode='success'
+   await page.getByRole('region',{name:'图片',exact:true}).waitFor()
+   const formSave=page.getByRole('button',{name:'保存',exact:true})
+   saveMode='fail';await formSave.click();await page.getByRole('alert').waitFor()
+   assert.match(page.url(),/products\/p1\/edit/)
+   assert.equal(await page.getByRole('region',{name:'图片',exact:true}).count(),1)
+   saveMode='success';await formSave.click();await page.waitForURL('**/products/recipes?productId=p1')
+   await page.getByRole('img',{name:product.name,exact:true}).waitFor()
+   assert.deepEqual(postedProduct.mediaIds,['m1'])
+   await page.reload();await page.getByRole('img',{name:product.name,exact:true}).waitFor()
+   assert.equal(await page.getByRole('img',{name:product.name,exact:true}).evaluate(img=>img.complete&&img.naturalWidth>0),true)
+   await page.screenshot({path:'/tmp/product-save-detail-regression.png',fullPage:true})
+   Object.assign(product,originalProduct);postedProduct=null
+   if(process.env.PRODUCT_SAVE_ONLY==='1'){assert.deepEqual(errors,[]);await browser.close();console.log('Product save flow: blocks pending upload, retains failed-save draft, persists images, returns to detail and survives reload');return}
+ }
  if(process.env.PRODUCT_GALLERY_ONLY==='1') {
    await page.route('**/uploads/**',route=>route.fulfill({contentType:'image/svg+xml',body:`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#f6e7d3"/><rect x="180" y="200" width="240" height="400" rx="30" fill="#a56d44"/><rect x="280" y="90" width="24" height="350" fill="#503524"/><text x="300" y="680" text-anchor="middle" font-size="36" fill="#503524">${route.request().url().includes('tea2')?'Pearl Tea 2':'Pearl Tea 1'}</text></svg>`}))
    await page.goto(base+'/products/recipes?productId=p1')
@@ -101,6 +132,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  const imageInput=page.locator('form input[type="file"]').first()
  const pngFile={name:'tea.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=','base64')}
  uploadMode='hang';await imageInput.setInputFiles(pngFile)
+ assert.equal(await page.locator('form button[type="submit"]').isDisabled(),true)
  await page.getByRole('alert').filter({hasText:'上传超时'}).waitFor({timeout:35000})
  assert.equal(await imageInput.isDisabled(),false)
  if(pendingUpload)await pendingUpload.abort().catch(()=>{})
@@ -143,6 +175,19 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  await page.waitForTimeout(200)
  assert.equal(postedHardware.dualScreen.mediaFiles[0].mediaId,'m4')
  assert.equal(postedHardware.dualScreen.mediaFiles[0].isVideo,true)
+ await page.getByRole('button',{name:'选择产品图片与价格',exact:true}).click()
+ const productPicker=page.getByRole('dialog',{name:'营销管理表单',exact:true})
+ await productPicker.getByRole('checkbox').first().check()
+ await productPicker.getByLabel('展示规格',{exact:true}).selectOption('s2')
+ await productPicker.getByRole('button',{name:'使用此产品',exact:true}).click()
+ await page.waitForFunction(()=>!document.querySelector('[role="dialog"]'))
+ await page.waitForTimeout(200)
+ const selectedProductMedia=postedHardware.dualScreen.mediaFiles.find(file=>file.productId==='p1')
+ assert.equal(selectedProductMedia.specId,'s2');assert.equal(selectedProductMedia.productPrice,19000)
+ assert.equal(selectedProductMedia.productName,product.name)
+ assert.match(selectedProductMedia.url,/tea\.png/)
+ await page.screenshot({path:'/tmp/customer-display-product-selection.png',fullPage:true})
+
  for(const lang of ['en','id']){
   await page.evaluate(lang=>localStorage.setItem('bubble-tea-language',lang),lang)
   await page.goto(base+'/products/analysis');await page.getByRole('heading',{name:lang==='en'?'Product analysis':'Analisis produk',exact:true}).waitFor();await page.locator('details').last().locator('summary').waitFor();const text=await page.locator('body').innerText();assert.ok(!/insights\.|media\./.test(text),lang+' missing translation')
