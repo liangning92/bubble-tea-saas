@@ -2,8 +2,8 @@
 const {chromium, expect}=require('@playwright/test');
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const root=path.resolve(process.env.ADMIN_UI_BUILD||'client-admin/dist');
-const user=id=>({id,phone:'fixture',role:'admin',storeId:'fixture-store',staff:null});
-const token=(id,exp=Math.floor(Date.now()/1000)+600)=>`fixture.${Buffer.from(JSON.stringify({...user(id),exp})).toString('base64url')}.fixture`;
+const user=id=>({id,phone:'fixture',role:'admin',storeId:id==='no-store'?null:'fixture-store',staff:null});
+const token=(id,exp=Math.floor(Date.now()/1000)+600)=>`fixture.${Buffer.from(JSON.stringify({...user(id),storeId:user(id).storeId||'',exp})).toString('base64url')}.fixture`;
 (async()=>{
  const server=http.createServer((req,res)=>{let file=path.join(root,new URL(req.url,'http://localhost').pathname);if(!fs.existsSync(file)||!fs.statSync(file).isFile())file=path.join(root,'index.html');res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');fs.createReadStream(file).pipe(res)});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -24,7 +24,7 @@ const token=(id,exp=Math.floor(Date.now()/1000)+600)=>`fixture.${Buffer.from(JSO
    if(loginCalls!==0)throw Error('Session reuse attempted password login');
    await context.close();
   }
-  await scenario({ids:[]});await scenario({logout:true});await scenario({loginUrl:true});await scenario({expired:true});await scenario({revoked:true});await scenario({ids:['owner','other']});await scenario({existing:true});
+  await scenario({ids:['no-store']});await scenario({ids:[]});await scenario({logout:true});await scenario({loginUrl:true});await scenario({expired:true});await scenario({revoked:true});await scenario({ids:['owner','other']});await scenario({existing:true});
   console.log('PASS: same-origin valid session reuse, deep route, login redirect, API revocation, expiry, account isolation and logout');
  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve))}
 })().catch(error=>{console.error(error);process.exitCode=1});
