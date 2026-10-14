@@ -1,3 +1,4 @@
+import { inventoryInputUnits, defaultInventoryInputUnit, inventoryLedgerQuantity, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -281,7 +282,7 @@ export function InventoryPage() {
       inventoryId: selectedItem.id,
       storeId: user?.storeId,
       quantity: parseFloat(stockForm.quantity),
-      inputUnit: stockForm.inputUnit || selectedItem.unit,
+      inputUnit: stockForm.inputUnit || defaultInventoryInputUnit(selectedItem),
       unitCost:
         stockForm.unitCost === "" ? undefined : Number(stockForm.unitCost),
       note: stockForm.note,
@@ -299,6 +300,7 @@ export function InventoryPage() {
       inventoryId: selectedItem.id,
       storeId: user?.storeId,
       quantity: parseFloat(stockForm.quantity),
+      inputUnit: stockForm.inputUnit || defaultInventoryInputUnit(selectedItem),
       reason: stockOutPurpose,
       note: stockForm.note,
     });
@@ -610,6 +612,7 @@ export function InventoryPage() {
                           <button
                             onClick={() => {
                               setSelectedItem(item);
+                              setStockForm({ quantity: "", unitCost: "", note: "", inputUnit: defaultInventoryInputUnit(item), expiryDate: "" });
                               setShowStockIn(true);
                             }}
                             className="p-1.5 text-green-600 hover:bg-green-50 rounded"
@@ -620,6 +623,7 @@ export function InventoryPage() {
                           <button
                             onClick={() => {
                               setSelectedItem(item);
+                              setStockForm({ quantity: "", unitCost: "", note: "", inputUnit: defaultInventoryInputUnit(item), expiryDate: "" });
                               setShowStockOut(true);
                             }}
                             className="p-1.5 text-orange-600 hover:bg-orange-50 rounded"
@@ -1030,7 +1034,7 @@ export function InventoryPage() {
                 {t("inventoryUnits.input")}
                 <select
                   className="input w-full"
-                  value={stockForm.inputUnit || selectedItem.unit}
+                  value={stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)}
                   onChange={(e) =>
                     setStockForm({
                       ...stockForm,
@@ -1039,19 +1043,7 @@ export function InventoryPage() {
                     })
                   }
                 >
-                  {[
-                    ...new Set([
-                      selectedItem.unit,
-                      ...(["kg", "g"].includes(selectedItem.unit.toLowerCase())
-                        ? ["kg", "g"]
-                        : ["l", "ml"].includes(selectedItem.unit.toLowerCase())
-                          ? ["L", "ml"]
-                          : []),
-                      ...(selectedItem.packaging?.unit
-                        ? [selectedItem.packaging.unit]
-                        : []),
-                    ]),
-                  ].map((unit) => (
+                  {inventoryInputUnits(selectedItem).map((unit) => (
                     <option key={unit}>{unit}</option>
                   ))}
                 </select>
@@ -1069,12 +1061,12 @@ export function InventoryPage() {
               </label>
               <p className="text-sm">
                 {t("inventoryUnits.cost")} (
-                {stockForm.inputUnit || selectedItem.unit})
+                {stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)})
               </p>
               <div>
                 <label className="block text-sm font-medium mb-1">
                   {t("inventory.quantity") || "Quantity"} (
-                  {stockForm.inputUnit || selectedItem.unit}) *
+                  {stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)}) *
                 </label>
                 <input
                   type="number"
@@ -1098,7 +1090,7 @@ export function InventoryPage() {
                     setStockForm({ ...stockForm, unitCost: e.target.value })
                   }
                   className="input w-full"
-                  placeholder={selectedItem.avgCost}
+                  placeholder={String((selectedItem.avgCost || 0) * inventoryUnitFactor(selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)))}
                 />
               </div>
               <div>
@@ -1170,18 +1162,24 @@ export function InventoryPage() {
                   ))}
                 </select>
               </label>
+              <label className="block">
+                {t("inventoryUnits.input")}
+                <select className="input w-full" value={stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)} onChange={e => setStockForm({ ...stockForm, inputUnit: e.target.value })}>
+                  {inventoryInputUnits(selectedItem).map(unit => <option key={unit}>{unit}</option>)}
+                </select>
+              </label>
               <p>
                 {t("inventoryFlow.currentStock")}: {selectedItem.currentStock}{" "}
                 {selectedItem.unit}
               </p>
               <p>
                 {t("inventoryFlow.afterStock")}:{" "}
-                {selectedItem.currentStock - (Number(stockForm.quantity) || 0)}{" "}
+                {selectedItem.currentStock - inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem))}{" "}
                 {selectedItem.unit}
               </p>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  {t("inventory.quantity") || "Quantity"} ({selectedItem.unit})
+                  {t("inventory.quantity") || "Quantity"} ({stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)})
                   *
                 </label>
                 <input
