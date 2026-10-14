@@ -39,7 +39,7 @@ export function MediaPreview({
   if (asset.kind === "audio")
     return (
       <div className="h-40 flex flex-col gap-2 items-center justify-center bg-gray-100">
-        {!controls&&<span className="text-sm text-gray-600">♫ {asset.name}</span>}
+        {!controls&&<span aria-hidden="true" className="text-2xl text-gray-600">♫</span>}
         <audio src={url} controls={controls} preload="metadata" className="w-full" />
       </div>
     );

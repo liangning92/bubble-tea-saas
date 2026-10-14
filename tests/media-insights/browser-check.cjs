@@ -123,7 +123,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  await page.goto(base+'/settings/tv-screen')
  await page.getByRole('heading',{name:'电视大屏',exact:true}).waitFor()
  await page.getByRole('button',{name:'门店默认内容',exact:true}).click()
- assert.equal(await page.getByLabel('Store music',{exact:true}).count(),1)
+ await page.getByRole('dialog').getByLabel('启用背景音乐',{exact:true}).check();await page.getByLabel('Store music',{exact:true}).waitFor();assert.equal(await page.getByLabel('Store music',{exact:true}).count(),1);await page.getByLabel('Store music',{exact:true}).check()
  await page.getByLabel('Store video',{exact:true}).check()
  await page.getByRole('button',{name:'保存',exact:true}).click()
  await page.waitForFunction(()=>!document.querySelector('form input[type="number"]'))

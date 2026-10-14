@@ -33,6 +33,7 @@ export function TVScreensPage() {
   const l = useMarketingCopy();
   const [searches, setSearches] = useState<Record<string, string>>({});
   const canWrite = useEmployeePermission("marketing.write");
+  const [loading,setLoading]=useState(true);
   const { t } = useTranslation(),
     tr = (key: string) => t("tvTerminal." + key);
   const [screens, setScreens] = useState<any[]>([]),
@@ -65,7 +66,7 @@ export function TVScreensPage() {
       setError("");
     } catch (e: any) {
       setError(e.response?.data?.message || tr("loadFailed"));
-    }
+    } finally {setLoading(false);}
   }
   useEffect(() => {
     load();
@@ -141,6 +142,7 @@ export function TVScreensPage() {
             >
               <input
                 type="checkbox"
+                aria-label={item.name}
                 checked={chosen.includes(item.id)}
                 onChange={() => toggle(key, item.id)}
               />
@@ -191,7 +193,7 @@ export function TVScreensPage() {
       <div className="flex gap-3 items-center flex-wrap">
         <h1 className="text-2xl font-bold">{tr("title")}</h1>
         <button
-          disabled={!canWrite}
+          disabled={!canWrite||loading}
           className="btn-primary"
           onClick={() =>
             setEdit({
@@ -205,6 +207,7 @@ export function TVScreensPage() {
           {tr("add")}
         </button>
         <button
+          disabled={loading}
           className="btn"
           onClick={() =>
             setEdit({
@@ -223,12 +226,13 @@ export function TVScreensPage() {
         </Link>
       </div>
       <p className="text-gray-600">{tr("hint")}</p>
+      {loading&&<p role="status">{t("common.loading")}</p>}
       {error && (
         <p role="alert" className="text-red-600">
           {error}
         </p>
       )}
-      {!screens.length && (
+      {!loading&&!screens.length && (
         <section className="card bg-primary-light/30 space-y-3">
           <h2 className="font-semibold">
             {l(
