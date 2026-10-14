@@ -1,3 +1,4 @@
+import { flushSync } from 'react-dom'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { inventoryUnitFactor } from '../../utils/inventoryInputUnits'
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -472,7 +473,12 @@ export function RecipeEditPage() {
                     <input
                       type="text"
                       value={focusedQuantity === index || !item.quantityStr || !Number.isFinite(Number(item.quantityStr)) ? item.quantityStr : formatDisplayQuantity(Number(item.quantityStr))}
-                      onFocus={() => setFocusedQuantity(index)}
+                      onFocus={event => {
+                        // Restore full precision before selection, so a replacement
+                        // cannot be appended when the controlled value changes.
+                        flushSync(() => setFocusedQuantity(index))
+                        event.currentTarget.select()
+                      }}
                       onBlur={() => setFocusedQuantity(null)}
                       onChange={(e) => handleQuantityChange(index, e.target.value)}
                       aria-label={t("uiDesign.quantity")} className={`input w-full text-right ${item.error ? 'input-error' : ''}`}
