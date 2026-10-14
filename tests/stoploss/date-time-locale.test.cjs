@@ -17,7 +17,7 @@ try {
     import { LocalizedDateTimeInput } from './shared/components/LocalizedDateTimeInput';
     i18n.use(initReactI18next).init({ lng:'en', fallbackLng:'en', resources:{ en:{translation:{}}, id:{translation:{}}, zh:{translation:{}} }, initImmediate:false });
     export function render(language, props) { i18n.changeLanguage(language); return renderToStaticMarkup(React.createElement(LocalizedDateTimeInput, props)); }
-  `, resolveDir: root, sourcefile: 'date-locale-fixture.tsx', loader: 'tsx' }, outfile, jsx: 'automatic', bundle: true, platform: 'node', format: 'cjs', loader: { '.css': 'empty' }, logLevel: 'silent' })
+  `, resolveDir: root, sourcefile: 'date-locale-fixture.tsx', loader: 'tsx' }, outfile, jsx: 'transform', bundle: true, platform: 'node', format: 'cjs', loader: { '.css': 'empty' }, logLevel: 'silent' })
   fixture = require(outfile)
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })

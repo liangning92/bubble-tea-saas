@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState, type InputHTMLAttributes, type ChangeEvent } from 'react'
+import React, { useEffect, useRef, useState, type InputHTMLAttributes, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import './LocalizedDateTimeInput.css'
@@ -14,7 +14,7 @@ const words = {
 }
 
 // Keep the existing ISO value/onChange contract; never delegate UI language to the OS picker.
-export const LocalizedDateTimeInput = forwardRef<HTMLInputElement, Props>(function LocalizedDateTimeInput(
+export const LocalizedDateTimeInput = React.forwardRef<HTMLInputElement, Props>(function LocalizedDateTimeInput(
   { type, value, defaultValue, onChange, min, max, step, name, className, disabled, readOnly, required, onClick, onKeyDown, ...rest }, forwardedRef,
 ) {
   const { i18n } = useTranslation()
