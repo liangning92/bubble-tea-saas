@@ -496,7 +496,7 @@ export function RecipeEditPage() {
                   </select></label>
 
                   {/* 小计 */}
-                  <div className="min-w-0 text-right font-medium text-sm tabular-nums">
+                  <div className="recipe-row-cost min-w-0 text-right font-medium text-sm tabular-nums">
                     <div className="text-xs text-gray-500 font-normal">{t('uiDesign.unitPrice')}: {displayCost(item.costPending || item.costFailed ? null : item.cost)}</div>
                     <div><span className="text-xs text-gray-500 font-normal">{t('uiDesign.subtotal')}: </span>{item.inventoryId ? displayCost(recipeRowCost(item)) : '-'}</div>
                   </div>
