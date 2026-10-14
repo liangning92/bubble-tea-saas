@@ -48,6 +48,7 @@ export function SalesStatsPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
+      maximumFractionDigits: 20,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0

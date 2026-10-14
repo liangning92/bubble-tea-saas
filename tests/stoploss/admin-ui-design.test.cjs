@@ -41,3 +41,13 @@ test('refund policy awaits confirmation and blocks invalid legacy or partial req
 });
 
 test('unknown API cost responses are not displayed as free inventory',()=>{assert.equal(costs.readBreakdownCost({type:'unknown',cost:0}),null);assert.equal(costs.readBreakdownCost({type:'semi_finished'}),null);assert.equal(costs.readBreakdownCost({type:'raw_material',cost:0}),0);assert.equal(costs.recipeRowCost({inventoryId:'x',quantityStr:'2',cost:1.234,rowTotal:2}),2)});
+
+test('full currency values retain decimal amounts and large totals',()=>{
+ const {formatExactCurrency}=load('client-admin/src/utils/moneyDisplay.ts');
+ for(const value of [0,12.35,-1234.56,9876543210123.75,3943/230]){
+  const text=formatExactCurrency(value);
+  const restored=Number(text.replace(/[^0-9,-]/g,'').replace(',','.'));
+  assert.equal(restored,value);
+  assert.ok(!/K|M|B/.test(text));
+ }
+});

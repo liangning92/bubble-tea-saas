@@ -277,7 +277,7 @@ export function OrderListPage() {
                     {items.map((item, index) => (
                       <tr key={index}>
                         <td className="py-3 pr-4 text-sm text-gray-800 max-w-sm break-words">{item.productName}</td>
-                        <td className="text-right tabular-nums py-3 px-2 text-left text-sm text-gray-800 tabular-nums whitespace-nowrap">{item.quantity ?? '-'}</td>
+                        <td className="text-right tabular-nums py-3 px-2 text-left text-sm text-gray-800 whitespace-nowrap">{item.quantity ?? '-'}</td>
                         {index === 0 && (
                           <>
                             <td rowSpan={items.length} className="py-3 pl-6 pr-4">

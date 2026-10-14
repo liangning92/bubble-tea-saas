@@ -71,6 +71,7 @@ export function RecipeEditPage() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
   const [isDirty, setIsDirty] = useState(false)
+  const [focusedQuantity, setFocusedQuantity] = useState<number | null>(null)
 
   // 获取产品详情
   const { data: productData, isLoading: productLoading } = useQuery({
@@ -470,7 +471,9 @@ export function RecipeEditPage() {
                     <label className="block text-xs text-gray-500 mb-1">{t('uiDesign.quantity')}</label>
                     <input
                       type="text"
-                      value={item.quantityStr}
+                      value={focusedQuantity === index || !item.quantityStr || !Number.isFinite(Number(item.quantityStr)) ? item.quantityStr : formatDisplayQuantity(Number(item.quantityStr))}
+                      onFocus={() => setFocusedQuantity(index)}
+                      onBlur={() => setFocusedQuantity(null)}
                       onChange={(e) => handleQuantityChange(index, e.target.value)}
                       aria-label={t("uiDesign.quantity")} className={`input w-full text-right ${item.error ? 'input-error' : ''}`}
                       placeholder="0"

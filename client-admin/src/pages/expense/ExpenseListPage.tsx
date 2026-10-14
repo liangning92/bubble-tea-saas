@@ -584,6 +584,7 @@ export function ExpenseListPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
+      maximumFractionDigits: 20,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -718,6 +719,7 @@ export function ExpenseListPage() {
 
   const formatReimbCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
+      maximumFractionDigits: 20,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0

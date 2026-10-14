@@ -1,15 +1,8 @@
+import { formatExactCurrency } from './moneyDisplay'
 import { itemDisplayName } from './itemDisplayName'
 import {formatStoreDate} from './storeDateTime'
 // Format currency to IDR
-export function formatCurrency(amount: number): string {
-  if (amount === undefined || amount === null) return 'Rp 0'
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-}
+export const formatCurrency = formatExactCurrency
 
 // Safe parse date string
 function safeParseDate(date: string | Date): Date | null {

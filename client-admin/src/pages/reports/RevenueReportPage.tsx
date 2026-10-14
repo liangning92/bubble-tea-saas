@@ -70,19 +70,19 @@ export function RevenueReportPage() {
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : (
-          <div className="h-64">
+          <div className="overflow-x-auto"><div className="h-64 min-w-[640px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={daily}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                <YAxis width={140} tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(value)} />
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
                 <Legend />
                 <Line type="monotone" dataKey="revenue" stroke="#22c55e" name={t('reports.revenue')} />
                 <Line type="monotone" dataKey="profit" stroke="#3b82f6" name={t('reports.profit')} />
               </LineChart>
             </ResponsiveContainer>
-          </div>
+          </div></div>
         )}
       </div>
 
