@@ -1,3 +1,4 @@
+import { EmployeeFile } from "../components/EmployeeFile";
 import { PageHeader } from "../components/PageHeader";
 import { ShieldCheck, FolderLock } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -7,9 +8,11 @@ import { useSessionDraft } from "../utils/useSessionDraft";
 function UploadFiles({
   files,
   onChange,
+  onBusyChange,
 }: {
   files: string[];
   onChange: (ids: string[]) => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const { t } = useTranslation(),
     [busy, setBusy] = useState(false),
@@ -24,21 +27,21 @@ function UploadFiles({
           accept="image/jpeg,image/png,application/pdf"
           disabled={busy}
           onChange={async (e) => {
-            setBusy(true);
+            setBusy(true); onBusyChange(true);
             setError("");
             try {
               const selected = [...(e.target.files || [])];
               if (selected.length + files.length > 5)
                 throw new Error(t("workspace.maxFiles"));
-              const ids = [];
+              const ids = [...files];
               for (const f of selected) {
                 ids.push(await employeeApi.upload(f));
+                onChange([...ids]);
               }
-              onChange([...files, ...ids]);
             } catch (err: any) {
               setError(err.response?.data?.message || err.message);
             } finally {
-              setBusy(false);
+              setBusy(false); onBusyChange(false);
               e.target.value = "";
             }
           }}
@@ -50,18 +53,10 @@ function UploadFiles({
       </p>
       {files.map((id) => (
         <div key={id}>
+          <EmployeeFile id={id} />
           <button
             type="button"
-            onClick={() =>
-              employeeApi.file(id).catch(() => setError(t("common.loadFailed")))
-            }
-            className="text-primary"
-          >
-            {t("workspace.viewFile")}
-          </button>
-          <button
-            type="button"
-            className="p-2"
+            disabled={busy} aria-label={t("common.remove")} className="p-2"
             onClick={() => onChange(files.filter((f) => f !== id))}
           >
             ×
@@ -89,7 +84,9 @@ export function EmployeeAppealsPage() {
   const { t } = useTranslation(),
     [data, setData] = useState<any>(null),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [uploadBusy, setUploadBusy] = useState(false),
+    [loading, setLoading] = useState(true);
   const [draft, setDraft, clear] = useSessionDraft("appeal", {
     attendanceId: "",
     reason: "",
@@ -97,12 +94,13 @@ export function EmployeeAppealsPage() {
     requestId: crypto.randomUUID(),
   });
   async function load() {
+    setLoading(true);
     try {
       setData(await employeeApi.get("/my/attendance"));
       setError("");
     } catch {
       setError(t("common.loadFailed"));
-    }
+    } finally { setLoading(false); }
   }
   useEffect(() => {
     void load();
@@ -117,7 +115,9 @@ export function EmployeeAppealsPage() {
       <p role="alert" className="text-red-600">
         {error}
       </p>
-      <button onClick={load}>{t("common.retry")}</button>
+      {error && <button disabled={busy || uploadBusy || loading} onClick={load} className="text-primary-hover">{t("ui.refresh")}</button>}
+      {loading && <p role="status">{t("common.loading")}</p>}
+      {!loading && !error && data && !data.records?.some((r: any) => r.minutes > 0 && !r.exempt) && <p role="status" className="bg-white p-4 rounded-xl">{t("audit.noAppeals")}</p>}
       {data?.records
         ?.filter((r: any) => r.minutes > 0)
         .map((r: any) => (
@@ -144,6 +144,7 @@ export function EmployeeAppealsPage() {
           className="space-y-3 bg-white p-4 rounded-xl"
           onSubmit={async (e) => {
             e.preventDefault();
+            if (busy || uploadBusy) return;
             setBusy(true);
             try {
               await employeeApi.post("/my/appeals", draft);
@@ -170,12 +171,14 @@ export function EmployeeAppealsPage() {
             onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
             className="w-full p-3 border rounded"
           />
+          <p className="text-sm text-gray-500">{t("audit.appealRequired")}</p>
           <UploadFiles
+            onBusyChange={setUploadBusy}
             files={draft.files}
             onChange={(files) => setDraft({ ...draft, files })}
           />
           <button
-            disabled={busy || !draft.files.length}
+            disabled={busy || uploadBusy || !draft.reason.trim() || !draft.files.length}
             className="p-3 bg-primary text-white rounded-xl"
           >
             {t("common.submit")}
@@ -204,7 +207,9 @@ export function EmployeeDocumentsPage() {
   const { t } = useTranslation(),
     [records, setRecords] = useState<any>(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [uploadBusy, setUploadBusy] = useState(false),
+    [loading, setLoading] = useState(true);
   const [draft, setDraft, clear] = useSessionDraft("profile", {
     requestId: crypto.randomUUID(),
     kind: "ktp",
@@ -220,12 +225,13 @@ export function EmployeeDocumentsPage() {
     },
   });
   async function load() {
+    setLoading(true);
     try {
       setRecords(await employeeApi.get("/my/profile-submissions"));
       setError("");
     } catch {
       setError(t("common.loadFailed"));
-    }
+    } finally { setLoading(false); }
   }
   useEffect(() => {
     void load();
@@ -246,7 +252,8 @@ export function EmployeeDocumentsPage() {
       <p role="alert" className="text-red-600">
         {error}
       </p>
-      <button onClick={load}>{t("common.retry")}</button>
+      {error && <button disabled={busy || uploadBusy || loading} onClick={load} className="text-primary-hover">{t("ui.refresh")}</button>}
+      {loading && <p role="status">{t("common.loading")}</p>}
       {records?.official &&
         Object.entries(records.official).map(([kind, v]: any) => (
           <section key={kind} className="p-4 rounded-xl bg-white">
@@ -259,16 +266,7 @@ export function EmployeeDocumentsPage() {
               </p>
             ))}
             {v.files.map((id: string) => (
-              <button
-                key={id}
-                onClick={() =>
-                  employeeApi
-                    .file(id)
-                    .catch(() => setError(t("common.loadFailed")))
-                }
-              >
-                {t("workspace.viewFile")}
-              </button>
+              <EmployeeFile key={id} id={id} />
             ))}
           </section>
         ))}
@@ -276,6 +274,7 @@ export function EmployeeDocumentsPage() {
         className="bg-white p-4 rounded-xl space-y-3"
         onSubmit={async (e) => {
           e.preventDefault();
+          if (busy || uploadBusy) return;
           setBusy(true);
           setError("");
           try {
@@ -297,6 +296,7 @@ export function EmployeeDocumentsPage() {
           }
         }}
       >
+        <fieldset disabled={busy || uploadBusy} className="space-y-3">
         <select
           value={draft.kind}
           onChange={(e) =>
@@ -331,16 +331,19 @@ export function EmployeeDocumentsPage() {
             />
           </label>
         ))}
+        <p className="text-sm text-gray-500">{t(draft.kind === "ktp" ? "audit.ktpRequired" : "audit.optionalFiles")}</p>
         <UploadFiles
+            onBusyChange={setUploadBusy}
           files={draft.files}
           onChange={(files) => setDraft({ ...draft, files })}
         />
         <button
-          disabled={busy || (draft.kind === "ktp" && !draft.files.length)}
+          disabled={busy || uploadBusy || (draft.kind === "ktp" && !draft.files.length)}
           className="p-3 bg-primary text-white rounded-xl"
         >
           {t("common.submit")}
         </button>
+        </fieldset>
       </form>
       {records?.submissions?.map((r: any) => (
         <section key={r.id} className="bg-white rounded-xl p-4">

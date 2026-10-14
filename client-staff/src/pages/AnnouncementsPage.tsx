@@ -26,6 +26,7 @@ export function AnnouncementsPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   const [loadFailed, setLoadFailed] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   useEffect(() => {
     loadAnnouncements()
@@ -72,13 +73,14 @@ export function AnnouncementsPage() {
   }
 
   const markAsRead = async (id: string) => {
+    setActionError('')
     try {
       await staffApi.markNotificationRead(id)
       setAnnouncements(prev =>
         prev.map(a => a.id === id ? { ...a, isRead: true } : a)
       )
     } catch (error) {
-      console.error('Failed to mark as read:', error)
+      setActionError(t('common.loadFailed'))
     }
   }
 
@@ -99,11 +101,11 @@ export function AnnouncementsPage() {
   const unreadCount = announcements.filter(a => !a.isRead).length
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">{actionError && <p role="alert" className="p-4 text-red-700">{actionError}</p>}
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button aria-label={t('common.back')} onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1">
@@ -128,6 +130,9 @@ export function AnnouncementsPage() {
           announcements.map((announcement) => (
             <div
               key={announcement.id}
+              role={!announcement.isRead ? 'button' : undefined}
+              tabIndex={!announcement.isRead ? 0 : undefined}
+              onKeyDown={e => { if (!announcement.isRead && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void markAsRead(announcement.id) } }}
               onClick={() => !announcement.isRead && markAsRead(announcement.id)}
               className={`bg-white rounded-xl shadow-sm p-4 cursor-pointer transition-all ${
                 !announcement.isRead ? 'border-l-4 border-l-primary' : ''

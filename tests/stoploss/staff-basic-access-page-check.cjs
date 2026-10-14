@@ -37,5 +37,6 @@ const assert = require('node:assert/strict');
       await context.close();
       console.log('PASS employee pages and basic navigation:',scenario);
     }
+    await require('./staff-ui-complete-page-check.cjs')(browser);
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -1,3 +1,9 @@
+// Presentation only: never round quantities sent to the inventory ledger.
+export function formatQuantity(value: number | null | undefined, language = 'id'): string {
+  if (value == null || !Number.isFinite(Number(value))) return '—'
+  return new Intl.NumberFormat(language.startsWith('zh') ? 'zh-CN' : language.startsWith('en') ? 'en-US' : 'id-ID', { maximumFractionDigits: Math.abs(Number(value)) > 0 && Math.abs(Number(value)) < 0.000001 ? 12 : 6 }).format(Number(value))
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',

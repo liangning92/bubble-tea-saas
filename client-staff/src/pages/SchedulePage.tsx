@@ -117,7 +117,7 @@ export function SchedulePage() {
       {/* Week Navigation */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <button
-          onClick={goToPrevWeek}
+          aria-label={t('ui.previousWeek')} onClick={goToPrevWeek}
           className="p-2 rounded-full hover:bg-gray-100"
         >
           <ChevronLeft size={24} className="text-gray-600" />
@@ -126,7 +126,7 @@ export function SchedulePage() {
           {weekStart.toLocaleDateString(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID', { timeZone: 'Asia/Jakarta', month: 'long', year: 'numeric' })}
         </span>
         <button
-          onClick={goToNextWeek}
+          aria-label={t('ui.nextWeek')} onClick={goToNextWeek}
           className="p-2 rounded-full hover:bg-gray-100"
         >
           <ChevronRight size={24} className="text-gray-600" />

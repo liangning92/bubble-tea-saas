@@ -1,0 +1,144 @@
+const { expect } = require('@playwright/test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+module.exports = async function staffUI(browser) {
+  const output = path.resolve(process.env.STAFF_UI_EVIDENCE_DIR || 'output/staff-ui-regression');
+  fs.mkdirSync(output, { recursive: true });
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block' });
+  const errors = [], writes = [];
+  await context.addInitScript(() => {
+    localStorage.setItem('bubble-tea-language', 'en');
+    sessionStorage.setItem('staff-auth-storage', JSON.stringify({ state: { token: 'synthetic-ui-only', user: { id: 'u', staffId: 'e', storeId: 's', name: 'UI Employee', role: 'admin' }, isAuthenticated: true }, version: 0 }));
+  });
+  const materials = [{ id: 'm', name: 'Test Water', unit: 'ml', category: 'raw_material', currentStock: 88799.99999999994, safetyStock: 100, updatedAt: '2026-10-15T00:00:00Z' }];
+  const purchase = { id: 'p', orderNumber: 'UI-PURCHASE', status: 'awaiting_receipt', createdAt: '2026-10-15T00:00:00Z', items: [{ id: 'pi', inventory: materials[0], quantity: 10 }] };
+  const course = { key: 'onboarding', reviewed: true, title: { en: 'UI Course', id: 'UI Course', zh: '测试课程' }, subtitle: { en: 'UI subtitle', id: 'UI subtitle', zh: '测试说明' }, minutes: 5, sections: [{ title: { en: 'Section', id: 'Section' }, points: [{ en: 'Step', id: 'Step' }] }], quiz: [], practical: [], sources: [] };
+  let failInventory = false, failOvertime = false, confirmedSwap = false;
+  await context.route('**/api/**', async route => {
+    const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
+    let data = [], extra = {};
+    if (method !== 'GET') writes.push({ p, method });
+    if (failInventory && p === '/api/inventory') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic inventory failure' } });
+    if (failOvertime && p === '/api/overtime') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic overtime failure' } });
+    if (p === '/api/shift-swap/pending-confirm') data = confirmedSwap ? [] : [{id:'swap-invite',originalDate:'2026-10-15',targetDate:'2026-10-16',originalShift:'morning',targetShift:'evening',status:'pending',reason:'UI swap invitation'}];
+    else if (p === '/api/shift-swap/swap-invite/confirm') { confirmedSwap = true; data = {id:'swap-invite',targetConfirmed:true}; }
+    else if (p === '/api/staff-permissions/me') data = { role: { version: 2, modes: {} } };
+    else if (p === '/api/auth/me') data = { staff: { name: 'UI Employee', position: 'cashier' }, store: { name: 'UI Store' } };
+    else if (p === '/api/staff/overview/monthly') data = { schedule: {}, attendance: {}, announcements: [] };
+    else if (p === '/api/staff/attendance/today') data = null;
+    else if (p === '/api/staff/salary/my') { data = null; extra = { unavailableReason: 'STAFF_BASE_SALARY_REQUIRED' }; }
+    else if (p === '/api/shifts') data = [{ key: 'morning', name: 'Morning', startTime: '09:00', endTime: '18:00' }];
+    else if (p === '/api/staff/schedule/my') data = { monday: 'morning' };
+    else if (p === '/api/staff-work/my/dashboard') data = { tasks: [], reminders: [], pendingRequests: [], reviews: [] };
+    else if (p === '/api/staff-work/my/attendance') data = { records: [], appeals: [], payrollIssues: [] };
+    else if (p === '/api/staff-work/my/profile-submissions') data = { official: {ktp:{data:{number:'synthetic-id'},files:['ui-file']}}, submissions: [] };
+    else if (p === '/api/staff-work/files/ui-file') return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=','base64')});
+    else if (p === '/api/staff-work/my/checklist') data = {};
+    else if (p === '/api/staff-work/my/late-rule') data = { enabled: false };
+    else if (p === '/api/inventory') data = { list: materials };
+    else if (p === '/api/purchase-orders') data = { list: [purchase] };
+    else if (p === '/api/inventory-counts') data = { list: [] };
+    else if (p.includes('/inventory/logs/')) data = { list: [] };
+    else if (p === '/api/suppliers/dropdown') data = { list: [] };
+    else if (p === '/api/process-recipes') data = { list: [] };
+    else if (p === '/api/hygiene/tasks/my') data = { list: [] };
+    else if (p === '/api/training/library') data = { revision: 'ui-test', modules: [course], checklists: [], standardsToConfirm: [] };
+    else if (p === '/api/training/my') data = [{ id: 'training', title: 'Official UI Training', trainingType: 'onboarding', startDate: '2026-10-15', status: 'completed', passed: true }];
+    else if (p === '/api/training/categories') data = [{ key: 'onboarding', label: 'Onboarding' }];
+    else if (p === '/api/leave-types') data = [{ code: 'annual', name: 'Annual Leave', deductBalance: true, requiresProof: false }];
+    else if (p === '/api/leave/balance') data = { annualLeave: 12, sickLeave: 12, unpaidLeave: 0, usedLeave: 0 };
+    else if (p === '/api/reimbursement-types') data = [{ code: 'transportation', name: 'Transportation', maxAmount: 100000, requiresReceipt: false }];
+    else if (p === '/api/staff-points/my') data = { currentPoints: 0, lifetimePoints: 0 };
+    else if (p === '/api/staff-points/logs/my') data = { list: [] };
+    else if (p === '/api/deposit/staff/my') data = null;
+    else if (p === '/api/notifications') data = { list: [] };
+    else if (p === '/api/attendance-qr/verify') return route.fulfill({ status: 400, json: { code: 400, message: 'Synthetic invalid QR' } });
+    return route.fulfill({ json: { code: method === 'POST' ? 201 : 200, data, ...extra } });
+  });
+  const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+  const origin = 'http://127.0.0.1:5179';
+  const routes = ['/', '/inventory', '/inventory?action=in', '/inventory?action=out', '/inventory?action=purchase', '/inventory?action=history', '/inventory?action=process', '/inventory/count', '/hygiene', '/attendance', '/schedule', '/overtime', '/shift-swap', '/attendance/correction', '/attendance/appeals', '/attendance/rules', '/leave', '/reimbursement', '/salary', '/deposit', '/deposit/rules', '/points', '/profile', '/profile/documents', '/announcements', '/training', '/training?tab=records', '/training/library', '/approvals'];
+  try {
+    for (const width of [375, 768, 1440]) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+      for (const route of routes) {
+        await page.goto(origin + route);
+        await expect(page.locator('.employee-bottom-nav')).toBeVisible();
+        await expect(page.locator('.employee-shell h1, .employee-shell h2, .employee-shell [role=alert]').first()).toBeVisible();
+        await expect(page.locator('[role=status]').filter({ hasText: /^Loading\.\.\.$/ })).toHaveCount(0);
+        await expect.poll(() => page.locator('.employee-shell').innerText()).not.toMatch(/Unexpected Application Error|TypeError|undefined/);
+        assert.ok(await page.locator('.employee-shell').evaluate(el => el.scrollWidth <= innerWidth + 1), `${width} ${route}: horizontal overflow`);
+      }
+      await page.screenshot({ path: path.join(output, `training-library-${width}.jpg`) });
+    }
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(origin + '/');
+    await page.locator('.employee-bottom-nav').getByRole('button', { name: 'Attendance', exact: true }).click();
+    await expect(page).toHaveURL(origin + '/attendance');
+    await expect(page.locator('a[href="/attendance/correction"]')).toHaveCount(1);
+    await expect(page.locator('a[href="/overtime"]')).toHaveCount(1);
+    await expect(page.getByText('Jakarta, Indonesia', { exact: true })).toHaveCount(0);
+    // Branded primary action and rounded control size, tested against generated CSS.
+    await page.goto(origin + '/inventory/count');
+    const count = page.getByRole('button', { name: /Start.*count|New.*count/i });
+    await expect(count).toBeEnabled();
+    assert.equal(await count.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(236, 109, 136)');
+    await count.click(); await expect(page.locator('form')).toBeVisible();
+    await page.goto(origin + '/inventory');
+    await expect(page.getByText(/88799\.999999/)).toHaveCount(0);
+    await page.getByPlaceholder(/Search/i).fill('not-a-material');
+    await expect(page.getByText('No data', { exact: true })).toBeVisible();
+    await page.goto(origin + '/inventory?action=in');
+    await page.getByRole('button', { name: /UI-PURCHASE/ }).click();
+    const receive = page.getByRole('dialog'); await expect(receive).toBeVisible();
+    assert.ok(await receive.evaluate(el => Number(getComputedStyle(el).zIndex) > 60));
+    assert.equal(await page.locator('#root').evaluate(el => el.inert), true);
+    await page.keyboard.press('Escape'); await expect(receive).toHaveCount(0);
+    assert.equal(await page.locator('#root').evaluate(el => el.inert), false);
+    // Every form dialog can open, scroll and close without losing the session.
+    for (const [route, name] of [['/leave', /Apply.*Leave|Request.*Leave/], ['/reimbursement', /Expense|Reimbursement/]]) {
+      await page.goto(origin + route); await page.locator('header').getByRole('button', { name }).click();
+      const dialog = page.getByRole('dialog'); await expect(dialog).toBeVisible();
+      await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
+    }
+    await page.goto(origin + '/overtime');
+    await page.getByRole('button', { name: 'New Overtime Request', exact: true }).click();
+    await page.locator('input[data-picker=date]').fill('15/10/2026'); await page.locator('input[data-picker=date]').press('Tab');
+    await page.locator('textarea').fill('UI overtime');
+    await page.locator('input[data-picker=time]').first().fill(''); await page.locator('input[data-picker=time]').first().press('Tab');
+    await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeDisabled();
+    await page.goto(origin + '/training?tab=records');
+    await expect(page.getByText('Official UI Training', { exact: true })).toBeVisible();
+    await page.goto(origin + '/training');
+    await page.getByText('UI Course', { exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible(); await page.keyboard.press('Tab');
+    assert.equal(await page.getByRole('dialog').evaluate(el => el.contains(document.activeElement)), true);
+    await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.goto(origin + '/shift-swap');
+    await expect(page.getByText('UI swap invitation', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', {name:'Confirm',exact:true}).click();
+    await expect(page.getByText('UI swap invitation', { exact: true })).toHaveCount(0);
+    assert.ok(writes.some(w => w.p === '/api/shift-swap/swap-invite/confirm' && w.method === 'PUT'));
+    await page.goto(origin + '/profile/documents');
+    await page.getByRole('button', {name:'View file',exact:true}).click();
+    await expect(page.getByRole('dialog').getByRole('img')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('link', {name:'Download file'})).toHaveAttribute('download', 'document.png');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.goto(origin + '/salary');
+    await expect(page.getByText(/salary profile is incomplete|salary profile needs a base salary|salary details are incomplete/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Previous month/i })).toBeEnabled();
+    failInventory = true; await page.goto(origin + '/inventory');
+    await expect(page.getByRole('alert')).toBeVisible(); failInventory = false;
+    await page.getByRole('button', { name: /Retry/i }).click(); await expect(page.getByRole('alert')).toHaveCount(0);
+    await page.goto(origin + '/profile');
+    await page.getByRole('button', { name: /Change Password/ }).click(); await expect(page.locator('form')).toBeVisible();
+    await page.getByRole('button', { name: /Change Password/ }).click(); await expect(page.locator('form')).toHaveCount(0);
+    assert.deepEqual(errors, []);
+    assert.ok(!writes.some(w => w.p === '/api/auth/password'), 'Never change any real account password');
+    console.log('PASS staff UI: 29 routes at 375/768/1440, navigation, stock search/error recovery, count branding, receive/leave/expense/course dialogs, focus, Escape, overtime validation, official training and missing salary setup.');
+  } finally { await context.close(); }
+};

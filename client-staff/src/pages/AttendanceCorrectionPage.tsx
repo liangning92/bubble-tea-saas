@@ -1,3 +1,4 @@
+import { useDialogs } from '../components/Dialogs'
 import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
@@ -23,6 +24,8 @@ interface CorrectionRequest {
 }
 
 export function AttendanceCorrectionPage() {
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -62,7 +65,8 @@ export function AttendanceCorrectionPage() {
   }, [user])
 
   const handleSubmit = async () => {
-    if (!formData.date || !formData.reason) return
+    if (isSubmitting) return
+    if (!formData.date || !formData.reason.trim()) { await dialogs.alert(t('ui.completeFields')); return }
 
     setIsSubmitting(true)
     try {
@@ -74,11 +78,11 @@ export function AttendanceCorrectionPage() {
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
-        alert(response.message || t('attendance.submitFailed'))
+        await dialogs.alert(response.message || t('attendance.submitFailed'))
       }
     } catch (error: any) {
       console.error('Failed to submit correction:', error)
-      alert(error?.response?.data?.message || t('attendance.submitFailed'))
+      await dialogs.alert(error?.response?.data?.message || t('attendance.submitFailed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -105,7 +109,7 @@ export function AttendanceCorrectionPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button aria-label={t('common.back')} onClick={() => navigate('/attendance')} className="p-2 hover:bg-gray-100 rounded-lg">
             <ArrowLeft size={20} />
           </button>
           <div>
@@ -215,7 +219,7 @@ export function AttendanceCorrectionPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowForm(false)}
+                  disabled={isSubmitting} onClick={() => setShowForm(false)}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
                 >
                   {t('common.cancel')}
@@ -288,18 +292,7 @@ export function AttendanceCorrectionPage() {
         </div>
       </div>
 
-      {/* Success Toast */}
-      {submitSuccess && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 mx-8 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Send size={32} className="text-green-600" />
-            </div>
-            <h2 className="text-xl font-bold mb-2">{t('attendance.submitSuccess')}</h2>
-            <p className="text-gray-500">{t('attendance.submitSuccessDesc')}</p>
-          </div>
-        </div>
-      )}
+      {submitSuccess && <div role="status" className="employee-success-toast">{t('attendance.submitSuccess')}</div>}
     </div>
   )
 }

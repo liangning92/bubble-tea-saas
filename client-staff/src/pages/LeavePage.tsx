@@ -1,3 +1,5 @@
+import { Modal } from '../components/Modal'
+import { useDialogs } from '../components/Dialogs'
 import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import {payrollLabels} from '../../../shared/payrollLabels'
 import { useSessionDraft } from '../utils/useSessionDraft'
@@ -66,6 +68,8 @@ interface LeaveBalance {
 }
 
 export function LeavePage() {
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -101,13 +105,13 @@ export function LeavePage() {
   }
 
   const handleCancelLeave = async (leaveId: string) => {
-    if (!confirm(t('leave.cancelLeaveConfirm'))) return
+    if (!await dialogs.confirm(t('leave.cancelLeaveConfirm'))) return
     try {
       await staffApi.cancelLeave(leaveId)
       loadData()
     } catch (error) {
       console.error('Failed to cancel leave:', error)
-      alert(t('leave.cancelLeaveSuccess'))
+      await dialogs.alert(t('leave.cancelLeaveSuccess'))
     }
   }
 
@@ -120,7 +124,7 @@ export function LeavePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/attendance')}
               className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
             >
               <ChevronLeft size={22} />
@@ -321,6 +325,8 @@ interface ApplyLeaveModalProps {
 }
 
 function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
+  const dialogs = useDialogs()
+
   const { t, i18n } = useTranslation()
   const [leaveType, setLeaveType] = useSessionDraft('LeavePage.tsx.leaveType', 'annual')
   const [leaveTypes, setLeaveTypes] = useState<any[]>(DEFAULT_LEAVE_TYPES)
@@ -355,9 +361,10 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   }, [])
 
   useEffect(() => {
+    setTotalDays(0)
     if (startDate && endDate) {
       const days = (new Date(endDate + 'T00:00:00+07:00').getTime() - new Date(startDate + 'T00:00:00+07:00').getTime()) / 86400000 + 1
-      if (Number.isInteger(days) && days > 0) setTotalDays(halfDay && days === 1 ? 0.5 : days)
+      if (Number.isInteger(days) && days > 0 && (!halfDay || days === 1)) setTotalDays(halfDay && days === 1 ? 0.5 : days)
     }
   }, [startDate, endDate, halfDay])
 
@@ -380,23 +387,24 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
         setAttachmentUrl(url)
       }
     } catch (err: any) {
-      alert(err?.response?.data?.message || t('common.uploadFailed', '上传失败'))
+      await dialogs.alert(err?.response?.data?.message || t('common.uploadFailed', '上传失败'))
     } finally {
       setUploadingAttachment(false)
     }
   }
 
   const handleSubmit = async () => {
+    if (isSubmitting || uploadingAttachment) return
     if (!leaveType) {
-      alert(t('leave.selectLeaveType', '请选择请假类型'))
+      await dialogs.alert(t('leave.selectLeaveType', '请选择请假类型'))
       return
     }
-    if (!startDate || !endDate) {
-      alert(t('leave.selectDateRange'))
+    if (!startDate || !endDate || endDate < startDate || (halfDay && endDate !== startDate)) {
+      await dialogs.alert(t('leave.selectDateRange'))
       return
     }
 
-    for(let day=new Date(startDate+'T00:00:00Z').getTime();day<=new Date(endDate+'T00:00:00Z').getTime();day+=86400000){const weekday=new Date(day).getUTCDay();if(weekday===0||weekday===6){alert(payrollLabels(i18n.language).weekendRule);return}}
+    for(let day=new Date(startDate+'T00:00:00Z').getTime();day<=new Date(endDate+'T00:00:00Z').getTime();day+=86400000){const weekday=new Date(day).getUTCDay();if(weekday===0||weekday===6){await dialogs.alert(payrollLabels(i18n.language).weekendRule);return}}
     setIsSubmitting(true)
     try {
       await staffApi.applyLeave({
@@ -411,18 +419,18 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
       setStartDate(''); setEndDate(''); setReason(''); setTotalDays(1); setHalfDay(false); setAttachmentUrl('')
       onSuccess()
     } catch (error: any) {
-      alert(error.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error.response?.data?.message || t('leave.submitError'))
+      await dialogs.alert(error.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error.response?.data?.message || t('leave.submitError'))
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-black/50 flex items-end justify-center z-50 animate-in fade-in duration-200">
+    <Modal className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 animate-in fade-in duration-200" label={t('leave.applyLeave')} onClose={isSubmitting || uploadingAttachment ? undefined : onClose}>
       <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold">{t('leave.applyLeave')}</h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
+          <button disabled={isSubmitting || uploadingAttachment} onClick={onClose} aria-label={t('common.cancel')} className="p-2 text-gray-400 hover:text-gray-600">
             <XCircle size={24} />
           </button>
         </div>
@@ -607,13 +615,13 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
 
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || uploadingAttachment}
             className="w-full py-3 bg-primary text-white rounded-xl font-medium disabled:opacity-50"
           >
             {isSubmitting ? t('leave.submitting') : t('leave.submit')}
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

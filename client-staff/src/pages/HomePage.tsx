@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../stores/auth";
 import { staffApi, employeeApi } from "../services/api";
-import { EmployeeActions } from "../components/EmployeeActions";
 import { QRCameraScannerModal } from "../components/QRCameraScannerModal";
 export function HomePage() {
   const { t, i18n } = useTranslation(),
@@ -349,7 +348,8 @@ export function HomePage() {
           </span>
         </div>
         <div className="workspace-list">
-          {taskRows.map(
+          {dashboard && !taskRows.some(row => Number(row.count) > 0) && <p role="status" className="p-4 text-gray-500">{t("audit.noTasks")}</p>}
+          {taskRows.filter(row => !dashboard || Number(row.count) > 0).map(
             ({ path, title, subtitle, count, icon: Icon, tone }) => (
               <button
                 className="workspace-row"
@@ -371,12 +371,6 @@ export function HomePage() {
             ),
           )}
         </div>
-      </section>
-      <section>
-        <div className="home-section-title">
-          <h2>{t("ui.quick")}</h2>
-        </div>
-        <EmployeeActions />
       </section>
       <QRCameraScannerModal
         isOpen={scanner}

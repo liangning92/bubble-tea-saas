@@ -1,6 +1,5 @@
-import { TrainingLibrary } from '../components/TrainingLibrary'
-import { useAuthStore } from '../stores/auth'
-export function TrainingLibraryPage({ embedded = false }: { embedded?: boolean }) {
-  const { token } = useAuthStore()
-  return <TrainingLibrary embedded={embedded} token={token} recordsPath='/training?tab=records' />
+import { Navigate } from 'react-router-dom'
+/** Old bookmarks now open the same learning centre and its saved progress. */
+export function TrainingLibraryPage() {
+  return <Navigate to="/training" replace />
 }

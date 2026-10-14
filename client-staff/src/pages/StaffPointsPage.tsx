@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+import { useDialogs } from '../components/Dialogs'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +26,9 @@ interface Reward {
 }
 
 export function StaffPointsPage() {
+  const navigate = useNavigate()
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const [compensation,setCompensation]=useState<any[]>([])
@@ -64,17 +69,18 @@ export function StaffPointsPage() {
   }, [user])
 
   const handleRedeem = async (reward: Reward) => {
-    if (!confirm(t('staffPoints.confirmRedeem', { name: reward.name, points: reward.pointsCost }))) {
+    if (redeeming) return
+    if (!await dialogs.confirm(t('staffPoints.confirmRedeem', { name: reward.name, points: reward.pointsCost }))) {
       return
     }
 
     setRedeeming(reward.id)
     try {
       await staffApi.redeemReward({ rewardId: reward.id })
-      alert(t('staffPoints.redeemSuccess'))
+      await dialogs.alert(t('staffPoints.redeemSuccess'))
       loadData()
     } catch (error: any) {
-      alert(error?.response?.data?.message || t('staffPoints.redeemFailed'))
+      await dialogs.alert(error?.response?.data?.message || t('staffPoints.redeemFailed'))
     } finally {
       setRedeeming(null)
     }
@@ -92,12 +98,11 @@ export function StaffPointsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <section className="p-4 space-y-4"><h2 className="text-xl font-bold">{t('voucher.wallet')}</h2>{shareMessage&&<p role="status">{shareMessage}</p>}{compensation.map(r=><article key={r.id} className="bg-white rounded-2xl p-5 space-y-3 border border-gray-100"><div className="flex justify-between gap-3"><strong>{r.rewardMethod==='voucher'?t('voucher.title'):t('compensation.'+r.type)}</strong><span>{r.month}</span></div><p className="text-2xl font-bold text-primary">Rp {r.amount.toLocaleString('id-ID')}</p><p>{r.reason}</p>{r.rewardMethod==='voucher'?<><p>{r.encouragement}</p><div className="rounded-xl bg-pink-50 p-3 font-mono break-all text-lg select-all">{r.voucherCode}</div><p>{t('voucher.'+(r.voucherStatus||r.status))} · {t('voucher.expires')} {formatDate(r.validUntil)}</p><p className="text-base text-gray-600">{t('voucher.rules')}</p>{r.voucherStatus==='active'&&<button type="button" className="w-full bg-primary text-white rounded-xl py-3 font-semibold" onClick={()=>void shareVoucher(r.voucherCode)}>{t('voucher.share')}</button>}</>:<p>{t('compensation.'+r.status)}</p>}</article>)}</section>
       {/* Header */}
       <header className="bg-primary text-white px-4 py-6 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold">{t('staffPoints.title')}</h1>
-          <button onClick={() => window.history.back()} className="p-2 bg-white/20 rounded-lg">
+          <button aria-label={t('common.back')} onClick={() => navigate('/profile')} className="p-2 bg-white/20 rounded-lg">
             ✕
           </button>
         </div>
@@ -109,13 +114,14 @@ export function StaffPointsPage() {
             <span className="text-4xl font-bold">{points?.currentPoints || 0}</span>
           </div>
           <p className="text-white/80 text-base">{t('staffPoints.currentPoints')}</p>
-          {points?.lifetimePoints && (
+          {!!points?.lifetimePoints && (
             <p className="text-white/60 text-sm mt-1">
               {t('staffPoints.lifetimePoints')}: {points.lifetimePoints}
             </p>
           )}
         </div>
       </header>
+      <section className="p-4 space-y-4"><h2 className="text-xl font-bold">{t('voucher.wallet')}</h2>{shareMessage&&<p role="status">{shareMessage}</p>}{compensation.map(r=><article key={r.id} className="bg-white rounded-2xl p-5 space-y-3 border border-gray-100"><div className="flex justify-between gap-3"><strong>{r.rewardMethod==='voucher'?t('voucher.title'):t('compensation.'+r.type)}</strong><span>{r.month}</span></div><p className="text-2xl font-bold text-primary">Rp {r.amount.toLocaleString('id-ID')}</p><p>{r.reason}</p>{r.rewardMethod==='voucher'?<><p>{r.encouragement}</p><div className="rounded-xl bg-pink-50 p-3 font-mono break-all text-lg select-all">{r.voucherCode}</div><p>{t('voucher.'+(r.voucherStatus||r.status))} · {t('voucher.expires')} {formatDate(r.validUntil)}</p><p className="text-base text-gray-600">{t('voucher.rules')}</p>{r.voucherStatus==='active'&&<button type="button" className="w-full bg-primary text-white rounded-xl py-3 font-semibold" onClick={()=>void shareVoucher(r.voucherCode)}>{t('voucher.share')}</button>}</>:<p>{t('compensation.'+r.status)}</p>}</article>)}</section>
 
       {/* Tabs */}
       <div className="flex gap-2 p-4">
