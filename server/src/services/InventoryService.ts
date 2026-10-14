@@ -1,3 +1,4 @@
+import {loadInventoryActors, inventoryLogActorId} from '../utils/inventoryActors'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {inventoryForecast} from './InventoryForecastService'
 import {alignInventoryBatches,consumeInventoryBatches,receiptBatchDates,availableBatches} from './InventoryBatchService'
@@ -371,7 +372,9 @@ export async function getStockInLogs(
     take: filter.take || 200
   })
 
+  const actors = await loadInventoryActors(prisma, filter.storeId, logs.map(inventoryLogActorId))
   return logs.map((l: any) => ({
+    operator: actors.get(inventoryLogActorId(l) || '') || null,
     ...l,
     unitCost: Number(l.unitCost || 0),
     totalAmount: Number(l.totalAmount || 0),
@@ -436,7 +439,9 @@ export async function getStockOutLogs(
     take: filter.take || 200
   })
 
+  const actors = await loadInventoryActors(prisma, filter.storeId, logs.map(inventoryLogActorId))
   return logs.map((l: any) => ({
+    operator: actors.get(inventoryLogActorId(l) || '') || null,
     ...l,
     inventory: l.inventory ? {
       ...l.inventory,

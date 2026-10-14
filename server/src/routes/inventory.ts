@@ -181,7 +181,7 @@ router.put('/:id/adjust', authenticate, resourceAccess, authorize('admin', 'mana
       id,
       req.body.newStock,
       req.body.reason,
-      req.body.staffId || req.user!.staffId
+      req.user!.staffId || req.user!.id
     )
 
     res.json({

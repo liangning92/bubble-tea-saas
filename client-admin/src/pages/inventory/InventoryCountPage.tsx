@@ -1,3 +1,4 @@
+import { ActorName, InventoryActor } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
 import { useStoreDateSettings } from "../../hooks/useStoreDateSettings";
 import { InventoryCountAdjustments } from "../../components/InventoryCountAdjustments";
@@ -51,6 +52,7 @@ interface InventoryCountItem {
   movementSinceObservation?: number;
   varianceAmountEstimate?: number;
   countedBy?: string;
+  countedByActor?: InventoryActor | null;
   note?: string;
   inventory?: {
     id: string;
@@ -709,6 +711,7 @@ export function InventoryCountPage() {
                         <span className="text-sm text-gray-500 ml-2">
                           ({item.inventory?.unit})
                         </span>
+                        {item.countedAt && <p className="text-xs text-gray-500 mt-1">{t('inventoryActors.counter')}: <ActorName actor={item.countedByActor} id={item.countedBy}/> · {formatDateTime(item.countedAt)}</p>}
                       </td>
                       <td
                         data-label={t("countFlow.theory")}
