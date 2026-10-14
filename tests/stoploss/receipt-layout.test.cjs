@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
-function load(file,requireFn=require){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,{module:m,exports:m.exports,require:requireFn,Buffer,console});return m.exports;}
+function load(file,requireFn=require){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,{module:m,exports:m.exports,require:requireFn,Buffer,console,setTimeout,clearTimeout});return m.exports;}
 const layout=load('client-pos/electron/receiptLayout.ts');
 const block=(type,config={},style={})=>({type,enabled:true,config,style});
 const fixture={language:'id',orderNum:'MEQ24TP39A',pickupNumber:'A34',createdAt:'2026-10-09T13:05:25Z',items:[{productName:'Red Bean Matcha Sundae',specName:'Default',unitPrice:16000,quantity:1,sugarLevelName:'Gula Normal',iceLevelName:'Es Normal'}],subtotal:16000,total:16000,paidAmount:100000,change:84000,paymentMethod:'Tunai',blocks:[block('header',{text:'YOUME'},{fontSize:'large',bold:true}),block('divider'),block('orderInfo',{showDate:true,showTime:true}),block('divider'),block('items',{showSugarIce:true}),block('subtotal'),block('total',{}, {fontSize:'large',bold:true}),block('divider'),block('paymentInfo',{showMethod:true,showReceived:true,showChange:true}),block('footer',{footerText:'Thank you!'})]};
@@ -8,10 +8,12 @@ test('shared layout escapes custom content, follows disabled/order settings and 
  assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));assert.ok(html.indexOf('first')<html.indexOf('&lt;script'));assert.ok(!html.includes('disabled'));assert.ok(html.includes('<svg'));assert.equal((html.match(/<svg/g)||[]).length,2);
 });
 test('raster strips retain the final rows, use actual receipt height and recover queue after failure',async()=>{
- const captures=[],sizes=[];let top=0,height=1684,broken=false;
- class Window{constructor(){this.webContents={executeJavaScript:async code=>{if(code.includes('getBoundingClientRect'))return height;top=Number(code.match(/scrollTo\(0,(\d+)\)/)[1]);},capturePage:async rect=>{captures.push({top,...rect});if(broken)throw Error('capture failed');return {resize:()=>({toBitmap:()=>{const b=Buffer.alloc(rect.width*rect.height*4,255);b[0]=b[1]=b[2]=0;return b}})}}};}isDestroyed(){return false}setContentSize(w,h){sizes.push([w,h])}async loadURL(){}}
+ const captures=[],sizes=[];let top=0,height=1684,broken=false,destroyed=0;
+ const {EventEmitter}=require('node:events');
+ class Window{constructor(){this.webContents=new EventEmitter();Object.assign(this.webContents,{executeJavaScript:async code=>{if(code.includes('getBoundingClientRect'))return height;top=Number(code.match(/scrollTo\(0,(\d+)\)/)[1]);},capturePage:async()=>{throw Error('UnknownVizError')},invalidate:()=>{if(broken){this.webContents.emit('render-process-gone');return}const [width,rows]=sizes.at(-1);captures.push({top,width,height:rows});queueMicrotask(()=>this.webContents.emit('paint',{}, {},{getSize:()=>({width,height:rows}),isEmpty:()=>false,resize:()=>({toBitmap:()=>{const b=Buffer.alloc(width*rows*4,255);b[0]=b[1]=b[2]=0;return b}})}));}});}isDestroyed(){return false}destroy(){destroyed++}setContentSize(w,h){sizes.push([w,h])}async loadURL(){}}
+
  const raster=load('client-pos/electron/receiptRaster.ts',name=>name==='electron'?{BrowserWindow:Window,session:{fromPartition:()=>({webRequest:{onBeforeRequest(){}}})}}:layout);
  const result=await raster.renderTemplateReceipt({...fixture,paperSize:'58mm'});assert.deepEqual(captures.map(c=>[c.top,c.height]),[[0,800],[800,800],[1600,84]]);assert.deepEqual(sizes.at(-1),[384,84]);
  let offset=3;for(const rows of [800,800,84]){assert.equal(result[offset+4],48);assert.equal(result.readUInt16LE(offset+6),rows);assert.equal(result[offset+8],128);offset+=8+48*rows;}assert.equal(result.length,offset);
- broken=true;await assert.rejects(raster.renderTemplateReceipt(fixture),/capture failed/);broken=false;height=90;assert.ok((await raster.renderTemplateReceipt(fixture)).length>0);
+ broken=true;await assert.rejects(raster.renderTemplateReceipt(fixture),/RECEIPT_RENDERER_EXITED/);assert.equal(destroyed,1);broken=false;height=90;assert.ok((await raster.renderTemplateReceipt(fixture)).length>0);
 });
