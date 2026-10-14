@@ -207,6 +207,9 @@ body {
 
 /* Shared admin design. Scoped away from POS, staff and public displays. */
 .admin-workspace { font-size: 14px; }
+.admin-workspace button { min-height: 40px; border-radius: 8px; }
+.admin-workspace .rounded-2xl, .admin-workspace .rounded-xl { border-radius: 12px; }
+.admin-workspace button.rounded-xl, .admin-workspace button.rounded-2xl { border-radius: 8px; }
 .admin-workspace h1 { font-size: 24px; line-height: 1.3; font-weight: 700; }
 .admin-workspace h2, .admin-workspace h3 { font-size: 18px; line-height: 1.4; }
 .admin-workspace .btn, .admin-workspace .btn-primary, .admin-workspace .btn-secondary, .admin-workspace .btn-danger {
@@ -247,6 +250,8 @@ body {
   .recipe-edit-row { grid-template-columns: 64px minmax(0,1fr) 72px 72px; }
   .recipe-edit-row > :nth-child(2) { grid-column: 2 / -1; }
   .recipe-edit-row > :nth-child(3) { grid-column: 1 / 3; }
+  .recipe-edit-row > .recipe-row-cost { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
+  .recipe-edit-row > .recipe-row-cost > div { min-width: 0; }
   .recipe-edit-row > button:last-child { grid-column: 4; }
 }
 @media (max-width: 767px) {
