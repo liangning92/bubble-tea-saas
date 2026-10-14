@@ -24,7 +24,7 @@ export function AdminFeedback() {
   return <>
     {request&&<AdminDialog title={t('common.confirm')} onClose={()=>settle(request.id,false)} className="max-w-md" chrome>
       <p className="whitespace-pre-wrap break-words">{request.message}</p>
-      <div className="admin-dialog-footer"><button type="button" className="btn-secondary" onClick={()=>settle(request.id,false)}>{t('common.cancel')}</button><button type="button" className="btn-primary" onClick={()=>settle(request.id,true)}>{t('common.confirm')}</button></div>
+      <div className="admin-dialog-footer"><button type="button" className="btn-secondary" onClick={()=>settle(request.id,false)} data-dialog-close="true">{t('common.cancel')}</button><button type="button" className="btn-primary" onClick={()=>settle(request.id,true)}>{t('common.confirm')}</button></div>
     </AdminDialog>}
     {message&&<aside role="status" className="admin-workspace fixed bottom-4 left-4 right-4 sm:left-auto sm:max-w-lg z-[100] rounded-xl border border-border bg-white p-4 shadow-lg flex items-start gap-3">
       <p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{message.message}</p><button type="button" className="btn-secondary shrink-0" onClick={()=>{notices=notices.filter(item=>item.id!==message.id);changed()}}>{t('common.close')}</button>

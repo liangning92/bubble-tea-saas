@@ -272,3 +272,5 @@ body {
 
 .admin-workspace input.pl-10 { padding-left: 40px; }
 .admin-workspace input.pr-10 { padding-right: 40px; }
+
+.recipe-edit-row .tabular-nums { overflow-wrap: anywhere; }

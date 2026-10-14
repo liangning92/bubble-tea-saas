@@ -388,7 +388,7 @@ export function ProductListPage() {
           <div className="text-center py-8 text-gray-500">{t('common.noData')}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="admin-responsive-table admin-responsive-table w-full">
+            <table className="admin-responsive-table w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 pl-3 w-24">{t('products.code')}</th>
@@ -411,16 +411,16 @@ export function ProductListPage() {
                       <td className="py-3 pl-3 font-mono text-sm" data-label={t('products.code')}>{product.code || '-'}</td>
                       <td className="py-3 font-medium text-gray-900" data-label={t('products.name')}><Link className="hover:text-primary" to={`/products/recipes?productId=${product.id}`}>{product.name}</Link></td>
                       <td className="py-3 text-gray-600" data-label={t('products.category')}>{getCategoryName(product.categoryId)}</td>
-                      <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 text-left font-mono" data-label={t('products.cost')}>{formatCurrency(product.costPrice || 0)}</td>
-                      <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 text-left font-mono" data-label={t('products.price')}>{formatCurrency(product.specs?.[0]?.price || 0)}</td>
-                      <td className="text-right tabular-nums text-right tabular-nums py-3 text-left" data-label={t('products.margin')}>
+                      <td className="text-right tabular-nums py-3 text-left font-mono" data-label={t('products.cost')}>{formatCurrency(product.costPrice || 0)}</td>
+                      <td className="text-right tabular-nums py-3 text-left font-mono" data-label={t('products.price')}>{formatCurrency(product.specs?.[0]?.price || 0)}</td>
+                      <td className="text-right tabular-nums py-3 text-left" data-label={t('products.margin')}>
                         {margin !== null ? (
                           <span className={`font-medium ${parseInt(margin) > 50 ? 'text-green-600' : parseInt(margin) > 30 ? 'text-orange-600' : 'text-red-600'}`}>
                             {margin}%
                           </span>
                         ) : '-'}
                       </td>
-                      <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 text-left font-mono text-gray-600" data-label={t('products.profit')}>
+                      <td className="text-right tabular-nums py-3 text-left font-mono text-gray-600" data-label={t('products.profit')}>
                         {profit !== null ? formatCurrency(profit) : '-'}
                       </td>
                       <td className="py-3 text-center" data-label={t('products.status')}>

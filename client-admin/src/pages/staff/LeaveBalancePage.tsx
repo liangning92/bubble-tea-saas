@@ -131,7 +131,7 @@ export function LeaveBalancePage() {
             <RefreshCw size={24} className="animate-spin text-gray-400" />
           </div>
         ) : (
-          <table className="admin-responsive-table admin-responsive-table w-full">
+          <table className="admin-responsive-table w-full">
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">

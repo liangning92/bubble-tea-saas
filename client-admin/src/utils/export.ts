@@ -115,6 +115,7 @@ export function downloadCSV<T extends Record<string, any>>(
  */
 export function formatCurrencyForExport(amount: number, currency = 'IDR'): string {
   return new Intl.NumberFormat('id-ID', {
+    maximumFractionDigits: 20,
     style: 'currency',
     currency,
     minimumFractionDigits: 0
