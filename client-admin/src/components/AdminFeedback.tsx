@@ -11,7 +11,7 @@ export function confirmAdmin(message: unknown): Promise<boolean> {
   return new Promise(resolve => { confirmations = [...confirmations, { id: ++nextId, message: String(message), resolve }]; changed() })
 }
 export function notifyAdmin(message: unknown): void {
-  notices = [...notices, { id: ++nextId, message: String(message) }]; changed()
+  notices = [{ id: ++nextId, message: String(message) }]; changed()
 }
 function settle(id: number, value: boolean) {
   const request = confirmations.find(item => item.id === id)

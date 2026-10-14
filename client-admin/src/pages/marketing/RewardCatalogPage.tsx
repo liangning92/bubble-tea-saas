@@ -1,5 +1,5 @@
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { ResourcePicker } from '../../components/marketing/ResourcePicker'
 import { useState } from 'react'

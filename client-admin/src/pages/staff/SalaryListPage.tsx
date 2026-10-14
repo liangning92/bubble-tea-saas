@@ -1,6 +1,6 @@
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { payslipHtml, downloadPayslip } from '../../../../shared/payslip'
 import { payrollPresentation, payrollStatus, isConfirmedBasis } from '../../../../shared/payrollPresentation'
 import { LateCalculation } from '../../../../shared/components/PayrollBasisDetails'

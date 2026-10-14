@@ -83,6 +83,23 @@ const { chromium, expect } = require("@playwright/test"),
       enabled: false,
     },
   ];
+  let costMode = 'normal';
+  const costReads = [];
+  let recipeItems = [{inventoryId:'raw-fixture',quantity:0.123456,unit:'pcs'},{inventoryId:'processed-fixture',quantity:120,unit:'g'}];
+  const recipeInventory = [
+    {id:'raw-fixture',name:'Large Cup 500ml',nameEn:'Long material name for responsive verification · Cup 500ml',unit:'pcs',type:'raw_material',avgCost:500/0.123456,currentStock:10000,safetyStock:0,category:'packaging'},
+    {id:'processed-fixture',name:'Processed material',unit:'g',type:'semi_finished',avgCost:0,currentStock:10000,safetyStock:0,category:'semi_finished'}
+  ];
+  const recipeDetail = () => {
+    const bomDetails=recipeItems.map(item=>{
+      const inventory=recipeInventory.find(inv=>inv.id===item.inventoryId);
+      const factor=item.unit==='kg'?1000:1;
+      const totalCost=Math.round(item.quantity*factor*(inventory.type==='semi_finished'?2057/120:inventory.avgCost));
+      return {...item,name:inventory.name,inventoryType:inventory.type,currentStock:inventory.currentStock/factor,safetyStock:0,costPerUnit:totalCost/item.quantity,totalCost,
+        ...(inventory.type==='semi_finished'?{costBreakdown:{processRecipeName:'Synthetic process',breakdown:[{inventoryId:'powder',name:'Synthetic powder',quantity:item.quantity*factor/120,unit:'g',costPerUnit:2057,totalCost}]}}:{})};
+    });
+    return {id:'recipe-fixture',name:'Synthetic recipe',code:'SYN-BOM',sellingPrice:16000,specs:[{id:'default',name:'Default',price:16000,isDefault:true}],category:'Tea',bomItemCount:2,bomCost:bomDetails.reduce((sum,item)=>sum+item.totalCost,0),totalBomCost:bomDetails.reduce((sum,item)=>sum+item.totalCost,0),bomDetails};
+  };
   try {
     browser = await chromium.launch();
     const context = await browser.newContext({
@@ -121,6 +138,7 @@ const { chromium, expect } = require("@playwright/test"),
           await new Promise(resolve => { releaseAccountWrite = resolve });
           return route.fulfill({ status: 500, json: { message: "Synthetic save failed" } });
         }
+        if (p === "/api/products/recipe-fixture/bom") recipeItems = req.postDataJSON().bomItems;
         if (p === "/api/tv/defaults") defaults = req.postDataJSON();
         if (p === "/api/config") info = req.postDataJSON().value;
         if (p.startsWith("/api/channels/dine/products/")) {
@@ -142,7 +160,16 @@ const { chromium, expect } = require("@playwright/test"),
           );
         }
       }
-      if (p === "/api/finance/accounts/types") data = { list: [{ key: "expense", label: "Expense", icon: "FileText", color: "text-gray-600", bgColor: "bg-gray-100" }] };
+      if (p === "/api/products/recipe-fixture" || p === "/api/bom/products/recipe-fixture") data = recipeDetail();
+      else if (p === "/api/bom/products") data = {list:[recipeDetail()]};
+      else if (p === "/api/inventory") data = {list:recipeInventory};
+      else if (p === "/api/bom/inventory/processed-fixture/breakdown") {
+        costReads.push({mode:costMode,quantity:url.searchParams.get('quantity'),unit:url.searchParams.get('unit')});
+        if (costMode==='failed') return route.fulfill({status:500,json:{message:'Synthetic cost load failure'}});
+        if (costMode==='missing') data = {type:'unknown',cost:0,breakdown:null};
+        else {const grams=Number(url.searchParams.get('quantity'))*(url.searchParams.get('unit')==='kg'?1000:1),cost=Math.round(grams*2057/120);data={type:'semi_finished',cost,processRecipeName:'Synthetic process',breakdown:[{inventoryId:'powder',name:'Synthetic powder',unit:'g',quantity:grams/120,costPerUnit:2057,totalCost:cost}]};}
+      }
+      else if (p === "/api/finance/accounts/types") data = { list: [{ key: "expense", label: "Expense", icon: "FileText", color: "text-gray-600", bgColor: "bg-gray-100" }] };
       else if (p === "/api/config") data = { storeInfo: info };
       else if (p === "/api/tv/screens" || p === "/api/tv/legacy") data = [];
       else if (p === "/api/tv/defaults") data = defaults;
@@ -317,6 +344,17 @@ const { chromium, expect } = require("@playwright/test"),
       );
     }
     await page.screenshot({ path: path.join(out, "mobile-inventory.png") });
+    // A calendar-only change must also trigger the dialog unsaved guard.
+    await page.goto(origin + '/finance/expenses');
+    await page.getByRole('button', {name:'Add Expense',exact:true}).click();
+    const expenseDialog=page.getByRole('dialog',{name:'Add Expense',exact:true});
+    await expenseDialog.getByRole('textbox',{name:'Select date',exact:true}).click();
+    await page.getByRole('dialog',{name:'Select date',exact:true}).getByRole('button',{name:'Previous month',exact:true}).click();
+    await page.getByRole('dialog',{name:'Select date',exact:true}).getByRole('button',{name:/, 1 /}).click();
+    await expenseDialog.getByRole('button',{name:'Cancel',exact:true}).click();
+    await expect(page.getByRole('dialog')).toContainText('unsaved');
+    await page.getByRole('button',{name:'Discard changes',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Add Expense',exact:true})).toBeFocused();
     // Exercise an older async form without its own saving flag. All data is
     // owned by this isolated fixture, and every external request is blocked.
     await page.goto(origin + "/finance/accounts");
@@ -345,6 +383,46 @@ const { chromium, expect } = require("@playwright/test"),
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Add Account", exact: true })).toBeFocused();
     await page.screenshot({ path: path.join(out, "mobile-form-protection.png") });
+    // Complete recipe flow on the production bundle, using owned API data.
+    await page.setViewportSize({width:1024,height:900});
+    await page.goto(origin + "/products/recipe-fixture/recipe");
+    await expect(page.getByRole("heading", {name:"Edit Recipe",exact:true})).toBeVisible();
+    await expect(page.getByText("Rp 2.557",{exact:true})).toBeVisible();
+    const quantities=page.getByRole("textbox",{name:"Quantity",exact:true});
+    await expect(quantities.first()).toHaveValue("0.12");
+    await expect(quantities.first()).toHaveAttribute("title","0.123456");
+    for (const width of [1024,768,390]) {
+      await page.setViewportSize({width,height:900});
+      const bounds=await page.locator('.recipe-edit-row').evaluateAll(rows=>rows.map(row=>{const box=row.getBoundingClientRect(),button=row.querySelector('button:last-child').getBoundingClientRect();return {rowRight:box.right,buttonRight:button.right,viewport:innerWidth};}));
+      for (const box of bounds) assert.ok(box.buttonRight<=box.rowRight+1 && box.buttonRight<=box.viewport+1,'recipe actions must remain inside the row at '+width);
+      await page.screenshot({path:path.join(out,'recipe-'+width+'.png')});
+    }
+    await page.getByRole('button',{name:'View Cost Breakdown',exact:true}).click();
+    await quantities.nth(1).fill('240');
+    await expect(page.getByText('Rp 4.614',{exact:true})).toBeVisible();
+    await quantities.nth(1).fill('0.24');
+    await page.getByRole('combobox',{name:'Unit',exact:true}).nth(1).selectOption('kg');
+    await expect(page.getByText('Rp 4.614',{exact:true})).toBeVisible();
+    const recipeWriteCount=writes.filter(write=>write.path==='/api/products/recipe-fixture/bom').length;
+    costMode='failed';await quantities.nth(1).fill('0.25');
+    await expect.poll(()=>costReads.some(read=>read.mode==='failed' && read.quantity==='0.25')).toBe(true);
+    await expect(page.getByRole('button',{name:/Cost needs review.*Retry/})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Save',exact:true})).toBeDisabled();
+    costMode='missing';await quantities.nth(1).fill('0.26');
+    await expect.poll(()=>costReads.some(read=>read.mode==='missing' && read.quantity==='0.26')).toBe(true);
+    await expect(page.getByRole('button',{name:/Cost needs review.*Retry/})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Save',exact:true})).toBeDisabled();
+    assert.equal(writes.filter(write=>write.path==='/api/products/recipe-fixture/bom').length,recipeWriteCount);
+    costMode='normal';await page.getByRole('button',{name:/Cost needs review.*Retry/}).click();
+    await expect(page.getByText('Rp 4.957',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await expect.poll(()=>writes.filter(write=>write.path==='/api/products/recipe-fixture/bom').length).toBe(recipeWriteCount+1);
+    const stored=writes.filter(write=>write.path==='/api/products/recipe-fixture/bom').at(-1).body.bomItems;
+    assert.equal(stored[0].quantity,0.123456);assert.equal(stored[1].quantity,0.26);assert.equal(stored[1].unit,'kg');
+    await expect(page.getByText('Recipe saved successfully',{exact:true})).toBeVisible();
+    await page.goto(origin + '/products/recipes?productId=recipe-fixture');
+    await expect(page.getByRole('cell',{name:'Rp 4.957',exact:true})).toBeVisible();
+    await page.screenshot({path:path.join(out,'recipe-saved-detail.png')});
     assert.deepEqual(errors, []);
     console.log(
       "PASS production UI: full-width mobile drawer, dialog focus/Escape, TV search/drafts, media preview, price zero/empty/failure/bulk review, explicit store save, inventory grouping.",

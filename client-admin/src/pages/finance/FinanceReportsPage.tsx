@@ -1,6 +1,6 @@
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { payrollLabels } from '../../../../shared/payrollLabels'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'

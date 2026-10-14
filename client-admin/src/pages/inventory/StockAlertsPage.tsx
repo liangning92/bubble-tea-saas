@@ -1,5 +1,5 @@
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings';
 import {formatStoreDate} from '../../utils/storeDateTime';
 import { useState } from 'react';

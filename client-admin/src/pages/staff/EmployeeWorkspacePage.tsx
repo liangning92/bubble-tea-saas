@@ -1,4 +1,4 @@
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 import { useAuthStore } from "../../stores/auth";

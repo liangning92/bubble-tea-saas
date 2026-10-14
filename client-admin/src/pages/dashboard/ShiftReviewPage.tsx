@@ -1,4 +1,4 @@
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import {QUERY_PERIODS,QueryPeriod,queryCalendarRange} from '../../utils/queryPeriods'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {formatStoreDate,storeCalendarDate} from '../../utils/storeDateTime'

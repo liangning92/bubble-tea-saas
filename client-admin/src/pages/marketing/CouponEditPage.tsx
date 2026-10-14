@@ -1,4 +1,4 @@
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'

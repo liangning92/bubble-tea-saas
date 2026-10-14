@@ -1,4 +1,4 @@
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { expenseCategoryName } from '../../../../shared/utils/expenseCategories'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
