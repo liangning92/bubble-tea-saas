@@ -3,7 +3,8 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const configuration=path.resolve('client-admin/docker/nginx.conf');
 test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',async()=>{
  if(!process.env.BT_TEST_RUN){
-  execFileSync('python3',[path.resolve('scripts/with-docker-test.py'),'--',process.execPath,'--test',__filename],{stdio:'inherit'});
+  const env={...process.env};delete env.NODE_TEST_CONTEXT;
+  execFileSync('python3',[path.resolve('scripts/with-docker-test.py'),'--',process.execPath,'--test',__filename],{stdio:'inherit',env});
   return;
  }
  assert.match(process.env.BT_TEST_RUN,/^bt-test-[0-9a-f]{12}$/);
