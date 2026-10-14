@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { Lock, Phone, Loader2, Globe } from 'lucide-react'
+import { Lock, Phone, Loader2, Globe, Eye, EyeOff } from 'lucide-react'
 
 const LANGUAGES = [
   { code: 'zh', label: '中文', flag: '🇨🇳' },
@@ -18,6 +18,7 @@ export function LoginPage() {
 
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -165,7 +166,7 @@ export function LoginPage() {
 
           {/* Password Input */}
           <div className="space-y-2 mt-4">
-            <label className="text-base font-medium text-gray-700">
+            <label htmlFor="staff-password" className="text-base font-medium text-gray-700">
               {t('auth.password')}
             </label>
             <div className="relative">
@@ -173,13 +174,25 @@ export function LoginPage() {
                 <Lock size={14} className="text-gray-400" />
               </div>
               <input
-                type="password"
+                id="staff-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t('auth.passwordPlaceholder')}
-                className="w-full pl-14 pr-4 py-3.5 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                className="w-full pl-14 pr-14 py-3.5 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                 required
               />
+              <button
+                type="button"
+                aria-label={t(showPassword ? 'auth.hidePassword' : 'auth.showPassword')}
+                aria-pressed={showPassword}
+                aria-controls="staff-password"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50"
+              >
+                {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+              </button>
             </div>
           </div>
 
