@@ -1,3 +1,4 @@
+import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { Link } from 'react-router-dom'
 import { countDetailUrl, inventoryLogDisplay, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
@@ -39,7 +40,7 @@ export function StockLogPage() {
 
   // Forms
   const [stockInForm, setStockInForm] = useState({
-    inventoryId: '',
+    inventoryId: '', inputUnit: '',
     quantity: '',
     unitCost: '',
     supplierId: '',
@@ -47,7 +48,7 @@ export function StockLogPage() {
   })
 
   const [wasteForm, setWasteForm] = useState({
-    inventoryId: '',
+    inventoryId: '', inputUnit: '',
     quantity: '',
     reason: 'loss',
     wasteType: 'spill',
@@ -196,7 +197,7 @@ export function StockLogPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory-all-items'] })
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       setShowStockInModal(false)
-      setStockInForm({ inventoryId: '', quantity: '', unitCost: '', supplierId: '', note: '' })
+      setStockInForm({ inventoryId: '', inputUnit: '', quantity: '', unitCost: '', supplierId: '', note: '' })
     }
   })
 
@@ -207,7 +208,7 @@ export function StockLogPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory-all-items'] })
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       setShowWasteModal(false)
-      setWasteForm({ inventoryId: '', quantity: '', reason: 'loss', wasteType: 'spill', note: '' })
+      setWasteForm({ inventoryId: '', inputUnit: '', quantity: '', reason: 'loss', wasteType: 'spill', note: '' })
     }
   })
 
@@ -226,7 +227,9 @@ export function StockLogPage() {
     setStockInForm(prev => ({
       ...prev,
       inventoryId: invId,
-      unitCost: item ? String(item.avgCost || '') : prev.unitCost
+      quantity: '',
+      inputUnit: item ? defaultInventoryInputUnit(item) : '',
+      unitCost: item ? String((item.avgCost || 0) * inventoryUnitFactor(item, defaultInventoryInputUnit(item))) : ''
     }))
   }
 
@@ -254,6 +257,7 @@ export function StockLogPage() {
     wasteMutation.mutate({
       inventoryId: wasteForm.inventoryId,
       quantity: qty,
+      inputUnit: wasteForm.inputUnit,
       reason: wasteForm.wasteType === 'expired' ? 'expired' : wasteForm.wasteType === 'other' ? 'other' : 'loss',
       note: fullNote
     })
@@ -265,12 +269,13 @@ export function StockLogPage() {
     if (!stockInForm.inventoryId || !stockInForm.quantity) return
 
     const qty = parseFloat(stockInForm.quantity)
-    const cost = stockInForm.unitCost ? parseFloat(stockInForm.unitCost) : 0
+    const cost = stockInForm.unitCost ? parseFloat(stockInForm.unitCost) : undefined
     if (isNaN(qty) || qty <= 0) return
 
     stockInMutation.mutate({
       inventoryId: stockInForm.inventoryId,
       quantity: qty,
+      inputUnit: stockInForm.inputUnit,
       unitCost: cost,
       supplierId: stockInForm.supplierId || undefined,
       note: stockInForm.note ? `[${t('inventory.reasonPurchase')}] ${stockInForm.note}` : t('inventory.reasonPurchase')
@@ -697,6 +702,11 @@ export function StockLogPage() {
                 </select>
               </div>
 
+              {selectedStockInItem && <label className="block">{t('inventoryUnits.input')}
+                <select className="input w-full" value={stockInForm.inputUnit} onChange={e => setStockInForm({ ...stockInForm, inputUnit: e.target.value, unitCost: '' })}>
+                  {inventoryInputUnits(selectedStockInItem).map(unit => <option key={unit}>{unit}</option>)}
+                </select>
+              </label>}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -713,7 +723,7 @@ export function StockLogPage() {
                       className="input w-full pr-10"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                      {selectedStockInItem?.unit || ''}
+                      {stockInForm.inputUnit}
                     </span>
                   </div>
                 </div>
@@ -819,7 +829,7 @@ export function StockLogPage() {
                 <select
                   required
                   value={wasteForm.inventoryId}
-                  onChange={(e) => setWasteForm({ ...wasteForm, inventoryId: e.target.value })}
+                  onChange={(e) => setWasteForm({ ...wasteForm, inventoryId: e.target.value, quantity: '', inputUnit: inventoryItems.find(i => i.id === e.target.value) ? defaultInventoryInputUnit(inventoryItems.find(i => i.id === e.target.value)) : '' })}
                   className="input w-full"
                 >
                   <option value="">-- {t('inventory.selectItem')} --</option>
@@ -837,6 +847,11 @@ export function StockLogPage() {
                 )}
               </div>
 
+              {selectedWasteItem && <label className="block">{t('inventoryUnits.input')}
+                <select className="input w-full" value={wasteForm.inputUnit} onChange={e => setWasteForm({ ...wasteForm, inputUnit: e.target.value })}>
+                  {inventoryInputUnits(selectedWasteItem).map(unit => <option key={unit}>{unit}</option>)}
+                </select>
+              </label>}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -848,13 +863,13 @@ export function StockLogPage() {
                       step="any"
                       required
                       min="0.001"
-                      max={selectedWasteItem ? selectedWasteItem.currentStock : undefined}
+                      max={selectedWasteItem ? selectedWasteItem.currentStock / inventoryUnitFactor(selectedWasteItem, wasteForm.inputUnit || defaultInventoryInputUnit(selectedWasteItem)) : undefined}
                       value={wasteForm.quantity}
                       onChange={(e) => setWasteForm({ ...wasteForm, quantity: e.target.value })}
                       className="input w-full pr-10"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                      {selectedWasteItem?.unit || ''}
+                      {wasteForm.inputUnit}
                     </span>
                   </div>
                 </div>

@@ -1,3 +1,4 @@
+import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
 import { useStoreDateSettings } from "../../hooks/useStoreDateSettings";
 import { InventoryCountAdjustments } from "../../components/InventoryCountAdjustments";
 import { useSearchParams } from "react-router-dom";
@@ -925,7 +926,9 @@ function CountItemInput({
   isUpdating: boolean;
 }) {
   const { t } = useTranslation();
-  const [value, setValue] = useState(item.countedQty?.toString() || "");
+  const material = item.inventory || { unit: "kg" };
+  const [inputUnit, setInputUnit] = useState(() => defaultInventoryInputUnit(material));
+  const [value, setValue] = useState(() => item.countedQty == null ? "" : String(item.countedQty / inventoryUnitFactor(material, defaultInventoryInputUnit(material))));
   const [reason, setReason] = useState(item.note || "");
   const [showInput, setShowInput] = useState(
     item.countedQty === null || item.countedQty === undefined,
@@ -934,14 +937,20 @@ function CountItemInput({
   const handleSubmit = () => {
     const qty = parseFloat(value);
     if (Number.isFinite(qty) && qty >= 0) {
-      onUpdate(qty, reason);
+      onUpdate(inventoryLedgerQuantity(qty, material, inputUnit), reason);
       setShowInput(false);
     }
   };
 
   if (showInput || item.countedQty === undefined || item.countedQty === null) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label={t("inventoryUnits.input")} className="input input-sm w-24" value={inputUnit} disabled={isUpdating} onChange={e => {
+          if (value !== "" && Number.isFinite(Number(value))) setValue(String(inventoryLedgerQuantity(Number(value), material, inputUnit) / inventoryUnitFactor(material, e.target.value)));
+          setInputUnit(e.target.value);
+        }}>
+          {inventoryInputUnits(material).map(unit => <option key={unit}>{unit}</option>)}
+        </select>
         <input
           type="number"
           aria-label={t("inventory.actualQty")}
