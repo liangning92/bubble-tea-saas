@@ -1,61 +1,617 @@
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
-import { BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,ScatterChart,Scatter,ReferenceLine } from 'recharts'
-import api,{ categoryApi } from '../../services/api'
-import { formatCurrency } from '../../utils/helpers'
-import { useAuthStore } from '../../stores/auth'
-const colors=['#ec6b8e','#6366f1','#10b981','#f59e0b','#0ea5e9','#8b5cf6']
-const matrixColors:Record<string,string>={star:'#10b981',plowhorse:'#3b82f6',puzzle:'#a855f7',dog:'#f97316'}
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  ScatterChart,
+  Scatter,
+  ReferenceLine,
+} from "recharts";
+import api, { categoryApi } from "../../services/api";
+import { formatCurrency } from "../../utils/helpers";
+import { useAuthStore } from "../../stores/auth";
+const colors = [
+  "#ec6b8e",
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#0ea5e9",
+  "#8b5cf6",
+];
+const matrixColors: Record<string, string> = {
+  star: "#10b981",
+  plowhorse: "#3b82f6",
+  puzzle: "#a855f7",
+  dog: "#f97316",
+};
 export function ProductAnalysisPage() {
-  const {t}=useTranslation(),navigate=useNavigate(),storeId=useAuthStore(s=>s.user?.storeId)
-  const [days,setDays]=useState(30),[categoryId,setCategoryId]=useState(''),[metric,setMetric]=useState<'quantity'|'revenue'>('quantity')
-  const [productId,setProductId]=useState(''),[expanded,setExpanded]=useState(false),[page,setPage]=useState(1),[search,setSearch]=useState(''),[sort,setSort]=useState('quantity')
-  const filters={days,categoryId:categoryId||undefined}
-  const query=useQuery({queryKey:['product-insights',storeId,filters],queryFn:()=>api.get('/product-analysis/insights',{params:filters})})
-  const categories=useQuery({queryKey:['categories',storeId],queryFn:()=>categoryApi.list(storeId||undefined)})
-  const detail=useQuery({queryKey:['product-insights-detail',storeId,filters,page,search,sort],enabled:expanded,queryFn:()=>api.get('/product-analysis/insights/details',{params:{...filters,page,search,sort}})})
-  const preferences=useQuery({queryKey:['product-insights-preferences',storeId,filters,productId],enabled:!!productId,queryFn:()=>api.get(`/product-analysis/insights/preferences/${productId}`,{params:filters})})
-  const data=query.data?.data.data,pref=preferences.data?.data.data,details=detail.data?.data.data
-  useEffect(()=>{setPage(1)},[days,categoryId,search,sort])
-  useEffect(()=>{if(data?.products&&!data.products.some((p:any)=>p.id===productId))setProductId('')},[data,productId])
-  const quadrants=['puzzle','star','dog','plowhorse'].map(type=>{const group=data?.strategies?.find((s:any)=>s.type===type);return {type,count:group?.count||0,products:(group?.products||[]).slice(0,5)}})
-  const matrix=quadrants.flatMap(group=>group.products).filter((r:any)=>r.margin!==null)
-  const link=(id:string)=>`/products/recipes?productId=${id}`
-  const fmt=(value:any)=>Number(value||0).toLocaleString(undefined,{maximumFractionDigits:1})
-  const change=(row:any)=>row.change===null?t('insights.noPrevious'):`${row.change>0?'+':''}${fmt(row.change)}%`
-  const empty=<p className="text-gray-500 py-6 text-center">{t('insights.empty')}</p>
-  const failure=(retry:()=>unknown)=><p role="alert" className="text-red-600">{t('media.failed')} <button className="btn" onClick={retry}>{t('media.retry')}</button></p>
-  return <div className="space-y-6 pb-8">
-    <div className="card flex flex-wrap justify-between items-center gap-3"><h1 className="text-xl font-bold">{t('insights.title')}</h1><div className="flex flex-wrap gap-2">
-      <select aria-label={t('insights.period')} value={days} onChange={e=>setDays(Number(e.target.value))} className="input w-auto">{[7,30,90,365].map(n=><option key={n} value={n}>{t('insights.days',{count:n})}</option>)}</select>
-      <select aria-label={t('insights.allCategories')} value={categoryId} onChange={e=>setCategoryId(e.target.value)} className="input w-auto"><option value="">{t('insights.allCategories')}</option>{(Array.isArray(categories.data?.data.data)?categories.data?.data.data:[]).map((c:any)=><option value={c.id} key={c.id}>{c.name}</option>)}</select>
-    </div></div>
-    {query.isError?failure(()=>query.refetch()):query.isLoading?<p>{t('common.loading')}</p>:data&&<>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{['productsSold','quantity','unsold','incomplete'].map(k=><div className="card" key={k}><p className="text-sm text-gray-500">{t(`insights.${k}`)}</p><p className="text-2xl font-bold mt-2">{fmt(data.overview[k])}</p></div>)}</div>
-    <p className="text-xs text-gray-500">{t('insights.scope',{timezone:data.period.timeZone})}</p>
-    <div className="flex gap-2">{(['quantity','revenue'] as const).map(k=><button key={k} className={`btn btn-sm ${metric===k?'btn-primary':''}`} onClick={()=>setMetric(k)}>{t(`insights.${k}`)}</button>)}</div>
-    <div className="grid lg:grid-cols-2 gap-6">
-      <div className="card"><h2 className="font-semibold mb-4">{t('insights.top')}</h2>{data.overview.quantity?<div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart layout="vertical" data={metric==='quantity'?data.top:data.revenueTop} margin={{left:8,right:20}}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" tickFormatter={v=>metric==='revenue'?formatCurrency(v):fmt(v)} /><YAxis type="category" dataKey="productName" width={135} tick={{fontSize:11}} /><Tooltip formatter={(v:number)=>metric==='revenue'?formatCurrency(v):fmt(v)} labelFormatter={(label:any,payload:any)=>`${label}${payload?.[0]?.payload?.evidence===false?` (${t('insights.estimated')})`:``}`} /><Bar dataKey={metric} name={t(`insights.${metric}`)} fill={colors[0]} cursor="pointer" onClick={(r:any)=>navigate(link(r.productId))} /></BarChart></ResponsiveContainer></div>:empty}</div>
-      <div className="card"><h2 className="font-semibold mb-4">{t('insights.categories')}</h2>{data.overview.quantity?<div className="h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data.categories.filter((c:any)=>c[metric]>0)} dataKey={metric} nameKey="name" innerRadius={50} outerRadius={90} label={(p:any)=>`${p.name} ${(p.percent*100).toFixed(0)}%`} onClick={(r:any)=>setCategoryId(r.id)} cursor="pointer">{data.categories.map((c:any,i:number)=><Cell key={c.id} fill={colors[i%colors.length]} />)}</Pie><Tooltip formatter={(v:number)=>metric==='revenue'?formatCurrency(v):fmt(v)} /></PieChart></ResponsiveContainer></div>:empty}</div>
+  const { t } = useTranslation(),
+    navigate = useNavigate(),
+    storeId = useAuthStore((s) => s.user?.storeId);
+  const [days, setDays] = useState(30),
+    [categoryId, setCategoryId] = useState(""),
+    [metric, setMetric] = useState<"quantity" | "revenue">("quantity");
+  const [productId, setProductId] = useState(""),
+    [expanded, setExpanded] = useState(false),
+    [page, setPage] = useState(1),
+    [search, setSearch] = useState(""),
+    [sort, setSort] = useState("quantity");
+  const filters = { days, categoryId: categoryId || undefined };
+  const query = useQuery({
+    queryKey: ["product-insights", storeId, filters],
+    queryFn: () => api.get("/product-analysis/insights", { params: filters }),
+  });
+  const categories = useQuery({
+    queryKey: ["categories", storeId],
+    queryFn: () => categoryApi.list(storeId || undefined),
+  });
+  const detail = useQuery({
+    queryKey: ["product-insights-detail", storeId, filters, page, search, sort],
+    enabled: expanded,
+    queryFn: () =>
+      api.get("/product-analysis/insights/details", {
+        params: { ...filters, page, search, sort },
+      }),
+  });
+  const preferences = useQuery({
+    queryKey: ["product-insights-preferences", storeId, filters, productId],
+    enabled: !!productId,
+    queryFn: () =>
+      api.get(`/product-analysis/insights/preferences/${productId}`, {
+        params: filters,
+      }),
+  });
+  const data = query.data?.data.data,
+    pref = preferences.data?.data.data,
+    details = detail.data?.data.data;
+  useEffect(() => {
+    setPage(1);
+  }, [days, categoryId, search, sort]);
+  useEffect(() => {
+    if (data?.products && !data.products.some((p: any) => p.id === productId))
+      setProductId("");
+  }, [data, productId]);
+  const quadrants = ["puzzle", "star", "dog", "plowhorse"].map((type) => {
+    const group = data?.strategies?.find((s: any) => s.type === type);
+    return {
+      type,
+      count: group?.count || 0,
+      products: (group?.products || []).slice(0, 5),
+    };
+  });
+  const matrix = quadrants
+    .flatMap((group) => group.products)
+    .filter((r: any) => r.margin !== null);
+  const link = (id: string) => `/products/recipes?productId=${id}`;
+  const fmt = (value: any) =>
+    Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const change = (row: any) =>
+    row.change === null
+      ? t("insights.noPrevious")
+      : `${row.change > 0 ? "+" : ""}${fmt(row.change)}%`;
+  const empty = (
+    <p className="text-gray-500 py-6 text-center">{t("insights.empty")}</p>
+  );
+  const failure = (retry: () => unknown) => (
+    <p role="alert" className="text-red-600">
+      {t("media.failed")}{" "}
+      <button className="btn" onClick={retry}>
+        {t("media.retry")}
+      </button>
+    </p>
+  );
+  return (
+    <div className="space-y-6 pb-8">
+      <div className="card flex flex-wrap justify-between items-center gap-3">
+        <h1 className="text-xl font-bold">{t("insights.title")}</h1>
+        <div className="flex flex-wrap gap-2">
+          <select
+            aria-label={t("insights.period")}
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="input w-auto"
+          >
+            {[7, 30, 90, 365].map((n) => (
+              <option key={n} value={n}>
+                {t("insights.days", { count: n })}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label={t("insights.allCategories")}
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="input w-auto"
+          >
+            <option value="">{t("insights.allCategories")}</option>
+            {(Array.isArray(categories.data?.data.data)
+              ? categories.data?.data.data
+              : []
+            ).map((c: any) => (
+              <option value={c.id} key={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {query.isError ? (
+        failure(() => query.refetch())
+      ) : query.isLoading ? (
+        <p>{t("common.loading")}</p>
+      ) : (
+        data && (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {["productsSold", "quantity", "unsold", "incomplete"].map((k) => (
+                <div className="card" key={k}>
+                  <p className="text-sm text-gray-500">{t(`insights.${k}`)}</p>
+                  <p className="text-2xl font-bold mt-2">
+                    {fmt(data.overview[k])}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">
+              {t("insights.scope", { timezone: data.period.timeZone })}
+            </p>
+            <div className="flex gap-2">
+              {(["quantity", "revenue"] as const).map((k) => (
+                <button
+                  key={k}
+                  className={`btn btn-sm ${metric === k ? "btn-primary" : ""}`}
+                  onClick={() => setMetric(k)}
+                >
+                  {t(`insights.${k}`)}
+                </button>
+              ))}
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="card">
+                <h2 className="font-semibold mb-4">{t("insights.top")}</h2>
+                {data.overview.quantity ? (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        layout="vertical"
+                        data={
+                          metric === "quantity" ? data.top : data.revenueTop
+                        }
+                        margin={{ left: 8, right: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          type="number"
+                          tickFormatter={(v) =>
+                            metric === "revenue" ? formatCurrency(v) : fmt(v)
+                          }
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="productName"
+                          width={135}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          formatter={(v: number) =>
+                            metric === "revenue" ? formatCurrency(v) : fmt(v)
+                          }
+                          labelFormatter={(label: any, payload: any) =>
+                            `${label}${payload?.[0]?.payload?.evidence === false ? ` (${t("insights.estimated")})` : ``}`
+                          }
+                        />
+                        <Bar
+                          dataKey={metric}
+                          name={t(`insights.${metric}`)}
+                          fill={colors[0]}
+                          cursor="pointer"
+                          onClick={(r: any) => navigate(link(r.productId))}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  empty
+                )}
+              </div>
+              <div className="card">
+                <h2 className="font-semibold mb-4">
+                  {t("insights.categories")}
+                </h2>
+                {data.overview.quantity ? (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={data.categories.filter(
+                            (c: any) => c[metric] > 0,
+                          )}
+                          dataKey={metric}
+                          nameKey="name"
+                          innerRadius={50}
+                          outerRadius={90}
+                          label={(p: any) =>
+                            `${p.name} ${(p.percent * 100).toFixed(0)}%`
+                          }
+                          onClick={(r: any) => setCategoryId(r.id)}
+                          cursor="pointer"
+                        >
+                          {data.categories.map((c: any, i: number) => (
+                            <Cell key={c.id} fill={colors[i % colors.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(v: number) =>
+                            metric === "revenue" ? formatCurrency(v) : fmt(v)
+                          }
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  empty
+                )}
+              </div>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <details className="card">
+                <summary className="font-semibold cursor-pointer">
+                  {t("insights.matrix")}
+                </summary>
+                <div className="mt-4">
+                  <p className="text-xs text-gray-500 mb-3">
+                    {t("insights.matrixBasis", {
+                      quantity: fmt(data.benchmarks.avgQuantity),
+                      margin: fmt(data.benchmarks.avgMargin),
+                    })}
+                  </p>
+                  {matrix.length > 0 ? (
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart
+                          margin={{ right: 20, bottom: 15, left: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis
+                            type="number"
+                            dataKey="quantity"
+                            name={t("insights.quantity")}
+                          />
+                          <YAxis
+                            type="number"
+                            dataKey="margin"
+                            name={t("insights.margin")}
+                            unit="%"
+                          />
+                          <Tooltip
+                            cursor={{ strokeDasharray: "3 3" }}
+                            content={({ payload }: any) =>
+                              payload?.length ? (
+                                <div className="bg-white p-3 border rounded shadow">
+                                  <p>{payload[0].payload.productName}</p>
+                                  <p>
+                                    {t("insights.quantity")}:{" "}
+                                    {payload[0].payload.quantity}
+                                  </p>
+                                  <p>
+                                    {t("insights.margin")}:{" "}
+                                    {fmt(payload[0].payload.margin)}%
+                                  </p>
+                                </div>
+                              ) : null
+                            }
+                          />
+                          <ReferenceLine
+                            x={data.benchmarks.avgQuantity}
+                            stroke="#9ca3af"
+                          />
+                          <ReferenceLine
+                            y={data.benchmarks.avgMargin}
+                            stroke="#9ca3af"
+                          />
+                          <Scatter
+                            data={matrix}
+                            onClick={(r: any) =>
+                              navigate(
+                                link(r.productId || r.payload?.productId),
+                              )
+                            }
+                            cursor="pointer"
+                          >
+                            {matrix.map((r: any) => (
+                              <Cell
+                                key={r.productId}
+                                fill={matrixColors[r.matrixType]}
+                              />
+                            ))}
+                          </Scatter>
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    empty
+                  )}
+                </div>
+              </details>
+              <div className="card lg:order-first">
+                <h2 className="font-semibold mb-2">
+                  {t("insights.strategies")}
+                </h2>
+                <p className="text-xs text-gray-500 mb-4">
+                  {t("insights.quadrantTop")}
+                </p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {quadrants.map((group) => (
+                    <section
+                      key={group.type}
+                      aria-label={t(`insights.${group.type}`)}
+                      className="border rounded-lg p-3 border-t-4"
+                      style={{ borderTopColor: matrixColors[group.type] }}
+                    >
+                      <h3 className="font-medium">
+                        {t(`insights.${group.type}`)} · {group.count}
+                      </h3>
+                      <p className="text-xs text-gray-500 my-2">
+                        {t(`insights.${group.type}Hint`)}
+                      </p>
+                      {group.products.length ? (
+                        <ol className="space-y-2">
+                          {group.products.map((p: any, index: number) => (
+                            <li
+                              key={p.productId}
+                              className="flex justify-between gap-2 text-sm"
+                            >
+                              <Link
+                                to={link(p.productId)}
+                                className="text-primary"
+                              >
+                                {index + 1}. {p.productName}
+                              </Link>
+                              <span className="text-xs whitespace-nowrap">
+                                {fmt(p.quantity)} · {fmt(p.margin)}%
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        empty
+                      )}
+                    </section>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="card">
+                <h2 className="font-semibold">{t("insights.changes")}</h2>
+                <p className="text-xs text-gray-500 my-2">
+                  {t("insights.comparison")}
+                </p>
+                {data.changes.length ? (
+                  <div className="space-y-2">
+                    {data.changes.map((r: any) => (
+                      <div
+                        className="flex justify-between border-b py-2 gap-3"
+                        key={r.productId}
+                      >
+                        <Link to={link(r.productId)} className="text-primary">
+                          {r.productName}
+                        </Link>
+                        <span className="text-sm">
+                          {r.previousQuantity} → {r.quantity} · {change(r)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  empty
+                )}
+              </div>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="card space-y-3">
+                <h2 className="font-semibold">{t("insights.preferences")}</h2>
+                <select
+                  aria-label={t("insights.chooseProduct")}
+                  className="input"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                >
+                  <option value="">{t("insights.chooseProduct")}</option>
+                  {data.products.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                {preferences.isError ? (
+                  failure(() => preferences.refetch())
+                ) : preferences.isFetching ? (
+                  <p>{t("common.loading")}</p>
+                ) : pref ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {["specs", "addons"].map((k) => (
+                      <div key={k}>
+                        <h3 className="text-sm font-medium mb-2">
+                          {t(`insights.${k}`)}
+                        </h3>
+                        {pref[k].length
+                          ? pref[k].map((r: any) => (
+                              <div
+                                className="text-sm py-2"
+                                key={r.id || r.name}
+                              >
+                                <div className="flex justify-between">
+                                  <span>{r.name}</span>
+                                  <span>{fmt(r.percentage)}%</span>
+                                </div>
+                                <div className="h-1 bg-gray-100 mt-1 rounded">
+                                  <div
+                                    className="h-1 bg-primary rounded"
+                                    style={{
+                                      width: `${Math.min(100, r.percentage)}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ))
+                          : empty}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="card">
+                <h2 className="font-semibold">{t("insights.pairs")}</h2>
+                <p className="text-xs text-gray-500 my-3">
+                  {t("insights.pairBasis")}
+                </p>
+                {data.pairs.length
+                  ? data.pairs.map((r: any) => (
+                      <div
+                        key={r.productIds.join(":")}
+                        className="border-b py-3"
+                      >
+                        <p>
+                          {r.productIds.map((id: string, i: number) => (
+                            <span key={id}>
+                              {i > 0 ? " + " : ""}
+                              <Link to={link(id)} className="text-primary">
+                                {r.names[i]}
+                              </Link>
+                            </span>
+                          ))}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {t("insights.orders", { count: r.orderCount })}
+                        </p>
+                      </div>
+                    ))
+                  : empty}
+              </div>
+            </div>
+            <details
+              className="card"
+              onToggle={(e) => setExpanded(e.currentTarget.open)}
+            >
+              <summary className="font-semibold cursor-pointer">
+                {t("insights.details")}
+              </summary>
+              {expanded && (
+                <div className="space-y-4 mt-4">
+                  <p className="text-xs text-gray-500">
+                    {t("insights.penetrationBasis")}
+                  </p>
+                  <div className="flex gap-3">
+                    <input
+                      aria-label={t("insights.search")}
+                      placeholder={t("insights.search")}
+                      className="input"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                    <select
+                      aria-label={t("insights.sort")}
+                      value={sort}
+                      className="input w-auto"
+                      onChange={(e) => setSort(e.target.value)}
+                    >
+                      {["quantity", "penetration", "change", "revenue"].map(
+                        (k) => (
+                          <option key={k} value={k}>
+                            {t(`insights.${k}`)}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  {detail.isError ? (
+                    failure(() => detail.refetch())
+                  ) : detail.isFetching ? (
+                    <p>{t("common.loading")}</p>
+                  ) : details?.list.length ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left">
+                            {[
+                              "product",
+                              "quantity",
+                              "previousQuantity",
+                              "change",
+                              "penetration",
+                              "matrix",
+                            ].map((k) => (
+                              <th className="py-3 px-2" key={k}>
+                                {t(`insights.${k}`)}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {details.list.map((r: any) => (
+                            <tr key={r.productId} className="border-b">
+                              <td className="py-3 px-2">
+                                <Link
+                                  className="text-primary"
+                                  to={link(r.productId)}
+                                >
+                                  {r.productName}
+                                </Link>
+                              </td>
+                              <td>{r.quantity}</td>
+                              <td>{r.previousQuantity}</td>
+                              <td>{change(r)}</td>
+                              <td>{fmt(r.penetration)}%</td>
+                              <td>
+                                {t(
+                                  `insights.${r.matrixType === "incomplete" ? "incompleteLabel" : r.matrixType === "unsold" ? "unsoldLabel" : r.matrixType}`,
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    empty
+                  )}
+                  <div className="flex justify-between">
+                    <button
+                      className="btn"
+                      disabled={page === 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      {t("media.previous")}
+                    </button>
+                    <span>
+                      {page} /{" "}
+                      {Math.max(1, Math.ceil((details?.total || 0) / 20))}
+                    </span>
+                    <button
+                      className="btn"
+                      disabled={page * 20 >= (details?.total || 0)}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      {t("media.next")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </details>
+          </>
+        )
+      )}
     </div>
-    <div className="grid lg:grid-cols-2 gap-6">
-      <div className="card"><h2 className="font-semibold mb-3">{t('insights.matrix')}</h2><p className="text-xs text-gray-500 mb-3">{t('insights.matrixBasis',{quantity:fmt(data.benchmarks.avgQuantity),margin:fmt(data.benchmarks.avgMargin)})}</p>{matrix.length>0?<div className="h-72"><ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{right:20,bottom:15,left:10}}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" dataKey="quantity" name={t('insights.quantity')} /><YAxis type="number" dataKey="margin" name={t('insights.margin')} unit="%" /><Tooltip cursor={{strokeDasharray:'3 3'}} content={({payload}:any)=>payload?.length?<div className="bg-white p-3 border rounded shadow"><p>{payload[0].payload.productName}</p><p>{t('insights.quantity')}: {payload[0].payload.quantity}</p><p>{t('insights.margin')}: {fmt(payload[0].payload.margin)}%</p></div>:null} /><ReferenceLine x={data.benchmarks.avgQuantity} stroke="#9ca3af" /><ReferenceLine y={data.benchmarks.avgMargin} stroke="#9ca3af" /><Scatter data={matrix} onClick={(r:any)=>navigate(link(r.productId||r.payload?.productId))} cursor="pointer">{matrix.map((r:any)=><Cell key={r.productId} fill={matrixColors[r.matrixType]} />)}</Scatter></ScatterChart></ResponsiveContainer></div>:empty}</div>
-      <div className="card"><h2 className="font-semibold mb-2">{t('insights.strategies')}</h2><p className="text-xs text-gray-500 mb-4">{t('insights.quadrantTop')}</p><div className="grid sm:grid-cols-2 gap-4">{quadrants.map(group=><section key={group.type} aria-label={t(`insights.${group.type}`)} className="border rounded-lg p-3 border-t-4" style={{borderTopColor:matrixColors[group.type]}}><h3 className="font-medium">{t(`insights.${group.type}`)} · {group.count}</h3><p className="text-xs text-gray-500 my-2">{t(`insights.${group.type}Hint`)}</p>{group.products.length?<ol className="space-y-2">{group.products.map((p:any,index:number)=><li key={p.productId} className="flex justify-between gap-2 text-sm"><Link to={link(p.productId)} className="text-primary">{index+1}. {p.productName}</Link><span className="text-xs whitespace-nowrap">{fmt(p.quantity)} · {fmt(p.margin)}%</span></li>)}</ol>:empty}</section>)}</div></div>
-    </div>
-    <div className="grid lg:grid-cols-2 gap-6">
-      <div className="card"><h2 className="font-semibold">{t('insights.changes')}</h2><p className="text-xs text-gray-500 my-2">{t('insights.comparison')}</p>{data.changes.length?<div className="space-y-2">{data.changes.map((r:any)=><div className="flex justify-between border-b py-2 gap-3" key={r.productId}><Link to={link(r.productId)} className="text-primary">{r.productName}</Link><span className="text-sm">{r.previousQuantity} → {r.quantity} · {change(r)}</span></div>)}</div>:empty}</div>
-    </div>
-    <div className="grid lg:grid-cols-2 gap-6">
-      <div className="card space-y-3"><h2 className="font-semibold">{t('insights.preferences')}</h2><select aria-label={t('insights.chooseProduct')} className="input" value={productId} onChange={e=>setProductId(e.target.value)}><option value="">{t('insights.chooseProduct')}</option>{data.products.map((p:any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-      {preferences.isError?failure(()=>preferences.refetch()):preferences.isFetching?<p>{t('common.loading')}</p>:pref?<div className="grid sm:grid-cols-2 gap-4">{['specs','addons'].map(k=><div key={k}><h3 className="text-sm font-medium mb-2">{t(`insights.${k}`)}</h3>{pref[k].length?pref[k].map((r:any)=><div className="text-sm py-2" key={r.id||r.name}><div className="flex justify-between"><span>{r.name}</span><span>{fmt(r.percentage)}%</span></div><div className="h-1 bg-gray-100 mt-1 rounded"><div className="h-1 bg-primary rounded" style={{width:`${Math.min(100,r.percentage)}%`}} /></div></div>):empty}</div>)}</div>:null}</div>
-      <div className="card"><h2 className="font-semibold">{t('insights.pairs')}</h2><p className="text-xs text-gray-500 my-3">{t('insights.pairBasis')}</p>{data.pairs.length?data.pairs.map((r:any)=><div key={r.productIds.join(':')} className="border-b py-3"><p>{r.productIds.map((id:string,i:number)=><span key={id}>{i>0?' + ':''}<Link to={link(id)} className="text-primary">{r.names[i]}</Link></span>)}</p><p className="text-sm text-gray-500">{t('insights.orders',{count:r.orderCount})}</p></div>):empty}</div>
-    </div>
-    <details className="card" onToggle={e=>setExpanded(e.currentTarget.open)}><summary className="font-semibold cursor-pointer">{t('insights.details')}</summary>{expanded&&<div className="space-y-4 mt-4"><p className="text-xs text-gray-500">{t('insights.penetrationBasis')}</p><div className="flex gap-3"><input aria-label={t('insights.search')} placeholder={t('insights.search')} className="input" value={search} onChange={e=>setSearch(e.target.value)} /><select aria-label={t('insights.sort')} value={sort} className="input w-auto" onChange={e=>setSort(e.target.value)}>{['quantity','penetration','change','revenue'].map(k=><option key={k} value={k}>{t(`insights.${k}`)}</option>)}</select></div>
-      {detail.isError?failure(()=>detail.refetch()):detail.isFetching?<p>{t('common.loading')}</p>:details?.list.length?<div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left">{['product','quantity','previousQuantity','change','penetration','matrix'].map(k=><th className="py-3 px-2" key={k}>{t(`insights.${k}`)}</th>)}</tr></thead><tbody>{details.list.map((r:any)=><tr key={r.productId} className="border-b"><td className="py-3 px-2"><Link className="text-primary" to={link(r.productId)}>{r.productName}</Link></td><td>{r.quantity}</td><td>{r.previousQuantity}</td><td>{change(r)}</td><td>{fmt(r.penetration)}%</td><td>{t(`insights.${r.matrixType==='incomplete'?'incompleteLabel':r.matrixType==='unsold'?'unsoldLabel':r.matrixType}`)}</td></tr>)}</tbody></table></div>:empty}
-      <div className="flex justify-between"><button className="btn" disabled={page===1} onClick={()=>setPage(p=>p-1)}>{t('media.previous')}</button><span>{page} / {Math.max(1,Math.ceil((details?.total||0)/20))}</span><button className="btn" disabled={page*20>=(details?.total||0)} onClick={()=>setPage(p=>p+1)}>{t('media.next')}</button></div>
-    </div>}</details>
-    </>}
-  </div>
+  );
 }

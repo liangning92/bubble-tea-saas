@@ -2,6 +2,9 @@ import { useEmployeePermission } from "../../contexts/EmployeeAccess";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { AdminDialog } from "../../components/AdminDialog";
+import { MediaPreview } from "../../components/MediaLibrary";
+import { useMarketingCopy } from "../../components/marketing/MarketingLayout";
 import { tvApi } from "../../services/api";
 const initial = {
   inherit: true,
@@ -27,6 +30,8 @@ const initial = {
 };
 type Settings = typeof initial;
 export function TVScreensPage() {
+  const l = useMarketingCopy();
+  const [searches, setSearches] = useState<Record<string, string>>({});
   const canWrite = useEmployeePermission("marketing.write");
   const { t } = useTranslation(),
     tr = (key: string) => t("tvTerminal." + key);
@@ -91,19 +96,77 @@ export function TVScreensPage() {
         : [...edit.settings[key], id],
     );
   function selectList(key: string, list: any[]) {
+    const query = searches[key] || "",
+      chosen = edit.settings[key] || [];
+    const matches = list.filter((item) =>
+      item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    );
     return (
-      <div className="max-h-56 overflow-auto border rounded p-3 grid sm:grid-cols-2 gap-2">
-        {list.map((item) => (
-          <label key={item.id}>
-            <input
-              type="checkbox"
-              checked={edit.settings[key].includes(item.id)}
-              onChange={() => toggle(key, item.id)}
-            />{" "}
-            {item.name}
-          </label>
-        ))}
-      </div>
+      <details className="border rounded-lg p-3 space-y-3" open={chosen.length>0||key==="selectedProductIds"||key==="selectedMediaIds"||key==="musicIds"&&edit.settings.musicEnabled}>
+        <summary className="cursor-pointer text-sm font-medium">{tr(key==="selectedMediaIds"?"media":key==="musicIds"?"music":key==="selectedProductIds"?"products":key==="selectedSpecIds"?"specs":"categories")} · {l("已选","Selected","Dipilih")} {chosen.length}</summary>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            type="search"
+            className="input flex-1 min-w-0"
+            aria-label={
+              l("搜索", "Search", "Cari") +
+              " " +
+              tr(
+                key === "selectedMediaIds"
+                  ? "media"
+                  : key === "musicIds"
+                    ? "music"
+                    : key === "selectedProductIds"
+                      ? "products"
+                      : key === "selectedSpecIds"
+                        ? "specs"
+                        : "categories",
+              )
+            }
+            placeholder={l("搜索名称", "Search names", "Cari nama")}
+            value={query}
+            onChange={(e) =>
+              setSearches({ ...searches, [key]: e.target.value })
+            }
+          />
+          <span className="text-xs text-gray-500">
+            {l("已选", "Selected", "Dipilih")} {chosen.length} / {list.length}
+          </span>
+        </div>
+        <div className="max-h-48 overflow-auto grid sm:grid-cols-2 gap-2">
+          {matches.map((item) => (
+            <label
+              key={item.id}
+              className={`flex items-center gap-3 rounded p-2 cursor-pointer ${chosen.includes(item.id) ? "bg-primary-light" : "hover:bg-gray-50"}`}
+            >
+              <input
+                type="checkbox"
+                checked={chosen.includes(item.id)}
+                onChange={() => toggle(key, item.id)}
+              />
+              {item.url && (
+                <span className="tv-selection-preview w-16 shrink-0">
+                  <MediaPreview asset={item} />
+                </span>
+              )}
+              {item.image && (
+                <img
+                  src={item.image}
+                  alt=""
+                  className="w-12 h-12 rounded object-cover"
+                />
+              )}
+              <span className="text-sm break-words min-w-0">{item.name}</span>
+            </label>
+          ))}
+        </div>
+        {!matches.length && (
+          <p className="text-sm text-gray-500">
+            {l("没有匹配项", "No matches", "Tidak ada hasil")}
+          </p>
+        )}
+        {chosen.some((id:string)=>!list.some(item=>item.id===id))&&<button type="button" className="btn btn-sm" onClick={()=>set(key,chosen.filter((id:string)=>list.some(item=>item.id===id)))}>{l("清除不可用选择","Remove unavailable selections","Hapus pilihan tidak tersedia")}</button>}
+      </details>
     );
   }
   function state(device: any, screen: any) {
@@ -165,63 +228,92 @@ export function TVScreensPage() {
           {error}
         </p>
       )}
-      <form
-        className="card flex flex-wrap gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          action(() => tvApi.claimDevice({ pin, screenId: target })).then(() =>
-            setPin(""),
-          );
-        }}
-      >
-        <label>
-          {tr("pairCode")}
-          <input
-            className="input"
-            required
-            pattern="[0-9]{6}"
-            maxLength={6}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-          />
-        </label>
-        <label>
-          {tr("screen")}
-          <select
-            className="input"
-            required
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-          >
-            <option value="">{tr("choose")}</option>
-            {screens.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </select>
-        </label>
-        <button disabled={busy || !canWrite} className="btn-primary">
-          {tr("pair")}
-        </button>
-      </form>
-      <details className="card">
-        <summary>{tr("legacyImport")}</summary>
-        <p>{tr("legacyHint")}</p>
-        {legacy.map((row) => (
-          <button
-            key={row.id}
-            disabled={busy || !canWrite}
-            className="btn"
-            onClick={() => {
-              if (confirm(tr("legacyConfirm")))
-                action(() => tvApi.importLegacy(row.id));
-            }}
-          >
-            {row.name} ({row.code})
+      {!screens.length && (
+        <section className="card bg-primary-light/30 space-y-3">
+          <h2 className="font-semibold">
+            {l(
+              "开始展示门店内容",
+              "Start your store display",
+              "Mulai tampilan toko",
+            )}
+          </h2>
+          <ol className="grid sm:grid-cols-3 gap-3 text-sm">
+            <li>1. {tr("defaults")}</li>
+            <li>2. {tr("add")}</li>
+            <li>
+              3. {tr("pairCode")} → {tr("pair")}
+            </li>
+          </ol>
+          <p className="text-sm text-gray-600">
+            {l(
+              "先设置内容并添加屏幕，随后输入电视显示的配对码。",
+              "Set content and add a screen, then enter the code shown on the TV.",
+              "Atur konten dan tambah layar, lalu masukkan kode di TV.",
+            )}
+          </p>
+        </section>
+      )}
+      {screens.length > 0 && (
+        <form
+          className="card flex flex-wrap gap-3 items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            action(() => tvApi.claimDevice({ pin, screenId: target })).then(
+              () => setPin(""),
+            );
+          }}
+        >
+          <label>
+            {tr("pairCode")}
+            <input
+              className="input"
+              required
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+            />
+          </label>
+          <label>
+            {tr("screen")}
+            <select
+              className="input"
+              required
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              <option value="">{tr("choose")}</option>
+              {screens.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button disabled={busy || !canWrite} className="btn-primary">
+            {tr("pair")}
           </button>
-        ))}
-      </details>
+        </form>
+      )}
+      {legacy.length > 0 && (
+        <details className="card">
+          <summary>{tr("legacyImport")}</summary>
+          <p>{tr("legacyHint")}</p>
+          {legacy.map((row) => (
+            <button
+              key={row.id}
+              disabled={busy || !canWrite}
+              className="btn"
+              onClick={() => {
+                if (confirm(tr("legacyConfirm")))
+                  action(() => tvApi.importLegacy(row.id));
+              }}
+            >
+              {row.name} ({row.code})
+            </button>
+          ))}
+        </details>
+      )}
       <div className="grid lg:grid-cols-2 gap-4">
         {screens.map((screen) => (
           <section className="card space-y-3" key={screen.id}>
@@ -304,9 +396,13 @@ export function TVScreensPage() {
         ))}
       </div>
       {edit && (
-        <div className="fixed inset-0 z-50 bg-black/50 overflow-auto p-5">
+        <AdminDialog
+          title={edit.isDefaults ? tr("defaults") : tr("edit")}
+          onClose={() => setEdit(null)}
+          busy={busy}
+        >
           <form
-            className="bg-white rounded-xl max-w-4xl mx-auto p-6 space-y-4"
+            className="flex flex-col max-h-[94dvh]"
             onSubmit={(e) => {
               e.preventDefault();
               action(async () => {
@@ -330,264 +426,268 @@ export function TVScreensPage() {
               });
             }}
           >
-            <h2 className="text-xl font-bold">
-              {edit.isDefaults ? tr("defaults") : tr("edit")}
-            </h2>
-            {!edit.isDefaults && (
-              <>
-                <label className="block">
-                  {tr("name")}
-                  <input
-                    className="input"
-                    required
-                    maxLength={100}
-                    value={edit.name}
-                    onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-                  />
-                </label>
-                <label className="block">
-                  {tr("code")}
-                  <input
-                    className="input"
-                    required
-                    pattern="[A-Za-z0-9_-]+"
-                    maxLength={40}
-                    value={edit.code}
-                    onChange={(e) => setEdit({ ...edit, code: e.target.value })}
-                  />
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={edit.isActive}
-                    onChange={(e) =>
-                      setEdit({ ...edit, isActive: e.target.checked })
-                    }
-                  />{" "}
-                  {tr("enabled")}
-                </label>
-                <label className="block">
-                  <input
-                    type="checkbox"
-                    checked={edit.settings.inherit}
-                    onChange={(e) => set("inherit", e.target.checked)}
-                  />{" "}
-                  {tr("inherit")}
-                </label>
-              </>
-            )}
-            {!edit.isDefaults && (
-              <div className="grid sm:grid-cols-2 gap-3">
-                <label>
-                  {tr("channel")}
-                  <select
-                    className="input"
-                    value={edit.settings.channelId}
-                    onChange={(e) => set("channelId", e.target.value)}
-                  >
-                    <option value="">{tr("dineIn")}</option>
-                    {options.channels.map((c: any) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {tr("orientation")}
-                  <select
-                    className="input"
-                    value={edit.settings.orientation}
-                    onChange={(e) => set("orientation", e.target.value)}
-                  >
-                    {["landscape", "portrait"].map((v) => (
-                      <option key={v} value={v}>
-                        {tr(v)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {tr("layout")}
-                  <select
-                    className="input"
-                    value={edit.settings.layoutTemplate}
-                    onChange={(e) => set("layoutTemplate", e.target.value)}
-                  >
-                    {[
-                      "menu_full",
-                      "split_media_menu",
-                      "media_loop",
-                      "portrait_promo_menu",
-                      "portrait_media_loop",
-                    ].map((v) => (
-                      <option key={v} value={v}>
-                        {tr(v)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {tr("theme")}
-                  <select
-                    className="input"
-                    value={edit.settings.themeStyle}
-                    onChange={(e) => set("themeStyle", e.target.value)}
-                  >
-                    {[
-                      "international_dark",
-                      "creamy_morandi",
-                      "dynamic_vivid",
-                    ].map((v) => (
-                      <option key={v} value={v}>
-                        {tr(v)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {tr("fit")}
-                  <select
-                    className="input"
-                    value={edit.settings.mediaFitMode}
-                    onChange={(e) => set("mediaFitMode", e.target.value)}
-                  >
-                    <option value="cover">{tr("cover")}</option>
-                    <option value="contain_blur">{tr("contain")}</option>
-                  </select>
-                </label>
-                <label>
-                  {tr("safeAreaPadding")}
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    max={5}
-                    step={0.5}
-                    value={edit.settings.safeAreaPadding}
-                    onChange={(e) =>
-                      set("safeAreaPadding", Number(e.target.value))
-                    }
-                  />
-                </label>
-              </div>
-            )}
-            <fieldset
-              disabled={!edit.isDefaults && edit.settings.inherit}
-              className="space-y-4 disabled:opacity-60"
-            >
-              <h3 className="font-bold">{tr("content")}</h3>
-              <p>{tr("selectionHint")}</p>
-              <h4>{tr("categories")}</h4>
-              {selectList("selectedCategoryIds", options.categories)}
-              <h4>{tr("products")}</h4>
-              {selectList("selectedProductIds", options.products)}
-              <h4>{tr("specs")}</h4>
-              {selectList(
-                "selectedSpecIds",
-                options.products.flatMap((p: any) =>
-                  p.specs.map((s: any) => ({
-                    ...s,
-                    name: p.name + " · " + s.name,
-                  })),
-                ),
+            <div className="overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
+              <h2 className="text-xl font-bold">
+                {edit.isDefaults ? tr("defaults") : tr("edit")}
+              </h2>
+              {!edit.isDefaults && (
+                <>
+                  <label className="block">
+                    {tr("name")}
+                    <input
+                      className="input"
+                      required
+                      maxLength={100}
+                      value={edit.name}
+                      onChange={(e) =>
+                        setEdit({ ...edit, name: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="block">
+                    {tr("code")}
+                    <input
+                      className="input"
+                      required
+                      pattern="[A-Za-z0-9_-]+"
+                      maxLength={40}
+                      value={edit.code}
+                      onChange={(e) =>
+                        setEdit({ ...edit, code: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={edit.isActive}
+                      onChange={(e) =>
+                        setEdit({ ...edit, isActive: e.target.checked })
+                      }
+                    />{" "}
+                    {tr("enabled")}
+                  </label>
+                  <label className="block">
+                    <input
+                      type="checkbox"
+                      checked={edit.settings.inherit}
+                      onChange={(e) => set("inherit", e.target.checked)}
+                    />{" "}
+                    {tr("inherit")}
+                  </label>
+                </>
               )}
-              <h4>{tr("media")}</h4>
-              {selectList(
-                "selectedMediaIds",
-                options.media.filter((m: any) => m.kind !== "audio"),
-              )}
-              <ol>
-                {edit.settings.selectedMediaIds.map(
-                  (id: string, index: number) => (
-                    <li key={id}>
-                      {options.media.find((m: any) => m.id === id)?.name}
-                      <button
-                        type="button"
-                        disabled={index === 0}
-                        onClick={() => {
-                          const ids = [...edit.settings.selectedMediaIds];
-                          [ids[index - 1], ids[index]] = [
-                            ids[index],
-                            ids[index - 1],
-                          ];
-                          set("selectedMediaIds", ids);
-                        }}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          index === edit.settings.selectedMediaIds.length - 1
-                        }
-                        onClick={() => {
-                          const ids = [...edit.settings.selectedMediaIds];
-                          [ids[index + 1], ids[index]] = [
-                            ids[index],
-                            ids[index + 1],
-                          ];
-                          set("selectedMediaIds", ids);
-                        }}
-                      >
-                        ↓
-                      </button>
-                    </li>
-                  ),
-                )}
-              </ol>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {[
-                  ["mediaIntervalSeconds", 2, 300],
-                  ["pageSeconds", 3, 300],
-                  ["marqueeSpeed", 1, 5],
-                  ["volume", 0, 1],
-                ].map(([key, min, max]) => (
-                  <label key={key}>
-                    {tr(String(key))}
+              {!edit.isDefaults && (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <label>
+                    {tr("channel")}
+                    <select
+                      className="input"
+                      value={edit.settings.channelId}
+                      onChange={(e) => set("channelId", e.target.value)}
+                    >
+                      <option value="">{tr("dineIn")}</option>
+                      {options.channels.map((c: any) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {tr("orientation")}
+                    <select
+                      className="input"
+                      value={edit.settings.orientation}
+                      onChange={(e) => set("orientation", e.target.value)}
+                    >
+                      {["landscape", "portrait"].map((v) => (
+                        <option key={v} value={v}>
+                          {tr(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {tr("layout")}
+                    <select
+                      className="input"
+                      value={edit.settings.layoutTemplate}
+                      onChange={(e) => set("layoutTemplate", e.target.value)}
+                    >
+                      {[
+                        "menu_full",
+                        "split_media_menu",
+                        "media_loop",
+                        "portrait_promo_menu",
+                        "portrait_media_loop",
+                      ].map((v) => (
+                        <option key={v} value={v}>
+                          {tr(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {tr("theme")}
+                    <select
+                      className="input"
+                      value={edit.settings.themeStyle}
+                      onChange={(e) => set("themeStyle", e.target.value)}
+                    >
+                      {[
+                        "international_dark",
+                        "creamy_morandi",
+                        "dynamic_vivid",
+                      ].map((v) => (
+                        <option key={v} value={v}>
+                          {tr(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {tr("fit")}
+                    <select
+                      className="input"
+                      value={edit.settings.mediaFitMode}
+                      onChange={(e) => set("mediaFitMode", e.target.value)}
+                    >
+                      <option value="cover">{tr("cover")}</option>
+                      <option value="contain_blur">{tr("contain")}</option>
+                    </select>
+                  </label>
+                  <label>
+                    {tr("safeAreaPadding")}
                     <input
                       className="input"
                       type="number"
-                      min={Number(min)}
-                      max={Number(max)}
-                      step={key === "volume" ? 0.1 : 1}
-                      value={edit.settings[key]}
-                      onChange={(e) => set(String(key), Number(e.target.value))}
+                      min={0}
+                      max={5}
+                      step={0.5}
+                      value={edit.settings.safeAreaPadding}
+                      onChange={(e) =>
+                        set("safeAreaPadding", Number(e.target.value))
+                      }
                     />
                   </label>
-                ))}
-              </div>
-              <label className="block">
-                {tr("marquee")}
-                <input
-                  className="input"
-                  maxLength={1000}
-                  value={edit.settings.marqueeText}
-                  onChange={(e) => set("marqueeText", e.target.value)}
-                />
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={edit.settings.showActivities}
-                  onChange={(e) => set("showActivities", e.target.checked)}
-                />{" "}
-                {tr("showActivities")}
-              </label>
-              <label className="block">
-                <input
-                  type="checkbox"
-                  checked={edit.settings.musicEnabled}
-                  onChange={(e) => set("musicEnabled", e.target.checked)}
-                />{" "}
-                {tr("music")}
-              </label>
-              {selectList(
-                "musicIds",
-                options.media.filter((m: any) => m.kind === "audio"),
+                </div>
               )}
-            </fieldset>
-            <div className="flex gap-3">
+              <fieldset
+                disabled={!edit.isDefaults && edit.settings.inherit}
+                className="space-y-4 disabled:opacity-60"
+              >
+                <h3 className="font-bold">{tr("content")}</h3>
+                <p>{tr("selectionHint")}</p>
+                {selectList("selectedCategoryIds", options.categories)}
+                {selectList("selectedProductIds", options.products)}
+                {selectList(
+                  "selectedSpecIds",
+                  options.products.flatMap((p: any) =>
+                    p.specs.map((s: any) => ({
+                      ...s,
+                      name: p.name + " · " + s.name,
+                    })),
+                  ),
+                )}
+                {selectList(
+                  "selectedMediaIds",
+                  options.media.filter((m: any) => m.kind !== "audio"),
+                )}
+                <ol>
+                  {edit.settings.selectedMediaIds.map(
+                    (id: string, index: number) => (
+                      <li key={id}>
+                        {options.media.find((m: any) => m.id === id)?.name}
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => {
+                            const ids = [...edit.settings.selectedMediaIds];
+                            [ids[index - 1], ids[index]] = [
+                              ids[index],
+                              ids[index - 1],
+                            ];
+                            set("selectedMediaIds", ids);
+                          }}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            index === edit.settings.selectedMediaIds.length - 1
+                          }
+                          onClick={() => {
+                            const ids = [...edit.settings.selectedMediaIds];
+                            [ids[index + 1], ids[index]] = [
+                              ids[index],
+                              ids[index + 1],
+                            ];
+                            set("selectedMediaIds", ids);
+                          }}
+                        >
+                          ↓
+                        </button>
+                      </li>
+                    ),
+                  )}
+                </ol>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {[
+                    ["mediaIntervalSeconds", 2, 300],
+                    ["pageSeconds", 3, 300],
+                    ["marqueeSpeed", 1, 5],
+                    ["volume", 0, 1],
+                  ].map(([key, min, max]) => (
+                    <label key={key}>
+                      {tr(String(key))}
+                      <input
+                        className="input"
+                        type="number"
+                        min={Number(min)}
+                        max={Number(max)}
+                        step={key === "volume" ? 0.1 : 1}
+                        value={edit.settings[key]}
+                        onChange={(e) =>
+                          set(String(key), Number(e.target.value))
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+                <label className="block">
+                  {tr("marquee")}
+                  <input
+                    className="input"
+                    maxLength={1000}
+                    value={edit.settings.marqueeText}
+                    onChange={(e) => set("marqueeText", e.target.value)}
+                  />
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={edit.settings.showActivities}
+                    onChange={(e) => set("showActivities", e.target.checked)}
+                  />{" "}
+                  {tr("showActivities")}
+                </label>
+                <label className="block">
+                  <input
+                    type="checkbox"
+                    checked={edit.settings.musicEnabled}
+                    onChange={(e) => set("musicEnabled", e.target.checked)}
+                  />{" "}
+                  {tr("music")}
+                </label>
+                {selectList(
+                  "musicIds",
+                  options.media.filter((m: any) => m.kind === "audio"),
+                )}
+              </fieldset>
+            </div>
+            <div className="shrink-0 border-t bg-white p-4 flex flex-wrap gap-3 items-center">
               <button className="btn-primary" disabled={busy || !canWrite}>
                 {tr("save")}
               </button>
@@ -600,15 +700,15 @@ export function TVScreensPage() {
               </button>
             </div>
             {error && (
-              <p role="alert" className="text-red-600">
+              <p role="alert" className="text-red-600 px-4 pb-3">
                 {error}
               </p>
             )}
           </form>
-        </div>
+        </AdminDialog>
       )}
       {preview && (
-        <div className="fixed inset-0 z-50 bg-black/50 p-6 overflow-auto">
+        <AdminDialog title={tr("preview")} onClose={() => setPreview(null)}>
           <div className="bg-white rounded p-5 max-w-4xl mx-auto">
             <button className="btn" onClick={() => setPreview(null)}>
               {tr("close")}
@@ -629,7 +729,7 @@ export function TVScreensPage() {
             />
             <p className="text-red-600">{preview.errors.join(" · ")}</p>
           </div>
-        </div>
+        </AdminDialog>
       )}
     </div>
   );

@@ -3,15 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #EC6D88;
-  --color-primary-hover: #D94D6E;
-  --color-primary-light: #FCE4EA;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
-  --color-info: #3B82F6;
-  --color-surface: #F9FAFB;
-  --color-border: #E5E7EB;
+  --color-primary: #ec6d88;
+  --color-primary-hover: #d94d6e;
+  --color-primary-light: #fce4ea;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  --color-surface: #f9fafb;
+  --color-border: #e5e7eb;
 }
 
 * {
@@ -21,12 +21,27 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
-  background-color: #F9FAFB;
-  color: #1F2937;
+  font-family: "Inter", system-ui, sans-serif;
+  background-color: #f9fafb;
+  color: #1f2937;
 }
 
 @layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 bg-white text-gray-700 border border-border px-3 py-2 rounded-btn text-sm font-medium hover:bg-gray-50 transition-colors;
+  }
+  .btn-sm {
+    @apply px-2 py-1 text-xs;
+  }
+  button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  summary:focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2;
+  }
+
   .btn-primary {
     @apply bg-primary text-white px-4 py-2 rounded-btn font-medium
            hover:bg-primary-hover active:scale-[0.98] transition-all;
@@ -73,16 +88,16 @@ body {
   }
 
   .marketing-primary-nav {
-    @apply flex flex-wrap gap-1 bg-white p-1 rounded-lg border border-border shadow-sm;
+    @apply flex flex-nowrap overflow-x-auto gap-1 bg-white p-1 rounded-lg border border-border shadow-sm;
   }
   .marketing-primary-link {
-    @apply px-4 py-2 rounded-md text-sm font-medium transition-colors;
+    @apply shrink-0 whitespace-nowrap px-4 py-2 rounded-md text-sm font-medium transition-colors;
   }
   .marketing-section-nav {
-    @apply flex flex-wrap gap-x-5 gap-y-1 border-b border-border;
+    @apply flex flex-nowrap overflow-x-auto gap-x-5 gap-y-1 border-b border-border;
   }
   .marketing-section-link {
-    @apply py-3 border-b-2 text-sm font-medium transition-colors;
+    @apply shrink-0 whitespace-nowrap py-3 border-b-2 text-sm font-medium transition-colors;
   }
   .marketing-workspace .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 bg-white border border-border text-gray-700 px-3 py-2 rounded-btn text-sm font-medium hover:bg-gray-50 transition-colors;
@@ -90,7 +105,8 @@ body {
   .marketing-workspace button:disabled {
     @apply opacity-50 cursor-not-allowed;
   }
-  .marketing-workspace input[type='checkbox'], .marketing-workspace input[type='radio'] {
+  .marketing-workspace input[type="checkbox"],
+  .marketing-workspace input[type="radio"] {
     @apply accent-primary shrink-0;
   }
   .marketing-workspace .badge-gray {
@@ -139,10 +155,52 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D1D5DB;
+  background: #d1d5db;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF;
+  background: #9ca3af;
+}
+
+.tv-selection-preview .h-40 {
+  height: 4rem;
+}
+
+@media (max-width: 767px) {
+  .inventory-responsive-table,
+  .inventory-responsive-table tbody {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+  .inventory-responsive-table thead {
+    display: none;
+  }
+  .inventory-responsive-table tr {
+    display: block;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 12px;
+  }
+  .inventory-responsive-table td {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 0;
+    text-align: right;
+  }
+  .inventory-responsive-table td::before {
+    content: attr(data-label);
+    font-size: 12px;
+    color: #6b7280;
+    text-align: left;
+  }
+  .inventory-responsive-table td input {
+    max-width: 100%;
+  }
 }
