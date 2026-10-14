@@ -81,6 +81,7 @@ const { chromium, expect } = require('@playwright/test');
 
     await page.goto(origin + '/logos?mode=store'); await expect(page.locator('input').first()).toHaveValue('Existing store');
     await page.locator('input').first().fill('Changed name'); await page.getByRole('button', { name: /Save/ }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm save', exact: true }).click();
     await expect.poll(() => config.storeInfo.storeName).toBe('Changed name'); await page.waitForTimeout(100);
     assert.equal(config.storeInfo.address, 'Existing address'); assert.deepEqual(config.posReceipt, savedReceipt); assert.equal(writes.at(-1).key, 'storeInfo');
     console.log('PASS store save: correct response envelope loaded; unrelated receipt logo, footer, paper size not overwritten');
