@@ -7200,6 +7200,30 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/revenue/query-options": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "finance.read",
+    "resource": null,
+    "permission": "finance.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "GET /api/revenue/query": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "finance.read",
+    "resource": null,
+    "permission": "finance.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/revenue/handover-receipts": {
     "legacyRoles": [
       "admin",

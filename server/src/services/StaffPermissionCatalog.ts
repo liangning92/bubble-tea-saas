@@ -128,6 +128,7 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (/^\/training\/library(?:\/documents\/[^/]+)?$/.test(path) && read) return user?.accessRole?.permissions.includes('training.read') ? 'training.read' : 'personal.training'
   if (path === '/marketing/activity-prices' && read) return 'products.read'
   if (path === '/marketing/tv-screen/trigger-lottery' && method === 'POST') return 'orders.create'
+  if (/^\/revenue\/query(?:-options)?$/.test(path) && read) return 'finance.read'
   if (/^\/expenses\/categories$/.test(path) && read) return null
   if (/^\/expenses\/pos(?:\/|$)/.test(path)) return 'pos.expense'
   if (/^\/pos-cash\/shifts(?:\/|$)/.test(path)) return 'pos.shift'
