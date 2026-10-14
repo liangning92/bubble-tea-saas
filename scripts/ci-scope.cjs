@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ adminUi:{paths:/(?:AdminDialog|MainLayout|client-admin\/src\/index\.css|ChannelProductPricingPage|client-admin\/src\/pages\/SettingsPage|InventoryIndexPage|admin-ui-optimization)/i,tests:/admin-ui-optimization/i},
  tv:{paths:/(?:tv-android-app|server\/public\/tv|TvSignage|tvSchema|\/routes\/tv\.|\/pages\/tv\/|tv-signage|sync-tv-player)/i,tests:/tv-signage/i},
  media:{paths:/(?:ProductImageEditor|MediaLibrary|\/services\/media\.|\/routes\/media\.|MediaService|mediaFiles|imageOptimization|image-optimization|ProductInsights|productInsights|ProductAnalysisPage|\/media-insights\/|test-media-insights)/i,tests:/media|product-insights/i},
  products:{paths:/(?:\/pages\/products\/|\/routes\/product(?:Price)?\.|Product(?:Management)?Service|\/productStore\.|\/publicProduct\.|\/routes\/bom\.|BomService)/i,tests:/product|channel-bootstrap/i},
@@ -57,6 +58,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ adminUi:{scripts:['tests/stoploss/admin-ui-optimization-page-check.cjs','tests/stoploss/store-date-settings-page-check.cjs'],components:['admin']},
  tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs'],components:['admin']},
  inventory:{scripts:['tests/stoploss/inventory-count-workspace-page-check.cjs'],components:['admin']},
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},

@@ -62,7 +62,6 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    await page.keyboard.press('Escape');await viewer.waitFor({state:'hidden'})
    await page.screenshot({path:'/tmp/product-gallery-desktop.png',fullPage:true})
    await page.setViewportSize({width:390,height:844})
-   await page.locator('aside').getByRole('button').first().click()
    await gallery.getByRole('button',{name:'图片',exact:true}).click();await viewer.waitFor()
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true)
    await viewer.getByRole('button',{name:'关闭',exact:true}).click();await viewer.waitFor({state:'hidden'})
@@ -90,7 +89,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  assert.equal(await page.getByText('渠道产品偏好',{exact:true}).count(),0)
  for(const label of ['高销高利','高销低利','低销高利','低销低利'])assert.equal(await page.getByRole('region',{name:label,exact:true}).count(),1)
  assert.equal(await page.getByRole('region',{name:'高销高利',exact:true}).locator('li').count(),5)
- await page.locator('summary').click();await page.getByRole('columnheader',{name:'订单渗透率',exact:true}).waitFor();await page.locator('tbody tr').first().waitFor();assert.equal(detailsRequests,1)
+ await page.locator('details').last().locator('summary').click();await page.getByRole('columnheader',{name:'订单渗透率',exact:true}).waitFor();await page.locator('tbody tr').first().waitFor();assert.equal(detailsRequests,1)
  await page.getByLabel('选择产品').selectOption('p1');await page.getByText('Pearl',{exact:true}).waitFor()
  await page.screenshot({path:'/tmp/product-insights-page.png',fullPage:true})
  await page.goto(base+'/products/recipes?productId=p1');await page.getByRole('heading',{name:'产品详情',exact:true}).waitFor();await page.getByRole('img',{name:product.name,exact:true}).waitFor();await page.getByLabel('规格销量占比').selectOption('s2');await page.getByText('Rp 19.000',{exact:true}).waitFor();assert.equal(await page.getByText('原料预测',{exact:true}).count(),0)
@@ -146,7 +145,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  assert.equal(postedHardware.dualScreen.mediaFiles[0].isVideo,true)
  for(const lang of ['en','id']){
   await page.evaluate(lang=>localStorage.setItem('bubble-tea-language',lang),lang)
-  await page.goto(base+'/products/analysis');await page.getByRole('heading',{name:lang==='en'?'Product analysis':'Analisis produk',exact:true}).waitFor();await page.locator('summary').waitFor();const text=await page.locator('body').innerText();assert.ok(!/insights\.|media\./.test(text),lang+' missing translation')
+  await page.goto(base+'/products/analysis');await page.getByRole('heading',{name:lang==='en'?'Product analysis':'Analisis produk',exact:true}).waitFor();await page.locator('details').last().locator('summary').waitFor();const text=await page.locator('body').innerText();assert.ok(!/insights\.|media\./.test(text),lang+' missing translation')
  }
  assert.deepEqual(errors,[]);console.log('Browser checks passed: library, analysis, lazy details, preferences, product gallery, quick-add picker, cancel, TV/customer display, EN/ID translations.')
  await browser.close()
