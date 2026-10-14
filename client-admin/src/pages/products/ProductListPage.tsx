@@ -353,11 +353,11 @@ export function ProductListPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 mb-4 items-center">
-        <button onClick={openAddModal} className="btn-primary flex items-center gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3 mb-4 items-center sm:flex sm:gap-4">
+        <button onClick={openAddModal} className="btn-primary flex items-center gap-2 col-span-2 justify-self-start">
           <Plus size={20} /> {t('products.addProduct')}
         </button>
-        <div className="relative flex-1 max-w-md">
+        <div className="relative min-w-0 sm:flex-1 max-w-md">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
