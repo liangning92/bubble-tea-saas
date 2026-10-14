@@ -22,9 +22,12 @@ test('desktop-only source permits identical complete API context and dependencie
   const result = await checkWindowsBackend(health, source, get());
   assert.equal(result.mode, 'identical-backend-inputs');
   assert.equal(result.backendSha, backend);
-  assert.equal(Object.keys(result.matchedInputs).length, 4);
+  assert.equal(Object.keys(result.matchedInputs).length, 3);
 });
-for (const path of ['server', 'shared', 'package.json', 'package-lock.json']) {
+test('shared UI changes do not require deploying an API whose complete context is identical', async () => {
+  assert.equal((await checkWindowsBackend(health, source, get({changed:'shared'}))).mode, 'identical-backend-inputs');
+});
+for (const path of ['server', 'package.json', 'package-lock.json']) {
   test(`changed ${path} requires deployment`, async () => {
     await assert.rejects(checkWindowsBackend(health, source, get({ changed: path })), /Deploy the matching backend first/);
   });

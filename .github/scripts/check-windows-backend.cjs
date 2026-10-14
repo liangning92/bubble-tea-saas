@@ -1,9 +1,11 @@
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 
-// Compare the complete API Docker context, plus shared/root dependency inputs.
+// Compare the complete API Docker context, plus root dependency inputs.
 // Desktop-only fixes need no API restart; any backend input change still blocks.
-const inputs = ['server', 'shared', 'package.json', 'package-lock.json'];
+// API builds use the server/ context. Shared UI files are outside that context
+// and server/src has no imports from them; wire contracts live inside server/.
+const inputs = ['server', 'package.json', 'package-lock.json'];
 async function checkWindowsBackend(health, sourceSha, get) {
   assert.equal(health.status, 'ok');
   assert.match(sourceSha, /^[a-f0-9]{40}$/);
@@ -22,7 +24,7 @@ async function checkWindowsBackend(health, sourceSha, get) {
     for (const entry of entries) {
       assert.ok(entry, `Missing backend build input: ${path}`);
       assert.match(entry.sha, /^[a-f0-9]{40}$/);
-      assert.equal(entry.type, ['server', 'shared'].includes(path) ? 'tree' : 'blob');
+      assert.equal(entry.type, path === 'server' ? 'tree' : 'blob');
     }
     assert.equal(entries[0].sha, entries[1].sha, `Deploy the matching backend first: ${path} changed`);
     assert.equal(entries[0].mode, entries[1].mode);
