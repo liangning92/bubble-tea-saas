@@ -43,7 +43,12 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   if(!blocked){if(scenario==='network'){assert.equal(calls[0].printerName,undefined);assert.equal(calls[0].printerHost,'127.0.0.1');}else assert.equal(calls[0].printerName,scenario==='legacy-cache'?'Exact Legacy Receipt':'Synthetic Receipt');}
   const rows=await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return db.orders.toArray();});assert.equal(rows.length,1);await expect.poll(async()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return (await db.orders.toArray())[0]?.status;})).toBe('synced');
   if(blocked)await page.getByText(/Configure an enabled printer for this purpose/).first().waitFor();
-  if(['offline-device','rejected-device','timeout','network'].includes(scenario))await page.getByText(/Printing failed or is unconfirmed/).first().waitFor();
+  if (!blocked) {
+   const saved = await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return (await db.config.toArray()).find(row=>row.key.startsWith('receipt-print:'))?.value;});
+   assert.equal(saved.payload.orderNum,calls[0].orderNum);
+   assert.equal(saved.status,['timeout','rejected-device'].includes(scenario)?'unknown':['offline-device','network'].includes(scenario)?'failed':'sent');
+  }
+  if(['offline-device','rejected-device','timeout','network'].includes(scenario))await page.getByText(/The order is confirmed, but output failed/).first().waitFor();
   if(scenario==='enabled'){
    await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();
    await page.getByRole('button',{name:'Hardware',exact:true}).click();

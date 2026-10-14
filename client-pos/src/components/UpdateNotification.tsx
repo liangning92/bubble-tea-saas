@@ -70,9 +70,22 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     return () => {clearInterval(poll); restoreState.current = null; document.removeEventListener('visibilitychange', restoreWhenVisible); window.removeEventListener('pos-update-check-requested', manualCheck); disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
   useEffect(() => {
-    if (status !== 'downloaded' || !installAfterDownload.current) return
-    installAfterDownload.current = false
-    void run('install')
+    if (status !== 'downloaded') return
+    // Leave sixty seconds of inactivity before a short, verified restart.
+    // Busy forms, baskets and pending output defer installation without errors.
+    let lastActivity = Date.now()
+    const touch = () => {lastActivity = Date.now()}
+    window.addEventListener('pointerdown', touch)
+    window.addEventListener('keydown', touch)
+    const timer = setInterval(() => {
+      const state = useOrderStore.getState()
+      if (Date.now() - lastActivity < 60000 || state.isCheckingOut || state.isInstallingUpdate ||
+          !window.dispatchEvent(new Event('pos-before-update', {cancelable:true}))) return
+      clearInterval(timer)
+      installAfterDownload.current = false
+      void run('install')
+    }, 5000)
+    return () => {clearInterval(timer);window.removeEventListener('pointerdown', touch);window.removeEventListener('keydown', touch)}
   }, [status])
   const run = async (action: 'check'|'download'|'show'|'install') => {
     const api = window.electronAPI
@@ -94,8 +107,6 @@ export function UpdateNotification({className = ''}: {className?: string}) {
       }
       if (action === 'check') {setStatus('checking'); await api.checkForUpdates()}
       if (action === 'download') {
-        const state = useOrderStore.getState()
-        if (state.isCheckingOut || !window.dispatchEvent(new Event('pos-before-update', {cancelable: true}))) throw Error(t('updateFlow.busy'))
         installAfterDownload.current = true
         activeStatus.current = 'downloading'
         setStatus('downloading'); setProgress(0); setVisible(true)

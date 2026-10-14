@@ -203,7 +203,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   useEffect(()=>{
     const guard = (event:Event)=>{
       const state=useOrderStore.getState(),ui=useUiStore.getState()
-      if(cart.length || state.isCheckingOut || ui.showPaymentModal || ui.showExpenseModal || state.suspendedOrders.some(order=>!order.orderNumber)) event.preventDefault()
+      if(cart.length || state.isCheckingOut || ui.showPaymentModal || ui.showExpenseModal || ui.showAddonModal || ui.showMemberModal || ui.showDiscountModal || ui.showSuspendModal || ui.showShiftModal || ui.showScanModal || ui.showHistoryModal || ui.showCashModal || ui.showTasksModal || ui.showLogoutModal || ui.confirmModal.isOpen || state.suspendedOrders.some(order=>!order.orderNumber)) event.preventDefault()
     }
     window.addEventListener('pos-before-update',guard)
     return ()=>window.removeEventListener('pos-before-update',guard)
@@ -3075,6 +3075,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
       // Each output uses its own configured device; a stalled receipt must not block cup labels.
       void printCupStickers(orderNum, cart, finalPickupNum)
+      let receiptSent = true
       // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
       if (posReceipt.autoPrint !== false) {
         const printResult = await printReceipt(orderNum, {
@@ -3082,6 +3083,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           pickupNumber: finalPickupNum,
           openCashDrawer: shouldOpenDrawer
         })
+        receiptSent = printResult
         if (!printResult) {
           showToast(t('printerRouting.failed'), 'warning')
 
@@ -3098,7 +3100,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(paymentMethod === 'cash' || manualQris ? 'offlineSale.saved' : 'pos.orderSuccess')} #${finalPickupNum}`, 'success')
+      showToast(`${t(receiptSent ? (paymentMethod === 'cash' || manualQris ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
@@ -3153,15 +3155,24 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 打印小票
   const printReceipt = async (orderNum: string, orderData: any): Promise<boolean> => {
-    console.log('[POS PAGE] printReceipt called, electronAPI exists:', !!electronAPI?.sendPrintReceipt)
+    const audit = (status: string, error?: string) => {
+      logPOSAction({action:'receipt_print',entityId:orderNum,description:'Receipt output: '+status,
+        metadata:{orderNumber:orderNum,pickupNumber:orderData?.pickupNumber,appVersion,status,error},severity:status==='sent'?'info':'warning'})
+    }
+    const receiptKey = `receipt-print:${user?.storeId}:${orderNum}`
+    const saveResult = async (status: string, error?: string) => {
+      const record = await db.config.get(receiptKey)
+      if (record) await db.config.put({...record,value:{...record.value,status,error},updatedAt:new Date()})
+      audit(status,error)
+    }
     if (!electronAPI?.sendPrintReceipt) {
-      console.log('[POS PAGE] electronAPI.sendPrintReceipt not available')
+      audit('failed','PRINTER_API_UNAVAILABLE')
       return false
     }
     const target = printerTarget('receipt')
-    if (!target) return false
+    if (!target) {audit('failed','PRINTER_TARGET_UNAVAILABLE');return false}
     try {
-      const printPromise = electronAPI?.sendPrintReceipt({
+      const payload = {
         orderNum,
         pickupNumber: orderData?.pickupNumber,
         blocks: getPrintBlocks(),
@@ -3222,7 +3233,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         change,
         memberName: member?.name,
         pointsRedeemed: pointsToRedeem
-      })
+      }
+      // Save the exact receipt before transport; uncertain jobs are never resent automatically.
+      await db.config.put({key:receiptKey,value:{payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
+      audit('pending')
+      const printPromise = electronAPI.sendPrintReceipt(payload)
       // Multi-copy printing waits for the employee to tear off each copy.
       // Do not time out the handover while Electron is still waiting for confirmation.
       let timer: ReturnType<typeof setTimeout> | undefined
@@ -3231,9 +3246,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         if ((posReceipt.printCopies || 1) <= 1) timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 10000)
       })
       const result = await Promise.race([printPromise, timeoutPromise]).finally(() => { if (timer) clearTimeout(timer) })
+      await saveResult(result?.success?'sent':result?.error==='Print timeout'?'unknown':'failed',result?.error)
       if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
       return result?.success ?? false
     } catch (err) {
+      await saveResult('unknown',String(err).slice(0,500)).catch(()=>audit('unknown',String(err).slice(0,500)))
       console.warn('Print error:', err)
       return false
     }

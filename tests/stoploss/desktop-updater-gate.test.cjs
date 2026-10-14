@@ -16,9 +16,9 @@ function fixture(t,{background=false}={}){
  const download=(version='2026.10.314')=>events['update-downloaded']({version,files:[{url:'installer.exe',sha512}]});
  return {root,installer,handlers,events,sent,actions,autoUpdater,snapshot,download,failPrepare:()=>failPrepare=true};
 }
-test('online upgrade verifies installer, durably backs up pending records, prepares shutdown and invokes interactive installer',async t=>{
+test('online upgrade verifies installer, durably backs up pending records, prepares shutdown and invokes silent verified installer',async t=>{
  const f=fixture(t);f.download();assert.equal(await f.handlers['install-update']({},f.snapshot),true);
- assert.deepEqual(f.actions,[['prepare'],['install',false,true]]);
+ assert.deepEqual(f.actions,[['prepare'],['install',true,true]]);
  const files=fs.readdirSync(path.join(f.root,'profile/data/upgrade-backups'));assert.equal(files.length,1);
  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root,'profile/data/upgrade-backups',files[0]))),f.snapshot);
  assert.equal(f.autoUpdater.autoInstallOnAppQuit,false);assert.equal(f.autoUpdater.autoRunAppAfterInstall,true);
@@ -30,7 +30,7 @@ test('download prepares backup in background and installation reuses it after re
  assert.equal(f.sent.some(row=>row[1]==='preparing'),true);
  assert.equal(f.sent.some(row=>row[1]==='downloaded'),true);
  assert.equal(await f.handlers['install-update']({},f.snapshot),true);
- assert.deepEqual(f.actions,[['helper','stage'],['prepare'],['helper','refresh-stage'],['install',false,true]]);
+ assert.deepEqual(f.actions,[['helper','stage'],['prepare'],['helper','refresh-stage'],['install',true,true]]);
 });
 test('missing downloaded installer or backup does not quit the usable POS',async t=>{
  const f=fixture(t);assert.equal(await f.handlers['install-update']({},f.snapshot),false);f.download();assert.equal(await f.handlers['install-update']({},undefined),false);assert.deepEqual(f.actions,[]);
@@ -54,3 +54,5 @@ test('two install clicks invoke one installer and retain one backup',async t=>{
 test('same and lower available versions are suppressed',t=>{
  const f=fixture(t);f.events['update-available']({version:'2026.10.313'});f.events['update-available']({version:'2026.10.312'});f.events['update-available']({version:'2026.10.314'});assert.deepEqual(f.sent.map(e=>e[1]),['up-to-date','up-to-date','available']);
 });
+
+test('automatic updates download in background and TV releases never replace the POS latest feed',t=>{const f=fixture(t);assert.equal(f.autoUpdater.autoDownload,true);assert.match(fs.readFileSync('.github/workflows/build-tv-apk.yml','utf8'),/gh release create.*--latest=false/)});

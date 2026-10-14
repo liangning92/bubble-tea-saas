@@ -97,4 +97,4 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           TAG="tv-v2.0.$GITHUB_RUN_NUMBER"
-          gh release create "$TAG" verified-tv/Store-TV.apk verified-tv/SHA256SUMS verified-tv/manifest.json --target "$SOURCE_SHA" --title "Store TV 2.0.$GITHUB_RUN_NUMBER" --notes "Store-scoped pairing, product and activity display, verified offline media. Source: $SOURCE_SHA"
+          gh release create "$TAG" --latest=false verified-tv/Store-TV.apk verified-tv/SHA256SUMS verified-tv/manifest.json --target "$SOURCE_SHA" --title "Store TV 2.0.$GITHUB_RUN_NUMBER" --notes "Store-scoped pairing, product and activity display, verified offline media. Source: $SOURCE_SHA"

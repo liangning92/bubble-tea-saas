@@ -81,7 +81,12 @@ function stageDownloadedUpdate(installer: string): Promise<void> {
 }
 
 async function checkForUpdates() {
-  if (!app.isPackaged || checkInFlight || downloadInProgress || updateDownloaded) return
+  if (!app.isPackaged || checkInFlight || downloadInProgress) return
+  if (updateDownloaded) {
+    const installer = autoUpdater.installerPath
+    if (installer && !stageReady && existsSync(upgradeHelper())) await stageDownloadedUpdate(installer)
+    return
+  }
   checkInFlight = true
   try {
     return await autoUpdater.checkForUpdates()
@@ -108,7 +113,7 @@ export function setupUpdater(window: BrowserWindow, hooks: {prepare:()=>Promise<
   installationHooks = hooks
 
   // Configure auto-updater
-  autoUpdater.autoDownload = false
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.autoRunAppAfterInstall = true
 
@@ -147,6 +152,8 @@ export function setupUpdater(window: BrowserWindow, hooks: {prepare:()=>Promise<
   })
 
   autoUpdater.on('download-progress', (progressObj: any) => {
+    downloadInProgress = true
+    if (updateState.status !== 'downloading') sendToRenderer('update-status', 'downloading')
     sendToRenderer('update-progress', {
       percent: progressObj.percent,
       bytesPerSecond: progressObj.bytesPerSecond,
@@ -251,6 +258,7 @@ function setupIpcHandlers() {
 
   // Download update
   ipcMain.handle('download-update', async () => {
+    if (downloadInProgress || updateDownloaded) return true
     try {
       downloadInProgress = true
       log('info', 'Starting download...')
@@ -295,8 +303,9 @@ function setupIpcHandlers() {
       await installationHooks.prepare()
       if (existsSync(upgradeHelper())) await runUpgradeHelper('refresh-stage', installer)
       sendToRenderer('update-status','installing',downloadedInfo)
-      // Heavy verification and backup are complete before opening NSIS.
-      autoUpdater.quitAndInstall(false,true)
+      // The idle renderer has frozen checkout and durably saved pending sales.
+      // NSIS still verifies the backup and original profile before replacement.
+      autoUpdater.quitAndInstall(true,true)
       return true
     } catch (error:any) {
       if (prepared) {try{installationHooks.resume()}catch{}}

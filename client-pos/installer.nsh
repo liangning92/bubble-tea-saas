@@ -71,15 +71,17 @@ Var BTPSUpgradeDiagnostic
   ${OrIf} ${FileExists} "$APPDATA\bubble-tea-saas\data\dev.db"
   ${OrIf} ${FileExists} "$LOCALAPPDATA\BTPS\data\dev.db"
   ${OrIf} ${FileExists} "$LOCALAPPDATA\bubble-tea-saas\data\dev.db"
+    # Only the in-app updater may perform a silent upgrade. Both paths still
+    # verify shutdown, original profile, backups and schema before replacement.
+    ${GetParameters} $R4
+    ClearErrors
+    ${GetOptions} $R4 "--updated" $R5
+    IfErrors btps_manual_upgrade btps_upgrade_confirmed
+    btps_manual_upgrade:
     ${If} ${Silent}
       SetErrorLevel 73
       Quit
     ${EndIf}
-    # electron-updater has already received the cashier's install action.
-    # Go straight to the installer UI; retain the confirmation for manual runs.
-    ${GetParameters} $R4
-    ${GetOptions} $R4 "--updated" $R5
-    IfErrors 0 btps_upgrade_confirmed
     MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Finish the current payment before installing. Setup will automatically close this POS, install the update, and restart it. Continue?$\r$\n请先完成当前收款。安装器将自动关闭本机收银程序、安装更新并重新启动。是否继续？$\r$\nSelesaikan pembayaran saat ini. Instalasi akan menutup POS otomatis, memasang pembaruan, dan membuka POS kembali. Lanjutkan?" IDYES btps_upgrade_confirmed
     SetErrorLevel 73
     Quit
