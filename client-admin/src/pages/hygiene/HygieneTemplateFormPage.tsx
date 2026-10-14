@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -429,7 +430,7 @@ export function HygieneTemplateFormPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {t('hygiene.time')}
               </label>
-              <input
+              <LocalizedDateTimeInput
                 type="time"
                 value={form.time}
                 onChange={(e) => setForm({ ...form, time: e.target.value })}
@@ -460,7 +461,7 @@ export function HygieneTemplateFormPage() {
                   </button>
                 </div>
               ))}
-              <input
+              <LocalizedDateTimeInput
                 type="time"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {

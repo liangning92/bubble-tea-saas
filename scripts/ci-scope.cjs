@@ -100,6 +100,7 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  for(const check of browser)for(const component of check.components)builds.add(component);
  const media=selectedDomains.includes('media')||files.some(file=>/^(?:server\/audit-tests\/(?:media-library|product-insights)\.check\.ts|tests\/media-insights\/)/.test(file));
  const python=[];if(selectedDomains.includes('desktop')||files.some(file=>file.startsWith('server/prisma/')))python.push('tests/stoploss/desktop-upgrade-preflight.test.py','tests/stoploss/desktop-db-upgrade.test.py');
+ if(files.some(file=>/^(?:scripts\/with-docker-test\.py|tests\/stoploss\/(?:docker-test-cleanup\.test\.py|media-upload-proxy-limit\.test\.cjs))$/.test(file)))python.push('tests/stoploss/docker-test-cleanup.test.py');
  const electronTypes=files.some(file=>/^client-pos\/(?:electron\/|tsconfig\.electron\.json)/.test(file));
  if(full){for(const service of SERVICES){services.add(service);typecheck.add(service);builds.add(service);if(service!=='api')i18n.add(service)}}
  const order=list=>SERVICES.filter(s=>list.has(s));

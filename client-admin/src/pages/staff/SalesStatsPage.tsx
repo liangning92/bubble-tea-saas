@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -69,7 +70,7 @@ export function SalesStatsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <input
+          <LocalizedDateTimeInput
             type="month"
             value={month}
             onChange={e => setMonth(e.target.value)}

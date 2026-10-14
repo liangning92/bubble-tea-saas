@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -207,7 +208,7 @@ export function AnnouncementFormPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             {t('announcement.formStartAt')}
           </label>
-          <input
+          <LocalizedDateTimeInput
             type="date"
             value={formData.startAt}
             onChange={(e) => handleChange('startAt', e.target.value)}
@@ -220,7 +221,7 @@ export function AnnouncementFormPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             {t('announcement.formEndAt')}
           </label>
-          <input
+          <LocalizedDateTimeInput
             type="date"
             value={formData.endAt}
             onChange={(e) => handleChange('endAt', e.target.value)}

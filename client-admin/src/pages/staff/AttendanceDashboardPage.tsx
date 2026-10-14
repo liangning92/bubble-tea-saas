@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -215,7 +216,7 @@ export function AttendanceDashboardPage() {
           <div />
         </div>
         <div className="flex items-center gap-3">
-          <input
+          <LocalizedDateTimeInput
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}

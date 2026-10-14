@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { ResourcePicker } from '../../components/marketing/ResourcePicker'
@@ -282,7 +283,7 @@ export function RewardCatalogPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.validFrom}
                     onChange={e => setForm(f => ({ ...f, validFrom: e.target.value }))}
@@ -291,7 +292,7 @@ export function RewardCatalogPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')}</label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={form.validUntil}
                     onChange={e => setForm(f => ({ ...f, validUntil: e.target.value }))}

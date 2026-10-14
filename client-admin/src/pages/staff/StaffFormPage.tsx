@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import {useEmployeePermission,EmployeeAccessContext} from '../../contexts/EmployeeAccess'
 import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
 import { payrollLabels } from '../../../../shared/payrollLabels'
@@ -301,7 +302,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
 
           {form.role==='admin' && <section className="bg-blue-50 rounded-xl p-4 space-y-2"><p className="font-medium">{identityText.identity}</p><p className="text-sm">{identityText.hint}</p><label className="flex gap-2"><input type="checkbox" checked={form.payrollEmployee} disabled={user?.role!=='admin'} onChange={e=>setForm({...form,payrollEmployee:e.target.checked,probationEnabled:e.target.checked&&!!probationRuleQuery.data?.data?.data?.enabled})}/>{identityText.employee}</label>{!form.payrollEmployee&&<p>{identityText.accountOnly}</p>}</section>}
           {isEdit&&<p className="text-sm text-gray-600">{identityText.offboardHint}</p>}
-          {isEdit&&<label className="block text-sm">{payrollLabels(i18n.language).termination}<input type="date" min={form.hireDate||undefined} className="input" value={form.terminationDate} onChange={e=>setForm({...form,terminationDate:e.target.value})}/></label>}
+          {isEdit&&<label className="block text-sm">{payrollLabels(i18n.language).termination}<LocalizedDateTimeInput type="date" min={form.hireDate||undefined} className="input" value={form.terminationDate} onChange={e=>setForm({...form,terminationDate:e.target.value})}/></label>}
           {form.payrollEmployee&&<>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -319,7 +320,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
             </div>
             <div>
               <label htmlFor="staff-hireDate" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.hireDate')}</label>
-              <input
+              <LocalizedDateTimeInput
                 id="staff-hireDate" type="date"
                 value={form.hireDate}
                 onChange={(e) => setForm({ ...form, hireDate: e.target.value })}
@@ -333,7 +334,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
           <label className="flex gap-2 items-center"><input type="checkbox" checked={form.probationEnabled} disabled={probationRuleQuery.isLoading || probationRuleQuery.isError || (!probationRuleQuery.data?.data?.data?.enabled && !staffData?.data?.data?.probation?.enabled)} onChange={e=>setForm({...form,probationEnabled:e.target.checked})}/>{probationText.enroll}</label>
           {probationRuleQuery.isError&&<p role="alert">{probationText.loadError}<button type="button" onClick={()=>probationRuleQuery.refetch()}>↻</button></p>}
           {!probationRuleQuery.data?.data?.data?.enabled&&<Link to="/staff/salary/probation-rules" className="text-primary underline text-sm">{probationText.needsRule}</Link>}
-          {form.probationEnabled&&<><p className="text-sm">{probationText.hireRequired}</p><label className="block text-sm">{probationText.override}<input type="date" min={form.hireDate||undefined} className="input" value={form.confirmationDate} onChange={e=>setForm({...form,confirmationDate:e.target.value})}/></label>{staffData?.data?.data?.probation?.confirmationDate&&<p className="text-sm">{probationText.confirmation}: {staffData.data.data.probation.confirmationDate}</p>}</>}
+          {form.probationEnabled&&<><p className="text-sm">{probationText.hireRequired}</p><label className="block text-sm">{probationText.override}<LocalizedDateTimeInput type="date" min={form.hireDate||undefined} className="input" value={form.confirmationDate} onChange={e=>setForm({...form,confirmationDate:e.target.value})}/></label>{staffData?.data?.data?.probation?.confirmationDate&&<p className="text-sm">{probationText.confirmation}: {staffData.data.data.probation.confirmationDate}</p>}</>}
           </section>
           </>}
           {/* Part-time fields */}

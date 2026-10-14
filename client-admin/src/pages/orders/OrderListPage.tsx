@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { OrderItemsTable, OrderItemColumns } from '../../components/OrderItemsTable'
 import { useDashboardContext, requireRead, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
@@ -189,8 +190,8 @@ export function OrderListPage() {
         </button>
       </div>
       {subTab === 'orders' && <div className="flex flex-wrap items-center gap-3 ml-auto" data-testid="order-date-filters">
-        <label className="flex items-center gap-2 text-xs text-gray-500 whitespace-nowrap">{labels.start}<input aria-label={labels.start} type="datetime-local" className="input w-[205px] h-10 text-xs" value={startTime || jakartaInput(context.startDate)} onChange={e => setStartTime(e.target.value)} /></label>
-        <label className="flex items-center gap-2 text-xs text-gray-500 whitespace-nowrap">{labels.end}<input aria-label={labels.end} type="datetime-local" className="input w-[205px] h-10 text-xs" value={endTime || jakartaInput(context.endDate)} onChange={e => setEndTime(e.target.value)} /></label>
+        <label className="flex items-center gap-2 text-xs text-gray-500 whitespace-nowrap">{labels.start}<LocalizedDateTimeInput aria-label={labels.start} type="datetime-local" className="input w-[205px] h-10 text-xs" value={startTime || jakartaInput(context.startDate)} onChange={e => setStartTime(e.target.value)} /></label>
+        <label className="flex items-center gap-2 text-xs text-gray-500 whitespace-nowrap">{labels.end}<LocalizedDateTimeInput aria-label={labels.end} type="datetime-local" className="input w-[205px] h-10 text-xs" value={endTime || jakartaInput(context.endDate)} onChange={e => setEndTime(e.target.value)} /></label>
       </div>}
       </div>
 

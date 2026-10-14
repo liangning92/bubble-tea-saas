@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, CountOperators, InventoryActor } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
 import { useStoreDateSettings } from "../../hooks/useStoreDateSettings";
@@ -830,7 +831,7 @@ export function InventoryCountPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="form-group">
               <label className="form-label">{t("inventory.startDate")}</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={newCountForm.startDate}
                 onChange={(e) =>
@@ -844,7 +845,7 @@ export function InventoryCountPage() {
             </div>
             <div className="form-group">
               <label className="form-label">{t("inventory.endDate")}</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={newCountForm.endDate}
                 onChange={(e) =>

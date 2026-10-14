@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -427,7 +428,7 @@ export function FixedAssetsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('finance.purchaseDate')} *
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={formData.purchaseDate}
                   onChange={e => setFormData({ ...formData, purchaseDate: e.target.value })}
@@ -539,7 +540,7 @@ export function FixedAssetsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('finance.disposalDate')} *
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={disposeData.disposalDate}
                   onChange={e => setDisposeData({ ...disposeData, disposalDate: e.target.value })}

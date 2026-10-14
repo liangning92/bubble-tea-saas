@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -826,7 +827,7 @@ export function ExpenseListPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Calendar size={18} className="text-gray-400" />
-            <input
+            <LocalizedDateTimeInput
               type="date"
               value={filterStartDate}
               onChange={(e) => setFilterStartDate(e.target.value)}
@@ -834,7 +835,7 @@ export function ExpenseListPage() {
               placeholder={t('expense.filterByDate')}
             />
             <span className="text-gray-400">-</span>
-            <input
+            <LocalizedDateTimeInput
               type="date"
               value={filterEndDate}
               onChange={(e) => setFilterEndDate(e.target.value)}
@@ -1151,7 +1152,7 @@ export function ExpenseListPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('expense.date')}
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -1258,7 +1259,7 @@ export function ExpenseListPage() {
                   <option value="weekly">{t('expense.frequencyWeekly')}</option>
                   <option value="monthly">{t('expense.frequencyMonthly')}</option>
                 </select>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={recurringForm.nextDueDate}
                   onChange={(e) => setRecurringForm({ ...recurringForm, nextDueDate: e.target.value })}

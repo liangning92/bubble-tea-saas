@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -32,14 +33,14 @@ export function ChannelCommissionPage() {
       <div className="flex items-center justify-between mb-6">
         <div />
         <div className="flex items-center gap-2">
-          <input
+          <LocalizedDateTimeInput
             type="date"
             value={dateRange.startDate}
             onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
             className="input w-36"
           />
           <span className="text-gray-500">-</span>
-          <input
+          <LocalizedDateTimeInput
             type="date"
             value={dateRange.endDate}
             onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}

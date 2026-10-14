@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
@@ -137,7 +138,7 @@ export function AttendanceCorrectionPage() {
                   <Calendar size={14} className="inline mr-1" />
                   {t('attendance.date')}
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -150,7 +151,7 @@ export function AttendanceCorrectionPage() {
                   <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.originalCheckIn')}
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.originalCheckIn}
                     onChange={(e) => setFormData({ ...formData, originalCheckIn: e.target.value })}
@@ -162,7 +163,7 @@ export function AttendanceCorrectionPage() {
                   <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.originalCheckOut')}
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.originalCheckOut}
                     onChange={(e) => setFormData({ ...formData, originalCheckOut: e.target.value })}
@@ -177,7 +178,7 @@ export function AttendanceCorrectionPage() {
                   <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.correctCheckIn')}
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.correctCheckIn}
                     onChange={(e) => setFormData({ ...formData, correctCheckIn: e.target.value })}
@@ -189,7 +190,7 @@ export function AttendanceCorrectionPage() {
                   <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('attendance.correctCheckOut')}
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="time"
                     value={formData.correctCheckOut}
                     onChange={(e) => setFormData({ ...formData, correctCheckOut: e.target.value })}

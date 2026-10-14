@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
@@ -332,7 +333,7 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium mb-1">{tk('marketing.startDate')}</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={form.startDate}
                 onChange={(e) => setForm({ ...form, startDate: e.target.value })}
@@ -341,7 +342,7 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{tk('marketing.endDate')}</label>
-              <input
+              <LocalizedDateTimeInput
                 type="date"
                 value={form.endDate}
                 onChange={(e) => setForm({ ...form, endDate: e.target.value })}
