@@ -1,3 +1,5 @@
+import {validateInventoryProcessLink} from '../utils/inventoryProcessLink'
+import {recalculateInventoryConsumers} from './InventoryQuantityService'
 import {loadInventoryActors, inventoryLogActorId} from '../utils/inventoryActors'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {inventoryForecast} from './InventoryForecastService'
@@ -125,6 +127,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
       throw new Error('Inventory not found')
     }
 
+    if(inventory.type==='semi_finished'&&inventory.processRecipeId)throw Error('PROCESS_OUTPUT_IS_CONVERSION_ONLY')
     if(supplierId&&!await tx.supplier.findFirst({where:{id:supplierId,storeId}}))throw Error('SUPPLIER_STORE_MISMATCH')
     if(!Number.isFinite(data.quantity)||data.quantity<=0||unitCost!==undefined&&(!Number.isSafeInteger(unitCost)||unitCost<0))throw new Error('INVALID_STOCK_INPUT')
     const inputUnit=data.inputUnit||inventory.unit
@@ -168,6 +171,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
       }
     })
 
+    if (unitCost !== undefined) await recalculateInventoryConsumers(tx,[inventoryId])
     return serializeBigInt(updated)
   }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw error}
 }
@@ -196,6 +200,7 @@ export async function stockOut(data: StockOperation) {
       throw new Error('Inventory not found')
     }
 
+    if(inventory.type==='semi_finished'&&inventory.processRecipeId)throw Error('PROCESS_OUTPUT_IS_CONVERSION_ONLY')
     if(!Number.isFinite(data.quantity)||data.quantity<=0)throw new Error('INVALID_QUANTITY')
     const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
     const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit,saved?validatePackage(JSON.parse(saved.value),inventory.unit):null)
@@ -217,7 +222,7 @@ export async function stockOut(data: StockOperation) {
         staffId,
         quantity,
         reason,
-        note:JSON.stringify({version:1,kind:'manual-out',note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
+        note:JSON.stringify({version:1,kind:'manual-out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
         orderId
       }
     })
@@ -249,6 +254,7 @@ export async function adjustInventory(
       throw new Error('Inventory not found')
     }
 
+    if(inventory.type==='semi_finished'&&inventory.processRecipeId)throw Error('PROCESS_OUTPUT_IS_CONVERSION_ONLY')
     const difference = newStock - inventory.currentStock
 
     // Update stock
@@ -440,14 +446,18 @@ export async function getStockOutLogs(
   })
 
   const actors = await loadInventoryActors(prisma, filter.storeId, logs.map(inventoryLogActorId))
-  return logs.map((l: any) => ({
+  return logs.map((l:any)=>{let valuation:any;try{valuation=JSON.parse(l.note||'null')}catch{}
+    return ({
+    unitCost:valuation?.unitCost??Number(l.inventory?.avgCost||0),
+    totalAmount:valuation?.totalAmount??Math.round(l.quantity*Number(l.inventory?.avgCost||0)),
+    valuationBasis:valuation?.unitCost!==undefined?'at_operation':'current_average_estimate',
     operator: actors.get(inventoryLogActorId(l) || '') || null,
     ...l,
     inventory: l.inventory ? {
       ...l.inventory,
       avgCost: Number(l.inventory.avgCost || 0)
     } : null
-  }))
+  })})
 }
 
 // Create inventory item
@@ -455,6 +465,8 @@ export async function createInventory(data: {
   storeId: string
   name: string
   category: string
+  type?: string
+  processRecipeId?: string | null
   unit: string
   avgCost?: number
   minStock?: number
@@ -463,11 +475,14 @@ export async function createInventory(data: {
   shelfLife?: number
   concentrateRatio?: number
 }) {
+  await validateInventoryProcessLink(prisma, {...data, type:data.type||'raw_material'})
   const result = await prisma.inventory.create({
     data: {
       storeId: data.storeId,
       name: data.name,
       category: data.category,
+      type: data.type || 'raw_material',
+      processRecipeId: data.processRecipeId || null,
       unit: data.unit,
       avgCost: data.avgCost || 0,
       minStock: data.minStock || 0,
@@ -486,6 +501,8 @@ export async function updateInventory(
   data: Partial<{
     name: string
     category: string
+    type: string
+    processRecipeId: string | null
     unit: string
     currentStock: number
     avgCost: number
@@ -502,13 +519,16 @@ export async function updateInventory(
     const current=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
     if(data.unit!==undefined&&normalizedUnit(data.unit)!==normalizedUnit(current.unit))throw new Error('INVENTORY_UNIT_IMMUTABLE')
     if(data.currentStock!==undefined&&data.currentStock!==current.currentStock)throw new Error('USE_INVENTORY_COUNT_OR_ADJUSTMENT')
+    if(data.type!==undefined||data.processRecipeId!==undefined||data.name!==undefined)await validateInventoryProcessLink(tx,{...current,...data})
     const {packaging,unit,currentStock,...fields}=data
     if(packaging!==undefined){
       const key=`inventoryPackage:${inventoryId}`
       if(packaging===null)await tx.config.deleteMany({where:{storeId:current.storeId,key}})
       else{const value=JSON.stringify(validatePackage(packaging,current.unit));await tx.config.upsert({where:{storeId_key:{storeId:current.storeId,key}},create:{storeId:current.storeId,key,value,category:'inventory'},update:{value}})}
     }
-    return serializeBigInt(await tx.inventory.update({where:{id:inventoryId},data:fields}))
+    const updated=await tx.inventory.update({where:{id:inventoryId},data:fields})
+    await recalculateInventoryConsumers(tx,[inventoryId])
+    return serializeBigInt(updated)
   })
 }
 

@@ -1,3 +1,5 @@
+import {ActorName} from '../../components/InventoryActor'
+import {inventoryInputUnits,defaultInventoryInputUnit,inventoryLedgerQuantity} from '../../utils/inventoryInputUnits'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -10,21 +12,23 @@ export function ProcessingListPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [selected,setSelected]=useState<any>(null),[quantity,setQuantity]=useState(''),[inputUnit,setInputUnit]=useState(''),[operationId,setOperationId]=useState('')
   const [executingId, setExecutingId] = useState<string | null>(null)
 
-  const { data: recipesData, isLoading } = useQuery({
+  const { data: recipesData, isLoading, isError,refetch } = useQuery({
     queryKey: ['process-recipes'],
     queryFn: () => processRecipeApi.list()
   })
 
   const executeMutation = useMutation({
     mutationFn: ({ id, multiplier }: { id: string; multiplier: number }) =>
-      processRecipeApi.execute(id, { multiplier }),
+      processRecipeApi.execute(id, { multiplier,operationId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['process-recipes'] })
       queryClient.invalidateQueries({ queryKey: ['material-alerts'] })
       queryClient.invalidateQueries({ queryKey: ['materials'] })
-      setExecutingId(null)
+      setExecutingId(null);setSelected(null)
+      queryClient.invalidateQueries({queryKey:['processing-history']})
     }
   })
 
@@ -35,14 +39,11 @@ export function ProcessingListPage() {
     }
   })
 
-  const recipes = recipesData?.data?.data?.list || recipesData?.data || []
+  const recipes = recipesData?.data?.data?.list || []
 
   const handleExecute = (recipeId: string) => {
-    const multiplier = prompt(t('material.enterMultiplier') || 'Enter multiplier:', '1')
-    if (multiplier && !isNaN(parseFloat(multiplier))) {
-      setExecutingId(recipeId)
-      executeMutation.mutate({ id: recipeId, multiplier: parseFloat(multiplier) })
-    }
+    const recipe=recipes.find((r:any)=>r.id===recipeId),material=(recipe.rawInputs||recipe.items.filter((i:any)=>i.type==='input'))[0]?.inventory
+    setSelected(recipe);setQuantity('');setInputUnit(material?defaultInventoryInputUnit(material):'');setOperationId(crypto.randomUUID())
   }
 
   const handleDelete = (id: string, name: string) => {
@@ -52,22 +53,13 @@ export function ProcessingListPage() {
   }
 
   const calculateRecipeCost = (recipe: any) => {
-    if (!recipe.items) return 0
-    let total = 0
-    for (const item of recipe.items) {
-      if (item.type === 'input') {
-        const inv = item.inventory
-        if (inv) {
-          total += item.quantity * (inv.avgCost || 0)
-        }
-      }
-    }
-    return total
+    return Number(recipe.totalInputCost||0)
   }
+  const firstInput=(selected?.rawInputs||selected?.items.filter((i:any)=>i.type==='input')||[])[0],base=firstInput?.inventory,multiplier=base&&firstInput.quantity>0?inventoryLedgerQuantity(Number(quantity),base,inputUnit)/firstInput.quantity:0
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{t('material.processRecipes') || 'Processing Recipes'}</h1>
         <Link to="/inventory/process/new" className="btn-primary flex items-center gap-2">
           <Plus size={20} />
@@ -75,6 +67,8 @@ export function ProcessingListPage() {
         </Link>
       </div>
 
+      <p className="text-sm bg-blue-50 p-3 rounded-lg">{t('inventoryProcessing.hint')}</p>
+      {isError&&<p role="alert" className="text-red-700">{t('inventoryProcessing.failed')} <button className="underline" onClick={()=>refetch()}>{t('common.refresh')}</button></p>}
       {/* Quick Execute */}
       <div className="card">
         <h3 className="font-semibold mb-4">{t('material.quickExecute') || 'Quick Execute'}</h3>
@@ -103,20 +97,23 @@ export function ProcessingListPage() {
                     </div>
                     <div className="flex gap-2">
                       <button
+                        aria-label={t('material.editRecipe')+' '+recipe.name}
                         onClick={() => navigate(`/inventory/process/${recipe.id}/edit`)}
                         className="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button
+                        aria-label={t('common.delete')+' '+recipe.name}
                         onClick={() => handleDelete(recipe.id, recipe.name)}
                         className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded"
                       >
                         <Trash2 size={18} />
                       </button>
                       <button
+                        aria-label={t('inventoryProcessing.title')+' '+recipe.name}
                         onClick={() => handleExecute(recipe.id)}
-                        disabled={executingId === recipe.id}
+                        disabled={executeMutation.isPending || recipe.status!=='active'}
                         className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
                       >
                         {executingId === recipe.id ? (
@@ -146,9 +143,9 @@ export function ProcessingListPage() {
                     <div className="text-xs text-gray-500 mb-1">{t('material.outputs') || 'Outputs'}</div>
                     {outputItems.map((item: any) => (
                       <div key={item.id} className="text-sm flex justify-between">
-                        <span>{formatItemName(item.inventory?.name || '-', i18n.language)}</span>
+                        <span>{formatItemName(item.name || item.inventory?.name || '-', i18n.language)}</span>
                         <span className="text-green-600 font-medium">
-                          {item.quantity} {item.inventory?.unit || ''}
+                          {item.quantity} {recipe.outputUnit}
                         </span>
                       </div>
                     ))}
@@ -166,6 +163,7 @@ export function ProcessingListPage() {
         )}
       </div>
 
+      {selected&&<div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center"><form onSubmit={e=>{e.preventDefault();setExecutingId(selected.id);executeMutation.mutate({id:selected.id,multiplier})}} role="dialog" aria-modal="true" aria-label={t('inventoryProcessing.title')} className="bg-white rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-auto space-y-4"><h2 className="text-lg font-bold">{selected.name}</h2><p className="text-sm text-gray-600">{t('inventoryProcessing.hint')}</p><div className="grid grid-cols-2 gap-3"><label>{t('inventoryProcessing.input')}<input type="number" step="any" min="0.000000001" required className="input w-full" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><label>{t('inventoryProcessing.unit')}<select className="input w-full" value={inputUnit} onChange={e=>setInputUnit(e.target.value)}>{(base?inventoryInputUnits(base):[]).map(u=><option key={u}>{u}</option>)}</select></label></div><h3>{t('inventoryProcessing.deduct')}</h3>{(selected.rawInputs||selected.items.filter((i:any)=>i.type==='input')).map((i:any)=><p key={i.id}>{formatItemName(i.inventory?.name||'',i18n.language)}: {Number((i.quantity*multiplier).toFixed(6))} {i.inventory?.unit}</p>)}<h3>{t('inventoryProcessing.output')}</h3>{selected.items.filter((i:any)=>i.type==='output').map((i:any)=><p key={i.id}>{i.name}: {Number((i.quantity*multiplier).toFixed(6))} {selected.outputUnit}</p>)}{executeMutation.isError&&<p role="alert" className="text-red-700">{t('inventoryProcessing.failed')}</p>}<div className="flex justify-end gap-3"><button type="button" disabled={executeMutation.isPending} className="btn-secondary" onClick={()=>setSelected(null)}>{t('common.cancel')}</button><button disabled={executeMutation.isPending||multiplier<=0} className="btn-primary">{t('inventoryProcessing.confirm')}</button></div></form></div>}
       {/* Processing History */}
       <ProcessingHistory />
     </div>
@@ -241,7 +239,7 @@ function ProcessingHistory() {
                   )) : <div className="text-gray-400">-</div>}
                 </div>
               </div>
-              {log.note && <div className="mt-2 text-sm text-gray-500">{log.note}</div>}
+              {log.note&&<p className="text-sm text-gray-500">{(()=>{try{return JSON.parse(log.note).note||''}catch{return log.note}})()}</p>}<p className="mt-2 text-sm">{t('inventoryActors.operator')}: <ActorName actor={log.operator} id={log.staffId}/></p>
             </div>
           )
         })}

@@ -11,7 +11,7 @@ export function InventoryCountPage() {
     async function load() { setLoading(true); try {
         const [result, stock] = await Promise.all([inventoryFlowApi.counts(), inventoryFlowApi.list()]);
         setCounts(result.data.list || []);
-        setItems(stock.data.list || []);
+        setItems((stock.data.list || []).filter((i:Material)=>i.type!=='semi_finished'||!i.processRecipeId));
         setError('');
     }
     catch {

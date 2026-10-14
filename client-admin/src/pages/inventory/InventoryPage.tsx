@@ -327,6 +327,8 @@ export function InventoryPage() {
     const data = {
       name: selectedItem.name,
       category: selectedItem.category,
+      type: selectedItem.type,
+      processRecipeId: selectedItem.type === "semi_finished" ? selectedItem.processRecipeId || null : null,
       unit: selectedItem.unit,
       packaging: selectedItem.packaging?.unit
         ? {
@@ -463,7 +465,7 @@ export function InventoryPage() {
             {alerts.slice(0, 10).map((item: any) => (
               <span key={item.id} className="badge badge-error">
                 {formatItemName(item.name, i18n.language)}:{" "}
-                {formatStockDisplay(item.currentStock, item.unit)}
+                {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}
               </span>
             ))}
             {alerts.length > 10 && (
@@ -540,10 +542,10 @@ export function InventoryPage() {
               </thead>
               <tbody>
                 {filteredInventory.map((item: any) => {
-                  const isLow =
+                  const isLow = !(item.type==='semi_finished'&&item.processRecipeId) && (
                     item.isLowStock ||
                     item.currentStock <=
-                      (item.effectiveSafetyStock ?? item.safetyStock ?? 0);
+                      (item.effectiveSafetyStock ?? item.safetyStock ?? 0));
                   return (
                     <tr
                       key={item.id}
@@ -576,7 +578,7 @@ export function InventoryPage() {
                         <span
                           className={`font-bold ${isLow ? "text-red-600" : "text-gray-900"}`}
                         >
-                          {formatStockDisplay(item.currentStock, item.unit)}
+                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}
                         </span>
                       </td>
                       <td
@@ -616,6 +618,7 @@ export function InventoryPage() {
                               setShowStockIn(true);
                             }}
                             className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                            disabled={item.type==='semi_finished'&&!!item.processRecipeId}
                             title={t("inventory.stockIn") || "Stock In"}
                           >
                             <TrendingUp size={16} />
@@ -627,6 +630,7 @@ export function InventoryPage() {
                               setShowStockOut(true);
                             }}
                             className="p-1.5 text-orange-600 hover:bg-orange-50 rounded"
+                            disabled={item.type==='semi_finished'&&!!item.processRecipeId}
                             title={t("inventory.stockOut") || "Stock Out"}
                           >
                             <TrendingDown size={16} />
@@ -901,6 +905,16 @@ export function InventoryPage() {
                   </select>
                 </div>
               </div>
+              <label className="block text-sm font-medium">{t("inventory.materialType")}
+                <select className="input w-full mt-1" value={selectedItem.type || "raw_material"} onChange={e=>setSelectedItem({...selectedItem,type:e.target.value,processRecipeId:null})}>
+                  <option value="raw_material">{t("material.typeRawMaterial")}</option><option value="semi_finished">{t("material.typeSemiFinished")}</option><option value="finished_goods">{t("material.typeFinishedGoods")}</option>
+                </select>
+              </label>
+              {selectedItem.type === "semi_finished" && <label className="block text-sm font-medium">{t("material.linkedRecipe")}
+                <select className="input w-full mt-1" value={selectedItem.processRecipeId || ""} onChange={e=>setSelectedItem({...selectedItem,processRecipeId:e.target.value})}>
+                  <option value="">{t("inventory.selectRecipe")}</option>{recipes.map((recipe:any)=><option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
+                </select>
+              </label>}
               <p className="text-sm text-amber-700">
                 {t("inventoryUnits.fixed")}
               </p>

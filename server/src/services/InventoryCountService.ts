@@ -23,7 +23,7 @@ export async function createInventoryCount(data:CreateInventoryCountData){
   // Lock store row to prevent two simultaneous active sessions without a schema migration.
   await tx.store.update({where:{id:data.storeId},data:{updatedAt:new Date()}})
   if(await tx.inventoryCount.findFirst({where:{storeId:data.storeId,status:{in:['in_progress','pending_review']}}}))throw new Error('COUNT_ALREADY_ACTIVE')
-  const inventory=await tx.inventory.findMany({where:{storeId:data.storeId,...(data.inventoryIds?{id:{in:data.inventoryIds}}:{})},select:{id:true,currentStock:true}})
+  const inventory=await tx.inventory.findMany({where:{storeId:data.storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}],...(data.inventoryIds?{id:{in:data.inventoryIds}}:{})},select:{id:true,currentStock:true}})
   if(!inventory.length||data.inventoryIds&&(new Set(data.inventoryIds).size!==data.inventoryIds.length||inventory.length!==data.inventoryIds.length))throw Error('INVALID_COUNT_SELECTION')
   const {inventoryIds,...fields}=data
   return view(await tx.inventoryCount.create({data:{...fields,status:'in_progress',items:{create:inventory.map(i=>({inventoryId:i.id,systemQty:i.currentStock}))}},include}))

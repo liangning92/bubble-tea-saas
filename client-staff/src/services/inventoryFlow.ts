@@ -17,7 +17,9 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
     return result;
 }
 export const inventoryFlowApi = {
-    logs: () => get('/inventory/logs?limit=100'),
+    recipes:()=>get('/process-recipes'),
+    process:(id:string,data:Record<string,unknown>)=>intent(`/process-recipes/${id}/execute`,data,'operationId'),
+    logs: async()=>{const [incoming,outgoing]=await Promise.all([get('/inventory/logs/stock-in?limit=100'),get('/inventory/logs/stock-out?limit=100')]);return {data:{list:[...incoming.data.list.map((r:any)=>({...r,type:'stock_in'})),...outgoing.data.list.map((r:any)=>({...r,type:'stock_out'}))]}}},
     list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers/dropdown'),
     purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),
     stock: (kind: 'in' | 'out', data: Record<string, unknown>) => intent(`/inventory/stock-${kind}`, data, 'operationId'),
@@ -25,6 +27,8 @@ export const inventoryFlowApi = {
 };
 export interface Material {
     effectiveSafetyStock?: number; dynamicSafetyStock?: number; forecastHistoryDays?: number; daysUntilStockOut?: number | null;
+    type?: string;
+    processRecipeId?:string|null;
     id: string;
     name: string;
     category: string;

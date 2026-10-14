@@ -1,3 +1,4 @@
+import {InventoryProcessing} from '../components/InventoryProcessing';
 import { ActorName } from '../components/InventoryActor';
 import { InventoryHistory } from '../components/InventoryHistory';
 import { useEffect, useRef, useState } from 'react';
@@ -14,7 +15,7 @@ export function InventoryPage() {
     const [receiptDates,setReceiptDates]=useState<Record<string,string>>({});
     async function load() { setLoading(true); try {
         const [stock, purchase, count] = await Promise.all([inventoryFlowApi.list(), inventoryFlowApi.purchases(), inventoryFlowApi.counts()]);
-        setItems(stock.data.list);
+        setItems(stock.data.list.filter((i:Material)=>i.type!=='semi_finished'||!i.processRecipeId));
         setOrders(purchase.data.list);
         setCounts(count.data.list);
         setError('');
@@ -55,6 +56,8 @@ export function InventoryPage() {
             { key: 'purchase', label: 'purchase', hint: 'purchaseHint', Icon: ShoppingCart, color: 'text-purple-600' }
         ].map(({ key, label, hint, Icon, color }) => <Link key={key} to={key === 'count' ? '/inventory/count' : `/inventory?action=${key}`} className={`bg-white border rounded-2xl p-4 shadow-sm ${action === key ? 'ring-2 ring-orange-400' : ''}`}><Icon size={26} className={color}/><h2 className="font-bold text-lg mt-2">{t('inventoryFlow.' + label)}</h2><p className="text-xs text-gray-500 mt-1">{t('inventoryFlow.' + hint)}</p></Link>)}</div>}
   {!action && <Link className="block text-orange-600 underline" to="/inventory?action=history">{t('inventoryActors.history')}</Link>}
+  {!action && <Link className="block text-orange-600 underline" to="/inventory?action=process">{t('inventoryProcessing.title')}</Link>}
+  {action==='process'&&<InventoryProcessing onDone={done}/>}
   {action === 'history' && <InventoryHistory/>}
   {loading && <p role="status">{t('inventoryFlow.loading')}</p>}
   {action && <Link className="block text-orange-600" to="/inventory">← {t('inventoryFlow.back')}</Link>}
