@@ -149,6 +149,8 @@ function LegacyShiftRedirect() {
 }
 
 function App() {
+  const sessionReady = useAuthStore(state => state.sessionReady)
+  if (!sessionReady) return <RouteLoading />
   return (
     <><AdminFeedback/><Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
