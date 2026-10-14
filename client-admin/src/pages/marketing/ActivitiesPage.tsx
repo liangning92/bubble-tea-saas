@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1739,7 +1740,7 @@ export function ActivitiesPage() {
             <div className="grid md:grid-cols-3 gap-4">
               <label>
                 {l("开始日期时间", "Starts at", "Mulai")}
-                <input
+                <LocalizedDateTimeInput
                   type="datetime-local"
                   className="input"
                   value={form.startsAt}
@@ -1748,7 +1749,7 @@ export function ActivitiesPage() {
               </label>
               <label>
                 {l("结束日期时间", "Ends at", "Berakhir")}
-                <input
+                <LocalizedDateTimeInput
                   type="datetime-local"
                   className="input"
                   value={form.endsAt}
@@ -1815,7 +1816,7 @@ export function ActivitiesPage() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <label>
                     {l("每日开始时刻", "Daily start", "Jam mulai")}
-                    <input
+                    <LocalizedDateTimeInput
                       type="time"
                       className="input"
                       value={form.dailyStart}
@@ -1824,7 +1825,7 @@ export function ActivitiesPage() {
                   </label>
                   <label>
                     {l("每日结束时刻", "Daily end", "Jam akhir")}
-                    <input
+                    <LocalizedDateTimeInput
                       type="time"
                       className="input"
                       value={form.dailyEnd}

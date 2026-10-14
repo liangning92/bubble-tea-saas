@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, InventoryActor } from '../../components/InventoryActor';
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -368,7 +369,7 @@ export function PurchaseOrderListPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('purchases.expectedDateOptional')}</label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={formData.expectedDate}
                   onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}

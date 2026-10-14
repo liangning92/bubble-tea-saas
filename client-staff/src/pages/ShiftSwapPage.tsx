@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { businessDate, businessWeekStart } from '../utils/businessDate'
 import { LoadFailure } from '../components/LoadFailure'
@@ -138,7 +139,7 @@ export function ShiftSwapPage() {
                   <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('shiftSwap.originalDate')}
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={formData.originalDate}
                     onChange={(e) => setFormData({ ...formData, originalDate: e.target.value })}
@@ -165,7 +166,7 @@ export function ShiftSwapPage() {
                   <label className="block text-base font-medium text-gray-700 mb-1">
                     {t('shiftSwap.targetDate')}
                   </label>
-                  <input
+                  <LocalizedDateTimeInput
                     type="date"
                     value={formData.targetDate}
                     onChange={(e) => setFormData({ ...formData, targetDate: e.target.value })}

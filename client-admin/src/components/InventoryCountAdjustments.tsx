@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -30,8 +31,8 @@ export function InventoryCountAdjustments({ storeId }: { storeId: string }) {
     <h2 className="font-semibold">{t('inventoryCountWorkspace.adjustments')}</h2>
     <p className="text-sm text-gray-500">{t('inventoryCountWorkspace.historyHint')}</p>
     <div className="flex flex-wrap gap-3 items-end">
-      <label>{t('inventoryCountWorkspace.startDate')}<input className="input block" type="date" value={start} onChange={e => setStart(e.target.value)} /></label>
-      <label>{t('inventoryCountWorkspace.endDate')}<input className="input block" type="date" value={end} onChange={e => setEnd(e.target.value)} /></label>
+      <label>{t('inventoryCountWorkspace.startDate')}<LocalizedDateTimeInput className="input block" type="date" value={start} onChange={e => setStart(e.target.value)} /></label>
+      <label>{t('inventoryCountWorkspace.endDate')}<LocalizedDateTimeInput className="input block" type="date" value={end} onChange={e => setEnd(e.target.value)} /></label>
       <button className="btn btn-outline" disabled={invalid || query.isFetching} onClick={() => query.refetch()}>{t('common.refresh')}</button>
     </div>
     {invalid ? <p role="alert">{t('inventoryCountWorkspace.invalidDates')}</p>

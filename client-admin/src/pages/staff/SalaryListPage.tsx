@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { payslipHtml, downloadPayslip } from '../../../../shared/payslip'
 import { payrollPresentation, payrollStatus, isConfirmedBasis } from '../../../../shared/payrollPresentation'
 import { LateCalculation } from '../../../../shared/components/PayrollBasisDetails'
@@ -408,7 +409,7 @@ export function SalaryListPage() {
               <option key={staff.id} value={staff.id}>{staff.name}</option>
             ))}
           </select>
-          <input
+          <LocalizedDateTimeInput
             type="month"
             value={filterMonth}
             onChange={(e) => setFilterMonth(e.target.value)}
@@ -550,7 +551,7 @@ export function SalaryListPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('staff.salary.month')} *
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="month"
                   value={formData.month}
                   onChange={(e) => {setWorkingDays(null);setFormData({ ...formData, month: e.target.value })}}

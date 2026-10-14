@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
@@ -134,7 +135,7 @@ export function OvertimeRequestPage() {
                   <Calendar size={14} className="inline mr-1" />
                   {t('overtime.date')}
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -144,10 +145,10 @@ export function OvertimeRequestPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block text-base font-medium text-gray-700">{t('overtime.startTime')}
-                  <input type="time" value={formData.startTime} onChange={e => setFormData({ ...formData, startTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
+                  <LocalizedDateTimeInput type="time" value={formData.startTime} onChange={e => setFormData({ ...formData, startTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
                 </label>
                 <label className="block text-base font-medium text-gray-700">{t('overtime.endTime')}
-                  <input type="time" value={formData.endTime} onChange={e => setFormData({ ...formData, endTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
+                  <LocalizedDateTimeInput type="time" value={formData.endTime} onChange={e => setFormData({ ...formData, endTime: e.target.value })} className="w-full p-3 border border-gray-200 rounded-xl" required />
                 </label>
               </div>
 

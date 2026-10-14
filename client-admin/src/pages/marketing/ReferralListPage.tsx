@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
@@ -368,11 +369,11 @@ export function ReferralListPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.startDate')}</label>
-                  <input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} className="input" />
+                  <LocalizedDateTimeInput type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} className="input" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.endDate')}</label>
-                  <input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} className="input" />
+                  <LocalizedDateTimeInput type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} className="input" />
                 </div>
               </div>
 

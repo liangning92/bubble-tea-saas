@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { accountApi } from '../../services/api'
@@ -674,7 +675,7 @@ export function AccountsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('common.period')}
                 </label>
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   value={transferData.date}
                   onChange={e => setTransferData({ ...transferData, date: e.target.value })}

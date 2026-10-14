@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryLedgerQuantity, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1070,7 +1071,7 @@ export function InventoryPage() {
               </label>
               <label className="block text-sm">
                 {t("inventoryAlerts.expiryDate")}
-                <input
+                <LocalizedDateTimeInput
                   type="date"
                   className="input w-full"
                   value={stockForm.expiryDate}

@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -13,7 +14,7 @@ export function EmployeeConsumptionPage() {
     const data = query.data?.data?.data, config = settings.data?.data?.data;
     return <main className="space-y-5"><div className="flex justify-between gap-4 flex-wrap"><div><h1 className="text-2xl font-bold">{t('inventoryFlow.consumption')}</h1><p className="text-sm text-gray-500 mt-2">{t('inventoryFlow.analysisHint')}</p></div><Link className="text-primary" to="/inventory/alert-config">{t('inventoryFlow.settings')}</Link></div>
  <ConsumptionAlertsWidget />
- <div className="flex flex-wrap gap-3 items-center"><input aria-label={t('shiftReview.start')} type="date" className="input w-auto" value={range.startDate} onChange={e => setRange({ ...range, startDate: e.target.value })}/><span>—</span><input aria-label={t('shiftReview.end')} type="date" className="input w-auto" value={range.endDate} onChange={e => setRange({ ...range, endDate: e.target.value })}/><button className="btn btn-secondary" onClick={() => query.refetch()}>{t('inventoryFlow.refresh')}</button><Link className="text-primary" to="/inventory/physical-analysis">{t('inventoryFlow.physicalAnalysis')}</Link></div>
+ <div className="flex flex-wrap gap-3 items-center"><LocalizedDateTimeInput aria-label={t('shiftReview.start')} type="date" className="input w-auto" value={range.startDate} onChange={e => setRange({ ...range, startDate: e.target.value })}/><span>—</span><LocalizedDateTimeInput aria-label={t('shiftReview.end')} type="date" className="input w-auto" value={range.endDate} onChange={e => setRange({ ...range, endDate: e.target.value })}/><button className="btn btn-secondary" onClick={() => query.refetch()}>{t('inventoryFlow.refresh')}</button><Link className="text-primary" to="/inventory/physical-analysis">{t('inventoryFlow.physicalAnalysis')}</Link></div>
  {config && <p className="text-sm text-gray-500">{t(config.enableConsumptionAlert ? 'inventoryFlow.dailyEnabled' : 'inventoryFlow.dailyDisabled')} · {t('inventoryFlow.warning')} {config.varianceWarningPercent}% · {t('inventoryFlow.critical')} {config.varianceCriticalPercent}%</p>}
  {query.isPending && <p>{t('inventoryFlow.loading')}</p>}{query.isError && <p role="alert" className="text-red-700">{t('inventoryFlow.failed')}</p>}
  {data?.cutover && <p className="text-sm text-gray-500">{t('inventoryFlow.cutover', { date: new Date(data.cutover).toLocaleString(i18n.language, { timeZone: 'Asia/Jakarta' }) })}</p>}

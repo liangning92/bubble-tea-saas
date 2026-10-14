@@ -1,3 +1,4 @@
+import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 import { useAuthStore } from "../../stores/auth";
@@ -82,7 +83,7 @@ export function EmployeeWorkspacePage() {
         </p>
         <label>
           生效月份{" "}
-          <input
+          <LocalizedDateTimeInput
             type="month"
             value={rule.month}
             onChange={(e) => {
@@ -364,7 +365,7 @@ export function EmployeeWorkspacePage() {
             </p>
             <label>
               返还月份（原工资已发放时选择未冻结月份）{" "}
-              <input
+              <LocalizedDateTimeInput
                 type="month"
                 value={refundMonths[r.staffId + r.month] || ""}
                 onChange={(e) =>
