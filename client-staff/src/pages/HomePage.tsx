@@ -32,8 +32,8 @@ export function HomePage() {
     [scanner, setScanner] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
-  async function refresh() {
-    setLoading(true);
+  async function refresh(background = false) {
+    if (!background) setLoading(true);
     const results = await Promise.allSettled([
       staffApi.getMonthlyOverview(),
       employeeApi.get("/my/dashboard"),
@@ -50,11 +50,25 @@ export function HomePage() {
           : [],
       ),
     );
-    setLoading(false);
+    if (!background) setLoading(false);
   }
   useEffect(() => {
     if (user?.staffId) void refresh();
   }, [user?.staffId]);
+  useEffect(() => {
+    if (!user?.staffId || scanner || busy) return;
+    const update = () => {
+      if (document.visibilityState === "visible") void refresh(true);
+    };
+    const timer = window.setInterval(update, 60000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [user?.staffId, scanner, busy]);
   const working = attendance && !attendance.checkOutTime,
     mode = working ? "check_out" : "check_in";
   async function scan(data: string, selected: "check_in" | "check_out") {
@@ -104,6 +118,9 @@ export function HomePage() {
     (overview?.pointsAndDiscipline?.penaltiesCount || 0) +
     (dashboard?.penaltiesCount || 0);
   const reminders = dashboard?.reminders?.slice(0, 5) || [];
+  const hasUpdates = reminders.length > 0 ||
+    overview?.announcements?.length > 0 ||
+    dashboard?.hygiene?.pendingReview > 0;
   const taskRows = [
     {
       path: "/hygiene",
@@ -134,11 +151,11 @@ export function HomePage() {
     <main className="employee-home">
       <header className="home-brand-panel">
         <img src="/youme-logo-red.png" alt="YOUME" />
-        <div className="home-values">
-          <p>{t("ui.coreValueHonesty")}</p>
-          <p>{t("ui.coreValueInitiative")}</p>
-          <p>{t("ui.coreValueEnthusiasm")}</p>
-        </div>
+        <p className="home-values" lang={i18n.resolvedLanguage}>
+          <span>{t("ui.coreValueHonesty")}</span>{" "}
+          <span>{t("ui.coreValueInitiative")}</span>{" "}
+          <span>{t("ui.coreValueEnthusiasm")}</span>
+        </p>
       </header>
       <section className="home-greeting">
         <div>
@@ -176,8 +193,58 @@ export function HomePage() {
       {(failed.length > 0 || dashboard?.failedModules?.length > 0) && (
         <div role="alert" className="workspace-feedback warning">
           {t("common.loadFailed")}{" "}
-          <button onClick={refresh}>{t("common.retry")}</button>
+          <button onClick={() => void refresh()}>{t("common.retry")}</button>
         </div>
+      )}
+      {hasUpdates && (
+        <section className="home-updates" aria-label={t("ui.review")}>
+          <div className="home-section-title">
+            <h2>{t("ui.review")}</h2>
+            <Bell size={17} />
+          </div>
+          <div className="workspace-list">
+            {reminders.map((r: any) => (
+              <button
+                key={r.id}
+                className="workspace-row"
+                onClick={() => navigate(r.url)}
+              >
+                <span className="workspace-row-icon rose">
+                  <Bell size={19} />
+                </span>
+                <span className="workspace-row-copy">
+                  <strong>{r.title}</strong>
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            ))}
+            {overview?.announcements?.map((a: any) => (
+              <button
+                key={a.id}
+                className="workspace-row"
+                onClick={() => navigate("/announcements")}
+              >
+                <span className="workspace-row-icon lavender">
+                  <Bell size={19} />
+                </span>
+                <span className="workspace-row-copy">
+                  <strong>{a.title}</strong>
+                  {a.content && <small>{a.content}</small>}
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            ))}
+            {dashboard?.hygiene?.pendingReview > 0 && (
+              <button className="workspace-row" onClick={() => navigate("/hygiene")}>
+                <span className="workspace-row-icon amber"><Clock3 size={19} /></span>
+                <span className="workspace-row-copy">
+                  <strong>{t("hygiene.title")} · {t("workspace.pendingReview")} {dashboard.hygiene.pendingReview}</strong>
+                </span>
+                <ChevronRight size={17} />
+              </button>
+            )}
+          </div>
+        </section>
       )}
       <section className="home-shift-card">
         <div className="home-shift-top">
@@ -229,7 +296,7 @@ export function HomePage() {
           <h2>{t("ui.month")}</h2>
           <button
             aria-label={t("ui.refresh")}
-            onClick={refresh}
+            onClick={() => void refresh()}
             disabled={loading}
           >
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
@@ -304,72 +371,12 @@ export function HomePage() {
             ),
           )}
         </div>
-        {dashboard?.hygiene?.pendingReview > 0 && (
-          <button className="home-pending" onClick={() => navigate("/hygiene")}>
-            <Clock3 size={15} />
-            {t("hygiene.title")} · {t("workspace.pendingReview")}{" "}
-            {dashboard.hygiene.pendingReview}
-            <ChevronRight size={15} />
-          </button>
-        )}
       </section>
       <section>
         <div className="home-section-title">
           <h2>{t("ui.quick")}</h2>
         </div>
         <EmployeeActions />
-      </section>
-      <section>
-        <div className="home-section-title">
-          <h2>{t("ui.review")}</h2>
-          <Bell size={17} />
-        </div>
-        <div className="workspace-list">
-          {!reminders.length && !overview?.announcements?.length ? (
-            <div className="home-empty">
-              <span>
-                <CheckCircle2 size={22} />
-              </span>
-              <div>
-                <strong>{t("ui.noUpdates")}</strong>
-                <p>{t("ui.noUpdatesHint")}</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {reminders.map((r: any) => (
-                <button
-                  key={r.id}
-                  className="workspace-row"
-                  onClick={() => navigate(r.url)}
-                >
-                  <span className="workspace-row-icon rose">
-                    <Bell size={19} />
-                  </span>
-                  <span className="workspace-row-copy">
-                    <strong>{r.title}</strong>
-                  </span>
-                  <ChevronRight size={17} />
-                </button>
-              ))}
-              {overview?.announcements?.map((a: any) => (
-                <button
-                  key={a.id}
-                  className="workspace-row"
-                  onClick={() => navigate("/announcements")}
-                >
-                  <span className="workspace-row-icon lavender">
-                    <Bell size={19} />
-                  </span>
-                  <span className="workspace-row-copy">
-                    <strong>{a.title}</strong>
-                  </span>
-                  <ChevronRight size={17} />
-                </button>
-              ))}
-            </>
-          )}
-        </div>
       </section>
       <QRCameraScannerModal
         isOpen={scanner}

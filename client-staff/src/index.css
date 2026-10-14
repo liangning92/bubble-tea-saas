@@ -212,32 +212,36 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 16px 20px;
+  gap: 12px;
+  padding: 20px 12px;
   border-radius: 24px;
   background: #fce9ee;
 }
 .home-brand-panel img {
   flex: none;
-  width: 112px;
-  max-width: 42%;
+  width: clamp(64px, 20vw, 112px);
   height: 34px;
   object-fit: contain;
 }
 .home-values {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding-left: 20px;
+  margin: 0;
+  padding-left: 12px;
   border-left: 1px solid #dca4b4;
   color: #93334d;
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 2;
   text-align: left;
+  white-space: nowrap;
 }
-.home-values p {
-  margin: 0;
+.home-values span + span {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid #dca4b4;
+}
+.home-values:lang(id),
+.home-values:lang(en) {
+  font-size: clamp(10px, 2.6vw, 14px);
 }
 .home-language {
   flex: none;
@@ -285,6 +289,13 @@ a:focus-visible {
   color: var(--staff-muted);
 }
 
+.home-updates .workspace-row-copy {
+  overflow-wrap: anywhere;
+}
+.home-updates .workspace-row small {
+  color: var(--staff-muted);
+  white-space: pre-line;
+}
 .home-shift-card {
   padding: 20px;
   background: linear-gradient(125deg, #fff8f8, #fff);
