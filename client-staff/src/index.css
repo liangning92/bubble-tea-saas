@@ -210,27 +210,34 @@ a:focus-visible {
 }
 .home-brand-panel {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 20px 12px;
+  gap: 20px;
+  padding: 16px 20px;
   border-radius: 24px;
   background: #fce9ee;
 }
 .home-brand-panel img {
+  flex: none;
   width: 112px;
+  max-width: 42%;
   height: 34px;
   object-fit: contain;
 }
 .home-values {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 20px;
+  border-left: 1px solid #dca4b4;
   color: #93334d;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
-  text-align: center;
-  text-wrap: balance;
+  text-align: left;
+}
+.home-values p {
+  margin: 0;
 }
 .home-language {
   flex: none;

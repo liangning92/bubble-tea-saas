@@ -134,7 +134,11 @@ export function HomePage() {
     <main className="employee-home">
       <header className="home-brand-panel">
         <img src="/youme-logo-red.png" alt="YOUME" />
-        <p className="home-values">{t("ui.coreValues")}</p>
+        <div className="home-values">
+          <p>{t("ui.coreValueHonesty")}</p>
+          <p>{t("ui.coreValueInitiative")}</p>
+          <p>{t("ui.coreValueEnthusiasm")}</p>
+        </div>
       </header>
       <section className="home-greeting">
         <div>
