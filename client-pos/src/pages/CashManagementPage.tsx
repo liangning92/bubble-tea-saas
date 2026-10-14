@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../i18n'
 import { resolveHandoverReceiptItems } from '../../../shared/utils/handoverReceipt'
 import { selectPrinter } from '../utils/printerRouting'
 import { ShiftSummaryEvidence, ShiftEvidence } from '../components/ShiftSummaryEvidence'
@@ -316,7 +317,7 @@ export function CashManagementPage() {
           <div className="p-4">
             <ShiftSummaryEvidence evidence={balance?.summaryEvidence} openFloat={balance?.openFloat} storeId={user?.storeId} />
 
-            {closedShifts.length > 0 && <div className="flex gap-2 mb-4"><select aria-label={t('pos.handoverReceipt')} className="border rounded p-2 flex-1 min-w-0" value={handoverId} onChange={e => setHandoverId(e.target.value)}>{closedShifts.map(s => <option key={s.id} value={s.id}>{s.shift} · {new Date(s.closedAt).toLocaleString()}</option>)}</select><button onClick={reprintHandover} disabled={printingHandover} className="border rounded p-2">{t('pos.reprint')}</button></div>}
+            {closedShifts.length > 0 && <div className="flex gap-2 mb-4"><select aria-label={t('pos.handoverReceipt')} className="border rounded p-2 flex-1 min-w-0" value={handoverId} onChange={e => setHandoverId(e.target.value)}>{closedShifts.map(s => <option key={s.id} value={s.id}>{s.shift} · {new Date(s.closedAt).toLocaleString(dateLocaleI18n.language)}</option>)}</select><button onClick={reprintHandover} disabled={printingHandover} className="border rounded p-2">{t('pos.reprint')}</button></div>}
 
             {/* Quick Actions */}
             <div className="grid grid-cols-4 gap-2 mb-4">

@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../i18n'
 import { OrderItemsTable } from '../components/OrderItemsTable'
 import {RefundRequestForm} from '../components/RefundRequestForm'
 import { useState, useEffect, useCallback } from 'react'
@@ -130,7 +131,7 @@ export function OrderHistoryPage() {
           <div>
             <h1 className="text-lg font-bold">{t('orders.todayOrders')}</h1>
             <p className="text-xs text-gray-500">
-              {new Date().toLocaleDateString()}
+              {new Date().toLocaleDateString(dateLocaleI18n.language)}
             </p>
           </div>
           <button className="text-sm" onClick={()=>navigate('/receipt-sync')}>{t('receiptSync.title')}</button>

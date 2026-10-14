@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../../i18n'
 import { TrainingSectionExtras, TrainingModuleExtras } from '../../../../shared/components/TrainingExtras'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -469,7 +470,7 @@ export function TrainingListPage() {
                             {record.provider || '-'}
                           </td>
                           <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">
-                            {new Date(record.startDate).toLocaleDateString('zh-CN', {
+                            {new Date(record.startDate).toLocaleDateString(dateLocaleI18n.language, {
                               year: 'numeric',
                               month: '2-digit',
                               day: '2-digit'

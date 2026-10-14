@@ -65,3 +65,24 @@ test('all three apps use the shared picker for page and modal fields', () => {
     }
   }
 })
+
+test('date and time text in pages and dialogs never falls back to browser language', () => {
+  const ts = require('typescript')
+  function walk(dir) { return fs.readdirSync(dir, {withFileTypes:true}).flatMap(entry => entry.isDirectory() ? walk(path.join(dir, entry.name)) : entry.name.endsWith('.tsx') ? [path.join(dir, entry.name)] : []) }
+  for (const app of ['client-admin', 'client-pos', 'client-staff']) for (const file of walk(path.join(root, app, 'src'))) {
+    const tree = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    function visit(node) {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const method = node.expression.name.text
+        const receiver = node.expression.expression
+        const isDate = ['toLocaleDateString', 'toLocaleTimeString'].includes(method) || (method === 'toLocaleString' && ts.isNewExpression(receiver) && receiver.expression.getText(tree) === 'Date')
+        if (isDate) {
+          assert.ok(node.arguments.length > 0, `${path.relative(root, file)} delegates ${method} to browser language`)
+          assert.ok(!(node.arguments[0] && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === 'zh-CN'), `${path.relative(root, file)} hardcodes Chinese date display`)
+        }
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(tree)
+  }
+})
