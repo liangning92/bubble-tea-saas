@@ -1,3 +1,4 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -219,14 +220,8 @@ export function TimedSpecialPage() {
 
       {/* Create/Edit Modal */}
       {(showCreate || showEdit) && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">{showEdit ? t('marketing.editTimedSpecial') : t('marketing.addTimedSpecial')}</h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={showEdit ? t('marketing.editTimedSpecial') : t('marketing.addTimedSpecial')} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.ruleName')} *</label>
@@ -326,16 +321,15 @@ export function TimedSpecialPage() {
 
               <div className="flex flex-wrap gap-2">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day,index) => <label key={day}><input type="checkbox" checked={form.daysOfWeek.includes(index)} onChange={e => setForm({...form,daysOfWeek:e.target.checked?[...form.daysOfWeek,index]:form.daysOfWeek.filter(d=>d!==index)})} /> {day}</label>)}</div>
               <div className="flex flex-wrap gap-2">{['DINE_IN','TAKEAWAY','GOFOOD','GRAB','SHOPEE','POS'].map(channel => <label key={channel}><input type="checkbox" checked={form.applicableChannels.includes(channel)} onChange={e => setForm({...form,applicableChannels:e.target.checked?[...form.applicableChannels,channel]:form.applicableChannels.filter(c=>c!==channel)})} /> {channel}</label>)}</div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button type="submit" disabled={!form.name || !form.productId || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

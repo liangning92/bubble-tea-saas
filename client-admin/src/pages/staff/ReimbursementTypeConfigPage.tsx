@@ -1,8 +1,10 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { reimbursementTypeApi } from '../../services/api'
-import { Plus, Edit2, Trash2, RefreshCw, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, RefreshCw, } from 'lucide-react'
 
 interface ReimbursementType {
   id: string
@@ -102,12 +104,12 @@ export function ReimbursementTypeConfigPage() {
       loadTypes()
     } catch (error) {
       console.error('Failed to save type:', error)
-      alert(t('reimbTypes.saveFailed'))
+      notifyAdmin(t('reimbTypes.saveFailed'))
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('reimbTypes.deleteConfirm'))) return
+    if (!await confirmAdmin(t('reimbTypes.deleteConfirm'))) return
     try {
       await reimbursementTypeApi.delete(id)
       loadTypes()
@@ -231,16 +233,8 @@ export function ReimbursementTypeConfigPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold">
-                {editingType ? t('reimbTypes.editTitle') : t('reimbTypes.addTitle')}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingType ? t('reimbTypes.editTitle') : t('reimbTypes.addTitle')} onClose={() => setShowModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="space-y-4">
               <div>
@@ -302,11 +296,11 @@ export function ReimbursementTypeConfigPage() {
                 <label htmlFor="requiresReceipt" className="text-sm">{t('reimbTypes.receiptRequired')}</label>
               </div>
 
-              <div className="flex gap-3 mt-6">
+              <div className="admin-dialog-footer flex gap-3 mt-6">
                 <button
                   onClick={() => setShowModal(false)}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
-                >
+                 data-dialog-close="true">
                   {t('reimbTypes.cancel')}
                 </button>
                 <button
@@ -317,8 +311,7 @@ export function ReimbursementTypeConfigPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

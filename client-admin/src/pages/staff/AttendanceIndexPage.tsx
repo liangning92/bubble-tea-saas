@@ -10,7 +10,7 @@ export function AttendanceIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    {key:'workspace',label:'员工审核与迟到累计',path:'/staff/attendance/workspace',icon:Settings},
+    {key:'workspace',label:t('uiDesign.employeeReview'),path:'/staff/attendance/workspace',icon:Settings},
     { key: 'dashboard', label: t('staff.attendanceDashboard'), path: '/staff/attendance/dashboard', icon: Calendar },
     { key: 'leave/balance', label: t('staff.leaveBalance'), path: '/staff/attendance/leave/balance', icon: Calendar },
     { key: 'leave', label: t('nav.leave'), path: '/staff/attendance/leave', icon: FileText },
@@ -27,7 +27,7 @@ export function AttendanceIndexPage() {
     <div className="flex flex-col h-full">
       {/* 三级导航 - 考勤模块 */}
       <div className="sticky top-0 bg-gray-50 z-10 pb-4 mb-4">
-        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap overflow-x-auto">
+        <div className="admin-section-nav">
           {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => {
             const Icon = tab.icon
             return (
@@ -35,10 +35,10 @@ export function AttendanceIndexPage() {
                 key={tab.key}
                 to={tab.path}
                 aria-current={currentTab === tab.key ? 'page' : undefined}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 admin-section-link text-sm font-medium transition-colors whitespace-nowrap ${
                   currentTab === tab.key
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-600 hover:text-primary'
                 }`}
               >
                 <Icon size={16} />

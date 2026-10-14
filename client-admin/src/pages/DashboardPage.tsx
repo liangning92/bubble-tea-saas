@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { reportApi, posActionLogApi } from '../services/api'
-import { formatCurrency } from '../utils/helpers'
+import { formatItemName, formatCurrency } from '../utils/helpers'
 import {
   ShoppingCart,
   DollarSign,
@@ -158,7 +158,7 @@ function POSAlertsWidget({storeId,asOf}: {storeId:string;asOf:string}) {
 export function DashboardPage() {
   const dateSettings=useStoreDateSettings()
   const context = useDashboardContext()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -330,17 +330,17 @@ export function DashboardPage() {
           <PageHelp>{t('dashboardNavigation.safetyStockNotice')}</PageHelp>
           {dashboard?.inventory?.lowStockItems?.length > 0 ? (
             <div className="space-y-2">
-              {dashboard.inventory.lowStockItems.map((item: any) => (
+              {dashboard.inventory.lowStockItems.slice(0, 5).map((item: any) => (
                 <div
                   key={item.id}
-                  className={`flex items-center justify-between p-2 rounded-lg ${
+                  className={`flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg ${
                     item.urgency === 'critical' ? 'bg-red-50 border border-red-200' :
                     item.urgency === 'warning' ? 'bg-orange-50 border border-orange-200' :
                     'bg-gray-50'
                   }`}
                 >
                   <div>
-                    <span className="font-medium">{item.name}</span>
+                    <span className="font-medium" title={item.name}>{formatItemName(item, i18n.language)}</span>
                     <span className="text-sm text-gray-500 ml-2">({item.unit})</span>
                   </div>
                   <div className="text-right">
@@ -390,7 +390,7 @@ export function DashboardPage() {
                 }`}
               >
                 <div>
-                  <span className="font-medium">{item.name}</span>
+                  <span className="font-medium" title={item.name}>{formatItemName(item, i18n.language)}</span>
                   <div className="text-xs text-gray-500 mt-1">
                     {t('dashboard.theoretical')} {item.theoretical?.toFixed(1)} {item.unit} vs{' '}
                     {t('dashboard.actual')} {item.actual?.toFixed(1)} {item.unit}
@@ -469,7 +469,7 @@ export function DashboardPage() {
               <tr className="text-left text-sm text-gray-500 border-b">
                 <th className="pb-3 font-medium">{t('shiftHandover.products')}</th>
                 <th className="pb-3 px-4 text-right font-medium">{t('shiftReview.quantity')}</th>
-                <th className="pb-3 font-medium">{t('dashboard.amount')}</th>
+                <th className="text-right tabular-nums pb-3 font-medium">{t('dashboard.amount')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.payment')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.status')}</th>
                 <th className="pb-3 font-medium">{t('dashboard.time')}</th>
@@ -480,12 +480,12 @@ export function DashboardPage() {
                 <OrderItemRows key={order.id} items={order.items}
                   onClick={() => navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, {storeId,asOf,...businessDay(order.createdAt,dateSettings.timezone)}))}
                   trailing={rowSpan => <>
-                  <td rowSpan={rowSpan} className="py-3 pr-4 font-medium">
+                  <td rowSpan={rowSpan} className="text-right tabular-nums py-3 pr-4 font-medium">
                     {formatCurrency(order.finalAmount)}
                   </td>
                   <td rowSpan={rowSpan} className="py-3 pr-4">
                     <span className="badge badge-info capitalize">
-                      {order.paymentMethod}
+                      {order.paymentMethod === 'cash' ? t('uiDesign.cash') : order.paymentMethod === 'qris' ? 'QRIS' : order.paymentMethod}
                     </span>
                   </td>
                   <td rowSpan={rowSpan} className="py-3 pr-4">
@@ -494,7 +494,7 @@ export function DashboardPage() {
                       order.status === 'pending' ? 'badge-warning' :
                       order.status === 'refunded' ? 'badge-error' : 'badge-secondary'
                     }`}>
-                      {order.status}
+                      {t('orders.' + order.status, { defaultValue: order.status })}
                     </span>
                   </td>
                   <td rowSpan={rowSpan} className="py-3 pr-4 text-sm text-gray-500">

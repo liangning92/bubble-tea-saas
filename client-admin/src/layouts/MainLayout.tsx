@@ -405,7 +405,7 @@ export function MainLayout() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0 overflow-auto">
+        <main className="admin-workspace flex-1 min-w-0 overflow-auto">
           <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-border px-4 py-2 flex items-center gap-3">
             <button
               aria-label={l("菜单", "Menu", "Menu")}

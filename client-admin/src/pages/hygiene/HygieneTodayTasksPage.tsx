@@ -1,8 +1,10 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { hygieneApi } from '../../services/api'
-import { Loader2, CheckCircle, SkipForward, Clock, Camera, User, X, Star } from 'lucide-react'
+import { Loader2, CheckCircle, SkipForward, Clock, Camera, User,  Star } from 'lucide-react'
 
 const AREAS = [
   { value: 'counter', label: '', color: 'bg-blue-100 text-blue-700' },
@@ -56,7 +58,7 @@ export function HygieneTodayTasksPage() {
     },
     onError: (error: any) => {
       console.error('Complete task error:', error)
-      alert(t('hygiene.completeTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.completeTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     }
   })
 
@@ -69,7 +71,7 @@ export function HygieneTodayTasksPage() {
     },
     onError: (error: any) => {
       console.error('Skip task error:', error)
-      alert(t('hygiene.skipTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.skipTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     }
   })
 
@@ -84,7 +86,7 @@ export function HygieneTodayTasksPage() {
     },
     onError: (error: any) => {
       console.error('Approve task error:', error)
-      alert(t('hygiene.approveTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.approveTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     }
   })
 
@@ -97,7 +99,7 @@ export function HygieneTodayTasksPage() {
     onError: (error: any) => {
       console.error('Generate tasks error:', error)
       const message = error?.response?.data?.message || error?.message || t('common.unknownError')
-      alert(t('hygiene.generateTasksFailed') + ': ' + message)
+      notifyAdmin(t('hygiene.generateTasksFailed') + ': ' + message)
     }
   })
 
@@ -182,7 +184,7 @@ export function HygieneTodayTasksPage() {
     },
     onError: (error: any) => {
       console.error('Create temp task error:', error)
-      alert(t('hygiene.createTempTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.createTempTaskFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     }
   })
 
@@ -336,14 +338,8 @@ export function HygieneTodayTasksPage() {
 
       {/* Task Detail Modal */}
       {showDetailModal && selectedTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDetailModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">{selectedTask.name}</h2>
-              <button onClick={() => setShowDetailModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={selectedTask.name} onClose={() => setShowDetailModal(false)} className="max-w-lg" busy={false} trackChanges chrome>
+
             <div className="p-6 space-y-4">
               <div className="flex items-center gap-4 text-sm text-gray-600">
                 <span className="flex items-center gap-1">
@@ -372,20 +368,13 @@ export function HygieneTodayTasksPage() {
 
               {getStatusBadge(selectedTask.status)}
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Approval Modal */}
       {showApproveModal && selectedTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowApproveModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">{t('hygiene.approveTask')}</h2>
-              <button onClick={() => setShowApproveModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('hygiene.approveTask')} onClose={() => setIsRejecting(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="p-6 space-y-4">
               <div className="font-medium">{selectedTask.name}</div>
 
@@ -437,11 +426,11 @@ export function HygieneTodayTasksPage() {
               )}
 
               {isRejecting && (
-                <div className="flex gap-3 pt-4 border-t">
+                <div className="admin-dialog-footer flex gap-3 pt-4 border-t">
                   <button
                     onClick={() => setIsRejecting(false)}
                     className="flex-1 py-2 border border-gray-300 rounded-lg"
-                  >
+                   data-dialog-close="true">
                     {t('common.cancel')}
                   </button>
                   <button
@@ -454,20 +443,13 @@ export function HygieneTodayTasksPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Create Temporary Task Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">{t('hygiene.addTemporaryTask')}</h2>
-              <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('hygiene.addTemporaryTask')} onClose={() => setShowCreateModal(false)} className="max-w-md" busy={Boolean(createTempMutation.isPending)} trackChanges chrome>
+
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('hygiene.taskName')} *</label>
@@ -520,11 +502,11 @@ export function HygieneTodayTasksPage() {
                   placeholder={t('hygiene.taskNotePlaceholder')}
                 />
               </div>
-              <div className="flex gap-3 pt-4 border-t">
+              <div className="admin-dialog-footer flex gap-3 pt-4 border-t">
                 <button
                   onClick={() => setShowCreateModal(false)}
                   className="flex-1 py-2 border border-gray-300 rounded-lg"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -536,8 +518,7 @@ export function HygieneTodayTasksPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

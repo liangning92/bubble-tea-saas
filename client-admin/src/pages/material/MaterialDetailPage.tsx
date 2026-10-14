@@ -120,7 +120,7 @@ export function MaterialDetailPage() {
             <thead>
               <tr className="text-left text-sm text-gray-500 border-b">
                 <th className="pb-2">{t('material.batchNumber')}</th>
-                <th className="pb-2">{t('material.quantity')}</th>
+                <th className="text-right tabular-nums pb-2">{t('material.quantity')}</th>
                 <th className="pb-2">{t('material.stockInDate')}</th>
                 <th className="pb-2">{t('material.expiryDate')}</th>
                 <th className="pb-2">{t('material.batchStatus')}</th>
@@ -130,7 +130,7 @@ export function MaterialDetailPage() {
               {mat.batches.map((batch: any) => (
                 <tr key={batch.id} className="border-b border-border">
                   <td className="py-2 font-mono text-sm">{batch.batchNumber}</td>
-                  <td className="py-2">{batch.quantity} {mat.unit}</td>
+                  <td className="text-right tabular-nums py-2">{batch.quantity} {mat.unit}</td>
                   <td className="py-2 text-sm text-gray-500">
                     {batch.manufacturingDate
                       ? new Date(batch.manufacturingDate).toLocaleDateString(dateLocaleI18n.language)

@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -98,7 +100,7 @@ export function RewardsPage() {
       setFormData({ name: '', description: '', pointsCost: 100, stock: 10, isActive: true })
     } catch (error) {
       console.error('Failed to save:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setIsLoading(false)
     }
@@ -117,7 +119,7 @@ export function RewardsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('common.confirm') + '?')) return
+    if (!await confirmAdmin(t('common.confirm') + '?')) return
     try {
       await staffPointsApi.deleteReward(id)
       await loadRewards()
@@ -141,7 +143,7 @@ export function RewardsPage() {
       await loadRedemptions()
     } catch (error) {
       console.error('Failed to fulfill:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -151,7 +153,7 @@ export function RewardsPage() {
       await loadRedemptions()
     } catch (error) {
       console.error('Failed to cancel:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -339,11 +341,8 @@ export function RewardsPage() {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">
-              {editingReward ? t('common.edit') : t('common.add')} {t('staff.reward')}
-            </h3>
+        <AdminDialog title={[editingReward ? t('common.edit') : t('common.add'), t('staff.reward')].join(" ")} onClose={() => setShowForm(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.name')} *</label>
@@ -383,8 +382,8 @@ export function RewardsPage() {
                   min="0"
                 />
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowForm(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
+              <div className="admin-dialog-footer flex gap-3">
+                <button onClick={() => setShowForm(false)} className="flex-1 py-2 border border-gray-200 rounded-lg" data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button onClick={handleSave} disabled={isLoading || !formData.name.trim() || !Number.isSafeInteger(formData.pointsCost) || formData.pointsCost < 1 || !Number.isSafeInteger(formData.stock) || formData.stock < 0} className="flex-1 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">
@@ -392,8 +391,7 @@ export function RewardsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

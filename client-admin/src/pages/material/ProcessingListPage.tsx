@@ -1,3 +1,6 @@
+import { formatDisplayQuantity } from '../../utils/itemDisplayName'
+import { confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import dateLocaleI18n from '../../i18n'
 import {ActorName} from '../../components/InventoryActor'
 import {inventoryInputUnits,defaultInventoryInputUnit,inventoryLedgerQuantity} from '../../utils/inventoryInputUnits'
@@ -47,8 +50,8 @@ export function ProcessingListPage() {
     setSelected(recipe);setQuantity('');setInputUnit(material?defaultInventoryInputUnit(material):'');setOperationId(crypto.randomUUID())
   }
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(t('material.deleteRecipeConfirm', { name }))) {
+  const handleDelete = async (id: string, name: string) => {
+    if (await confirmAdmin(t('material.deleteRecipeConfirm', { name }))) {
       deleteMutation.mutate(id)
     }
   }
@@ -164,7 +167,7 @@ export function ProcessingListPage() {
         )}
       </div>
 
-      {selected&&<div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center"><form onSubmit={e=>{e.preventDefault();setExecutingId(selected.id);executeMutation.mutate({id:selected.id,multiplier})}} role="dialog" aria-modal="true" aria-label={t('inventoryProcessing.title')} className="bg-white rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-auto space-y-4"><h2 className="text-lg font-bold">{selected.name}</h2><p className="text-sm text-gray-600">{t('inventoryProcessing.hint')}</p><div className="grid grid-cols-2 gap-3"><label className="flex flex-col justify-between gap-1 min-w-0">{t('inventoryProcessing.input')}<input type="number" step="any" min="0.000000001" required className="input w-full" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><label className="flex flex-col justify-between gap-1 min-w-0">{t('inventoryProcessing.unit')}<select className="input w-full" value={inputUnit} onChange={e=>setInputUnit(e.target.value)}>{(base?inventoryInputUnits(base):[]).map(u=><option key={u}>{u}</option>)}</select></label></div><h3>{t('inventoryProcessing.deduct')}</h3>{(selected.rawInputs||selected.items.filter((i:any)=>i.type==='input')).map((i:any)=><p key={i.id}>{formatItemName(i.inventory?.name||'',i18n.language)}: {Number((i.quantity*multiplier).toFixed(6))} {i.inventory?.unit}</p>)}<h3>{t('inventoryProcessing.output')}</h3>{selected.items.filter((i:any)=>i.type==='output').map((i:any)=><p key={i.id}>{i.name}: {Number((i.quantity*multiplier).toFixed(6))} {selected.outputUnit}</p>)}{executeMutation.isError&&<p role="alert" className="text-red-700">{t('inventoryProcessing.failed')}</p>}<div className="flex justify-end gap-3"><button type="button" disabled={executeMutation.isPending} className="btn-secondary" onClick={()=>setSelected(null)}>{t('common.cancel')}</button><button disabled={executeMutation.isPending||multiplier<=0} className="btn-primary">{t('inventoryProcessing.confirm')}</button></div></form></div>}
+      {selected&&<AdminDialog title={t('inventoryProcessing.title')} onClose={()=>setSelected(null)} className="max-w-lg" busy={Boolean(executeMutation.isPending)} trackChanges chrome><form onSubmit={e=>{e.preventDefault();setExecutingId(selected.id);executeMutation.mutate({id:selected.id,multiplier})}} className="space-y-4"><p className="font-medium">{selected.name}</p><p className="text-sm text-gray-600">{t('inventoryProcessing.hint')}</p><div className="grid grid-cols-2 gap-3"><label className="flex flex-col justify-between gap-1 min-w-0">{t('inventoryProcessing.input')}<input type="number" step="any" min="0.000000001" required className="input w-full" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><label className="flex flex-col justify-between gap-1 min-w-0">{t('inventoryProcessing.unit')}<select className="input w-full" value={inputUnit} onChange={e=>setInputUnit(e.target.value)}>{(base?inventoryInputUnits(base):[]).map(u=><option key={u}>{u}</option>)}</select></label></div><h3>{t('inventoryProcessing.deduct')}</h3>{(selected.rawInputs||selected.items.filter((i:any)=>i.type==='input')).map((i:any)=><p key={i.id}>{formatItemName(i.inventory||'',i18n.language)}: {formatDisplayQuantity(i.quantity*multiplier)} {i.inventory?.unit}</p>)}<h3>{t('inventoryProcessing.output')}</h3>{selected.items.filter((i:any)=>i.type==='output').map((i:any)=><p key={i.id}>{i.name}: {formatDisplayQuantity(i.quantity*multiplier)} {selected.outputUnit}</p>)}{executeMutation.isError&&<p role="alert" className="text-red-700">{t('inventoryProcessing.failed')}</p>}<div className="admin-dialog-footer flex justify-end gap-3"><button type="button" data-dialog-close="true" disabled={executeMutation.isPending} className="btn-secondary" onClick={()=>setSelected(null)}>{t('common.cancel')}</button><button disabled={executeMutation.isPending||multiplier<=0} className="btn-primary">{t('inventoryProcessing.confirm')}</button></div></form></AdminDialog>}
       {/* Processing History */}
       <ProcessingHistory />
     </div>

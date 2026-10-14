@@ -186,7 +186,7 @@ export function ProcessingFormPage() {
                   >
                     <option value="">{t('material.selectMaterial')}</option>
                     {materials.map((m: any) => (
-                      <option key={m.id} value={m.id}>{formatItemName(m.name, i18n.language)} ({m.unit})</option>
+                      <option key={m.id} value={m.id}>{formatItemName(m, i18n.language)} ({m.unit})</option>
                     ))}
                   </select>
                   <input

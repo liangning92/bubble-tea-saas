@@ -118,7 +118,7 @@ export function MaterialForecastPage() {
                 <AlertTriangle size={24} />
               </div>
               <div className="flex-1">
-                <div className="font-medium">{formatItemName(alert.name, i18n.language)}</div>
+                <div className="font-medium">{formatItemName(alert, i18n.language)}</div>
                 <div className="text-sm text-gray-500">
                   {t('inventory.currentStock')}: {alert.currentStock} {alert.unit} | {t('bom.dailyUsage')}: {fmt(alert.dailyUsage)} {alert.unit} |
                   {t('inventory.daysLeft')}: {fmt(alert.daysUntilStockOut)} {t('bom.days')}

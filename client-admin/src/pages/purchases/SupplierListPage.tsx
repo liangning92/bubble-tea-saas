@@ -1,8 +1,10 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { supplierApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Plus, Edit2, Trash2, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, } from 'lucide-react'
 
 interface Supplier {
   id: string
@@ -70,12 +72,12 @@ export function SupplierListPage() {
       loadSuppliers()
     } catch (error) {
       console.error(t('common.error'), error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('common.confirm'))) return
+    if (!await confirmAdmin(t('common.confirm'))) return
     try {
       await supplierApi.delete(id)
       loadSuppliers()
@@ -140,14 +142,8 @@ export function SupplierListPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">{editingSupplier ? t('purchases.editSupplier') : t('purchases.addSupplier')}</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingSupplier ? t('purchases.editSupplier') : t('purchases.addSupplier')} onClose={() => setShowModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('purchases.supplierName')}</label>
@@ -199,17 +195,16 @@ export function SupplierListPage() {
                   placeholder={t('common.addressPlaceholder')}
                 />
               </div>
-              <div className="flex gap-2 pt-4">
+              <div className="admin-dialog-footer flex gap-2 pt-4">
+                <button onClick={() => setShowModal(false)} className="btn-secondary flex-1" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button onClick={handleSave} className="btn-primary flex-1">
                   {t('common.save')}
                 </button>
-                <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">
-                  {t('common.cancel')}
-                </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

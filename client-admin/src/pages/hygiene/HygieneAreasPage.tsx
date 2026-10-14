@@ -1,8 +1,10 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { hygieneApi } from '../../services/api'
-import { Loader2, Plus, Trash2, X } from 'lucide-react'
+import { Loader2, Plus, Trash2, } from 'lucide-react'
 
 // Default area options for new areas (user can still use these or enter custom)
 export const DEFAULT_AREA_OPTIONS = [
@@ -58,7 +60,7 @@ export function HygieneAreasPage() {
     },
     onError: (error: any) => {
       console.error('Create area error:', error)
-      alert(t('hygiene.createAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.createAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 
@@ -70,7 +72,7 @@ export function HygieneAreasPage() {
     },
     onError: (error: any) => {
       console.error('Update area error:', error)
-      alert(t('hygiene.updateAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.updateAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 
@@ -81,7 +83,7 @@ export function HygieneAreasPage() {
     },
     onError: (error: any) => {
       console.error('Delete area error:', error)
-      alert(t('hygiene.deleteAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.deleteAreaFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 
@@ -130,12 +132,12 @@ export function HygieneAreasPage() {
       }
     } catch (err) {
       console.error('Save error:', err)
-      alert(t('hygiene.saveAreaFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')))
+      notifyAdmin(t('hygiene.saveAreaFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')))
     }
   }
 
-  const handleDelete = (id: string) => {
-    if (window.confirm(t('hygiene.confirmDelete'))) {
+  const handleDelete = async (id: string) => {
+    if (await confirmAdmin(t('hygiene.confirmDelete'))) {
       deleteMutation.mutate(id)
     }
   }
@@ -209,16 +211,8 @@ export function HygieneAreasPage() {
 
       {/* Add/Edit Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50 p-4" onClick={closeForm}>
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl pointer-events-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {editingArea ? t('hygiene.editArea') : t('hygiene.addArea')}
-              </h3>
-              <button onClick={closeForm} className="p-1 hover:bg-gray-100 rounded">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingArea ? t('hygiene.editArea') : t('hygiene.addArea')} onClose={closeForm} className="max-w-md" busy={Boolean(isSaving)} trackChanges chrome>
+
 
             <div className="p-6 space-y-5">
               {/* Quick Templates */}
@@ -336,8 +330,8 @@ export function HygieneAreasPage() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
-              <button onClick={closeForm} className="btn-secondary">
+            <div className="admin-dialog-footer px-6 py-4 border-t flex justify-end gap-3">
+              <button onClick={closeForm} className="btn-secondary" data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -349,8 +343,7 @@ export function HygieneAreasPage() {
                 {t('common.save')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

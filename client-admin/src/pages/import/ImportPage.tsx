@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import * as XLSX from 'xlsx'
 import {batchImportApi} from '../../services/api'
 import { useState, useCallback } from 'react'
@@ -62,7 +63,7 @@ export function ImportPage() {
       const response=await batchImportApi.run({...data,requestId})
       return response.data.data as ImportResult
     },
-    onError:()=>alert(t('common.saveFailed')),
+    onError:()=>notifyAdmin(t('common.saveFailed')),
     onSuccess: (data) => {
       setResult(data)
       queryClient.invalidateQueries({ queryKey: ['products'] })
@@ -75,7 +76,7 @@ export function ImportPage() {
     if (!files || files.length === 0) return
     const file = files[0]
     setAllRows([]);setPreview([]);setResult(null)
-    if(file.size>5*1024*1024){setFile(null);alert(t('common.error'));return}
+    if(file.size>5*1024*1024){setFile(null);notifyAdmin(t('common.error'));return}
     setFile(file)
 
     // 解析CSV
@@ -88,9 +89,9 @@ export function ImportPage() {
       setAllRows(rows)
       setRequestId(crypto.randomUUID())
       setPreview(rows.slice(0, 5))
-      } catch {setAllRows([]);setPreview([]);alert(t('common.error'))}
+      } catch {setAllRows([]);setPreview([]);notifyAdmin(t('common.error'))}
     }
-    reader.onerror=()=>{setAllRows([]);setPreview([]);alert(t('common.error'))}
+    reader.onerror=()=>{setAllRows([]);setPreview([]);notifyAdmin(t('common.error'))}
     reader.readAsText(file)
   }, [t])
 

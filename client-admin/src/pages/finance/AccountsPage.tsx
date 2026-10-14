@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -5,7 +7,7 @@ import { accountApi } from '../../services/api'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 import {
   Plus, Edit2, Trash2, RefreshCw, AlertCircle, ArrowRightLeft,
-  Settings, X, Search, Check, FileText,
+  Settings,  Search, Check, FileText,
   Wallet, Building2, CreditCard, TrendingUp, Package, TrendingDown
 } from 'lucide-react'
 
@@ -117,7 +119,7 @@ export function AccountsPage() {
       setShowTypeModal(false)
     } catch (error) {
       console.error('Failed to save account types:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -160,14 +162,14 @@ export function AccountsPage() {
   }, [viewTab, filterType])
 
   const handleSeedDefaults = async () => {
-    if (!confirm(t('finance.seedConfirmMessage'))) return
+    if (!await confirmAdmin(t('finance.seedConfirmMessage'))) return
     try {
       await accountApi.seed()
       fetchAccounts()
-      alert(t('common.success'))
+      notifyAdmin(t('common.success'))
     } catch (error) {
       console.error('Failed to seed accounts:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -185,7 +187,7 @@ export function AccountsPage() {
       fetchAccounts()
     } catch (error) {
       console.error('Failed to save account:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -204,13 +206,13 @@ export function AccountsPage() {
   const handleDelete = async (id: string) => {
     const account = accounts.find(a => a.id === id)
     if (!account) return
-    if (!confirm(t('finance.confirmDelete') + `?\n${account.name}`)) return
+    if (!await confirmAdmin(t('finance.confirmDelete') + `?\n${account.name}`)) return
     try {
       await accountApi.delete(id)
       fetchAccounts()
     } catch (error) {
       console.error('Failed to delete account:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -222,10 +224,10 @@ export function AccountsPage() {
       resetTransferForm()
       fetchAccounts()
       fetchTransfers()
-      alert(t('common.success'))
+      notifyAdmin(t('common.success'))
     } catch (error: any) {
       console.error('Failed to transfer:', error)
-      alert(error.response?.data?.message || t('common.error'))
+      notifyAdmin(error.response?.data?.message || t('common.error'))
     }
   }
 
@@ -527,16 +529,8 @@ export function AccountsPage() {
 
       {/* Account Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {editingAccount ? t('finance.chartEditAccount') : t('finance.chartAddAccount')}
-              </h3>
-              <button onClick={() => { setShowForm(false); setEditingAccount(null) }} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingAccount ? t('finance.chartEditAccount') : t('finance.chartAddAccount')} onClose={() => { setShowForm(false); setEditingAccount(null); resetForm() }} className="max-w-md" busy={false} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -582,12 +576,12 @@ export function AccountsPage() {
                 </select>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setEditingAccount(null); resetForm() }}
                   className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -598,20 +592,13 @@ export function AccountsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Transfer Form Modal */}
       {showTransferForm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{t('finance.transfer')}</h3>
-              <button onClick={() => { setShowTransferForm(false); resetTransferForm() }} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('finance.transfer')} onClose={() => { setShowTransferForm(false); resetTransferForm() }} className="max-w-md" busy={false} trackChanges chrome>
+
             <form onSubmit={handleTransfer} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -697,12 +684,12 @@ export function AccountsPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => { setShowTransferForm(false); resetTransferForm() }}
                   className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -713,8 +700,7 @@ export function AccountsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Account Types Management Modal */}
@@ -775,14 +761,8 @@ function AccountTypeModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{t('finance.manageTypes')}</h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <X size={20} />
-          </button>
-        </div>
+    <AdminDialog title={t('finance.manageTypes')} onClose={onClose} className="max-w-2xl" busy={false} trackChanges chrome>
+
 
         <div className="p-6 overflow-y-auto flex-1">
           {/* Existing Types */}
@@ -877,11 +857,11 @@ function AccountTypeModal({
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+        <div className="admin-dialog-footer px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
           <button
             onClick={onClose}
             className="px-4 py-2 border rounded-lg hover:bg-gray-100"
-          >
+           data-dialog-close="true">
             {t('common.cancel')}
           </button>
           <button
@@ -892,7 +872,6 @@ function AccountTypeModal({
             {t('common.save')}
           </button>
         </div>
-      </div>
-    </div>
+      </AdminDialog>
   )
 }

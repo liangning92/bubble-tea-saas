@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -102,7 +103,7 @@ export function StaffFeatureSettingsPage() {
       setTimeout(() => setSaved(false), 2000)
     } catch (error) {
       console.error('Failed to save staff features:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setSaving(false)
     }

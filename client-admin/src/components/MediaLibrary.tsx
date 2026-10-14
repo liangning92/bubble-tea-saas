@@ -109,14 +109,7 @@ export function MediaLibrary({
   };
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold">{t("media.title")}</h1>
-        {onClose && (
-          <button type="button" className="btn" onClick={onClose}>
-            {t("common.close")}
-          </button>
-        )}
-      </div>
+      {!onClose && <h1 className="text-xl font-bold">{t("media.title")}</h1>}
       <p className="text-sm text-gray-500">{t("media.limits")}</p>
       <div className="flex flex-wrap gap-3">
         <input
@@ -311,33 +304,27 @@ export function MediaLibrary({
         </button>
       </div>
       {onSelect && (
-        <button
+        <div className="admin-dialog-footer"><button
           type="button"
           className="btn btn-primary"
           disabled={!selected.length}
           onClick={() => onSelect(selected)}
         >
           {t("media.useSelected", { count: selected.length })}
-        </button>
+        </button></div>
       )}
       {preview && (
-        <AdminDialog
-          title={preview.name}
-          onClose={() => setPreview(null)}
-          className="max-w-3xl"
-        >
-          <div className="bg-white rounded-xl p-5 w-full max-w-3xl space-y-4">
+        <AdminDialog title={preview.name} onClose={() => setPreview(null)} className="max-w-3xl" busy={false} trackChanges chrome>
             <p>{preview.name}</p>
             <MediaPreview asset={preview} controls large />
             <button
               type="button"
               className="btn"
               onClick={() => setPreview(null)}
-            >
+             data-dialog-close="true">
               {t("common.close")}
             </button>
-          </div>
-        </AdminDialog>
+          </AdminDialog>
       )}
       {references !== null && (
         <div className="card space-y-2" role="status">
@@ -440,14 +427,8 @@ export function MediaPicker(props: {
 }) {
   const { t } = useTranslation();
   return (
-    <AdminDialog
-      title={t("media.title")}
-      onClose={props.onClose || (() => {})}
-      className="max-w-5xl"
-    >
-      <div className="bg-white rounded-xl p-5 w-full max-w-5xl max-h-[90vh] overflow-auto">
+    <AdminDialog title={t("media.title")} onClose={props.onClose || (() => {})} className="max-w-5xl" busy={false} trackChanges chrome>
         <MediaLibrary {...props} />
-      </div>
-    </AdminDialog>
+      </AdminDialog>
   );
 }

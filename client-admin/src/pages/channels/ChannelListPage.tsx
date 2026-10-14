@@ -1,3 +1,4 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -199,7 +200,7 @@ export function ChannelListPage() {
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 font-medium">{t('channels.name')}</th>
                   <th className="pb-3 font-medium">{t('channels.code')}</th>
-                  <th className="pb-3 font-medium">{t('channels.commission')}</th>
+                  <th className="text-right tabular-nums pb-3 font-medium">{t('channels.commission')}</th>
                   <th className="pb-3 font-medium">{t('channels.status')}</th>
                   <th className="pb-3 font-medium">{t('common.actions')}</th>
                 </tr>
@@ -266,11 +267,8 @@ export function ChannelListPage() {
 
       {/* 创建/编辑弹窗 */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingChannel ? t('channels.editChannel') : t('channels.addChannel')}
-            </h2>
+        <AdminDialog title={editingChannel ? t('channels.editChannel') : t('channels.addChannel')} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending || updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -324,7 +322,10 @@ export function ChannelListPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">{t('channels.commissionHint')}</p>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   className="btn-primary flex-1"
@@ -336,24 +337,22 @@ export function ChannelListPage() {
                     t('common.save')
                   )}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* 删除确认弹窗 */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 mb-2">{t('common.confirm')}</h2>
+        <AdminDialog title={t('common.confirm')} onClose={() => setDeleteConfirm(null)} className="max-w-sm" busy={Boolean(deleteMutation.isPending)} trackChanges chrome>
+
             <p className="text-gray-600 mb-4">
               {t('channels.deleteConfirm')}
             </p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
                 className="btn-danger flex-1"
@@ -361,12 +360,8 @@ export function ChannelListPage() {
               >
                 {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin mx-auto" /> : t('common.delete')}
               </button>
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

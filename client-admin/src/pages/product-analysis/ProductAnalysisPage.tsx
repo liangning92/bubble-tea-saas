@@ -569,7 +569,7 @@ export function ProductAnalysisPage() {
                                   {r.productName}
                                 </Link>
                               </td>
-                              <td>{r.quantity}</td>
+                              <td className="text-right tabular-nums">{r.quantity}</td>
                               <td>{r.previousQuantity}</td>
                               <td>{change(r)}</td>
                               <td>{fmt(r.penetration)}%</td>

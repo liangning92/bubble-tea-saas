@@ -1,9 +1,11 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { configApi } from '../../services/api'
-import { Plus, Edit2, Trash2, Loader2, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, Loader2, } from 'lucide-react'
 
 interface InventoryCategory {
   id: string
@@ -60,7 +62,7 @@ export function InventoryCategoryPage() {
     },
     onError: (error: any) => {
       console.error('Save category error:', error)
-      alert(error?.response?.data?.message || error.message || 'Failed to save category')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Failed to save category')
     }
   })
 
@@ -138,8 +140,8 @@ export function InventoryCategoryPage() {
                   <Edit2 size={14} />
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm(t('inventory.deleteCategoryConfirm'))) {
+                  onClick={async () => {
+                    if (await confirmAdmin(t('inventory.deleteCategoryConfirm'))) {
                       handleDelete(cat.id)
                     }
                   }}
@@ -171,16 +173,8 @@ export function InventoryCategoryPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">
-                {editingCategory ? t('inventory.editCategory') : t('inventory.addCategory')}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingCategory ? t('inventory.editCategory') : t('inventory.addCategory')} onClose={closeModal} className="max-w-sm" busy={Boolean(saveMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -221,7 +215,10 @@ export function InventoryCategoryPage() {
                   placeholder={t('inventory.descriptionPlaceholder')}
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   className="btn-primary flex-1"
@@ -233,13 +230,9 @@ export function InventoryCategoryPage() {
                     t('common.save')
                   )}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

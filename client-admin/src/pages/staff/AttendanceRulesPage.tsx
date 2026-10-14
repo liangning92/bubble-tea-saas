@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -108,7 +110,7 @@ export function AttendanceRulesPage() {
 
   const handleSave = async () => {
     if (!formData.name) {
-      alert(t('staff.pleaseEnterRuleName'))
+      notifyAdmin(t('staff.pleaseEnterRuleName'))
       return
     }
 
@@ -138,12 +140,12 @@ export function AttendanceRulesPage() {
       loadRules()
     } catch (error) {
       console.error('Failed to save:', error)
-      alert(t('staff.failedToSaveRule'))
+      notifyAdmin(t('staff.failedToSaveRule'))
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('staff.deleteThisRule'))) return
+    if (!await confirmAdmin(t('staff.deleteThisRule'))) return
     try {
       await attendanceRulesApi.delete(id)
       loadRules()
@@ -250,11 +252,8 @@ export function AttendanceRulesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 my-8" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">
-              {editingRule ? t('staff.editAttendanceRule') : t('staff.addAttendanceRule')}
-            </h3>
+        <AdminDialog title={editingRule ? t('staff.editAttendanceRule') : t('staff.addAttendanceRule')} onClose={() => setShowModal(false)} className="max-w-lg" busy={false} trackChanges chrome>
+
 
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
               <div>
@@ -401,8 +400,8 @@ export function AttendanceRulesPage() {
                 <label htmlFor="isDefault" className="text-sm">{t('staff.setAsDefault')}</label>
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg" data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button onClick={handleSave} className="flex-1 py-2 bg-primary text-white rounded-lg">
@@ -410,8 +409,7 @@ export function AttendanceRulesPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

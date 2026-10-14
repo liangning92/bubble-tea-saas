@@ -11,7 +11,8 @@ test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',
  assert.equal(process.env.BT_TEST_LABEL,'com.bubbletea.test-run='+process.env.BT_TEST_RUN);
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'media-proxy-limit-'));
  const prefix=process.env.BT_TEST_RUN,network=prefix+'-net',backend=prefix+'-backend',front=prefix+'-front';
- const image=process.env.MEDIA_PROXY_NGINX_IMAGE||'nginx:alpine';
+ const image=prefix+':nginx-test';
+ const baseImage=process.env.MEDIA_PROXY_NGINX_IMAGE||'nginx:alpine';
  const docker=(...args)=>execFileSync('docker',args,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
  const cleanup=(...args)=>{try{docker(...args)}catch{}};
  try{
@@ -19,6 +20,11 @@ test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',
   fs.writeFileSync(upstream,'server { listen 3000; client_max_body_size 501m; location / { return 200 "mock upstream"; } }\n');
   const small=path.join(root,'small.png'),large=path.join(root,'large.png');
   fs.writeFileSync(small,Buffer.alloc(50*1024));fs.writeFileSync(large,Buffer.alloc(4*1024*1024));
+  // The private builder owns base layers; only the labelled test image is
+  // loaded locally. Removing the builder avoids leaving shared test cache.
+  fs.writeFileSync(path.join(root,'Dockerfile'),`FROM ${baseImage}\nLABEL com.bubbletea.test-run="${prefix}"\n`);
+  docker('buildx','create','--name',prefix,'--driver','docker-container');
+  docker('buildx','build','--builder',prefix,'--load','--label',process.env.BT_TEST_LABEL,'--tag',image,root);
   docker('network','create','--label',process.env.BT_TEST_LABEL,network);
   docker('run','--rm','-d','--label',process.env.BT_TEST_LABEL,'--name',backend,'--network',network,'--network-alias','bubble-tea-api','-v',`${upstream}:/etc/nginx/conf.d/default.conf:ro`,image);
   docker('run','--rm','-d','--label',process.env.BT_TEST_LABEL,'--name',front,'--network',network,'-p','127.0.0.1::80','-v',`${configuration}:/etc/nginx/conf.d/default.conf:ro`,image);
@@ -34,5 +40,5 @@ test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',
   assert.equal(post('/api/media/?scene=product',large),'200');
   assert.equal(post('/api/upload/dualScreen',large),'200');
   assert.equal(post('/api/unrelated-json-endpoint',large),'413');
- }finally{cleanup('rm','-f',front,backend);cleanup('network','rm',network);fs.rmSync(root,{recursive:true,force:true})}
+ }finally{cleanup('buildx','rm','--force',prefix);cleanup('rm','-f',front,backend);cleanup('network','rm',network);fs.rmSync(root,{recursive:true,force:true})}
 });

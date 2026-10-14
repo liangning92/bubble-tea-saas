@@ -1,3 +1,4 @@
+import { notifyAdmin, confirmAdmin } from './AdminFeedback'
 import { OrderItemsTable } from './OrderItemsTable'
 import { useTranslation } from 'react-i18next'
 import {PageHelp} from './PageHelp'
@@ -6,11 +7,11 @@ function selected(request:RequestPolicy):{v2:boolean;rows:{itemId:string;quantit
  try{const value=JSON.parse(request.selectedItemIds||'[]');if(value?.version===2&&Array.isArray(value.items))return {v2:true,rows:value.items};if(Array.isArray(value))return {v2:false,rows:(request.order?.items||[]).filter(i=>value.includes(i.id)).map(i=>({itemId:i.id,quantity:i.quantity}))}}catch{}
  return {v2:false,rows:[]}
 }
-export function confirmPreparedRefund(request:RequestPolicy,t:(key:string)=>string):boolean {
- if(!['customer_dissatisfied','paid_unprepared'].includes(request.reasonCode||'')){alert(t('refundPolicy.legacyBlocked'));return false}
+export async function confirmPreparedRefund(request:RequestPolicy,t:(key:string)=>string):Promise<boolean> {
+ if(!['customer_dissatisfied','paid_unprepared'].includes(request.reasonCode||'')){notifyAdmin(t('refundPolicy.legacyBlocked'));return false}
  const {v2,rows}=selected(request)
- if(!rows.length||(!v2&&rows.length!==request.order?.items.length)){alert(t('refundPolicy.partialBlocked'));return false}
- return window.confirm(t(request.reasonCode==='paid_unprepared'?'refundPolicy.verifyUnprepared':'refundPolicy.verifyPrepared'))
+ if(!rows.length||(!v2&&rows.length!==request.order?.items.length)){notifyAdmin(t('refundPolicy.partialBlocked'));return false}
+ return await confirmAdmin(t(request.reasonCode==='paid_unprepared'?'refundPolicy.verifyUnprepared':'refundPolicy.verifyPrepared'))
 }
 export function RefundPolicyReview({request}:{request:RequestPolicy}){
  const {t}=useTranslation();const {rows}=selected(request)

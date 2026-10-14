@@ -134,7 +134,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  await page.screenshot({path:'/tmp/product-detail-page.png',fullPage:true})
  await page.goto(base+'/products');await page.getByRole('button',{name:'添加产品',exact:true}).click();await page.getByRole('button',{name:'从媒体库选择',exact:true}).click();await page.getByRole('dialog',{name:'媒体库'}).waitFor();assert.equal(await page.locator('audio').count(),0);await page.getByRole('button',{name:'选择',exact:true}).first().click();await page.getByRole('button',{name:'使用所选素材（1）',exact:true}).click();await page.getByText('主图',{exact:true}).waitFor()
  // Cancel leaves uploaded/library files untouched, then reopening starts a fresh form.
- await page.getByRole('button',{name:'取消',exact:true}).click();await page.getByRole('button',{name:'添加产品',exact:true}).click();assert.equal(await page.getByText('主图',{exact:true}).count(),0)
+ await page.getByRole('button',{name:'取消',exact:true}).click();await page.getByRole('button',{name:'放弃修改',exact:true}).click();await page.getByRole('button',{name:'添加产品',exact:true}).click();assert.equal(await page.getByText('主图',{exact:true}).count(),0)
  // A stalled upload must leave loading state, then allow a successful retry.
  const imageInput=page.locator('form input[type="file"]').first()
  const pngFile={name:'tea.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=','base64')}
@@ -183,7 +183,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  assert.equal(postedHardware.dualScreen.mediaFiles[0].mediaId,'m4')
  assert.equal(postedHardware.dualScreen.mediaFiles[0].isVideo,true)
  await page.getByRole('button',{name:'选择产品图片与价格',exact:true}).click()
- const productPicker=page.getByRole('dialog',{name:'营销管理表单',exact:true})
+ const productPicker=page.getByRole('dialog',{name:'选择展示产品',exact:true})
  await productPicker.getByRole('checkbox').first().check()
  await productPicker.getByLabel('展示规格',{exact:true}).selectOption('s2')
  await productPicker.getByRole('button',{name:'使用此产品',exact:true}).click()

@@ -1,3 +1,4 @@
+import { AdminFeedback } from './components/AdminFeedback'
 import {StaffApprovalPage} from './pages/StaffApprovalPage'
 import { EmployeeWorkspacePage } from './pages/staff/EmployeeWorkspacePage'
 import { lazy, Suspense } from 'react'
@@ -149,7 +150,7 @@ function LegacyShiftRedirect() {
 
 function App() {
   return (
-    <Suspense fallback={<RouteLoading />}><Routes>
+    <><AdminFeedback/><Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
@@ -385,7 +386,7 @@ function App() {
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />
       </Route>
-    </Routes></Suspense>
+    </Routes></Suspense></>
   )
 }
 

@@ -1,12 +1,12 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Plus, Edit2, Trash2, X, Zap, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Loader2, Plus, Edit2, Trash2,  Zap, ToggleLeft, ToggleRight } from 'lucide-react'
 
 interface AutomationRule {
   id: string
@@ -268,14 +268,8 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
   }
 
   return (
-    <MarketingDialog onClose={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <div className="marketing-toolbar mb-4">
-          <h3 className="text-lg font-semibold">{rule ? tk('marketing.editAutomationRule') : tk('marketing.addAutomationRule')}</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
-            <X size={20} />
-          </button>
-        </div>
+    <AdminDialog title={rule ? tk('marketing.editAutomationRule') : tk('marketing.addAutomationRule')} onClose={onClose} className="max-w-md" busy={Boolean(isPending)} trackChanges chrome>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{tk('marketing.ruleName')} *</label>
@@ -351,15 +345,14 @@ function AutomationRuleFormModal({ rule, storeId, onClose, onSubmit, isPending }
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="admin-dialog-footer flex gap-3 pt-4">
+            <button type="button" onClick={onClose} className="btn-secondary" data-dialog-close="true">{tk('common.cancel')}</button>
             <button type="submit" disabled={!form.name || isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
               {isPending && <Loader2 size={16} className="animate-spin" />}
               {tk('common.save')}
             </button>
-            <button type="button" onClick={onClose} className="btn-secondary">{tk('common.cancel')}</button>
           </div>
         </form>
-      </div>
-    </MarketingDialog>
+      </AdminDialog>
   )
 }

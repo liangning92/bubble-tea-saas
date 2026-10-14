@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -209,7 +211,7 @@ export function ScheduleCalendarPage() {
       setBatchMode(false)
     } catch (error) {
       console.error('Failed to batch save schedule:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -466,9 +468,8 @@ export function ScheduleCalendarPage() {
 
       {/* Shift Selection Modal */}
       {editingCell && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingCell(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{t('staff.selectShift')}</h3>
+        <AdminDialog title={t('staff.selectShift')} onClose={() => setEditingCell(null)} className="max-w-sm" busy={false} trackChanges chrome>
+
             <div className="grid grid-cols-2 gap-3 mb-4">
               {shifts.map(shift => (
                 <button
@@ -484,11 +485,10 @@ export function ScheduleCalendarPage() {
             <button
               onClick={() => setEditingCell(null)}
               className="w-full py-2 border border-gray-200 rounded-lg"
-            >
+             data-dialog-close="true">
               {t('common.cancel')}
             </button>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

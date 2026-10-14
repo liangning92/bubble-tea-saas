@@ -385,24 +385,12 @@ export function SettingsPage() {
       )}
 
       {confirmSave && (
-        <AdminDialog
-          title={l(
+        <AdminDialog title={l(
             "确认门店设置",
             "Review store settings",
             "Tinjau pengaturan toko",
-          )}
-          onClose={() => setConfirmSave(false)}
-          busy={saveMutation.isPending}
-          className="max-w-xl"
-        >
-          <div className="p-5 space-y-4">
-            <h2 className="font-semibold">
-              {l(
-                "确认门店设置",
-                "Review store settings",
-                "Tinjau pengaturan toko",
-              )}
-            </h2>
+          )} onClose={() => setConfirmSave(false)} className="max-w-lg" busy={Boolean(saveMutation.isPending)} trackChanges chrome>
+
             <p className="text-sm text-gray-500">
               {l(
                 "保存后将用于门店展示、日期及报表。请核对以下修改。",
@@ -432,7 +420,14 @@ export function SettingsPage() {
                   t("common.error")}
               </p>
             )}
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button
+                className="btn"
+                disabled={saveMutation.isPending}
+                onClick={() => setConfirmSave(false)}
+               data-dialog-close="true">
+                {t("common.cancel")}
+              </button>
               <button
                 className="btn-primary"
                 disabled={saveMutation.isPending}
@@ -440,16 +435,8 @@ export function SettingsPage() {
               >
                 {l("确认保存", "Confirm save", "Konfirmasi simpan")}
               </button>
-              <button
-                className="btn"
-                disabled={saveMutation.isPending}
-                onClick={() => setConfirmSave(false)}
-              >
-                {t("common.cancel")}
-              </button>
             </div>
-          </div>
-        </AdminDialog>
+          </AdminDialog>
       )}
       {activeTab === "permissions" && (
         <Suspense

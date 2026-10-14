@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -61,10 +62,10 @@ export function PointsRuleConfigPage() {
     mutationFn: (payload: typeof form) => pointsRuleApi.update(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['points-rule'] })
-      alert(t('common.success'))
+      notifyAdmin(t('common.success'))
     },
     onError: () => {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   })
 

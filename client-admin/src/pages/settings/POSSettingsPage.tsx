@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import dateLocaleI18n from '../../i18n'
 import { ProductDisplayPicker } from '../../components/ProductDisplayPicker'
 import { DisplayProductMedia } from '../../../../shared/components/DisplayProductMedia'
@@ -765,7 +766,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     },
     onError: (error: any) => {
       console.error('Save config error:', error)
-      if (!logoDialog) alert(t('pos.saveFailed') + ': ' + (error?.message || t('common.unknownError')))
+      if (!logoDialog) notifyAdmin(t('pos.saveFailed') + ': ' + (error?.message || t('common.unknownError')))
     }
   })
 

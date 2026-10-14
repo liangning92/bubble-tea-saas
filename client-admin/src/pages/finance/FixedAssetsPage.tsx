@@ -1,10 +1,12 @@
+import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { assetApi } from '../../services/api'
 import { formatCurrency, formatDate } from '../../utils/helpers'
-import { TrendingDown, Plus, Edit2, Trash2, RefreshCw, AlertCircle, CheckCircle, X } from 'lucide-react'
+import { TrendingDown, Plus, Edit2, Trash2, RefreshCw, AlertCircle, CheckCircle, } from 'lucide-react'
 
 interface FixedAsset {
   id: string
@@ -134,11 +136,11 @@ export function FixedAssetsPage() {
     const asset = assets.find(a => a.id === id)
     if (!asset) return
     if (asset.originalValue >= LARGE_AMOUNT_THRESHOLD) {
-      const confirmed = window.confirm(
+      const confirmed = await confirmAdmin(
         `${t('finance.confirmLargeDelete')}\n${t('finance.assetName')}: ${asset.name}\n${t('finance.originalValue')}: ${formatCurrency(asset.originalValue)}`
       )
       if (!confirmed) return
-    } else if (!confirm(t('finance.confirmDelete'))) {
+    } else if (!await confirmAdmin(t('finance.confirmDelete'))) {
       return
     }
     try {
@@ -163,7 +165,7 @@ export function FixedAssetsPage() {
     if (!disposeAsset) return
     const saleValue = parseFloat(disposeData.saleValue.replace(/,/g, ''))
     if (isNaN(saleValue) || saleValue < 0) {
-      alert(t('finance.invalidSaleValue'))
+      notifyAdmin(t('finance.invalidSaleValue'))
       return
     }
     try {
@@ -177,7 +179,7 @@ export function FixedAssetsPage() {
       fetchAssets()
       fetchSchedule()
     } catch (error: any) {
-      alert(error.response?.data?.message || t('common.error'))
+      notifyAdmin(error.response?.data?.message || t('common.error'))
     }
   }
 
@@ -391,13 +393,8 @@ export function FixedAssetsPage() {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b">
-              <h3 className="text-lg font-semibold">
-                {editingAsset ? t('finance.editAsset') : t('finance.addAsset')}
-              </h3>
-            </div>
+        <AdminDialog title={editingAsset ? t('finance.editAsset') : t('finance.addAsset')} onClose={() => { setShowForm(false); setEditingAsset(null); resetForm() }} className="max-w-md" busy={false} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -479,12 +476,12 @@ export function FixedAssetsPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setEditingAsset(null); resetForm() }}
                   className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -495,20 +492,13 @@ export function FixedAssetsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Dispose Modal */}
       {showDisposeModal && disposeAsset && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{t('finance.disposeAsset')}</h3>
-              <button onClick={() => setShowDisposeModal(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('finance.disposeAsset')} onClose={() => setShowDisposeModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="p-6 space-y-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="font-medium">{disposeAsset.name}</p>
@@ -561,12 +551,12 @@ export function FixedAssetsPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowDisposeModal(false)}
                   className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -578,8 +568,7 @@ export function FixedAssetsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

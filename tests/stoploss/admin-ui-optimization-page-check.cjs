@@ -60,7 +60,7 @@ const { chromium, expect } = require("@playwright/test"),
       dateFormat: "YYYY-MM-DD",
     },
     writes = [],
-    fail = false;
+    fail = false, releaseAccountWrite;
   let prices = [
     {
       productId: "p1",
@@ -117,6 +117,10 @@ const { chromium, expect } = require("@playwright/test"),
       let data = {};
       if (req.method() !== "GET") {
         writes.push({ path: p, body: req.postDataJSON() });
+        if (p === "/api/finance/accounts") {
+          await new Promise(resolve => { releaseAccountWrite = resolve });
+          return route.fulfill({ status: 500, json: { message: "Synthetic save failed" } });
+        }
         if (p === "/api/tv/defaults") defaults = req.postDataJSON();
         if (p === "/api/config") info = req.postDataJSON().value;
         if (p.startsWith("/api/channels/dine/products/")) {
@@ -138,7 +142,8 @@ const { chromium, expect } = require("@playwright/test"),
           );
         }
       }
-      if (p === "/api/config") data = { storeInfo: info };
+      if (p === "/api/finance/accounts/types") data = { list: [{ key: "expense", label: "Expense", icon: "FileText", color: "text-gray-600", bgColor: "bg-gray-100" }] };
+      else if (p === "/api/config") data = { storeInfo: info };
       else if (p === "/api/tv/screens" || p === "/api/tv/legacy") data = [];
       else if (p === "/api/tv/defaults") data = defaults;
       else if (p === "/api/tv/options")
@@ -312,6 +317,34 @@ const { chromium, expect } = require("@playwright/test"),
       );
     }
     await page.screenshot({ path: path.join(out, "mobile-inventory.png") });
+    // Exercise an older async form without its own saving flag. All data is
+    // owned by this isolated fixture, and every external request is blocked.
+    await page.goto(origin + "/finance/accounts");
+    await page.getByRole("button", { name: "Add Account", exact: true }).click();
+    let accountDialog = page.getByRole("dialog", { name: "Add Account", exact: true });
+    await accountDialog.getByPlaceholder("1001").fill("9999");
+    await accountDialog.getByPlaceholder("Account Name", { exact: true }).fill("Isolated draft");
+    await accountDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("unsaved");
+    await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+    accountDialog = page.getByRole("dialog", { name: "Add Account", exact: true });
+    await expect(accountDialog.getByPlaceholder("Account Name", { exact: true })).toHaveValue("Isolated draft");
+    const accountWrites = writes.length;
+    await accountDialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(accountDialog).toHaveAttribute("aria-busy", "true");
+    await expect(accountDialog.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    await expect(accountDialog.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(accountDialog).toBeVisible();
+    assert.equal(writes.length, accountWrites + 1);
+    releaseAccountWrite();
+    await expect(accountDialog).toHaveAttribute("aria-busy", "false");
+    await expect(accountDialog.getByPlaceholder("Account Name", { exact: true })).toHaveValue("Isolated draft");
+    await accountDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add Account", exact: true })).toBeFocused();
+    await page.screenshot({ path: path.join(out, "mobile-form-protection.png") });
     assert.deepEqual(errors, []);
     console.log(
       "PASS production UI: full-width mobile drawer, dialog focus/Escape, TV search/drafts, media preview, price zero/empty/failure/bulk review, explicit store save, inventory grouping.",

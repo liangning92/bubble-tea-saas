@@ -25,13 +25,13 @@ export function StaffIndexPage() {
     <div className="flex flex-col h-full">
       {/* 二级导航 */}
       <div className="sticky top-0 bg-surface z-10 pb-4 border-b border-gray-200 mb-4">
-        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap overflow-x-auto">
+        <div className="admin-module-nav">
           {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => (
             <Link
               key={tab.key}
               to={tab.path}
                 aria-current={currentTab === tab.key ? 'page' : undefined}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+              className={`admin-module-link text-sm font-medium transition-colors whitespace-nowrap ${
                 currentTab === tab.key
                   ? 'bg-primary text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100'

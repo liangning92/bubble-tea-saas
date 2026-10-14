@@ -1,10 +1,11 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Plus, Edit2, Trash2, X, Percent, Banknote, Tag, Sparkles, Gift } from 'lucide-react'
+import { Loader2, Plus, Edit2, Trash2,  Percent, Banknote, Tag, Sparkles, Gift } from 'lucide-react'
 
 type DiscountRuleType = 'fixed' | 'percent' | 'second_half' | 'bogo'
 
@@ -223,14 +224,14 @@ export function DiscountRulePage() {
                       <div className="font-medium text-gray-900">{rule.name}</div>
                       <div className="text-xs text-gray-400">Priority: {rule.priority}</div>
                     </td>
-                    <td className="py-3">
+                    <td className="text-right tabular-nums py-3">
                       <span className="text-gray-700 text-sm">
                         {isCupRule(rule.discountType)
                           ? `${t('marketing.minCups')}: ${rule.minOrderAmount || 2} ${t('marketing.cups')}`
                           : `${t('marketing.minOrderAmount')}: ${formatCurrency(rule.minOrderAmount)}`}
                       </span>
                     </td>
-                    <td className="py-3">
+                    <td className="text-right tabular-nums py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                         rule.discountType === 'bogo'
                           ? 'bg-purple-100 text-purple-700'
@@ -292,16 +293,8 @@ export function DiscountRulePage() {
 
       {/* Form Modal (Create or Edit) */}
       {(showCreate || (showEdit && editingRule)) && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[92vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">
-                {showEdit ? t('marketing.editDiscountRule') : t('marketing.addDiscountRule')}
-              </h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={showEdit ? t('marketing.editDiscountRule') : t('marketing.addDiscountRule')} onClose={closeModal} className="max-w-lg" busy={Boolean(createMutation.isPending || updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.ruleName')} *</label>
@@ -491,7 +484,10 @@ export function DiscountRulePage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t">
+              <div className="admin-dialog-footer flex gap-3 pt-4 border-t">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   disabled={!form.name || createMutation.isPending || updateMutation.isPending}
@@ -502,13 +498,9 @@ export function DiscountRulePage() {
                   )}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

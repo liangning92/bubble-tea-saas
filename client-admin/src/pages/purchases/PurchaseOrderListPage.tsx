@@ -1,3 +1,5 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, InventoryActor } from '../../components/InventoryActor';
 import { useState, useEffect, useRef } from 'react'
@@ -154,13 +156,13 @@ export function PurchaseOrderListPage() {
     }
   }
 
-  const handleStatusChange = (id: string, status: string) => {
-    if(status==='received'&&!confirm(t('inventoryFlow.confirmReceive')))return
+  const handleStatusChange = async (id: string, status: string) => {
+    if(status==='received'&&!await confirmAdmin(t('inventoryFlow.confirmReceive')))return
     return runOrderAction(id, () => status === 'received' ? purchaseOrderApi.receive(id) : purchaseOrderApi.updateStatus(id, status))
   }
 
-  const handleCancel = (id: string) => {
-    if (!confirm(t('purchases.confirmCancel'))) return
+  const handleCancel = async (id: string) => {
+    if (!await confirmAdmin(t('purchases.confirmCancel'))) return
     return runOrderAction(id, () => purchaseOrderApi.cancel(id, 'Dibatalkan oleh admin'))
   }
 
@@ -342,14 +344,8 @@ export function PurchaseOrderListPage() {
 
       {/* Create PO Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-2xl rounded-xl p-6 mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold">{t('purchases.createNewPO')}</h2>
-              <button onClick={() => { setShowModal(false); resetForm(); }} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('purchases.createNewPO')} onClose={() => { setShowModal(false); resetForm(); }} className="max-w-2xl" busy={Boolean(busyOrders.has('new'))} trackChanges chrome>
+
 
             {actionError && <div role="alert" className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg">{actionError}</div>}
             <div className="space-y-4">
@@ -400,8 +396,8 @@ export function PurchaseOrderListPage() {
 
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-5">
+                    <div key={index} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
+                      <div className="col-span-2 sm:col-span-5">
                         <select
                           value={item.inventoryId}
                           onChange={(e) => updateItem(index, 'inventoryId', e.target.value)}
@@ -409,12 +405,14 @@ export function PurchaseOrderListPage() {
                         >
                           <option value="">{t('purchases.selectItem')}</option>
                           {inventory.map((inv) => (
-                            <option key={inv.id} value={inv.id}>{formatItemName(inv.name, i18n.language)} ({inv.unit})</option>
+                            <option key={inv.id} value={inv.id}>{formatItemName(inv, i18n.language)} ({inv.unit})</option>
                           ))}
                         </select>
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-1 sm:col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">{t('uiDesign.quantity')} · {inventory.find(inv=>inv.id===item.inventoryId)?.unit||'—'}</label>
                         <input
+                          aria-label={t('uiDesign.quantity')}
                           type="number"
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
@@ -423,8 +421,10 @@ export function PurchaseOrderListPage() {
                           min="1"
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-1 sm:col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">{t('uiDesign.unitPrice')} (Rp)</label>
                         <input
+                          aria-label={t('uiDesign.unitPrice')}
                           type="number"
                           value={item.unitCost}
                           onChange={(e) => updateItem(index, 'unitCost', parseInt(e.target.value) || 0)}
@@ -433,7 +433,7 @@ export function PurchaseOrderListPage() {
                           min="0"
                         />
                       </div>
-                      <div className="col-span-1">
+                      <div className="col-span-2 sm:col-span-1">
                         <button
                           onClick={() => removeItem(index)}
                           className="p-3 text-red-500 hover:bg-red-50 rounded-xl"
@@ -454,8 +454,8 @@ export function PurchaseOrderListPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 py-3 border border-gray-200 rounded-xl">
+              <div className="admin-dialog-footer flex gap-3 mt-6">
+                <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 py-3 border border-gray-200 rounded-xl" data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button disabled={busyOrders.has('new')} onClick={handleSave} className="flex-1 py-3 bg-primary text-white rounded-xl font-medium">
@@ -463,8 +463,7 @@ export function PurchaseOrderListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

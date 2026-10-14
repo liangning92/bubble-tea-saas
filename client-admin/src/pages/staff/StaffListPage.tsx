@@ -183,7 +183,7 @@ export function StaffListPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="admin-responsive-table admin-responsive-table w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 font-medium">{t('staff.employeeNumber')}</th>
@@ -191,7 +191,7 @@ export function StaffListPage() {
                   <th className="pb-3 font-medium">{t('staff.phone')}</th>
                   <th className="pb-3 font-medium">{t('staff.position')}</th>
                   <th className="pb-3 font-medium">{t('staff.employmentType')}</th>
-                  <th className="pb-3 font-medium">{t('salary.baseSalary')}</th>
+                  <th className="text-right tabular-nums pb-3 font-medium">{t('salary.baseSalary')}</th>
                   <th className="pb-3 font-medium">{t('staff.status')}</th>
                   <th className="pb-3 font-medium">{t('common.actions')}</th>
                 </tr>
@@ -199,18 +199,18 @@ export function StaffListPage() {
               <tbody>
                 {staff.map((s: any) => (
                   <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="py-3 font-mono text-sm">{s.employeeNumber || s.id.slice(-6).toUpperCase()}</td>
-                    <td className="py-3 font-medium">{s.name}{s.payrollEmployee===false&&<p className="text-xs text-gray-500">{staffIdentityLabels(i18n.language).accountOnly}</p>}</td>
-                    <td className="py-3 text-gray-600">{s.phone}</td>
-                    <td className="py-3">{getPositionLabel(s.position)}</td>
-                    <td className="py-3 text-sm text-gray-600">{getEmploymentTypeLabel(s.employmentType || 'full_time')}{s.probation?.enabled&&<span className="badge badge-info ml-2">{probationLabels(i18n.language)[s.probation.status==='probation'?'probation':s.probation.status==='not_started'?'not_started':'regular']}</span>}</td>
-                    <td className="py-3 font-medium">{s.payrollEmployee===false ? '—' : s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
-                    <td className="py-3">
+                    <td className="py-3 font-mono text-sm" data-label={t('staff.employeeNumber')}>{s.employeeNumber || s.id.slice(-6).toUpperCase()}</td>
+                    <td className="py-3 font-medium" data-label={t('staff.name')}>{s.name}{s.payrollEmployee===false&&<p className="text-xs text-gray-500">{staffIdentityLabels(i18n.language).accountOnly}</p>}</td>
+                    <td className="py-3 text-gray-600" data-label={t('staff.phone')}>{s.phone}</td>
+                    <td className="py-3" data-label={t('staff.position')}>{getPositionLabel(s.position)}</td>
+                    <td className="py-3 text-sm text-gray-600" data-label={t('staff.employmentType')}>{getEmploymentTypeLabel(s.employmentType || 'full_time')}{s.probation?.enabled&&<span className="badge badge-info ml-2">{probationLabels(i18n.language)[s.probation.status==='probation'?'probation':s.probation.status==='not_started'?'not_started':'regular']}</span>}</td>
+                    <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 font-medium" data-label={t('salary.baseSalary')}>{s.payrollEmployee===false ? '—' : s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
+                    <td className="py-3" data-label={t('staff.status')}>
                       <span className={`badge ${getStatusBadge(s.status)} capitalize`}>
-                        {s.status === 'active' ? t('common.active') : s.status === 'inactive' ? t('common.inactive') : s.status}
+                        {s.status === 'active' ? t('common.active') : s.status === 'inactive' ? t('common.inactive') : s.status === 'resigned' ? t('staff.resigned') : s.status}
                       </span>
                     </td>
-                    <td className="py-3">
+                    <td className="py-3" data-label={t('common.actions')}>
                       <div className="flex items-center gap-2">
                         <Link
                           to={`/staff/${s.id}`}

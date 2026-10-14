@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -90,7 +92,7 @@ export function StaffPointsPage() {
       setFormData({ points: '', reason: 'good_performance', note: '' })
     } catch (error) {
       console.error('Failed to award points:', error)
-      alert(t('staff.earnPointsFailed'))
+      notifyAdmin(t('staff.earnPointsFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -112,7 +114,7 @@ export function StaffPointsPage() {
       setFormData({ points: '', reason: 'manual_adjust', note: '' })
     } catch (error) {
       console.error('Failed to adjust points:', error)
-      alert(t('staff.adjustPointsFailed'))
+      notifyAdmin(t('staff.adjustPointsFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -217,9 +219,8 @@ export function StaffPointsPage() {
 
       {/* History Modal */}
       {showHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowHistory(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{selectedStaffName} - {t('staff.pointsHistory')}</h3>
+        <AdminDialog title={[selectedStaffName, "-", t('staff.pointsHistory')].join(" ")} onClose={() => setShowHistory(false)} className="max-w-lg" busy={false} trackChanges chrome>
+
             <div className="space-y-3">
               {history.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">{t('common.noData')}</p>
@@ -242,18 +243,16 @@ export function StaffPointsPage() {
                 ))
               )}
             </div>
-            <button onClick={() => setShowHistory(false)} className="w-full mt-4 py-2 border border-gray-200 rounded-lg">
+            <button onClick={() => setShowHistory(false)} className="w-full mt-4 py-2 border border-gray-200 rounded-lg" data-dialog-close="true">
               {t('common.close')}
             </button>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Earn Points Modal */}
       {showEarnModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowEarnModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{t('staff.earnPoints')} - {selectedStaffName}</h3>
+        <AdminDialog title={[t('staff.earnPoints'), "-", selectedStaffName].join(" ")} onClose={() => setShowEarnModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.points')} *</label>
@@ -289,8 +288,8 @@ export function StaffPointsPage() {
                   rows={2}
                 />
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowEarnModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
+              <div className="admin-dialog-footer flex gap-3">
+                <button onClick={() => setShowEarnModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg" data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button onClick={handleEarnPoints} className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
@@ -298,15 +297,13 @@ export function StaffPointsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Adjust Points Modal */}
       {showAdjustModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAdjustModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{t('staff.adjustPoints')} - {selectedStaffName}</h3>
+        <AdminDialog title={[t('staff.adjustPoints'), "-", selectedStaffName].join(" ")} onClose={() => setShowAdjustModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.points')} ( +/- ) *</label>
@@ -341,8 +338,8 @@ export function StaffPointsPage() {
                   rows={2}
                 />
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowAdjustModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
+              <div className="admin-dialog-footer flex gap-3">
+                <button onClick={() => setShowAdjustModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg" data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button onClick={handleAdjustPoints} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -350,8 +347,7 @@ export function StaffPointsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

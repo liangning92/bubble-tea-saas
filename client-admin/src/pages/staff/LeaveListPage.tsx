@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import {payrollLabels} from '../../../../shared/payrollLabels'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -69,7 +71,7 @@ export function LeaveListPage() {
       setActionType(null)
     } catch (error:any) {
       console.error('Failed to approve leave:', error)
-      alert(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error?.response?.data?.message||t('common.error'))
+      notifyAdmin(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error?.response?.data?.message||t('common.error'))
     }
   }
 
@@ -235,11 +237,12 @@ export function LeaveListPage() {
 
       {/* Action Modal */}
       {selectedLeave && actionType && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4">
-              {actionType === 'approve' ? t('leave.approveLeave') : t('leave.rejectLeave')}
-            </h2>
+        <AdminDialog title={actionType === 'approve' ? t('leave.approveLeave') : t('leave.rejectLeave')} onClose={() => {
+                  setSelectedLeave(null)
+                  setActionType(null)
+                  setRejectReason('')
+                }} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="mb-4 p-4 bg-gray-50 rounded-xl">
               <p className="font-medium">{selectedLeave.staff?.name}</p>
@@ -266,7 +269,7 @@ export function LeaveListPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="admin-dialog-footer flex gap-2">
               <button
                 onClick={() => {
                   setSelectedLeave(null)
@@ -274,7 +277,7 @@ export function LeaveListPage() {
                   setRejectReason('')
                 }}
                 className="flex-1 py-3 border border-gray-200 rounded-xl"
-              >
+               data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -294,8 +297,7 @@ export function LeaveListPage() {
                 {actionType === 'approve' ? t('leave.approve') : t('leave.reject')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

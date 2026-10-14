@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -210,7 +211,7 @@ export function HygieneTemplateFormPage() {
     },
     onError: (error: any) => {
       console.error('Create template error:', error)
-      alert(t('hygiene.createTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.createTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 
@@ -222,7 +223,7 @@ export function HygieneTemplateFormPage() {
     },
     onError: (error: any) => {
       console.error('Update template error:', error)
-      alert(t('hygiene.updateTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.updateTemplateFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 
@@ -258,7 +259,7 @@ export function HygieneTemplateFormPage() {
       }
     } catch (err) {
       console.error('Submit error:', err)
-      alert(t('hygiene.submitFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')))
+      notifyAdmin(t('hygiene.submitFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')))
     }
   }
 

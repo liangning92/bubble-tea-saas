@@ -1,4 +1,3 @@
-import {payrollLabels} from '../../../../shared/payrollLabels'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useTranslation } from 'react-i18next'
 import { Outlet, Link, useLocation } from 'react-router-dom'
@@ -11,7 +10,7 @@ export function SalaryIndexPage() {
   const tabs = [
     { key: 'salary', label: t('staff.salaryTab', '工资'), path: '/staff/salary/salary', icon: Wallet },
     { key: 'reimbursement', label: t('nav.reimbursement'), path: '/staff/salary/reimbursement', icon: Receipt },
-    {key:'payroll-rules',label:payrollLabels(i18n.language).rules,path:'/staff/salary/payroll-rules',icon:Wallet},
+    {key:'payroll-rules',label:t('uiDesign.payrollRules'),path:'/staff/salary/payroll-rules',icon:Wallet},
     { key: 'probation-rules', label: probationLabels(i18n.language).title, path: '/staff/salary/probation-rules', icon: Wallet },
     { key: 'deposit-rules', label: t('staff.depositRules'), path: '/staff/salary/deposit-rules', icon: Coins },
     { key: 'deposit', label: t('staff.deposit'), path: '/staff/salary/deposit', icon: Coins },
@@ -24,7 +23,7 @@ export function SalaryIndexPage() {
     <div className="flex flex-col h-full">
       {/* 三级导航 - 薪酬福利模块 */}
       <div className="sticky top-0 bg-gray-50 z-10 pb-4 mb-4">
-        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap overflow-x-auto">
+        <div className="admin-section-nav">
           {tabs.map(tab => {
             const Icon = tab.icon
             return (
@@ -32,10 +31,10 @@ export function SalaryIndexPage() {
                 key={tab.key}
                 to={tab.path}
                 aria-current={currentTab === tab.key ? 'page' : undefined}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 admin-section-link text-sm font-medium transition-colors whitespace-nowrap ${
                   currentTab === tab.key
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-600 hover:text-primary'
                 }`}
               >
                 <Icon size={16} />

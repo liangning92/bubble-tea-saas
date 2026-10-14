@@ -1,9 +1,11 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { depositApi, staffApi } from '../../services/api'
-import { Wallet, Plus, RefreshCw, Search, X, Loader2 } from 'lucide-react'
+import { Wallet, Plus, RefreshCw, Search,  Loader2 } from 'lucide-react'
 
 interface DepositRule {
   id: string
@@ -153,7 +155,7 @@ export function StaffDepositListPage() {
 
   const handleCreateDeposit = async () => {
     if (!createForm.staffId || !createForm.depositRuleId || !createForm.totalAmount) {
-      alert(t('common.required'))
+      notifyAdmin(t('common.required'))
       return
     }
 
@@ -168,7 +170,7 @@ export function StaffDepositListPage() {
       loadData()
     } catch (error) {
       console.error('Failed to create deposit:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setCreating(false)
     }
@@ -182,7 +184,7 @@ export function StaffDepositListPage() {
 
   const handleDeduct = async () => {
     if (!deductingDeposit || !deductForm.amount) {
-      alert(t('common.required'))
+      notifyAdmin(t('common.required'))
       return
     }
 
@@ -197,7 +199,7 @@ export function StaffDepositListPage() {
       loadData()
     } catch (error) {
       console.error('Failed to record deduction:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setDeducting(false)
     }
@@ -211,7 +213,7 @@ export function StaffDepositListPage() {
 
   const handleRefund = async () => {
     if (!refundingDeposit || !refundForm.amount) {
-      alert(t('common.required'))
+      notifyAdmin(t('common.required'))
       return
     }
 
@@ -227,7 +229,7 @@ export function StaffDepositListPage() {
       loadData()
     } catch (error) {
       console.error('Failed to process refund:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setRefunding(false)
     }
@@ -404,14 +406,8 @@ export function StaffDepositListPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">{t('staff.addStaffDeposit')}</h3>
-              <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('staff.addStaffDeposit')} onClose={() => setShowCreateModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="space-y-4">
               <div>
@@ -462,11 +458,11 @@ export function StaffDepositListPage() {
                 <p className="mt-1 text-sm text-gray-500">{t('staff.depositTargetHint')}</p>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   onClick={() => setShowCreateModal(false)}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -479,20 +475,13 @@ export function StaffDepositListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Deduct Modal */}
       {showDeductModal && deductingDeposit && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDeductModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">{t('staff.recordDeduction')}</h3>
-              <button onClick={() => setShowDeductModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('staff.recordDeduction')} onClose={() => setShowDeductModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="space-y-4">
               <div className="p-4 bg-gray-50 rounded-xl">
@@ -522,11 +511,11 @@ export function StaffDepositListPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   onClick={() => setShowDeductModal(false)}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -539,20 +528,13 @@ export function StaffDepositListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Refund Modal */}
       {showRefundModal && refundingDeposit && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRefundModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">{t('staff.processRefund')}</h3>
-              <button onClick={() => setShowRefundModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('staff.processRefund')} onClose={() => setShowRefundModal(false)} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="space-y-4">
               <div className="p-4 bg-gray-50 rounded-xl">
@@ -596,11 +578,11 @@ export function StaffDepositListPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   onClick={() => setShowRefundModal(false)}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -613,8 +595,7 @@ export function StaffDepositListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

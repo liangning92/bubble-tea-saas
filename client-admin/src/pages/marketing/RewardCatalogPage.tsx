@@ -1,5 +1,5 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { ResourcePicker } from '../../components/marketing/ResourcePicker'
 import { useState } from 'react'
@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { activitiesApi, rewardApi } from '../../services/api'
 import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Plus, Edit2, Trash2, X, Gift } from 'lucide-react'
+import { Loader2, Plus, Edit2, Trash2,  Gift } from 'lucide-react'
 
 interface Reward {
   productId?: string
@@ -211,14 +211,8 @@ export function RewardCatalogPage() {
       )}
 
       {showModal && (
-        <MarketingDialog onClose={closeModal}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {editingReward ? t('marketing.editReward') : t('marketing.addReward')}
-              </h3>
-              <button onClick={closeModal} className="p-1 rounded hover:bg-gray-100"><X size={20} /></button>
-            </div>
+        <AdminDialog title={editingReward ? t('marketing.editReward') : t('marketing.addReward')} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending || updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.rewardName')} *</label>
@@ -300,7 +294,8 @@ export function RewardCatalogPage() {
                   />
                 </div>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
@@ -309,19 +304,19 @@ export function RewardCatalogPage() {
                   {(createMutation.isPending || updateMutation.isPending) && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </form>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
 
       {deleteId && (
-        <MarketingDialog onClose={()=>setDeleteId(null)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
+        <AdminDialog title={t('common.delete')} onClose={()=>setDeleteId(null)} className="max-w-sm" busy={Boolean(deleteMutation.isPending)} trackChanges chrome>
+
             <p className="text-gray-600 mb-6">{t('marketing.deleteRewardConfirm')}</p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setDeleteId(null)} className="btn-secondary flex-1" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => deleteMutation.mutate(deleteId)}
                 disabled={deleteMutation.isPending}
@@ -330,12 +325,8 @@ export function RewardCatalogPage() {
                 {deleteMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                 {t('common.delete')}
               </button>
-              <button onClick={() => setDeleteId(null)} className="btn-secondary flex-1">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
     </div>
   )

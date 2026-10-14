@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryLedgerQuantity, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { useState, useEffect } from "react";
@@ -20,7 +22,7 @@ import {
   Plus,
   Edit2,
   Trash2,
-  X,
+
 } from "lucide-react";
 
 const DEFAULT_CATEGORIES = [
@@ -158,7 +160,7 @@ export function InventoryPage() {
     },
     onError: (error: any) => {
       console.error("Add inventory error:", error);
-      alert(
+      notifyAdmin(
         error?.response?.data?.message || error.message || "Failed to add item",
       );
     },
@@ -174,7 +176,7 @@ export function InventoryPage() {
     },
     onError: (error: any) => {
       console.error("Update inventory error:", error);
-      alert(error?.response?.data?.message || error.message || "Update failed");
+      notifyAdmin(error?.response?.data?.message || error.message || "Update failed");
     },
   });
 
@@ -185,7 +187,7 @@ export function InventoryPage() {
     },
     onError: (error: any) => {
       console.error("Delete inventory error:", error);
-      alert(
+      notifyAdmin(
         error?.response?.data?.message || error.message || "Failed to delete",
       );
     },
@@ -208,7 +210,7 @@ export function InventoryPage() {
     },
     onError: (error: any) => {
       console.error("Save category error:", error);
-      alert(
+      notifyAdmin(
         error?.response?.data?.message ||
           error.message ||
           "Failed to save category",
@@ -294,7 +296,7 @@ export function InventoryPage() {
   const handleStockOut = () => {
     if (!selectedItem) return;
     if (stockOutPurpose === "other" && !stockForm.note.trim()) {
-      alert(t("inventoryFlow.otherReason"));
+      notifyAdmin(t("inventoryFlow.otherReason"));
       return;
     }
     stockOutMutation.mutate({
@@ -347,8 +349,8 @@ export function InventoryPage() {
     });
   };
 
-  const handleDeleteItem = (id: string) => {
-    if (!confirm(t("common.confirmDelete"))) return;
+  const handleDeleteItem = async (id: string) => {
+    if (!await confirmAdmin(t("common.confirmDelete"))) return;
     deleteItemMutation.mutate(id);
   };
 
@@ -426,9 +428,9 @@ export function InventoryPage() {
                     <Edit2 size={14} />
                   </button>
                   <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      if (confirm(t("inventory.deleteCategoryConfirm"))) {
+                      if (await confirmAdmin(t("inventory.deleteCategoryConfirm"))) {
                         handleDeleteCategory(cat.id);
                       }
                     }}
@@ -465,7 +467,7 @@ export function InventoryPage() {
           <div className="flex flex-wrap gap-2">
             {alerts.slice(0, 10).map((item: any) => (
               <span key={item.id} className="badge badge-error">
-                {formatItemName(item.name, i18n.language)}:{" "}
+                {formatItemName(item, i18n.language)}:{" "}
                 {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}
               </span>
             ))}
@@ -557,7 +559,7 @@ export function InventoryPage() {
                         className="py-3 pr-4"
                       >
                         <span className="font-medium text-gray-900">
-                          {formatItemName(item.name, i18n.language)}
+                          {formatItemName(item, i18n.language)}
                         </span>
                         {isLow && (
                           <AlertTriangle
@@ -666,22 +668,8 @@ export function InventoryPage() {
 
       {/* Add Item Modal */}
       {showAddItem && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div
-            className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {t("inventory.addItem")}
-              </h3>
-              <button
-                onClick={() => setShowAddItem(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t("inventory.addItem")} onClose={() => setShowAddItem(false)} className="max-w-md" busy={Boolean(addItemMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
@@ -804,7 +792,13 @@ export function InventoryPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="admin-dialog-footer flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddItem(false)}
+                className="btn-secondary flex-1"
+               data-dialog-close="true">
+                {t("common.cancel")}
+              </button>
               <button
                 onClick={handleAddItem}
                 className="btn-primary flex-1"
@@ -814,35 +808,14 @@ export function InventoryPage() {
                   ? t("common.loading")
                   : t("common.save")}
               </button>
-              <button
-                onClick={() => setShowAddItem(false)}
-                className="btn-secondary flex-1"
-              >
-                {t("common.cancel")}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Edit Item Modal */}
       {showEditItem && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div
-            className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {t("common.edit") || "Edit Item"}
-              </h3>
-              <button
-                onClick={() => setShowEditItem(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t("common.edit") || "Edit Item"} onClose={() => setShowEditItem(false)} className="max-w-md" busy={Boolean(updateItemMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
@@ -1010,7 +983,13 @@ export function InventoryPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="admin-dialog-footer flex gap-3 mt-6">
+              <button
+                onClick={() => setShowEditItem(false)}
+                className="btn-secondary flex-1"
+               data-dialog-close="true">
+                {t("common.cancel")}
+              </button>
               <button
                 onClick={handleUpdateItem}
                 className="btn-primary flex-1"
@@ -1020,36 +999,14 @@ export function InventoryPage() {
                   ? t("common.loading")
                   : t("common.save")}
               </button>
-              <button
-                onClick={() => setShowEditItem(false)}
-                className="btn-secondary flex-1"
-              >
-                {t("common.cancel")}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Stock In Modal */}
       {showStockIn && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div
-            className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {t("inventory.stockIn")} -{" "}
-                {formatItemName(selectedItem.name, i18n.language)}
-              </h3>
-              <button
-                onClick={() => setShowStockIn(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={[t("inventory.stockIn"), "-", " ", formatItemName(selectedItem, i18n.language)].join(" ")} onClose={() => setShowStockIn(false)} className="max-w-md" busy={Boolean(stockInMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <label className="block">
                 {t("inventoryUnits.input")}
@@ -1128,7 +1085,13 @@ export function InventoryPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="admin-dialog-footer flex gap-3 mt-6">
+              <button
+                onClick={() => setShowStockIn(false)}
+                className="btn-secondary flex-1"
+               data-dialog-close="true">
+                {t("common.cancel")}
+              </button>
               <button
                 onClick={handleStockIn}
                 className="btn-primary flex-1"
@@ -1138,36 +1101,14 @@ export function InventoryPage() {
                   ? t("common.loading")
                   : t("inventory.stockIn")}
               </button>
-              <button
-                onClick={() => setShowStockIn(false)}
-                className="btn-secondary flex-1"
-              >
-                {t("common.cancel")}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Stock Out Modal */}
       {showStockOut && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div
-            className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                {t("inventory.stockOut")} -{" "}
-                {formatItemName(selectedItem.name, i18n.language)}
-              </h3>
-              <button
-                onClick={() => setShowStockOut(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={[t("inventory.stockOut"), "-", " ", formatItemName(selectedItem, i18n.language)].join(" ")} onClose={() => setShowStockOut(false)} className="max-w-md" busy={Boolean(stockOutMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <label className="block">
                 {t("inventoryFlow.purpose")}
@@ -1228,7 +1169,13 @@ export function InventoryPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="admin-dialog-footer flex gap-3 mt-6">
+              <button
+                onClick={() => setShowStockOut(false)}
+                className="btn-secondary flex-1"
+               data-dialog-close="true">
+                {t("common.cancel")}
+              </button>
               <button
                 onClick={handleStockOut}
                 className="btn-primary flex-1"
@@ -1238,37 +1185,16 @@ export function InventoryPage() {
                   ? t("common.loading")
                   : t("inventory.stockOut")}
               </button>
-              <button
-                onClick={() => setShowStockOut(false)}
-                className="btn-secondary flex-1"
-              >
-                {t("common.cancel")}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div
-            className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">
-                {editingCategory
+        <AdminDialog title={editingCategory
                   ? t("inventory.editCategory")
-                  : t("inventory.addCategory")}
-              </h2>
-              <button
-                onClick={() => setShowCategoryModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+                  : t("inventory.addCategory")} onClose={() => setShowCategoryModal(false)} className="max-w-sm" busy={Boolean(saveCategoryMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleCategorySubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1321,7 +1247,14 @@ export function InventoryPage() {
                   placeholder={t("inventory.descriptionPlaceholder")}
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="btn-secondary flex-1"
+                 data-dialog-close="true">
+                  {t("common.cancel")}
+                </button>
                 <button
                   type="submit"
                   className="btn-primary flex-1"
@@ -1331,17 +1264,9 @@ export function InventoryPage() {
                     ? t("common.loading")
                     : t("common.save")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryModal(false)}
-                  className="btn-secondary flex-1"
-                >
-                  {t("common.cancel")}
-                </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   );

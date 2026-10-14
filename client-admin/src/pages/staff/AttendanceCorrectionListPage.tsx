@@ -1,3 +1,4 @@
+import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -52,7 +53,7 @@ export function AttendanceCorrectionListPage() {
   }, [token, filter])
 
   const handleApprove = async (id: string) => {
-    if (!confirm(t('staff.correctionConfirmApprove'))) return
+    if (!await confirmAdmin(t('staff.correctionConfirmApprove'))) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/staff-correction/${id}/approve`, {
@@ -65,13 +66,13 @@ export function AttendanceCorrectionListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.correctionApproved'))
+        notifyAdmin(t('staff.correctionApproved'))
         loadData()
       } else {
-        alert(data.message || t('common.error'))
+        notifyAdmin(data.message || t('common.error'))
       }
     } catch (error) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setProcessing(null)
     }
@@ -92,13 +93,13 @@ export function AttendanceCorrectionListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.correctionRejected'))
+        notifyAdmin(t('staff.correctionRejected'))
         loadData()
       } else {
-        alert(data.message || t('common.error'))
+        notifyAdmin(data.message || t('common.error'))
       }
     } catch (error) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setProcessing(null)
     }

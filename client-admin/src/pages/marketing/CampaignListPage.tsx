@@ -1,3 +1,4 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -200,9 +201,8 @@ export function CampaignListPage() {
 
       {/* Create Campaign Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">{t('marketing.createCampaign')}</h3>
+        <AdminDialog title={t('marketing.createCampaign')} onClose={() => setShowCreate(false)} className="max-w-md" busy={Boolean(createMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.campaignName')} *</label>
@@ -270,7 +270,10 @@ export function CampaignListPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="admin-dialog-footer flex gap-3 mt-6">
+              <button onClick={() => setShowCreate(false)} className="btn-secondary" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => createMutation.mutate({ ...newCampaign, storeId })}
                 disabled={!newCampaign.name || !newCampaign.startDate || createMutation.isPending}
@@ -279,21 +282,19 @@ export function CampaignListPage() {
                 {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                 {t('common.save')}
               </button>
-              <button onClick={() => setShowCreate(false)} className="btn-secondary">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Delete Confirmation Modal */}
       {showDelete && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
+        <AdminDialog title={t('common.delete')} onClose={() => setShowDelete(null)} className="max-w-sm" busy={Boolean(deleteMutation.isPending)} trackChanges chrome>
+
             <p className="text-gray-600 mb-6">{t('marketing.deleteCampaignConfirm')}</p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setShowDelete(null)} className="btn-secondary" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => deleteMutation.mutate(showDelete)}
                 disabled={deleteMutation.isPending}
@@ -302,12 +303,8 @@ export function CampaignListPage() {
                 {deleteMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                 {t('common.delete')}
               </button>
-              <button onClick={() => setShowDelete(null)} className="btn-secondary">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

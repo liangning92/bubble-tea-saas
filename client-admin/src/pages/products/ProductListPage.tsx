@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { Link, useNavigate } from 'react-router-dom'
 import { ProductImageEditor, ProductPicture } from '../../components/ProductImageEditor'
 import { mediaApi } from '../../services/media'
@@ -7,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { productApi, categoryApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
-import { Plus, Edit2, Trash2, Search, Loader2, CheckCircle, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, Search, Loader2, CheckCircle, } from 'lucide-react'
 
 export function ProductListPage() {
   const { t } = useTranslation()
@@ -43,7 +45,7 @@ export function ProductListPage() {
     onError: (error: any) => {
       console.error('Create product error:', error)
       const msg = error?.response?.data?.message || error?.response?.data?.error || error.message || 'Failed to create product'
-      alert(msg)
+      notifyAdmin(msg)
     }
   })
 
@@ -67,7 +69,7 @@ export function ProductListPage() {
     },
     onError: (error: any) => {
       console.error('Update status error:', error)
-      alert(error?.response?.data?.message || error.message || 'Failed to update status')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Failed to update status')
     }
   })
 
@@ -78,7 +80,7 @@ export function ProductListPage() {
     },
     onError: (error: any) => {
       console.error('Delete product error:', error)
-      alert(error?.response?.data?.message || error.message || 'Failed to delete product')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Failed to delete product')
     }
   })
 
@@ -91,7 +93,7 @@ export function ProductListPage() {
     },
     onError: (error: any) => {
       console.error('Create category error:', error)
-      alert(error?.response?.data?.message || error.message || 'Failed to create category')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Failed to create category')
     }
   })
 
@@ -105,7 +107,7 @@ export function ProductListPage() {
     },
     onError: (error: any) => {
       console.error('Update category error:', error)
-      alert(error?.response?.data?.message || error.message || 'Failed to update category')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Failed to update category')
     }
   })
 
@@ -116,7 +118,7 @@ export function ProductListPage() {
     },
     onError: (error: any) => {
       console.error('Delete category error:', error)
-      alert(error?.response?.data?.message || error.message || 'Failed to delete category')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Failed to delete category')
     }
   })
 
@@ -130,7 +132,7 @@ export function ProductListPage() {
     onError: (error: any) => {
       console.error('Update product error:', error)
       const msg = error?.response?.data?.message || error?.response?.data?.error || error.message || 'Failed to update product'
-      alert(msg)
+      notifyAdmin(msg)
     }
   })
 
@@ -277,12 +279,12 @@ export function ProductListPage() {
             onClick={() => setSelectedCategory(null)}
             className={`flex-shrink-0 w-40 p-4 rounded-xl cursor-pointer transition-all border-2 ${
               selectedCategory === null
-                ? 'bg-white border-error shadow-sm'
+                ? 'bg-white border-primary shadow-sm'
                 : 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm'
             }`}
           >
             <div className="text-center">
-              <p className={`text-lg font-bold ${selectedCategory === null ? 'text-error' : 'text-gray-700'}`}>
+              <p className={`text-lg font-bold ${selectedCategory === null ? 'text-primary' : 'text-gray-700'}`}>
                 {t('common.all')}
               </p>
               <p className="text-xs text-gray-400 mt-1">{products.length} {t('categories.products')}</p>
@@ -298,13 +300,13 @@ export function ProductListPage() {
                 onClick={() => setSelectedCategory(cat.id)}
                                className={`flex-shrink-0 w-40 p-4 rounded-xl cursor-pointer transition-all border-2 ${
                   selectedCategory === cat.id
-                    ? 'bg-white border-error shadow-sm'
+                    ? 'bg-white border-primary shadow-sm'
                     : 'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm'
                 }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <p className={`font-semibold truncate ${selectedCategory === cat.id ? 'text-error' : 'text-gray-700'}`}>
+                    <p className={`font-semibold truncate ${selectedCategory === cat.id ? 'text-primary' : 'text-gray-700'}`}>
                       {cat.name}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">{count} {t('categories.products')}</p>
@@ -317,15 +319,15 @@ export function ProductListPage() {
                       <Edit2 size={14} />
                     </button>
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
                         // Check if there are products in this category
                         const productsInCategory = products.filter((p: any) => p.categoryId === cat.id)
                         if (productsInCategory.length > 0) {
-                          alert(`${t('categories.hasProducts')} (${productsInCategory.length} ${t('categories.products')})`)
+                          notifyAdmin(`${t('categories.hasProducts')} (${productsInCategory.length} ${t('categories.products')})`)
                           return
                         }
-                        if (confirm(t('common.confirmDelete'))) {
+                        if (await confirmAdmin(t('common.confirmDelete'))) {
                           deleteCategory.mutate(cat.id)
                         }
                       }}
@@ -386,16 +388,16 @@ export function ProductListPage() {
           <div className="text-center py-8 text-gray-500">{t('common.noData')}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="admin-responsive-table admin-responsive-table w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 pl-3 w-24">{t('products.code')}</th>
                   <th className="pb-3 w-40">{t('products.name')}</th>
                   <th className="pb-3 w-28">{t('products.category')}</th>
-                  <th className="pb-3 text-left w-24">{t('products.cost')}</th>
-                  <th className="pb-3 text-left w-24">{t('products.price')}</th>
-                  <th className="pb-3 text-left w-20">{t('products.margin')}</th>
-                  <th className="pb-3 text-left w-24">{t('products.profit')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.cost')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.price')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-20">{t('products.margin')}</th>
+                  <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.profit')}</th>
                   <th className="pb-3 text-center w-20">{t('products.status')}</th>
                   <th className="pb-3 pr-3 text-center w-24">{t('common.edit')}</th>
                 </tr>
@@ -406,22 +408,22 @@ export function ProductListPage() {
                   const profit = calculateProfit(product)
                   return (
                     <tr key={product.id} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="py-3 pl-3 font-mono text-sm">{product.code || '-'}</td>
-                      <td className="py-3 font-medium text-gray-900"><Link className="hover:text-primary" to={`/products/recipes?productId=${product.id}`}>{product.name}</Link></td>
-                      <td className="py-3 text-gray-600">{getCategoryName(product.categoryId)}</td>
-                      <td className="py-3 text-left font-mono">{formatCurrency(product.costPrice || 0)}</td>
-                      <td className="py-3 text-left font-mono">{formatCurrency(product.specs?.[0]?.price || 0)}</td>
-                      <td className="py-3 text-left">
+                      <td className="py-3 pl-3 font-mono text-sm" data-label={t('products.code')}>{product.code || '-'}</td>
+                      <td className="py-3 font-medium text-gray-900" data-label={t('products.name')}><Link className="hover:text-primary" to={`/products/recipes?productId=${product.id}`}>{product.name}</Link></td>
+                      <td className="py-3 text-gray-600" data-label={t('products.category')}>{getCategoryName(product.categoryId)}</td>
+                      <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 text-left font-mono" data-label={t('products.cost')}>{formatCurrency(product.costPrice || 0)}</td>
+                      <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 text-left font-mono" data-label={t('products.price')}>{formatCurrency(product.specs?.[0]?.price || 0)}</td>
+                      <td className="text-right tabular-nums text-right tabular-nums py-3 text-left" data-label={t('products.margin')}>
                         {margin !== null ? (
                           <span className={`font-medium ${parseInt(margin) > 50 ? 'text-green-600' : parseInt(margin) > 30 ? 'text-orange-600' : 'text-red-600'}`}>
                             {margin}%
                           </span>
                         ) : '-'}
                       </td>
-                      <td className="py-3 text-left font-mono text-gray-600">
+                      <td className="text-right tabular-nums text-right tabular-nums text-right tabular-nums py-3 text-left font-mono text-gray-600" data-label={t('products.profit')}>
                         {profit !== null ? formatCurrency(profit) : '-'}
                       </td>
-                      <td className="py-3 text-center">
+                      <td className="py-3 text-center" data-label={t('products.status')}>
                         <button
                           onClick={() => updateStatus.mutate({ id: product.id, status: product.status === 'active' ? 'inactive' : 'active' })}
                           className={`badge cursor-pointer ${product.status === 'active' ? 'badge-success' : 'badge-error'}`}
@@ -429,7 +431,7 @@ export function ProductListPage() {
                           {product.status === 'active' ? t('products.active') : t('products.inactive')}
                         </button>
                       </td>
-                      <td className="py-3 pr-3 text-center">
+                      <td className="py-3 pr-3 text-center" data-label={t('common.edit')}>
                         <div className="flex items-center justify-center gap-1">
                           <button
                             aria-label={t('common.edit')}
@@ -439,8 +441,8 @@ export function ProductListPage() {
                             <Edit2 size={18} />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(t('common.confirmDelete') )) {
+                            onClick={async () => {
+                              if (await confirmAdmin(t('common.confirmDelete') )) {
                                 deleteProduct.mutate(product.id)
                               }
                             }}
@@ -461,16 +463,8 @@ export function ProductListPage() {
 
       {/* Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 pointer-events-none">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">
-                {editingCategory ? t('common.edit') : t('common.add')} {t('products.category') }
-              </h2>
-              <button onClick={() => setShowCategoryModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={[editingCategory ? t('common.edit') : t('common.add'), t('products.category')].join(" ")} onClose={() => setShowCategoryModal(false)} className="max-w-sm" busy={false} trackChanges chrome>
+
             <form onSubmit={handleCategorySubmit} className="flex gap-2">
               <input
                 type="text"
@@ -484,20 +478,13 @@ export function ProductListPage() {
                 {t('common.save')}
               </button>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Edit/Add Product Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 pointer-events-none">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">{editingProduct ? t('common.edit') : t('common.add')} {t('products.title')}</h2>
-              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={[editingProduct ? t('common.edit') : t('common.add'), t('products.title')].join(" ")} onClose={() => setShowEditModal(false)} className="max-w-md" busy={Boolean(imagesUploading || updateProduct.isPending || createProduct.isPending)} trackChanges chrome>
+
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -564,7 +551,10 @@ export function ProductListPage() {
                   <option value="inactive">{t('products.inactive') }</option>
                 </select>
               </div>
-                            <div className="flex gap-3 mt-6">
+                            <div className="admin-dialog-footer flex gap-3 mt-6">
+                <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   className="btn-primary flex-1"
@@ -572,13 +562,9 @@ export function ProductListPage() {
                 >
                   {imagesUploading || updateProduct.isPending || createProduct.isPending ? t('common.loading') : t('common.save')}
                 </button>
-                <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )
