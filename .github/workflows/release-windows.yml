@@ -64,6 +64,10 @@ jobs:
           assert.match(manual.installedVersion,/^\d+\.\d+\.\d+$/);
           assert.equal(manual.syntheticOnly,true);
           assert.equal(manual.onlineInteractiveInstallerVerified,true);
+          assert.equal(manual.onlineSilentInstallerVerified,true);
+          assert.equal(manual.silentRestartedRuntime.version,manual.expectedVersion);
+          assert.equal(manual.silentRestartedRuntime.originalProfileUsed,true);
+          assert.ok(manual.cases.includes('silent-nsis-online-install-restarts-original-profile-and-preserves-history'));
           assert.equal(manual.restartedRuntime.normalExit,true);
           assert.equal(manual.restartedRuntime.localApiReady,true);
           assert.equal(manual.restartedRuntime.processStarted,true);

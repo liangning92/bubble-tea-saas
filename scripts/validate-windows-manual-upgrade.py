@@ -368,6 +368,16 @@ try:
     assert fast_downtime <= 120, ('Prepared upgrade exceeded 120 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-online-install-without-repeat-confirmation-and-history-preserved')
+    invoke('stage')
+    invoke('refresh-stage')
+    silent_started = time.monotonic()
+    silent = subprocess.run([str(installer), '/S', '--updated', '--force-run'], timeout=180)
+    assert silent.returncode == 0, ('Silent online installer failed', silent.returncode)
+    silent_runtime = verify_started_runtime(expected_version)
+    assert historic() == history, 'Silent update must preserve all historical rows'
+    assert time.monotonic() - silent_started <= 120, 'Silent update exceeded downtime limit'
+    CASES.append('silent-nsis-online-install-restarts-original-profile-and-preserves-history')
+
     if SCOPE in ('installer', 'legacy'):
         # Reproduce the employee failure with a valid receipt for another package.
         obsolete_installer = TEMP / 'obsolete-installer.exe'
@@ -438,7 +448,7 @@ try:
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version,
               'cases': CASES, 'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
               'onlineInstallerArguments': ['--updated', '--force-run'],
-              'onlineInteractiveInstallerVerified': True, 'restartedRuntime': restarted_runtime}
+              'onlineInteractiveInstallerVerified': True, 'onlineSilentInstallerVerified': True, 'silentRestartedRuntime': silent_runtime, 'restartedRuntime': restarted_runtime}
     (ROOT / 'desktop-manual-upgrade-report.json').write_text(json.dumps(report, indent=2))
     manifest_path = ROOT / 'desktop-template-manifest.json'
     manifest = json.loads(manifest_path.read_text())
