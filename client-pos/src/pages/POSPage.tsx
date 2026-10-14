@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../i18n'
 import { discoverPrinters } from '../utils/printerDiscovery'
 import {discountApprovalBasket} from '../../../shared/discountApprovalBasket'
 import api from '../services/api'
@@ -2416,7 +2417,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         orderNumber: serverOrder?.orderNumber,
         cart: [...cart],
         channel: selectedChannel,
-        time: new Date().toLocaleTimeString()
+        time: new Date().toLocaleTimeString(dateLocaleI18n.language)
       }
       const updated = [...suspendedOrders, order]
       setSuspendedOrders(updated)
@@ -4558,7 +4559,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                                   : '特惠券'}
                               </p>
                               <p className="text-[10px] text-gray-400">
-                                有效期至: {c.validUntil ? new Date(c.validUntil).toLocaleDateString() : '长期有效'}
+                                有效期至: {c.validUntil ? new Date(c.validUntil).toLocaleDateString(dateLocaleI18n.language) : '长期有效'}
                               </p>
                             </div>
                           </div>
@@ -4727,7 +4728,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       {shiftData?.shift && (
                         <div className="text-right">
                           <p className="text-sm text-gray-500">{activeShifts.find(s => s.key === shiftData.shift.shift)?.name || shiftData.shift.shift}</p>
-                          <p className="font-bold text-primary">{new Date(shiftData.shift.openedAt).toLocaleTimeString()}</p>
+                          <p className="font-bold text-primary">{new Date(shiftData.shift.openedAt).toLocaleTimeString(dateLocaleI18n.language)}</p>
                         </div>
                       )}
                     </div>
@@ -4975,7 +4976,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-xs text-gray-400">{t('pos.orderNo')}: #{order.orderNumber || order.id}</p>
-                          <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
+                          <p className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString(dateLocaleI18n.language)}</p>
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-primary">{formatCurrency(order.finalAmount || order.totalAmount)}</p>

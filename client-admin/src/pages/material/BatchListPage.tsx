@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../../i18n'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -18,7 +19,7 @@ export function BatchListPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString()
+    return new Date(dateStr).toLocaleDateString(dateLocaleI18n.language)
   }
 
   const getUrgencyClass = (days: number) => {

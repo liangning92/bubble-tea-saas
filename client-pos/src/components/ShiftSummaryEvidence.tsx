@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../i18n'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/offline'
@@ -29,7 +30,7 @@ export function ShiftSummaryEvidence({ evidence, openFloat, storeId, showValues 
     <h4 className="font-bold">{t('shiftEvidence.title')} · {t(!locallyUncertain && evidence?.status === 'provisional' ? 'shiftEvidence.provisional' : 'shiftEvidence.unknown')}</h4>
     <p className="text-sm mt-2" role="alert">{t('shiftEvidence.notice')}</p>
     {locallyUncertain && <p className="text-sm mt-2">{t(typeof pending === 'number' ? 'shiftEvidence.pending' : 'shiftEvidence.queueUnknown', { count: typeof pending === 'number' ? pending : undefined })}</p>}
-    {evidence?.windowStart && <p className="text-xs text-gray-600 mt-2">{t('shiftEvidence.window')}: {new Date(evidence.windowStart).toLocaleString()} – {new Date(evidence.windowEnd).toLocaleString()}</p>}
+    {evidence?.windowStart && <p className="text-xs text-gray-600 mt-2">{t('shiftEvidence.window')}: {new Date(evidence.windowStart).toLocaleString(dateLocaleI18n.language)} – {new Date(evidence.windowEnd).toLocaleString(dateLocaleI18n.language)}</p>}
     {showValues && <dl className="grid grid-cols-2 gap-2 mt-3 text-sm">
       {[
         ['openingFloat', openFloat], ['cashSales', evidence?.cashSales],

@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../../i18n'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -132,12 +133,12 @@ export function MaterialDetailPage() {
                   <td className="py-2">{batch.quantity} {mat.unit}</td>
                   <td className="py-2 text-sm text-gray-500">
                     {batch.manufacturingDate
-                      ? new Date(batch.manufacturingDate).toLocaleDateString()
+                      ? new Date(batch.manufacturingDate).toLocaleDateString(dateLocaleI18n.language)
                       : '-'}
                   </td>
                   <td className="py-2 text-sm text-gray-500">
                     {batch.expiryDate
-                      ? new Date(batch.expiryDate).toLocaleDateString()
+                      ? new Date(batch.expiryDate).toLocaleDateString(dateLocaleI18n.language)
                       : '-'}
                   </td>
                   <td className="py-2">

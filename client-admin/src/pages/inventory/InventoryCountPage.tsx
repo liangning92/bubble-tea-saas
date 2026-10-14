@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../../i18n'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, InventoryActor } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
@@ -438,8 +439,8 @@ export function InventoryCountPage() {
                       {getPeriodLabel(count.period)}
                     </div>
                     <div className="text-sm text-gray-500">
-                      {new Date(count.startDate).toLocaleDateString()} -{" "}
-                      {new Date(count.endDate).toLocaleDateString()}
+                      {new Date(count.startDate).toLocaleDateString(dateLocaleI18n.language)} -{" "}
+                      {new Date(count.endDate).toLocaleDateString(dateLocaleI18n.language)}
                     </div>
                     {count.notes && (
                       <div className="text-sm text-gray-400 mt-1">

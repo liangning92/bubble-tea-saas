@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../../i18n'
 import {ActorName} from '../../components/InventoryActor'
 import {inventoryInputUnits,defaultInventoryInputUnit,inventoryLedgerQuantity} from '../../utils/inventoryInputUnits'
 import { useState } from 'react'
@@ -218,7 +219,7 @@ function ProcessingHistory() {
                   <span className="text-sm text-gray-500">{t('material.multiplier', { value: log.multiplier })}</span>
                 </div>
                 <span className="text-sm text-gray-500">
-                  {new Date(log.createdAt).toLocaleString()}
+                  {new Date(log.createdAt).toLocaleString(dateLocaleI18n.language)}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">

@@ -1,3 +1,4 @@
+import dateLocaleI18n from '../../i18n'
 import { ProductDisplayPicker } from '../../components/ProductDisplayPicker'
 import { DisplayProductMedia } from '../../../../shared/components/DisplayProductMedia'
 import { resolveDisplayProducts, ProductDisplayMedia } from '../../../../shared/utils/customerDisplayProducts'
@@ -2946,7 +2947,7 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
             })}
           </div>
           {lastPrinterDetection && (
-            <p className="text-xs text-gray-500 mt-2">{t('posSettings.lastDetected')}: {new Date(lastPrinterDetection).toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-2">{t('posSettings.lastDetected')}: {new Date(lastPrinterDetection).toLocaleString(dateLocaleI18n.language)}</p>
           )}
         </div>
       )}
