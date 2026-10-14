@@ -1,4 +1,5 @@
-import {QUERY_PERIODS,QueryPeriod} from '../../utils/queryPeriods'
+import { RevenueLiveShifts } from './RevenueLiveShifts'
+import {QUERY_PERIODS,QueryPeriod,queryCalendarRange} from '../../utils/queryPeriods'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {formatStoreDate,storeCalendarDate} from '../../utils/storeDateTime'
 import { useState, useEffect, useRef } from 'react'
@@ -79,18 +80,18 @@ export function RevenuePage() {
   const params=period==='custom'?{storeId,period,startDate:customDateRange.start,endDate:customDateRange.end}:{storeId,period}
   const selected=useQuery({
     queryKey:['revenue-selected',storeId,user?.role,params,dateSettings],
-    enabled:!!storeId && canRead && validSelection,
+    enabled:!!storeId && canRead && validSelection,refetchInterval:30000,
     queryFn:async()=>{
       const [channels,summary]=await Promise.all([revenueApi.byChannel(params),revenueApi.summary(params)])
       return {channels:readChannels(channels.data?.data),summary:readSummary(summary.data?.data)}
     },
   })
-  const handovers=useQuery({queryKey:['revenue-handovers',storeId,user?.role,params,dateSettings],enabled:!!storeId && canRead && validSelection,
+  const handovers=useQuery({queryKey:['revenue-handovers',storeId,user?.role,params,dateSettings],enabled:!!storeId && canRead && validSelection,refetchInterval:30000,
     queryFn:async()=>{const data=(await api.get('/revenue/handover-receipts',{params})).data?.data; if(!Array.isArray(data?.list)||!data?.totals) throw Error('INVALID_HANDOVER_RECEIPTS'); return data as {range:{startDate:string;endDate:string};actualCashReceived:number|null;totals:ManualReceiptAmounts;list:{id:string;shift:string;openedAt:string;closedAt:string;definition:{name:string;nameZh:string|null;nameId:string|null}|null;actualCashReceived:number|null;onlineRevenueCounted:boolean;manualReceipts:ManualReceiptAmounts|null;manualReceiptsCashBasis?:string}[]} }
   })
   const purchases=useQuery({
     queryKey:['revenue-purchase-hours',storeId,user?.role,params,dateSettings],
-    enabled:!!storeId && canRead && validSelection,
+    enabled:!!storeId && canRead && validSelection,refetchInterval:30000,
     queryFn:async()=>readPurchaseHours((await revenueApi.purchaseHours(params)).data?.data),
   })
   const label=period==='custom'?`${formatStoreDate(customDateRange.start,dateSettings)} — ${formatStoreDate(customDateRange.end,dateSettings)}`:t('queryPeriods.'+period)
@@ -116,6 +117,7 @@ export function RevenuePage() {
       <label className="text-sm text-gray-600">{t('revenueRange.endDate')}<input aria-label={t('revenueRange.endDate')} type="date" value={customDateRange.end} onChange={e=>setCustomDateRange(prev=>({...prev,end:e.target.value}))} className="input ml-2"/></label>
     </div>}
     {preferenceError&&<PageHelp><p role="status">{t('revenueRange.preferenceFailed')}</p></PageHelp>}
+    <RevenueLiveShifts storeId={storeId} role={user?.role} enabled={validSelection} range={period==='custom'?{startDate:customDateRange.start,endDate:customDateRange.end}:queryCalendarRange(period,dateSettings.timezone)} />
     <section className="space-y-6" data-testid="revenue-selected-range">
       {!validSelection?<p role="alert" data-testid="revenue-range-invalid" className="card text-amber-700">{t('revenueRange.invalidRange')}</p>:selected.isError?<DashboardReadFailure retry={()=>selected.refetch()} />:selected.isPending?<p role="status">{t('common.loading')}</p>:summary&&<>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-4" data-testid="revenue-selected-summary">
