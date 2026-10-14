@@ -1,3 +1,6 @@
+import { db } from '../db/offline'
+import { DisplayProductMedia } from '../../../shared/components/DisplayProductMedia'
+import { resolveDisplayProducts, DisplayCatalogProduct, ProductDisplayMedia } from '../../../shared/utils/customerDisplayProducts'
 import { CustomerDisplayCanvas } from '../../../shared/components/CustomerDisplayCanvas'
 import React from 'react'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
@@ -30,7 +33,7 @@ interface OrderData {
   upsellHint?: string
 }
 
-interface MediaFile {
+interface MediaFile extends ProductDisplayMedia {
   url: string
   filename: string
   mimetype: string
@@ -146,7 +149,18 @@ export function CustomerDisplayPage(): React.ReactElement {
     return () => window.removeEventListener('storage', loadConfig)
   }, [])
 
-  const mediaFiles = dualScreenConfig.mediaFiles || []
+  const configuredMedia = dualScreenConfig.mediaFiles || []
+  const productIds = [...new Set(configuredMedia.map(file=>file.productId).filter((id): id is string=>!!id))].sort().join(',')
+  const [displayCatalog,setDisplayCatalog]=useState<DisplayCatalogProduct[]>()
+  useEffect(()=>{
+    setDisplayCatalog(undefined)
+    if (!productIds) return
+    let cancelled=false
+    const load=()=>db.products.where('id').anyOf(productIds.split(',')).toArray().then(products=>{if(!cancelled)setDisplayCatalog(products)}).catch(()=>{})
+    void load();const timer=setInterval(load,15000)
+    return()=>{cancelled=true;clearInterval(timer)}
+  },[productIds])
+  const mediaFiles = displayCatalog ? resolveDisplayProducts(configuredMedia,displayCatalog) : configuredMedia
   const appearance = customerDisplayAppearance(dualScreenConfig, displayState === 'idle' ? 'idle' : displayState === 'complete' ? 'complete' : 'ordering')
   const background = appearance.backgroundColor
   const textColor = customerTextColor(background)
@@ -284,7 +298,7 @@ export function CustomerDisplayPage(): React.ReactElement {
               />
             )
           }
-          return <img src={media?.url} alt="" className="w-full h-full" style={{ background: regionBackground, objectFit: appearance.mediaFit === 'contain' ? 'contain' : 'cover' }} />
+          return media ? <DisplayProductMedia media={media} fit={appearance.mediaFit === 'contain' ? 'contain' : 'cover'} background={regionBackground}/> : null
         }
         return (
           <div className="w-full h-full flex items-center justify-center" style={{ background: regionBackground, color: regionTextColor }}>

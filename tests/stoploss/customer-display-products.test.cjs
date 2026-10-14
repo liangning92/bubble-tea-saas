@@ -1,0 +1,14 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
+const m={exports:{}};
+new Function('module','exports',ts.transpileModule(fs.readFileSync(path.join(__dirname,'../../shared/utils/customerDisplayProducts.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m,m.exports);
+const {resolveDisplayProducts:resolve}=m.exports;
+const file={productId:'p1',specId:'large',url:'https://admin.example/uploads/old.png',filename:'Old',mimetype:'image/png',isVideo:false,productName:'Old',productPrice:10};
+const product={id:'p1',name:'Fresh Tea',image:'/uploads/new.webp',specs:[{id:'small',price:16000,isDefault:true},{id:'large',price:22000}]};
+test('selected product uses its current image, name and exact specification price',()=>{const [media]=resolve([file],[product]);assert.equal(media.productName,'Fresh Tea');assert.equal(media.productPrice,22000);assert.equal(media.url,'https://admin.example/uploads/new.webp');assert.equal(media.filename,'Fresh Tea');assert.equal(file.productPrice,10)});
+test('catalog updates refresh the display without rewriting the selection',()=>{const [media]=resolve([file],[{...product,name:'New Tea',image:'/uploads/newer.webp',specs:[{id:'large',price:24000}]}]);assert.equal(media.productPrice,24000);assert.equal(media.productName,'New Tea');assert.match(media.url,/newer.webp$/)});
+test('missing products, images or selected specifications never show stale prices',()=>{assert.deepEqual(resolve([file],[]),[]);assert.deepEqual(resolve([file],[{...product,image:null}]),[]);assert.deepEqual(resolve([file],[{...product,specs:[{id:'small',price:16000}]}]),[])});
+test('default specification is used only when no specification was selected',()=>{const [media]=resolve([{...file,specId:undefined}],[product]);assert.equal(media.productPrice,16000);assert.deepEqual(resolve([file],[{...product,specs:[{id:'large',price:NaN}]}]),[])});
+test('ordinary images and videos keep their existing behavior',()=>{const video={url:'clip.mp4',filename:'clip',mimetype:'video/mp4',isVideo:true};assert.equal(resolve([video],[product])[0],video)});
+const mediaModule={exports:{}};
+new Function('module','exports',ts.transpileModule(fs.readFileSync(path.join(__dirname,'../../shared/utils/customerDisplayMedia.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(mediaModule,mediaModule.exports);
+test('fixed product selection survives image URL updates and legacy URLs remain supported',()=>{const a={url:'https://example/image1.png',productId:'p1',specId:'small'},b={url:'https://example/image2-new.png',productId:'p2',specId:'large'};assert.equal(mediaModule.exports.customerDisplayMedia([a,b],'single','product:p2:large',0),b);assert.equal(mediaModule.exports.customerDisplayMedia([a,b],'single',a.url,0),a)});

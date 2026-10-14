@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ProductImageEditor, ProductPicture } from '../../components/ProductImageEditor'
 import { mediaApi } from '../../services/media'
 import { useState } from 'react'
@@ -13,6 +13,8 @@ export function ProductListPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [imagesUploading,setImagesUploading]=useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -26,14 +28,17 @@ export function ProductListPage() {
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [editForm, setEditForm] = useState({ code: '', name: '', categoryId: '', price: '', description: '', status: 'active' })
 
+  const finishProductSave = async (response: any) => {
+    const productId=response.data.data.id
+    await Promise.all([['products'],['product',productId],['bom-products'],['bom-product',productId],['display-product-catalog'],['tv-standby-products']].map(queryKey=>queryClient.invalidateQueries({queryKey})))
+    setShowEditModal(false)
+    setImages([]);setImagesChanged(false);setEditingProduct(null)
+    navigate(`/products/recipes?productId=${encodeURIComponent(productId)}`)
+  }
+
   const createProduct = useMutation({
     mutationFn: (data: any) => productApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] })
-      setShowEditModal(false)
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 2000)
-    },
+    onSuccess: finishProductSave,
     onError: (error: any) => {
       console.error('Create product error:', error)
       const msg = error?.response?.data?.message || error?.response?.data?.error || error.message || 'Failed to create product'
@@ -120,13 +125,7 @@ export function ProductListPage() {
         return res
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] })
-      setShowEditModal(false)
-      setImages([])
-      setImagesChanged(false)
-      setEditingProduct(null)
-    },
+    onSuccess: finishProductSave,
     onError: (error: any) => {
       console.error('Update product error:', error)
       const msg = error?.response?.data?.message || error?.response?.data?.error || error.message || 'Failed to update product'
@@ -212,6 +211,7 @@ export function ProductListPage() {
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (imagesUploading || updateProduct.isPending || createProduct.isPending) return
 
     const price = parseInt(editForm.price) || 0
     const data: any = {
@@ -537,7 +537,7 @@ export function ProductListPage() {
                   className="input w-full"
                 />
               </div>
-              <ProductImageEditor images={images} onChange={next=>{setImages(next);setImagesChanged(true)}} />
+              <ProductImageEditor onUploadingChange={setImagesUploading} images={images} onChange={next=>{setImages(next);setImagesChanged(true)}} />
               <div>
                 <label className="block text-sm font-medium mb-1">{t('products.description') }</label>
                 <textarea
@@ -562,9 +562,9 @@ export function ProductListPage() {
                 <button
                   type="submit"
                   className="btn-primary flex-1"
-                  disabled={updateProduct.isPending || createProduct.isPending}
+                  disabled={imagesUploading || updateProduct.isPending || createProduct.isPending}
                 >
-                  {updateProduct.isPending || createProduct.isPending ? t('common.loading') : t('common.save')}
+                  {imagesUploading || updateProduct.isPending || createProduct.isPending ? t('common.loading') : t('common.save')}
                 </button>
                 <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary flex-1">
                   {t('common.cancel')}

@@ -1,7 +1,7 @@
 import { ProductImageGallery } from '../../components/ProductImageGallery'
 import { MediaPicker } from '../../components/MediaLibrary'
 import { mediaUploadError, mediaApi } from '../../services/media'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -17,6 +17,7 @@ export function ProductFormPage() {
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const isEdit = !!id
+  const backUrl = id ? `/products/recipes?productId=${encodeURIComponent(id)}` : '/products'
   const [showBomSection, setShowBomSection] = useState(false)
   const [showChannelSection, setShowChannelSection] = useState(false)
 
@@ -37,6 +38,8 @@ export function ProductFormPage() {
   const [showMediaPicker, setShowMediaPicker] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const hydratedProduct = useRef<string>()
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
@@ -56,7 +59,8 @@ export function ProductFormPage() {
   const { data: productData } = useQuery({
     queryKey: ['product', id],
     queryFn: async () => {await mediaApi.list('product',{pageSize:1});return productApi.get(id!)},
-    enabled: !!id
+    enabled: !!id,
+    refetchOnWindowFocus: false
   })
 
   // 获取渠道列表
@@ -68,6 +72,8 @@ export function ProductFormPage() {
   useEffect(() => {
     if (productData?.data) {
       const p = productData.data.data
+      if (!p || p.id !== id || hydratedProduct.current === id) return
+      hydratedProduct.current = id
       setForm({
         code: p.code || '',
         name: p.name,
@@ -88,33 +94,36 @@ export function ProductFormPage() {
       })
       setUploadedImages(p.images?.length ? p.images : p.image ? [{url:p.image}] : [])
     }
-  }, [productData])
+  }, [productData, id])
 
+  const finishSave = async (productId: string) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['products'] }),
+      queryClient.invalidateQueries({ queryKey: ['product', productId] }),
+      queryClient.invalidateQueries({ queryKey: ['bom-products'] }),
+      queryClient.invalidateQueries({ queryKey: ['bom-product', productId] }),
+      queryClient.invalidateQueries({ queryKey: ['display-product-catalog'] }),
+      queryClient.invalidateQueries({ queryKey: ['tv-standby-products'] })
+    ])
+    navigate(`/products/recipes?productId=${encodeURIComponent(productId)}`)
+  }
   const createMutation = useMutation({
-    mutationFn: (data: any) => {
-      return productApi.create(data)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] })
-      navigate('/products')
-    },
-    onError: (error: any) => {
-      console.error('Create product error:', error)
-      console.error('Error response:', error?.response?.data)
-      alert(error?.response?.data?.message || error.message || 'Failed to create product')
-    }
+    mutationFn: (data: any) => productApi.create(data),
+    onSuccess: response => finishSave(response.data.data.id),
+    onError: () => setSaveError(t('media.failed'))
   })
-
   const updateMutation = useMutation({
     mutationFn: (data: any) => productApi.update(id!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] })
-      navigate('/products')
-    }
+    onSuccess: () => finishSave(id!),
+    onError: () => setSaveError(t('media.failed'))
   })
+  const saving = createMutation.isPending || updateMutation.isPending
+  const canSave = !isUploading && !saving && (!isEdit || !!productData?.data?.data)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canSave) return
+    setSaveError('')
 
 
     // Validation
@@ -313,7 +322,7 @@ export function ProductFormPage() {
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/products" className="p-2 rounded-lg hover:bg-gray-100">
+        <Link to={backUrl} className="p-2 rounded-lg hover:bg-gray-100">
           <ArrowLeft size={20} />
         </Link>
       </div>
@@ -384,6 +393,7 @@ export function ProductFormPage() {
               {t('products.image')}
             </label>
             <ProductImageGallery images={uploadedImages} />
+            <p className="mb-3 text-sm text-gray-500">{t('media.productSaveHint')}</p>
             <button type="button" className="btn mb-3" disabled={uploadedImages.length>=5} onClick={()=>setShowMediaPicker(true)}>{t('media.choose')}</button>
             {showMediaPicker&&<MediaPicker scene="product" max={5-uploadedImages.length} onClose={()=>setShowMediaPicker(false)} onSelect={assets=>{setUploadedImages(prev=>[...prev.filter(i=>i.mediaId),...assets.filter(a=>!prev.some(i=>i.mediaId===a.id)).map(a=>({mediaId:a.id,url:a.url}))].slice(0,5));setShowMediaPicker(false)}} />}
             <div
@@ -658,11 +668,12 @@ export function ProductFormPage() {
             </label>
           </div>
 
+          {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
           <div className="flex gap-3 pt-4">
-            <button type="submit" className="btn-primary">
-              {t('common.save')}
+            <button type="submit" disabled={!canSave} className="btn-primary disabled:opacity-50">
+              {isUploading || saving ? t('common.loading') : t('common.save')}
             </button>
-            <Link to="/products" className="btn-secondary">
+            <Link to={backUrl} className="btn-secondary">
               {t('common.cancel')}
             </Link>
           </div>
