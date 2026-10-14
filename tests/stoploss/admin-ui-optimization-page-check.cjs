@@ -169,6 +169,7 @@ const { chromium, expect } = require("@playwright/test"),
         if (costMode==='missing') data = {type:'unknown',cost:0,breakdown:null};
         else {const grams=Number(url.searchParams.get('quantity'))*(url.searchParams.get('unit')==='kg'?1000:1),cost=Math.round(grams*2057/120);data={type:'semi_finished',cost,processRecipeName:'Synthetic process',breakdown:[{inventoryId:'powder',name:'Synthetic powder',unit:'g',quantity:grams/120,costPerUnit:2057,totalCost:cost}]};}
       }
+      else if (p === "/api/expenses/recurring") data = {items:[],revision:0};
       else if (p === "/api/finance/accounts/types") data = { list: [{ key: "expense", label: "Expense", icon: "FileText", color: "text-gray-600", bgColor: "bg-gray-100" }] };
       else if (p === "/api/config") data = { storeInfo: info };
       else if (p === "/api/tv/screens" || p === "/api/tv/legacy") data = [];
