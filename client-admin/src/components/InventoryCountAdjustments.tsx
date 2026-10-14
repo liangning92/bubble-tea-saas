@@ -1,3 +1,4 @@
+import { ActorName } from './InventoryActor'
 import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -47,7 +48,7 @@ export function InventoryCountAdjustments({ storeId }: { storeId: string }) {
             <td className="pr-3">{log.countId ? <Link className="text-primary underline" to={countDetailUrl(log.countId, log.countItemId)}>{log.countId.slice(-8).toUpperCase()}</Link> : t('inventoryCountWorkspace.legacyAdjustment')}</td>
             <td className="pr-3">{formatItemName(log.inventory?.name || '-', i18n.language)}</td>
             <td className="pr-3 whitespace-nowrap">{log.stockDelta !== null && log.stockDelta > 0 ? '+' : ''}{log.stockDelta?.toLocaleString() ?? '—'} {log.inventory?.unit}</td>
-            <td className="pr-3">{log.staffId || '—'}</td><td>{typeof log.note === 'string' ? log.note : '—'}</td>
+            <td className="pr-3"><ActorName actor={log.operator} id={log.staffId}/></td><td>{typeof log.note === 'string' ? log.note : '—'}</td>
           </tr>)}</tbody>
         </table></div>}
       </>}
