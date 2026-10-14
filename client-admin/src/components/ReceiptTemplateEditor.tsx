@@ -1,3 +1,4 @@
+import { notifyAdmin, confirmAdmin } from './AdminFeedback'
 import { receiptHtml, receiptWidth } from '../../../client-pos/electron/receiptLayout'
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -1032,7 +1033,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
   const handleSave = async (autoSetDefault = true) => {
     if (!templateName.trim()) {
-      alert(t('posSettings.templateNameRequired'))
+      notifyAdmin(t('posSettings.templateNameRequired'))
       return
     }
 
@@ -1064,11 +1065,11 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
       onSave?.()
       await loadTemplates()
-      alert('✓ 模板保存成功并已同步设为生效模板！')
+      notifyAdmin('✓ 模板保存成功并已同步设为生效模板！')
     } catch (err: any) {
       console.error('Failed to save template:', err)
       const msg = err?.response?.data?.message || err?.message || ''
-      alert(`${t('posSettings.saveTemplateFailed')}${msg ? ': ' + msg : ''}`)
+      notifyAdmin(`${t('posSettings.saveTemplateFailed')}${msg ? ': ' + msg : ''}`)
     } finally {
       setSaving(false)
     }
@@ -1084,7 +1085,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
       await ReceiptTemplateApi.setDefault(currentTemplateId)
       await loadTemplates()
       onSave?.()
-      alert('✓ 已成功设为默认生效模板！')
+      notifyAdmin('✓ 已成功设为默认生效模板！')
     } catch (err) {
       console.error('Failed to set default:', err)
     }
@@ -1092,7 +1093,7 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
   const handleDelete = async () => {
     if (!currentTemplateId) return
-    if (!confirm(t('posSettings.templateDeleteConfirm'))) return
+    if (!await confirmAdmin(t('posSettings.templateDeleteConfirm'))) return
 
     try {
       await ReceiptTemplateApi.delete(currentTemplateId)

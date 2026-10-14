@@ -1,5 +1,6 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +9,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Plus, Loader2, Users, Gift, Edit2, Trash2, X, Star } from 'lucide-react'
+import { Plus, Loader2, Users, Gift, Edit2, Trash2,  Star } from 'lucide-react'
 
 interface Referral {
   id: string
@@ -75,7 +76,7 @@ export function ReferralListPage() {
       closeModal()
     },
     onError: (error: any) => {
-      alert(error?.message || t('common.error'))
+      notifyAdmin(error?.message || t('common.error'))
     }
   })
 
@@ -86,7 +87,7 @@ export function ReferralListPage() {
       closeModal()
     },
     onError: (error: any) => {
-      alert(error?.message || t('common.error'))
+      notifyAdmin(error?.message || t('common.error'))
     }
   })
 
@@ -97,7 +98,7 @@ export function ReferralListPage() {
       setDeleteConfirm(null)
     },
     onError: (error: any) => {
-      alert(error?.message || t('common.error'))
+      notifyAdmin(error?.message || t('common.error'))
     }
   })
 
@@ -269,16 +270,8 @@ export function ReferralListPage() {
 
       {/* Create/Edit Modal */}
       {(showCreate || showEdit) && (
-        <MarketingDialog onClose={closeModal}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="marketing-toolbar mb-4">
-              <h3 className="text-lg font-semibold">
-                {showEdit ? t('marketing.editReferral') : t('marketing.createReferral')}
-              </h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={showEdit ? t('marketing.editReferral') : t('marketing.createReferral')} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending || updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.referralName')} *</label>
@@ -391,33 +384,30 @@ export function ReferralListPage() {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button type="submit" disabled={!form.name || !form.referralCode || createMutation.isPending || updateMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {(createMutation.isPending || updateMutation.isPending) && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </form>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <MarketingDialog onClose={()=>setDeleteConfirm(null)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
+        <AdminDialog title={t('common.delete')} onClose={()=>setDeleteConfirm(null)} className="max-w-sm" busy={Boolean(deleteMutation.isPending)} trackChanges chrome>
+
             <p className="text-gray-600 mb-6">{t('marketing.deleteReferralConfirm')}</p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
               <button onClick={() => deleteMutation.mutate(deleteConfirm)} disabled={deleteMutation.isPending} className="btn-danger flex-1 flex items-center justify-center gap-2">
                 {deleteMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                 {t('common.delete')}
               </button>
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary">{t('common.cancel')}</button>
             </div>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
     </div>
   )

@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import {useEmployeePermission,EmployeeAccessContext} from '../../contexts/EmployeeAccess'
 import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
@@ -10,7 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { staffApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { ArrowLeft, Key, X } from 'lucide-react'
+import { ArrowLeft, Key, } from 'lucide-react'
 
 export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onCancel?: () => void } = {}) {
   const { t, i18n } = useTranslation()
@@ -61,7 +63,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
   const resetPasswordMutation = useMutation({
     mutationFn: (password: string) => staffApi.resetPassword(id!, password),
     onSuccess: () => {
-      alert(t('staff.passwordResetSuccess'))
+      notifyAdmin(t('staff.passwordResetSuccess'))
       setShowPasswordModal(false)
       setNewPassword('')
       setConfirmPassword('')
@@ -172,12 +174,12 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
 
     // Validation for new staff
     if (!isEdit && !submitData.password) {
-      alert(t('staff.passwordRequired'))
+      notifyAdmin(t('staff.passwordRequired'))
       return
     }
 
     if (!isEdit && !submitData.storeId) {
-      alert('Store ID is missing. Please login again.')
+      notifyAdmin('Store ID is missing. Please login again.')
       return
     }
 
@@ -457,14 +459,8 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
 
       {/* Password Reset Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">{t('staff.resetPassword')}</h3>
-              <button onClick={() => setShowPasswordModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('staff.resetPassword')} onClose={() => setShowPasswordModal(false)} className="max-w-sm" busy={false} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('staff.newPassword')}</label>
@@ -489,11 +485,11 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
               {resetError && (
                 <p className="text-sm text-red-600">{resetError}</p>
               )}
-              <div className="flex gap-3">
+              <div className="admin-dialog-footer flex gap-3">
                 <button
                   onClick={() => setShowPasswordModal(false)}
                   className="flex-1 py-2 border border-gray-200 rounded-lg"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -505,8 +501,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

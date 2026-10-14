@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { OrderItemsTable } from '../../components/OrderItemsTable'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
 import { useQueryClient } from '@tanstack/react-query'
@@ -57,17 +59,17 @@ export function RefundRequestListPage() {
 
   const handleApprove = async () => {
     if (!selectedRequest) return
-    if (!confirmPreparedRefund(selectedRequest, t)) return
+    if (!await confirmPreparedRefund(selectedRequest, t)) return
     setSubmitting(true)
     try {
       await adminApi.approveRefund(selectedRequest.id, { verifiedPrepared: selectedRequest.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRequest.reasonCode === 'paid_unprepared', note: actionNote })
       await queryClient.invalidateQueries()
-      alert(t('orders.refundApproved'))
+      notifyAdmin(t('orders.refundApproved'))
       setSelectedRequest(null)
       setActionNote('')
       loadRequests()
     } catch (err) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setSubmitting(false)
     }
@@ -76,18 +78,18 @@ export function RefundRequestListPage() {
   const handleReject = async () => {
     if (!selectedRequest) return
     if (!actionNote.trim()) {
-      alert(t('orders.rejectReasonRequired'))
+      notifyAdmin(t('orders.rejectReasonRequired'))
       return
     }
     setSubmitting(true)
     try {
       await adminApi.rejectRefund(selectedRequest.id, { note: actionNote })
-      alert(t('orders.refundRejected'))
+      notifyAdmin(t('orders.refundRejected'))
       setSelectedRequest(null)
       setActionNote('')
       loadRequests()
     } catch (err) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setSubmitting(false)
     }
@@ -166,14 +168,8 @@ export function RefundRequestListPage() {
 
       {/* Detail Modal */}
       {selectedRequest && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-[90%] max-w-lg rounded-xl overflow-hidden max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white p-4 border-b flex items-center justify-between">
-              <h3 className="font-bold text-lg">{t('orders.refundDetail')}</h3>
-              <button onClick={() => setSelectedRequest(null)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <XCircle size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('orders.refundDetail')} onClose={() => setSelectedRequest(null)} className="max-w-lg" busy={Boolean(submitting)} trackChanges chrome>
+
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -251,8 +247,7 @@ export function RefundRequestListPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

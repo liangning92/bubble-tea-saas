@@ -1,9 +1,10 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { marketingApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { Loader2, Plus, Edit2, Trash2, X, Layers } from 'lucide-react'
+import { Loader2, Plus, Edit2, Trash2,  Layers } from 'lucide-react'
 
 interface StackingRule {
   id: string
@@ -230,14 +231,8 @@ export function StackingRulePage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">{t('marketing.addStackingRule')}</h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('marketing.addStackingRule')} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.ruleName')} *</label>
@@ -314,28 +309,21 @@ export function StackingRulePage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button type="submit" disabled={!form.name || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Edit Modal */}
       {showEdit && editingRule && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">{t('marketing.editStackingRule')}</h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('marketing.editStackingRule')} onClose={closeModal} className="max-w-md" busy={Boolean(updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.ruleName')} *</label>
@@ -410,16 +398,15 @@ export function StackingRulePage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button type="submit" disabled={!form.name || updateMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {updateMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

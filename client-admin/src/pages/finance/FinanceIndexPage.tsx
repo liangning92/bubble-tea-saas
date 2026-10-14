@@ -93,14 +93,15 @@ export function FinanceIndexPage() {
     <div className="flex flex-col h-full">
       {/* 二级导航 */}
       <div className="sticky top-0 bg-surface z-10 pb-4 border-b border-gray-200 mb-4">
-        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex flex-wrap">
+        <div className="admin-module-nav">
           {tabs.filter(tab=>allowed(permissionForPage(tab.path))).map(tab => {
             const Icon = tab.icon
             return (
               <Link
                 key={tab.key}
                 to={tab.path}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              aria-current={currentTab === tab.key ? 'page' : undefined}
+                className={`admin-module-link text-sm font-medium transition-colors flex items-center gap-1.5 ${
                   currentTab === tab.key
                     ? 'bg-primary text-white shadow-sm'
                     : 'text-gray-600 hover:bg-gray-100'

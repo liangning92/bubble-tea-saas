@@ -1,3 +1,4 @@
+import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -56,7 +57,7 @@ export function ShiftSwapListPage() {
   }, [token])
 
   const handleApprove = async (id: string) => {
-    if (!confirm(t('staff.shiftSwapConfirmApprove'))) return
+    if (!await confirmAdmin(t('staff.shiftSwapConfirmApprove'))) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/shift-swap/${id}/approve`, {
@@ -69,13 +70,13 @@ export function ShiftSwapListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.shiftSwapApproved'))
+        notifyAdmin(t('staff.shiftSwapApproved'))
         loadData()
       } else {
-        alert(data.message || t('staff.approveFailed'))
+        notifyAdmin(data.message || t('staff.approveFailed'))
       }
     } catch (error) {
-      alert(t('staff.approveFailed'))
+      notifyAdmin(t('staff.approveFailed'))
     } finally {
       setProcessing(null)
     }
@@ -96,13 +97,13 @@ export function ShiftSwapListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.shiftSwapRejected'))
+        notifyAdmin(t('staff.shiftSwapRejected'))
         loadData()
       } else {
-        alert(data.message || t('staff.rejectFailed'))
+        notifyAdmin(data.message || t('staff.rejectFailed'))
       }
     } catch (error) {
-      alert(t('staff.rejectFailed'))
+      notifyAdmin(t('staff.rejectFailed'))
     } finally {
       setProcessing(null)
     }

@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -66,13 +68,13 @@ export function ReimbursementListPage() {
       setActionType(null)
     } catch (error) {
       console.error('Failed to approve:', error)
-      alert(t('reimbursement.approveFailed'))
+      notifyAdmin(t('reimbursement.approveFailed'))
     }
   }
 
   const handleReject = async (id: string) => {
     if (!rejectReason) {
-      alert(t('reimbursement.fillRejectReason'))
+      notifyAdmin(t('reimbursement.fillRejectReason'))
       return
     }
     try {
@@ -83,7 +85,7 @@ export function ReimbursementListPage() {
       setRejectReason('')
     } catch (error) {
       console.error('Failed to reject:', error)
-      alert(t('reimbursement.rejectFailed'))
+      notifyAdmin(t('reimbursement.rejectFailed'))
     }
   }
 
@@ -95,7 +97,7 @@ export function ReimbursementListPage() {
       setActionType(null)
     } catch (error) {
       console.error('Failed to mark paid:', error)
-      alert(t('reimbursement.markPaidFailed'))
+      notifyAdmin(t('reimbursement.markPaidFailed'))
     }
   }
 
@@ -311,11 +313,12 @@ export function ReimbursementListPage() {
 
       {/* Action Modal */}
       {selectedItem && actionType && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4">
-              {getActionTitle()}
-            </h2>
+        <AdminDialog title={getActionTitle()} onClose={() => {
+                  setSelectedItem(null)
+                  setActionType(null)
+                  setRejectReason('')
+                }} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="mb-4 p-4 bg-gray-50 rounded-xl">
               <p className="font-medium">{selectedItem.staff?.name}</p>
@@ -340,7 +343,7 @@ export function ReimbursementListPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="admin-dialog-footer flex gap-2">
               <button
                 onClick={() => {
                   setSelectedItem(null)
@@ -348,7 +351,7 @@ export function ReimbursementListPage() {
                   setRejectReason('')
                 }}
                 className="flex-1 py-3 border border-gray-200 rounded-xl"
-              >
+               data-dialog-close="true">
                 {t('reimbursement.cancel')}
               </button>
               <button
@@ -372,8 +375,7 @@ export function ReimbursementListPage() {
                 {getActionLabel()}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

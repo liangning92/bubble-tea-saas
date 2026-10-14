@@ -1,3 +1,4 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { configApi } from '../../services/api'
@@ -124,8 +125,8 @@ export function FinanceSettingsPage() {
     }
   }
 
-  const handleReset = () => {
-    if (confirm(t('finance.resetConfirm'))) {
+  const handleReset = async () => {
+    if (await confirmAdmin(t('finance.resetConfirm'))) {
       setSettings(DEFAULT_SETTINGS)
     }
   }

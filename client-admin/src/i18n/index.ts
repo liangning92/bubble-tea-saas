@@ -4,6 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   "id": {
     "translation": {
+      "uiDesign": {"employeeReview": "Tinjauan staf", "payrollRules": "Gaji & cuti", "calculationBasis": "Dasar perhitungan", "costReview": "Biaya perlu diperiksa", "scrollHint": "Geser ke samping untuk melihat semua rincian", "nameFull": "Nama lengkap", "quantity": "Jumlah", "unitPrice": "Harga satuan", "subtotal": "Subtotal", "systemName": "Sistem Manajemen", "cash": "Tunai", "unit": "Satuan", "retry": "Coba lagi", "category": "Kategori", "salary": "Gaji", "discardTitle": "Buang perubahan yang belum disimpan?", "discardMessage": "Perubahan yang belum disimpan akan hilang.", "keepEditing": "Lanjutkan mengedit", "discardChanges": "Buang perubahan"},
       inventoryProcessing: {"title": "Ambil bahan untuk proses", "hint": "Stok dicatat sebagai bahan baku. Simpan mengurangi bahan sekali; hasil hanya untuk konversi resep penjualan. Jangan proses batch yang sudah dicatat sebagai pengambilan terpisah.", "recipe": "Resep proses", "choose": "Pilih resep", "input": "Jumlah bahan utama", "unit": "Satuan", "deduct": "Bahan baku yang dikurangi", "output": "Hasil konversi", "confirm": "Konfirmasi pengambilan proses", "saved": "Proses tercatat dan bahan baku dikurangi", "failed": "Gagal menyimpan. Periksa stok bahan baku dan coba lagi.", "definition": "Atur bahan dan hasil per batch. Resep penjualan dikonversi ke jumlah dan biaya bahan baku. Bahan setengah jadi hanya untuk konversi, bukan pembelian, penerimaan, pengeluaran atau stok opname.", "virtual": "Bahan konversi resep", "cost": "Biaya bahan per batch", "editError": "Gagal menyimpan resep. Periksa bahan, hasil dan satuan."},
       inventoryActors: {"operator": "Petugas", "counter": "Dihitung oleh", "buyer": "Dicatat oleh", "receiver": "Diterima oleh", "unrecorded": "Tidak tercatat", "unknown": "Nama akun lama tidak ditemukan", "history": "Riwayat & petugas", "none": "Belum ada catatan", "all": "Semua catatan", "in": "Barang masuk", "out": "Barang keluar", "purchase": "Pembelian"},
       revenueQuery: {"title":"Kueri berdasarkan kategori","dataset":"Data yang dicari","query":"Cari","reset":"Atur ulang","all":"Semua","payment":"Metode pembayaran","channel":"Kanal penjualan","net":"Semua pendapatan bersih","orders":"Pendapatan bersih pesanan sistem","pos":"POS (tanpa kanal)","shopeefood":"Laporan ShopeeFood","gofood":"Laporan GoFood","refund":"Pengembalian terkonfirmasi","expense":"Pengeluaran","category":"Kategori pengeluaran","drawer":"Kas diterima (setoran bank)","manualCash":"Kas dilaporkan","manualQris":"QRIS dilaporkan","revenue":"Pendapatan","handover":"Penerimaan serah terima","cash":"Penerimaan bersih pesanan tunai","qris":"Penerimaan bersih pesanan QRIS","amount":"Jumlah kueri","count":"Jumlah catatan","details":"Rincian kueri","breakdown":"Rincian kategori","source":"Sumber data","reference":"Nomor / keterangan","dateBasis":"Waktu pelaporan","orderAt":"Waktu pesanan","approvedAt":"Waktu konfirmasi pengembalian","legacyRequestedAt":"Waktu permintaan lama (konfirmasi tidak ada)","expenseDate":"Tanggal pengeluaran","closedAt":"Waktu serah terima","order":"Pesanan sistem","legacy":"Waktu konfirmasi tidak ada","missing":"Belum dicatat","missingHint":"{{count}} catatan belum memiliki jumlah. Total hanya mencakup jumlah yang diketahui.","legacyHint":"{{count}} pengembalian lama memakai waktu permintaan karena waktu konfirmasi tidak ada; perlu diperiksa.","invalid":"Isi tanggal valid dengan rentang maksimal 366 hari termasuk kedua tanggal.","filteredAmount":"Jumlah setelah filter","filteredCount":"Catatan setelah filter","fullShift":"Rincian shift menampilkan seluruh shift dan jumlah serah terima.","notApplicable":"Analisis jam pembelian tidak berlaku untuk data ini.","dateRange":"Tanggal kueri","page":"Halaman {{page}} / {{pages}}, {{total}} catatan","unassigned":"{{count}} catatan tidak dapat dikaitkan secara unik ke shift.","applied":"Kueri saat ini","loadFailed":"Kueri gagal. Coba lagi.","empty":"Tidak ada catatan yang cocok.","period": "Rentang waktu", "averageRecord": "Rata-rata per catatan", "ordersOnly": "Hanya pesanan sistem; laporan manual dikecualikan", "knownOnly": "Hanya catatan dengan jumlah tercatat", "comparison": "Perubahan dari periode sebelumnya (durasi sama)"},
@@ -737,9 +738,9 @@ const resources = {
         "phone": "Nomor Telepon",
         "password": "Kata Sandi",
         "loginTitle": "Masuk ke Dashboard",
-        "loginSubtitle": "Bubbly Tea POS System",
+        "loginSubtitle": "YOUME Sistem Manajemen",
         "appName": "YOUME",
-        "appSubtitle": "Sistem Manajemen POS",
+        "appSubtitle": "Sistem Manajemen",
         "phonePlaceholder": "08xxxxxxxxxx",
         "passwordPlaceholder": "••••••••",
         "apiUrlPlaceholder": "https://api.example.com",
@@ -4410,6 +4411,7 @@ const resources = {
   },
   "en": {
     "translation": {
+      "uiDesign": {"employeeReview": "Staff review", "payrollRules": "Payroll & leave", "calculationBasis": "Calculation basis", "costReview": "Cost needs review", "scrollHint": "Scroll horizontally to view all details", "nameFull": "Full name", "quantity": "Quantity", "unitPrice": "Unit price", "subtotal": "Subtotal", "systemName": "Management Console", "cash": "Cash", "unit": "Unit", "retry": "Retry", "category": "Category", "salary": "Payroll", "discardTitle": "Discard unsaved changes?", "discardMessage": "Your unsaved changes will be lost.", "keepEditing": "Keep editing", "discardChanges": "Discard changes"},
       inventoryProcessing: {"title": "Withdraw for processing", "hint": "Stock is accounted in raw materials. Submit deducts these inputs once; yield is used for sales conversion only. Do not process the same batch after recording a separate withdrawal.", "recipe": "Processing recipe", "choose": "Choose a recipe", "input": "Main material quantity", "unit": "Unit", "deduct": "Raw materials to deduct", "output": "Converted yield", "confirm": "Confirm processing withdrawal", "saved": "Processing recorded and raw materials deducted", "failed": "Could not save. Check raw material stock and retry.", "definition": "Set the inputs and yield for one batch. Sales recipes convert to raw quantities and purchase costs. Semi-finished materials are conversion definitions, excluded from purchasing, receiving, withdrawals and counts.", "virtual": "Recipe conversion material", "cost": "Batch raw material cost", "editError": "Could not save recipe. Check inputs, yield and units."},
       inventoryActors: {"operator": "Operator", "counter": "Counted by", "buyer": "Purchased by", "receiver": "Received by", "unrecorded": "Not recorded", "unknown": "Historical account name unavailable", "history": "History & operators", "none": "No records yet", "all": "All records", "in": "Stock in", "out": "Stock out", "purchase": "Purchase"},
       revenueQuery: {"title":"Classified query","dataset":"Query data","query":"Query","reset":"Reset","all":"All","payment":"Payment method","channel":"Sales channel","net":"All net revenue","orders":"System order net revenue","pos":"POS (no assigned channel)","shopeefood":"Declared ShopeeFood","gofood":"Declared GoFood","refund":"Confirmed refunds","expense":"Expenses","category":"Expense category","drawer":"Received cash (bank deposit)","manualCash":"Declared cash","manualQris":"Declared QRIS","revenue":"Revenue","handover":"Handover receipts","cash":"Cash order net receipts","qris":"QRIS order net receipts","amount":"Query amount","count":"Records","details":"Query details","breakdown":"Breakdown","source":"Data source","reference":"Reference / description","dateBasis":"Reporting time","orderAt":"Order time","approvedAt":"Refund confirmation time","legacyRequestedAt":"Legacy request time (confirmation missing)","expenseDate":"Expense date","closedAt":"Handover time","order":"System order","legacy":"Confirmation time missing","missing":"Not recorded","missingHint":"{{count}} records have no amount. The total includes only known amounts.","legacyHint":"{{count}} legacy refunds have no confirmation time and use request time; review their attribution.","invalid":"Enter valid dates spanning at most 366 inclusive days.","filteredAmount":"Filtered amount","filteredCount":"Filtered records","fullShift":"Shift details show the complete shift and handover amounts.","notApplicable":"Purchase-hour analysis is not applicable to this data.","dateRange":"Query dates","page":"Page {{page}} / {{pages}}, {{total}} records","unassigned":"{{count}} records cannot be uniquely assigned to a shift.","applied":"Current query","loadFailed":"Query failed. Please retry.","empty":"No matching records.","period": "Time range", "averageRecord": "Average per record", "ordersOnly": "System orders only; excludes manual declarations", "knownOnly": "Only records with known amounts", "comparison": "Change from preceding equal-length period"},
@@ -5419,9 +5421,9 @@ const resources = {
         "phone": "Phone Number",
         "password": "Password",
         "loginTitle": "Login to Dashboard",
-        "loginSubtitle": "YOUME POS System",
+        "loginSubtitle": "YOUME Management Console",
         "appName": "YOUME",
-        "appSubtitle": "POS Management System",
+        "appSubtitle": "Management Console",
         "phonePlaceholder": "08xxxxxxxxxx",
         "passwordPlaceholder": "••••••••",
         "apiUrlPlaceholder": "https://api.example.com",
@@ -8753,6 +8755,7 @@ const resources = {
   },
   "zh": {
     "translation": {
+      "uiDesign": {"employeeReview": "员工审核", "payrollRules": "计薪与休假", "calculationBasis": "计薪依据", "costReview": "成本待核对", "scrollHint": "左右滑动查看完整明细", "nameFull": "完整名称", "quantity": "数量", "unitPrice": "单价", "subtotal": "小计", "systemName": "后台管理系统", "cash": "现金", "unit": "单位", "retry": "重试", "category": "分类", "salary": "工资", "discardTitle": "放弃未保存的修改？", "discardMessage": "关闭后，本次未保存的修改将丢失。", "keepEditing": "继续编辑", "discardChanges": "放弃修改"},
       inventoryProcessing: {"title": "领用加工", "hint": "库存按原料记账。提交后扣除下列原料一次；加工产量仅用于销售配方换算。已登记领用的同一批原料，请勿重复提交加工。", "recipe": "加工配方", "choose": "选择加工配方", "input": "主原料投入量", "unit": "单位", "deduct": "本次原料扣减", "output": "换算加工产量", "confirm": "确认领用加工", "saved": "已记录加工并扣减原料", "failed": "加工保存失败，请检查原料库存后重试", "definition": "设置一批加工的投入与产出，销售配方会自动换算成原料用量与采购成本。半成品仅用于换算，不独立采购、入库、出库或盘点。", "virtual": "配方换算物料", "cost": "本批原料成本", "editError": "配方保存失败，请检查投入、产出与单位"},
       inventoryActors: {"operator": "操作人", "counter": "盘点人", "buyer": "采购登记人", "receiver": "入库人", "unrecorded": "未记录", "unknown": "历史账号姓名未找到", "history": "记录与操作人", "none": "暂无记录", "all": "全部记录", "in": "入库", "out": "出库", "purchase": "采购"},
       revenueQuery: {"title":"分类查询","dataset":"查询数据","query":"查询","reset":"重置","all":"全部","payment":"支付方式","channel":"销售渠道","net":"全部净营收","orders":"系统订单净营收","pos":"POS（未指定渠道）","shopeefood":"ShopeeFood交班申报","gofood":"GoFood交班申报","refund":"已确认退款","expense":"费用支出","category":"费用分类","drawer":"实收现金（应存银行）","manualCash":"人工申报现金","manualQris":"人工申报QRIS","revenue":"营收","handover":"交班收款","cash":"现金订单净收款","qris":"QRIS订单净收款","amount":"查询金额","count":"记录笔数","details":"查询明细","breakdown":"分类统计","source":"数据来源","reference":"单号／说明","dateBasis":"统计时间","orderAt":"订单时间","approvedAt":"退款确认时间","legacyRequestedAt":"历史申请时间（确认时间缺失）","expenseDate":"费用日期","closedAt":"交班时间","order":"系统订单","legacy":"历史确认时间缺失","missing":"未完整记录","missingHint":"有 {{count}} 笔记录金额未填写，当前金额仅汇总已知部分。","legacyHint":"有 {{count}} 笔历史退款缺少确认时间，暂按申请时间归属，需核对。","invalid":"请填写有效日期，首尾日期最多366天。","filteredAmount":"筛选后金额","filteredCount":"筛选后笔数","fullShift":"班次详情展示完整班次及交班金额。","notApplicable":"此数据类型不适用购买时段分析。","dateRange":"查询日期","page":"第 {{page}} / {{pages}} 页，共 {{total}} 笔","unassigned":"有 {{count}} 笔记录无法唯一关联班次。","applied":"当前查询","loadFailed":"查询失败，请重试。","empty":"没有符合条件的记录。","period": "时间范围", "averageRecord": "平均每笔金额", "ordersOnly": "仅系统订单，不含人工申报", "knownOnly": "仅计算金额已填写的记录", "comparison": "较前一等长期间"},
@@ -9487,9 +9490,9 @@ const resources = {
         "phone": "手机号",
         "password": "密码",
         "loginTitle": "登录后台管理",
-        "loginSubtitle": "YOUME POS 系统",
+        "loginSubtitle": "YOUME 后台管理系统",
         "appName": "YOUME",
-        "appSubtitle": "POS 管理系统",
+        "appSubtitle": "后台管理系统",
         "phonePlaceholder": "08xxxxxxxxxx",
         "passwordPlaceholder": "••••••••",
         "apiUrlPlaceholder": "https://api.example.com",
@@ -13250,5 +13253,9 @@ i18n.use(initReactI18next).init({
   fallbackLng: 'en',
   interpolation: { escapeValue: false }
 })
+
+const updateAdminTitle = () => { document.title = 'YOUME · ' + i18n.t('uiDesign.systemName') }
+i18n.on('languageChanged', updateAdminTitle)
+updateAdminTitle()
 
 export default i18n

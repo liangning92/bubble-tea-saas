@@ -1,9 +1,11 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { shiftApi } from '../../services/api'
-import { Plus, Edit2, Trash2, RefreshCw, X, Save } from 'lucide-react'
+import { Plus, Edit2, Trash2, RefreshCw,  Save } from 'lucide-react'
 
 interface Shift {
   id: string
@@ -95,7 +97,7 @@ export function ShiftConfigPage() {
 
   const handleSave = async () => {
     if (!formData.name || !formData.startTime || !formData.endTime) {
-      alert(t('common.required'))
+      notifyAdmin(t('common.required'))
       return
     }
 
@@ -113,20 +115,20 @@ export function ShiftConfigPage() {
       loadShifts()
     } catch (error) {
       console.error('Failed to save shift:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('common.confirmDelete'))) return
+    if (!await confirmAdmin(t('common.confirmDelete'))) return
     try {
       await shiftApi.delete(id)
       loadShifts()
     } catch (error) {
       console.error('Failed to delete shift:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -226,16 +228,8 @@ export function ShiftConfigPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">
-                {editingShift ? t('staff.editShift') : t('staff.addShift')}
-              </h2>
-              <button onClick={handleCloseModal} className="p-1 hover:bg-gray-100 rounded">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingShift ? t('staff.editShift') : t('staff.addShift')} onClose={handleCloseModal} className="max-w-md" busy={Boolean(saving)} trackChanges chrome>
+
 
             <div className="space-y-4">
               <div>
@@ -334,11 +328,11 @@ export function ShiftConfigPage() {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="admin-dialog-footer flex gap-3 mt-6">
               <button
                 onClick={handleCloseModal}
                 className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
-              >
+               data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -354,8 +348,7 @@ export function ShiftConfigPage() {
                 {t('common.save')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

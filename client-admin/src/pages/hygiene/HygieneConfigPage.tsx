@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -133,7 +134,7 @@ export function HygieneConfigPage() {
     },
     onError: (error: any) => {
       console.error('Update config error:', error)
-      alert(t('hygiene.saveConfigFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
+      notifyAdmin(t('hygiene.saveConfigFailed') + ': ' + (error?.message || error?.response?.data?.message || t('common.unknownError')))
     },
   })
 

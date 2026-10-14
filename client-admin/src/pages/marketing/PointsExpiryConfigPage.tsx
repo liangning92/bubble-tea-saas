@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -42,20 +43,20 @@ export function PointsExpiryConfigPage() {
     mutationFn: (data: any) => marketingApi.createPointsExpiryRule(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['points-expiry-rules'] })
-      alert(t('common.saveSuccess'))
+      notifyAdmin(t('common.saveSuccess'))
     },
     onError: () => {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   })
 
   const processMutation = useMutation({
     mutationFn: () => marketingApi.processPointsExpiry(storeId),
     onSuccess: (res) => {
-      alert(`Processed: ${res.data?.data?.processed} members, ${res.data?.data?.expired} points expired`)
+      notifyAdmin(`Processed: ${res.data?.data?.processed} members, ${res.data?.data?.expired} points expired`)
     },
     onError: () => {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   })
 

@@ -1,3 +1,5 @@
+import { finiteCost } from '../../utils/recipeCost'
+import { formatDisplayQuantity } from '../../utils/itemDisplayName'
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -64,9 +66,11 @@ export function BomAnalysisPage() {
   const images=detail?.images?.length?detail.images:detail?.image?[{url:detail.image}]:[]
   const selectedSpec=detail?.specs?.find((s:any)=>s.id===specId)||detail?.specs?.find((s:any)=>s.isDefault)||detail?.specs?.[0]
   const sellingPrice = selectedSpec?.price ?? currentProduct?.sellingPrice ?? 0
-  const bomCost = detail?.totalBomCost ?? currentProduct?.bomCost ?? 0
-  const grossProfit = sellingPrice - bomCost
-  const profitRate = sellingPrice > 0 ? Math.round((grossProfit / sellingPrice) * 100) : 0
+  const bomCost = finiteCost(detail?.totalBomCost ?? currentProduct?.bomCost)
+  const grossProfit = bomCost === null ? null : sellingPrice - bomCost
+  const profitRate = grossProfit !== null && sellingPrice > 0 ? Math.round((grossProfit / sellingPrice) * 100) : 0
+
+  const displayCost = (value: unknown) => finiteCost(value) === null ? t('uiDesign.costReview') : formatCurrency(Number(value))
 
   return (
     <div className="space-y-6">
@@ -188,7 +192,7 @@ export function BomAnalysisPage() {
                             {formatCurrency(product.sellingPrice)}
                           </p>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            {t('bom.cost')}: <span className="font-medium text-gray-900">{formatCurrency(product.bomCost)}</span>
+                            {t('bom.cost')}: <span className="font-medium text-gray-900">{displayCost(product.bomCost)}</span>
                           </p>
                           <p className="text-xs font-medium text-green-600 mt-0.5">
                             {t('bom.profitMargin')}: {product.profitRate}%
@@ -242,7 +246,7 @@ export function BomAnalysisPage() {
                   <div className="card p-4">
                     <p className="text-sm text-gray-500 font-medium">{t('bom.totalBomCost')}</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">
-                      {formatCurrency(detail.totalBomCost)}
+                      {displayCost(detail.totalBomCost)}
                     </p>
                   </div>
 
@@ -256,7 +260,7 @@ export function BomAnalysisPage() {
                   <div className="card p-4">
                     <p className="text-sm text-gray-500 font-medium">{t('bom.grossProfit')}</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">
-                      {formatCurrency(grossProfit)} <span className="text-sm font-normal text-green-600">({profitRate}%)</span>
+                      {grossProfit === null ? t('uiDesign.costReview') : formatCurrency(grossProfit)} <span className="text-sm font-normal text-green-600">({grossProfit === null ? '—' : profitRate}%)</span>
                     </p>
                   </div>
                 </div>
@@ -288,15 +292,15 @@ export function BomAnalysisPage() {
                         <tbody>
                           {detail.bomDetails.map((item: any, idx: number) => {
                             const ratio =
-                              detail.totalBomCost > 0
+                              finiteCost(item.totalCost) !== null && finiteCost(detail.totalBomCost) !== null && detail.totalBomCost > 0
                                 ? ((item.totalCost / detail.totalBomCost) * 100).toFixed(1)
-                                : '0'
+                                : '—'
                             const isSemi = item.inventoryType === 'semi_finished'
 
                             return (
                               <tr key={idx} className="border-b last:border-0 hover:bg-gray-50">
                                 <td className="py-3 text-sm font-medium text-gray-900">
-                                  {formatItemName(item.name, i18n.language)}
+                                  {formatItemName(item, i18n.language)}
                                 </td>
                                 <td className="py-3 text-sm whitespace-nowrap">
                                   <span className={`badge ${isSemi ? 'badge-success' : 'badge-info'}`}>
@@ -304,13 +308,13 @@ export function BomAnalysisPage() {
                                   </span>
                                 </td>
                                 <td className="py-3 text-sm text-right whitespace-nowrap font-medium">
-                                  {item.quantity} {item.unit}
+                                  {formatDisplayQuantity(item.quantity)} {item.unit}
                                 </td>
                                 <td className="py-3 text-sm text-right whitespace-nowrap text-gray-500">
-                                  {formatCurrency(item.costPerUnit)}/{item.unit}
+                                  {displayCost(item.costPerUnit)}/{item.unit}
                                 </td>
                                 <td className="py-3 text-sm text-right whitespace-nowrap font-medium text-gray-900">
-                                  {formatCurrency(item.totalCost)}
+                                  {displayCost(item.totalCost)}
                                 </td>
                                 <td className="py-3 text-sm text-right whitespace-nowrap">
                                   <span className="font-medium text-gray-700">{ratio}%</span>
@@ -331,7 +335,7 @@ export function BomAnalysisPage() {
                               {t('bom.totalCost')}:
                             </td>
                             <td className="py-3 text-right">
-                              {formatCurrency(detail.totalBomCost)}
+                              {displayCost(detail.totalBomCost)}
                             </td>
                             <td className="py-3 text-right">100%</td>
                           </tr>

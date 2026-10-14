@@ -1,14 +1,16 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { financeApi } from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
-import { Download, FileSpreadsheet, Loader2, Settings, Eye, X } from 'lucide-react'
+import { Download, FileSpreadsheet, Loader2, Settings, Eye, } from 'lucide-react'
 import { format } from 'date-fns'
 import { TaxConfigModal } from './TaxConfigModal'
 
 export function TaxReportsPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'MM'))
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear())
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -17,14 +19,7 @@ export function TaxReportsPage() {
   const [showPreview, setShowPreview] = useState(false)
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i)
-  const months = [
-    { value: '01', label: 'January' }, { value: '02', label: 'February' },
-    { value: '03', label: 'March' }, { value: '04', label: 'April' },
-    { value: '05', label: 'May' }, { value: '06', label: 'June' },
-    { value: '07', label: 'July' }, { value: '08', label: 'August' },
-    { value: '09', label: 'September' }, { value: '10', label: 'October' },
-    { value: '11', label: 'November' }, { value: '12', label: 'December' },
-  ]
+  const months = Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1).padStart(2, '0'), label: new Intl.DateTimeFormat(i18n.language, { month: 'long' }).format(new Date(2026, index, 1)) }))
 
   const monthStr = `${selectedYear}-${selectedMonth.padStart(2, '0')}`
 
@@ -59,7 +54,7 @@ export function TaxReportsPage() {
       document.body.removeChild(a)
     } catch (error) {
       console.error('Download failed:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setDownloading(null)
     }
@@ -193,14 +188,8 @@ export function TaxReportsPage() {
 
       {/* Preview Modal */}
       {showPreview && previewData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-bold">{t('common.preview')} - SPT</h2>
-              <button onClick={() => setShowPreview(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={[t('common.preview'), "- SPT"].join(" ")} onClose={() => setShowPreview(false)} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-gray-50 rounded-lg">
@@ -234,12 +223,11 @@ export function TaxReportsPage() {
               )}
             </div>
             <div className="flex justify-end px-6 py-4 border-t bg-gray-50">
-              <button onClick={() => setShowPreview(false)} className="btn btn-outline">
+              <button onClick={() => setShowPreview(false)} className="btn btn-outline" data-dialog-close="true">
                 {t('common.close')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

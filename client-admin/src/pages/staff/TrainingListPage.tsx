@@ -1,3 +1,5 @@
+import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import dateLocaleI18n from '../../i18n'
 import { TrainingSectionExtras, TrainingModuleExtras } from '../../../../shared/components/TrainingExtras'
 import { useState, useEffect } from 'react'
@@ -140,13 +142,13 @@ export function TrainingListPage() {
   }
 
   const handleDelete = async (record: TrainingRecord) => {
-    if (!confirm(t('common.confirm') + '?')) return
+    if (!await confirmAdmin(t('common.confirm') + '?')) return
     try {
       await trainingApi.delete(record.id)
       loadData()
     } catch (error) {
       console.error('Failed to delete:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -203,11 +205,11 @@ export function TrainingListPage() {
       if (response.ok) {
         setCategories(categoryForm)
         setShowCategoryModal(false)
-        alert(t('common.success'))
+        notifyAdmin(t('common.success'))
       }
     } catch (error) {
       console.error('Failed to save categories:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -635,15 +637,12 @@ export function TrainingListPage() {
 
       {/* Course Detail Modal for Admin */}
       {selectedCourse && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+        <AdminDialog title={tr(selectedCourse.title, i18n.language)} onClose={() => setSelectedCourse(null)} className="max-w-2xl" busy={false} trackChanges chrome>
             <div className={`p-5 text-white bg-gradient-to-r ${selectedCourse.color} flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">{selectedCourse.icon}</span>
                 <div>
-                  <h3 className="text-lg font-bold">
-                    {tr(selectedCourse.title, i18n.language)}
-                  </h3>
+
                   <p className="text-xs text-white/80 mt-0.5">
                     {tr(selectedCourse.subtitle, i18n.language)}
                   </p>
@@ -652,7 +651,7 @@ export function TrainingListPage() {
               <button
                 onClick={() => setSelectedCourse(null)}
                 className="p-1.5 bg-black/20 hover:bg-black/30 rounded-full transition-colors"
-              >
+               data-dialog-close="true">
                 <X size={18} />
               </button>
             </div>
@@ -750,12 +749,11 @@ export function TrainingListPage() {
               <button
                 onClick={() => setSelectedCourse(null)}
                 className="btn-secondary px-5 py-2 text-xs font-semibold"
-              >
+               data-dialog-close="true">
                 关闭
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Form Modal */}
@@ -769,16 +767,8 @@ export function TrainingListPage() {
 
       {/* Category Management Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between border-b pb-3 mb-4">
-              <h3 className="font-bold text-gray-900 text-lg">
-                {t('training.categoryManagement', '培训分类管理')}
-              </h3>
-              <button onClick={() => setShowCategoryModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('training.categoryManagement', '培训分类管理')} onClose={() => setShowCategoryModal(false)} className="max-w-xl" busy={false} trackChanges chrome>
+
 
             <div className="overflow-y-auto flex-1 space-y-3 pr-1">
               {categoryForm.map((cat, idx) => (
@@ -839,11 +829,11 @@ export function TrainingListPage() {
               >
                 <Plus size={14} /> 添加新分类
               </button>
-              <div className="flex items-center gap-2">
+              <div className="admin-dialog-footer flex items-center gap-2">
                 <button
                   onClick={() => setShowCategoryModal(false)}
                   className="btn-secondary px-4 py-2 text-xs font-semibold"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel', '取消')}
                 </button>
                 <button
@@ -854,8 +844,7 @@ export function TrainingListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

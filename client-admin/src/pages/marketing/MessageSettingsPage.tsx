@@ -1,5 +1,5 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +7,7 @@ import { messageApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import {
   Loader2, MessageSquare, Settings, FileText, BarChart3,
-  Plus, Edit2, Trash2, X, Check, Bell, Globe, Phone
+  Plus, Edit2, Trash2,  Check, Bell, Globe, Phone
 } from 'lucide-react'
 
 // Types
@@ -450,16 +450,8 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
   }
 
   return (
-    <MarketingDialog onClose={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">
-            {channel ? t('marketing.editChannel') : t('marketing.addChannel')}
-          </h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X size={20} />
-          </button>
-        </div>
+    <AdminDialog title={channel ? t('marketing.editChannel') : t('marketing.addChannel')} onClose={onClose} className="max-w-lg" busy={Boolean(isPending)} trackChanges chrome>
+
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -613,16 +605,15 @@ function ChannelModal({ channel, onClose, onSave, isPending }: {
             </label>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="admin-dialog-footer flex gap-3 pt-4">
+            <button type="button" onClick={onClose} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
             <button type="submit" disabled={isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
               {isPending && <Loader2 size={16} className="animate-spin" />}
               {t('common.save')}
             </button>
-            <button type="button" onClick={onClose} className="btn-secondary">{t('common.cancel')}</button>
           </div>
         </form>
-      </div>
-    </MarketingDialog>
+      </AdminDialog>
   )
 }
 
@@ -658,16 +649,8 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
   }
 
   return (
-    <MarketingDialog onClose={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">
-            {template ? t('marketing.editTemplate') : t('marketing.addTemplate')}
-          </h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X size={20} />
-          </button>
-        </div>
+    <AdminDialog title={template ? t('marketing.editTemplate') : t('marketing.addTemplate')} onClose={onClose} className="max-w-2xl" busy={Boolean(isPending)} trackChanges chrome>
+
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -776,15 +759,14 @@ function TemplateModal({ template, onClose, onSave, isPending, variables }: {
             </label>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="admin-dialog-footer flex gap-3 pt-4">
+            <button type="button" onClick={onClose} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
             <button type="submit" disabled={isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
               {isPending && <Loader2 size={16} className="animate-spin" />}
               {t('common.save')}
             </button>
-            <button type="button" onClick={onClose} className="btn-secondary">{t('common.cancel')}</button>
           </div>
         </form>
-      </div>
-    </MarketingDialog>
+      </AdminDialog>
   )
 }

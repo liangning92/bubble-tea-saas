@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { materialApi } from "../../services/api";
-import { formatCurrency } from "../../utils/helpers";
+import { formatCurrency, formatItemName } from "../../utils/helpers";
 import {
   Loader2,
   ShoppingCart,
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 export function RestockSuggestionPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [days, setDays] = useState(15);
 
   const { data: suggestionsData, isLoading } = useQuery({
@@ -126,7 +126,7 @@ export function RestockSuggestionPage() {
                   key={item.inventoryId}
                   className="border-b border-border last:border-0"
                 >
-                  <td className="py-3 font-medium">{item.name}</td>
+                  <td className="py-3 font-medium">{formatItemName(item, i18n.language)}</td>
                   <td className="py-3 text-gray-600">{item.category}</td>
                   <td className="py-3 text-right">
                     <span

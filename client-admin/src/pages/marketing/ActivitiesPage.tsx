@@ -1,3 +1,4 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -724,9 +725,9 @@ export function ActivitiesPage() {
                           <button
                             className="btn-ghost text-red-600"
                             disabled={changeStatus.isPending}
-                            onClick={() => {
+                            onClick={async () => {
                               if (
-                                window.confirm(
+                                await confirmAdmin(
                                   l(
                                     "结束后不再参与收银优惠和电视宣传，确认结束？",
                                     "End this activity? POS offers and TV publicity will stop.",

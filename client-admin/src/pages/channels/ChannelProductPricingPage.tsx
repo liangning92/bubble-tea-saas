@@ -1,3 +1,4 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
 import { useEmployeePermission } from "../../contexts/EmployeeAccess";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -124,10 +125,10 @@ export function ChannelProductPricingPage() {
           className="input sm:max-w-xs"
           value={channel}
           disabled={busy}
-          onChange={(e) => {
+          onChange={async (e) => {
             if (
               Object.keys(drafts).length &&
-              !confirm(
+              !await confirmAdmin(
                 l(
                   "放弃未保存的调价？",
                   "Discard unsaved price edits?",
@@ -329,22 +330,12 @@ export function ChannelProductPricingPage() {
         </>
       )}
       {bulk !== null && (
-        <AdminDialog
-          title={l(
+        <AdminDialog title={l(
             "批量调价预览",
             "Bulk price preview",
             "Pratinjau harga massal",
-          )}
-          onClose={() => setBulk(null)}
-        >
-          <div className="p-4 sm:p-6 space-y-4">
-            <h2 className="font-semibold">
-              {l(
-                "批量调价预览",
-                "Bulk price preview",
-                "Pratinjau harga massal",
-              )}
-            </h2>
+          )} onClose={() => setBulk(null)} className="max-w-lg" busy={false} trackChanges chrome>
+
             <p>
               {filtered.length}{" "}
               {l(
@@ -377,7 +368,10 @@ export function ChannelProductPricingPage() {
                 </p>
               ))}
             </div>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button className="btn" onClick={() => setBulk(null)} data-dialog-close="true">
+                {t("common.cancel")}
+              </button>
               <button
                 className="btn-primary"
                 onClick={() => {
@@ -397,12 +391,8 @@ export function ChannelProductPricingPage() {
               >
                 {l("填入草稿", "Fill drafts", "Isi draf")}
               </button>
-              <button className="btn" onClick={() => setBulk(null)}>
-                {t("common.cancel")}
-              </button>
             </div>
-          </div>
-        </AdminDialog>
+          </AdminDialog>
       )}
     </div>
   );

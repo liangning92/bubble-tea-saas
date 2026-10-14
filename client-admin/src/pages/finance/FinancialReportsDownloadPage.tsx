@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { financeApi } from '../../services/api'
@@ -44,7 +45,7 @@ export function FinancialReportsDownloadPage() {
       document.body.removeChild(a)
     } catch (error) {
       console.error('Download failed:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setDownloading(null)
     }

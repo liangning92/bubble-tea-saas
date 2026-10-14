@@ -1,9 +1,13 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { inventoryUnitFactor } from '../../utils/inventoryInputUnits'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { bomApi, inventoryApi, productApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
+import { formatDisplayQuantity } from '../../utils/itemDisplayName'
+import { finiteCost, recipeRowCost, recipeTotalCost } from '../../utils/recipeCost'
 import { formatCurrency, formatItemName } from '../../utils/helpers'
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronDown, ChevronRight,
@@ -13,6 +17,14 @@ import {
 // 原料类型
 type InventoryType = 'raw_material' | 'semi_finished' | 'all'
 
+interface BomDetailResponse {
+  inventoryId: string; quantity: number; name: string; unit: string
+  costPerUnit?: number | null; totalCost?: number | null
+  inventoryType?: InventoryType; type?: InventoryType
+  currentStock?: number; safetyStock?: number
+  costBreakdown?: BOMItem['costBreakdown']
+}
+
 interface BOMItem {
   id?: string
   inventoryId: string
@@ -20,14 +32,17 @@ interface BOMItem {
   quantityStr: string
   name: string
   unit: string
-  cost: number
+  cost: number | null
+  rowTotal?: number | null
+  costPending?: boolean
+  costFailed?: boolean
   type?: InventoryType
   currentStock?: number
   safetyStock?: number
   // 成本分解（用于 semi_finished）
   costBreakdown?: {
-    type: string
-    cost: number
+    type?: string
+    cost?: number
     breakdown: Array<{
       inventoryId: string
       name: string
@@ -97,10 +112,10 @@ export function RecipeEditPage() {
       queryClient.invalidateQueries({ queryKey: ['bom-product', id] })
       queryClient.invalidateQueries({ queryKey: ['bom-products'] })
       setIsDirty(false)
-      alert(t('bom.saveSuccess'))
+      notifyAdmin(t('bom.saveSuccess'))
     },
     onError: (error: any) => {
-      alert(error?.response?.data?.message || error.message || 'Save failed')
+      notifyAdmin(error?.response?.data?.message || error.message || 'Save failed')
     }
   })
 
@@ -111,18 +126,26 @@ export function RecipeEditPage() {
   }, [productData])
 
   useEffect(() => {
-    if (bomData?.data) {
-      const items = (bomData.data.data.bomDetails || []).map((item: any) => ({
+    if (bomData?.data && !inventoryLoading && !isDirty) {
+      const items = (bomData.data.data.bomDetails || []).map((item: BomDetailResponse) => {
+        const inv = inventoryList.find((candidate:any)=>candidate.id===item.inventoryId)
+        let cost = finiteCost(item.costPerUnit)
+        if (inv && finiteCost(inv.avgCost) !== null && (item.inventoryType || item.type) !== 'semi_finished') {
+          try { cost = Number(inv.avgCost) * inventoryUnitFactor(inv, item.unit || inv.unit) } catch { cost = null }
+        }
+        return ({
         ...item,
-        cost:item.costPerUnit,
+        cost,
+        rowTotal: finiteCost(item.totalCost),
+        costBreakdown: item.costBreakdown ? { ...item.costBreakdown, cost: finiteCost(item.totalCost) ?? undefined } : undefined,
         quantityStr: item.quantity?.toString() || '',
         type: item.inventoryType || item.type || 'raw_material',
         currentStock: item.currentStock,
         safetyStock: item.safetyStock
-      }))
+      })})
       setBomItems(items)
     }
-  }, [bomData])
+  }, [bomData, inventoryLoading])
 
   // 离开页面时提示未保存更改
   useEffect(() => {
@@ -138,14 +161,17 @@ export function RecipeEditPage() {
 
   // 获取 semi_finished 项的成本分解
   const fetchCostBreakdown = useCallback(async (index: number, inventoryId: string, quantity: number, unit?:string) => {
+    setBomItems(prev => prev.map((item, i) => i === index ? { ...item, costPending: true, costFailed: false } : item))
     try {
       const res = await bomApi.getInventoryBreakdown(inventoryId, quantity, unit)
+      if (res.data.code !== 200 || finiteCost(res.data.data?.cost) === null) throw new Error('Invalid cost response')
       if (res.data.code === 200) {
         setBomItems(prev => prev.map((item, i) =>
-          i === index ? { ...item, costBreakdown: res.data.data } : item
+          i === index && item.inventoryId === inventoryId && Number(item.quantityStr) === quantity && (!unit || item.unit === unit) ? { ...item, costBreakdown: { ...res.data.data, cost: Number(res.data.data.cost) }, costPending: false, costFailed: false } : item
         ))
       }
     } catch (e) {
+      setBomItems(prev => prev.map((item, i) => i === index && item.inventoryId === inventoryId && Number(item.quantityStr) === quantity && (!unit || item.unit === unit) ? { ...item, costPending: false, costFailed: true } : item))
       console.error('Failed to fetch cost breakdown:', e)
     }
   }, [])
@@ -187,20 +213,18 @@ export function RecipeEditPage() {
           inventoryId,
           name: inventory.name,
           unit: inventory.unit,
-          cost: inventory.avgCost || 0,
+          cost: finiteCost(inventory.avgCost),
           type: inventory.type || 'raw_material',
           currentStock: inventory.currentStock,
           safetyStock: inventory.safetyStock,
+          rowTotal: undefined,
           costBreakdown: undefined,
+          costPending: inventory.type === 'semi_finished', costFailed: false,
           error: undefined
-        }
-        // 如果是 semi_finished，自动获取成本分解
-        if (inventory.type === 'semi_finished') {
-          const qty = parseFloat(newItem.quantityStr) || 1
-          fetchCostBreakdown(index, inventoryId, qty, inventory.unit)
         }
         return newItem
       }))
+      if (inventory.type === 'semi_finished') fetchCostBreakdown(index, inventoryId, Number(bomItems[index].quantityStr) || 0, inventory.unit)
       setIsDirty(true)
     }
   }
@@ -214,14 +238,12 @@ export function RecipeEditPage() {
 
     setBomItems(prev => prev.map((item, i) => {
       if (i !== index) return item
-      const newItem = { ...item, quantityStr: finalValue }
-      // 如果是 semi_finished，重新计算成本分解
-      if (newItem.type === 'semi_finished' && newItem.inventoryId) {
-        const qty = parseFloat(finalValue) || 1
-        fetchCostBreakdown(index, newItem.inventoryId, qty, newItem.unit)
-      }
+      const newItem = { ...item, quantityStr: finalValue, rowTotal: undefined, costBreakdown: undefined }
+      if (newItem.type === 'semi_finished') { newItem.costPending = true; newItem.costFailed = false }
       return newItem
     }))
+    const row = bomItems[index]
+    if (row.type === 'semi_finished' && row.inventoryId) fetchCostBreakdown(index, row.inventoryId, Number(finalValue) || 0, row.unit)
     setIsDirty(true)
   }
 
@@ -252,7 +274,7 @@ export function RecipeEditPage() {
   const handleSave = () => {
     const { valid, errors } = validateItems()
     if (!valid) {
-      alert(errors.join('\n'))
+      notifyAdmin(errors.join('\n'))
       return
     }
 
@@ -266,24 +288,18 @@ export function RecipeEditPage() {
     })
   }
 
-  const handleCancel = () => {
-    if (isDirty && !confirm(t('bom.unsavedChanges'))) {
+  const handleCancel = async () => {
+    if (isDirty && !await confirmAdmin(t('bom.unsavedChanges'))) {
       return
     }
     navigate(-1)
   }
 
   // 计算总成本（考虑 semi_finished 的实际成本）
-  const totalCost = useMemo(() => {
-    return bomItems.reduce((sum, item) => {
-      if (!item.inventoryId) return sum
-      const qty = parseFloat(item.quantityStr) || 0
-      if (item.costBreakdown) {
-        return sum + item.costBreakdown.cost
-      }
-      return sum + (qty * item.cost)
-    }, 0)
-  }, [bomItems])
+  const totalCost = useMemo(() => recipeTotalCost(bomItems), [bomItems])
+  const costReview = t('uiDesign.costReview')
+  const displayCost = (cost: number | null | undefined) => cost === null || cost === undefined || !Number.isFinite(cost) ? costReview : formatCurrency(cost)
+
 
   // 库存不足的项目数量
   const lowStockCount = useMemo(() => {
@@ -337,7 +353,7 @@ export function RecipeEditPage() {
 
       {/* 原料类型筛选 */}
       <div className="card">
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-4 mb-4">
           <span className="text-sm font-medium text-gray-700">{t('bom.filterByType')}：</span>
           <div className="flex gap-2">
             {(['all', 'raw_material', 'semi_finished'] as InventoryType[]).map(type => (
@@ -393,7 +409,7 @@ export function RecipeEditPage() {
                 item.error ? 'border-red-300' : 'border-gray-200'
               }`}>
                 {/* 主行 */}
-                <div className="flex items-center gap-3 p-3 bg-gray-50">
+                <div className="recipe-edit-row p-3 bg-gray-50">
                   {/* 原料类型标签 */}
                   <span className={`px-2 py-0.5 text-xs rounded-full flex-shrink-0 ${
                     item.type === 'semi_finished'
@@ -420,7 +436,7 @@ export function RecipeEditPage() {
                               <option disabled>{t('bom.noRawMaterials')}</option>
                             ) : groupedInventory.raw.map((inv: any) => (
                               <option key={inv.id} value={inv.id}>
-                                {formatItemName(inv.name, i18n.language)} ({inv.unit})
+                                {formatItemName(inv, i18n.language)} ({inv.unit})
                              </option>
                             ))}
                           </optgroup>
@@ -429,7 +445,7 @@ export function RecipeEditPage() {
                               <option disabled>{t('bom.noProcessed')}</option>
                             ) : groupedInventory.semi.map((inv: any) => (
                               <option key={inv.id} value={inv.id}>
-                                {formatItemName(inv.name, i18n.language)} ({inv.unit})
+                                {formatItemName(inv, i18n.language)} ({inv.unit})
                               </option>
                             ))}
                           </optgroup>
@@ -437,7 +453,7 @@ export function RecipeEditPage() {
                       ) : (
                         filteredInventory.map((inv: any) => (
                           <option key={inv.id} value={inv.id}>
-                            {formatItemName(inv.name, i18n.language)} ({inv.unit})
+                            {formatItemName(inv, i18n.language)} ({inv.unit})
                           </option>
                         ))
                       )}
@@ -445,12 +461,13 @@ export function RecipeEditPage() {
                   </div>
 
                   {/* 用量 */}
-                  <div className="w-28 flex-shrink-0">
+                  <div className="min-w-0">
+                    <label className="block text-xs text-gray-500 mb-1">{t('uiDesign.quantity')}</label>
                     <input
                       type="text"
                       value={item.quantityStr}
                       onChange={(e) => handleQuantityChange(index, e.target.value)}
-                      className={`input w-full text-right ${item.error ? 'input-error' : ''}`}
+                      aria-label={t("uiDesign.quantity")} className={`input w-full text-right ${item.error ? 'input-error' : ''}`}
                       placeholder="0"
                       inputMode="decimal"
                       style={{ appearance: 'textfield' }}
@@ -458,26 +475,21 @@ export function RecipeEditPage() {
                   </div>
 
                   {/* 单位 */}
-                  <select className="w-16 text-gray-500 text-sm" value={item.unit||''} onChange={e=>{
+                  <label className="min-w-0"><span className="block text-xs text-gray-500 mb-1">{t('uiDesign.unit')}</span><select aria-label={t("uiDesign.unit")} className="input min-w-0 text-sm" value={item.unit||''} onChange={e=>{
                     const unit=e.target.value,inv=inventoryList.find((x:any)=>x.id===item.inventoryId)
                     if(!inv)return
-                    const size=(u:string)=>['kg','l'].includes(u.toLowerCase())?1000:1
-                    const factor=size(unit)/size(inv.unit)
-                    setBomItems(prev=>prev.map((row,i)=>i===index?{...row,unit,cost:Number(inv.avgCost)*factor,currentStock:inv.currentStock/factor,safetyStock:inv.safetyStock/factor,costBreakdown:undefined}:row));setIsDirty(true)
+                    let factor: number
+                    try { factor = inventoryUnitFactor(inv, unit) } catch { return }
+                    setBomItems(prev=>prev.map((row,i)=>i===index?{...row,unit,cost:finiteCost(inv.avgCost) === null ? null : Number(inv.avgCost)*factor,currentStock:inv.currentStock/factor,safetyStock:inv.safetyStock/factor,costBreakdown:undefined,rowTotal:undefined}:row));setIsDirty(true)
                     if(inv.type==='semi_finished')fetchCostBreakdown(index,inv.id,parseFloat(item.quantityStr)||0,unit)
                   }}>
                     {[...new Set([item.unit||'',...(['kg','g'].includes((item.unit||'').toLowerCase())?['kg','g']:['l','ml'].includes((item.unit||'').toLowerCase())?['L','ml']:[])])].map(unit=><option key={unit}>{unit}</option>)}
-                  </select>
+                  </select></label>
 
                   {/* 小计 */}
-                  <div className="w-28 text-right font-medium text-sm flex-shrink-0">
-                    {item.inventoryId
-                      ? formatCurrency(
-                          item.costBreakdown
-                            ? item.costBreakdown.cost
-                            : (parseFloat(item.quantityStr) || 0) * item.cost
-                        )
-                      : '-'}
+                  <div className="min-w-0 text-right font-medium text-sm tabular-nums">
+                    <div className="text-xs text-gray-500 font-normal">{t('uiDesign.unitPrice')}: {displayCost(item.cost)}</div>
+                    <div><span className="text-xs text-gray-500 font-normal">{t('uiDesign.subtotal')}: </span>{item.inventoryId ? displayCost(recipeRowCost(item)) : '-'}</div>
                   </div>
 
                   {/* 库存状态 */}
@@ -488,7 +500,7 @@ export function RecipeEditPage() {
                         : 'text-gray-500'
                     }`}>
                      <div>{t('bom.stock')}</div>
-                      <div>{item.currentStock}{item.unit}</div>
+                      <div>{formatDisplayQuantity(item.currentStock)} {item.unit}</div>
                     </div>
                   )}
 
@@ -527,7 +539,7 @@ export function RecipeEditPage() {
                 {/* 成本分解展开行（仅 semi_finished 且已展开） */}
                 {item.type === 'semi_finished' && item.inventoryId && expandedItems.has(index) && (
                   <div className="bg-amber-50 border-t border-amber-100 p-3">
-                    {item.costBreakdown ? (
+                    {item.costFailed ? (<button type="button" className="btn-secondary" onClick={() => fetchCostBreakdown(index, item.inventoryId, Number(item.quantityStr), item.unit)}>{costReview} · {t("uiDesign.retry")}</button>) : item.costBreakdown && !item.costPending ? (
                       <>
                         <div className="flex items-center gap-2 mb-2 text-sm text-amber-800">
                           <AlertCircle size={14} />
@@ -537,19 +549,19 @@ export function RecipeEditPage() {
                         </div>
                         <div className="space-y-1">
                           {item.costBreakdown.breakdown?.map((b, bi) => (
-                            <div key={bi} className="flex items-center justify-between text-sm pl-4">
+                            <div key={bi} className="flex flex-wrap items-start justify-between gap-2 text-sm pl-4">
                               <span className="text-gray-600">
-                                → {formatItemName(b.name, i18n.language)}: {b.quantity} {b.unit}
+                                → {formatItemName(b, i18n.language)}: {formatDisplayQuantity(b.quantity)} {b.unit}
                               </span>
                               <span className="text-gray-500">
-                                {formatCurrency(b.totalCost)}
+                                {displayCost(finiteCost(b.totalCost))}
                               </span>
                             </div>
                           ))}
                         </div>
                         <div className="flex justify-end mt-2 pt-2 border-t border-amber-200">
                           <span className="text-sm text-amber-800">
-                            {t('bom.totalCost')}: {formatCurrency(item.costBreakdown.cost)}
+                            {t('bom.totalCost')}: {displayCost(item.costBreakdown.cost)}
                           </span>
                         </div>
                       </>
@@ -576,18 +588,18 @@ export function RecipeEditPage() {
               </span>
             )}
           </div>
-          <span className="text-xl font-bold text-primary">{formatCurrency(totalCost)}</span>
+          <span className="text-xl font-bold text-primary">{displayCost(totalCost)}</span>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="flex justify-end gap-4">
+      <div className="admin-save-bar flex justify-end gap-4">
         <button onClick={handleCancel} className="btn-secondary">
           {t('common.cancel')}
         </button>
         <button
           onClick={handleSave}
-          disabled={updateBomMutation.isPending || bomItems.length === 0}
+          disabled={updateBomMutation.isPending || bomItems.length === 0 || totalCost === null}
           className="btn-primary flex items-center gap-2"
         >
           {updateBomMutation.isPending ? (

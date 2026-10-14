@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -62,7 +63,7 @@ export function TierBenefitsPage() {
       queryClient.invalidateQueries({ queryKey: ['tier-benefits'] })
     },
     onError: () => {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   })
 

@@ -1,3 +1,4 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { OrderItemsTable } from '../../components/OrderItemsTable'
 import { useDashboardContext, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
@@ -28,7 +29,7 @@ export function OrderDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries()
       setShowVoid(false)
-      alert(t('orderVoid.done'))
+      notifyAdmin(t('orderVoid.done'))
     }
   })
 
@@ -48,7 +49,7 @@ export function OrderDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order',context.storeId,id] })
       setShowRefund(false)
-      alert(t('refundPolicy.submitted'))
+      notifyAdmin(t('refundPolicy.submitted'))
     }
   })
 
@@ -143,7 +144,7 @@ export function OrderDetailPage() {
                 <textarea className="input" rows={3} value={voidReason} onChange={e => setVoidReason(e.target.value)} placeholder={t('orderVoid.reason')} maxLength={1000}/>
                 <label className="flex gap-2 text-sm"><input type="checkbox" checked={noActualPayment} onChange={e => setNoActualPayment(e.target.checked)}/>{t('orderVoid.noPayment')}</label>
                 {voidMutation.isError && <p role="alert" className="text-sm text-red-600">{t('orderVoid.failed')}</p>}
-                <button className="btn-danger w-full" disabled={voidMutation.isPending || !voidReason.trim() || !noActualPayment} onClick={() => window.confirm(t('orderVoid.confirm')) && voidMutation.mutate()}>{voidMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
+                <button className="btn-danger w-full" disabled={voidMutation.isPending || !voidReason.trim() || !noActualPayment} onClick={async () => await confirmAdmin(t('orderVoid.confirm')) && voidMutation.mutate()}>{voidMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
                 <button className="btn-secondary w-full" onClick={() => setShowVoid(false)}>{t('common.cancel')}</button>
               </div>}
             </div>
@@ -157,7 +158,7 @@ export function OrderDetailPage() {
               ) : (
                 <div className="space-y-3">
                   <textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder={t('orders.refundReason')} className="input text-sm" rows={3} />
-                  <button onClick={() => window.confirm(t('refundPolicy.requestFullConfirm')) && refundMutation.mutate(refundReason)} disabled={refundMutation.isPending || !refundReason.trim()} className="btn-danger w-full">{refundMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
+                  <button onClick={async () => await confirmAdmin(t('refundPolicy.requestFullConfirm')) && refundMutation.mutate(refundReason)} disabled={refundMutation.isPending || !refundReason.trim()} className="btn-danger w-full">{refundMutation.isPending ? t('common.loading') : t('common.confirm')}</button>
                   <button onClick={() => setShowRefund(false)} className="btn-secondary w-full">{t('common.cancel')}</button>
                 </div>
               )}

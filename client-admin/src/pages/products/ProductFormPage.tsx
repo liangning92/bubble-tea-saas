@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { ProductImageGallery } from '../../components/ProductImageGallery'
 import { MediaPicker } from '../../components/MediaLibrary'
 import { mediaUploadError, mediaApi } from '../../services/media'
@@ -135,24 +136,24 @@ export function ProductFormPage() {
 
     // Validation
     if (!form.name.trim()) {
-      alert(t('products.nameRequired'))
+      notifyAdmin(t('products.nameRequired'))
       return
     }
     if (!form.categoryId) {
-      alert(t('products.categoryRequired'))
+      notifyAdmin(t('products.categoryRequired'))
       return
     }
     if (form.specs.length === 0 || !form.specs[0].name.trim()) {
-      alert(t('products.specRequired'))
+      notifyAdmin(t('products.specRequired'))
       return
     }
     if (form.specs.some(s => s.price < 0)) {
-      alert(t('products.priceInvalid'))
+      notifyAdmin(t('products.priceInvalid'))
       return
     }
 
     if (!user?.storeId) {
-      alert('Store ID not found. Please login again.')
+      notifyAdmin('Store ID not found. Please login again.')
       return
     }
 
@@ -213,7 +214,7 @@ export function ProductFormPage() {
     } catch (error: any) {
       console.error('Upload failed:', error)
       const msg = t(mediaUploadError(error))
-      alert(msg)
+      notifyAdmin(msg)
     } finally {
       setIsUploading(false)
     }
@@ -574,7 +575,7 @@ export function ProductFormPage() {
                       <option value="">{t('products.selectIngredient')}</option>
                       {inventoryItems.map((inv: any) => (
                         <option key={inv.id} value={inv.id}>
-                          {formatItemName(inv.name, i18n.language)} ({inv.unit}) - {formatCurrency(inv.avgCost || 0)}{t('products.ingredientUnit')}
+                          {formatItemName(inv, i18n.language)} ({inv.unit}) - {formatCurrency(inv.avgCost || 0)}{t('products.ingredientUnit')}
                         </option>
                       ))}
                     </select>

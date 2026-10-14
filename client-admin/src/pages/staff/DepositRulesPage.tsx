@@ -1,3 +1,5 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -129,7 +131,7 @@ export function DepositRulesPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('staff.deleteThisDepositRule'))) return
+    if (!await confirmAdmin(t('staff.deleteThisDepositRule'))) return
     try {
       await depositApi.deleteRule(id)
       loadRules()
@@ -225,11 +227,8 @@ export function DepositRulesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">
-              {editingRule ? t('staff.editDepositRule') : t('staff.addDepositRule')}
-            </h3>
+        <AdminDialog title={editingRule ? t('staff.editDepositRule') : t('staff.addDepositRule')} onClose={() => setShowModal(false)} className="max-w-md" busy={Boolean(saving)} trackChanges chrome>
+
 
             <div className="space-y-4">
               {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
@@ -322,8 +321,8 @@ export function DepositRulesPage() {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-gray-200 rounded-lg" data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button onClick={handleSave} disabled={saving} className="flex-1 py-2 bg-primary text-white rounded-lg">
@@ -331,8 +330,7 @@ export function DepositRulesPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

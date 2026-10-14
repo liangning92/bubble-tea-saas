@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import {payrollLabels} from '../../../../shared/payrollLabels'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -58,7 +59,7 @@ export function LeaveKanbanPage() {
       loadLeaves()
     } catch (error:any) {
       console.error('Failed to approve:', error)
-      alert(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:t('leave.approveFailed'))
+      notifyAdmin(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:t('leave.approveFailed'))
     }
   }
 
@@ -70,7 +71,7 @@ export function LeaveKanbanPage() {
       loadLeaves()
     } catch (error) {
       console.error('Failed to reject:', error)
-      alert(t('leave.rejectFailed'))
+      notifyAdmin(t('leave.rejectFailed'))
     }
   }
 

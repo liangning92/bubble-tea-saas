@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import dateLocaleI18n from '../../i18n'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, CountOperators, InventoryActor } from '../../components/InventoryActor';
@@ -154,7 +156,7 @@ export function InventoryCountPage() {
         ?.scrollIntoView({ block: "center" });
   }, [selectedCount, searchParams]);
   const showError = (error: any) => {
-    alert(error?.response?.data?.message || t("countFlow.refresh"));
+    notifyAdmin(error?.response?.data?.message || t("countFlow.refresh"));
     refreshCounts();
   };
   // Create mutation
@@ -261,14 +263,14 @@ export function InventoryCountPage() {
     });
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (
       !selectedCount ||
       !canApprove ||
       selectedCount.status !== "pending_review"
     )
       return;
-    if (!confirm(t("inventory.confirmCompleteCount"))) return;
+    if (!await confirmAdmin(t("inventory.confirmCompleteCount"))) return;
     completeMutation.mutate(selectedCount.id);
   };
 
@@ -802,12 +804,8 @@ export function InventoryCountPage() {
 
   // Create Modal
   const renderCreateModal = () => (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-      <div
-        className="bg-white rounded-xl p-6 w-full max-w-md pointer-events-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-xl font-bold mb-4">{t("inventory.newCount")}</h2>
+    <AdminDialog title={t("inventory.newCount")} onClose={() => setShowCreateModal(false)} className="max-w-md" busy={Boolean(createMutation.isPending)} trackChanges chrome>
+
 
         <div className="space-y-4">
           <div className="form-group">
@@ -871,11 +869,11 @@ export function InventoryCountPage() {
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div className="admin-dialog-footer flex gap-3 mt-6">
           <button
             onClick={() => setShowCreateModal(false)}
             className="btn btn-outline flex-1"
-          >
+           data-dialog-close="true">
             {t("common.cancel")}
           </button>
           <button
@@ -896,8 +894,7 @@ export function InventoryCountPage() {
             {t("inventory.create")}
           </button>
         </div>
-      </div>
-    </div>
+      </AdminDialog>
   );
 
   return (

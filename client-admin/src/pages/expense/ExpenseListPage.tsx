@@ -1,3 +1,5 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
@@ -230,32 +232,32 @@ export function ExpenseListPage() {
   const handleReimbApprove = async (id: string) => {
     try {
       await reimbursementApi.approve(id)
-      alert(t('reimbursement.approved'))
+      notifyAdmin(t('reimbursement.approved'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       loadReimbursements()
     } catch (error) {
       console.error('Failed to approve:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
   // Handle reject reimbursement
   const handleReimbReject = async (id: string) => {
     if (!reimbRejectReason) {
-      alert(t('reimbursement.fillRejectReason'))
+      notifyAdmin(t('reimbursement.fillRejectReason'))
       return
     }
     try {
       await reimbursementApi.reject(id, reimbRejectReason)
-      alert(t('reimbursement.rejected'))
+      notifyAdmin(t('reimbursement.rejected'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       setReimbRejectReason('')
       loadReimbursements()
     } catch (error) {
       console.error('Failed to reject:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -263,20 +265,20 @@ export function ExpenseListPage() {
   const handleReimbMarkPaid = async (id: string) => {
     try {
       await reimbursementApi.markPaid(id)
-      alert(t('reimbursement.markedPaid'))
+      notifyAdmin(t('reimbursement.markedPaid'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       loadReimbursements()
     } catch (error) {
       console.error('Failed to mark paid:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
   const [recurringRevision,setRecurringRevision]=useState(0)
   const loadRecurringExpenses = async () => {
     try { if(!user?.storeId)return;const r=await expenseApi.getRecurring();setRecurringExpenses(r.data.data.items);setRecurringRevision(r.data.data.revision) }
-    catch(error){alert(t('dashboardNavigation.loadFailed'));console.error('Recurring load failed',error)}
+    catch(error){notifyAdmin(t('dashboardNavigation.loadFailed'));console.error('Recurring load failed',error)}
   }
 
   const loadCustomTypes = async () => {
@@ -332,21 +334,21 @@ export function ExpenseListPage() {
 
   const saveRecurringExpenses = async (items:RecurringExpense[]) => {
     try{const r=await expenseApi.saveRecurring(items,recurringRevision);setRecurringExpenses(r.data.data.items);setRecurringRevision(r.data.data.revision);return true}
-    catch{alert(t('common.saveFailed'));await loadRecurringExpenses();return false}
+    catch{notifyAdmin(t('common.saveFailed'));await loadRecurringExpenses();return false}
   }
 
   const handleSave = async () => {
     try {
       const amount = expenseAmountFromInput(formData.amount)
       if (amount === null || !formData.date || !formData.category || !formData.type) {
-        alert(t('common.required'))
+        notifyAdmin(t('common.required'))
         return
       }
 
       // Validate: prevent future dates
       const today = expenseCalendarDate()
       if (formData.date > today) {
-        alert(t('expense.noFutureDate'))
+        notifyAdmin(t('expense.noFutureDate'))
         return
       }
 
@@ -371,7 +373,7 @@ export function ExpenseListPage() {
       loadData()
     } catch (error) {
       console.error('Failed to save expense:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setIsSaving(false)
     }
@@ -379,7 +381,7 @@ export function ExpenseListPage() {
 
   const handleDelete = async (id: string) => {
     if(!canWrite)return
-    if (!confirm(t('expense.confirmDelete'))) return
+    if (!await confirmAdmin(t('expense.confirmDelete'))) return
     try {
       await expenseApi.delete(id)
       loadData()
@@ -405,7 +407,7 @@ export function ExpenseListPage() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to export expenses:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -464,15 +466,15 @@ export function ExpenseListPage() {
           await expenseApi.bulkImport(expenses)
           setImportProgress('')
           loadData()
-          alert(t('expense.importSuccess', { count: expenses.length }))
+          notifyAdmin(t('expense.importSuccess', { count: expenses.length }))
         } else {
           setImportProgress('')
-          alert(t('expense.importNoData'))
+          notifyAdmin(t('expense.importNoData'))
         }
       } catch (error) {
         console.error('Failed to import:', error)
         setImportProgress('')
-        alert(t('expense.importFailed'))
+        notifyAdmin(t('expense.importFailed'))
       }
     }
     reader.readAsArrayBuffer(file)
@@ -481,12 +483,12 @@ export function ExpenseListPage() {
 
   const handleSaveRecurring = async () => {
     if (!recurringForm.name || !recurringForm.amount) {
-      alert(t('common.required'))
+      notifyAdmin(t('common.required'))
       return
     }
 
     const amount = expenseAmountFromInput(recurringForm.amount)
-    if (amount === null) { alert(t('common.required')); return }
+    if (amount === null) { notifyAdmin(t('common.required')); return }
     const newItem: RecurringExpense = {
       id: crypto.randomUUID(),
       storeId: user?.storeId || '',
@@ -517,8 +519,8 @@ export function ExpenseListPage() {
     saveRecurringExpenses(updated)
   }
 
-  const handleDeleteRecurring = (id: string) => {
-    if (!confirm(t('expense.confirmDelete'))) return
+  const handleDeleteRecurring = async (id: string) => {
+    if (!await confirmAdmin(t('expense.confirmDelete'))) return
     const updated = recurringExpenses.filter(r => r.id !== id)
     saveRecurringExpenses(updated)
   }
@@ -542,9 +544,9 @@ export function ExpenseListPage() {
     if (saved) { setNewTypeName(''); setCategoryFeedback({ kind: 'success', message: t('expenseCategoryFeedback.added', { name }) }) }
   }
 
-  const handleRemoveType = (key: string) => {
+  const handleRemoveType = async (key: string) => {
     if (isTypeSaving) return
-    if (!confirm(t('expense.confirmDelete'))) return
+    if (!await confirmAdmin(t('expense.confirmDelete'))) return
     const updated = expenseTypes.filter(t => t.key !== key)
     saveCustomTypes(updated)
   }
@@ -738,8 +740,8 @@ export function ExpenseListPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link to="/finance" className="p-2 hover:bg-gray-100 rounded-lg">
               <ArrowLeft size={20} />
             </Link>
@@ -769,7 +771,7 @@ export function ExpenseListPage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowTypeModal(true)}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -825,7 +827,7 @@ export function ExpenseListPage() {
       {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Calendar size={18} className="text-gray-400" />
             <LocalizedDateTimeInput
               type="date"
@@ -873,7 +875,7 @@ export function ExpenseListPage() {
       {recurringExpenses.length > 0 && (
         <div className="bg-blue-50 border-b border-blue-100 px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <RefreshCw size={16} className="text-blue-600" />
               <span className="text-sm text-blue-700">
                 {recurringExpenses.filter(r => r.active).length} {t('expense.recurringActive')}
@@ -1072,19 +1074,8 @@ export function ExpenseListPage() {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold">
-                {selectedExpense ? t('expense.editExpense') : t('expense.addExpense')}
-              </h2>
-              <button
-                onClick={() => { setShowModal(false); resetForm(); }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={selectedExpense ? t('expense.editExpense') : t('expense.addExpense')} onClose={() => { setShowModal(false); resetForm(); }} className="max-w-md" busy={Boolean(isSaving)} trackChanges chrome>
+
 
             <div className="space-y-4">
               <div>
@@ -1174,11 +1165,11 @@ export function ExpenseListPage() {
                 />
               </div>
 
-              <div className="flex gap-3 mt-6">
+              <div className="admin-dialog-footer flex gap-3 mt-6">
                 <button
                   onClick={() => { setShowModal(false); resetForm(); }}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -1190,23 +1181,13 @@ export function ExpenseListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Recurring Expenses Modal */}
       {showRecurringModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-lg rounded-xl p-6 mx-4 max-h-[80vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold">{t('expense.recurring')}</h2>
-              <button
-                onClick={() => setShowRecurringModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('expense.recurring')} onClose={() => setShowRecurringModal(false)} className="max-w-lg" busy={false} trackChanges chrome>
+
 
             {/* Add New */}
             <div className="bg-gray-50 rounded-xl p-4 mb-4">
@@ -1305,23 +1286,13 @@ export function ExpenseListPage() {
                 ))
               )}
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Expense Type Management Modal */}
       {showTypeModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold">{t('expense.manageTypes')}</h2>
-              <button
-                onClick={() => setShowTypeModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('expense.manageTypes')} onClose={() => setShowTypeModal(false)} className="max-w-md" busy={Boolean(isTypeSaving)} trackChanges chrome>
+
 
             {!canManageCategories && <p role="status" className="mb-3 text-sm text-amber-700">{t('expenseCategoryFeedback.adminOnly')}</p>}
             {categoryLoadState === 'loading' && <p role="status" className="mb-3 text-sm text-gray-600">{t('expenseCategoryFeedback.loading')}</p>}
@@ -1371,15 +1342,17 @@ export function ExpenseListPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Reimbursement Action Modal */}
       {selectedReimbursement && reimbActionType && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4">{getReimbActionTitle()}</h2>
+        <AdminDialog title={getReimbActionTitle()} onClose={() => {
+                  setSelectedReimbursement(null)
+                  setReimbActionType(null)
+                  setReimbRejectReason('')
+                }} className="max-w-md" busy={false} trackChanges chrome>
+
 
             <div className="mb-4 p-4 bg-gray-50 rounded-xl">
               <p className="font-medium">{selectedReimbursement.staff?.name}</p>
@@ -1404,7 +1377,7 @@ export function ExpenseListPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="admin-dialog-footer flex gap-2">
               <button
                 onClick={() => {
                   setSelectedReimbursement(null)
@@ -1412,7 +1385,7 @@ export function ExpenseListPage() {
                   setReimbRejectReason('')
                 }}
                 className="flex-1 py-3 border border-gray-200 rounded-xl"
-              >
+               data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -1430,8 +1403,7 @@ export function ExpenseListPage() {
                 {getReimbActionLabel()}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

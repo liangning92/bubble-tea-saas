@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Settings, Save, RotateCcw } from 'lucide-react'
@@ -46,7 +47,7 @@ export function KDSConfigPage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {
-      alert(t('common.saveFailed'))
+      notifyAdmin(t('common.saveFailed'))
     } finally {
       setSaving(false)
     }

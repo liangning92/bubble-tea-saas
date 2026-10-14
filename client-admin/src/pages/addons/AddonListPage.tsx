@@ -1,3 +1,4 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -204,11 +205,8 @@ export function AddonListPage() {
 
       {/* Create/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingAddon ? t('addons.editAddon') : t('addons.addAddon')}
-            </h2>
+        <AdminDialog title={editingAddon ? t('addons.editAddon') : t('addons.addAddon')} onClose={closeModal} className="max-w-md" busy={false} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -272,38 +270,35 @@ export function AddonListPage() {
                   {t('addons.isFree')}
                 </label>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button type="submit" className="btn-primary flex-1">
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 mb-2">{t('common.confirm')}</h2>
+        <AdminDialog title={t('common.confirm')} onClose={() => setDeleteConfirm(null)} className="max-w-sm" busy={false} trackChanges chrome>
+
             <p className="text-gray-600 mb-4">{t('addons.deleteConfirm')}</p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => deleteMutation.mutate(deleteConfirm)}
                 className="btn-danger flex-1"
               >
                 {t('common.delete')}
               </button>
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

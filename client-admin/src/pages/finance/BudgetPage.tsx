@@ -1,10 +1,12 @@
+import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { budgetApi } from '../../services/api'
 import { formatCurrency } from '../../utils/helpers'
 import {
   Plus, Edit2, Trash2, RefreshCw, AlertCircle,
-  X, TrendingUp, TrendingDown, Target, PieChart, Settings
+   TrendingUp, TrendingDown, Target, PieChart, Settings
 } from 'lucide-react'
 
 interface Budget {
@@ -101,7 +103,7 @@ export function BudgetPage() {
       setShowCategoryModal(false)
     } catch (error) {
       console.error('Failed to save categories:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -159,7 +161,7 @@ export function BudgetPage() {
       fetchSummary()
     } catch (error) {
       console.error('Failed to save budget:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -176,14 +178,14 @@ export function BudgetPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('finance.confirmDelete'))) return
+    if (!await confirmAdmin(t('finance.confirmDelete'))) return
     try {
       await budgetApi.delete(id)
       fetchBudgets()
       fetchSummary()
     } catch (error) {
       console.error('Failed to delete budget:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -199,14 +201,7 @@ export function BudgetPage() {
 
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
-  const months = [
-    { value: 1, label: 'Januari' }, { value: 2, label: 'Februari' },
-    { value: 3, label: 'Maret' }, { value: 4, label: 'April' },
-    { value: 5, label: 'Mei' }, { value: 6, label: 'Juni' },
-    { value: 7, label: 'Juli' }, { value: 8, label: 'Agustus' },
-    { value: 9, label: 'September' }, { value: 10, label: 'Oktober' },
-    { value: 11, label: 'November' }, { value: 12, label: 'Desember' },
-  ]
+  const months = Array.from({length:12},(_,index)=>({value:index+1,label:new Intl.DateTimeFormat(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID',{month:'long',timeZone:'UTC'}).format(new Date(Date.UTC(2026,index,1)))}))
 
   const formatVariance = (variance: number, percent: number) => {
     const isOver = variance > 0
@@ -414,20 +409,12 @@ export function BudgetPage() {
 
       {/* Budget Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {editingBudget ? t('finance.editBudget') : t('finance.addBudget')}
-              </h3>
-              <button onClick={() => { setShowForm(false); setEditingBudget(null) }} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={editingBudget ? t('finance.editBudget') : t('finance.addBudget')} onClose={() => { setShowForm(false); setEditingBudget(null); resetForm() }} className="max-w-md" busy={false} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Kategori *
+                  {t('uiDesign.category')} *
                 </label>
                 <select
                   value={formData.category}
@@ -507,12 +494,12 @@ export function BudgetPage() {
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setEditingBudget(null); resetForm() }}
                   className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -523,8 +510,7 @@ export function BudgetPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Category Management Modal */}
@@ -575,12 +561,8 @@ function BudgetCategoryModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden flex flex-col pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{t('finance.manageCategories')}</h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
-        </div>
+    <AdminDialog title={t('finance.manageCategories')} onClose={onClose} className="max-w-md" busy={false} trackChanges chrome>
+
         <div className="p-6 overflow-y-auto flex-1">
           <div className="mb-4">
             <h4 className="text-sm font-medium text-gray-700 mb-2">{t('finance.currentTypes')}</h4>
@@ -614,11 +596,10 @@ function BudgetCategoryModal({
             </button>
           </div>
         </div>
-        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-100">{t('common.cancel')}</button>
+        <div className="admin-dialog-footer px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-100" data-dialog-close="true">{t('common.cancel')}</button>
           <button onClick={() => onSave(cats)} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">{t('common.save')}</button>
         </div>
-      </div>
-    </div>
+      </AdminDialog>
   )
 }

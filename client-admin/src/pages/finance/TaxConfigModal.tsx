@@ -1,3 +1,4 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -105,15 +106,9 @@ export function TaxConfigModal({ isOpen, onClose, onSaved }: TaxConfigModalProps
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md mx-4">
+    <AdminDialog title={t('finance.taxConfig')} onClose={onClose} className="max-w-md" busy={Boolean(isSaving)} trackChanges chrome>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-bold">{t('finance.taxConfig')}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <X size={20} />
-          </button>
-        </div>
+
 
         {/* Content */}
         <div className="p-6 space-y-6">
@@ -219,15 +214,14 @@ export function TaxConfigModal({ isOpen, onClose, onSaved }: TaxConfigModalProps
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
-          <button onClick={onClose} className="btn btn-outline">
+        <div className="admin-dialog-footer flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+          <button onClick={onClose} className="btn btn-outline" data-dialog-close="true">
             {t('common.cancel')}
           </button>
           <button onClick={handleSave} className="btn btn-primary" disabled={isSaving}>
             {isSaving ?<Loader2 className="w-4 h-4 animate-spin" /> : t('common.save')}
           </button>
         </div>
-      </div>
-    </div>
+      </AdminDialog>
   )
 }

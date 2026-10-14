@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { ActorName, actorText } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
@@ -16,7 +18,7 @@ import {
   Download,
   Plus,
   RefreshCw,
-  X,
+
   AlertTriangle,
   Loader2
 } from 'lucide-react'
@@ -252,7 +254,7 @@ export function StockLogPage() {
       other: t('inventory.lossOther')
     }
 
-    if(wasteForm.wasteType==='other'&&!wasteForm.note.trim()){alert(t('inventoryFlow.otherReason'));return}
+    if(wasteForm.wasteType==='other'&&!wasteForm.note.trim()){notifyAdmin(t('inventoryFlow.otherReason'));return}
     const fullNote = `[${wasteLabelMap[wasteForm.wasteType] || ''}] ${wasteForm.note || ''}`.trim()
 
     wasteMutation.mutate({
@@ -502,7 +504,7 @@ export function StockLogPage() {
       </div>
 
       {/* Sub Tabs */}
-      <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex overflow-x-auto max-w-full">
+      <div className="admin-module-nav">
         {[
           { key: 'all', label: t('inventory.allLogs') },
           { key: 'in', label: t('inventory.inboundLogs') },
@@ -527,7 +529,7 @@ export function StockLogPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         {/* Preset Date Selector */}
-        <div className="flex gap-1 bg-white p-1 rounded-lg shadow-sm inline-flex">
+        <div className="admin-module-nav">
           {[
             ...QUERY_PERIODS.map(key=>({key,label:t('queryPeriods.'+key)})),
             { key: 'all', label: t('common.all') },
@@ -669,20 +671,8 @@ export function StockLogPage() {
 
       {/* Modal: Quick Stock In */}
       {showStockInModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-900">
-                {t('inventory.quickStockIn')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowStockInModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('inventory.quickStockIn')} onClose={() => setShowStockInModal(false)} className="max-w-md" busy={Boolean(stockInMutation.isPending)} trackChanges chrome>
+
 
             <form onSubmit={handleStockInSubmit} className="space-y-4">
               <div>
@@ -698,7 +688,7 @@ export function StockLogPage() {
                   <option value="">-- {t('inventory.selectItem')} --</option>
                   {inventoryItems.map((item: any) => (
                     <option key={item.id} value={item.id}>
-                      [{getCategoryText(item.category)}] {formatItemName(item.name, i18n.language)} ({t('inventory.currentStock')}: {item.currentStock} {item.unit})
+                      [{getCategoryText(item.category)}] {formatItemName(item, i18n.language)} ({t('inventory.currentStock')}: {item.currentStock} {item.unit})
                     </option>
                   ))}
                 </select>
@@ -784,12 +774,12 @@ export function StockLogPage() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="admin-dialog-footer flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowStockInModal(false)}
                   className="btn btn-secondary"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -802,26 +792,13 @@ export function StockLogPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {/* Modal: Waste & Loss */}
       {showWasteModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-900">
-                {t('inventory.quickStockOut')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowWasteModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('inventory.quickStockOut')} onClose={() => setShowWasteModal(false)} className="max-w-md" busy={Boolean(wasteMutation.isPending)} trackChanges chrome>
+
 
             <form onSubmit={handleWasteSubmit} className="space-y-4">
               <div>
@@ -837,7 +814,7 @@ export function StockLogPage() {
                   <option value="">-- {t('inventory.selectItem')} --</option>
                   {inventoryItems.map((item: any) => (
                     <option key={item.id} value={item.id}>
-                      [{getCategoryText(item.category)}] {formatItemName(item.name, i18n.language)} ({t('inventory.currentStock')}: {item.currentStock} {item.unit})
+                      [{getCategoryText(item.category)}] {formatItemName(item, i18n.language)} ({t('inventory.currentStock')}: {item.currentStock} {item.unit})
                     </option>
                   ))}
                 </select>
@@ -918,12 +895,12 @@ export function StockLogPage() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="admin-dialog-footer flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowWasteModal(false)}
                   className="btn btn-secondary"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -936,8 +913,7 @@ export function StockLogPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

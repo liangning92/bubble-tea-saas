@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -112,7 +114,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
       setAttachments(prev => [...prev, ...newFiles])
     } catch (error) {
       console.error('Upload failed:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setIsUploading(false)
     }
@@ -130,7 +132,7 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.staffId || !form.title || !form.provider) {
-      alert('Please fill required fields')
+      notifyAdmin('Please fill required fields')
       return
     }
 
@@ -159,20 +161,19 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
         onClose()
       } else {
         const data = await response.json()
-        alert(data.message || t('common.error'))
+        notifyAdmin(data.message || t('common.error'))
       }
     } catch (error) {
       console.error('Failed to save:', error)
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setIsSubmitting(false)
        }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold mb-4">{editData ? t('staff.editTraining') : t('staff.addTraining')}</h3>
+    <AdminDialog title={editData ? t('staff.editTraining') : t('staff.addTraining')} onClose={onClose} className="max-w-2xl" busy={Boolean(isSubmitting || isUploading)} trackChanges chrome>
+
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -365,16 +366,15 @@ export function TrainingFormModal({ staffList, editData, onClose }: Props) {
             )}
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="admin-dialog-footer flex gap-3 pt-4">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1" data-dialog-close="true">
+              {t('common.cancel')}
+            </button>
             <button type="submit" className="btn-primary flex-1" disabled={isSubmitting || isUploading}>
               {isSubmitting ? t('common.loading') : t('common.save')}
             </button>
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">
-              {t('common.cancel')}
-            </button>
           </div>
         </form>
-      </div>
-    </div>
+      </AdminDialog>
   )
 }

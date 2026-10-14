@@ -1,3 +1,4 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -46,7 +47,7 @@ export function LeaveBalancePage() {
       setBalances(balanceData)
     } catch (error) {
       setBalances([])
-      alert(t('dashboardNavigation.loadFailed'))
+      notifyAdmin(t('dashboardNavigation.loadFailed'))
       console.error('Failed to load balances:', error)
     } finally {
       setLoading(false)
@@ -60,10 +61,10 @@ export function LeaveBalancePage() {
         year,annualLeave:balance.annualLeave,sickLeave:balance.sickLeave,broughtForward:balance.broughtForward
       })
       await loadBalances()
-      alert(t('common.saveSuccess'))
+      notifyAdmin(t('common.saveSuccess'))
     } catch (error) {
       console.error('Failed to save:', error)
-      alert(t('common.saveFailed'))
+      notifyAdmin(t('common.saveFailed'))
     } finally {
       setSaving(null)
     }
@@ -86,7 +87,7 @@ export function LeaveBalancePage() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold">{t('staff.leaveBalance')}</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -130,7 +131,7 @@ export function LeaveBalancePage() {
             <RefreshCw size={24} className="animate-spin text-gray-400" />
           </div>
         ) : (
-          <table className="w-full">
+          <table className="admin-responsive-table admin-responsive-table w-full">
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
@@ -162,11 +163,11 @@ export function LeaveBalancePage() {
             <tbody>
               {filteredBalances.map(balance => (
                 <tr key={balance.staffId} className="border-t">
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" data-label={t('staff.name')}>
                     <div className="font-medium">{balance.staffName}</div>
                     <div className="text-xs text-gray-500">{balance.employeeNumber}</div>
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-center" data-label={t('staff.annualLeave')}>
                     <input
                       type="number"
                       value={balance.annualLeave}
@@ -175,13 +176,13 @@ export function LeaveBalancePage() {
                       min={0}
                     />
                   </td>
-                  <td className="px-4 py-3 text-center text-red-500">
+                  <td className="px-4 py-3 text-center text-red-500" data-label={t('staff.used')}>
                     -{balance.usedLeave}
                   </td>
-                  <td className="px-4 py-3 text-center text-green-600 font-medium">
+                  <td className="px-4 py-3 text-center text-green-600 font-medium" data-label={t('staff.available')}>
                     {getAvailable(balance)}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-center" data-label={t('staff.sickLeave')}>
                     <input
                       type="number"
                       value={balance.sickLeave}
@@ -190,13 +191,13 @@ export function LeaveBalancePage() {
                       min={0}
                     />
                   </td>
-                  <td className="px-4 py-3 text-center text-red-500">
+                  <td className="px-4 py-3 text-center text-red-500" data-label={t('staff.used')}>
                     -{balance.usedSick}
                   </td>
-                  <td className="px-4 py-3 text-center text-green-600 font-medium">
+                  <td className="px-4 py-3 text-center text-green-600 font-medium" data-label={t('staff.available')}>
                     {getSickAvailable(balance)}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-center" data-label={t('staff.actions')}>
                     <button
                       onClick={() => handleSave(balance)}
                       disabled={saving === balance.staffId}

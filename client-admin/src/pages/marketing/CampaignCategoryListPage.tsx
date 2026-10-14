@@ -1,4 +1,5 @@
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { Link } from 'react-router-dom'
 import { categoryDisplayName, useMarketingCopy } from '../../components/marketing/MarketingLayout'
@@ -55,7 +56,7 @@ export function CampaignCategoryListPage() {
       closeModal()
     },
     onError: (error: any) => {
-      alert(error?.message || t('common.error'))
+      notifyAdmin(error?.message || t('common.error'))
     }
   })
 
@@ -68,7 +69,7 @@ export function CampaignCategoryListPage() {
       closeModal()
     },
     onError: (error: any) => {
-      alert(error?.message || t('common.error'))
+      notifyAdmin(error?.message || t('common.error'))
     }
   })
 
@@ -81,7 +82,7 @@ export function CampaignCategoryListPage() {
       setDeleteId(null)
     },
     onError: (error: any) => {
-      alert(error?.message || t('common.error'))
+      notifyAdmin(error?.message || t('common.error'))
     }
   })
 
@@ -214,11 +215,8 @@ export function CampaignCategoryListPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <MarketingDialog onClose={closeModal}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">
-              {editingCategory ? t('common.edit') : t('common.add')} {t('marketing.category')}
-            </h3>
+        <AdminDialog title={[editingCategory ? t('common.edit') : t('common.add'),t('marketing.category')].join(" ")} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending || updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.categoryName')} *</label>
@@ -263,7 +261,10 @@ export function CampaignCategoryListPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
@@ -272,22 +273,20 @@ export function CampaignCategoryListPage() {
                   {(createMutation.isPending || updateMutation.isPending) && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
 
       {/* Delete Confirmation */}
       {deleteId && (
-        <MarketingDialog onClose={()=>setDeleteId(null)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">{t('common.delete')}</h3>
+        <AdminDialog title={t('common.delete')} onClose={()=>setDeleteId(null)} className="max-w-sm" busy={Boolean(deleteMutation.isPending)} trackChanges chrome>
+
             <p className="text-gray-600 mb-6">{t('marketing.deleteCategoryConfirm')}</p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setDeleteId(null)} className="btn-secondary flex-1" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => deleteMutation.mutate(deleteId)}
                 disabled={deleteMutation.isPending}
@@ -296,12 +295,8 @@ export function CampaignCategoryListPage() {
                 {deleteMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                 {t('common.delete')}
               </button>
-              <button onClick={() => setDeleteId(null)} className="btn-secondary flex-1">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
     </div>
   )

@@ -1,3 +1,5 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -61,8 +63,8 @@ export function AnnouncementListPage() {
     return true
   })
 
-  const handleDelete = (id: string) => {
-    if (window.confirm(t('announcement.deleteConfirm'))) {
+  const handleDelete = async (id: string) => {
+    if (await confirmAdmin(t('announcement.deleteConfirm'))) {
       deleteMutation.mutate(id)
     }
   }
@@ -118,12 +120,11 @@ export function AnnouncementListPage() {
 
       {/* Delete Confirm Modal */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 shadow-xl pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">{t('announcement.confirmDelete')}</h3>
+        <AdminDialog title={t('announcement.confirmDelete')} onClose={() => setDeleteId(null)} className="max-w-lg" busy={false} trackChanges chrome>
+
             <p className="text-gray-600 mb-6">{t('announcement.deleteHint')}</p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteId(null)} className="btn-secondary">
+            <div className="admin-dialog-footer flex justify-end gap-3">
+              <button onClick={() => setDeleteId(null)} className="btn-secondary" data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -133,8 +134,7 @@ export function AnnouncementListPage() {
                 {t('common.delete')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
 
       {isLoading ? (

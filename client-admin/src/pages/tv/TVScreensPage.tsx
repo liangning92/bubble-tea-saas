@@ -1,3 +1,4 @@
+import { confirmAdmin } from '../../components/AdminFeedback'
 import { useEmployeePermission } from "../../contexts/EmployeeAccess";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -308,8 +309,8 @@ export function TVScreensPage() {
               key={row.id}
               disabled={busy || !canWrite}
               className="btn"
-              onClick={() => {
-                if (confirm(tr("legacyConfirm")))
+              onClick={async () => {
+                if (await confirmAdmin(tr("legacyConfirm")))
                   action(() => tvApi.importLegacy(row.id));
               }}
             >
@@ -349,8 +350,8 @@ export function TVScreensPage() {
               </button>
               <button
                 className="btn"
-                onClick={() => {
-                  if (confirm(tr("deleteConfirm")))
+                onClick={async () => {
+                  if (await confirmAdmin(tr("deleteConfirm")))
                     action(() => tvApi.deleteScreen(screen.id));
                 }}
               >
@@ -380,8 +381,8 @@ export function TVScreensPage() {
                 <button
                   disabled={busy || d.revoked || !canWrite}
                   className="btn"
-                  onClick={() => {
-                    if (confirm(tr("revokeConfirm")))
+                  onClick={async () => {
+                    if (await confirmAdmin(tr("revokeConfirm")))
                       action(() => tvApi.revoke(d.id));
                   }}
                 >
@@ -400,11 +401,7 @@ export function TVScreensPage() {
         ))}
       </div>
       {edit && (
-        <AdminDialog
-          title={edit.isDefaults ? tr("defaults") : tr("edit")}
-          onClose={() => setEdit(null)}
-          busy={busy}
-        >
+        <AdminDialog title={edit.isDefaults ? tr("defaults") : tr("edit")} onClose={() => setEdit(null)} className="max-w-lg" busy={Boolean(busy)} trackChanges chrome>
           <form
             className="flex flex-col max-h-[94dvh]"
             onSubmit={(e) => {
@@ -431,9 +428,7 @@ export function TVScreensPage() {
             }}
           >
             <div className="overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
-              <h2 className="text-xl font-bold">
-                {edit.isDefaults ? tr("defaults") : tr("edit")}
-              </h2>
+
               {!edit.isDefaults && (
                 <>
                   <label className="block">
@@ -691,16 +686,16 @@ export function TVScreensPage() {
                 )}
               </fieldset>
             </div>
-            <div className="shrink-0 border-t bg-white p-4 flex flex-wrap gap-3 items-center">
-              <button className="btn-primary" disabled={busy || !canWrite}>
-                {tr("save")}
-              </button>
+            <div className="admin-dialog-footer shrink-0 border-t bg-white p-4 flex flex-wrap gap-3 items-center">
               <button
                 type="button"
                 className="btn"
                 onClick={() => setEdit(null)}
-              >
+               data-dialog-close="true">
                 {tr("cancel")}
+              </button>
+              <button className="btn-primary" disabled={busy || !canWrite}>
+                {tr("save")}
               </button>
             </div>
             {error && (
@@ -712,14 +707,11 @@ export function TVScreensPage() {
         </AdminDialog>
       )}
       {preview && (
-        <AdminDialog title={tr("preview")} onClose={() => setPreview(null)}>
-          <div className="bg-white rounded p-5 max-w-4xl mx-auto">
-            <button className="btn" onClick={() => setPreview(null)}>
+        <AdminDialog title={tr("preview")} onClose={() => setPreview(null)} className="max-w-4xl" busy={false} trackChanges chrome>
+            <button className="btn" onClick={() => setPreview(null)} data-dialog-close="true">
               {tr("close")}
             </button>
-            <h2>
-              {preview.store.name} · {preview.channel.name}
-            </h2>
+
             <iframe
               title={tr("preview")}
               className="w-full h-[65vh]"
@@ -732,8 +724,7 @@ export function TVScreensPage() {
               }
             />
             <p className="text-red-600">{preview.errors.join(" · ")}</p>
-          </div>
-        </AdminDialog>
+          </AdminDialog>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -51,7 +52,7 @@ export function OvertimeRequestListPage() {
   }, [token, filter])
 
   const handleApprove = async (id: string) => {
-    if (!confirm(t('staff.overtimeConfirmApprove'))) return
+    if (!await confirmAdmin(t('staff.overtimeConfirmApprove'))) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/overtime/${id}/approve`, {
@@ -64,13 +65,13 @@ export function OvertimeRequestListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.overtimeApproved'))
+        notifyAdmin(t('staff.overtimeApproved'))
         loadData()
       } else {
-        alert(data.message || t('common.error'))
+        notifyAdmin(data.message || t('common.error'))
       }
     } catch (error) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setProcessing(null)
     }
@@ -91,13 +92,13 @@ export function OvertimeRequestListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        alert(t('staff.overtimeRejected'))
+        notifyAdmin(t('staff.overtimeRejected'))
         loadData()
       } else {
-        alert(data.message || t('common.error'))
+        notifyAdmin(data.message || t('common.error'))
       }
     } catch (error) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     } finally {
       setProcessing(null)
     }

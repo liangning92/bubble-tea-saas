@@ -1,5 +1,5 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import {useEmployeePermission} from '../../contexts/EmployeeAccess'
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -271,9 +271,8 @@ export function MemberBalancePage() {
 
       {/* Topup Modal */}
       {showTopup && selectedMember && (
-        <MarketingDialog onClose={()=>setShowTopup(false)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">{t('marketing.topup')}</h3>
+        <AdminDialog title={t('marketing.topup')} onClose={()=>setShowTopup(false)} className="max-w-md" busy={Boolean(topupMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.amount')}</label>
@@ -296,7 +295,8 @@ export function MemberBalancePage() {
                   placeholder={t('marketing.topupNote')}
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button onClick={() => setShowTopup(false)} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button
                   onClick={() => topupMutation.mutate({ memberId: selectedMember.memberId, amount: Number(amount), note })}
                   disabled={!amount || topupMutation.isPending}
@@ -304,18 +304,15 @@ export function MemberBalancePage() {
                 >
                   {topupMutation.isPending ? <Loader2 className="animate-spin" /> : t('common.confirm')}
                 </button>
-                <button onClick={() => setShowTopup(false)} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </div>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
 
       {/* Deduct Modal */}
       {showDeduct && selectedMember && (
-        <MarketingDialog onClose={()=>setShowDeduct(false)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">{t('marketing.deduct')}</h3>
+        <AdminDialog title={t('marketing.deduct')} onClose={()=>setShowDeduct(false)} className="max-w-md" busy={Boolean(deductMutation.isPending)} trackChanges chrome>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">{t('marketing.amount')}</label>
@@ -338,7 +335,8 @@ export function MemberBalancePage() {
                   placeholder={t('marketing.deductNote')}
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button onClick={() => setShowDeduct(false)} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
                 <button
                   onClick={() => deductMutation.mutate({ memberId: selectedMember.memberId, amount: Number(amount), note })}
                   disabled={!amount || deductMutation.isPending}
@@ -346,11 +344,9 @@ export function MemberBalancePage() {
                 >
                   {deductMutation.isPending ? <Loader2 className="animate-spin" /> : t('common.confirm')}
                 </button>
-                <button onClick={() => setShowDeduct(false)} className="btn-secondary">{t('common.cancel')}</button>
               </div>
             </div>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
     </div>
   )

@@ -1,3 +1,4 @@
+import { AdminDialog } from '../../components/AdminDialog'
 import {staffAccessLabels,staffRoleLabel} from '../../../../shared/staffAccessLabels'
 import {useEmployeePermission} from '../../contexts/EmployeeAccess'
 import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
@@ -328,9 +329,8 @@ export function StaffDetailPage() {
 
       {/* Role Edit Modal */}
       {showRoleModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRoleModal(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{t('staff.editRole')}</h3>
+        <AdminDialog title={t('staff.editRole')} onClose={() => setShowRoleModal(false)} className="max-w-md" busy={Boolean(updateRoleMutation.isPending)} trackChanges chrome>
+
 
             <div className="space-y-3 mb-4">
               {[
@@ -364,11 +364,11 @@ export function StaffDetailPage() {
             </div>
 
             {updateRoleMutation.isError && <p role="alert" className="text-red-600 mb-3">{(updateRoleMutation.error as any)?.response?.data?.message || t('common.error')}</p>}
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
               <button
                 onClick={() => setShowRoleModal(false)}
                 className="flex-1 py-2 border border-gray-200 rounded-lg"
-              >
+               data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -379,8 +379,7 @@ export function StaffDetailPage() {
                 {updateRoleMutation.isPending ? t('common.loading') : t('common.save')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

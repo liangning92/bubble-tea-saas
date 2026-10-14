@@ -1,3 +1,5 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { payslipHtml, downloadPayslip } from '../../../../shared/payslip'
 import { payrollPresentation, payrollStatus, isConfirmedBasis } from '../../../../shared/payrollPresentation'
@@ -10,7 +12,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { salaryApi, staffApi } from '../../services/api'
-import { DollarSign, Loader2, Filter, X, CheckCircle } from 'lucide-react'
+import { DollarSign, Loader2, Filter,  CheckCircle } from 'lucide-react'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -194,7 +196,7 @@ export function SalaryListPage() {
     if (!monthStr) return ''
     const [year, month] = monthStr.split('-')
     const date = new Date(parseInt(year), parseInt(month) - 1)
-    return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+    return date.toLocaleDateString(i18n.language==='zh'?'zh-CN':i18n.language==='en'?'en-GB':'id-ID', { month: 'long', year: 'numeric' })
   }
 
   const calculateFinalAmount = () => {
@@ -306,7 +308,7 @@ export function SalaryListPage() {
 
   const handleSave = async () => {
     if (!formData.staffId || !formData.month || !formData.baseSalary) {
-      alert(t('common.required'))
+      notifyAdmin(t('common.required'))
       return
     }
 
@@ -355,7 +357,7 @@ export function SalaryListPage() {
     }
   }
 
-  const openPayslip=async(id:string)=>{try{const r=await salaryApi.payslip(id);setPayslip(r.data.data)}catch{alert(pl.salaryErrorHint)}}
+  const openPayslip=async(id:string)=>{try{const r=await salaryApi.payslip(id);setPayslip(r.data.data)}catch{notifyAdmin(pl.salaryErrorHint)}}
 
   const handleMarkPaid = async (id: string) => {
     try {
@@ -363,7 +365,7 @@ export function SalaryListPage() {
       loadSalaries()
     } catch (error:any) {
       console.error('Failed to mark paid:', error)
-      alert(error?.response?.data?.message==='SALARY_REVIEW_REQUIRED'?l.reviewGeneric:t('salaryDeposit.recalculate'))
+      notifyAdmin(error?.response?.data?.message==='SALARY_REVIEW_REQUIRED'?l.reviewGeneric:t('salaryDeposit.recalculate'))
     }
   }
 
@@ -378,11 +380,11 @@ export function SalaryListPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-primary text-white px-4 py-6">
+      <header className="bg-white border-b px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <DollarSign size={28} />
-            <div />
+            <h1>{t("uiDesign.salary")}</h1>
           </div>
           <button
             onClick={() => handleOpenModal()}
@@ -397,12 +399,12 @@ export function SalaryListPage() {
       {prepareMessage&&<p role="alert" className="p-4 text-amber-700">{prepareMessage}</p>}
       {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Filter size={20} className="text-gray-500" />
           <select
             value={filterStaff}
             onChange={(e) => setFilterStaff(e.target.value)}
-            className="flex-1 p-2 border border-gray-200 rounded-lg text-sm"
+            className="input min-w-0 w-full sm:flex-1 sm:w-auto text-sm"
           >
             <option value="">{t('staff.salary.selectStaff')}</option>
             {staffOptions.map((staff) => (
@@ -413,12 +415,12 @@ export function SalaryListPage() {
             type="month"
             value={filterMonth}
             onChange={(e) => setFilterMonth(e.target.value)}
-            className="flex-1 p-2 border border-gray-200 rounded-lg text-sm"
+            className="input min-w-0 w-full sm:flex-1 sm:w-auto text-sm"
           />
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="flex-1 p-2 border border-gray-200 rounded-lg text-sm"
+            className="input min-w-0 w-full sm:flex-1 sm:w-auto text-sm"
           >
             <option value="">{t('common.all')} {t('staff.salary.status')}</option>
             <option value="pending">{pl.confirmed}</option>
@@ -429,7 +431,7 @@ export function SalaryListPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="p-4 grid grid-cols-3 gap-3">
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
           <p className="text-yellow-800 text-sm font-medium">{t('staff.salary.totalPending')}</p>
           <p className="text-xl font-bold text-yellow-900">{formatCurrency(totalPending)}</p>
@@ -444,6 +446,7 @@ export function SalaryListPage() {
         </div>
       </div>
 
+      <p className="px-4 text-sm text-gray-500">{pl.estimateHint}</p>
       {/* List */}
       <div className="p-4 space-y-4">
         {isLoading ? (
@@ -473,7 +476,7 @@ export function SalaryListPage() {
                 </span>
               </div>
 
-              {salary.payrollBasis?.segments?.length>0&&<p className="text-sm text-blue-700 mb-3">{salary.payrollBasis.segments.map((segment:any)=>`${segment.type==='probation'?pl.probation:pl.regular} · ${formatCurrency(segment.monthlyRate)} × ${segment.days} / ${salary.payrollBasis.daysInMonth}`).join(' + ')}</p>}
+              {salary.payrollBasis?.segments?.length>0&&<details className="text-sm mb-3"><summary>{t("uiDesign.calculationBasis")}</summary><p className="text-blue-700">{salary.payrollBasis.segments.map((segment:any)=>`${segment.type==='probation'?pl.probation:pl.regular} · ${formatCurrency(segment.monthlyRate)} × ${segment.days} / ${salary.payrollBasis.daysInMonth}`).join(' + ')}</p></details>}
               <div className="mb-3">
                 <span className="inline-block px-2 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary">
                   {formatMonth(salary.month)}
@@ -483,13 +486,13 @@ export function SalaryListPage() {
               {salary.payrollReview&&<p className="text-sm text-amber-700 mb-2">{payrollIssueText(i18n.language,salary.payrollReview.reason)}{salary.payrollReview.reason==='STAFF_BASE_SALARY_REQUIRED'&&<Link className="ml-2 underline" to={'/staff/'+salary.staffId+'/edit'}>{l.configureSalary}</Link>}</p>}
               {salary.payrollBasis?.employmentNeedsReview&&<p role="alert" className="text-amber-700">{l.employmentReview}</p>}
               <div className="mb-4"><p className="text-sm text-gray-500">{payrollStatus(salary,i18n.language)}</p><p className="text-3xl font-bold">{salary.calculationError?pl.salaryError:formatCurrency(salary.settlementAmount??salary.finalAmount)}</p></div>
-              {(salary.status!=='paid'&&!salary.payrollBasis?.confirmed)&&<p className="text-sm text-blue-700 mb-4">{pl.estimateHint}</p>}
+
               {salary.status==='pending'&&salary.payrollBasis?.version!==2&&<p className="text-sm text-amber-700 mb-3">{pl.legacy}</p>}
               {salary.reestimate&&<p className="text-sm text-blue-700 mb-3">{salary.reestimate.error?pl.salaryErrorHint:<>{pl.originalAmount}: {formatCurrency(salary.reestimate.originalFinalAmount??salary.finalAmount)} · {pl.difference}: {formatCurrency(salary.reestimate.difference)}</>}</p>}
-              <section className="border rounded-xl p-4 mb-3"><h3 className="font-semibold mb-3">{pl.breakdown}</h3><dl className="space-y-2 text-sm">
+              <details className="border rounded-xl p-4 mb-3"><summary className="font-semibold cursor-pointer">{pl.breakdown}</summary><dl className="space-y-2 text-sm">
                 {[[pl.base,salary.baseSalary],[pl.overtime,salary.overtime],[pl.commission,salary.commission],[pl.reward,salary.bonus],[pl.lateDeduction,-(salary.payrollBasis?.correction?.lateDeduction||0)],[pl.penalty,-(salary.compensationPenalties||0)],[pl.deposit,-(salary.depositDeductionAmount||0)],[pl.unpaidLeave,-(salary.payrollBasis?.unpaidLeave?.deduction||0)],[pl.depositRefund,salary.depositRefundAmount||0],[pl.otherDeduction,-Math.max(0,salary.deduction-(salary.payrollBasis?.correction?.lateDeduction||0)-(salary.compensationPenalties||0)-(salary.depositDeductionAmount||0)-(salary.payrollBasis?.unpaidLeave?.deduction||0))]].map(([label,amount])=><div className="flex justify-between gap-3" key={String(label)}><dt className="text-gray-500">{label}</dt><dd className={Number(amount)<0?'text-red-600':'font-medium'}>{formatCurrency(Number(amount)||0)}</dd></div>)}
                 <div className="flex justify-between border-t pt-2 font-semibold"><dt>{pl.totalDeduction}</dt><dd>{formatCurrency(salary.deduction)}</dd></div>
-              </dl></section>
+              </dl></details>
               {!!salary.compensationItems?.length&&<details className="text-sm mb-3"><summary>{t('compensation.title')}</summary><ul>{salary.compensationItems.map(item=><li key={item.id}>{t('compensation.'+item.type)} {formatCurrency(item.amount)} · {item.reason}</li>)}</ul></details>}
               <PayrollBasisSummary basis={salary.payrollBasis}/>
               {salary.depositNeedsReview&&<p className="text-sm text-amber-700">{t('salaryDeposit.recalculate')}</p>}
@@ -515,19 +518,11 @@ export function SalaryListPage() {
         )}
       </div>
 
-      {payslip&&<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><section className="bg-white rounded-xl p-4 w-full max-w-3xl mx-4 max-h-[95vh] overflow-y-auto"><header className="flex justify-between items-center mb-3"><h2 className="font-bold">{pl.payslipTitle}</h2><button aria-label={pl.cancel} onClick={()=>setPayslip(null)}><X/></button></header><iframe title={pl.payslipTitle} sandbox="allow-same-origin" srcDoc={payslipHtml(payslip,{title:pl.payslipTitle,language:i18n.language})} className="w-full h-[65vh] border rounded-lg"/><button className="mt-3 px-4 py-2 border rounded-lg" onClick={()=>downloadPayslip(payslip,{title:pl.payslipTitle,language:i18n.language})}>{pl.downloadPayslip}</button></section></div>}
+      {payslip&&<AdminDialog title={pl.payslipTitle} onClose={()=>setPayslip(null)} className="max-w-3xl" busy={false} trackChanges chrome><section className="space-y-4"><iframe title={pl.payslipTitle} sandbox="allow-same-origin" srcDoc={payslipHtml(payslip,{title:pl.payslipTitle,language:i18n.language})} className="w-full h-[65vh] border rounded-lg"/><button className="mt-3 px-4 py-2 border rounded-lg" onClick={()=>downloadPayslip(payslip,{title:pl.payslipTitle,language:i18n.language})}>{pl.downloadPayslip}</button></section></AdminDialog>}
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">
-                {l.correction}
-              </h2>
-              <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={l.correction} onClose={handleCloseModal} className="max-w-md" busy={Boolean(saving)} trackChanges chrome>
+
 
             <div className="space-y-4">
               {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
@@ -679,11 +674,11 @@ export function SalaryListPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2">
+              <div className="admin-dialog-footer flex gap-2">
                 <button
                   onClick={handleCloseModal}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
-                >
+                 data-dialog-close="true">
                   {t('common.cancel')}
                 </button>
                 <button
@@ -699,8 +694,7 @@ export function SalaryListPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { MarketingDialog } from '../../components/marketing/MarketingDialog'
+import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +7,7 @@ import { useAuthStore } from '../../stores/auth'
 import {
   Plus, Loader2, Globe, Phone, Building2,
   Edit2, Trash2, Search,
-  Users, DollarSign, BarChart3, X, Check, MessageCircle
+  Users, DollarSign, BarChart3,  Check, MessageCircle
 } from 'lucide-react'
 
 // 预设营销渠道 - 消息推送平台（不是订单销售渠道！）
@@ -455,14 +455,8 @@ export function MarketingChannelsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <MarketingDialog onClose={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="marketing-toolbar mb-4">
-              <h3 className="text-lg font-semibold">{t('marketing.addChannel')}</h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('marketing.addChannel')} onClose={closeModal} className="max-w-md" busy={Boolean(createMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -521,7 +515,10 @@ export function MarketingChannelsPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">{t('marketing.commissionHint')}</p>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
@@ -530,25 +527,15 @@ export function MarketingChannelsPage() {
                   {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
 
       {/* Edit Modal */}
       {showEdit && editingChannel && (
-        <MarketingDialog onClose={closeModal}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <div className="marketing-toolbar mb-4">
-              <h3 className="text-lg font-semibold">{t('marketing.editChannel')}</h3>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
+        <AdminDialog title={t('marketing.editChannel')} onClose={closeModal} className="max-w-md" busy={Boolean(updateMutation.isPending)} trackChanges chrome>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -619,7 +606,10 @@ export function MarketingChannelsPage() {
                 </button>
                 <span className="text-sm text-gray-500">{t('marketing.channelStatus')}</span>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="admin-dialog-footer flex gap-3 pt-4">
+                <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">
+                  {t('common.cancel')}
+                </button>
                 <button
                   type="submit"
                   className="btn-primary flex-1 flex items-center justify-center gap-2"
@@ -628,24 +618,22 @@ export function MarketingChannelsPage() {
                   {updateMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
-                <button type="button" onClick={closeModal} className="btn-secondary">
-                  {t('common.cancel')}
-                </button>
               </div>
             </form>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
 
       {/* Delete Confirm Modal */}
       {deleteConfirm && (
-        <MarketingDialog onClose={()=>setDeleteConfirm(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 mb-2">{t('common.confirm')}</h2>
+        <AdminDialog title={t('common.confirm')} onClose={()=>setDeleteConfirm(null)} className="max-w-sm" busy={Boolean(deleteMutation.isPending)} trackChanges chrome>
+
             <p className="text-gray-600 mb-4">
               {t('marketing.deleteConfirm')}
             </p>
-            <div className="flex gap-3">
+            <div className="admin-dialog-footer flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1" data-dialog-close="true">
+                {t('common.cancel')}
+              </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
                 className="btn-danger flex-1 flex items-center justify-center gap-2"
@@ -654,12 +642,8 @@ export function MarketingChannelsPage() {
                 {deleteMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                 {t('common.delete')}
               </button>
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">
-                {t('common.cancel')}
-              </button>
             </div>
-          </div>
-        </MarketingDialog>
+          </AdminDialog>
       )}
     </div>
   )

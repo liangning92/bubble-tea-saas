@@ -1,3 +1,6 @@
+import { notifyAdmin } from '../../components/AdminFeedback'
+import { OrderSummaryCards } from '../../components/OrderSummaryCards'
+import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
 import { OrderItemsTable, OrderItemColumns } from '../../components/OrderItemsTable'
 import { useDashboardContext, requireRead, dashboardLink } from '../../utils/dashboardNavigation'
@@ -118,33 +121,33 @@ export function OrderListPage() {
 
   const handleApproveRefund = async () => {
     if (!selectedRefund) return
-    if (!confirmPreparedRefund(selectedRefund, t)) return
+    if (!await confirmPreparedRefund(selectedRefund, t)) return
     try {
       await adminApi.approveRefund(selectedRefund.id, { verifiedPrepared: selectedRefund.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRefund.reasonCode === 'paid_unprepared', note: refundNote })
-      alert(t('orders.refundApproved'))
+      notifyAdmin(t('orders.refundApproved'))
       setSelectedRefund(null)
       setRefundAction(null)
       setRefundNote('')
       loadRefundRequests()
     } catch (err) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
   const handleRejectRefund = async () => {
     if (!selectedRefund || !refundNote.trim()) {
-      alert(t('orders.rejectReasonRequired'))
+      notifyAdmin(t('orders.rejectReasonRequired'))
       return
     }
     try {
       await adminApi.rejectRefund(selectedRefund.id, { note: refundNote })
-      alert(t('orders.refundRejected'))
+      notifyAdmin(t('orders.refundRejected'))
       setSelectedRefund(null)
       setRefundAction(null)
       setRefundNote('')
       loadRefundRequests()
     } catch (err) {
-      alert(t('common.error'))
+      notifyAdmin(t('common.error'))
     }
   }
 
@@ -227,7 +230,7 @@ export function OrderListPage() {
           ))}
         </select>
         <select aria-label={labels.shift} className="input w-36 h-10 text-sm" value={shiftSessionId} title={sessions.find((row: any) => row.id === shiftSessionId) ? shiftLabel(sessions.find((row: any) => row.id === shiftSessionId)) : labels.shift} onChange={e => setShiftSessionId(e.target.value)} disabled={shiftsQuery.isLoading || shiftsQuery.isError}><option value="">{labels.shift}</option>{sessions.map((row: any) => <option key={row.id} value={row.id}>{shiftLabel(row)}</option>)}</select>
-        <select aria-label={labels.payment} className="input w-32 h-10 text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option value="">{labels.payment}</option>{['cash','qris','gopay','ovo','dana','shopeepay','debit','card','member','bca_va','mandiri_va'].map(value => <option key={value} value={value}>{value}</option>)}</select>
+        <select aria-label={labels.payment} className="input w-32 h-10 text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option value="">{labels.payment}</option>{['cash','qris','gopay','ovo','dana','shopeepay','debit','card','member','bca_va','mandiri_va'].map(value => <option key={value} value={value}>{value === 'cash' ? t('uiDesign.cash') : value.toUpperCase()}</option>)}</select>
         <button className="btn-secondary h-10 px-3 text-sm whitespace-nowrap" onClick={() => { setStartTime(''); setEndTime(''); setShiftSessionId(''); setPaymentMethod(''); setSearch(''); setStatusFilter(''); setChannelFilter('') }}>{labels.reset}</button>
         <button className="btn-primary h-10 px-3 text-sm whitespace-nowrap" disabled={exporting || !validRange || isLoading || isError} onClick={handleExport}>{exporting ? labels.loading : labels.export}</button>
       </div>
@@ -244,7 +247,9 @@ export function OrderListPage() {
         ) : !validRange || orders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">{t('common.noData')}</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
+            <OrderSummaryCards orders={orders} onOpen={order=>navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, { storeId: context.storeId, asOf: context.asOf, startDate: context.startDate, endDate: context.endDate }))}/>
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[1100px] table-fixed" data-testid="orders-table">
               <OrderItemColumns after={[120,180,undefined,128,112,112]} />
               <thead>
@@ -285,9 +290,9 @@ export function OrderListPage() {
                             </td>
                             <td rowSpan={items.length} className="py-3 pr-4 text-sm">{formatDateTime(order.createdAt)}</td>
                             <td rowSpan={items.length} className="py-3 pr-4">{order.member?.name || order.staff?.name || '-'}</td>
-                            <td rowSpan={items.length} className="py-3 pr-4 font-medium">{formatCurrency(order.finalAmount || order.total)}</td>
-                            <td rowSpan={items.length} className="py-3 pr-4 capitalize">{order.paymentMethod}</td>
-                            <td rowSpan={items.length} className="py-3 pr-4"><span className={`badge ${getStatusBadge(order.status)} capitalize`}>{order.status}</span></td>
+                            <td rowSpan={items.length} className="py-3 pr-4 font-medium">{formatCurrency(order.finalAmount ?? order.total)}</td>
+                            <td rowSpan={items.length} className="py-3 pr-4 capitalize">{order.paymentMethod==='cash'?t('uiDesign.cash'):order.paymentMethod==='qris'?'QRIS':order.paymentMethod}</td>
+                            <td rowSpan={items.length} className="py-3 pr-4"><span className={`badge ${getStatusBadge(order.status)} capitalize`}>{t('orders.'+order.status,{defaultValue:order.status})}</span></td>
                           </>
                         )}
                       </tr>
@@ -296,6 +301,7 @@ export function OrderListPage() {
                 )
               })}
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -367,11 +373,8 @@ export function OrderListPage() {
 
       {/* Refund Action Modal */}
       {selectedRefund && refundAction && (
-        <div className="fixed inset-0 bg-black/50 pointer-events-none flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-xl p-6 mx-4 pointer-events-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold mb-4">
-              {refundAction === 'approve' ? t('orders.approveRefund') : t('orders.rejectRefund')}
-            </h2>
+        <AdminDialog title={refundAction === 'approve' ? t('orders.approveRefund') : t('orders.rejectRefund')} onClose={() => { setSelectedRefund(null); setRefundAction(null); setRefundNote('') }} className="max-w-md" busy={false} trackChanges chrome>
+
             <div className="bg-gray-50 rounded-xl p-4 mb-4">
               <p className="font-medium">{selectedRefund.orderNumber}</p>
               <p className="text-sm text-gray-500">{selectedRefund.reason}</p>
@@ -391,11 +394,11 @@ export function OrderListPage() {
                 />
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="admin-dialog-footer flex gap-2">
               <button
                 onClick={() => { setSelectedRefund(null); setRefundAction(null); setRefundNote('') }}
                 className="flex-1 py-3 border border-gray-200 rounded-xl"
-              >
+               data-dialog-close="true">
                 {t('common.cancel')}
               </button>
               <button
@@ -407,8 +410,7 @@ export function OrderListPage() {
                 {refundAction === 'approve' ? t('common.confirm') : t('common.confirm')}
               </button>
             </div>
-          </div>
-        </div>
+          </AdminDialog>
       )}
     </div>
   )

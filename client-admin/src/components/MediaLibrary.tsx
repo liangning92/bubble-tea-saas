@@ -321,23 +321,17 @@ export function MediaLibrary({
         </button>
       )}
       {preview && (
-        <AdminDialog
-          title={preview.name}
-          onClose={() => setPreview(null)}
-          className="max-w-3xl"
-        >
-          <div className="bg-white rounded-xl p-5 w-full max-w-3xl space-y-4">
+        <AdminDialog title={preview.name} onClose={() => setPreview(null)} className="max-w-3xl" busy={false} trackChanges chrome>
             <p>{preview.name}</p>
             <MediaPreview asset={preview} controls large />
             <button
               type="button"
               className="btn"
               onClick={() => setPreview(null)}
-            >
+             data-dialog-close="true">
               {t("common.close")}
             </button>
-          </div>
-        </AdminDialog>
+          </AdminDialog>
       )}
       {references !== null && (
         <div className="card space-y-2" role="status">
@@ -440,14 +434,8 @@ export function MediaPicker(props: {
 }) {
   const { t } = useTranslation();
   return (
-    <AdminDialog
-      title={t("media.title")}
-      onClose={props.onClose || (() => {})}
-      className="max-w-5xl"
-    >
-      <div className="bg-white rounded-xl p-5 w-full max-w-5xl max-h-[90vh] overflow-auto">
+    <AdminDialog title={t("media.title")} onClose={props.onClose || (() => {})} className="max-w-5xl" busy={false} trackChanges chrome>
         <MediaLibrary {...props} />
-      </div>
-    </AdminDialog>
+      </AdminDialog>
   );
 }
