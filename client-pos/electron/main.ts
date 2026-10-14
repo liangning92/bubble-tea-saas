@@ -1,3 +1,4 @@
+import { consumeUpgradeSession } from './upgradeSession'
 import { cupStickerTspl } from './cupSticker'
 import { parsePrinterNames } from './printerInventory'
 import { requestReceiptHandover } from './receiptHandover'
@@ -211,6 +212,8 @@ if (process.env.ELECTRON_DISABLE_GPU !== '1') {
 
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
+// The customer display must not consume the main cashier's one-time session.
+ipcMain.handle('consume-upgrade-session',event=>event.sender===mainWindow?.webContents?consumeUpgradeSession():null)
 let customerWindow: BrowserWindow | null = null
 
 // 本地 Express 服务器进程（用于打包后的桌面版本）
