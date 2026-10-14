@@ -13254,7 +13254,7 @@ i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false }
 })
 
-const updateAdminTitle = () => { document.title = 'YOUME · ' + i18n.t('uiDesign.systemName') }
+const updateAdminTitle = () => { if (typeof document !== 'undefined') document.title = 'YOUME · ' + i18n.t('uiDesign.systemName') }
 i18n.on('languageChanged', updateAdminTitle)
 updateAdminTitle()
 
