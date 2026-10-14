@@ -7,11 +7,12 @@ function fixture(t,{background=false}={}){
  if(background){const helper=path.join(runtimeProcess.resourcesPath,'upgrade-helper','btps-db-upgrade.exe');fs.mkdirSync(path.dirname(helper),{recursive:true});fs.writeFileSync(helper,'owned helper');}
  const childProcesses={spawn:(_helper,args)=>{actions.push(['helper',args[0]]);const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>{};queueMicrotask(()=>child.emit('exit',0));return child;}};
  const handlers={},events={},sent=[],actions=[];let failPrepare=false;
+ const ownerContents={executeJavaScript:async()=>null,send:(...args)=>sent.push(args)};
  const autoUpdater={installerPath:installer,setFeedURL(){},on:(n,cb)=>events[n]=cb,quitAndInstall:(...args)=>actions.push(['install',...args]),async downloadUpdate(){},async checkForUpdates(){}};
  const versions={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('client-pos/src/utils/updateVersion.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports:versions});
  const api={};const source=ts.transpileModule(fs.readFileSync('client-pos/electron/updater.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,esModuleInterop:true,target:ts.ScriptTarget.ES2020}}).outputText;
- vm.runInNewContext(source,{exports:api,Buffer,require:n=>n==='electron-updater'?{autoUpdater}:n==='electron'?{ipcMain:{handle:(n,cb)=>handlers[n]=cb},shell:{showItemInFolder(){}},app:{isPackaged:true,getVersion:()=> '2026.10.313',getPath:()=>path.join(root,'profile')}}:n==='child_process'&&background?childProcesses:n.includes('upgradeSession')?{saveUpgradeSession:async()=>actions.push(['session-saved']),consumeUpgradeSession:async()=>null,clearUpgradeSession:async()=>{}}:n.includes('updateVersion')?versions:require(n),process:runtimeProcess,console:{log(){},warn(){},error(){}},setTimeout,setInterval,clearTimeout,clearInterval});
- api.setupUpdater({isDestroyed:()=>false,webContents:{executeJavaScript:async()=>null,send:(...args)=>sent.push(args)}},{prepare:async()=>{actions.push(['prepare']);if(failPrepare)throw Error('UPDATE_LOCAL_SERVER_STILL_RUNNING')},resume:()=>actions.push(['resume'])});
+ vm.runInNewContext(source,{exports:api,Buffer,require:n=>n==='electron-updater'?{autoUpdater}:n==='electron'?{ipcMain:{handle:(n,cb)=>handlers[n]=(...args)=>cb(args[0]?.sender?args[0]:{sender:ownerContents},...args.slice(1))},shell:{showItemInFolder(){}},app:{isPackaged:true,getVersion:()=> '2026.10.313',getPath:()=>path.join(root,'profile')}}:n==='child_process'&&background?childProcesses:n.includes('upgradeSession')?{saveUpgradeSession:async()=>actions.push(['session-saved']),consumeUpgradeSession:async()=>null,clearUpgradeSession:async()=>{}}:n.includes('updateVersion')?versions:require(n),process:runtimeProcess,console:{log(){},warn(){},error(){}},setTimeout,setInterval,clearTimeout,clearInterval});
+ api.setupUpdater({isDestroyed:()=>false,webContents:ownerContents},{prepare:async()=>{actions.push(['prepare']);if(failPrepare)throw Error('UPDATE_LOCAL_SERVER_STILL_RUNNING')},resume:()=>actions.push(['resume'])});
  const snapshot={format:'POSOffline-upgrade-v1',orders:[{id:1,status:'pending',orderNumber:'OFFLINE-owned',finalAmount:16000}],syncQueue:[{id:2,type:'order'}],config:[{key:'owned',value:'retained'}],products:[]};
  const download=(version='2026.10.314')=>events['update-downloaded']({version,files:[{url:'installer.exe',sha512}]});
  return {root,installer,handlers,events,sent,actions,autoUpdater,snapshot,download,failPrepare:()=>failPrepare=true};
@@ -56,3 +57,5 @@ test('same and lower available versions are suppressed',t=>{
 });
 
 test('automatic updates download in background and TV releases never replace the POS latest feed',t=>{const f=fixture(t);assert.equal(f.autoUpdater.autoDownload,true);assert.match(fs.readFileSync('.github/workflows/build-tv-apk.yml','utf8'),/gh release create.*--latest=false/)});
+
+test('a customer display cannot install an update or close a busy cashier window',async t=>{const f=fixture(t);f.download();assert.equal(await f.handlers['install-update']({sender:{}},f.snapshot),false);assert.deepEqual(f.actions,[])});

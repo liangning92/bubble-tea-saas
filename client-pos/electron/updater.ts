@@ -279,6 +279,7 @@ function setupIpcHandlers() {
 
   // Install update and restart
   ipcMain.handle('install-update', async (_event, snapshot: any) => {
+    if (_event.sender !== mainWindow?.webContents) return false
     if (installing) return false
     installing = true
     let prepared = false
