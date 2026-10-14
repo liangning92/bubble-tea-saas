@@ -1,4 +1,3 @@
-import {Link} from 'react-router-dom'
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -132,25 +131,10 @@ export function HomePage() {
     },
   ];
   return (
-    <main className="employee-home"><Link to="/approvals" className="p-3 block text-primary">{t("staffAccessV2.approvals")}</Link>
-      <header className="home-topbar">
-        <div className="home-brand">
-          <img src="/youme-logo-red.png" alt="YOUME" />
-          <span>{t("ui.workplace")}</span>
-        </div>
-        <select
-          aria-label="Language"
-          value={i18n.language}
-          onChange={(e) => {
-            i18n.changeLanguage(e.target.value);
-            localStorage.setItem("bubble-tea-language", e.target.value);
-          }}
-          className="home-language"
-        >
-          <option value="id">ID</option>
-          <option value="zh">中文</option>
-          <option value="en">EN</option>
-        </select>
+    <main className="employee-home">
+      <header className="home-brand-panel">
+        <img src="/youme-logo-red.png" alt="YOUME" />
+        <p className="home-values">{t("ui.coreValues")}</p>
       </header>
       <section className="home-greeting">
         <div>
@@ -165,14 +149,19 @@ export function HomePage() {
             {overview?.staff?.storeName || user?.storeName || t("ui.workplace")}
           </p>
         </div>
-        <button
-          className="home-scan-icon"
-          aria-label={t("workspace.scan")}
-          disabled={loading || failed.includes("attendance")}
-          onClick={() => setScanner(true)}
+        <select
+          aria-label={t("ui.language")}
+          value={i18n.resolvedLanguage?.split("-")[0] || "id"}
+          onChange={(e) => {
+            void i18n.changeLanguage(e.target.value);
+            localStorage.setItem("bubble-tea-language", e.target.value);
+          }}
+          className="home-language"
         >
-          <ScanLine size={25} />
-        </button>
+          <option value="id">ID</option>
+          <option value="zh">中文</option>
+          <option value="en">EN</option>
+        </select>
       </section>
       {message && (
         <p role="status" className="workspace-feedback">

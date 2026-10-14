@@ -203,46 +203,60 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 .employee-home {
-  padding: 0 20px 16px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
-.home-topbar {
+.home-brand-panel {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding-top: 22px;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 12px;
+  border-radius: 24px;
+  background: #fce9ee;
 }
-.home-brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-.home-brand img {
-  width: 84px;
-  height: 25px;
+.home-brand-panel img {
+  width: 112px;
+  height: 34px;
   object-fit: contain;
 }
-.home-brand span {
-  padding-left: 11px;
-  border-left: 1px solid #ded6d7;
-  color: var(--staff-muted);
+.home-values {
+  margin: 0;
+  color: #93334d;
   font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
 }
 .home-language {
+  flex: none;
+  min-width: 68px;
+  min-height: 44px;
+  border-radius: 14px;
   font-size: 14px;
   font-weight: 600;
   color: #69606b;
-  padding: 6px 8px;
+  padding: 10px 8px;
   background: #fff;
   border: 1px solid var(--staff-line);
+}
+.home-language:focus-visible {
+  outline: 3px solid #c9466870;
+  outline-offset: 3px;
 }
 .home-greeting {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+.home-greeting > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .home-date {
   font-size: 14px;
@@ -263,19 +277,7 @@ a:focus-visible {
   margin-top: 6px;
   color: var(--staff-muted);
 }
-.home-scan-icon {
-  width: 48px;
-  height: 48px;
-  flex: none;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: white;
-  border: 1px solid #eadfe2;
-  border-radius: 17px;
-  color: var(--staff-rose);
-  box-shadow: 0 4px 12px #c9466808;
-}
+
 .home-shift-card {
   padding: 20px;
   background: linear-gradient(125deg, #fff8f8, #fff);
@@ -803,9 +805,6 @@ a:focus-visible {
   .workspace-row {
     padding: 13px;
     gap: 10px;
-  }
-  .home-brand span {
-    font-size: 14px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
