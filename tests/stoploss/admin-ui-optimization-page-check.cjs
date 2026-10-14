@@ -428,6 +428,7 @@ const { chromium, expect } = require("@playwright/test"),
     await page.setViewportSize({width:1440,height:900});
     await page.goto(origin + '/products/recipe-fixture/recipe');
     await page.getByRole('textbox',{name:'Quantity',exact:true}).first().fill('0.2');
+    await expect(page.getByRole('textbox',{name:'Quantity',exact:true}).first()).toHaveValue('0.2');
     let languageNavigations=0;
     page.on('framenavigated',frame=>{if(frame===page.mainFrame()) languageNavigations++;});
     const savedWriteCount=writes.length;
