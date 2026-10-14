@@ -1,3 +1,4 @@
+import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from '../utils/inventoryInputUnits';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -61,9 +62,9 @@ function CountRow({ countId, item, reload }: {
     item: any;
     reload: () => Promise<void>;
 }) {
-    const { t, i18n } = useTranslation(), [quantity, setQuantity] = useState(item.countedQty?.toString() || ''), [reason, setReason] = useState(item.note || ''), [error, setError] = useState(''), [busy, setBusy] = useState(false), lock = useRef(false);
+    const { t, i18n } = useTranslation(), [inputUnit, setInputUnit] = useState(() => defaultInventoryInputUnit(item.inventory)), [quantity, setQuantity] = useState(() => item.countedQty == null ? '' : String(item.countedQty / inventoryUnitFactor(item.inventory, defaultInventoryInputUnit(item.inventory)))), [reason, setReason] = useState(item.note || ''), [error, setError] = useState(''), [busy, setBusy] = useState(false), lock = useRef(false);
     async function submit(event: React.FormEvent) { event.preventDefault(); if (lock.current)
-        return; setError(''); const qty = Number(quantity); if (quantity === '' || !Number.isFinite(qty) || qty < 0) {
+        return; setError(''); const qty = inventoryLedgerQuantity(Number(quantity), item.inventory, inputUnit); if (quantity === '' || !Number.isFinite(qty) || qty < 0) {
         setError(t('inventoryFlow.invalid'));
         return;
     } if (qty !== item.inventory.currentStock && !reason.trim()) {
@@ -80,5 +81,5 @@ function CountRow({ countId, item, reload }: {
         lock.current = false;
         setBusy(false);
     } }
-    return <form onSubmit={submit} className="bg-white rounded-xl border p-3 space-y-3"><h3 className="font-medium">{materialName(item.inventory.name, i18n.language)} ({item.inventory.unit}) {item.countedAt && <span className="text-green-600 text-xs">{t('inventoryFlow.saved')}</span>}</h3><p className="text-sm text-gray-500">{t('countFlow.theory')}: {item.countedAt ? item.systemQty : item.inventory.currentStock} {item.inventory.unit}</p><label className="block">{t('inventoryFlow.actualCount')}<input type="number" min="0" step="any" className="border rounded-lg p-3 w-full mt-1" required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={busy}/></label><label className="block">{t('inventoryFlow.differenceReason')}<input className="border rounded-lg p-3 w-full mt-1" value={reason} onChange={e => setReason(e.target.value)} disabled={busy}/></label><button className="bg-blue-600 text-white px-4 py-2 rounded-lg" disabled={busy}>{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.save')}</button>{error && <p role="alert" className="text-red-700">{error} <button type="button" className="underline" onClick={reload}>{t('inventoryFlow.refresh')}</button></p>}</form>;
+    return <form onSubmit={submit} className="bg-white rounded-xl border p-3 space-y-3"><h3 className="font-medium">{materialName(item.inventory.name, i18n.language)} ({item.inventory.unit}) {item.countedAt && <span className="text-green-600 text-xs">{t('inventoryFlow.saved')}</span>}</h3><p className="text-sm text-gray-500">{t('countFlow.theory')}: {item.countedAt ? item.systemQty : item.inventory.currentStock} {item.inventory.unit}</p><label className="block">{t('inventoryFlow.unit')}<select aria-label={t('inventoryFlow.unit')} className="border rounded-lg p-3 w-full mt-1" value={inputUnit} disabled={busy} onChange={e => { if (quantity !== '' && Number.isFinite(Number(quantity))) setQuantity(String(inventoryLedgerQuantity(Number(quantity), item.inventory, inputUnit) / inventoryUnitFactor(item.inventory, e.target.value))); setInputUnit(e.target.value); }}>{inventoryInputUnits(item.inventory).map(unit => <option key={unit}>{unit}</option>)}</select></label><label className="block">{t('inventoryFlow.actualCount')} ({inputUnit})<input type="number" min="0" step="any" className="border rounded-lg p-3 w-full mt-1" required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={busy}/></label><label className="block">{t('inventoryFlow.differenceReason')}<input className="border rounded-lg p-3 w-full mt-1" value={reason} onChange={e => setReason(e.target.value)} disabled={busy}/></label><button className="bg-blue-600 text-white px-4 py-2 rounded-lg" disabled={busy}>{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.save')}</button>{error && <p role="alert" className="text-red-700">{error} <button type="button" className="underline" onClick={reload}>{t('inventoryFlow.refresh')}</button></p>}</form>;
 }
