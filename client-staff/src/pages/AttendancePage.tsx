@@ -4,7 +4,6 @@ import { LoadFailure } from "../components/LoadFailure";
 import { RouteLoading } from "../components/RouteLoading";
 import { businessDate } from "../utils/businessDate";
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../stores/auth";
 import { staffApi } from "../services/api";
@@ -16,16 +15,13 @@ import {
   LogOut,
   Calendar,
   Loader2,
-  Edit3,
-  PlusCircle,
   X,
   Camera,
   RotateCcw,
 } from "lucide-react";
 
 export function AttendancePage() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const { user } = useAuthStore();
 
   const [attendance, setAttendance] = useState<any>(null);
@@ -151,7 +147,7 @@ export function AttendancePage() {
         location: locationStr,
       });
 
-      if (response.code === 201) {
+      if (response.code === 201 || response.code === 200) {
         setAttendance(response.data);
         setMessage({ type: "success", text: t("attendance.checkInSuccess") });
         await refresh();
@@ -208,6 +204,8 @@ export function AttendancePage() {
         });
         setMessage({ type: "success", text: t("attendance.checkOutSuccess") });
         await refresh();
+      } else {
+        setMessage({ type: "error", text: response.message || t("attendance.errorOccurred") });
       }
     } catch (error: any) {
       setMessage({
@@ -380,7 +378,7 @@ export function AttendancePage() {
                     setShowScanner(true);
                   }}
                   disabled={isLoading}
-                  className="w-full py-4 bg-amber-500 text-white rounded-2xl font-bold text-base hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-98 transition-all"
+                  className="w-full py-4 bg-primary text-white rounded-2xl font-bold text-base hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-98 transition-all"
                 >
                   <Camera size={22} />
                   {t("attendance.scanPosQrCheckOut", "扫码下班打卡")}
@@ -411,12 +409,7 @@ export function AttendancePage() {
                   <RotateCcw size={18} />
                   {t("attendance.scanAgain", "再次扫码打卡")}
                 </button>
-                <button
-                  onClick={() => navigate("/overtime")}
-                  className="py-3.5 px-4 bg-gray-100 text-gray-700 rounded-2xl font-medium text-sm hover:bg-gray-200"
-                >
-                  {t("attendance.requestOvertime", "申请加班")}
-                </button>
+
               </div>
             ) : (
               <>
@@ -461,39 +454,6 @@ export function AttendancePage() {
 
         <ModuleLinks group="attendance" />
 
-        {/* Location Info */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-            <MapPin className="text-blue-600" size={20} />
-          </div>
-          <div>
-            <p className="font-medium text-gray-900">
-              {t("attendance.location")}
-            </p>
-            <p className="text-base text-gray-500">
-              {t("attendance.defaultLocation")}
-            </p>
-          </div>
-        </div>
-
-        {/* Correction Button */}
-        <button
-          onClick={() => navigate("/attendance/correction")}
-          className="w-full py-3 border border-gray-200 rounded-xl text-base font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-2"
-        >
-          <Edit3 size={18} />
-          {t("attendance.requestCorrection")}
-        </button>
-
-        {/* Overtime Button */}
-        <button
-          onClick={() => navigate("/overtime")}
-          className="w-full py-3 border border-gray-200 rounded-xl text-base font-medium flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 mb-6"
-        >
-          <PlusCircle size={18} />
-          {t("attendance.requestOvertime")}
-        </button>
-
         {/* Monthly History */}
         <div className="bg-white rounded-2xl shadow-sm p-4">
           <div className="flex items-center justify-between mb-4">
@@ -501,7 +461,8 @@ export function AttendancePage() {
               {t("attendance.monthlyHistory")}
             </h3>
             <span className="text-base text-gray-500">
-              {new Date().toLocaleDateString("id-ID", {
+              {new Date().toLocaleDateString(i18n.language === "zh" ? "zh-CN" : i18n.language === "en" ? "en-GB" : "id-ID", {
+                timeZone: "Asia/Jakarta",
                 month: "long",
                 year: "numeric",
               })}

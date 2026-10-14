@@ -20,7 +20,7 @@ export function useSessionDraft<T>(name: string, initial: T) {
       const before: T = previous.key === key ? previous.value : read();
       const resolved =
         typeof next === "function" ? (next as (v: T) => T)(before) : next;
-      sessionStorage.setItem(key, JSON.stringify(resolved));
+      try { sessionStorage.setItem(key, JSON.stringify(resolved)); } catch { /* Keep the editable in-memory draft when browser storage is unavailable. */ }
       return { key, value: resolved };
     });
   return [

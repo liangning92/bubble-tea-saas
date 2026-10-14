@@ -1,3 +1,5 @@
+import { Modal } from '../components/Modal'
+import { useDialogs } from '../components/Dialogs'
 import jsQR from 'jsqr'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -29,6 +31,8 @@ export function QRCameraScannerModal({
   defaultMode,
   isLoading
 }: QRCameraScannerModalProps) {
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const [mode, setMode] = useState<'check_in' | 'check_out'>(defaultMode)
   const [activeTab, setActiveTab] = useState<'camera' | 'manual'>('camera')
@@ -238,16 +242,16 @@ export function QRCameraScannerModal({
         }
       }
 
-      alert(t('attendance.invalidQR', '未能从照片中识别出有效的收银机动态考勤码'))
+      await dialogs.alert(t('attendance.invalidQR', '未能从照片中识别出有效的收银机动态考勤码'))
     } catch (err) {
-      alert(t('attendance.errorOccurred', '解析照片失败，请重试或使用手动输入'))
+      await dialogs.alert(t('attendance.errorOccurred', '解析照片失败，请重试或使用手动输入'))
     }
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/85 flex flex-col justify-between select-none">
+    <Modal className="fixed inset-0 z-[80] bg-black/85 flex flex-col justify-between select-none" label={t('attendance.scanQR')} onClose={onClose}>
       {/* 顶部栏 */}
       <div className="px-4 pt-12 pb-4 flex items-center justify-between text-white bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center gap-2">
@@ -282,7 +286,7 @@ export function QRCameraScannerModal({
             onClick={() => {setScanError('');setHasScanned(false);setMode('check_in')}}
             className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_in'
-                ? 'bg-emerald-500 text-white shadow-md'
+                ? 'bg-primary text-white shadow-md'
                 : 'text-white/80 hover:text-white'
             }`}
           >
@@ -294,7 +298,7 @@ export function QRCameraScannerModal({
             onClick={() => {setScanError('');setHasScanned(false);setMode('check_out')}}
             className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'check_out'
-                ? 'bg-amber-500 text-white shadow-md'
+                ? 'bg-primary text-white shadow-md'
                 : 'text-white/80 hover:text-white'
             }`}
           >
@@ -475,6 +479,6 @@ export function QRCameraScannerModal({
           100% { top: 8%; opacity: 0.3; }
         }
       `}</style>
-    </div>
+    </Modal>
   )
 }

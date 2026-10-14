@@ -10,7 +10,7 @@ interface DepositRule {
   name: string
   depositAmount: number
   monthlyAmount: number | null
-  maxDeductions: number
+  maxDeductions: number | null
   deductionType: string
   refundType: string
   prorataPercent: number | null
@@ -88,20 +88,20 @@ export function DepositRulesPage() {
                 </div>
 
                 {/* Monthly Deduction */}
-                <div className="flex justify-between py-2 border-b border-gray-100">
+                {rule.deductionType !== 'one_time' && rule.monthlyAmount != null && <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-gray-600">{t('deposit.monthlyDeduction')}</span>
                   <span className="font-medium">
                     Rp {((rule.monthlyAmount || 0) / 100).toLocaleString('id-ID')}
                   </span>
-                </div>
+                </div>}
 
                 {/* Max Deductions */}
-                <div className="flex justify-between py-2 border-b border-gray-100">
+                {rule.deductionType === 'limited' && rule.maxDeductions != null && <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-gray-600">{t('deposit.maxDeductions')}</span>
                   <span className="font-medium">
-                    {rule.maxDeductions} {t('deposit.times')}
+                    {rule.maxDeductions == null ? '—' : `${rule.maxDeductions} ${t('deposit.times')}`}
                   </span>
-                </div>
+                </div>}
 
                 {/* Deduction Type */}
                 <div className="flex justify-between py-2 border-b border-gray-100">

@@ -123,7 +123,7 @@ export function DepositPage() {
       <header className="bg-primary text-white px-4 py-6 rounded-b-3xl">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold">{t('deposit.title')}</h1>
-          <button onClick={loadData} className="p-2 bg-white/20 rounded-lg">
+          <button aria-label={t('ui.refresh')} onClick={loadData} className="p-2 bg-white/20 rounded-lg">
             <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -163,7 +163,7 @@ export function DepositPage() {
             <div className="h-2 bg-white/20 rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-400 rounded-full"
-                style={{ width: `${(deposit.deductedAmount / deposit.totalAmount) * 100}%` }}
+                style={{ width: `${deposit.totalAmount > 0 ? Math.min(100, Math.max(0, deposit.deductedAmount / deposit.totalAmount * 100)) : 0}%` }}
               />
             </div>
             <p className="text-white/60 text-sm mt-1 text-center">

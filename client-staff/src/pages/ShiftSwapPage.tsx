@@ -1,3 +1,4 @@
+import { useDialogs } from '../components/Dialogs'
 import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { businessDate, businessWeekStart } from '../utils/businessDate'
@@ -7,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { ArrowLeft, Calendar, Send, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Calendar, Send } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
 interface ShiftSwapRequest {
@@ -23,10 +24,14 @@ interface ShiftSwapRequest {
 }
 
 export function ShiftSwapPage() {
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
+  const [pending, setPending] = useState<ShiftSwapRequest[]>([])
+  const [confirming, setConfirming] = useState<string | null>(null)
   const [requests, setRequests] = useState<ShiftSwapRequest[]>([])
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -46,7 +51,8 @@ export function ShiftSwapPage() {
     setIsLoading(true)
     setLoadFailed(false)
     try {
-      const [response, schedule] = await Promise.all([staffApi.getMyShiftSwaps(), staffApi.getMySchedule(user!.staffId, businessDate(businessWeekStart(new Date())))])
+      const [response, invitations, schedule] = await Promise.all([staffApi.getMyShiftSwaps(), staffApi.getPendingShiftSwaps(), staffApi.getMySchedule(user!.staffId, businessDate(businessWeekStart(new Date())))])
+      setPending(invitations.data || [])
       setShifts(schedule.data?.shiftDetails || [])
       if (response.data) {
         setRequests(response.data)
@@ -63,7 +69,8 @@ export function ShiftSwapPage() {
   }, [user])
 
   const handleSubmit = async () => {
-    if (!formData.originalDate || !formData.targetDate || !formData.originalShift || !formData.targetShift) return
+    if (isSubmitting) return
+    if (!formData.originalDate || !formData.targetDate || !formData.originalShift || !formData.targetShift) { await dialogs.alert(t('ui.completeFields')); return }
 
     setIsSubmitting(true)
     try {
@@ -75,11 +82,11 @@ export function ShiftSwapPage() {
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
-        alert(response.message || t('shiftSwap.submitFailed'))
+        await dialogs.alert(response.message || t('shiftSwap.submitFailed'))
       }
     } catch (error: any) {
       console.error('Failed to submit shift swap:', error)
-      alert(error?.response?.data?.message || t('shiftSwap.submitFailed'))
+      await dialogs.alert(error?.response?.data?.message || t('shiftSwap.submitFailed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -106,7 +113,7 @@ export function ShiftSwapPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button aria-label={t('common.back')} onClick={() => navigate('/attendance')} className="p-2 hover:bg-gray-100 rounded-lg">
             <ArrowLeft size={20} />
           </button>
           <div>
@@ -117,6 +124,21 @@ export function ShiftSwapPage() {
 
       {/* Content */}
       <div className="p-4">
+        {!!pending.length && <section className="bg-white border rounded-xl p-4 mb-4 space-y-3">
+          <h2 className="font-semibold">{t('workspace.swapConfirm')}</h2>
+          <p className="text-sm text-gray-500">{t('audit.swapHint')}</p>
+          {pending.map(req => <div key={req.id} className="border-t pt-3 space-y-2">
+            <p>{formatDate(req.originalDate)} · {shifts.find(s => s.key === req.originalShift)?.name || req.originalShift} → {formatDate(req.targetDate)} · {shifts.find(s => s.key === req.targetShift)?.name || req.targetShift}</p>
+            {req.reason && <p>{req.reason}</p>}
+            <button disabled={!!confirming} className="bg-primary text-white p-3 rounded-lg disabled:opacity-50" onClick={async () => {
+              if (confirming || !await dialogs.confirm(t('audit.swapHint'))) return
+              setConfirming(req.id)
+              try { await staffApi.confirmShiftSwap(req.id); await loadData() }
+              catch { await dialogs.alert(t('common.error')) }
+              finally { setConfirming(null) }
+            }}>{confirming === req.id ? t('common.submitting') : t('common.confirm')}</button>
+          </div>)}
+        </section>}
         {/* New Request Button */}
         {!showForm && (
           <button
@@ -203,7 +225,7 @@ export function ShiftSwapPage() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowForm(false)}
+                  disabled={isSubmitting} onClick={() => setShowForm(false)}
                   className="flex-1 py-3 border border-gray-200 rounded-xl"
                 >
                   {t('common.cancel')}
@@ -268,18 +290,7 @@ export function ShiftSwapPage() {
         </div>
       </div>
 
-      {/* Success Toast */}
-      {submitSuccess && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 mx-8 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle size={32} className="text-green-600" />
-            </div>
-            <h2 className="text-xl font-bold mb-2">{t('shiftSwap.submitSuccess')}</h2>
-            <p className="text-gray-500">{t('shiftSwap.submitSuccessDesc')}</p>
-          </div>
-        </div>
-      )}
+      {submitSuccess && <div role="status" className="employee-success-toast">{t('shiftSwap.submitSuccess')} · {t('shiftSwap.submitSuccessDesc')}</div>}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { useMemoryDraft, useSessionDraft } from "../utils/useSessionDraft";
 import { LoadFailure } from "../components/LoadFailure";
 import { RouteLoading } from "../components/RouteLoading";
 import { businessDate } from "../utils/businessDate";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { staffApi } from "../services/api";
 import { useAuthStore } from "../stores/auth";
@@ -12,6 +12,8 @@ import { CheckCircle, Clock, Camera, ShieldCheck } from "lucide-react";
 export function HygienePage() {
   const { t } = useTranslation();
   useAuthStore();
+  const actionRef = useRef<HTMLDivElement>(null);
+
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -41,6 +43,7 @@ export function HygienePage() {
     "hygiene.photos",
     {},
   );
+  useEffect(() => { if (confirmTask || skipTaskId || issueTaskId) { actionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); actionRef.current?.focus({ preventScroll: true }); } }, [confirmTask, skipTaskId, issueTaskId]);
   const [selectedDate] = useState(businessDate());
 
   const loadTasks = async () => {
@@ -147,6 +150,7 @@ export function HygienePage() {
           {actionError}
         </div>
       )}
+      <div ref={actionRef} tabIndex={-1} className="outline-none">
       {(confirmTask || skipTaskId) && (
         <section
           role="form"
@@ -192,6 +196,7 @@ export function HygienePage() {
           </div>
         </section>
       )}
+      </div>
       {/* Summary */}
       <div className="hygiene-summary">
         <div className="bg-white rounded-lg p-4 text-center">
@@ -222,6 +227,7 @@ export function HygienePage() {
       </p>
       {issueTaskId && (
         <form
+          ref={el => { if (issueTaskId && el) { el.scrollIntoView({ block: "center" }); el.querySelector("textarea")?.focus({ preventScroll: true }); } }}
           className="mx-4 p-4 bg-white rounded-xl space-y-2"
           onSubmit={async (e) => {
             e.preventDefault();
@@ -238,7 +244,7 @@ export function HygienePage() {
             }
           }}
         >
-          <h2>{t("workspace.issue")}</h2>
+          <h2>{t("workspace.issue")} · {tasks.find(task => task.id === issueTaskId)?.name}</h2>
           <textarea
             required
             className="w-full border p-2"
@@ -246,11 +252,12 @@ export function HygienePage() {
             onChange={(e) => setIssueDescription(e.target.value)}
           />
           <button
-            disabled={!!busy}
+            disabled={!!busy || !issueDescription.trim()}
             className="bg-primary text-white p-2 rounded"
           >
             {t("common.submit")}
           </button>
+          <button type="button" disabled={!!busy} className="p-3 border rounded-lg" onClick={() => setIssueTaskId(null)}>{t("common.cancel")}</button>
         </form>
       )}
       {/* Pending Tasks */}
@@ -320,7 +327,7 @@ export function HygienePage() {
                     <button
                       disabled={!!busy}
                       className="hygiene-issue-button"
-                      onClick={() => setIssueTaskId(task.id)}
+                      onClick={() => (() => { setConfirmTask(null); setSkipTaskId(null); setIssueTaskId(task.id); })()}
                     >
                       {t("workspace.issue")}
                     </button>
@@ -334,7 +341,7 @@ export function HygienePage() {
                       onClick={() =>
                         task.status !== "in_progress"
                           ? handleStart(task.id)
-                          : setConfirmTask(task)
+                          : (() => { setSkipTaskId(null); setIssueTaskId(null); setConfirmTask(task); })()
                       }
                       className="hygiene-submit-button"
                     >
@@ -346,7 +353,7 @@ export function HygienePage() {
                       disabled={!!busy}
                       aria-label={t("hygiene.skipReasonPlaceholder")}
                       onClick={() => {
-                        setSkipTaskId(task.id);
+                        setConfirmTask(null); setIssueTaskId(null); setSkipTaskId(task.id);
                         setSkipNote("");
                       }}
                       className="hygiene-skip-button"

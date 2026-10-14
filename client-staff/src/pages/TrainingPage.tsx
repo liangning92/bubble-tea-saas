@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router-dom'
+import { Modal } from '../components/Modal'
 import { PageHeader } from "../components/PageHeader";
 import {
   TrainingSectionExtras,
@@ -61,6 +63,7 @@ interface TrainingCategory {
 }
 
 export function TrainingPage() {
+  const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
   const { user, token } = useAuthStore();
   const catalogue = useTrainingCatalogue(token, user?.storeId, 'employee');
@@ -71,7 +74,7 @@ export function TrainingPage() {
   // Tab: 'courses' | 'checklists' | 'records'
   const [activeTab, setActiveTab] = useState<
     "courses" | "checklists" | "records"
-  >("courses");
+  >(searchParams.get("tab") === "records" ? "records" : searchParams.get("tab") === "checklists" ? "checklists" : "courses");
 
   // Records state
   const [trainings, setTrainings] = useState<Training[]>([]);
@@ -190,11 +193,11 @@ export function TrainingPage() {
         staffApi.getMyTraining(),
         staffApi.getTrainingCategories(),
       ]);
-      if (!Array.isArray(trainingRes.data?.data))
+      if (!Array.isArray(trainingRes.data))
         throw new Error("Invalid training response");
-      setTrainings(trainingRes.data.data);
-      if (categoryRes.data?.data) {
-        setCategories(categoryRes.data.data);
+      setTrainings(trainingRes.data);
+      if (Array.isArray(categoryRes.data)) {
+        setCategories(categoryRes.data);
       }
     } catch (error) {
       setLoadError(true);
@@ -340,7 +343,7 @@ export function TrainingPage() {
         </div>
         <div>
           <span>{t("training.recordsTab")}</span>
-          <strong>{trainings.length}</strong>
+          <strong>{isLoading || loadError ? "—" : trainings.length}</strong>
         </div>
       </section>
 
@@ -642,7 +645,7 @@ export function TrainingPage() {
               role="alert"
               className="bg-white rounded-2xl p-8 text-center text-red-600 border border-red-100"
             >
-              {t("common.error")}
+              {t("common.loadFailed")} <button className="underline text-primary-hover" onClick={loadData}>{t("common.retry")}</button>
             </div>
           ) : filteredTrainings.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
@@ -781,14 +784,14 @@ export function TrainingPage() {
 
       {/* Course Detail Modal */}
       {selectedModule && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4 animate-fade-in">
+        <Modal className="fixed inset-0 bg-black/60 z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4 animate-fade-in" label={tr(selectedModule.title, i18n.language)} onClose={() => setSelectedModule(null)}>
           <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
             {/* Modal Header */}
             <div
-              className={`p-5 text-white bg-gradient-to-r ${selectedModule.color} relative shrink-0`}
+              className="p-5 text-white bg-primary relative shrink-0"
             >
               <button
-                onClick={() => setSelectedModule(null)}
+                aria-label={t("training.close")} onClick={() => setSelectedModule(null)}
                 className="absolute top-4 right-4 p-1.5 bg-black/20 hover:bg-black/30 rounded-full transition-colors"
               >
                 <X size={18} />
@@ -911,7 +914,7 @@ export function TrainingPage() {
                         {t("training.takeQuiz", "随堂测验考核")}
                       </h4>
                       <p className="text-sm text-gray-500 mt-0.5">
-                        答对 70% 以上即可通过并记录学习档案
+                        {t("ui.quizHelp")}
                       </p>
                     </div>
                     {quizSubmitted && quizScore !== null && (
@@ -922,7 +925,7 @@ export function TrainingPage() {
                             : "bg-red-100 text-red-700"
                         }`}
                       >
-                        {quizScore} 分
+                        {quizScore} {t("ui.scoreUnit")}
                       </span>
                     )}
                   </div>
@@ -1010,7 +1013,7 @@ export function TrainingPage() {
                             )}
                       </p>
                       <p className="text-sm mt-1 text-gray-600">
-                        {t("training.scoreLabel", "得分")}: {quizScore}分
+                        {t("training.scoreLabel", "得分")}: {quizScore} {t("ui.scoreUnit")}
                       </p>
                     </div>
                   )}
@@ -1090,7 +1093,7 @@ export function TrainingPage() {
               )}
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

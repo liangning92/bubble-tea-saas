@@ -1036,6 +1036,9 @@ router.get('/salary/my', authenticate, async (req: AuthRequest, res) => {
     if(salaryRecord?.status==='paid'){const snapshot=await readPayslip(prisma,staff.storeId,salaryRecord.id);if(snapshot)return res.json({code:200,data:snapshot})}
     const savedBasis=salaryRecord?await savedPayrollBasis(prisma,staff.storeId,salaryRecord.id):null
     if (!salaryRecord || salaryRecord.status==='pending'&&(isLegacyAutomaticBasis(savedBasis)||savedBasis?.daysSource==='estimate'&&!savedBasis?.confirmed)) {
+      // An incomplete employee profile is a business state, not a server failure.
+      // Preserve recorded/paid salaries above; never invent a zero salary.
+      if (staff.baseSalary === null) return res.json({ code: 200, data: null, unavailableReason: 'STAFF_BASE_SALARY_REQUIRED' })
       const calculation=await calculateSalary(staff.id,Number(targetMonth.slice(5)),Number(targetMonth.slice(0,4)))
       if(!calculation.payrollBasis.eligibleDays)return res.json({code:200,data:null})
       const deposits=calculation.depositDeductions.reduce((sum,item)=>sum+item.amount,0)

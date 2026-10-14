@@ -8,7 +8,7 @@ function getApiBase(): string {
 
 const API_BASE = getApiBase()
 
-const http = axios.create({ timeout: 15000 })
+export const http = axios.create({ timeout: 15000 })
 http.interceptors.response.use(response => response, error => {
   const token = useAuthStore.getState().token
   if (error.response?.status === 401 && token && error.config?.headers?.Authorization === `Bearer ${token}`) {
@@ -453,6 +453,8 @@ export const staffApi = {
   },
 
   // Shift Swap
+  getPendingShiftSwaps: async () => (await http.get(`${API_BASE}/shift-swap/pending-confirm`, { headers: getAuthHeader() })).data,
+  confirmShiftSwap: async (id: string) => (await http.put(`${API_BASE}/shift-swap/${id}/confirm`, {}, { headers: getAuthHeader() })).data,
   getMyShiftSwaps: async () => {
     const response = await http.get(`${API_BASE}/shift-swap/my`, {
       headers: getAuthHeader()
@@ -530,7 +532,7 @@ export const employeeApi = {
  put: async (path:string,data:any) => (await http.put(`${API_BASE}/staff-work${path}`,data,{headers:getAuthHeader()})).data.data,
  delete: async(path:string,data?:any) => http.delete(`${API_BASE}/staff-work${path}`,{headers:getAuthHeader(),data}),
  upload: async(file:File) => {const data=new FormData();data.append('file',file);return (await http.post(`${API_BASE}/staff-work/my/files`,data,{headers:getAuthHeader()})).data.data.id},
- file: async(id:string) => {const res=await http.get(`${API_BASE}/staff-work/files/${id}`,{headers:getAuthHeader(),responseType:'blob'});const url=URL.createObjectURL(res.data);const a=document.createElement('a');a.href=url;a.download='document'+(res.data.type==='application/pdf'?'.pdf':res.data.type==='image/png'?'.png':'.jpg');a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},
+ file: async(id:string) => {const res=await http.get(`${API_BASE}/staff-work/files/${id}`,{headers:getAuthHeader(),responseType:'blob'});return res.data as Blob},
  permissions: async() => (await http.get(`${API_BASE}/staff-permissions/me`,{headers:getAuthHeader()})).data.data
 }
 

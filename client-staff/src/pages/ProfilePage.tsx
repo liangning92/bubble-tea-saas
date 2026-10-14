@@ -42,6 +42,7 @@ export function ProfilePage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setMessage(null);
 
     if (newPassword !== confirmPassword) {
@@ -87,6 +88,7 @@ export function ProfilePage() {
     logout();
   };
 
+  const position = ["admin", "manager", "staff", "cashier"].includes(user?.position || "") ? t(`audit.roles.${user?.position}`) : user?.position || "—";
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
@@ -96,7 +98,7 @@ export function ProfilePage() {
           <p>{t("workspace.navProfile")}</p>
           <h1>{user?.name || "Staff"}</h1>
           <p>
-            {user?.position} {user?.storeName && `· ${user.storeName}`}
+            {position} {user?.storeName && `· ${user.storeName}`}
           </p>
         </div>
       </header>
@@ -121,35 +123,12 @@ export function ProfilePage() {
           <div className="space-y-4">
             <div>
               <label className="text-base text-gray-500">
-                {t("profile.name")}
-              </label>
-              <p className="font-medium text-gray-900">{user?.name || "-"}</p>
-            </div>
-            <div>
-              <label className="text-base text-gray-500">
                 {t("profile.phone")}
               </label>
               <p className="font-medium text-gray-900">{user?.phone || "-"}</p>
             </div>
-            <div>
-              <label className="text-base text-gray-500">
-                {t("profile.position")}
-              </label>
-              <p className="font-medium text-gray-900">
-                {user?.position || "-"}
-              </p>
-            </div>
-            <div>
-              <label className="text-base text-gray-500">
-                {t("profile.store")}
-              </label>
-              <p className="font-medium text-gray-900">
-                {user?.storeName || "-"}
-              </p>
-            </div>
           </div>
         </div>
-
         {/* Change Password */}
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
           <button

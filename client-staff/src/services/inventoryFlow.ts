@@ -1,12 +1,12 @@
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryLedgerQuantity } from '../utils/inventoryInputUnits';
 export { defaultInventoryInputUnit };
-import axios from 'axios';
+import { http } from './api';
 import { useAuthStore } from '../stores/auth';
 const configured = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 const base = configured.endsWith('/api') ? configured : `${configured}/api`;
 const headers = () => ({ 'X-Client-App':'employee', Authorization: `Bearer ${useAuthStore.getState().token}` });
-const get = async (path: string) => (await axios.get(base + path, { headers: headers() })).data;
-const post = async (path: string, data: unknown) => (await axios.post(base + path, data, { headers: headers() })).data;
+const get = async (path: string) => (await http.get(base + path, { headers: headers() })).data;
+const post = async (path: string, data: unknown) => (await http.post(base + path, data, { headers: headers() })).data;
 /** Persist retry identity across lost responses and page reloads. */
 async function intent(path: string, data: Record<string, unknown>, keyField: string) {
     const key = 'inventory.intent.' + JSON.stringify([useAuthStore.getState().user?.id, path, data]);
@@ -17,8 +17,6 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
     return result;
 }
 export const inventoryFlowApi = {
-    recipes:()=>get('/process-recipes'),
-    process:(id:string,data:Record<string,unknown>)=>intent(`/process-recipes/${id}/execute`,data,'operationId'),
     logs: async()=>{const [incoming,outgoing]=await Promise.all([get('/inventory/logs/stock-in?limit=100'),get('/inventory/logs/stock-out?limit=100')]);return {data:{list:[...incoming.data.list.map((r:any)=>({...r,type:'stock_in'})),...outgoing.data.list.map((r:any)=>({...r,type:'stock_out'}))]}}},
     list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers/dropdown'),
     purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),

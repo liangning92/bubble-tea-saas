@@ -38,6 +38,8 @@ export function ModuleLinks({ group }: { group: "attendance" | "profile" }) {
           ["/reimbursement", "home.reimbursement", Receipt],
           ["/profile/documents", "workspace.documents", FolderLock],
           ["/deposit", "home.deposit", Landmark],
+          ["/deposit/rules", "deposit.rules", Info],
+          ["/announcements", "announcement.title", Info],
           ["/points", "voucher.wallet", Award],
         ] as const);
   return (

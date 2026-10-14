@@ -1,3 +1,6 @@
+import { useNavigate } from 'react-router-dom'
+import { Modal } from '../components/Modal'
+import { useDialogs } from '../components/Dialogs'
 import { useSessionDraft, useMemoryDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
@@ -35,6 +38,9 @@ interface ReimbursementType {
 }
 
 export function ReimbursementPage() {
+  const navigate = useNavigate()
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const { user } = useAuthStore()
 
@@ -73,13 +79,13 @@ export function ReimbursementPage() {
   }
 
   const handleCancelReimbursement = async (id: string) => {
-    if (!confirm(t('reimbursement.cancelConfirm'))) return
+    if (!await dialogs.confirm(t('reimbursement.cancelConfirm'))) return
     try {
       await staffApi.cancelReimbursement(id)
       loadData()
     } catch (error) {
       console.error('Failed to cancel reimbursement:', error)
-      alert(t('reimbursement.cancelFailed'))
+      await dialogs.alert(t('reimbursement.cancelFailed'))
     }
   }
 
@@ -115,7 +121,7 @@ export function ReimbursementPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => window.history.back()}
+              onClick={() => navigate('/profile')}
               className="p-2 bg-white/20 rounded-full hover:bg-white/30"
             >
               ✕
@@ -218,6 +224,8 @@ interface ApplyReimbursementModalProps {
 }
 
 function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyReimbursementModalProps) {
+  const dialogs = useDialogs()
+
   const { t } = useTranslation()
   const [reimbType, setReimbType] = useSessionDraft('ReimbursementPage.tsx.reimbType', availableTypes[0]?.code || '')
   const [amount, setAmount] = useSessionDraft('ReimbursementPage.tsx.amount', '')
@@ -230,6 +238,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || [])
+    previewUrls.forEach(url => URL.revokeObjectURL(url))
     setFiles(selectedFiles)
 
     // Create preview URLs
@@ -238,24 +247,25 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
   }
 
   const handleSubmit = async () => {
+    if (isSubmitting) return
     if (!amount || !description) {
-      alert(t('reimbursement.fillAmountAndDescription'))
+      await dialogs.alert(t('reimbursement.fillAmountAndDescription'))
       return
     }
 
     const numericAmount = Math.round(parseFloat(amount))
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      alert('Jumlah tidak valid / Invalid amount')
+      await dialogs.alert('Jumlah tidak valid / Invalid amount')
       return
     }
 
     if (selectedTypeConfig?.maxAmount && numericAmount > selectedTypeConfig.maxAmount) {
-      alert(`Maksimal pengajuan ${formatCurrency(selectedTypeConfig.maxAmount)}`)
+      await dialogs.alert(`Maksimal pengajuan ${formatCurrency(selectedTypeConfig.maxAmount)}`)
       return
     }
 
     if (selectedTypeConfig?.requiresReceipt && files.length === 0) {
-      alert(t('reimbursement.receiptRequired') || 'Wajib melampirkan nota/bukti foto untuk jenis ini')
+      await dialogs.alert(t('reimbursement.receiptRequired') || 'Wajib melampirkan nota/bukti foto untuk jenis ini')
       return
     }
 
@@ -278,7 +288,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
       setAmount(''); setDescription(''); setFiles([]); previewUrls.forEach(url => URL.revokeObjectURL(url)); setPreviewUrls([])
       onSuccess()
     } catch (error: any) {
-      alert(error.response?.data?.message || t('reimbursement.submitFailed'))
+      await dialogs.alert(error.response?.data?.message || t('reimbursement.submitFailed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -294,11 +304,11 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
   }
 
   return (
-    <div className="fixed inset-0 pb-[calc(4rem+env(safe-area-inset-bottom))] bg-black/50 flex items-end justify-center z-50">
+    <Modal className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" label={t('reimbursement.applyTitle')} onClose={isSubmitting ? undefined : onClose}>
       <div className="bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">{t('reimbursement.applyTitle')}</h2>
-          <button onClick={onClose} className="p-2">
+          <button disabled={isSubmitting} onClick={onClose} aria-label={t('common.cancel')} className="p-2">
             <XCircle size={24} />
           </button>
         </div>
@@ -429,6 +439,6 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
