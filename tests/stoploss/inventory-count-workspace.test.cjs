@@ -19,3 +19,10 @@ test('unknown count status falls back to all, preserving all workflow stages and
  for(const state of ['all','in_progress','pending_review','completed','cancelled','adjustments'])assert.equal(countStatusFilter(state),state);
  assert.equal(countStatusFilter('unknown'),'all');assert.equal(countStatusFilter(null),'all');
 });
+
+test('raw receipt notes mentioning processing do not become processed-output movements',()=>{
+ const {inventoryLogDisplay,isProcessingInbound}=mod.exports;
+ assert.equal(isProcessingInbound(inventoryLogDisplay({type:'stock_in',quantity:1,note:JSON.stringify({kind:'receipt',note:'采购冰淇淋粉用于加工'})})),false);
+ assert.equal(isProcessingInbound(inventoryLogDisplay({type:'stock_in',quantity:1,note:'加工产出: 红茶汤'})),true);
+ assert.equal(isProcessingInbound(inventoryLogDisplay({type:'stock_out',reason:'process',quantity:1,note:'加工: 红茶汤'})),false);
+});
