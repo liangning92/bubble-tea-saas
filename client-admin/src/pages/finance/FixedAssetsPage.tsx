@@ -1,6 +1,6 @@
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { expenseCalendarDate } from '../../utils/expenseInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'

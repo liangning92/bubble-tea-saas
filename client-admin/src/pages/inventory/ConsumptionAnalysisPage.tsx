@@ -1,6 +1,6 @@
 import { formatItemName } from '../../utils/helpers'
 import { formatDisplayQuantity } from '../../utils/itemDisplayName'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import {useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import {Link} from 'react-router-dom'

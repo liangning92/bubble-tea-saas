@@ -1,6 +1,6 @@
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { ActorName, InventoryActor } from '../../components/InventoryActor';
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'

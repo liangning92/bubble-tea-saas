@@ -1,6 +1,6 @@
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { ActorName, actorText } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { Link } from 'react-router-dom'

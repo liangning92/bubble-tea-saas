@@ -1,7 +1,7 @@
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { OrderSummaryCards } from '../../components/OrderSummaryCards'
 import { AdminDialog } from '../../components/AdminDialog'
-import { LocalizedDateTimeInput } from '../../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { OrderItemsTable, OrderItemColumns } from '../../components/OrderItemsTable'
 import { useDashboardContext, requireRead, dashboardLink } from '../../utils/dashboardNavigation'
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'

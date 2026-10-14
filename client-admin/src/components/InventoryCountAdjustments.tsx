@@ -1,5 +1,5 @@
 import { ActorName } from './InventoryActor'
-import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
+import { LocalizedDateTimeInput } from './LocalizedDateTimeInput'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'

@@ -477,6 +477,7 @@ export function RecipeEditPage() {
                       onChange={(e) => handleQuantityChange(index, e.target.value)}
                       aria-label={t("uiDesign.quantity")} className={`input w-full text-right ${item.error ? 'input-error' : ''}`}
                       placeholder="0"
+                      title={item.quantityStr}
                       inputMode="decimal"
                       style={{ appearance: 'textfield' }}
                     />
@@ -496,7 +497,7 @@ export function RecipeEditPage() {
 
                   {/* 小计 */}
                   <div className="min-w-0 text-right font-medium text-sm tabular-nums">
-                    <div className="text-xs text-gray-500 font-normal">{t('uiDesign.unitPrice')}: {displayCost(item.cost)}</div>
+                    <div className="text-xs text-gray-500 font-normal">{t('uiDesign.unitPrice')}: {displayCost(item.costPending || item.costFailed ? null : item.cost)}</div>
                     <div><span className="text-xs text-gray-500 font-normal">{t('uiDesign.subtotal')}: </span>{item.inventoryId ? displayCost(recipeRowCost(item)) : '-'}</div>
                   </div>
 
