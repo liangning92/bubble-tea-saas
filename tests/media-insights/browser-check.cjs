@@ -31,7 +31,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    else if(pathname==='/api/products/p1'&&req.method()==='PUT'){
      if(saveMode==='fail'){await route.fulfill({status:500,json:{code:500,message:'SAVE_FAILED'}});return}
      postedProduct=req.postDataJSON();Object.assign(product,postedProduct)
-     product.images=(postedProduct.mediaIds||[]).map((id,index)=>({mediaId:id,url:assets.find(a=>a.id===id).url,position:index}))
+     if(postedProduct.mediaIds!==undefined)product.images=postedProduct.mediaIds.map((id,index)=>({mediaId:id,url:assets.find(a=>a.id===id).url,position:index}))
      data=product
    }
    else if(pathname==='/api/products/p1')data=product
@@ -54,6 +54,12 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
  await page.route('**/uploads/**',route=>route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=','base64')}))
  if(process.env.PRODUCT_GALLERY_ONLY!=='1') {
    const originalProduct=JSON.parse(JSON.stringify(product))
+   await page.goto(base+'/products')
+   await page.getByRole('button',{name:'编辑',exact:true}).first().click()
+   await page.getByRole('button',{name:'保存',exact:true}).click()
+   await page.waitForURL('**/products/recipes?productId=p1')
+   assert.equal(postedProduct.specs.length,2)
+   assert.equal(postedProduct.specs.find(spec=>spec.id==='s2').price,19000)
    product.images=[];product.image=''
    await page.goto(base+'/products/p1/edit')
    await page.waitForFunction(()=>document.querySelector('form input[type="text"]')?.value==='Brown Sugar Pearl Tea')
@@ -71,6 +77,7 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    saveMode='success';await formSave.click();await page.waitForURL('**/products/recipes?productId=p1')
    await page.getByRole('img',{name:product.name,exact:true}).waitFor()
    assert.deepEqual(postedProduct.mediaIds,['m1'])
+   assert.equal(postedProduct.specs,undefined);assert.equal(postedProduct.bomItems,undefined)
    await page.reload();await page.getByRole('img',{name:product.name,exact:true}).waitFor()
    assert.equal(await page.getByRole('img',{name:product.name,exact:true}).evaluate(img=>img.complete&&img.naturalWidth>0),true)
    await page.screenshot({path:'/tmp/product-save-detail-regression.png',fullPage:true})

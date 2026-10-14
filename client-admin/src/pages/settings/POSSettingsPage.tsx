@@ -347,9 +347,7 @@ export const DualScreenPreview: React.FC<{
   const [currentIndex, setCurrentIndex] = useState(0)
   const appearance = customerDisplayAppearance(dualScreen, previewState)
   const promotions = appearance.promotions || ['🧋', '🍓', '💳', '🎁']
-  const configuredFiles: MediaFile[] = dualScreen.mediaFiles || []
-  const catalog = useQuery({queryKey:['display-product-catalog'],queryFn:()=>activitiesApi.resources().then(response=>response.data.data.products),enabled:configuredFiles.some(file=>file.productId),refetchInterval:15000})
-  const mediaFiles = useMemo(()=>catalog.data ? resolveDisplayProducts(configuredFiles,catalog.data) : configuredFiles,[configuredFiles,catalog.data])
+  const mediaFiles: MediaFile[] = dualScreen.mediaFiles || []
   const background = appearance.backgroundColor
   const textColor = customerTextColor(background)
 
@@ -918,6 +916,8 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   }))
 
   // 检测到的打印机列表（从POS客户端上传）
+  const displayProductQuery = useQuery({queryKey:['display-product-catalog'],queryFn:()=>activitiesApi.resources().then(response=>response.data.data.products),enabled:(hardwareSettings.dualScreen?.mediaFiles || []).some((file:MediaFile)=>file.productId),refetchInterval:15000})
+  const previewDualScreen = useMemo(()=>({...hardwareSettings.dualScreen,mediaFiles:displayProductQuery.data ? resolveDisplayProducts(hardwareSettings.dualScreen?.mediaFiles || [],displayProductQuery.data) : hardwareSettings.dualScreen?.mediaFiles || []}),[hardwareSettings.dualScreen,displayProductQuery.data])
   const editedAppearance = customerDisplayAppearance(hardwareSettings.dualScreen || {}, appearanceState)
   const selectedLayout = (appearanceState === 'idle' ? hardwareSettings.dualScreen?.idleLayout : hardwareSettings.dualScreen?.orderingLayout) || { columns: [{ width: 100, content: appearanceState === 'idle' ? 'media' : 'order' }] }
   const selectedContents = new Set<string>(selectedLayout.columns.flatMap((col: CustomerLayoutColumn) => customerRows(col).map(row => row.content)))
@@ -1826,7 +1826,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 </div>
                 <p className="text-sm text-gray-500">{t('posSettings.stateEditorHint')}</p>
                 <div role="tabpanel" className="space-y-4">
-                  <DualScreenPreview dualScreen={hardwareSettings.dualScreen} editingState={appearanceState} />
+                  <DualScreenPreview dualScreen={previewDualScreen} editingState={appearanceState} />
                   {appearanceState !== 'complete' && <_DualScreenLayoutEditor
                     title={t(appearanceState === 'idle' ? 'posSettings.idleLayout' : 'posSettings.orderingLayout')}
                     layout={selectedLayout}
