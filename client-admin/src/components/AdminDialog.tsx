@@ -65,11 +65,14 @@ export function AdminDialog({ title, children, onClose, className = 'max-w-4xl',
   })
   return createPortal(<div className="admin-dialog-overlay fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-3 sm:p-5" onMouseDown={e => { if (e.target === e.currentTarget) requestClose.current() }}>
     <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={discard ? copy.title : title} aria-busy={working} className={`admin-workspace admin-dialog w-full max-h-[92dvh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-xl ${className}`}
-      onChangeCapture={e => { const field = e.target as HTMLInputElement; if (field.type !== 'search' && !field.closest('[data-dialog-search]')) dirty.current = true }}
+      onChangeCapture={e => { if (!ref.current?.contains(e.target as Node)) return; const field = e.target as HTMLInputElement; if (field.type !== 'search' && !field.closest('[data-dialog-search]')) dirty.current = true }}
       onClickCapture={e => {
+        // Portal dialogs bubble through the React parent; their controls belong
+        // to the child dialog and must not be blocked by a busy parent.
+        if (!ref.current?.contains(e.target as Node)) return
         if (pending.current) { e.preventDefault(); e.stopPropagation(); return }
         const button = (e.target as HTMLElement).closest('button')
-        if (trackChanges && button && button.getAttribute('data-dialog-close') !== 'true' && (/添加|删除|计算|新增|移除|\b(?:add|remove|calculate|delete|tambah|hapus|hitung)\b/i.test(button.textContent || '') || button.querySelector('.lucide-trash-2'))) dirty.current = true
+        if (trackChanges && button && button.getAttribute('data-dialog-close') !== 'true' && (/添加|删除|计算|新增|移除|\b(?:add|remove|calculate|delete|tambah|hapus|hitung)\b/i.test(button.textContent || '') || button.querySelector('.lucide-trash-2') || button.textContent?.includes(t('media.choose')))) dirty.current = true
         if (trackChanges && button?.getAttribute('data-dialog-close') === 'true') { e.preventDefault(); e.stopPropagation(); requestClose.current() }
       }}>
       {chrome && <header className="admin-dialog-header"><h2>{title}</h2><button type="button" aria-label={t('common.close', 'Close')} disabled={working} onClick={() => requestClose.current()}><X size={20}/></button></header>}

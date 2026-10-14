@@ -109,14 +109,7 @@ export function MediaLibrary({
   };
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold">{t("media.title")}</h1>
-        {onClose && (
-          <button type="button" className="btn" onClick={onClose}>
-            {t("common.close")}
-          </button>
-        )}
-      </div>
+      {!onClose && <h1 className="text-xl font-bold">{t("media.title")}</h1>}
       <p className="text-sm text-gray-500">{t("media.limits")}</p>
       <div className="flex flex-wrap gap-3">
         <input
@@ -311,14 +304,14 @@ export function MediaLibrary({
         </button>
       </div>
       {onSelect && (
-        <button
+        <div className="admin-dialog-footer"><button
           type="button"
           className="btn btn-primary"
           disabled={!selected.length}
           onClick={() => onSelect(selected)}
         >
           {t("media.useSelected", { count: selected.length })}
-        </button>
+        </button></div>
       )}
       {preview && (
         <AdminDialog title={preview.name} onClose={() => setPreview(null)} className="max-w-3xl" busy={false} trackChanges chrome>
