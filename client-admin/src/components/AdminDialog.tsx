@@ -10,6 +10,7 @@ export function AdminDialog({ title, children, onClose, className = 'max-w-4xl',
   const ref = useRef<HTMLDivElement>(null), close = useRef(onClose), pending = useRef(busy), dirty = useRef(false)
   const [discard, setDiscard] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
+  const actionOrigin = useRef<HTMLElement | null>(null)
   const working = busy || actionBusy
   close.current = onClose; pending.current = busy || actionBusy
   const requestClose = useRef<() => void>(() => {})
@@ -37,6 +38,12 @@ export function AdminDialog({ title, children, onClose, className = 'max-w-4xl',
     document.addEventListener('keydown', key)
     return () => { document.removeEventListener('keydown', key); document.body.style.overflow = overflow; if (previous?.isConnected) previous.focus() }
   }, [])
+  useEffect(() => {
+    if (!working && actionOrigin.current) {
+      if (actionOrigin.current.isConnected && !ref.current?.contains(document.activeElement)) actionOrigin.current.focus()
+      actionOrigin.current = null
+    }
+  }, [working])
   useEffect(() => { if (discard) ref.current?.querySelector<HTMLElement>('[data-keep-editing]')?.focus() }, [discard])
   // Observe promises returned by existing form/actions, including older dialogs
   // that do not yet expose a mutation's pending state.
@@ -53,6 +60,7 @@ export function AdminDialog({ title, children, onClose, className = 'max-w-4xl',
           if (pending.current) { args[0]?.preventDefault?.(); return }
           const result = handler(...args)
           if (result && typeof (result as Promise<unknown>).then === 'function') {
+            actionOrigin.current = document.activeElement as HTMLElement | null
             pending.current = true; setActionBusy(true)
             const finish = () => { pending.current = busy; setActionBusy(false) }
             Promise.resolve(result).then(finish, finish)
