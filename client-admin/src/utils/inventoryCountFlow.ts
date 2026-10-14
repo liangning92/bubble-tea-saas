@@ -20,7 +20,7 @@ export function inventoryLogDisplay(log: any) {
     : typeof data?.note === 'string' ? data.note : typeof data?.orderNumber === 'string' ? data.orderNumber : log.note
   const quantity = typeof log.quantity === 'number' ? log.quantity
     : typeof log.quantity === 'string' && log.quantity.trim() ? Number(log.quantity) : NaN
-  return { ...log, note, countId, countItemId,
+  return { ...log, note, operationKind:typeof data?.kind==='string'?data.kind:undefined, countId, countItemId,
     staffId: isCount && typeof data?.actor === 'string' ? data.actor : log.staffId,
     stockDelta: Number.isFinite(quantity) ? (quantity === 0 ? 0 : log.type === 'stock_in' ? quantity : -quantity) : null,
     adjustmentValue: isCount && typeof data?.varianceAmountEstimate === 'number' && Number.isFinite(data.varianceAmountEstimate) ? data.varianceAmountEstimate : undefined
@@ -30,4 +30,9 @@ export function inventoryLogDisplay(log: any) {
 export function isInventoryAdjustment(log: any) {
   return log.reason === 'count_adjustment' || log.reason === 'adjust' || log.type === 'adjustment'
     || (typeof log.note === 'string' && /^Adjustment:/i.test(log.note))
+}
+
+/** Structured receipts remain raw receipts even when a human note mentions processing. */
+export function isProcessingInbound(log:any){
+ return log.type==='stock_in'&&(log.operationKind==='process-output'||(!log.operationKind&&/加工|Process|Olahan/.test(log.note||'')))
 }

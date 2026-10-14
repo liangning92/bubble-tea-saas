@@ -1,7 +1,7 @@
 import { ActorName, actorText } from '../../components/InventoryActor';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } from "../../utils/inventoryInputUnits";
 import { Link } from 'react-router-dom'
-import { countDetailUrl, inventoryLogDisplay, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
+import { countDetailUrl, inventoryLogDisplay, isProcessingInbound, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange,calendarStart} from '../../utils/queryPeriods'
 import { useState, useMemo } from 'react'
@@ -132,7 +132,7 @@ export function StockLogPage() {
         if (log.type !== 'stock_out' || (log.reason !== 'loss' && log.reason !== 'expired')) return false
       } else if (activeTab === 'process') {
         const isProcessOut = log.type === 'stock_out' && log.reason === 'process'
-        const isProcessIn = log.type === 'stock_in' && (log.note?.includes('加工') || log.note?.includes('Process') || log.note?.includes('Olahan'))
+        const isProcessIn = isProcessingInbound(log)
         if (!isProcessOut && !isProcessIn) return false
 
       }
@@ -321,7 +321,7 @@ export function StockLogPage() {
       let reasonText = ''
       if (isInventoryAdjustment(log)) reasonText = t('inventory.reasonAdjust')
       else if (isStockIn) {
-        if (log.note?.includes('加工') || log.note?.includes('Process') || log.note?.includes('Olahan')) {
+        if (isProcessingInbound(log)) {
           reasonText = t('inventory.reasonProcessIn')
         } else if (log.note?.includes('期初') || log.note?.includes('Initial') || log.note?.includes('Awal')) {
           reasonText = t('inventory.reasonInitial')
@@ -404,7 +404,7 @@ export function StockLogPage() {
   const getReasonBadge = (log: any) => {
     if (isInventoryAdjustment(log)) return <span className="badge">{t('inventory.reasonAdjust')}</span>
     if (log.type === 'stock_in') {
-      if (log.note?.includes('加工') || log.note?.includes('Process') || log.note?.includes('Olahan')) {
+      if (isProcessingInbound(log)) {
         return <span className="badge badge-success">{t('inventory.reasonProcessIn')}</span>
       }
       if (log.note?.includes('期初') || log.note?.includes('Initial') || log.note?.includes('Awal')) {
