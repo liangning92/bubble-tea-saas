@@ -762,6 +762,12 @@ export function InventoryPage() {
                   </select>
                 </div>
               )}
+              <label className="block text-sm font-medium">
+                {t("inventory.unit")}
+                <select className="input w-full mt-1" value={addForm.unit} onChange={e => setAddForm({ ...addForm, unit: e.target.value })}>
+                  {["kg", "g", "L", "ml", "pcs", "bottle", "roll", "pack", "slice"].map(unit => <option key={unit}>{unit}</option>)}
+                </select>
+              </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">
