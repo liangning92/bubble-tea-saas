@@ -288,7 +288,7 @@ function App() {
             <Route path="discount-rules" element={<Navigate to="/marketing/promotions/activities" replace />} />
             <Route path="timed-specials" element={<Navigate to="/marketing/promotions/activities" replace />} />
             <Route path="stacking-rules" element={<Navigate to="/marketing/promotions/activities" replace />} />
-            <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
+            <Route path="tv-screen" element={<Navigate to="/marketing/tv-screen" replace />} />
           <Route path="media" element={<MediaLibraryPage />} />
           </Route>
 
@@ -332,7 +332,7 @@ function App() {
           </Route>
 
           {/* 电视大屏互动 */}
-          <Route path="tv-screen" element={<Navigate to="/settings/tv-screen" replace />} />
+          <Route path="tv-screen" element={<TVScreensPage />} />
           <Route path="media" element={<MediaLibraryPage />} />
         </Route>
 
@@ -373,14 +373,14 @@ function App() {
         {/* 系统设置 */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/pos" element={<SettingsPage />} />
-        <Route path="settings/tv-screen" element={<Navigate to="/tv-screens" replace />} />
+        <Route path="settings/tv-screen" element={<Navigate to="/marketing/tv-screen" replace />} />
         <Route path="settings/ai" element={<SettingsPage />} />
         <Route path="approvals" element={<StaffApprovalPage />} />
         <Route path="settings/permissions" element={<SettingsPage />} />
 
         {/* 电视大屏 & 公共媒体库 */}
-        <Route path="tv-screens" element={<TVScreensPage />} />
-        <Route path="media-library" element={<MediaLibraryPage />} />
+        <Route path="tv-screens" element={<Navigate to="/marketing/tv-screen" replace />} />
+        <Route path="media-library" element={<Navigate to="/marketing/media" replace />} />
 
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />

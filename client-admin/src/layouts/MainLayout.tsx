@@ -20,9 +20,7 @@ import {
   Megaphone,
   Sprout,
   Wallet,
-  Link2,
-  Tv,
-  Film
+  Link2
 } from 'lucide-react'
 import { Suspense, useState, useEffect } from 'react'
 import { RouteLoading } from '../components/RouteLoading'
@@ -32,8 +30,6 @@ const adminPagePermission=(path:string)=>['/tv-screens','/media-library','/setti
 const navItems = [
   { path: '/dashboard', label: 'nav.dashboard', defaultLabel: '仪表盘', icon: LayoutDashboard },
   { path: '/products', label: 'nav.products', defaultLabel: '商品管理', icon: Package },
-  { path: '/tv-screens', label: 'tvTerminal.title', defaultLabel: 'TV', icon: Tv },
-  { path: '/media-library', label: 'tvTerminal.mediaLibrary', defaultLabel: 'Media', icon: Film },
   { path: '/inventory', label: 'nav.inventory', defaultLabel: '库存管理', icon: Warehouse },
   { path: '/finance', label: 'nav.finance', defaultLabel: '财务中心', icon: Wallet },
   { path: '/channels', label: 'nav.channels', defaultLabel: '销售渠道', icon: Link2 },
@@ -74,7 +70,7 @@ export function MainLayout() {
       '/dashboard':['dashboard.read'], '/products':['products.read'], '/inventory':['inventory.read'],
       '/finance':['finance.read','dashboard.read'], '/channels':['channels.read'],
       '/staff':['staff.read','attendance.read','schedules.read','salary.read','deposits.read','rewards.read','training.read'],
-      '/tv-screens':['marketing.read'], '/media-library':['marketing.read'], '/hygiene':['hygiene.read'], '/marketing':['marketing.read','members.read'], '/settings':[]
+      '/hygiene':['hygiene.read'], '/marketing':['marketing.read','members.read'], '/settings':[]
     }
     return (groups[item.path]||[]).some(permission=>customRole.permissions.includes(permission))
   })

@@ -76,6 +76,13 @@ let hardwareConfig={dualScreen:{enabled:true,mediaFiles:[],idleLayout:{columns:[
    await page.getByRole('region',{name:'图片',exact:true}).waitFor()
    assert.deepEqual(errors,[]);await browser.close();console.log('Product gallery: main image, thumbnails, zoom, keyboard, mobile, legacy image and edit pages passed');return
  }
+ await page.goto(base+'/media-library');await page.getByRole('heading',{name:'媒体库',exact:true}).waitFor();
+ assert.equal(new URL(page.url()).pathname,'/marketing/media')
+ assert.deepEqual(await page.locator('aside nav a').evaluateAll(links=>links.map(a=>a.getAttribute('href'))),['/dashboard','/products','/inventory','/finance','/channels','/staff','/hygiene','/marketing','/settings'])
+ assert.match(await page.locator('aside nav a[href="/marketing"]').getAttribute('class'),/bg-primary-light/)
+ await page.goto(base+'/tv-screens');await page.getByRole('heading',{name:'电视大屏',exact:true}).waitFor();assert.equal(new URL(page.url()).pathname,'/marketing/tv-screen')
+ assert.equal(await page.locator('aside nav a[href="/tv-screens"],aside nav a[href="/media-library"]').count(),0)
+ assert.equal(await page.locator('nav[aria-label="Marketing"] a[href="/marketing/tv-screen"]').getAttribute('aria-current'),'page')
  await page.goto(base+'/marketing/media');await page.getByRole('heading',{name:'媒体库',exact:true}).waitFor();await page.getByText('Tea image',{exact:true}).waitFor();assert.equal(await page.locator('audio').count(),1)
  await page.screenshot({path:'/tmp/media-library-page.png',fullPage:true})
  await page.goto(base+'/products/analysis');await page.getByRole('heading',{name:'产品分析',exact:true}).waitFor();await page.getByText('四象限分析',{exact:true}).waitFor();assert.equal(detailsRequests,0)
