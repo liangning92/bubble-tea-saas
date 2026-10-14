@@ -26,7 +26,8 @@ class CleanupSafety(unittest.TestCase):
                 return ' '.join(o.get('Id', o.get('Name')) for o in objects)
             return ''
 
-        with patch.object(cleanup, 'docker', docker):
+        with patch.object(cleanup, 'docker', docker), patch.object(cleanup.subprocess, 'run') as builder:
+            builder.return_value.returncode = 1
             cleanup.cleanup(RUN)
         return calls
 

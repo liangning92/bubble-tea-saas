@@ -37,6 +37,13 @@ def cleanup(run):
         except subprocess.CalledProcessError:
             errors.append(' '.join(args))
 
+    # Buildx has no arbitrary builder labels. The cryptographically unique
+    # batch name is the ownership boundary for an optional private builder.
+    builder = subprocess.run(['docker', 'buildx', 'inspect', run],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if builder.returncode == 0:
+        remove('buildx', 'rm', '--force', run)
+
     for c in all_containers:
         if (c['Config'].get('Labels') or {}).get(LABEL) != run:
             continue

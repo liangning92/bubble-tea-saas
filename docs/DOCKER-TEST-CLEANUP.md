@@ -17,7 +17,7 @@ docker run --rm --name "$BT_TEST_RUN-check" --label "$BT_TEST_LABEL" \
   alpine:latest sh -c 'echo isolated-test > /test/result'
 ```
 
-Compose 项目也必须为 services、volumes、networks 和 build.labels 显式添加 `com.bubbletea.test-run: ${BT_TEST_RUN}`，并使用上述名称规则。不得把正式部署文件直接用于测试。构建测试镜像优先使用 `docker build --no-cache --label "$BT_TEST_LABEL" -t "$BT_TEST_RUN:check" ...`；需要 BuildKit 缓存时使用本批次独立 builder，并在测试脚本 `trap/finally` 中删除该 builder。不得在共享 builder 写入无人管理的测试缓存。
+Compose 项目也必须为 services、volumes、networks 和 build.labels 显式添加 `com.bubbletea.test-run: ${BT_TEST_RUN}`，并使用上述名称规则。不得把正式部署文件直接用于测试。构建测试镜像必须创建名称等于 `$BT_TEST_RUN` 的独立 `docker-container` Buildx builder，并通过 `--builder "$BT_TEST_RUN" --load --label "$BT_TEST_LABEL" -t "$BT_TEST_RUN:check"` 构建。包装器在收尾时自动移除该 builder 及其缓存；不要使用共享 builder 写入测试缓存。
 
 正常结束、命令失败、Ctrl+C、TERM、HUP 均触发本批次清理，返回原测试退出码；清理失败会让任务失败并输出残留信息。包装器不执行全局 prune，不影响并行测试，也不删除其他容器引用的镜像、卷或网络。测试日志与截图保存到项目 output，不放在待清理容器内。清理结束必须再次检查本批次标签无残留，并核对正式健康检查。
 
