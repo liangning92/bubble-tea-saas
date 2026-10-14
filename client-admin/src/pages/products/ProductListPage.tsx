@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { ProductImageEditor, ProductPicture } from '../../components/ProductImageEditor'
 import { mediaApi } from '../../services/media'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { productApi, categoryApi } from '../../services/api'
@@ -15,6 +15,7 @@ export function ProductListPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [imagesUploading,setImagesUploading]=useState(false)
+  const initialEditState=useRef('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -190,14 +191,16 @@ export function ProductListPage() {
     setImages(product.images?.length?product.images:product.image?[{url:product.image}]:[])
     setImagesChanged(false)
     setEditingProduct(product)
-    setEditForm({
+    const loadedEditForm = {
       code: product.code || '',
       name: product.name,
       categoryId: product.categoryId || '',
       price: product.specs?.[0]?.price || '',
       description: product.description || '',
       status: product.status || 'active'
-    })
+    }
+    setEditForm(loadedEditForm)
+    initialEditState.current=JSON.stringify(loadedEditForm)
     setShowEditModal(true)
   }
 
@@ -212,6 +215,10 @@ export function ProductListPage() {
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (imagesUploading || updateProduct.isPending || createProduct.isPending) return
+    if (editingProduct && imagesChanged && initialEditState.current===JSON.stringify(editForm)) {
+      updateProduct.mutate({id:editingProduct.id,data:{mediaIds:images.map(image=>image.mediaId).filter(Boolean)}})
+      return
+    }
 
     const price = parseInt(editForm.price) || 0
     const data: any = {
@@ -227,12 +234,11 @@ export function ProductListPage() {
       data.categoryId = editForm.categoryId
     }
     if (price > 0) {
-      const existingSpec = editingProduct?.specs?.[0]
-      data.specs = [{
-        id: existingSpec?.id,
-        name: existingSpec?.name || 'Default',
-        price
-      }]
+      const existingSpecs = editingProduct?.specs || []
+      data.specs = existingSpecs.length ? existingSpecs.map((spec:any,index:number)=>({
+        id:spec.id,name:spec.name || 'Default',price:index===0?price:spec.price,
+        priceAdjustment:spec.priceAdjustment ?? 0,isDefault:spec.isDefault
+      })) : [{name:'Default',price}]
     }
 
     if (editingProduct) {

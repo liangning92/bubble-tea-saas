@@ -40,6 +40,7 @@ export function ProductFormPage() {
   const [dragActive, setDragActive] = useState(false)
   const [saveError, setSaveError] = useState('')
   const hydratedProduct = useRef<string>()
+  const initialFormState = useRef('')
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
@@ -56,7 +57,7 @@ export function ProductFormPage() {
     queryFn: () => inventoryApi.list({ pageSize: 100 })
   })
 
-  const { data: productData } = useQuery({
+  const { data: productData, isError: productLoadError, refetch: reloadProduct } = useQuery({
     queryKey: ['product', id],
     queryFn: async () => {await mediaApi.list('product',{pageSize:1});return productApi.get(id!)},
     enabled: !!id,
@@ -74,14 +75,14 @@ export function ProductFormPage() {
       const p = productData.data.data
       if (!p || p.id !== id || hydratedProduct.current === id) return
       hydratedProduct.current = id
-      setForm({
+      const loadedForm = {
         code: p.code || '',
         name: p.name,
         categoryId: p.categoryId,
         description: p.description || '',
         image: p.image || '',
         status: p.status,
-        specs: p.specs?.length > 0 ? p.specs.filter((s: any) => s.name).map((s: any) => ({ id: s.id, name: s.name, price: s.price || 0 })) : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
+        specs: p.specs?.length > 0 ? p.specs.filter((s: any) => s.name).map((s: any) => ({ id: s.id, name: s.name, price: s.price || 0, isDefault: s.isDefault, priceAdjustment: s.priceAdjustment ?? 0 })) : [{ name: t('products.specMedium'), price: 0, isDefault: true }],
         addonIds: p.addons?.map((pa: any) => pa.addonId) || [],
         bomItems: p.bomItems?.map((b: any) => ({
           inventoryId: b.inventoryId,
@@ -91,7 +92,9 @@ export function ProductFormPage() {
           cost: b.inventory?.avgCost || 0
         })) || [],
         channelPrices: p.channelPrices || []
-      })
+      }
+      setForm(loadedForm)
+      initialFormState.current = JSON.stringify(loadedForm)
       setUploadedImages(p.images?.length ? p.images : p.image ? [{url:p.image}] : [])
     }
   }, [productData, id])
@@ -118,12 +121,16 @@ export function ProductFormPage() {
     onError: () => setSaveError(t('media.failed'))
   })
   const saving = createMutation.isPending || updateMutation.isPending
-  const canSave = !isUploading && !saving && (!isEdit || !!productData?.data?.data)
+  const canSave = !showMediaPicker && !isUploading && !saving && (!isEdit || !!productData?.data?.data)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSave) return
     setSaveError('')
+    if (isEdit && initialFormState.current === JSON.stringify(form)) {
+      updateMutation.mutate({image:uploadedImages[0]?.url || '',...(!uploadedImages.some(image=>!image.mediaId)?{mediaIds:uploadedImages.map(image=>image.mediaId)}:{})})
+      return
+    }
 
 
     // Validation
@@ -172,8 +179,8 @@ export function ProductFormPage() {
         id: s.id,
         name: s.name,
         price: s.price,
-        priceAdjustment: 0,
-        isDefault: i === 0
+        isDefault: s.isDefault ?? (i === 0),
+        priceAdjustment: s.priceAdjustment ?? 0
       })),
       addons,
       bomItems: form.bomItems
@@ -195,7 +202,7 @@ export function ProductFormPage() {
   }
 
   const handleImageUpload = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return
+    if (isUploading || saving || !files || files.length === 0) return
     setIsUploading(true)
     try {
       const fileArray = Array.from(files)
@@ -210,7 +217,7 @@ export function ProductFormPage() {
     } finally {
       setIsUploading(false)
     }
-  }, [uploadedImages,t])
+  }, [uploadedImages,t,isUploading,saving])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -319,6 +326,11 @@ export function ProductFormPage() {
     })
   }
 
+  if (isEdit && hydratedProduct.current !== id) return <div className="space-y-3">
+    {productLoadError ? <p role="alert">{t('media.failed')} <button type="button" className="btn" onClick={()=>reloadProduct()}>{t('media.retry')}</button></p> : <p role="status">{t('common.loading')}</p>}
+    <Link to={backUrl}>{t('common.cancel')}</Link>
+  </div>
+
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
@@ -394,7 +406,7 @@ export function ProductFormPage() {
             </label>
             <ProductImageGallery images={uploadedImages} />
             <p className="mb-3 text-sm text-gray-500">{t('media.productSaveHint')}</p>
-            <button type="button" className="btn mb-3" disabled={uploadedImages.length>=5} onClick={()=>setShowMediaPicker(true)}>{t('media.choose')}</button>
+            <button type="button" className="btn mb-3" disabled={isUploading || saving || uploadedImages.length>=5} onClick={()=>setShowMediaPicker(true)}>{t('media.choose')}</button>
             {showMediaPicker&&<MediaPicker scene="product" max={5-uploadedImages.length} onClose={()=>setShowMediaPicker(false)} onSelect={assets=>{setUploadedImages(prev=>[...prev.filter(i=>i.mediaId),...assets.filter(a=>!prev.some(i=>i.mediaId===a.id)).map(a=>({mediaId:a.id,url:a.url}))].slice(0,5));setShowMediaPicker(false)}} />}
             <div
               onDrop={handleDrop}
@@ -433,7 +445,8 @@ export function ProductFormPage() {
                         type="file"
                         accept="image/*"
                         multiple
-                        onChange={(e) => handleImageUpload(e.target.files)}
+                        disabled={isUploading || saving}
+                        onChange={event=>{void handleImageUpload(event.target.files);event.target.value=''}}
                         className="hidden"
                       />
                     </label>
@@ -452,9 +465,9 @@ export function ProductFormPage() {
                     type="file"
                     accept="image/*"
                     multiple
-                    onChange={(e) => handleImageUpload(e.target.files)}
+                    onChange={event=>{void handleImageUpload(event.target.files);event.target.value=''}}
                     className="hidden"
-                    disabled={isUploading}
+                    disabled={isUploading || saving}
                   />
                 </label>
               )}

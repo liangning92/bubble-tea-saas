@@ -5,6 +5,7 @@ export function DisplayProductMedia({ media, fit, background }: { media: Product
     <img src={media.url} alt={media.productName || ''} className="w-full h-full" style={{ objectFit: fit }} />
     {media.productId && media.productName && typeof media.productPrice === 'number' && <div className="absolute bottom-0 inset-x-0 bg-black/75 text-white px-5 py-3">
       <p className="font-bold text-xl break-words">{media.productName}</p>
+      {media.productSpecName && <p className="text-sm">{media.productSpecName}</p>}
       <p className="text-2xl font-bold">{new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:0}).format(media.productPrice)}</p>
     </div>}
   </div>
