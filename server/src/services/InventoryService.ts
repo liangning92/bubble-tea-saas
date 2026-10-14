@@ -1,5 +1,5 @@
 import {validateInventoryProcessLink} from '../utils/inventoryProcessLink'
-import {recalculateInventoryConsumers} from './InventoryQuantityService'
+import {recalculateInventoryConsumers,inventoryQuantityCost} from './InventoryQuantityService'
 import {loadInventoryActors, inventoryLogActorId} from '../utils/inventoryActors'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {inventoryForecast} from './InventoryForecastService'
@@ -70,13 +70,15 @@ export async function getInventory(filter: InventoryFilter) {
 
   const packages=await prisma.config.findMany({where:{key:{startsWith:'inventoryPackage:'},...(filter.storeId?{storeId:filter.storeId}:{})}})
   const forecasts=filter.storeId?await inventoryForecast(filter.storeId):[]
-  const enriched=items.map(item=>{
+  const enriched=await Promise.all(items.map(async item=>{
     const saved=packages.find(p=>p.storeId===item.storeId&&p.key===`inventoryPackage:${item.id}`)
     let packaging:InventoryPackage|null=null
     try{if(saved)packaging=validatePackage(JSON.parse(saved.value),item.unit)}catch{}
     const forecast=forecasts.find((row:any)=>row.inventoryId===item.id)
-    return {...item,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
-  })
+    let unitCost=Number(item.avgCost),processCostAvailable=true
+    if(item.type==='semi_finished'&&item.processRecipeId){try{unitCost=await inventoryQuantityCost(prisma,item.id,1,item.unit,0,item.storeId)}catch{unitCost=0;processCostAvailable=false}}
+    return {...item,avgCost:unitCost,processCostAvailable,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
+  }))
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
     return serializeBigInt(enriched.filter(item => item.currentStock <= item.effectiveSafetyStock))
@@ -294,7 +296,7 @@ export async function adjustInventory(
 // Get inventory statistics
 export async function getInventoryStats(storeId: string) {
   const items = await prisma.inventory.findMany({
-    where: { storeId }
+    where: { storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}] }
   })
 
   const total = items.length
