@@ -143,7 +143,7 @@ export async function createExpensesBulk(data: Array<{
 }
 
 // Default expense categories
-const DEFAULT_EXPENSE_CATEGORIES = [
+export const DEFAULT_EXPENSE_CATEGORIES = [
   { key: 'rent', label: '', labelZh: '租金', labelEn: 'Rent', color: 'text-purple-600', bgColor: 'bg-purple-100', isDefault: true },
   { key: 'utilities', label: '', labelZh: '水电费', labelEn: 'Utilities', color: 'text-blue-600', bgColor: 'bg-blue-100', isDefault: true },
   { key: 'supplies', label: '', labelZh: '用品', labelEn: 'Supplies', color: 'text-green-600', bgColor: 'bg-green-100', isDefault: true },

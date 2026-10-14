@@ -1,3 +1,4 @@
+import { expenseCategoryName } from '../../../../shared/utils/expenseCategories'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -28,11 +29,12 @@ export function RevenuePage(){
  useEffect(()=>{const f=initial(search);setApplied(f);setDraft(f);setPage(Math.max(1,Number(search.get('page'))||1))},[search])
  const options=useQuery({queryKey:['revenue-query-options',user?.id,storeId],enabled:allowed,queryFn:async()=>{const d=(await api.get('/revenue/query-options')).data?.data as Options;if(!Array.isArray(d?.datasets)||!Array.isArray(d?.channels)||!Array.isArray(d?.payments))throw Error('INVALID_QUERY_OPTIONS');return d}})
  const result=useQuery({queryKey:['revenue-query',user?.id,storeId,applied,page,settings],enabled:allowed&&valid(applied),refetchInterval:30000,queryFn:async()=>{const d=(await api.get('/revenue/query',{params:{...parameters(applied),page}})).data?.data as Result;if(!d?.summary||!Number.isFinite(d.summary.amount)||!Number.isFinite(d.summary.count)||!Array.isArray(d.rows)||!Array.isArray(d.shifts)||!Array.isArray(d.breakdown)||!d.pagination||!d.range||!Number.isFinite(Date.parse(d.asOf)))throw Error('INVALID_REVENUE_QUERY');return d}})
+ useEffect(()=>{if(result.data && page>result.data.pagination.pages)setPage(result.data.pagination.pages)},[result.data,page])
  const data=submittedInvalid?undefined:result.data,choice=options.data?.datasets.find(o=>o.value===draft.dataset)
  const orderData=applied.dataset==='net'||applied.dataset==='orders'||applied.dataset.startsWith('payment:')||applied.dataset.startsWith('channel:')
  const purchases=useQuery({queryKey:['revenue-purchase-hours',user?.id,storeId,applied,settings],enabled:allowed&&valid(applied)&&orderData,refetchInterval:30000,queryFn:async()=>readPurchaseHours((await api.get('/revenue/purchase-hours',{params:{...parameters(applied),paymentMethod:applied.dataset.startsWith('payment:')?applied.dataset.slice(8):applied.paymentMethod,channelId:applied.dataset.startsWith('channel:')?applied.dataset.slice(8):applied.channelId}})).data?.data)})
  const label=(item:Label)=> (i18n.language.startsWith('zh')?item.nameZh:i18n.language.startsWith('id')?item.nameId:item.name)||item.name
- const optionLabel=(o:Option)=>o.value.startsWith('payment:')?['cash','qris'].includes(o.name)?t('revenueQuery.'+o.name):o.name.toUpperCase():o.value.startsWith('expense:')||o.value.startsWith('channel:')&&o.value!=='channel:none'?label(o):t('revenueQuery.'+o.labelKey)
+ const optionLabel=(o:Option)=>o.value.startsWith('payment:')?['cash','qris'].includes(o.name)?t('revenueQuery.'+o.name):o.name.toUpperCase():o.value.startsWith('expense:')?expenseCategoryName({key:o.value.slice(8),labelEn:o.name,labelZh:o.nameZh||undefined,labelId:o.nameId||undefined},i18n.language):o.value.startsWith('channel:')&&o.value!=='channel:none'?label(o):t('revenueQuery.'+o.labelKey)
  const source=(key:string)=>key.startsWith('manual:')?t('revenueQuery.'+({cash:'manualCash',qris:'manualQris',shopeefood:'shopeefood',gofood:'gofood'}[key.slice(7)]||key)):t('revenueQuery.'+key,{defaultValue:key})
  const time=(value:string)=>formatStoreDate(value,settings,true)
  const apply=(f:Filter)=>{if(!valid(f)){setSubmittedInvalid(true);return}setSubmittedInvalid(false);setPage(1);setSearch(parameters(f));setApplied(f);setDraft(f)}

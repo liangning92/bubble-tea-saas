@@ -42,6 +42,7 @@ if(!/^\/tmp\/pos-(?:intent-http-runtime(?:-[\w-]+)?|idempotency-runtime-[\w-]+)$
  data=await query({dataset:'net'});assert.equal(data.summary.amount,62500);assert.equal(data.summary.orderCount,52);
  await query({dataset:'drawer',paymentMethod:'cash'},'owner',400);await query({dataset:'payment:cash',channelId:'foreign-channel'},'owner',400);await query({startDate:'2026-10-08',endDate:'2026-10-01'},'owner',400);await query({startDate:'2025-01-01',endDate:'2026-10-07'},'owner',400);await query({storeId:'foreign'},'owner',403);await query({},'cashier',403);
  data=await query({dataset:'payment:cash'},'foreign-owner');assert.equal(data.summary.amount,999999);
+ const fresh=await require(path.resolve('server/src/services/RevenueQueryService.ts')).revenueQueryOptions(prisma,'foreign',true);assert.ok(fresh.datasets.some(d=>d.value==='expense:rent'));
  const limited=await require(path.resolve('server/src/services/RevenueQueryService.ts')).revenueQueryOptions(prisma,'store',false);assert.ok(!limited.datasets.some(d=>d.value==='refund'));
  console.log('PASS real HTTP revenue classifications, 51-record pagination, payment/channel AND, partial/full/legacy refunds, expense date/units, repeated night deduplication, drawer separation, invalid filters and store/role isolation ('+provider+')');
 }finally{if(server)await new Promise(resolve=>server.close(resolve));if(prisma)await prisma.$disconnect();if(pgStarted)execFileSync('pg_ctl',['-D',root+'/pg','-m','fast','-w','stop'],{stdio:'ignore'})}})().catch(error=>{console.error(error);process.exitCode=1});

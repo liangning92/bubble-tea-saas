@@ -1,3 +1,4 @@
+import { DEFAULT_EXPENSE_CATEGORIES } from './ExpenseService'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
 import { loadStoreDateSettings } from '../utils/storeDateSettings'
@@ -25,8 +26,8 @@ export async function revenueQueryOptions(db:DB,storeId:string,canRefund=true) {
  ])
  const payments=new Set(['cash','qris',...methods.map(m=>m.paymentMethod)])
  for(const row of paymentConfig)try{const p=JSON.parse(row.value);if(p&&typeof p==='object'&&!Array.isArray(p)){for(const [key,enabled] of Object.entries(p))if(enabled===true)payments.add(key)};if(Array.isArray(p))for(const method of p){const key=typeof method==='string'?method:method?.key;if(typeof key==='string')payments.add(key)}}catch{}
- let categories:{key:string;label?:string;labelEn?:string;labelZh?:string;labelId?:string}[]=[]
- try{const parsed=JSON.parse(categoryConfig?.value||'[]');if(Array.isArray(parsed))categories=parsed.filter(c=>typeof c?.key==='string')}catch{}
+ let categories:{key:string;label?:string;labelEn?:string;labelZh?:string;labelId?:string}[]=DEFAULT_EXPENSE_CATEGORIES
+ try{if(categoryConfig?.value){const parsed=JSON.parse(categoryConfig.value);if(Array.isArray(parsed))categories=parsed.filter(c=>typeof c?.key==='string')}}catch{}
  const categoryKeys=new Set([...categories.map(c=>c.key),...expenseRows.map(e=>e.category)])
  const datasets:QueryOption[]=[option('net','revenue','net',true,true),option('orders','revenue','orders',true,true),...([...payments].sort().map(key=>({...option('payment:'+key,'payment','payment',false,true),name:key}))),
   {...option('channel:none','channel','pos',true,false),name:'POS'},...channels.map(c=>({...option('channel:'+c.id,'channel','channel',true,false),name:c.name})),option('manual:shopeefood','channel','shopeefood'),option('manual:gofood','channel','gofood'),
