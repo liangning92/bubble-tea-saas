@@ -275,7 +275,7 @@ body {
 .admin-module-nav::-webkit-scrollbar, .admin-section-nav::-webkit-scrollbar { height: 4px; }
 .admin-workspace td.text-right, .admin-workspace th.text-right { text-align: right; }
 
-.admin-workspace input.pl-10 { padding-left: 40px; }
-.admin-workspace input.pr-10 { padding-right: 40px; }
+.admin-workspace input.pl-10:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]) { padding-left: 40px; }
+.admin-workspace input.pr-10:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]) { padding-right: 40px; }
 
 .recipe-edit-row .tabular-nums { overflow-wrap: anywhere; }
