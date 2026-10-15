@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { shiftHandoverFinancials } from '../services/ShiftHandoverFinancials'
 import { parseDateBoundary } from '../utils/businessDate'
-import { calculateShiftCash, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
+import { calculateShiftCash, applyHandoverQris, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
 import { manualReceiptsSchema } from '../services/ShiftManualReceipts'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -224,11 +224,12 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
       await tx.store.update({ where: { id: storeId }, data: { updatedAt: new Date() } })
       const captured = await loadShiftSummaryEvidence(tx, storeId, closedAt, currentShift)
       const evidence = captured.summaryEvidence
-      const cashReconciliation = await calculateShiftCash(tx, storeId, currentShift, closedAt)
+      const recordedCashReconciliation = await calculateShiftCash(tx, storeId, currentShift, closedAt)
+      const cashReconciliation = applyHandoverQris(recordedCashReconciliation, manualReceipts?.qris)
       if (reviewed?.success) {
         const latest = await tx.shiftSession.findUniqueOrThrow({where:{id:currentShift.id}})
         const snapshot = reviewed.data
-        if (latest.status !== 'open' || snapshot.sessionId !== latest.id || snapshot.updatedAt !== latest.updatedAt.toISOString() || snapshot.openFloat !== latest.openFloat || snapshot.revenue !== cashReconciliation.revenue || snapshot.expenses !== cashReconciliation.expenses || snapshot.qris !== cashReconciliation.qris) throw Error('SHIFT_PREVIEW_CHANGED')
+        if (latest.status !== 'open' || snapshot.sessionId !== latest.id || snapshot.updatedAt !== latest.updatedAt.toISOString() || snapshot.openFloat !== latest.openFloat || snapshot.revenue !== cashReconciliation.revenue || snapshot.expenses !== cashReconciliation.expenses || snapshot.qris !== recordedCashReconciliation.qris) throw Error('SHIFT_PREVIEW_CHANGED')
       }
       const recordedBalance = cashReconciliation.expectedCash
       const expectedCash = cashReconciliation.expectedCash

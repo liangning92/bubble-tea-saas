@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
-import { CASH_WARNING_PREFIX, cashWarningFor, CashReviewError } from './ShiftCashReconciliation'
+import { CASH_WARNING_PREFIX, applyHandoverQris, cashWarningFor, CashReviewError } from './ShiftCashReconciliation'
 import { manualReceiptsSchema } from './ShiftManualReceipts'
 import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 
@@ -28,7 +28,7 @@ export async function correctShift(db: Pick<PrismaClient, '$transaction'>, actor
     let corrected = report
     if (session.status === 'closed') {
       if (!report?.cashReconciliation || actualCash === undefined || !input.manualReceipts) throw new CashReviewError(409, 'SHIFT_REPORT_REQUIRED')
-      const reconciliation = {...report.cashReconciliation,openFloat:input.openFloat,expectedCash:Math.round((report.cashReconciliation.cashFromRevenue+input.openFloat)*100)/100}
+      const reconciliation = applyHandoverQris({...report.cashReconciliation,openFloat:input.openFloat},input.manualReceipts.qris)
       const difference = Math.round((actualCash-reconciliation.expectedCash)*100)/100
       const int = (value:number) => Number.isSafeInteger(value) && value >= -2147483648 && value <= 2147483647
       data = {...data,actualCash:actualCash,expectedCash:int(reconciliation.expectedCash)?reconciliation.expectedCash:0,cashDifference:int(difference)?difference:null}
