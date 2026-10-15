@@ -1068,9 +1068,9 @@ async function resolvePrinterName(providedName?: string): Promise<string> {
 
 /**
  * 原生 Windows winspool.drv RAW 方式发送二进制指令（钱箱脉冲、ESC/POS 小票）
- * 100% 适用于 Windows 所有 USB 热敏小票打印机驱动，不走 GDI 文本转换
+ * 不走 GDI 文本转换；Windows 作业完成仍不等于打印机已完整出纸。
  */
-function sendRawBytesToWindowsPrinter(printerName: string, rawBytes: Buffer): Promise<void> {
+function sendRawBytesToWindowsPrinter(printerName: string, rawBytes: Buffer, documentName='POS_RAW_JOB'): Promise<void> {
   return new Promise((resolve, reject) => {
     const os = require('os')
     const path = require('path')
@@ -1104,7 +1104,13 @@ function sendRawBytesToWindowsPrinter(printerName: string, rawBytes: Buffer): Pr
     }
 
     // Keep one worker alive: PowerShell and WinSpool interop compile once per app session.
-    windowsPrinter.printFile(printerName, tempFile).then(resolve,reject).finally(cleanup)
+    windowsPrinter.printFile(printerName, tempFile, documentName).then(result=>{
+      writeCrash(`[WIN-RAW] job=${result.jobId} bytes=${result.bytesSubmitted} status=${result.status} delivery=${result.deliveryStatus}`)
+      resolve()
+    },error=>{
+      writeCrash(`[WIN-RAW] delivery=${error.deliveryStatus || 'unconfirmed'} job=${error.jobId || 0} bytes=${error.bytesSubmitted || 0} status=${error.status || 0} win32=${error.win32Error || 0} error=${error.message}`)
+      reject(error)
+    }).finally(cleanup)
 
   })
 }
@@ -1232,9 +1238,9 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       } else {
         // A transport error may occur after acceptance. Never resend automatically.
         try {
-          await sendRawBytesToWindowsPrinter(printerName, rawBytes)
+          await sendRawBytesToWindowsPrinter(printerName, rawBytes, `BTPS_RECEIPT:${String(data.orderNum || '')}:copy${c+1}`)
         } catch (error: any) {
-          return { success: false, copiesSubmitted, deliveryStatus: 'unconfirmed', error: 'Print delivery unconfirmed: ' + error.message }
+          return { success: false, copiesSubmitted, deliveryStatus: error.deliveryStatus==='not-sent'?'not-sent':'unconfirmed', error: error.message }
         }
       }
       writeCrash(`[PRINT-TIMING] transport_ms=${Date.now()-transportStarted} total_ms=${Date.now()-printStarted}`)

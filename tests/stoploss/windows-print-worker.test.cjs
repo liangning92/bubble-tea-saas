@@ -9,3 +9,31 @@ test('uncertain timeout kills the worker without retrying the job',async()=>{con
 test('failed spool reply is not reported as success and shutdown rejects future jobs',async()=>{const f=fake(),worker=new WindowsRawPrinter(f.launch,1000);const first=worker.printFile('Receipt','one.bin');await tick();await tick();f.reply(f.jobs[0],false);await assert.rejects(first,/delivery unconfirmed/);worker.dispose();await assert.rejects(worker.printFile('Receipt','two.bin'),/stopped/);assert.equal(f.jobs.length,1)});
 
 test('synchronous launch failure clears startup state so the next explicit job can start',async()=>{const f=fake();let attempts=0;const worker=new WindowsRawPrinter((...args)=>{if(++attempts===1)throw Error('Launch failed');return f.launch(...args)},1000);await assert.rejects(worker.warm(),/Launch failed/);await worker.warm();assert.equal(attempts,2);worker.dispose()});
+
+test('a stalled queue refusal stays not-sent, retains native details, and never resends',async()=>{
+ const f=fake(),worker=new WindowsRawPrinter(f.launch,1000);
+ try{
+  const pending=worker.printFile('Receipt','new.bin','BTPS_RECEIPT:example:copy1');
+  await tick();await tick();assert.equal(f.jobs[0].document,'BTPS_RECEIPT:example:copy1');
+  const rejected=assert.rejects(pending,error=>{assert.equal(error.deliveryStatus,'not-sent');assert.match(error.message,/PRINT_QUEUE_BLOCKED/);assert.equal(error.bytesSubmitted,0);return true});
+  f.jobs[0].child.stdout.emit('data',Buffer.from(JSON.stringify({id:f.jobs[0].id,success:false,deliveryStatus:'not-sent',error:'PRINT_QUEUE_BLOCKED job=94 status=8208',jobId:0,bytesSubmitted:0})+'\n'));
+  await rejected;assert.equal(f.jobs.length,1);
+ }finally{worker.dispose()}
+});
+test('a job accepted but still queued stays unconfirmed with its exact spool job ID',async()=>{
+ const f=fake(),worker=new WindowsRawPrinter(f.launch,1000);
+ try{
+  const pending=worker.printFile('Receipt','one.bin');await tick();await tick();
+  const rejected=assert.rejects(pending,error=>{assert.equal(error.deliveryStatus,'unconfirmed');assert.equal(error.jobId,94);assert.equal(error.bytesSubmitted,33783);assert.equal(error.status,8208);return true});
+  f.jobs[0].child.stdout.emit('data',Buffer.from(JSON.stringify({id:f.jobs[0].id,success:false,deliveryStatus:'unconfirmed',jobId:94,bytesSubmitted:33783,status:8208,error:'PRINT_JOB_STILL_QUEUED'})+'\n'));
+  await rejected;assert.equal(f.jobs.length,1);
+ }finally{worker.dispose()}
+});
+test('completion returns exact job metadata for diagnostics without claiming physical paper',async()=>{
+ const f=fake(),worker=new WindowsRawPrinter(f.launch,1000);
+ try{
+  const pending=worker.printFile('Receipt','one.bin');await tick();await tick();
+  f.jobs[0].child.stdout.emit('data',Buffer.from(JSON.stringify({id:f.jobs[0].id,success:true,jobId:95,bytesSubmitted:33783,deliveryStatus:'spool-completed'})+'\n'));
+  const result=await pending;assert.equal(result.jobId,95);assert.equal(result.bytesSubmitted,33783);assert.equal(result.deliveryStatus,'spool-completed');assert.equal(f.jobs.length,1);
+ }finally{worker.dispose()}
+});

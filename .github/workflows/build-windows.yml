@@ -210,6 +210,8 @@ jobs:
         run: |
           npx electron scripts/validate-receipt-raster.cjs --resources release/win-unpacked/resources
           if ($LASTEXITCODE -ne 0) { throw 'Packaged receipt raster validation failed' }
+          node scripts/validate-windows-spool.cjs --resources release/win-unpacked/resources
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged native spool validation failed' }
 
       - name: Validate packaged template, clients and synthetic legacy compatibility
         if: ${{ !inputs.skip_validation }}
