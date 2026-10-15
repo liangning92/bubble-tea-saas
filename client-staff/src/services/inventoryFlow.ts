@@ -24,7 +24,7 @@ export const inventoryFlowApi = {
     purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),
     stock: (kind: 'in' | 'out', data: Record<string, unknown>) => intent(`/inventory/stock-${kind}`, data, 'operationId'),
     saveCount: (id: string, items: unknown[]) => http.put(base + `/inventory-counts/${id}/items`, {items}, {headers: headers()}),
-    startCount: (data: unknown) => post('/inventory-counts', data), submitCount: (id: string) => post(`/inventory-counts/${id}/submit`, {})
+    startCount: (data: unknown) => post('/inventory-counts', data), submitCount: (id: string, items: unknown[] = []) => post(`/inventory-counts/${id}/submit`, {items})
 };
 export interface Material {
     effectiveSafetyStock?: number; dynamicSafetyStock?: number; forecastHistoryDays?: number; daysUntilStockOut?: number | null;

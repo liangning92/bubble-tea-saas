@@ -446,8 +446,7 @@ export function InventoryCountPage() {
       submitMutation.isPending ||
       completeMutation.isPending ||
       cancelMutation.isPending;
-    const allCounted =
-      countedItems.length === selectedCount.items.length &&
+    const hasCountedItems =
       countedItems.length > 0;
 
     return (
@@ -496,7 +495,7 @@ export function InventoryCountPage() {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      disabled={busy || !allCounted || draftDirty}
+                      disabled={busy || !hasCountedItems || draftDirty}
                       onClick={() => submitMutation.mutate(selectedCount.id)}
                     >
                       {t("inventoryCountWorkspace.submitReview")}
@@ -505,7 +504,7 @@ export function InventoryCountPage() {
                   {canApprove && selectedCount.status === "pending_review" && (
                     <button
                       onClick={handleComplete}
-                      disabled={busy || !allCounted || draftDirty}
+                      disabled={busy || !hasCountedItems || draftDirty}
                       className="btn btn-primary flex items-center gap-2"
                     >
                       {completeMutation.isPending ? (
@@ -570,6 +569,8 @@ export function InventoryCountPage() {
             </div>
           </div>
         )}
+
+        {selectedCount.items.some(item=>item.countedQty==null) && <section className="card space-y-3" data-testid="count-uncounted-items"><h2 className="font-semibold">{inventoryCountLabels(i18n.language).pending} · {selectedCount.items.filter(item=>item.countedQty==null).length}</h2><p className="text-sm text-gray-500">{inventoryCountLabels(i18n.language).uncountedHint}</p><ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">{selectedCount.items.filter(item=>item.countedQty==null).map(item=><li key={item.id} className="rounded-lg bg-gray-50 p-3 break-words">{formatItemName(item.inventory?.name || "Unknown",i18n.language)}</li>)}</ul></section>}
 
         {/* Variance Alert */}
         {varianceItems.length > 0 && (

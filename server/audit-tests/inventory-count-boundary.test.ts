@@ -1,7 +1,7 @@
 import {beforeEach,expect,jest,test} from '@jest/globals'
 jest.mock('../src/config/env',()=>({config:{jwt:{secret:'synthetic'}}}))
 jest.mock('../src/config/database',()=>({__esModule:true,default:{config:{findMany:jest.fn(async()=>[]),findUnique:jest.fn(),upsert:jest.fn(),delete:jest.fn()},$transaction:jest.fn()}}))
-jest.mock('../src/services/InventoryCountService',()=>({getInventoryCounts:jest.fn(async()=>[{items:[{inventory:{avgCost:900,unit:'kg'},varianceAmountEstimate:500}]}]),getInventoryCountById:jest.fn(),createInventoryCount:jest.fn(),updateCountItems:jest.fn(async()=>[]),updateCountItem:jest.fn(async()=>({})),completeInventoryCount:jest.fn(),cancelInventoryCount:jest.fn()}))
+jest.mock('../src/services/InventoryCountService',()=>({getInventoryCounts:jest.fn(async()=>[{items:[{inventory:{avgCost:900,unit:'kg'},varianceAmountEstimate:500}]}]),getInventoryCountById:jest.fn(),createInventoryCount:jest.fn(),updateCountItems:jest.fn(async()=>[]),updateCountItem:jest.fn(async()=>({})),submitInventoryCount:jest.fn(async()=>({items:[]})),completeInventoryCount:jest.fn(),cancelInventoryCount:jest.fn()}))
 jest.mock('../src/services/InventoryAlertConfigService',()=>({saveInventoryAlertConfig:jest.fn(async()=>({autoCheckIntervalHours:6})),getInventoryAlertConfig:jest.fn(),DEFAULT_INVENTORY_ALERT_CONFIG:{}}))
 import {inventoryCountRouter} from '../src/routes/inventoryCount'
 import {inventoryRouter} from '../src/routes/inventory'
@@ -43,4 +43,11 @@ test('batch observation uses authenticated identity and validates each quantity 
  expect((await call(inventoryCountRouter,'put','/:id/items','staff',{items:[item],countedBy:'spoof'})).statusCode).toBe(200)
  expect(service.updateCountItems).toHaveBeenCalledWith('count','a','actual-staff',[item])
  for(const items of [[],[{...item,countedQty:-1}],[{...item,observedVersion:'bad'}]])expect((await call(inventoryCountRouter,'put','/:id/items','staff',{items})).statusCode).toBe(400)
+})
+
+test('combined submit validates observations and records the authenticated actor',async()=>{
+ const row={itemId:'item',countedQty:0,expectedStock:10,observedVersion:'2026-01-01T00:00:00.000Z'}
+ expect((await call(inventoryCountRouter,'post','/:id/submit','staff',{items:[row],countedBy:'spoof'})).statusCode).toBe(200)
+ expect(service.submitInventoryCount).toHaveBeenCalledWith('count','a','actual-staff',[row])
+ for(const items of [[{...row,countedQty:-1}],[{...row,observedVersion:'bad'}]])expect((await call(inventoryCountRouter,'post','/:id/submit','staff',{items})).statusCode).toBe(400)
 })

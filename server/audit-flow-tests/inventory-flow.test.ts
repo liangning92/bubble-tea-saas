@@ -237,9 +237,30 @@ test('fulfilled promotion gift has its own frozen theory without duplicating the
   expect((await prisma.inventoryCountItem.findUniqueOrThrow({where:{id:first.id}})).countedAt).toBeNull()
   const saved=await updateCountItems(count.id,f.store.id,'employee',[row]);expect(saved[0].countedQty).toBe(0);expect(saved[0].note).toBeNull()
   expect((await prisma.inventoryCountItem.findUniqueOrThrow({where:{id:next.id}})).countedAt).toBeNull()
-  await expect(submitInventoryCount(count.id,f.store.id)).rejects.toThrow('COUNT_INCOMPLETE')
   expect(await balance(f.inventory.id)).toBe(100)
   await updateCountItems(count.id,f.store.id,'employee',[row2]);await submitInventoryCount(count.id,f.store.id)
   await expect(updateCountItems(count.id,f.store.id,'employee',[row])).rejects.toThrow('COUNT_NOT_ACTIVE')
   await completeInventoryCount(count.id,'manager',f.store.id);expect(await balance(f.inventory.id)).toBe(0);expect(await balance(second.id)).toBe(8)
  })
+
+test('single submission atomically saves a partial count, lists blanks, and approval adjusts only counted rows',async()=>{
+ const f=await fixture(),other=await fixture();const second=await prisma.inventory.create({data:{storeId:f.store.id,name:'Uncounted material',category:'tea',unit:'kg',currentStock:10,avgCost:100}})
+ const count=await createInventoryCount({storeId:f.store.id,period:'ad_hoc',startDate:new Date(),endDate:new Date()})
+ const first=count.items.find((i:any)=>i.inventoryId===f.inventory.id)!,next=count.items.find((i:any)=>i.inventoryId===second.id)!
+ const row={itemId:first.id,countedQty:0,note:'',expectedStock:100,observedVersion:f.inventory.updatedAt.toISOString()}
+ const row2={itemId:next.id,countedQty:8,note:'',expectedStock:10,observedVersion:second.updatedAt.toISOString()}
+ await expect(submitInventoryCount(count.id,other.store.id,'employee',[row])).rejects.toThrow('COUNT_NOT_ACTIVE')
+ await expect(submitInventoryCount(count.id,f.store.id,'employee',[row,row])).rejects.toThrow('INVALID_COUNT_SELECTION')
+ await expect(submitInventoryCount(count.id,f.store.id,'employee',[row,{...row2,observedVersion:'2000-01-01T00:00:00.000Z'}])).rejects.toThrow('COUNT_REFRESH_REQUIRED')
+ expect((await prisma.inventoryCountItem.findUniqueOrThrow({where:{id:first.id}})).countedAt).toBeNull()
+ expect((await prisma.inventoryCount.findUniqueOrThrow({where:{id:count.id}})).status).toBe('in_progress')
+ const submitted=await submitInventoryCount(count.id,f.store.id,'employee',[row])
+ expect(submitted.status).toBe('pending_review');expect(submitted.items.find((i:any)=>i.id===first.id).countedQty).toBe(0)
+ expect(submitted.items.find((i:any)=>i.id===next.id).countedQty).toBeNull()
+ expect(await balance(f.inventory.id)).toBe(100);expect(await balance(second.id)).toBe(10)
+ expect((await submitInventoryCount(count.id,f.store.id,'employee',[row])).status).toBe('pending_review')
+ await completeInventoryCount(count.id,'manager',f.store.id)
+ expect(await balance(f.inventory.id)).toBe(0);expect(await balance(second.id)).toBe(10)
+ expect(await prisma.stockOutLog.count({where:{inventoryId:second.id,reason:'count_adjustment'}})).toBe(0)
+ expect((await prisma.inventoryCountItem.findUniqueOrThrow({where:{id:next.id}})).countedAt).toBeNull()
+})

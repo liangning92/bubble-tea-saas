@@ -94,8 +94,8 @@ router.put('/:id/item/:itemId', authenticate, authorize('admin', 'manager', 'sta
   }
 })
 
-router.post('/:id/submit',authenticate,authorize('admin','manager','staff'),async(req:AuthRequest,res)=>{
- try {const count=await InventoryCountService.submitInventoryCount(req.params.id,req.user!.storeId);res.json({code:200,data:visibleCount(count,req.user!)})}
+router.post('/:id/submit',authenticate,authorize('admin','manager','staff'),validateBody(z.object({items:z.array(updateItemSchema.extend({itemId:z.string().min(1)})).max(1000).optional()})),async(req:AuthRequest,res)=>{
+ try {const count=await InventoryCountService.submitInventoryCount(req.params.id,req.user!.storeId,req.user!.staffId||req.user!.id,req.body.items);res.json({code:200,data:visibleCount(count,req.user!)})}
  catch(error:any){res.status(409).json({code:409,message:error.message})}
 })
 
