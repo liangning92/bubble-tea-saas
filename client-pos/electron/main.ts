@@ -1688,6 +1688,8 @@ function generateShiftReportText(data: any): string {
   const separator = () => lines.push(repeatChar('-', width))
   if (visible('storeName')) wrap(data.storeName || 'YOUME')
   wrap(label('交接班记录', 'SHIFT HANDOVER', 'SERAH TERIMA SHIFT'))
+  if(data.offlineStatus==='pending')wrap(label('本机离线记录 · 待同步','LOCAL OFFLINE · PENDING SYNC','CATATAN OFFLINE · BELUM SINKRON'))
+  if(data.offlineStatus==='synced')wrap(label('服务器已同步核对','SERVER SYNC CONFIRMED','SINKRONISASI SERVER DIKONFIRMASI'))
   if (visible('sessionId') && data.sessionId) { wrap(label('班次凭据', 'Session reference', 'Referensi shift')); wrap(String(data.sessionId)) }
   separator()
   if (visible('cashierName')) row(label('交班员工', 'Cashier', 'Kasir'), data.cashierName || unknown)

@@ -8,5 +8,5 @@ exports.emptyActivityQuotes=async(context,{isOffline=()=>false,specialPrice,prod
   const tax=input.taxEnabled===false?0:Math.round(subtotal*.11);
   await route.fulfill({contentType:'application/json',body:JSON.stringify({code:200,data:{items,subtotal,discount:0,finalAmount:subtotal,tax,grandTotal:subtotal+tax,applied:null,pointsRedeemed:0,pendingSelections:[],entitlements:[],signature:'synthetic-'+JSON.stringify(input)}})});
  });
- await context.route('**/api/marketing/activities/offline-snapshot',route=>isOffline()?route.abort('internetdisconnected'):route.fulfill({contentType:'application/json',body:JSON.stringify({code:200,data:{token:'synthetic-owned-fixture-only',expiresAt:new Date(Date.now()+86400000).toISOString(),activities:activity,channels:[{id:'dine_in',code:'DINE_IN'},{id:'takeaway',code:'TAKEAWAY'}],products,addons:[],taxRate:.11}})}));
+ await context.route('**/api/marketing/activities/offline-snapshot',route=>isOffline()?route.abort('internetdisconnected'):route.fulfill({contentType:'application/json',body:JSON.stringify({code:200,data:{token:'synthetic-owned-fixture-only',expiresAt:new Date(Date.now()+30*86400000).toISOString(),activities:activity,channels:[{id:'dine_in',code:'DINE_IN'},{id:'takeaway',code:'TAKEAWAY'}],products,addons:[],taxRate:.11}})}));
 };

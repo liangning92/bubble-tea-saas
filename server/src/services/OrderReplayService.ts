@@ -21,6 +21,7 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
     storeId: data.storeId, staffId: data.staffId, orderNumber: data.orderNumber ?? null,
     channelId: data.channelId ?? null, memberId: data.memberId ?? null,
     pickupNumber: data.pickupNumber ?? null, channelName: data.channelName ?? null,
+    ...(data.offlineAuthorization ? {offlineAuthorization:data.offlineAuthorization,manualDiscountAmount:data.manualDiscountAmount||0} : {}),
     shiftSessionId: data.shiftSessionId ?? null, dineInCount: data.dineInCount ?? null, customerCount: data.customerCount ?? 1,
     discountAmount: data.discountAmount ?? 0, pointsRedeemed: data.pointsRedeemed ?? 0,
     taxEnabled: data.taxEnabled ?? true, paymentMethod: data.paymentMethod,

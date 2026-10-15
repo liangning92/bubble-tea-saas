@@ -27,6 +27,7 @@ export interface CreateOrderData {
   channelId?: string
   channelName?: string
   shiftSessionId?: string
+  offlineAuthorization?: string
   dineInCount?: number
   staffId: string
   memberId?: string
@@ -71,7 +72,7 @@ export interface CreateOrderData {
   status?: string           // 订单状态: completed, suspended
 }
 
-export interface OrderRequestContext { actorId: string; storeId: string; allowCreate: boolean; validateActivityPricing?: boolean }
+export interface OrderRequestContext { actorId: string; storeId: string; allowCreate: boolean; validateActivityPricing?: boolean; occurredAt?: Date; offlineDiscountApproved?:boolean }
 
 export interface OrderResult {
   replayed?: boolean
@@ -446,7 +447,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   if (channel && channel.storeId !== data.storeId) throw new Error('CHANNEL_STORE_MISMATCH')
 
   if(data.manualDiscountAmount && (!context?.actorId || !Number.isSafeInteger(data.manualDiscountAmount) || data.manualDiscountAmount<=0))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
-  let unifiedQuote: Awaited<ReturnType<typeof quoteActivities>> & {offline?:boolean} | undefined
+  let unifiedQuote: Awaited<ReturnType<typeof quoteActivities>> & {offline?:boolean;offlineTaxRate?:number} | undefined
   if(data.activityOfflineToken){
     await ensureMigrated(data.storeId)
     unifiedQuote=await quoteOfflineActivity(data.storeId,{items:data.items,channelId:channel?.id,channel:data.activityChannelCode,paymentMethod:data.paymentMethod,taxEnabled:data.taxEnabled},data.activityOfflineToken,data.activityOccurredAt||'')
@@ -509,7 +510,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   if (finalAmount < 0) throw new Error('DISCOUNT_EXCEEDS_TOTAL')
 
   // Add PPN (Indonesian tax 11%) - only if taxEnabled is not explicitly false
-  const ppnAmount = data.taxEnabled !== false ? Math.round(finalAmount * config.indonesia.ppnRate) : 0
+  const ppnAmount = unifiedQuote?.offline ? (data.taxEnabled!==false?Math.round(finalAmount*(unifiedQuote.offlineTaxRate??config.indonesia.ppnRate)):0) : data.taxEnabled !== false ? Math.round(finalAmount * config.indonesia.ppnRate) : 0
   const grandTotal = Math.max(0, finalAmount + ppnAmount)
 
   let confirmedQris: { id: string; orderId: string | null } | null = null
@@ -603,7 +604,13 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   // Create order with transaction
   let created = false
   const persistOrder = () => prisma.$transaction(async (tx) => {
-    if(data.manualDiscountAmount)await consumeDiscountApproval(tx,context?.actorId||'',data)
+    if(context?.occurredAt){
+      await tx.store.update({where:{id:data.storeId},data:{updatedAt:new Date()}})
+      const session=await tx.shiftSession.findFirst({where:{id:data.shiftSessionId,storeId:data.storeId,status:'open'}})
+      if(!session||context.occurredAt<session.openedAt)throw Error('OFFLINE_SHIFT_CONFLICT')
+    }
+
+    if(data.manualDiscountAmount&&!context?.offlineDiscountApproved)await consumeDiscountApproval(tx,context?.actorId||'',data)
     if (unifiedQuote && !unifiedQuote.offline) {
       if(data.memberId) await tx.member.updateMany({where:{id:data.memberId,storeId:data.storeId},data:{points:{increment:0}}})
       const fresh = await quoteActivities(data.storeId,{items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested ?? data.pointsRedeemed,groupId:data.activityGroupId,giftSelections:data.activityGiftSelections,taxEnabled:data.taxEnabled},tx)
@@ -615,6 +622,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
     const newOrder = await tx.order.create({
       data: {
         storeId: data.storeId,
+        ...(context?.occurredAt ? {createdAt:context.occurredAt} : {}),
         channelId: channel ? channel.id : null,
         staffId: data.staffId,
         memberId: data.memberId,
@@ -722,6 +730,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
           storeId: data.storeId,
           staffId: data.staffId,
           type: 'cash_sale',
+          ...(context?.occurredAt ? {createdAt:context.occurredAt} : {}),
           shift: cashShift,
           amount: grandTotal,
           paymentMethod: 'cash',
@@ -928,8 +937,8 @@ export async function createRefundRequest(params: {
   requestedBy: string
   reasonCode?: string
   selectedItemIds?: string[]
-}) {
-  return prisma.$transaction(async tx=>{
+},db:any=prisma) {
+  const operation=async(tx:any)=>{
   await tx.order.updateMany({where:{id:params.orderId},data:{updatedAt:new Date()}})
   if(params.requestId){
     if(!/^[A-Za-z0-9-]{16,100}$/.test(params.requestId))throw Error('REFUND_REQUEST_ID_REQUIRED')
@@ -990,7 +999,7 @@ export async function createRefundRequest(params: {
   })
 
   return refundRequest
-  })
+  };return db===prisma?prisma.$transaction(operation):operation(db)
 }
 
 // Return inventory result type

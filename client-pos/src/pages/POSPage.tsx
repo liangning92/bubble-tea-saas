@@ -1,3 +1,6 @@
+import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
+import { readOfflineDrafts, suspendOfflineDraft, removeOfflineDraft } from '../utils/offlineDrafts'
+import { OfflineOperationsStatus } from '../components/OfflineOperationsStatus'
 import { serverUnavailable } from '../utils/serverUnavailable'
 import { ReceiptRecovery } from '../components/ReceiptRecovery'
 import { submitSavedReceipt } from '../utils/receiptRecovery'
@@ -509,9 +512,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   })
 
   // 小票模板（从ReceiptTemplate表加载，支持本地持久化离线容灾）
+  const receiptTemplateCacheKey=`pos_receipt_template:${encodeURIComponent(currentBackendIdentity())}:${user?.storeId||''}`
   const [receiptTemplate, setReceiptTemplate] = useState<any>(() => {
     try {
-      const cached = localStorage.getItem('pos_receipt_template')
+      const cached = localStorage.getItem(receiptTemplateCacheKey)
       return cached ? JSON.parse(cached) : null
     } catch {
       return null
@@ -1044,7 +1048,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }, [])
 
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
-  useEffect(() => { if (user?.storeId) void fetchShiftData() }, [user?.storeId])
+  useEffect(() => {
+    if(!user?.storeId)return
+    void Promise.allSettled([fetchShiftData(),posApi.getExpenseCategories(),posApi.getMyPosExpenses(),posApi.getCashEvents(),posApi.getShifts()])
+    void navigator.storage?.persist?.().catch(()=>false)
+  }, [user?.storeId])
 
   const loadConfig = useCallback(() => {
     // Guard: only load when storeId is available (not during initial loading with 'default')
@@ -1176,7 +1184,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 setPosReceipt(prev => ({ ...prev, paperSize: template.paperSize }))
               }
               try {
-                localStorage.setItem('pos_receipt_template', JSON.stringify(template))
+                localStorage.setItem(receiptTemplateCacheKey, JSON.stringify(template))
               } catch {}
             }
           } catch (e) {
@@ -1606,7 +1614,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('suspended_orders')
-      if (saved) setSuspendedOrders(JSON.parse(saved))
+      const legacy=saved?JSON.parse(saved):[]
+      setSuspendedOrders(legacy)
+      if(user?.storeId)void readOfflineDrafts(user.storeId).then(drafts=>setSuspendedOrders([...legacy,...drafts])).catch(console.error)
     } catch (e) {
       console.error('Failed to load suspended orders:', e)
       localStorage.removeItem('suspended_orders')
@@ -2375,6 +2385,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     let accepted = false
     setIsCheckingOut(true)
     try {
+      const shiftState=await posApi.getCurrentShift()
+      if(!navigator.onLine||!useAuthStore.getState().token||shiftState.config.posCachedSnapshot||shiftState.statusText==='Local cached snapshot'||currentQuote?.offline){
+        const draft=await suspendOfflineDraft(user!.storeId!,cart,selectedChannel,basketGeneration)
+        settledCartRef.current=cart
+        setSuspendedOrders([...suspendedOrders,draft])
+        clearCart('settled')
+        showToast(t('pos.orderSuspended'),'success')
+        return
+      }
       // 在服务端创建挂单状态的订单
       const orderData: any = {
         storeId: user?.storeId || 'default',
@@ -2746,6 +2765,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const resumeOrderConfirmed = async (order: typeof suspendedOrders[0]) => {
     // 取单时删除服务端 suspended 订单（结账会创建新订单）
     try {
+      if(order.id.startsWith('SUSP-')&&user?.storeId)await removeOfflineDraft(user.storeId,order.id)
       if (order.id && !order.id.startsWith('SUSP-')) {
         await posApi.deleteOrder(order.id)
       }
@@ -2997,13 +3017,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
-      if(manualDiscountAmount&&!navigator.onLine)throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+      if(manualDiscountAmount&&(!navigator.onLine||currentQuote?.offline)&&!access.can('orders.discount'))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
       if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
-      if ((paymentMethod === 'cash' || manualQris) && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
-        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
+      if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
+        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined,externalPaymentConfirmed)
         accepted = true
         settledCartRef.current = cart
         Object.assign(orderData,local.checkoutRequest)
@@ -3105,7 +3125,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(receiptSent ? (paymentMethod === 'cash' || manualQris ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
+      showToast(`${t(receiptSent ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
@@ -3118,6 +3138,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setPaidAmount('')
       setShowChannelModal(true)
     } catch (error: any) {
+      console.warn('[POS Checkout]', error?.name, error?.message)
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent && error?.message === 'OPEN_SHIFT_REQUIRED') { showOpenShiftRequired(); return }
@@ -3235,7 +3256,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         pointsRedeemed: pointsToRedeem
       }
       // Save the exact receipt before transport; uncertain jobs are never resent automatically.
-      await db.config.put({key:receiptKey,value:{payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
+      await db.config.put({key:receiptKey,value:{backendUrl:currentBackendIdentity(),storeId:user?.storeId,payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
       const result = await submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit)
       if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
       return result?.success ?? false
@@ -3366,6 +3387,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           <ul className="max-h-36 overflow-y-auto mt-2 space-y-1">{recovery.rows.filter(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()).map(row=><li key={row.localId} className="flex flex-wrap justify-between gap-x-4"><span className="break-all">{row.orderNumber}</span><span>{formatCurrency(row.finalAmount)} · {t(row.status==='review'?'offlineSale.review':'offlineSale.awaitUpload')}</span></li>)}</ul>
         </details>}
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
+        <OfflineOperationsStatus />
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
         <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
@@ -4814,7 +4836,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning'); return }
                           finishHandover()
                         } catch (e: any) {
-                          if(e?.response?.data?.message === 'SHIFT_PREVIEW_CHANGED'){setHandoverPreview(null);showToast(t('handoverFlow.changed'),'warning')}
+                          if((e?.response?.data?.message||e?.message) === 'SHIFT_PREVIEW_CHANGED'){setHandoverPreview(null);showToast(t('handoverFlow.changed'),'warning')}
                           else showToast(t('pos.shiftCloseFailed'), 'error')
                         } finally { setShiftClosing(false) }
                       }}
@@ -4980,6 +5002,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="mt-2 text-sm text-gray-600">
                         <OrderItemsTable items={order.items} />
                       </div>
+                      <div className="mt-2"><ReprintReceiptButton storeId={user?.storeId} orderNumber={order.orderNumber} /></div>
                     </div>
                   ))}
                 </div>

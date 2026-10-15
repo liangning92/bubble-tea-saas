@@ -47,12 +47,12 @@ export async function quoteItemRefund(orderId:string,storeId:string){
   return {orderId,finalAmount:state.order.finalAmount,refundedAmount:state.refunded,items:state.order.items.map((i:any)=>({itemId:i.id,name:i.productName,quantity:i.quantity,remaining:i.quantity-(state.used.get(i.id)||0),allocatedAmount:totals.get(i.id),refundedQuantity:state.used.get(i.id)||0}))}
  },{isolationLevel:'Serializable'})
 }
-export async function requestItemRefund(params:{requestId:string;orderId:string;storeId:string;reason:string;requestedBy:string;reasonCode:string;items:unknown}){
+export async function requestItemRefund(params:{requestId:string;orderId:string;storeId:string;reason:string;requestedBy:string;reasonCode:string;items:unknown},db:any=prisma){
  const items=canonicalSelection(params.items)
  if(!/^[A-Za-z0-9-]{16,100}$/.test(params.requestId))throw Error('REFUND_REQUEST_ID_REQUIRED')
  if(params.reasonCode!=='customer_dissatisfied')throw Error('UNPREPARED_FULL_REFUND_REQUIRED')
  const digest=fingerprint({orderId:params.orderId,reason:params.reason,reasonCode:params.reasonCode,requestedBy:params.requestedBy,items})
- return prisma.$transaction(async tx=>{
+ const operation=async(tx:any)=>{
   // All create/approve paths serialize on the same existing order row.
   const locked=await tx.order.updateMany({where:{id:params.orderId,storeId:params.storeId},data:{updatedAt:new Date()}})
   if(locked.count!==1)throw Error('REFUND_ORDER_NOT_FOUND')
@@ -63,7 +63,7 @@ export async function requestItemRefund(params:{requestId:string;orderId:string;
   if(await tx.refundRequest.findFirst({where:{orderId:params.orderId,status:'pending'}}))throw Error('REFUND_PENDING_REQUEST_EXISTS')
   const selected=plan(state,items)
   return tx.refundRequest.create({data:{id:params.requestId,orderId:params.orderId,reason:params.reason,reasonCode:params.reasonCode,requestedBy:params.requestedBy,amount:selected.amount,selectedItemIds:JSON.stringify({version:2,fingerprint:digest,items:selected.items,allItems:selected.allItems}),status:'pending'}})
- })
+ };return db===prisma?prisma.$transaction(operation):operation(db)
 }
 export async function approveItemRefund(requestId:string,actor:{storeId:string;id:string;role:string},verifiedPrepared:boolean,note?:string,db:any=prisma){
  if(!['admin','manager'].includes(actor.role))throw Error('REFUND_APPROVAL_FORBIDDEN')

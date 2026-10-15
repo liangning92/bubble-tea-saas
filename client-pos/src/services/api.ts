@@ -1,3 +1,6 @@
+import { offlineRefundQuote, queueRefund } from '../utils/offlineRefunds'
+import { offlineRead } from '../utils/offlineReads'
+import { currentOfflineShift, openOfflineShift, closeOfflineShift, createOfflineCashEvent, createOfflineExpense, offlineHandover, hasOfflineOperations } from '../utils/offlineOperations'
 import { serverUnavailable } from '../utils/serverUnavailable'
 import { readSnapshot, saveSnapshot, snapshotPath } from '../utils/offlineSale'
 import { assertBackendAuth, assertCheckoutBackend, backendIdentity, backendAuthHeaders, readBackendAuth } from '../utils/backendIdentity'
@@ -138,10 +141,10 @@ export const posApi = {
     return api.post('/orders', data, { posBackend: backendUrl, posStoreId: data.storeId })
   },
   deleteOrder: (id: string) => api.delete(`/orders/${id}`),
-  getOrders: (params?: any) => api.get('/orders', { params }),
-  getRefundQuote: (id: string) => api.get(`/orders/${id}/refund-quote`),
+  getOrders: (params?: any) => offlineRead('/orders',params,()=>api.get('/orders', { params,timeout:5000 })),
+  getRefundQuote: async (id: string) => {try{if(!navigator.onLine||!readBackendAuth().token||id.startsWith('LOCAL-'))return await offlineRefundQuote(id);return await api.get(`/orders/${id}/refund-quote`,{timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineRefundQuote(id)}},
   requestRefund: (data: { orderId: string; reason: string; staffId?: string; reasonCode: string; selectedItemIds?: string[]; requestId?: string; items?: {itemId:string;quantity:number}[] }) =>
-    api.post('/orders/refund-request', data),
+    (async()=>{if(!navigator.onLine||!readBackendAuth().token||data.orderId.startsWith('LOCAL-')||await hasOfflineOperations(readBackendAuth().user!.storeId!))return queueRefund(data);try{return await api.post('/orders/refund-request',data,{timeout:10000})}catch(error){if(!serverUnavailable(error))throw error;return queueRefund(data)}})(),
 
   // Members
   getMembers: (params?: any) => api.get('/members', { params }),
@@ -206,19 +209,26 @@ export const posApi = {
     api.put(`/hygiene/tasks/${id}/skip`, { note }),
 
   // Cash Management
-  getCashBalance: () => api.get('/pos-cash/balance'),
-  getCashEvents: (params?: any) => api.get('/pos-cash/events', { params }),
-  createCashEvent: (data: any) => api.post('/pos-cash/events', data),
+  getCashBalance: async () => posApi.getCurrentShift(),
+  getCashEvents: (params?: any) => offlineRead('/pos-cash/events',params,()=>api.get('/pos-cash/events', { params,timeout:5000 })),
+  createCashEvent: async (data: any) => ({data:{code:201,data:await createOfflineCashEvent(data)}}),
   getTodayCash: () => api.get('/pos-cash/today'),
-  getShifts: (params?: any) => api.get('/pos-cash/shifts', { params }),
-  getShiftHandover: (id: string) => api.get('/pos-cash/shifts/' + id + '/handover'),
-  getCurrentShift: () => api.get('/pos-cash/shifts/current'),
-  openShift: (data: { openFloat: number; shift: string }) => api.post('/pos-cash/shifts/open', data),
+  getShifts: (params?: any) => offlineRead('/pos-cash/shifts',params,()=>api.get('/pos-cash/shifts',{params,timeout:5000})),
+  getShiftHandover: async (id: string) => {
+    const local=await offlineHandover(readBackendAuth().user!.storeId!,id)
+    return local?{data:{code:200,data:local}}:api.get('/pos-cash/shifts/'+id+'/handover')
+  },
+  getCurrentShift: async () => {
+    const actor=readBackendAuth()
+    const response=await api.get('/pos-cash/shifts/current')
+    if(actor.user?.id!==readBackendAuth().user?.id||actor.user?.storeId!==readBackendAuth().user?.storeId||actor.apiUrl!==readBackendAuth().apiUrl)throw Error('CHECKOUT_AUTH_CHANGED')
+    // A cached response already contains the local ledger projection.
+    if(response.config.posCachedSnapshot||response.statusText==='Local cached snapshot')return response
+    return {...response,data:await currentOfflineShift(readBackendAuth().user!.storeId!,response.data)}
+  },
+  openShift: async (data: { openFloat: number; shift: string }) => ({data:{code:200,data:await openOfflineShift(data)}}),
   closeShift: async (data: { actualCash: number; reviewedSnapshot?: {sessionId:string;updatedAt:string;openFloat:number;revenue:number;expenses:number;qris:number}; manualReceiptsCashBasis?: 'drawer_total'; manualReceipts?: {cash:number;qris:number;shopeefood:number;gofood:number}; closeNote?: string; nextStaffId?: string }) => {
-    const response = await api.post('/pos-cash/shifts/close', data)
-    const auth = readBackendAuth()
-    if (auth.user?.storeId) await saveSnapshot('/pos-cash/shifts/current', {data:{hasOpenShift:false,shift:null}}, backendIdentity(auth.apiUrl!), auth.user.storeId, true)
-    return response
+    return {data:{code:200,data:await closeOfflineShift(data)}}
   },
   getCashSummary: (params?: any) => api.get('/pos-cash/summary', { params }),
 
@@ -251,8 +261,8 @@ export const posApi = {
   requestTestDrawer: (printerName: string, storeId: string) =>
     api.post('/hardware/test-drawer', { printerName, storeId }),
 
-  getMyPosExpenses: () => api.get('/expenses/pos'),
-  createPosExpense: (data: { requestId: string; category: string; amount: number; quantity: number; description: string }) => api.post('/expenses/pos', data),
+  getMyPosExpenses: () => offlineRead('/expenses/pos',undefined,()=>api.get('/expenses/pos',{timeout:5000})),
+  createPosExpense: async (data: { requestId: string; category: string; amount: number; quantity: number; description: string }) => ({data:{code:201,data:await createOfflineExpense(data)}}),
   getExpenseCategories: () => api.get('/expenses/categories'),
   // Expenses - POS can record daily expenses
   getExpenses: (params?: { startDate?: string; endDate?: string; type?: string }) =>
@@ -286,7 +296,7 @@ export const activitiesApi={
  heartbeat:(terminalId:string,version:number)=>api.post('/marketing/activities/heartbeat',{terminalId,version}),
  claim:(activityId:string,memberId:string,requestId:string)=>api.post('/marketing/activities/claim',{activityId,memberId,requestId}),referral:(memberId:string,inviterCode:string)=>api.post('/marketing/activities/referral',{memberId,inviterCode}),
  offlineSnapshot:()=>api.get('/marketing/activities/offline-snapshot',{timeout:5000}),
- list:()=>api.get('/marketing/activities',{timeout:5000}),quote:(data:any)=>api.post('/marketing/activities/quote',data,{timeout:10000}),
+ list:()=>api.get('/marketing/activities',{timeout:5000}),quote:async(data:any)=>{const storeId=readBackendAuth().user?.storeId;if(storeId&&await hasOfflineOperations(storeId))throw Error('OFFLINE_LEDGER_PENDING');return api.post('/marketing/activities/quote',data,{timeout:10000})},
  entitlements:(orderId?:string)=>api.get('/marketing/activities/entitlements/list',{params:{orderId}}),fulfil:(id:string)=>api.post(`/marketing/activities/entitlements/${id}/fulfil`),
  groups:()=>api.get('/marketing/activities/groups/list'),createGroup:(activityId:string,memberIds:string[])=>api.post('/marketing/activities/groups',{activityId,memberIds}),joinGroup:(id:string,memberId:string)=>api.post(`/marketing/activities/groups/${id}/join`,{memberId}),
 }

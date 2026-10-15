@@ -1,11 +1,10 @@
+import { POS_OFFLINE_TTL_MS, POS_OFFLINE_DAYS } from '../../../shared/utils/offlinePolicy'
 import { backendIdentity, currentBackendIdentity } from '../utils/backendIdentity'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import bcrypt from 'bcryptjs'
 import { saveOfflineCredentials, clearOfflineCredentials, getOfflineCredentials, OfflineCredentials } from '../db/offline'
-import { clearApiUrl } from '../config'
 import { serverUnavailable } from '../utils/serverUnavailable'
-import { connectionManager } from '../services/ConnectionManager'
 
 // Kept only in this process after the operator enters their password. Never persisted.
 let reconnectCredential: {phone: string; password: string; actor: string; backend: string} | null = null
@@ -108,14 +107,13 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         reconnectCredential = null
         set({ token: null, apiUrl: null, user: null, isAuthenticated: false })
-        clearOfflineCredentials()
-        clearApiUrl()
-        connectionManager.reset()
+        // Signing out clears the active session. Previously authorized cashiers still
+        // need their password to start the next shift without a network connection.
       },
 
       loginOffline: async (phone: string, password: string) => {
         try {
-          const cached = await getOfflineCredentials()
+          const cached = await getOfflineCredentials(phone)
 
           if (!cached) {
             return { success: false, error: 'offlineCredentialsNotFound' }
@@ -129,7 +127,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const age = Date.now() - new Date(cached.cachedAt).getTime()
-          if (!Number.isFinite(age) || age < 0 || age > 24 * 60 * 60 * 1000) return {success: false, error: 'offlineSale.authorizationExpired'}
+          if (!Number.isFinite(age) || age < 0 || age > POS_OFFLINE_TTL_MS) return {success: false, error: 'offlineSale.authorizationExpired'}
           if (!['admin','manager','cashier'].includes(cached.user.role) || !cached.user.storeId) return {success: false, error: 'auth.loginFailed'}
           // Verify password using bcrypt
           const isValid = await bcrypt.compare(password, cached.passwordHash)

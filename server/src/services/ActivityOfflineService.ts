@@ -1,3 +1,4 @@
+import { POS_OFFLINE_TTL_MS, POS_OFFLINE_DAYS } from '../utils/offlinePolicy'
 import jwt from 'jsonwebtoken'
 import prisma from '../config/database'
 import { config } from '../config/env'
@@ -7,8 +8,8 @@ const priceTypes=['special_price','percent','nth_cup','buy_get','fixed','tiered'
 export async function activityOfflineSnapshot(storeId:string){
  const [all,products,channels,addons]=await Promise.all([listActivities(storeId),prisma.product.findMany({where:{storeId,status:'active'},include:{specs:true,channelPrices:true,addons:{include:{addon:true}}}}),prisma.channel.findMany({where:{storeId,status:'active'}}),prisma.addon.findMany({where:{storeId}})])
  const activities=all.filter(a=>priceTypes.includes(a.type)&&a.limit===undefined&&!a.rule.perMemberLimit&&!a.memberOnly&&!a.memberLevels.length)
- const snapshot={purpose:'activity-offline',storeId,issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+7*86400000).toISOString(),activities,products:products.map(p=>({id:p.id,addonNames:p.addons.map(a=>a.addon.name),specs:p.specs.map(s=>({id:s.id,price:s.price})),prices:p.channelPrices.map(c=>({channelId:c.channelId,multiplier:c.priceAdjustment,enabled:c.enabled}))})),channels:channels.map(c=>({id:c.id,code:c.code})),addons:addons.map(a=>({name:a.name,price:a.price})),taxRate:config.indonesia.ppnRate}
- return {...snapshot,token:jwt.sign(snapshot,config.jwt.secret,{expiresIn:'7d'})}
+ const snapshot={purpose:'activity-offline',storeId,issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+POS_OFFLINE_TTL_MS).toISOString(),activities,products:products.map(p=>({id:p.id,addonNames:p.addons.map(a=>a.addon.name),specs:p.specs.map(s=>({id:s.id,price:s.price})),prices:p.channelPrices.map(c=>({channelId:c.channelId,multiplier:c.priceAdjustment,enabled:c.enabled}))})),channels:channels.map(c=>({id:c.id,code:c.code})),addons:addons.map(a=>({name:a.name,price:a.price})),taxRate:config.indonesia.ppnRate}
+ return {...snapshot,token:jwt.sign(snapshot,config.jwt.secret,{expiresIn:`${POS_OFFLINE_DAYS}d`})}
 }
 export async function quoteOfflineActivity(storeId:string,input:QuoteInput,token:string,occurredAt:string,db:any=prisma){
  const snapshot=jwt.verify(token,config.jwt.secret,{ignoreExpiration:true}) as any
@@ -31,5 +32,5 @@ export async function quoteOfflineActivity(storeId:string,input:QuoteInput,token
  const current=await quoteActivities(storeId,{...input,items},db,now,price.finalAmount)
  const entitlements=current.entitlements.filter(e=>!e.rewardId||e.activity.rule.rewardIds?.length===1)
  const tax=input.taxEnabled===false?0:Math.round(price.finalAmount*snapshot.taxRate)
- return {...current,...price,items,tax,grandTotal:price.finalAmount+tax,entitlements,pendingSelections:[],couponId:undefined,pointsRedeemed:0,signature:token,offline:true,context:{...current.context,now}}
+ return {...current,...price,items,tax,grandTotal:price.finalAmount+tax,entitlements,pendingSelections:[],couponId:undefined,pointsRedeemed:0,signature:token,offline:true,offlineTaxRate:snapshot.taxRate,context:{...current.context,now}}
 }

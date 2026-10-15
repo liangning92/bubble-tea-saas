@@ -1,3 +1,5 @@
+import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
+import { OfflineOperationsStatus } from '../components/OfflineOperationsStatus'
 import dateLocaleI18n from '../i18n'
 import { OrderItemsTable } from '../components/OrderItemsTable'
 import {RefundRequestForm} from '../components/RefundRequestForm'
@@ -122,6 +124,7 @@ export function OrderHistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <OfflineOperationsStatus />
       {/* Header */}
       <header className="bg-white border-b px-4 py-3">
         <div className="flex items-center gap-3">
@@ -240,6 +243,7 @@ export function OrderHistoryPage() {
               </div>
 
               {/* Action Buttons */}
+              <ReprintReceiptButton storeId={user?.storeId} orderNumber={selectedOrder.orderNumber} />
               <div className="flex gap-2 pt-4 border-t">
                 <button
                   onClick={() => handleRebuy(selectedOrder)}

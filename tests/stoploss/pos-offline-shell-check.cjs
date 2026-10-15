@@ -27,7 +27,7 @@ const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),
     if(url.pathname==='/api/config')data={paymentMethods:{cash:true,qris:true,defaultMethod:'cash'},taxSettings:{enabled:false},posReceipt:{autoPrint:true},hardwareSettings:{autoOpenCashDrawer:false,printers:[{type:'receipt',enabled:true,printerName:'Synthetic receipt'}]}};
     if(url.pathname==='/api/shifts')data=[{key:'custom-day',name:'Custom day'}];
     if(url.pathname==='/api/channels'||url.pathname==='/api/marketing/activities'||url.pathname==='/api/marketing/activity-prices')data=[];
-    if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:true,shift:{id:'session',shift:'custom-day'}};
+    if(url.pathname==='/api/pos-cash/shifts/current')data={hasOpenShift:true,shift:{id:'session',shift:'custom-day',openFloat:0,openedAt:new Date(Date.now()-60000).toISOString()},cashReconciliation:{revenue:0,expenses:0,qris:0,cashFromRevenue:0,openFloat:0,expectedCash:0},includedOrderNumbers:[],includedOfflineOperationIds:[]};
     if(url.pathname==='/api/orders/received-receipts'){const body=route.request().postDataJSON();receiptNumber=body.orderNumber;status=201;data={id:'synthetic-journal',orderNumber:receiptNumber}};
     if(url.pathname==='/api/orders/bulk-sync'){const body=route.request().postDataJSON();assert.equal(body.orders[0].orderNumber,receiptNumber);uploads++;data={results:[{success:true,data:{id:'synthetic-order',orderNumber:receiptNumber,grandTotal:10000}}]}};
     await route.fulfill({status,json:{data}});
@@ -35,7 +35,7 @@ const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),
   await require('./empty-activity-browser-fixture.cjs').emptyActivityQuotes(context,{isOffline:()=>offline});
   await page.goto(origin+'/#/login');await page.locator('input[type=tel]').waitFor();
   await page.locator('input[type=tel]').fill('synthetic');await page.locator('input[type=password]').fill('synthetic-password');await page.getByRole('button',{name:'Login',exact:true}).click();await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();
-  await expect.poll(()=>page.evaluate(()=>new Promise((resolve,reject)=>{const req=indexedDB.open('POSOffline');req.onsuccess=()=>{const db=req.result;const tx=db.transaction('config');const get=tx.objectStore('config').getAll();get.onsuccess=()=>{resolve(get.result.filter(r=>r.key.startsWith('offline.snapshot:')).length);db.close()};get.onerror=reject}}))).toBe(8);
+  await expect.poll(()=>page.evaluate(()=>new Promise((resolve,reject)=>{const req=indexedDB.open('POSOffline');req.onsuccess=()=>{const db=req.result;const tx=db.transaction('config');const get=tx.objectStore('config').getAll();get.onsuccess=()=>{resolve(get.result.filter(r=>r.key.startsWith('offline.snapshot:')).length);db.close()};get.onerror=reject}}))).toBe(9);
   await page.evaluate(async()=>{await navigator.serviceWorker.register('/pos-sw.js');await navigator.serviceWorker.ready});
   await page.reload();await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
   const caches=await page.evaluate(async()=>{const names=await window.caches.keys();const cache=await window.caches.open(names.find(n=>n.startsWith('youme-pos-shell-')));return (await cache.keys()).map(r=>new URL(r.url).pathname)});

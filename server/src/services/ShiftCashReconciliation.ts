@@ -1,20 +1,25 @@
+import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
 import { PrismaClient } from '@prisma/client'
 import { netReceivedAmount } from '../utils/refundAllocation'
 import { z } from 'zod'
 export const CASH_WARNING_PREFIX = 'pos.shift.cash-warning:'
-export type CashReconciliation = {version:1;source:string;windowStart:string;windowEnd:string;revenue:number;expenses:number;qris:number;cashFromRevenue:number;openFloat:number;expectedCash:number}
+export type CashReconciliation = {version:1;source:string;windowStart:string;windowEnd:string;revenue:number;expenses:number;qris:number;cashFromRevenue:number;openFloat:number;expectedCash:number;cashIns?:number;cashOuts?:number;otherNonCash?:number}
 const money = (value:number) => Math.round(value * 100) / 100
-export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>,storeId:string,shift:{openedAt:Date;openFloat:number},asOf:Date):Promise<CashReconciliation> {
+export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>&Partial<Pick<PrismaClient,'cashEvent'>>,storeId:string,shift:{openedAt:Date;openFloat:number},asOf:Date):Promise<CashReconciliation> {
   const where={storeId,createdAt:{gte:shift.openedAt,lt:asOf}}
   const [orders,expenses]=await Promise.all([
-    db.order.findMany({where:{...where,status:{in:['completed','paid']},paymentMethod:{in:['cash','qris']}},select:{finalAmount:true,status:true,paymentMethod:true,refundRequests:{where:{status:{in:['approved','paid']}},select:{amount:true,status:true}}}}),
+    db.order.findMany({where:{...where,status:{in:['completed','paid']},paymentMethod:{in:[...POS_MANUAL_PAYMENT_METHODS]}},select:{finalAmount:true,status:true,paymentMethod:true,refundRequests:{where:{status:{in:['approved','paid']}},select:{amount:true,status:true}}}}),
     db.expense.findMany({where,select:{amount:true}})
   ])
+  const events=db.cashEvent?await db.cashEvent.findMany({where:{...where,type:{in:['cash_in','cash_out']},orderId:null},select:{type:true,amount:true}}):[]
+  const cashIns=events.filter(e=>e.type==='cash_in').reduce((sum,e)=>sum+e.amount,0)
+  const cashOuts=events.filter(e=>e.type==='cash_out').reduce((sum,e)=>sum+e.amount,0)
   const revenue=orders.reduce((sum,o)=>sum+netReceivedAmount(o),0)
   const qris=orders.filter(o=>o.paymentMethod==='qris').reduce((sum,o)=>sum+netReceivedAmount(o),0)
+  const otherNonCash=orders.filter(o=>!['cash','qris'].includes(o.paymentMethod)).reduce((sum,o)=>sum+netReceivedAmount(o),0)
   const expenseAmount=money(expenses.reduce((sum,e)=>sum+e.amount,0)/100)
-  const cashFromRevenue=money(revenue-expenseAmount-qris)
-  return {version:1,source:'recorded_shift_formula',windowStart:shift.openedAt.toISOString(),windowEnd:asOf.toISOString(),revenue,expenses:expenseAmount,qris,cashFromRevenue,openFloat:shift.openFloat,expectedCash:money(cashFromRevenue+shift.openFloat)}
+  const cashFromRevenue=money(revenue-expenseAmount-qris-otherNonCash)
+  return {version:1,source:'recorded_shift_formula',windowStart:shift.openedAt.toISOString(),windowEnd:asOf.toISOString(),revenue,expenses:expenseAmount,qris,cashFromRevenue,openFloat:shift.openFloat,cashIns,cashOuts,otherNonCash,expectedCash:money(cashFromRevenue+shift.openFloat+cashIns-cashOuts)}
 }
 export type CashWarning={version:1;status:'pending'|'reviewed';sessionId:string;expectedCash:number;actualCash:number;difference:number;createdAt:string;reviewedAt?:string;reviewedBy?:string;reviewedByName?:string;reviewNote?:string}
 export function cashWarningFor(sessionId:string,actualCash:number,reconciliation:CashReconciliation,at:Date):CashWarning|null {

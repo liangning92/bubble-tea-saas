@@ -1,6 +1,7 @@
+import { verifyOfflineSale } from '../services/POSOfflineOperationService'
 import {readPolicyV2} from '../services/StaffPermissionV2Service'
 import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure } from '../services/ReceivedReceiptService'
-import { findOrderReplay, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
+import { findOrderReplay, orderRequestFingerprint, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import {quoteItemRefund,requestItemRefund,approveItemRefund,itemRefundRecord} from '../services/ItemRefundService'
@@ -34,6 +35,7 @@ const createOrderSchema = z.object({
   channelId: z.string().optional(),
   channelName: z.string().optional(),
   shiftSessionId: z.string().optional(),
+  offlineAuthorization: z.string().max(10000).optional(),
   staffId: z.string(),
   memberId: z.string().optional(),
   items: z.array(z.object({
@@ -270,15 +272,25 @@ router.post('/bulk-sync', authenticate, authorize('admin', 'manager', 'cashier')
         const replay = await findOrderReplay(order)
         if (replay) { results.push({ index, localId: order.orderNumber, success: true, data: replay }); continue }
         const session = order.shiftSessionId
-          ? await prisma.shiftSession.findFirst({ where: { id: order.shiftSessionId, storeId }, select: { id: true, shift: true } })
-          : await prisma.shiftSession.findFirst({ where: { storeId, status: 'open' }, select: { id: true, shift: true } })
+          ? await prisma.shiftSession.findFirst({ where: { id: order.shiftSessionId, storeId }, select: { id: true, shift: true, openedAt:true, closedAt:true } })
+          : await prisma.shiftSession.findFirst({ where: { storeId, status: 'open' }, select: { id: true, shift: true, openedAt:true, closedAt:true } })
         if (!session) throw new Error('OPEN_SHIFT_REQUIRED')
         if (session.shift === 'off') throw new Error('SHIFT_DISABLED')
-        const active = await prisma.shift.findFirst({ where: { storeId, key: session.shift, isActive: true }, select: { id: true } })
-        if (!active) throw new Error('SHIFT_DISABLED')
-        const paymentError = await checkPaymentMethod(storeId, order.paymentMethod)
-        if (paymentError) throw new Error(paymentError)
-        results.push({ index, localId: order.orderNumber, success: true, data: await OrderService.createOrder(order) })
+        const journal = order.orderNumber ? await prisma.config.findUnique({where:{storeId_key:{storeId,key:'receipts.pos.'+order.orderNumber}}}) : null
+        const receipt = journal ? JSON.parse(journal.value).receipt : null
+        if(receipt&&orderRequestFingerprint(receipt.request)!==orderRequestFingerprint(order))throw Error('RECEIVED_RECEIPT_CONFLICT')
+        const occurredAt = receipt ? new Date(receipt.occurredAt) : undefined
+        const historical=!!order.offlineAuthorization&&!!receipt
+        if(historical)await verifyOfflineSale(storeId,order.offlineAuthorization!,receipt.occurredAt,order.staffId,order.paymentMethod,order.manualDiscountAmount)
+        else {
+          const active=await prisma.shift.findFirst({where:{storeId,key:session.shift,isActive:true},select:{id:true}})
+          if(!active)throw Error('SHIFT_DISABLED')
+          const paymentError=await checkPaymentMethod(storeId,order.paymentMethod)
+          if(paymentError)throw Error(paymentError)
+        }
+        if (occurredAt && (!Number.isFinite(occurredAt.getTime()) || occurredAt > new Date(Date.now()+60000) || occurredAt < session.openedAt || (session.closedAt && occurredAt >= session.closedAt))) throw Error('OFFLINE_ORDER_SHIFT_WINDOW_INVALID')
+        if (order.shiftSessionId?.startsWith('POSSHIFT-') && !occurredAt) throw Error('OFFLINE_ORDER_RECEIPT_REQUIRED')
+        results.push({ index, localId: order.orderNumber, success: true, data: await OrderService.createOrder(order,{actorId:req.user!.id,storeId,allowCreate:true,occurredAt,offlineDiscountApproved:historical&&!!order.manualDiscountAmount}) })
       } catch (error: any) {
         await markReceivedReceiptFailure(storeId,order.orderNumber,error.message || 'ORDER_POST_FAILED')
         results.push({ index, localId: order.orderNumber, success: false, error: error.message || 'Failed to create order' })
