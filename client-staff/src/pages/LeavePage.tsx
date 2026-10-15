@@ -1,7 +1,8 @@
 import { Modal } from '../components/Modal'
 import { useDialogs } from '../components/Dialogs'
 import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
-import {payrollLabels} from '../../../shared/payrollLabels'
+import {leaveRestrictionMessage} from '../../../shared/staffRulePolicy'
+import {staffRuleLabels} from '../../../shared/staffRuleLabels'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
@@ -331,6 +332,10 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [, setLoadingTypes] = useState(true)
+  const [leaveRules,setLeaveRules] = useState<{blockedLeaveWeekdays:number[];allowHalfDayLeave:boolean}|null>(null)
+  const [rulesError,setRulesError] = useState(false)
+  const loadRules = async () => {try {const response=await staffApi.getLeaveRules();setLeaveRules(response.data);setRulesError(false)} catch {setRulesError(true)}}
+  useEffect(()=>{loadRules();const refresh=()=>{loadRules()};window.addEventListener('focus',refresh);return ()=>window.removeEventListener('focus',refresh)},[])
 
   // Fetch leave types from API with guaranteed fallback
   useEffect(() => {
@@ -396,7 +401,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
       return
     }
 
-    for(let day=new Date(startDate+'T00:00:00Z').getTime();day<=new Date(endDate+'T00:00:00Z').getTime();day+=86400000){const weekday=new Date(day).getUTCDay();if(weekday===0||weekday===6){await dialogs.alert(payrollLabels(i18n.language).weekendRule);return}}
+
     setIsSubmitting(true)
     try {
       await staffApi.applyLeave({
@@ -411,7 +416,9 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
       setStartDate(''); setEndDate(''); setReason(''); setTotalDays(1); setHalfDay(false); setAttachmentUrl('')
       onSuccess()
     } catch (error: any) {
-      await dialogs.alert(error.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error.response?.data?.message || t('leave.submitError'))
+      const code=error.response?.data?.message
+      if(code==='LEAVE_DAY_NOT_ALLOWED'||code==='WEEKEND_LEAVE_NOT_ALLOWED'){try{const latest=await staffApi.getLeaveRules();setLeaveRules(latest.data);await dialogs.alert(leaveRestrictionMessage(latest.data.blockedLeaveWeekdays,i18n.language))}catch{await dialogs.alert(staffRuleLabels(i18n.language).loadError)}}
+      else await dialogs.alert(code==='HALF_DAY_LEAVE_NOT_ALLOWED'?staffRuleLabels(i18n.language).halfDenied:code||t('leave.submitError'))
     } finally {
       setIsSubmitting(false)
     }
@@ -493,7 +500,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-sm text-amber-700 mb-2">{payrollLabels(i18n.language).weekendRule}</p><label className="block text-base font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
+              {leaveRules&&<p className="text-sm text-amber-700 mb-2">{leaveRestrictionMessage(leaveRules.blockedLeaveWeekdays,i18n.language)}</p>}{rulesError&&<p role="alert" className="text-sm text-red-700">{staffRuleLabels(i18n.language).loadError} <button type="button" onClick={loadRules}>{staffRuleLabels(i18n.language).retry}</button></p>}<label className="block text-base font-medium text-gray-700 mb-1">{t('leave.startDate')}</label>
               <LocalizedDateTimeInput
                 type="date"
                 value={startDate}
@@ -530,6 +537,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
               type="checkbox"
               id="halfDay"
               checked={halfDay}
+              disabled={leaveRules?.allowHalfDayLeave===false}
               onChange={(e) => setHalfDay(e.target.checked)}
               className="w-5 h-5"
             />

@@ -169,6 +169,7 @@ export const staffApi = {
   },
 
   // Leave Types
+  getLeaveRules: async () => (await http.get(`${API_BASE}/leave/rules`, {headers:getAuthHeader()})).data,
   getLeaveTypes: async () => {
     const response = await http.get(`${API_BASE}/leave-types`, {
       headers: getAuthHeader()

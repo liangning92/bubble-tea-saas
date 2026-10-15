@@ -74,12 +74,13 @@ export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, mont
  const basis=payrollBasis(staff,enrollment,month,workingDays || (source==='attendance'?attendanceDays:undefined))
  const rules=await getPayrollRules(db,staff.storeId)
  const fullMonthEligible=!!staff.hireDate&&businessDate(staff.hireDate)<=month+'-01'&&(!staff.terminationDate||dayNumber(businessDate(staff.terminationDate))>=dayNumber(month+'-01')+basis.daysInMonth-1)
- const paidRestDays=source!=='estimate'&&fullMonthEligible?Math.min(rules.paidRestDays,Math.max(0,basis.eligibleDays-basis.payableDays)):0
+ const credit = rules.paidRestEligibility==='prorated' ? Math.floor(rules.paidRestDays*basis.eligibleDays/basis.daysInMonth*2)/2 : rules.paidRestDays
+ const paidRestDays=source!=='estimate'&&(fullMonthEligible||rules.paidRestEligibility!=='full_month')?Math.min(credit,Math.max(0,basis.eligibleDays-basis.payableDays)):0
  // Fixed monthly credits have no leave dates. Across probation/regular rates,
  // use the month's employment-weighted rate and disclose the credit separately.
  const workNumerator=basis.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
  const monthNumerator=available.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
- const totalAmount=Math.round((workNumerator*basis.daysInMonth+monthNumerator*paidRestDays)/(100*basis.daysInMonth*basis.daysInMonth))
+ const totalAmount=Math.round((workNumerator+(basis.eligibleDays ? monthNumerator*paidRestDays/basis.eligibleDays : 0))/(100*basis.daysInMonth))
  const paidRestAmount=totalAmount-basis.amount
  return {...basis,version:2,workedAmount:basis.amount,amount:basis.amount+paidRestAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:source,attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
 }

@@ -1,6 +1,7 @@
-import { assertWeekdayLeave } from './PayrollRuleService'
+import { assertWeekdayLeave, getPayrollRules, leaveEntitlement } from './PayrollRuleService'
 import { formatDate } from '../utils/dateUtils'
 import prisma from '../config/database'
+import {getStaffConfig} from './StaffConfigService'
 
 export interface LeaveApplication {
   staffId: string
@@ -28,6 +29,8 @@ export interface LeaveBalanceUpdate {
 export async function applyLeave(data: LeaveApplication, autoInitBalance: boolean = true) {
   const { staffId, leaveType, totalDays, startDate, endDate } = data
   await assertWeekdayLeave(prisma,data.storeId,startDate,endDate)
+  const rules = await getPayrollRules(prisma,data.storeId)
+  if (data.halfDay && !rules.allowHalfDayLeave) throw new Error('HALF_DAY_LEAVE_NOT_ALLOWED')
 
   const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: data.storeId, code: leaveType } } })
   const deductBalance = configuredType?.deductBalance ?? ['annual', 'sick'].includes(leaveType)
@@ -36,13 +39,13 @@ export async function applyLeave(data: LeaveApplication, autoInitBalance: boolea
 
   // Check leave balance for paid leave types
   if (deductBalance) {
-    let balance = await getLeaveBalance(staffId, year)
+    let balance = await prisma.leaveBalance.findUnique({where:{staffId_year:{staffId,year}}})
 
     // If no balance and auto-init is enabled, create one automatically
-    if (!balance && autoInitBalance) {
+    if (!balance && autoInitBalance && (await getStaffConfig(data.storeId)).autoLeaveBalance) {
       const staff = await prisma.staff.findUnique({ where: { id: staffId } })
       if (staff?.hireDate) {
-        balance = await initializeLeaveBalanceForStaff(staffId, new Date(staff.hireDate))
+        balance = await initializeLeaveBalanceForStaff(staffId, new Date(staff.hireDate), year)
       }
     }
 
@@ -98,6 +101,7 @@ export async function approveLeave(leaveId: string, approverId: string) {
   if (!leave) throw new Error('Leave not found')
   if (leave.status !== 'pending') throw new Error('Leave is not pending')
   await assertWeekdayLeave(prisma,leave.storeId,leave.startDate,leave.endDate)
+  if (leave.halfDay && !(await getPayrollRules(prisma,leave.storeId)).allowHalfDayLeave) throw new Error('HALF_DAY_LEAVE_NOT_ALLOWED')
 
   const configuredType = await prisma.leaveType.findUnique({ where: { storeId_code: { storeId: leave.storeId, code: leave.leaveType } } })
   const deductBalance = configuredType?.deductBalance ?? ['annual', 'sick'].includes(leave.leaveType)
@@ -171,14 +175,19 @@ export async function getLeaveBalance(staffId: string, year: number) {
     where: { staffId_year: { staffId, year } }
   })
 
-  // If no balance record exists, create one with defaults
+  // Initialize from this store's saved policy, including the requested year.
   if (!balance) {
-    balance = await prisma.leaveBalance.create({
-      data: {
+    const staff = await prisma.staff.findUniqueOrThrow({where:{id:staffId},select:{storeId:true,hireDate:true}})
+    const rules = await getPayrollRules(prisma,staff.storeId)
+    const allowance = (await getStaffConfig(staff.storeId)).autoLeaveBalance ? leaveEntitlement(rules,staff.hireDate || new Date(`${year}-01-01T00:00:00+07:00`),year) : {annualLeave:0,sickLeave:0}
+    balance = await prisma.leaveBalance.upsert({
+      where:{staffId_year:{staffId,year}},
+      update:{},
+      create: {
         staffId,
         year,
-        annualLeave: 0,
-        sickLeave: 0,
+        annualLeave: allowance.annualLeave,
+        sickLeave: allowance.sickLeave,
         unpaidLeave: 0,
         usedLeave: 0,
         usedSick: 0,
@@ -191,21 +200,10 @@ export async function getLeaveBalance(staffId: string, year: number) {
 }
 
 // Auto-initialize leave balance for new staff based on hire date
-export async function initializeLeaveBalanceForStaff(staffId: string, hireDate: Date) {
-  const currentYear = new Date().getFullYear()
-  const yearsEmployed = currentYear - hireDate.getFullYear()
-
-  // Calculate annual leave based on employment years (Indonesian standard):
-  // 0-1 years: 12 days
-  // 1-5 years: 12 days
-  // >5 years: can be more (simplified to 15 days)
-  let annualLeave = 12
-  if (yearsEmployed >= 5) {
-    annualLeave = 15
-  }
-
-  // Sick leave is usually 14 days per year (Indonesian standard)
-  const sickLeave = 14
+export async function initializeLeaveBalanceForStaff(staffId: string, hireDate: Date, currentYear = Number(formatDate(new Date()).slice(0,4))) {
+  const staff = await prisma.staff.findUniqueOrThrow({where:{id:staffId},select:{storeId:true}})
+  const rules = await getPayrollRules(prisma,staff.storeId)
+  const {annualLeave,sickLeave} = leaveEntitlement(rules,hireDate,currentYear)
 
   // Create or update balance for current year
   let balance = await prisma.leaveBalance.findUnique({
@@ -213,13 +211,6 @@ export async function initializeLeaveBalanceForStaff(staffId: string, hireDate: 
   })
 
   if (balance) {
-    // If balance exists but annual/sick were 0, update them
-    if (balance.annualLeave === 0) {
-      return prisma.leaveBalance.update({
-        where: { id: balance.id },
-        data: { annualLeave, sickLeave }
-      })
-    }
     return balance
   }
 

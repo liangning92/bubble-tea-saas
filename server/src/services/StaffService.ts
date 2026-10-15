@@ -300,7 +300,8 @@ export async function calculateSalary(staffId: string, month: number, year: numb
       checkOut: previous?.checkOut && (!attendance.checkOutTime || previous.checkOut > attendance.checkOutTime) ? previous.checkOut : attendance.checkOutTime })
   }
   const onLeave = (key: string) => leaves.some(leave => key >= formatDate(leave.startDate) && key <= formatDate(leave.endDate))
-  const dailySalary = standardMonthlySalary / 26
+  const employeeRules = payrollBasis.payrollRules
+  const dailySalary = standardMonthlySalary / employeeRules.dailyRateDivisor
   const penalty = (type: string | undefined, count: number, fixed: number | null | undefined, ratio: number | null | undefined) => type === 'fixed' ? Math.round(count * (fixed || 0) / 100) : type === 'daily_rate' ? Math.round(count * dailySalary * (ratio ?? 1)) : 0
   const monthlyLateRule = await readWork(staff.storeId, `rule.${String(year)}-${String(month).padStart(2, '0')}`)
   const snapshots = await listWork(staff.storeId!, `attendance.${staffId}.`)
@@ -343,7 +344,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
 
 
   const featureConfig = await getStaffConfig(staff.storeId)
-  if (daysSource==='attendance' && featureConfig.attendanceBonus && lateDays === 0 && workDays >= 24) bonuses = 200000
+  if (daysSource==='attendance' && featureConfig.attendanceBonus && lateDays === 0 && workDays >= employeeRules.attendanceBonusDays) bonuses = employeeRules.attendanceBonusAmount
 
   const compensation = await adjustmentPlan(staff.storeId!,staffId,`${year}-${String(month).padStart(2,'0')}`,prisma,true)
   if(!correction && daysSource!=='estimate' && monthlyLateRule){
@@ -363,7 +364,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
   const approvedOvertime = await prisma.overtimeRequest.findMany({ where: { staffId, status: 'approved', date: { gte: startDate, lte: endDate } } })
   const overtimeHours = approvedOvertime.reduce((sum, request) => sum + request.hours, 0)
   const overtimePay = overtimeHours >= overtimeMinHours
-    ? Math.floor(approvedOvertime.reduce((sum, request)=>sum+request.hours*(monthlyRateCents(staff,enrollment,formatDate(request.date))/100/176)*overtimeRate,0))
+    ? Math.floor(approvedOvertime.reduce((sum, request)=>sum+request.hours*(monthlyRateCents(staff,enrollment,formatDate(request.date))/100/employeeRules.overtimeMonthlyHours)*overtimeRate,0))
     : 0
 
   depositDeductions = await salaryDepositPlan(staffId, `${year}-${String(month).padStart(2,'0')}`, prisma, baseSalary+overtimePay+bonuses-deductions)
@@ -387,7 +388,7 @@ export async function calculateSalary(staffId: string, month: number, year: numb
     compensation,
     compensationAdjustmentIds:compensation.items.map(item=>item.id),
     latePenalty, earlyLeaveDays, absentDays:daysSource!=='attendance'?0:absentDays, sickDays, unpaidDays,
-    calculationBasis: { workDaysPerMonth: 26, hoursPerMonth: 176 },
+    calculationBasis: { workDaysPerMonth: employeeRules.dailyRateDivisor, hoursPerMonth: employeeRules.overtimeMonthlyHours },
     bonuses,
     totalSalary: baseSalary + overtimePay + bonuses - deductions
   }
