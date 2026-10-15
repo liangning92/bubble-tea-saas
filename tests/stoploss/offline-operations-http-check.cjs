@@ -78,7 +78,7 @@ console.log('PASS '+provider+' original manager-only offline discount and immuta
 // Actual signed member directory and serial single-POS points/coupon delivery.
 await prisma.member.create({data:{id:'offline-member',storeId:'store',name:'Offline member',phone:'080000000001',points:10000}});
 const directoryResponse=await send('GET','/members/offline-snapshot');assert.equal(directoryResponse.status,200,JSON.stringify(await directoryResponse.clone().json()));
-const directory=(await directoryResponse.json()).data,memberEvidence=directory.members.find(m=>m.member.id==='offline-member');assert.ok(memberEvidence.token);assert.equal(memberEvidence.member.points,10000);
+const directory=(await directoryResponse.json()).data,memberEvidence=directory.members.find(m=>m.member.id==='offline-member');assert.ok(memberEvidence.token);assert.equal(memberEvidence.member.points,10000);assert.ok(Array.isArray(directory.includedOrders));assert.equal(memberEvidence.includedOrders,undefined,'Store inclusion lists are shared per page rather than duplicated for every member');
 const memberRule={...memberEvidence.rule,pointsPerRupiah:1000,isActive:true};
 const memberSnapshot={...memberEvidence,rule:memberRule,issuedAt:new Date(issued).toISOString(),expiresAt:snapshot.expiresAt};delete memberSnapshot.token;delete memberSnapshot.includedOrders;
 const memberToken=jwt.sign(memberSnapshot,process.env.JWT_SECRET,{audience:'pos-offline-member',expiresIn:'30d'});

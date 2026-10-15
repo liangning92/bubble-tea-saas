@@ -12,11 +12,11 @@ export async function memberOfflineSnapshot(storeId:string,after?:string){
   const operations=await tx.config.findMany({where:{storeId,key:{startsWith:'pos.offline.operation:'},createdAt:{gte:new Date(issuedAt.getTime()-POS_OFFLINE_TTL_MS)}},select:{key:true}})
   const includedOfflineOperationIds=operations.map(o=>o.key.slice('pos.offline.operation:'.length))
   const registration={purpose:'pos-offline-member-registration',storeId,rule,welcomePoints:100,issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString()}
-  return {registration:{...registration,token:jwt.sign(registration,config.jwt.secret,{audience:'pos-offline-member',expiresIn:`${POS_OFFLINE_DAYS}d`})},issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString(),next:members.length===200?members[members.length-1].id:null,members:members.map(m=>{
+  return {includedOfflineOperationIds,includedOrders:orders.map(o=>o.orderNumber),registration:{...registration,token:jwt.sign(registration,config.jwt.secret,{audience:'pos-offline-member',expiresIn:`${POS_OFFLINE_DAYS}d`})},issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString(),next:members.length===200?members[members.length-1].id:null,members:members.map(m=>{
    const member={id:m.id,storeId:m.storeId,name:m.name,phone:m.phone,level:m.level,points:m.points,balance:m.balance,totalSpent:m.totalSpent,birthday:m.birthday,referralCode:m.referralCode,status:m.status,updatedAt:m.updatedAt}
    const coupons=m.coupons.filter(c=>c.status==='unused'&&c.coupon.status==='active'&&c.coupon.storeId===storeId)
    const payload={purpose:'pos-offline-member',storeId,member,rule,coupons,issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString()}
-   return {...payload,includedOfflineOperationIds,includedOrders:orders.map(o=>o.orderNumber),token:jwt.sign(payload,config.jwt.secret,{audience:'pos-offline-member',expiresIn:`${POS_OFFLINE_DAYS}d`})}
+   return {...payload,token:jwt.sign(payload,config.jwt.secret,{audience:'pos-offline-member',expiresIn:`${POS_OFFLINE_DAYS}d`})}
   })}
  },{isolationLevel:process.env.DATABASE_URL?.startsWith('file:')?'Serializable':'RepeatableRead'})
 }

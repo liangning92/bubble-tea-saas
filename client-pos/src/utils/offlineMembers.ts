@@ -13,18 +13,20 @@ export async function prepareOfflineMembers(request:(after?:string)=>Promise<any
  if(await pendingOfflineMembers())return
  const {auth,scope}=await authority()
  const complete=await db.config.get(scope+'$complete');if(complete?.value?.registration&&Date.now()-new Date(complete.updatedAt).getTime()<5*60000)return
- const rows:any[]=[];let registration:any;let after:string|undefined;const seen=new Set<string>()
+ const rows:any[]=[],manifests:any[]=[];let registration:any;let after:string|undefined;const seen=new Set<string>()
  do{
-  const response=await request(after),page=response.data?.data
+  const captureStartedAt=Date.now(),response=await request(after),page=response.data?.data
+  const inclusionKey=Array.isArray(page?.includedOrders)?scope+'$inclusion:'+crypto.randomUUID():undefined
+  if(inclusionKey)manifests.push({key:inclusionKey,value:{includedOrders:page.includedOrders,includedOfflineOperationIds:page.includedOfflineOperationIds||[]},updatedAt:new Date()})
   registration=registration||page?.registration
   if(!Array.isArray(page?.members))throw Error('OFFLINE_MEMBERS_UNAVAILABLE')
-  for(const row of page.members){if(!row.token||seen.has(row.member.id))throw Error('OFFLINE_MEMBERS_UNAVAILABLE');seen.add(row.member.id);rows.push(row)}
+  for(const row of page.members){if(!row.token||seen.has(row.member.id))throw Error('OFFLINE_MEMBERS_UNAVAILABLE');seen.add(row.member.id);rows.push({...row,captureStartedAt,...(inclusionKey?{inclusionKey}:{})})}
   if(page.next===after)throw Error('OFFLINE_MEMBERS_UNAVAILABLE');after=page.next||undefined
  }while(after)
  if(offlineMemberScope()!==scope||readBackendAuth().user?.id!==auth.user?.id)throw Error('CHECKOUT_AUTH_CHANGED')
  await db.transaction('rw',db.config,async()=>{
   await db.config.where('key').startsWith(scope).delete()
-  await db.config.bulkPut(rows.map(value=>({key:scope+value.member.id,value,updatedAt:new Date()})))
+  await db.config.bulkPut([...manifests,...rows.map(value=>({key:scope+value.member.id,value,updatedAt:new Date()}))])
   await db.config.put({key:scope+'$complete',value:{registration},updatedAt:new Date()})
  })
 }
@@ -36,11 +38,13 @@ export async function offlineMemberEvidence(id:string){
  }
  const evidence=structuredClone(row?.value)
  if(!evidence?.token||!Number.isFinite(Date.parse(evidence.expiresAt))||!Number.isFinite(Date.parse(evidence.issuedAt))||Date.parse(evidence.expiresAt)<=Date.now()||Date.parse(evidence.issuedAt)>Date.now())throw Error('OFFLINE_MEMBERS_UNAVAILABLE')
- const included=new Set(evidence.includedOrders||[])
- const orders=await db.orders.where('[backendUrl+storeId]').equals([localIdentity(auth.user!.storeId!),auth.user!.storeId!]).filter(o=>(!!o.locallyAcceptedAt||o.checkoutResolution==='accepted'&&o.status==='synced')&&!['rejected','discarded'].includes(o.checkoutResolution||'')&&!included.has(o.orderNumber)&&!(o.status==='synced'&&o.syncedAt&&new Date(o.syncedAt).getTime()<=Date.parse(evidence.issuedAt))).sortBy('createdAt')
+ const inclusion=evidence.inclusionKey?(await db.config.get(evidence.inclusionKey))?.value:evidence
+ if(!inclusion)throw Error('OFFLINE_MEMBERS_UNAVAILABLE')
+ const included=new Set(inclusion.includedOrders||[])
+ const orders=await db.orders.where('[backendUrl+storeId]').equals([localIdentity(auth.user!.storeId!),auth.user!.storeId!]).filter(o=>(!!o.locallyAcceptedAt||o.checkoutResolution==='accepted'&&o.status==='synced')&&!['rejected','discarded'].includes(o.checkoutResolution||'')&&!included.has(o.orderNumber)&&!(o.status==='synced'&&o.syncedAt&&Number.isFinite(evidence.captureStartedAt)&&new Date(o.syncedAt).getTime()<=evidence.captureStartedAt)).sortBy('createdAt')
  const opRows=await db.config.where('key').startsWith(`offline.operation:${encodeURIComponent(localIdentity(auth.user!.storeId!))}:${encodeURIComponent(auth.user!.storeId!)}:`).toArray()
- const includedOps=new Set(evidence.includedOfflineOperationIds||[])
- const eligibleOps=opRows.filter(r=>!((r.value as any).status==='synced'&&new Date(r.updatedAt).getTime()<=Date.parse(evidence.issuedAt)))
+ const includedOps=new Set(inclusion.includedOfflineOperationIds||[])
+ const eligibleOps=opRows.filter(r=>!((r.value as any).status==='synced'&&Number.isFinite(evidence.captureStartedAt)&&new Date(r.updatedAt).getTime()<=evidence.captureStartedAt))
  const referrals=eligibleOps.map(r=>r.value).filter(o=>o.kind==='member'&&!includedOps.has(o.id)&&(o.data.referredByPhone===evidence.member.phone||evidence.member.referralCode&&o.data.referredByPhone?.toUpperCase()===evidence.member.referralCode))
  const refunds=eligibleOps.map(r=>r.value).filter(o=>o.kind==='refund-settle'&&o.data.decision==='approve'&&!includedOps.has(o.id))
  const events=[...refunds.map(o=>({at:Date.parse(o.occurredAt),order:null,referral:false,refund:o.data})),...orders.map(order=>({at:new Date(order.occurredAt||order.createdAt).getTime(),order,referral:false,refund:null})),...referrals.map(o=>({at:Date.parse(o.occurredAt),order:null,referral:true,refund:null}))].sort((a,b)=>a.at-b.at)
