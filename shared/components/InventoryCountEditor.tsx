@@ -31,7 +31,7 @@ export function InventoryCountEditor({formatQuantity,items,language,name,units,f
   if(!changes.length&&!onSubmit){setError(l.invalid);return}
   if(onSubmit&&!changes.length&&!items.some(i=>i.countedAt&&i.countedQty!=null)){setError(l.noEntries);return}
   lock.current=true;setBusy(true);setError('');setSaved(false)
-  try{if(onSubmit)await onSubmit(changes);else await onSave(changes);setDirty({});setSaved(true)}catch(e:any){setError(e?.response?.data?.message==='COUNT_REFRESH_REQUIRED'?l.conflict:l.failed)}finally{lock.current=false;setBusy(false)}
+  try{if(onSubmit)await onSubmit(changes);else await onSave(changes);setDirty({});setSaved(true)}catch(e:any){setError(e?.response?.data?.message==='COUNT_REFRESH_REQUIRED'?l.conflict:onSubmit?l.submitFailed:l.failed)}finally{lock.current=false;setBusy(false)}
  }
  async function refresh(){if(lock.current)return;lock.current=true;setBusy(true);try{const rows=await onReload();setDrafts(previous=>Object.fromEntries(rows.filter(i=>i.inventory).map(i=>[i.id,dirty[i.id]&&previous[i.id]?{...previous[i.id],expectedStock:i.inventory!.currentStock,observedVersion:i.inventory!.updatedAt}:fresh(i)])));setError('')}catch{setError(l.retryFailed)}finally{lock.current=false;setBusy(false)}}
  const visible=items.filter(item=>{const d=drafts[item.id],m=item.inventory;if(!m||!d)return false;const entered=d.quantity.trim()!=='';const variance=entered?ledger(Number(d.quantity),m,d.unit)-(dirty[item.id]?d.expectedStock:item.countedAt?item.systemQty:m.currentStock):null;return name(m.name,language).toLocaleLowerCase().includes(search.toLocaleLowerCase().trim())&&(filter==='all'||filter==='pending'&&!item.countedAt||filter==='difference'&&variance!==null&&variance!==0)})
@@ -39,7 +39,7 @@ export function InventoryCountEditor({formatQuantity,items,language,name,units,f
  return <section className="space-y-3" data-testid="count-batch-editor">
   <p className="text-sm text-gray-600">{onSubmit?l.staffHint:l.hint}</p>
   <div className="flex flex-wrap gap-2"><input aria-label={l.search} placeholder={l.search} className="border rounded-lg p-3 min-w-0 flex-1 bg-white" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label={l.all} className="border rounded-lg p-3 bg-white" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">{l.all}</option><option value="pending">{l.pending}</option><option value="difference">{l.difference}</option></select></div>
-  <p className="text-sm text-gray-600" role="status">{progress}</p>
+  <p className="text-sm text-gray-600" role="status">{onSubmit?l.submitSummary.replace('{count}',String(items.filter(i=>drafts[i.id]?.quantity.trim()!==''&&drafts[i.id]?.quantity!=null).length)).replace('{pending}',String(items.filter(i=>!drafts[i.id]||drafts[i.id].quantity.trim()==='').length)):progress}</p>
   <fieldset disabled={busy} className="space-y-2 min-w-0">
   {!visible.length&&<p>{l.empty}</p>}
   {visible.map(item=>{const m=item.inventory!,d=drafts[item.id],theory=dirty[item.id]?d.expectedStock:item.countedAt?item.systemQty:m.currentStock,qty=d.quantity.trim()===''?null:ledger(Number(d.quantity),m,d.unit),delta=qty===null?null:Math.round((qty-theory)*1e9)/1e9;return <div key={item.id} className="border rounded-xl bg-white p-3 space-y-2" data-count-item={item.id}>
