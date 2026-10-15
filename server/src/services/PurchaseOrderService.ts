@@ -65,7 +65,7 @@ async function prepareItems(tx:any,data:PurchaseInput){
   const amount=item.paidAmount??Math.round(item.quantity*item.unitCost!);
   totalAmount+=amount;
   if(!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(amount/quantity)||!Number.isFinite(amount/item.quantity)||!Number.isSafeInteger(amount)||amount<0||!Number.isSafeInteger(totalAmount)||totalAmount>2147483647||(paid&&totalAmount>21474836))throw new PurchaseOrderError('INVALID_PURCHASE_AMOUNT',400);
-  items.push({inventoryId:item.inventoryId,quantity,unitCost:amount/quantity,inputQuantity:item.quantity,inputUnit,inputUnitCost:amount/item.quantity,lineAmount:amount,packageSnapshot:JSON.stringify(pack)});
+  items.push({inventoryId:item.inventoryId,quantity,unitCost:amount/quantity,inputQuantity:item.quantity,inputUnit,inputUnitCost:paid?amount/item.quantity:item.unitCost!,lineAmount:amount,packageSnapshot:JSON.stringify(pack)});
  }
  return {items,totalAmount,paid};
 }

@@ -174,6 +174,7 @@ test('invalid payment rolls back and consumed batches cannot be reversed',async(
 
 test('legacy receipt reconstructs cost from original invoice quantity and preserves supplier reference on edit',async()=>{
  const f=await fixture(),order=await createPurchaseOrder({storeId:f.store.id,onlineOrderNumber:'INVOICE-REFERENCE',items:[{inventoryId:f.inv.id,quantity:6.9,inputUnit:'kg',unitCost:6765}]});
+ expect(order.items[0].inputUnitCost).toBe(6765);
  const edited=await editPurchaseOrder(order.id,{storeId:f.store.id,items:[{inventoryId:f.inv.id,quantity:6.9,inputUnit:'kg',unitCost:6765}]},'admin',order.updatedAt.toISOString(),'quantity review');expect(edited.onlineOrderNumber).toBe('INVOICE-REFERENCE');
  await prisma.purchaseOrderItem.updateMany({where:{purchaseOrderId:order.id},data:{unitCost:7,lineAmount:null}});
  await receivePurchaseOrder(order.id,'admin',f.store.id);
