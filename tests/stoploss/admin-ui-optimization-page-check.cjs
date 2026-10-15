@@ -326,10 +326,11 @@ const { chromium, expect } = require("@playwright/test"),
       .click();
     await expect.poll(() => info.timezone).toBe("America/New_York");
     for (const [url, group] of [
-      ["/inventory", "Stock & materials"],
+      ["/inventory", "Stock overview"],
       ["/inventory/restock", "Purchasing"],
-      ["/inventory/count", "Count & review"],
-      ["/inventory/alerts", "Stock alerts"],
+      ["/inventory/count", "Stock operations"],
+      ["/inventory/alerts", "Alert center"],
+      ["/inventory/consumption", "Usage reports"],
     ]) {
       await page.goto(origin + url);
       await expect(
