@@ -1,3 +1,4 @@
+import {attendanceNavigationLabels} from '../../../../shared/attendanceNavigationLabels'
 import {useEffect,useState} from 'react'
 import {useQuery,useQueryClient} from '@tanstack/react-query'
 import {useTranslation} from 'react-i18next'
@@ -29,6 +30,6 @@ export function PayrollRulesPage(){
    <div className="card space-y-4"><h2 className="font-semibold">{c.bonus}</h2><p className="text-sm text-gray-600">{c.bonusHint}</p><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{number('attendanceBonusDays',c.bonusDays,31)}{number('attendanceBonusAmount',c.bonusAmount,2000000000,1)}</div></div>
    <button type="submit" className="btn-primary">{saving?t('common.loading'):l.saveRules}</button>
   </fieldset>{message&&<p role="status" className="text-green-700">{message}</p>}{error&&<p role="alert" className="text-red-700">{error}</p>}</form>
-  <div className="card"><h2 className="font-semibold mb-3">{c.others}</h2><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{[[c.features,'/staff/features'],[c.attendance,'/staff/attendance/rules'],[c.types,'/staff/attendance/leave/types'],[c.probation,'/staff/salary/probation-rules'],[c.deposit,'/staff/salary/deposit-rules'],[c.points,'/staff/points/rules']].map(([label,to])=><Link key={to} to={to} className="text-primary underline text-sm">{label}</Link>)}</div></div>
+  <div className="card"><h2 className="font-semibold mb-3">{c.others}</h2><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{[[c.features,'/staff/features'],[c.attendance,'/staff/attendance/rules'],[attendanceNavigationLabels(i18n.language).late,'/staff/attendance/late-rules'],[c.types,'/staff/attendance/leave/types'],[c.probation,'/staff/salary/probation-rules'],[c.deposit,'/staff/salary/deposit-rules'],[c.points,'/staff/points/rules']].map(([label,to])=><Link key={to} to={to} className="text-primary underline text-sm">{label}</Link>)}</div></div>
  </section>
 }
