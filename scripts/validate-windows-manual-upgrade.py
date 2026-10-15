@@ -220,6 +220,11 @@ def verify_started_runtime(expected_version):
     query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
     launched = []
     verified = False
+    # A CI proxy must never intercept this owned loopback health check. The
+    # service probes DB (2s) and optional Redis (1.5s), so a 2s client timeout
+    # could hide its actual response. Keep the 60s/120s startup gates intact.
+    health_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    last_health = None
     deadline = time.monotonic() + 60
     try:
         while time.monotonic() < deadline:
@@ -228,9 +233,14 @@ def verify_started_runtime(expected_version):
             log = DATA / 'logs/main.log'
             if launched and log.is_file() and ('App version: ' + expected_version) in log.read_text(errors='replace') and ('userData: ' + str(DATA)) in log.read_text(errors='replace'):
                 try:
-                    with urllib.request.urlopen('http://127.0.0.1:7072/health', timeout=2) as response:
-                        ready = json.load(response).get('status') == 'ok'
-                except (OSError, ValueError):
+                    request = urllib.request.Request('http://127.0.0.1:7072/health', headers={'Connection': 'close'})
+                    with health_opener.open(request, timeout=5) as response:
+                        last_health = {'statusCode': response.status, 'body': json.load(response)}
+                        ready = last_health['body'].get('status') == 'ok'
+                except (OSError, ValueError) as error:
+                    last_health = {'error': str(error), 'errorType': type(error).__name__}
+                    if isinstance(error, urllib.error.HTTPError):
+                        last_health.update(statusCode=error.code, body=error.read().decode('utf-8', errors='replace')[:2000])
                     ready = False
                 if ready:
                     verified = True
@@ -239,6 +249,7 @@ def verify_started_runtime(expected_version):
                     return {'readyAtMonotonic': ready_at, 'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
         print('Owned restart processes: ' + json.dumps(launched), flush=True)
+        print('Owned loopback health result: ' + json.dumps(last_health), flush=True)
         log = DATA / 'logs/main.log'
         if log.is_file():
             print('Owned runtime log tail: ' + json.dumps(log.read_text(encoding='utf-8', errors='replace')[-12000:]), flush=True)
