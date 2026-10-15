@@ -4,6 +4,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { getPayrollRules } from '../services/PayrollRuleService'
 import * as LeaveService from '../services/LeaveService'
 
 const router = Router()
@@ -33,6 +34,12 @@ const setBalanceSchema = z.object({
 // ============================================
 // Staff/Cashier APIs
 // ============================================
+
+// Staff may read leave restrictions without access to payroll amounts or settings writes.
+router.get('/rules', authenticate, async (req: AuthRequest,res) => {
+ try { const rules=await getPayrollRules(prisma,req.user!.storeId!);res.json({code:200,data:{blockedLeaveWeekdays:rules.blockedLeaveWeekdays,allowHalfDayLeave:rules.allowHalfDayLeave}}) }
+ catch {res.status(500).json({code:500,message:'LEAVE_RULES_READ_FAILED'})}
+})
 
 // POST /api/leave/apply - Apply for leave
 router.post('/apply', authenticate, async (req: AuthRequest, res) => {

@@ -20,3 +20,21 @@ test('changing workdays alone retains configured lateness and early-leave deduct
  const result=await calculateSalary('staff',10,2026,{probation:0,regular:18})
  expect(result.latePenalty).toBe(5000);expect(result.deductions).toBe(128000)
 })
+
+test('custom payroll divisors, bonus thresholds and paid rest are consumed by salary calculation',async()=>{
+ db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='staff.payroll.rules'?{value:JSON.stringify({paidRestDays:3,dailyRateDivisor:20,overtimeMonthlyHours:100,attendanceBonusDays:1,attendanceBonusAmount:12345})}:null)
+ db.attendance.findMany.mockResolvedValue([{checkInTime:new Date('2026-10-05T09:00:00+07:00'),checkOutTime:new Date('2026-10-05T18:00:00+07:00'),status:'normal'}])
+ db.overtimeRequest.findMany.mockResolvedValue([{hours:2,date:new Date('2026-10-05T00:00:00+07:00')}])
+ const result=await calculateSalary('staff',10,2026,undefined,undefined,'attendance')
+ expect(result.payrollBasis.paidRestDays).toBe(3)
+ expect(result.overtimePay).toBe(42000)
+ expect(result.bonuses).toBe(62345)
+ expect(result.calculationBasis).toEqual({workDaysPerMonth:20,hoursPerMonth:100})
+})
+test.each([['full_month',0],['prorated',1.5],['any_employment',3]])('partial-month paid rest follows %s policy',async(mode,expected)=>{
+ db.staff.findUnique.mockResolvedValue({id:'staff',storeId:'s',name:'Test',baseSalary:1400000,hireDate:new Date('2026-10-16T00:00:00+07:00'),terminationDate:null})
+ db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='staff.payroll.rules'?{value:JSON.stringify({paidRestDays:3,paidRestEligibility:mode})}:null)
+ const result=await calculateSalary('staff',10,2026,{probation:0,regular:5})
+ expect(result.payrollBasis.paidRestDays).toBe(expected)
+ expect(result.baseSalary).toBe(Math.round(1400000*(5+Number(expected))/31))
+})

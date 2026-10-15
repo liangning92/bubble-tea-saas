@@ -1,10 +1,10 @@
+import {leaveRestrictionMessage} from '../../../../shared/staffRulePolicy'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import {payrollLabels} from '../../../../shared/payrollLabels'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
-import { leaveApi } from '../../services/api'
+import { leaveApi, staffApi } from '../../services/api'
 import { Calendar, CheckCircle, XCircle, Clock, Filter, Loader2 } from 'lucide-react'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -71,7 +71,8 @@ export function LeaveListPage() {
       setActionType(null)
     } catch (error:any) {
       console.error('Failed to approve leave:', error)
-      notifyAdmin(error?.response?.data?.message==='WEEKEND_LEAVE_NOT_ALLOWED'?payrollLabels(i18n.language).weekendRule:error?.response?.data?.message||t('common.error'))
+      if(['WEEKEND_LEAVE_NOT_ALLOWED','LEAVE_DAY_NOT_ALLOWED'].includes(error?.response?.data?.message)){try{const rules=await staffApi.payrollRules();notifyAdmin(leaveRestrictionMessage(rules.data.data.blockedLeaveWeekdays,i18n.language))}catch{notifyAdmin(t('common.error'))}}
+      else notifyAdmin(error?.response?.data?.message||t('common.error'))
     }
   }
 
