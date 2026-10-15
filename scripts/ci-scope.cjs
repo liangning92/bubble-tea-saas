@@ -91,7 +91,7 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  for(const file of affected){const client=file.match(/^client-(admin|pos|staff)\//);if(client){typecheck.add(client[1]);if(files.includes(file))services.add(client[1])}if(/^server\/(?:src|prisma|package|tsconfig|Dockerfile)/.test(file)){typecheck.add('api');if(files.includes(file))services.add('api')}}
  // Shared code affects the clients that import it; standalone shared assets affect all clients.
  if(files.some(file=>file.startsWith('shared/'))){for(const component of typecheck)services.add(component);if(!services.size)for(const service of ['admin','pos','staff']){services.add(service);typecheck.add(service)}}
- if(files.some(file=>/^(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json)$/.test(file))){for(const service of SERVICES){services.add(service);typecheck.add(service)}for(const name of Object.keys(domains).filter(name=>!['ci','i18n'].includes(name)))if(!selectedDomains.includes(name))selectedDomains.push(name)}
+ if(files.some(file=>/^(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json)$/.test(file))){for(const service of SERVICES){services.add(service);typecheck.add(service)}}
  if(files.some(file=>file.startsWith('server/prisma/')||/^server\/src\/(?:index|config\/database)\./.test(file))){services.add('api');typecheck.add('api');for(const name of (tvSchemaOnly?['access','marketing','media','tv']:['orders','payment','refunds','shifts','payroll','staff','access','inventory','marketing','media']))if(!selectedDomains.includes(name))selectedDomains.push(name)}
  for(const service of typecheck)if(service!=='api')i18n.add(service);
  const unitTests=all.filter(file=>/^tests\/stoploss\/.*\.test\.cjs$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
@@ -109,10 +109,26 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  const order=list=>SERVICES.filter(s=>list.has(s));
  return {mode:full?'full':'scoped',files,domains:selectedDomains.sort(),components:order(services),typecheck:order(typecheck),electronTypes,i18n:order(i18n),build:order(builds),unitTests:unitTests.sort(),auditTests:auditTests.sort(),media,inventoryFlow:files.some(file=>/OrderConsumption|EmployeeConsumption|InventoryAlert|InventoryForecast|inventoryFlowUpgrade|audit-flow-tests|check-employee-inventory-flow/.test(file)),http,python,browser,needsDependencies:typecheck.size>0||unitTests.length>0||auditTests.length>0||media||http.length>0||python.length>0,needsServer:typecheck.has('api')||auditTests.length>0||media||http.length>0,needsBrowser:browser.length>0,unmappedCode:files.filter(file=>/^(?:server\/src|client-(?:admin|pos|staff)\/src|shared)\//.test(file)&&!Object.values(domains).some(rule=>rule.paths.test(file))),note:'Unmapped code still receives affected-component type checks. Review the listed tests before confirming a build; full regression is opt-in.'};
 }
-function planRange(base,head,{root=process.cwd(),full=false}={}){
+function planRange(base,head,{root=process.cwd(),full=false,componentBaselines}={}){
  if(!/^[a-f0-9]{40}$/.test(head||''))throw Error('HEAD_SHA must be a full source SHA');
  const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trimEnd();
  if(git('rev-parse','HEAD')!==head)throw Error('Checkout does not match reviewed source SHA');
+ if(componentBaselines){
+  if(full)throw Error('Component baselines cannot restrict explicit full regression');
+  if(typeof componentBaselines!=='object'||Array.isArray(componentBaselines)||Object.keys(componentBaselines).length!==SERVICES.length||SERVICES.some(service=>!/^[a-f0-9]{40}$/.test(componentBaselines[service]||'')))throw Error('Component baselines require all four verified full service SHAs');
+  const owner=file=>file.startsWith('server/')?'api':file.match(/^client-(admin|pos|staff)\//)?.[1];
+  const ranges={},union=new Set(),components=[];
+  for(const service of SERVICES){
+   const serviceBase=componentBaselines[service];git('merge-base','--is-ancestor',serviceBase,head);
+   const files=git('diff','--no-renames','--name-only','-z',serviceBase,head).split('\0').filter(file=>file&&(!owner(file)||owner(file)===service));
+   ranges[service]={baseSha:serviceBase,files};for(const file of files)union.add(file);
+   if(selectScope(files,{root}).components.includes(service))components.push(service);
+  }
+  if(base&&base!==componentBaselines.api)throw Error('BASE_SHA must match the verified API baseline when component baselines are supplied');
+  const files=[...union].sort();
+  if(!files.length)throw Error('No component differs from the reviewed source');
+  return {...selectScope(files,{root}),components,baseSha:componentBaselines.api,componentBaselines,componentRanges:ranges,headSha:head};
+ }
  if(!base&&full)return {...selectScope([],{root,full}),baseSha:null,headSha:head};
  if(!/^[a-f0-9]{40}$/.test(base||''))throw Error('Scoped CI requires the full confirmed BASE_SHA; no automatic full-suite fallback');
  if(base===head&&!full)throw Error('BASE_SHA must precede HEAD_SHA for scoped checks');
@@ -126,7 +142,7 @@ function planRange(base,head,{root=process.cwd(),full=false}={}){
 function imageMatrix(components){return {include:components.map(service=>({service,context:service==='api'?'server':'.',dockerfile:service==='api'?'server/Dockerfile':`client-${service}/Dockerfile`}))};}
 module.exports={selectScope,planRange,imageMatrix,SERVICES};
 if(require.main===module){try{
- const plan=planRange(process.env.BASE_SHA,process.env.HEAD_SHA,{full:process.env.FULL_REGRESSION==='true'});
+ const plan=planRange(process.env.BASE_SHA,process.env.HEAD_SHA,{full:process.env.FULL_REGRESSION==='true',componentBaselines:process.env.COMPONENT_BASELINES?JSON.parse(process.env.COMPONENT_BASELINES):undefined});
  const output=process.env.SCOPE_FILE||'ci-scope.json';fs.writeFileSync(output,JSON.stringify(plan,null,2)+'\n');
  if(process.env.GITHUB_OUTPUT)fs.appendFileSync(process.env.GITHUB_OUTPUT,`dependencies=${!!plan.needsDependencies}\nserver=${!!plan.needsServer}\nbrowser=${!!plan.needsBrowser}\nfull=${plan.mode==='full'}\nmatrix=${JSON.stringify(imageMatrix(plan.mode==='full'?SERVICES:plan.components))}\nhas_images=${plan.mode==='full'||plan.components.length>0}\n`);
  console.log(JSON.stringify(plan,null,2));
