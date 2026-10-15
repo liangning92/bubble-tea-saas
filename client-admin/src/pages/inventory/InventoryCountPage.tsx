@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { InventoryCountEditor } from '../../../../shared/components/InventoryCountEditor'
 import { inventoryCountLabels } from '../../../../shared/inventoryCountLabels'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
@@ -599,13 +600,13 @@ export function InventoryCountPage() {
                       {t("inventory.system")}: {item.systemQty}
                     </span>
                     <span className="text-sm text-gray-500">
-                      {t("inventory.actual")}: {item.countedQty}
+                      {t("inventory.actual")}: {formatNumber(item.countedQty)}
                     </span>
                     <span
                       className={`font-bold ${item.variance! > 0 ? "text-red-600" : "text-blue-600"}`}
                     >
                       {item.variance! > 0 ? "+" : ""}
-                      {item.variance}
+                      {formatNumber(item.variance)}
                     </span>
                   </div>
                 </div>
@@ -620,7 +621,7 @@ export function InventoryCountPage() {
           </div>
         )}
 
-        {canEdit && selectedCount.status==='in_progress' && <InventoryCountEditor key={selectedCount.id} items={selectedCount.items} language={i18n.language} name={formatItemName} units={inventoryInputUnits} factor={inventoryUnitFactor} ledger={inventoryLedgerQuantity} onDirtyChange={setDraftDirty} onSave={async changes=>{await inventoryApi.updateInventoryCountItems(selectedCount.id,changes);await detailQuery.refetch();refreshCounts();}} onReload={async()=>{const response=await detailQuery.refetch();if(response.error)throw response.error;return response.data?.data?.data?.items||[];}}/>}
+        {canEdit && selectedCount.status==='in_progress' && <InventoryCountEditor formatQuantity={formatNumber} key={selectedCount.id} items={selectedCount.items} language={i18n.language} name={formatItemName} units={inventoryInputUnits} factor={inventoryUnitFactor} ledger={inventoryLedgerQuantity} onDirtyChange={setDraftDirty} onSave={async changes=>{await inventoryApi.updateInventoryCountItems(selectedCount.id,changes);await detailQuery.refetch();refreshCounts();}} onReload={async()=>{const response=await detailQuery.refetch();if(response.error)throw response.error;return response.data?.data?.data?.items||[];}}/>}
         {/* Saved observation details retain operators, movement, valuation and adjustment history. */}
         <details className="card" open={selectedCount.status!=="in_progress"}>
           <summary className="font-medium mb-4 cursor-pointer">
@@ -681,9 +682,9 @@ export function InventoryCountPage() {
                         data-label={t("countFlow.theory")}
                         className="py-3 text-right text-gray-600"
                       >
-                        {item.countedAt
+                        {formatNumber(item.countedAt
                           ? item.systemQty
-                          : item.inventory?.currentStock}
+                          : item.inventory?.currentStock)}
                       </td>
                       <td
                         data-label={t("inventory.actualQty")}
@@ -698,7 +699,7 @@ export function InventoryCountPage() {
                                 : ""
                             }
                           >
-                            {item.countedQty}
+                            {formatNumber(item.countedQty)}
                           </span>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -717,7 +718,7 @@ export function InventoryCountPage() {
                             className={`font-medium ${variance > 0 ? "text-red-600" : variance < 0 ? "text-blue-600" : "text-gray-600"}`}
                           >
                             {variance > 0 ? "+" : ""}
-                            {variance}
+                            {formatNumber(variance)}
                           </span>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -728,7 +729,7 @@ export function InventoryCountPage() {
                       </td>
                       {canReadCost && (
                         <td data-label={t("countFlow.amount")}>
-                          {item.varianceAmountEstimate ?? "—"}
+                          {formatNumber(item.varianceAmountEstimate ?? "—")}
                         </td>
                       )}
                       <td data-label={t("countFlow.reason")}>

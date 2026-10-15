@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -173,7 +174,7 @@ export function ChannelListPage() {
               >
                 <span>{preset.icon}</span>
                 <span>{t(preset.nameKey)}</span>
-                <span className="text-xs text-gray-400">({preset.commission * 100}%)</span>
+                <span className="text-xs text-gray-400">({formatNumber(preset.commission * 100)}%)</span>
               </button>
             ))}
           </div>

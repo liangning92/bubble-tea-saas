@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
@@ -231,7 +232,7 @@ export function LeaveTypeConfigPage() {
                   {type.maxDaysPerYear && (
                     <div className="flex items-center justify-between">
                       <span className="text-gray-500">{t('leaveTypes.maxPerYear')}</span>
-                      <span className="font-medium">{type.maxDaysPerYear} {t('leaveTypes.days')}</span>
+                      <span className="font-medium">{formatNumber(type.maxDaysPerYear)} {t('leaveTypes.days')}</span>
                     </div>
                   )}
                 </div>

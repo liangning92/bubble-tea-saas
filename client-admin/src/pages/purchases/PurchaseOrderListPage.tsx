@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -190,7 +191,7 @@ export function PurchaseOrderListPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -295,7 +296,7 @@ export function PurchaseOrderListPage() {
                     {order.items.slice(0, 3).map((item) => (
                       <div key={item.id} className="flex justify-between text-sm">
                         <span>{formatItemName(item.inventory?.name || t('purchases.items'), i18n.language)}</span>
-                        <span className="text-gray-500">{item.quantity} x {formatCurrency(item.unitCost)}</span>
+                        <span className="text-gray-500">{formatNumber(item.quantity)} x {formatCurrency(item.unitCost)}</span>
                       </div>
                     ))}
                     {order.items.length > 3 && (

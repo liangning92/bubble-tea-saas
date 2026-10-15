@@ -135,7 +135,7 @@ export function TimedSpecialPage() {
     setSearchProduct('')
   }
 
-  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
 
   const getDaysOfWeekLabel = (days: number[]) => {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

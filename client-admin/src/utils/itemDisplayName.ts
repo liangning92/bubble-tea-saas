@@ -1,3 +1,4 @@
+import { formatNumber } from './numberDisplay'
 type NamedItem = string | { name?: string; nameZh?: string; nameEn?: string; nameId?: string }
 
 /** Display-only legacy parsing. The original name remains the search/save value. */
@@ -23,5 +24,5 @@ export function itemDisplayName(item: NamedItem, language = 'id'): string {
 
 export function formatDisplayQuantity(value: number): string {
   if (!Number.isFinite(value)) return '—'
-  return String(Math.round((value + Number.EPSILON) * 100) / 100)
+  return formatNumber(value)
 }

@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import {payrollLabels} from '../../../../shared/payrollLabels'
 import { useState, useEffect } from 'react'
@@ -92,7 +93,7 @@ export function LeaveKanbanPage() {
           title: l.staff?.name || 'Staff',
           subtitle: t(`leave.${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`),
           description: l.reason,
-          badge: `${l.totalDays} ${t('leave.days')}`,
+          badge: `${formatNumber(l.totalDays)} ${t('leave.days')}`,
           badgeColor: l.halfDay ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600',
           metadata: {
             [t('leave.dateRange')]: `${formatDate(l.startDate)} - ${formatDate(l.endDate)}`,
@@ -110,7 +111,7 @@ export function LeaveKanbanPage() {
           id: l.id,
           title: l.staff?.name || 'Staff',
           subtitle: t(`leave.${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`),
-          badge: `${l.totalDays} ${t('leave.days')}`,
+          badge: `${formatNumber(l.totalDays)} ${t('leave.days')}`,
           metadata: {
             [t('leave.dateRange')]: `${formatDate(l.startDate)} - ${formatDate(l.endDate)}`
           }
@@ -126,7 +127,7 @@ export function LeaveKanbanPage() {
           id: l.id,
           title: l.staff?.name || 'Staff',
           subtitle: t(`leave.${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`),
-          badge: `${l.totalDays} ${t('leave.days')}`,
+          badge: `${formatNumber(l.totalDays)} ${t('leave.days')}`,
           metadata: {
             [t('leave.dateRange')]: `${formatDate(l.startDate)} - ${formatDate(l.endDate)}`
           }
@@ -142,7 +143,7 @@ export function LeaveKanbanPage() {
           id: l.id,
           title: l.staff?.name || 'Staff',
           subtitle: t(`leave.${LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}`),
-          badge: `${l.totalDays} ${t('leave.days')}`
+          badge: `${formatNumber(l.totalDays)} ${t('leave.days')}`
         }))
     }
   ]
@@ -176,7 +177,7 @@ export function LeaveKanbanPage() {
           {Object.entries(item.metadata).map(([key, value]) => (
             <div key={key} className="text-xs flex justify-between">
               <span className="text-gray-400">{key}:</span>
-              <span className="text-gray-600 font-medium">{value}</span>
+              <span className="text-gray-600 font-medium">{typeof value === 'number' ? formatNumber(value) : value}</span>
             </div>
           ))}
         </div>

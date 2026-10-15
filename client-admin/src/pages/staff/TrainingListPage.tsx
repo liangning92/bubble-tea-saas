@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import dateLocaleI18n from '../../i18n'
@@ -307,7 +308,7 @@ export function TrainingListPage() {
           </div>
           <div>
             <div className="text-xs text-gray-500 font-medium">{t('training.passRate', '考核通过率')}</div>
-            <div className="text-2xl font-bold text-purple-600 mt-0.5">{totalCount > 0 ? `${passRate}%` : '—'}</div>
+            <div className="text-2xl font-bold text-purple-600 mt-0.5">{totalCount > 0 ? `${formatNumber(passRate)}%` : '—'}</div>
           </div>
         </div>
       </div>
@@ -479,12 +480,12 @@ export function TrainingListPage() {
                             })}
                           </td>
                           <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">
-                            {record.duration ? `${record.duration}h` : '-'}
+                            {record.duration ? `${formatNumber(record.duration)}h` : '-'}
                           </td>
                           <td className="px-4 py-3.5 whitespace-nowrap">
                             {record.score !== null && record.score !== undefined ? (
                               <span className={`font-semibold ${record.passed ? 'text-green-600' : 'text-red-500'}`}>
-                                {record.score}分 {record.passed ? '✓' : '✗'}
+                                {formatNumber(record.score)}分 {record.passed ? '✓' : '✗'}
                               </span>
                             ) : (
                               <span className="text-gray-400">-</span>
@@ -567,7 +568,7 @@ export function TrainingListPage() {
                       {mod.icon}
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                      ⏱️ {mod.minutes} {t('training.minutes', '分钟')}
+                      ⏱️ {formatNumber(mod.minutes)} {t('training.minutes', '分钟')}
                     </span>
                   </div>
 

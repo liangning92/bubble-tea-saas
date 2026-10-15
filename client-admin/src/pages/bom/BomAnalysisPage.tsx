@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { finiteCost } from '../../utils/recipeCost'
 import { formatDisplayQuantity } from '../../utils/itemDisplayName'
 import { useState, useEffect, useMemo } from 'react'
@@ -195,7 +196,7 @@ export function BomAnalysisPage() {
                             {t('bom.cost')}: <span className="font-medium text-gray-900">{displayCost(product.bomCost)}</span>
                           </p>
                           <p className="text-xs font-medium text-green-600 mt-0.5">
-                            {t('bom.profitMargin')}: {product.profitRate}%
+                            {t('bom.profitMargin')}: {formatNumber(product.profitRate)}%
                           </p>
                         </div>
                       </div>
@@ -260,7 +261,7 @@ export function BomAnalysisPage() {
                   <div className="card p-4">
                     <p className="text-sm text-gray-500 font-medium">{t('bom.grossProfit')}</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">
-                      {grossProfit === null ? t('uiDesign.costReview') : formatCurrency(grossProfit)} <span className="text-sm font-normal text-green-600">({grossProfit === null ? '—' : profitRate}%)</span>
+                      {grossProfit === null ? t('uiDesign.costReview') : formatCurrency(grossProfit)} <span className="text-sm font-normal text-green-600">({formatNumber(grossProfit === null ? '—' : profitRate)}%)</span>
                     </p>
                   </div>
                 </div>
@@ -293,7 +294,7 @@ export function BomAnalysisPage() {
                           {detail.bomDetails.map((item: any, idx: number) => {
                             const ratio =
                               finiteCost(item.totalCost) !== null && finiteCost(detail.totalBomCost) !== null && detail.totalBomCost > 0
-                                ? ((item.totalCost / detail.totalBomCost) * 100).toFixed(1)
+                                ? ((item.totalCost / detail.totalBomCost) * 100).toFixed(0)
                                 : '—'
                             const isSemi = item.inventoryType === 'semi_finished'
 

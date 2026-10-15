@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -162,11 +163,11 @@ export function CouponListPage() {
 
   const formatValue = (coupon: Coupon) => {
     switch (coupon.type) {
-      case 'discount_percent': return `${coupon.value}%`
-      case 'discount_fixed': return `Rp ${coupon.value.toLocaleString()}`
+      case 'discount_percent': return `${formatNumber(coupon.value)}%`
+      case 'discount_fixed': return `Rp ${coupon.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
       case 'free_product': return t('marketing.freeProduct')
       case 'free_delivery': return t('marketing.freeDelivery')
-      default: return coupon.value
+      default: return formatNumber(coupon.value)
     }
   }
 
@@ -241,7 +242,7 @@ export function CouponListPage() {
                     </td>
                     <td className="py-3 font-medium">{formatValue(coupon)}</td>
                     <td className="py-3 text-gray-600">
-                      {coupon.minOrder ? `Rp ${coupon.minOrder.toLocaleString()}` : '-'}
+                      {coupon.minOrder ? `Rp ${coupon.minOrder.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                     </td>
                     <td className="py-3 text-sm text-gray-600">
                       {coupon.validFrom && coupon.validUntil

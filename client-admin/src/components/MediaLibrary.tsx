@@ -215,8 +215,8 @@ export function MediaLibrary({
                   {asset.size < 1024
                     ? `${asset.size} B`
                     : asset.size < 1024 * 1024
-                      ? `${(asset.size / 1024).toFixed(1)} KB`
-                      : `${(asset.size / 1024 / 1024).toFixed(1)} MB`}
+                      ? `${(asset.size / 1024).toFixed(0)} KB`
+                      : `${(asset.size / 1024 / 1024).toFixed(0)} MB`}
                 </p>
                 {onSelect ? (
                   <button

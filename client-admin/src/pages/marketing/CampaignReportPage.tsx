@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -54,7 +55,7 @@ export function CampaignReportPage() {
 
   const avgConversion = summary.totalIssued > 0 ? Math.round((summary.totalUsed / summary.totalIssued) * 100) : 0
 
-  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
 
   const getTypeLabel = (type: string) => {
     switch (type) {
@@ -167,7 +168,7 @@ export function CampaignReportPage() {
                       <div className="text-xs text-gray-500">{t('marketing.used')}</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-info">{report.conversionRate}%</div>
+                      <div className="text-2xl font-bold text-info">{formatNumber(report.conversionRate)}%</div>
                       <div className="text-xs text-gray-500">{t('marketing.conversionRate')}</div>
                     </div>
                     <div>

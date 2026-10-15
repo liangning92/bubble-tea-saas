@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -177,10 +178,10 @@ export function LeaveBalancePage() {
                     />
                   </td>
                   <td className="px-4 py-3 text-center text-red-500" data-label={t('staff.used')}>
-                    -{balance.usedLeave}
+                    -{formatNumber(balance.usedLeave)}
                   </td>
                   <td className="px-4 py-3 text-center text-green-600 font-medium" data-label={t('staff.available')}>
-                    {getAvailable(balance)}
+                    {formatNumber(getAvailable(balance))}
                   </td>
                   <td className="px-4 py-3 text-center" data-label={t('staff.sickLeave')}>
                     <input
@@ -192,10 +193,10 @@ export function LeaveBalancePage() {
                     />
                   </td>
                   <td className="px-4 py-3 text-center text-red-500" data-label={t('staff.used')}>
-                    -{balance.usedSick}
+                    -{formatNumber(balance.usedSick)}
                   </td>
                   <td className="px-4 py-3 text-center text-green-600 font-medium" data-label={t('staff.available')}>
-                    {getSickAvailable(balance)}
+                    {formatNumber(getSickAvailable(balance))}
                   </td>
                   <td className="px-4 py-3 text-center" data-label={t('staff.actions')}>
                     <button

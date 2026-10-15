@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -124,7 +125,7 @@ export function ProductCostPage() {
                     <div className="text-right">
                       <p className="font-bold text-primary">{formatCurrency(product.bomCost)}</p>
                       <p className={`text-xs ${product.profitRate > 50 ? 'text-green-600' : product.profitRate > 30 ? 'text-yellow-600' : 'text-red-600'}`}>
-                        {product.profitRate}% {t('products.margin')}
+                        {formatNumber(product.profitRate)}% {t('products.margin')}
                       </p>
                     </div>
                   </div>
@@ -184,7 +185,7 @@ export function ProductCostPage() {
                             ) : null}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {t('products.cost')}: {formatCurrency(spec.cost)} | {t('products.profit')}: {formatCurrency(spec.profit)} ({spec.profitRate}%)
+                            {t('products.cost')}: {formatCurrency(spec.cost)} | {t('products.profit')}: {formatCurrency(spec.profit)} ({formatNumber(spec.profitRate)}%)
                           </div>
                         </div>
                       </div>
@@ -205,13 +206,13 @@ export function ProductCostPage() {
                         <div>
                           <p className="font-medium">{item.name}</p>
                           <p className="text-xs text-gray-500">
-                            {item.quantity} {item.unit} × {formatCurrency(item.costPerUnit)}/{item.unit}
+                            {formatNumber(item.quantity)} {item.unit} × {formatCurrency(item.costPerUnit)}/{item.unit}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="font-medium">{formatCurrency(item.totalCost)}</p>
                           <p className="text-xs text-gray-500">
-                            {selectedProduct.totalBomCost > 0 ? ((item.totalCost / selectedProduct.totalBomCost) * 100).toFixed(1) : 0}%
+                            {selectedProduct.totalBomCost > 0 ? ((item.totalCost / selectedProduct.totalBomCost) * 100).toFixed(0) : 0}%
                           </p>
                         </div>
                       </div>

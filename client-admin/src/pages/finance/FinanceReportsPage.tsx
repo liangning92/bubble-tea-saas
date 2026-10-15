@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -228,7 +229,7 @@ export function FinanceReportsPage() {
                 </div>
                 <div className="card text-center">
                   <p className="text-sm text-gray-500">{t('finance.grossMargin')}</p>
-                  <p className="text-2xl font-bold text-green-600">{profit.grossMargin || 0}%</p>
+                  <p className="text-2xl font-bold text-green-600">{formatNumber(profit.grossMargin || 0)}%</p>
                 </div>
               </div>
 
@@ -259,7 +260,7 @@ export function FinanceReportsPage() {
                 </div>
                 <div className="card text-center">
                   <p className="text-sm text-gray-500">{t('finance.netMargin')}</p>
-                  <p className="text-3xl font-bold text-green-600">{profit.netMargin || 0}%</p>
+                  <p className="text-3xl font-bold text-green-600">{formatNumber(profit.netMargin || 0)}%</p>
                 </div>
               </div>
             </>
@@ -351,7 +352,7 @@ export function FinanceReportsPage() {
               <div className="flex justify-between items-center py-3 px-4 bg-green-50 rounded-lg mb-6">
                 <div>
                   <span className="font-semibold text-green-700">{t('finance.grossProfit')}</span>
-                  <span className="text-sm text-green-600 ml-2">({income.grossProfit?.margin || 0}%)</span>
+                  <span className="text-sm text-green-600 ml-2">({formatNumber(income.grossProfit?.margin || 0)}%)</span>
                 </div>
                 <span className="font-bold text-green-700 text-xl">{formatCurrency(income.grossProfit?.amount || 0)}</span>
               </div>
@@ -367,7 +368,7 @@ export function FinanceReportsPage() {
               <div className="flex justify-between items-center py-3 px-4 bg-primary/10 rounded-lg">
                 <div>
                   <span className="font-semibold text-primary">{t('finance.netProfit')}</span>
-                  <span className="text-sm text-primary/70 ml-2">({income.netProfit?.margin || 0}%)</span>
+                  <span className="text-sm text-primary/70 ml-2">({formatNumber(income.netProfit?.margin || 0)}%)</span>
                 </div>
                 <span className="font-bold text-primary text-xl">{formatCurrency(income.netProfit?.amount || 0)}</span>
               </div>

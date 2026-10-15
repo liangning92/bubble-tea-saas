@@ -181,8 +181,8 @@ export function ABCAnalysisPage() {
                   <td className="px-4 py-3 text-sm text-gray-500">{product.category}</td>
                   <td className="px-4 py-3 text-sm text-right">{product.orders}</td>
                   <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(product.revenue)}</td>
-                  <td className="px-4 py-3 text-sm text-right">{product.percentage.toFixed(1)}%</td>
-                  <td className="px-4 py-3 text-sm text-right">{product.cumulative.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-sm text-right">{product.percentage.toFixed(0)}%</td>
+                  <td className="px-4 py-3 text-sm text-right">{product.cumulative.toFixed(0)}%</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getClassColor(product.class)}`}>
                       {getClassIcon(product.class)}

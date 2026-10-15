@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -56,7 +57,7 @@ export function CampaignStatsPage() {
     },
     {
       label: t('marketing.avgUsageRate'),
-      value: stats.usageRate ? `${stats.usageRate.toFixed(1)}%` : '0%',
+      value: stats.usageRate ? `${stats.usageRate.toFixed(0)}%` : '0%',
       icon: TrendingUp,
       color: 'text-orange-600',
       bgColor: 'bg-orange-100'
@@ -81,7 +82,7 @@ export function CampaignStatsPage() {
               </div>
               <span className="text-sm text-gray-500">{metric.label}</span>
             </div>
-            <div className={`text-2xl font-bold ${metric.color}`}>{metric.value}</div>
+            <div className={`text-2xl font-bold ${metric.color}`}>{formatNumber(metric.value)}</div>
           </div>
         ))}
       </div>

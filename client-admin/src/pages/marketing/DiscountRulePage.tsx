@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useState } from 'react'
@@ -163,11 +164,11 @@ export function DiscountRulePage() {
     }
   }
 
-  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
 
   const getDiscountDisplay = (rule: DiscountRule) => {
     if (rule.discountType === 'percent') {
-      return `${rule.discountValue}%`
+      return `${formatNumber(rule.discountValue)}%`
     }
     if (rule.discountType === 'second_half') {
       return t('marketing.secondHalf')
@@ -227,7 +228,7 @@ export function DiscountRulePage() {
                     <td className="text-right tabular-nums py-3">
                       <span className="text-gray-700 text-sm">
                         {isCupRule(rule.discountType)
-                          ? `${t('marketing.minCups')}: ${rule.minOrderAmount || 2} ${t('marketing.cups')}`
+                          ? `${t('marketing.minCups')}: ${formatNumber(rule.minOrderAmount || 2)} ${t('marketing.cups')}`
                           : `${t('marketing.minOrderAmount')}: ${formatCurrency(rule.minOrderAmount)}`}
                       </span>
                     </td>

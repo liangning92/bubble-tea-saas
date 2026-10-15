@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -186,7 +187,7 @@ export function CampaignEditPage() {
                 <option value="">{t('common.none')} ({t('marketing.noCouponSelected')})</option>
                 {coupons.map((coupon: any) => (
                   <option key={coupon.id} value={coupon.id}>
-                    {coupon.code} - {coupon.type} ({coupon.value})
+                    {coupon.code} - {coupon.type} ({formatNumber(coupon.value)})
                   </option>
                 ))}
               </select>

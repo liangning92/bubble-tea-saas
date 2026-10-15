@@ -209,7 +209,7 @@ export function BudgetPage() {
       <div className={`text-right ${isOver ? 'text-red-600' : 'text-green-600'}`}>
         <div className="font-medium">{formatCurrency(Math.abs(variance))}</div>
         <div className="text-xs">
-          {isOver ? '+' : ''}{percent.toFixed(1)}%
+          {isOver ? '+' : ''}{percent.toFixed(0)}%
         </div>
       </div>
     )

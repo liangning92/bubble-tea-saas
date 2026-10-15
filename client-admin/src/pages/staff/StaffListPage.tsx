@@ -204,7 +204,7 @@ export function StaffListPage() {
                     <td className="py-3 text-gray-600" data-label={t('staff.phone')}>{s.phone}</td>
                     <td className="py-3" data-label={t('staff.position')}>{getPositionLabel(s.position)}</td>
                     <td className="py-3 text-sm text-gray-600" data-label={t('staff.employmentType')}>{getEmploymentTypeLabel(s.employmentType || 'full_time')}{s.probation?.enabled&&<span className="badge badge-info ml-2">{probationLabels(i18n.language)[s.probation.status==='probation'?'probation':s.probation.status==='not_started'?'not_started':'regular']}</span>}</td>
-                    <td className="text-right tabular-nums py-3 font-medium" data-label={t('salary.baseSalary')}>{s.payrollEmployee===false ? '—' : s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 20 }).format(s.baseSalary)}</td>
+                    <td className="text-right tabular-nums py-3 font-medium" data-label={t('salary.baseSalary')}>{s.payrollEmployee===false ? '—' : s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
                     <td className="py-3" data-label={t('staff.status')}>
                       <span className={`badge ${getStatusBadge(s.status)} capitalize`}>
                         {s.status === 'active' ? t('common.active') : s.status === 'inactive' ? t('common.inactive') : s.status === 'resigned' ? t('staff.resigned') : s.status}

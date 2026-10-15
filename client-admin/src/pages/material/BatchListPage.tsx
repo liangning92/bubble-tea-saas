@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import dateLocaleI18n from '../../i18n'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -92,7 +93,7 @@ export function BatchListPage() {
                 <tr key={batch.id} className="border-b border-border hover:bg-gray-50">
                   <td className="py-3 font-medium">{batch.inventoryName}</td>
                   <td className="py-3 font-mono text-sm">{batch.batchNumber}</td>
-                  <td className="py-3 text-right">{batch.quantity} {batch.unit}</td>
+                  <td className="py-3 text-right">{formatNumber(batch.quantity)} {batch.unit}</td>
                   <td className="py-3 text-right text-gray-600">
                     {formatDate(batch.expiryDate)}
                   </td>

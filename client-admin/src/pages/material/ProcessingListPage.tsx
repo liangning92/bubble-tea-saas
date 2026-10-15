@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { formatDisplayQuantity } from '../../utils/itemDisplayName'
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -136,7 +137,7 @@ export function ProcessingListPage() {
                       <div key={item.id} className="text-sm flex justify-between">
                         <span>{formatItemName(item.inventory?.name || '-', i18n.language)}</span>
                         <span className="text-gray-500">
-                          {item.quantity} {item.inventory?.unit || ''}
+                          {formatNumber(item.quantity)} {item.inventory?.unit || ''}
                         </span>
                       </div>
                     ))}
@@ -149,7 +150,7 @@ export function ProcessingListPage() {
                       <div key={item.id} className="text-sm flex justify-between">
                         <span>{formatItemName(item.name || item.inventory?.name || '-', i18n.language)}</span>
                         <span className="text-green-600 font-medium">
-                          {item.quantity} {recipe.outputUnit}
+                          {formatNumber(item.quantity)} {recipe.outputUnit}
                         </span>
                       </div>
                     ))}
@@ -230,7 +231,7 @@ function ProcessingHistory() {
                   <div className="text-gray-500 mb-1">{t('material.inputs') || 'Inputs'}</div>
                   {inputs.length > 0 ? inputs.map((item: any, idx: number) => (
                     <div key={idx} className="text-gray-600">
-                      {item.name}: {item.quantity} {item.unit}
+                      {item.name}: {formatNumber(item.quantity)} {item.unit}
                     </div>
                   )) : <div className="text-gray-400">-</div>}
                 </div>
@@ -238,7 +239,7 @@ function ProcessingHistory() {
                   <div className="text-gray-500 mb-1">{t('material.outputs') || 'Outputs'}</div>
                   {outputs.length > 0 ? outputs.map((item: any, idx: number) => (
                     <div key={idx} className="text-green-600">
-                      {item.name}: {item.quantity} {item.unit}
+                      {item.name}: {formatNumber(item.quantity)} {item.unit}
                     </div>
                   )) : <div className="text-gray-400">-</div>}
                 </div>

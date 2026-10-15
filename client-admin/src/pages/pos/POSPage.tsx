@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -162,7 +163,7 @@ export function POSPage() {
               <User size={16} className="text-primary" />
               <div className="flex-1">
                 <p className="text-sm font-medium">{selectedMember.name}</p>
-                <p className="text-xs text-gray-500">{selectedMember.points} pts</p>
+                <p className="text-xs text-gray-500">{formatNumber(selectedMember.points)} pts</p>
               </div>
               <button onClick={() => setSelectedMember(null)}><X size={16} /></button>
             </div>
@@ -186,7 +187,7 @@ export function POSPage() {
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => updateQuantity(index, -1)} className="p-1 rounded hover:bg-gray-200"><Minus size={14} /></button>
-                <span className="text-sm font-medium w-6 text-center">{item.quantity}</span>
+                <span className="text-sm font-medium w-6 text-center">{formatNumber(item.quantity)}</span>
                 <button onClick={() => updateQuantity(index, 1)} className="p-1 rounded hover:bg-gray-200"><Plus size={14} /></button>
                 <button onClick={() => removeFromCart(index)} className="p-1 text-error"><Trash2 size={14} /></button>
               </div>

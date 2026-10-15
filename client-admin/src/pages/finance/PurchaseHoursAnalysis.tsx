@@ -27,7 +27,7 @@ export function PurchaseHoursAnalysis({ data }: { data: PurchaseHours }) {
   const [selectedDate, setSelectedDate] = useState(highest[0]?.date || data.days[0].date)
   const day = data.days.find(day => day.date === selectedDate) || data.days[0]
   const dayMax = Math.max(...day.hours.map(hour => hour.customers))
-  const number = (value: number) => value.toLocaleString(i18n.language)
+  const number = (value: number) => value.toLocaleString(i18n.language, { maximumFractionDigits: 0 })
   const description = (date: string, hour: Hour) => t('purchaseHours.cell', { date:formatStoreDate(date,dateSettings), time: slot(hour.hour), customers: number(hour.customers), orders: number(hour.orders) })
   const colors = ['#fce7f3', '#fbcfe8', '#f9a8d4', '#f472b6', '#db2777']
   return <section data-testid="revenue-purchase-analysis" className="rounded-2xl bg-white border border-gray-200 p-4 sm:p-6 shadow-sm space-y-6">

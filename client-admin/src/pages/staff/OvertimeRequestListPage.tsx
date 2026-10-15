@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -218,7 +219,7 @@ export function OvertimeRequestListPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">{t('staff.totalHours')}</p>
-                    <p className="text-2xl font-bold text-primary">{request.hours}h</p>
+                    <p className="text-2xl font-bold text-primary">{formatNumber(request.hours)}h</p>
                   </div>
                 </div>
               </div>

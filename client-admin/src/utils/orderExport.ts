@@ -1,3 +1,4 @@
+import { formatNumber } from './numberDisplay'
 import { formatCurrency } from './helpers'
 
 export const orderExportText = {
@@ -18,7 +19,7 @@ export function orderReportHtml(orders: any[], filters: string, language: string
   const rows = orders.map(o => {
     const items = o.items?.length ? o.items : [{productName:'-',quantity:null}]
     const span = items.length
-    return items.map((item: any, index: number) => `<tr>${index === 0 ? `<td rowspan="${span}">${escape(o.orderNumber)}</td><td rowspan="${span}">${escape(date(o.createdAt))}</td>` : ''}<td data-order-column="product">${escape(item.productName)}</td><td data-order-column="quantity">${escape(item.quantity)}</td>${index === 0 ? `<td rowspan="${span}">${escape(o.channel?.name)}</td><td rowspan="${span}">${escape(o.paymentMethod)}</td><td rowspan="${span}" class="amount">${escape(formatCurrency(o.finalAmount ?? o.total))}</td><td rowspan="${span}">${escape(o.status)}</td>` : ''}</tr>`).join('')
+    return items.map((item: any, index: number) => `<tr>${index === 0 ? `<td rowspan="${span}">${escape(o.orderNumber)}</td><td rowspan="${span}">${escape(date(o.createdAt))}</td>` : ''}<td data-order-column="product">${escape(item.productName)}</td><td data-order-column="quantity">${escape(formatNumber(item.quantity))}</td>${index === 0 ? `<td rowspan="${span}">${escape(o.channel?.name)}</td><td rowspan="${span}">${escape(o.paymentMethod)}</td><td rowspan="${span}" class="amount">${escape(formatCurrency(o.finalAmount ?? o.total))}</td><td rowspan="${span}">${escape(o.status)}</td>` : ''}</tr>`).join('')
   }).join('')
   return `<!doctype html><html lang="${escape(language)}"><head><meta charset="utf-8"><title>${escape(l.title)} ${escape(generated.slice(0,10))}</title><style>
   @page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:#111;font-size:9px;margin:0}h1{font-size:17px;margin:0 0 5px}p{margin:4px 0;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%;table-layout:fixed;margin-top:8px}th,td{border-bottom:1px solid #ccc;padding:4px 5px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eee;font-size:9px}thead{display:table-header-group}tr{break-inside:avoid}.amount{text-align:right;white-space:nowrap}.controls{padding:12px;background:#f3f4f6;margin-bottom:12px}button{padding:8px 16px;cursor:pointer}@media print{.controls{display:none}thead th{background:#eee!important;print-color-adjust:exact}}

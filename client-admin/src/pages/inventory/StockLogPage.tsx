@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -645,7 +646,7 @@ export function StockLogPage() {
                       </td>
                       <td className="py-3 text-sm text-right px-4 whitespace-nowrap font-medium">
                         <span className={log.stockDelta >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          {log.stockDelta !== null && log.stockDelta > 0 ? '+' : ''}{log.stockDelta?.toLocaleString() ?? '—'} {log.inventory?.unit || ''}
+                          {log.stockDelta !== null && log.stockDelta > 0 ? '+' : ''}{log.stockDelta?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'} {log.inventory?.unit || ''}
                         </span>
                       </td>
                       <td className="py-3 text-sm text-right text-gray-600 px-4 whitespace-nowrap">
@@ -688,7 +689,7 @@ export function StockLogPage() {
                   <option value="">-- {t('inventory.selectItem')} --</option>
                   {inventoryItems.map((item: any) => (
                     <option key={item.id} value={item.id}>
-                      [{getCategoryText(item.category)}] {formatItemName(item, i18n.language)} ({t('inventory.currentStock')}: {item.currentStock} {item.unit})
+                      [{getCategoryText(item.category)}] {formatItemName(item, i18n.language)} ({t('inventory.currentStock')}: {formatNumber(item.currentStock)} {item.unit})
                     </option>
                   ))}
                 </select>
@@ -814,13 +815,13 @@ export function StockLogPage() {
                   <option value="">-- {t('inventory.selectItem')} --</option>
                   {inventoryItems.map((item: any) => (
                     <option key={item.id} value={item.id}>
-                      [{getCategoryText(item.category)}] {formatItemName(item, i18n.language)} ({t('inventory.currentStock')}: {item.currentStock} {item.unit})
+                      [{getCategoryText(item.category)}] {formatItemName(item, i18n.language)} ({t('inventory.currentStock')}: {formatNumber(item.currentStock)} {item.unit})
                     </option>
                   ))}
                 </select>
                 {selectedWasteItem && (
                   <div className="text-xs text-gray-500 mt-1 flex justify-between">
-                    <span>{t('inventory.availableStock')}: <strong>{selectedWasteItem.currentStock} {selectedWasteItem.unit}</strong></span>
+                    <span>{t('inventory.availableStock')}: <strong>{formatNumber(selectedWasteItem.currentStock)} {selectedWasteItem.unit}</strong></span>
                     <span>{t('inventory.unitCost')}: <strong>{formatCurrency(selectedWasteItem.avgCost || 0)}</strong></span>
                   </div>
                 )}

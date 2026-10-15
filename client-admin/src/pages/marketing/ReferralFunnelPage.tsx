@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -58,7 +59,7 @@ export function ReferralFunnelPage() {
     topReferrers: []
   }
 
-  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
 
   const getPeriodLabel = (p: string) => {
     switch (p) {
@@ -113,7 +114,7 @@ export function ReferralFunnelPage() {
               <div className="text-sm text-gray-500 mt-1">{t('marketing.referralsCompleted')}</div>
             </div>
             <div className="card text-center">
-              <div className="text-3xl font-bold text-green-600">{funnel.totalReferralRevenue}</div>
+              <div className="text-3xl font-bold text-green-600">{formatNumber(funnel.totalReferralRevenue)}</div>
               <div className="text-sm text-gray-500 mt-1">{t('marketing.referralRevenue')}</div>
             </div>
             <div className="card text-center">
@@ -141,8 +142,8 @@ export function ReferralFunnelPage() {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium">{step.label}</span>
                       <span className="text-sm">
-                        <span className="font-bold">{step.value}</span>
-                        <span className="text-gray-400 ml-2">({widthPercent}%)</span>
+                        <span className="font-bold">{formatNumber(step.value)}</span>
+                        <span className="text-gray-400 ml-2">({formatNumber(widthPercent)}%)</span>
                       </span>
                     </div>
                     <div className="w-full h-8 bg-gray-100 rounded-lg overflow-hidden">

@@ -17,7 +17,7 @@ export function StaffAdjustmentsPage() {
   useEffect(()=>{if(!open||!form.staffId||!form.month)return;let current=true;setPeriodStatus('loading');salaryApi.depositPlan(form.staffId,form.month).then(r=>{if(current)setPeriodStatus(r.data.data.salaryStatus)}).catch(()=>{if(current)setPeriodStatus('error')});return()=>{current=false}},[open,form.staffId,form.month])
   const load=async()=>{setLoading(true);setError('');try{const [r,s]=await Promise.all([salaryApi.adjustments(),staffApi.list({pageSize:100})]);setRecords(r.data.data.list);setStaff(s.data.data.list)}catch{setError(t('common.error'))}finally{setLoading(false)}}
   useEffect(()=>{void load()},[])
-  const money=(n:number)=>new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:20}).format(n)
+  const money=(n:number)=>new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits: 0}).format(n)
   const save=async(e:React.FormEvent)=>{e.preventDefault();if(saving||(form.rewardMethod!=='voucher'&&(periodStatus==='paid'||periodStatus==='loading'||periodStatus==='error')))return;setSaving(true);setError('');try{await salaryApi.createAdjustment({...form,amount:Number(form.amount),requestId:requestId.current});setOpen(false);await load()}catch(e:any){setError(e.response?.data?.message||t('common.error'))}finally{setSaving(false)}}
   const cancel=async(id:string)=>{if(saving||!await confirmAdmin(t('compensation.cancelConfirm')))return;setSaving(true);try{await salaryApi.cancelAdjustment(id);await load()}catch(e:any){setError(e.response?.data?.message||t('common.error'))}finally{setSaving(false)}}
   return <section className="p-4 space-y-4">

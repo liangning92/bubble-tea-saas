@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -94,7 +95,7 @@ export function ProductAnalysisPage() {
     .filter((r: any) => r.margin !== null);
   const link = (id: string) => `/products/recipes?productId=${id}`;
   const fmt = (value: any) =>
-    Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
   const change = (row: any) =>
     row.change === null
       ? t("insights.noPrevious")
@@ -283,12 +284,12 @@ export function ProductAnalysisPage() {
                         >
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis
-                            type="number"
+                            type="number" tickFormatter={formatNumber}
                             dataKey="quantity"
                             name={t("insights.quantity")}
                           />
                           <YAxis
-                            type="number"
+                            type="number" tickFormatter={formatNumber}
                             dataKey="margin"
                             name={t("insights.margin")}
                             unit="%"
@@ -301,7 +302,7 @@ export function ProductAnalysisPage() {
                                   <p>{payload[0].payload.productName}</p>
                                   <p>
                                     {t("insights.quantity")}:{" "}
-                                    {payload[0].payload.quantity}
+                                    {formatNumber(payload[0].payload.quantity)}
                                   </p>
                                   <p>
                                     {t("insights.margin")}:{" "}
@@ -408,7 +409,7 @@ export function ProductAnalysisPage() {
                           {r.productName}
                         </Link>
                         <span className="text-sm">
-                          {r.previousQuantity} → {r.quantity} · {change(r)}
+                          {formatNumber(r.previousQuantity)} → {formatNumber(r.quantity)} · {change(r)}
                         </span>
                       </div>
                     ))}
@@ -569,8 +570,8 @@ export function ProductAnalysisPage() {
                                   {r.productName}
                                 </Link>
                               </td>
-                              <td className="text-right tabular-nums">{r.quantity}</td>
-                              <td>{r.previousQuantity}</td>
+                              <td className="text-right tabular-nums">{formatNumber(r.quantity)}</td>
+                              <td>{formatNumber(r.previousQuantity)}</td>
                               <td>{change(r)}</td>
                               <td>{fmt(r.penetration)}%</td>
                               <td>

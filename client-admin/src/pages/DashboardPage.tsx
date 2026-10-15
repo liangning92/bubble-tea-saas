@@ -1,3 +1,4 @@
+import { formatNumber } from '../utils/numberDisplay'
 import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import {queryInstantRange} from '../utils/queryPeriods'
 import { OrderItemRows } from '../components/OrderItemsTable'
@@ -50,7 +51,7 @@ function StatCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-gray-500">{title}</p>
-          <p className="text-2xl font-bold mt-1">{value}</p>
+          <p className="text-2xl font-bold mt-1">{formatNumber(value)}</p>
           {subtitle && (
             <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
           )}
@@ -304,7 +305,7 @@ export function DashboardPage() {
                     </span>
                     <span className="font-medium">{product.name}</span>
                   </div>
-                  <span className="text-sm text-gray-500">{product.quantity} cups</span>
+                  <span className="text-sm text-gray-500">{formatNumber(product.quantity)} cups</span>
                 </div>
               ))}
             </div>
@@ -348,10 +349,10 @@ export function DashboardPage() {
                       item.urgency === 'critical' ? 'text-red-600' :
                       item.urgency === 'warning' ? 'text-orange-600' : 'text-gray-600'
                     }`}>
-                      {item.currentStock} / {item.safetyStock ?? '—'}
+                      {formatNumber(item.currentStock)} / {formatNumber(item.safetyStock ?? '—')}
                     </span>
                     <span className="text-xs text-gray-400 ml-1">
-                      ({item.currentStock} {item.unit})
+                      ({formatNumber(item.currentStock)} {item.unit})
                     </span>
                   </div>
                 </div>
@@ -392,8 +393,8 @@ export function DashboardPage() {
                 <div>
                   <span className="font-medium" title={item.name}>{formatItemName(item, i18n.language)}</span>
                   <div className="text-xs text-gray-500 mt-1">
-                    {t('dashboard.theoretical')} {item.theoretical?.toFixed(1)} {item.unit} vs{' '}
-                    {t('dashboard.actual')} {item.actual?.toFixed(1)} {item.unit}
+                    {t('dashboard.theoretical')} {item.theoretical?.toFixed(0)} {item.unit} vs{' '}
+                    {t('dashboard.actual')} {item.actual?.toFixed(0)} {item.unit}
                   </div>
                 </div>
                 <div className="text-right">
@@ -401,7 +402,7 @@ export function DashboardPage() {
                     item.status === 'critical' ? 'text-red-600' :
                     item.status === 'warning' ? 'text-orange-600' : 'text-green-600'
                   }`}>
-                    {item.variance >= 0 ? '+' : ''}{item.variancePercent?.toFixed(1)}%
+                    {item.variance >= 0 ? '+' : ''}{item.variancePercent?.toFixed(0)}%
                   </span>
                 </div>
               </div>

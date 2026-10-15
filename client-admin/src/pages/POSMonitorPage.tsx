@@ -1,3 +1,4 @@
+import { formatNumber } from '../utils/numberDisplay'
 import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../utils/queryPeriods'
 import { OrderItemsTable } from '../components/OrderItemsTable'
@@ -101,8 +102,8 @@ function ClearedCartDetails({ log }: { log: any }) {
       <div className="mt-2 overflow-x-auto"><table className="w-full text-sm">
         <thead><tr className="text-gray-500 border-b"><th className="py-2 text-left">{t('posMonitor.cartProduct')}</th><th className="px-3 text-right">{t('posMonitor.cartQuantity')}</th><th className="px-3 text-right">{t('posMonitor.cartUnitPrice')}</th><th className="text-right">{t('posMonitor.cartLineTotal')}</th></tr></thead>
         <tbody>{items.map((item: any, index: number) => <tr key={`${item.id}-${index}`} className="border-b last:border-0">
-          <td className="text-right tabular-nums py-3"><p className="font-medium">{item.productName}</p><p className="text-xs text-gray-500">{[item.specName, item.options].filter(Boolean).join(' · ')}</p>{item.addons?.length > 0 && <p className="text-xs text-gray-500">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}</td>
-          <td className="px-3 text-right">{item.quantity}</td><td className="px-3 text-right whitespace-nowrap">{typeof item.unitPrice === 'number' ? formatCurrency(item.unitPrice) : '—'}</td><td className="text-right whitespace-nowrap">{typeof item.lineTotal === 'number' ? formatCurrency(item.lineTotal) : '—'}</td>
+          <td className="text-right tabular-nums py-3"><p className="font-medium">{item.productName}</p><p className="text-xs text-gray-500">{[item.specName, item.options].filter(Boolean).join(' · ')}</p>{item.addons?.length > 0 && <p className="text-xs text-gray-500">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${formatNumber(addon.quantity)}` : ''}`).join(', ')}</p>}</td>
+          <td className="px-3 text-right">{formatNumber(item.quantity)}</td><td className="px-3 text-right whitespace-nowrap">{typeof item.unitPrice === 'number' ? formatCurrency(item.unitPrice) : '—'}</td><td className="text-right whitespace-nowrap">{typeof item.lineTotal === 'number' ? formatCurrency(item.lineTotal) : '—'}</td>
         </tr>)}</tbody>
       </table></div>
       <p className="mt-2 text-sm">{t('posMonitor.cartSubtotal')}: <strong>{typeof cart.subtotal === 'number' ? formatCurrency(cart.subtotal) : t('posMonitor.cartAmountUnavailable')}</strong></p>
@@ -250,8 +251,8 @@ export function POSMonitorPage() {
       </div>
 
       {!!unposted.length && <section role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 p-4">
-        <h2 className="font-bold text-red-800">{t('posMonitor.unpostedReceipts')} · {unposted.length} · Rp {unposted.reduce((sum:number,row:any)=>sum+row.grandTotal,0).toLocaleString('id-ID')}</h2>
-        <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id} className="border-b last:border-0 py-3"><OrderItemsTable items={row.items} /><span className="text-xs text-gray-500">{row.orderNumber}</span> · Rp {row.grandTotal.toLocaleString('id-ID')} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID')} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID')}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
+        <h2 className="font-bold text-red-800">{t('posMonitor.unpostedReceipts')} · {unposted.length} · Rp {unposted.reduce((sum:number,row:any)=>sum+row.grandTotal,0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</h2>
+        <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id} className="border-b last:border-0 py-3"><OrderItemsTable items={row.items} /><span className="text-xs text-gray-500">{row.orderNumber}</span> · Rp {row.grandTotal.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
       </section>}
       {/* Stats Row */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -334,9 +335,9 @@ export function POSMonitorPage() {
                       <tbody>{session.items.map((item: any, index: number) => <tr key={`${item.id}-${index}`} className="border-b border-gray-100">
                         <td className="text-right tabular-nums py-3 pr-4"><p className="font-medium">{item.productName}</p>
                           {item.specName && <p className="text-xs text-gray-500 mt-1">{item.specName}{item.options ? ` · ${item.options}` : ''}</p>}
-                          {Array.isArray(item.addons) && item.addons.length > 0 && <p className="text-xs text-gray-500 mt-1">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${addon.quantity}` : ''}`).join(', ')}</p>}
+                          {Array.isArray(item.addons) && item.addons.length > 0 && <p className="text-xs text-gray-500 mt-1">{t('posMonitor.cartAddons')}: {item.addons.map((addon: any) => `${addon.name}${addon.quantity ? ` ×${formatNumber(addon.quantity)}` : ''}`).join(', ')}</p>}
                         </td>
-                        <td className="py-3 px-3 text-right whitespace-nowrap">{item.quantity}</td>
+                        <td className="py-3 px-3 text-right whitespace-nowrap">{formatNumber(item.quantity)}</td>
                         <td className="py-3 px-3 text-right whitespace-nowrap">{typeof item.unitPrice === 'number' ? formatCurrency(item.unitPrice) : '—'}</td>
                         <td className="py-3 pl-3 text-right whitespace-nowrap">{typeof item.lineTotal === 'number' ? formatCurrency(item.lineTotal) : '—'}</td>
                       </tr>)}</tbody>
