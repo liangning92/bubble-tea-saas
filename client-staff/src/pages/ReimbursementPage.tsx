@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import { useDialogs } from '../components/Dialogs'
 import { useSessionDraft, useMemoryDraft } from '../utils/useSessionDraft'
@@ -7,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { Receipt, ArrowLeft, Plus, Clock, XCircle, Upload } from 'lucide-react'
+import { Receipt, Plus, Clock, XCircle, Upload } from 'lucide-react'
 import { formatDate, formatCurrency } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,7 +37,6 @@ interface ReimbursementType {
 }
 
 export function ReimbursementPage() {
-  const navigate = useNavigate()
   const dialogs = useDialogs()
 
   const { t } = useTranslation()
@@ -120,12 +118,6 @@ export function ReimbursementPage() {
       <header className="bg-primary text-white px-4 py-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              aria-label={t('common.back')} onClick={() => navigate('/profile')}
-              className="p-2 bg-white/20 rounded-full hover:bg-white/30"
-            >
-              <ArrowLeft size={20} />
-            </button>
             <Receipt size={28} />
             <div>
               <h1 className="text-xl font-bold">{t('reimbursement.title')}</h1>

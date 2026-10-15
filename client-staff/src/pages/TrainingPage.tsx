@@ -1,3 +1,4 @@
+import { employeeTrainingPresentation } from '../utils/trainingPresentation'
 import { useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import { PageHeader } from "../components/PageHeader";
@@ -5,7 +6,7 @@ import {
   TrainingSectionExtras,
   TrainingModuleExtras,
 } from "../../../shared/components/TrainingExtras";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../stores/auth";
 import { staffApi, employeeApi } from "../services/api";
@@ -66,7 +67,8 @@ export function TrainingPage() {
   const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
   const { user, token } = useAuthStore();
-  const catalogue = useTrainingCatalogue(token, user?.storeId, 'employee');
+  const sourceCatalogue = useTrainingCatalogue(token, user?.storeId, 'employee');
+  const catalogue = useMemo(() => employeeTrainingPresentation(sourceCatalogue), [sourceCatalogue.modules, sourceCatalogue.checklists, sourceCatalogue.revision, sourceCatalogue.loading, sourceCatalogue.error, sourceCatalogue.refresh]);
   const w = trainingCopy(i18n.language);
   const progressVersion = catalogue.revision || "1";
   const progressScope = `${user?.storeId}:${user?.staffId}:${progressVersion}`;

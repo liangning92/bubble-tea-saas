@@ -217,8 +217,8 @@ export function AttendancePage() {
     }
   };
 
-  const getWorkingHours = () => {
-    if (!attendance?.checkInTime) return t("attendance.workingHoursZero");
+  const getWorkingHours = (compact = false) => {
+    if (!attendance?.checkInTime) return compact ? "00:00" : t("attendance.workingHoursZero");
     const checkOutTime = attendance.checkOutTime
       ? new Date(attendance.checkOutTime)
       : new Date();
@@ -226,7 +226,7 @@ export function AttendancePage() {
     const diff = checkOutTime.getTime() - checkInTime.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return t("attendance.workingHoursFormat", { hours, minutes });
+    return compact ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}` : t("attendance.workingHoursFormat", { hours, minutes });
   };
 
   const isCheckedIn = Boolean(
@@ -327,8 +327,8 @@ export function AttendancePage() {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
             <div className="text-center">
-              <p className="text-lg font-bold text-primary">
-                {getWorkingHours().split(" ")[0]}
+              <p className="text-lg font-bold text-primary tabular-nums" aria-label={getWorkingHours()}>
+                {getWorkingHours(true)}
               </p>
               <p className="text-sm text-gray-400">
                 {t("attendance.workHours", "工时")}

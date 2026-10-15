@@ -5,11 +5,10 @@ import {payrollLabels} from '../../../shared/payrollLabels'
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { Calendar, Plus, Clock, XCircle, Paperclip, Trash2, Upload, Loader2, ChevronLeft, Check } from 'lucide-react'
+import { Calendar, Plus, Clock, XCircle, Paperclip, Trash2, Upload, Loader2, Check } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -71,7 +70,6 @@ export function LeavePage() {
   const dialogs = useDialogs()
 
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { user } = useAuthStore()
 
   const [leaves, setLeaves] = useState<Leave[]>([])
@@ -123,12 +121,6 @@ export function LeavePage() {
       <header className="bg-primary text-white px-4 py-6 shadow-md">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/attendance')}
-              className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
-            >
-              <ChevronLeft size={22} />
-            </button>
             <Calendar size={26} />
             <div>
               <h1 className="text-xl font-bold">{t('leave.title')}</h1>
