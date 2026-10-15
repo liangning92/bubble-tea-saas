@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
     "../shared/components/PayrollBasisDetails.tsx",
+    "../shared/components/InventoryCountEditor.tsx",
   ],
   theme: {
     extend: {

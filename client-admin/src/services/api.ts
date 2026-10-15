@@ -160,6 +160,7 @@ export const inventoryApi = {
   getInventoryCounts: () => api.get('/inventory-counts'),
   getInventoryCount: (id: string) => api.get('/inventory-counts/' + encodeURIComponent(id)),
   createInventoryCount: (data: any) => api.post('/inventory-counts', data),
+  updateInventoryCountItems: (countId: string, items: unknown[]) => api.put(`/inventory-counts/${countId}/items`, { items }),
   updateInventoryCountItem: (countId: string, itemId: string, data: any) =>
     api.put('/inventory-counts/' + countId + '/item/' + itemId, data),
   submitInventoryCount: (id: string) => api.post('/inventory-counts/' + encodeURIComponent(id) + '/submit'),

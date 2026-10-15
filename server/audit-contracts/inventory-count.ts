@@ -20,12 +20,12 @@ export function inventoryCountContract(db:any){
   await expect(completeInventoryCount(c.id,'manager',f.store.id)).rejects.toThrow('COUNT_NOT_ACTIVE')
   const logs=await db.stockOutLog.findMany({where:{inventoryId:f.inventory.id}});expect(logs).toHaveLength(1);expect(logs[0].quantity).toBe(2);expect(logs[0].reason).toBe('count_adjustment')
  })
- test('count gain requires reason, protects store/item boundaries, and cancel returns items',async()=>{
+ test('count gain accepts optional notes, protects store/item boundaries, and cancel returns items',async()=>{
   const f=await fixture(),other=await fixture(),c=await session(f.store.id)
-  await expect(observe(f,c,102,'')).rejects.toThrow('COUNT_VARIANCE_REASON_REQUIRED')
+  expect((await observe(f,c,102,'')).note).toBeNull()
   await expect(completeInventoryCount(c.id,'manager',other.store.id)).rejects.toThrow('COUNT_NOT_ACTIVE')
   await expect(updateCountItem(c.items[0].id,102,'staff','test',{countId:'wrong',storeId:f.store.id,expectedStock:100,observedVersion:f.inventory.updatedAt.toISOString()})).rejects.toThrow('COUNT_NOT_ACTIVE')
-  await observe(f,c,102);await completeInventoryCount(c.id,'manager',f.store.id)
+  await completeInventoryCount(c.id,'manager',f.store.id)
   expect((await db.inventory.findUniqueOrThrow({where:{id:f.inventory.id}})).currentStock).toBe(102)
   expect((await db.stockOutLog.findFirstOrThrow({where:{inventoryId:f.inventory.id}})).quantity).toBe(-2)
   const next=await session(other.store.id);expect((await cancelInventoryCount(next.id,other.store.id)).items).toHaveLength(1)
