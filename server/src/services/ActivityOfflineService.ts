@@ -29,7 +29,7 @@ export async function quoteOfflineActivity(storeId:string,input:QuoteInput,token
  for(const addon of i.addons||[])if(!product.addonNames?.includes(addon.name)||!snapshot.addons.some((a:any)=>a.name===addon.name&&a.price===addon.price))throw Error('ACTIVITY_OFFLINE_ADDON_MISMATCH')
  return {productId:i.productId,specId:i.specId,quantity:i.quantity,unitPrice,addons:i.addons||[]}
  })
- const member=memberProof?verifyOfflineMember(memberProof.token,storeId,input.memberId||'',occurredAt):undefined
+ const member=memberProof?await verifyOfflineMember(memberProof.token,storeId,input.memberId||'',occurredAt):undefined
  if(member){if(!Number.isSafeInteger(memberProof!.pointsBefore)||memberProof!.pointsBefore<0)throw Error('OFFLINE_MEMBER_AMOUNT_INVALID');member.member.points=memberProof!.pointsBefore}
  const price=bestActivityPrice(snapshot.activities as Activity[],items,{channel:channel.code,paymentMethod:input.paymentMethod,now},member?offlineMemberCandidates(member,input,items,now):[])
  // Shared-stock and quota rights are deliberately decided only after the order reaches the server.

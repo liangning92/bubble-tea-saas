@@ -132,6 +132,7 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (/^\/revenue\/query(?:-options)?$/.test(path) && read) return 'finance.read'
   if (/^\/expenses\/categories$/.test(path) && read) return null
   if (/^\/expenses\/pos(?:\/|$)/.test(path)) return 'pos.expense'
+  if (path === '/pos-cash/offline-work') return null // Each returned self-service section checks the actor's current personal permission.
   if (path === '/pos-cash/shifts/offline-operations') return null // Signed original actor authorizes financial effects.
   if (/^\/pos-cash\/shifts(?:\/|$)/.test(path)) return 'pos.shift'
   if (/^\/pos-cash(?:\/|$)/.test(path)) return 'pos.cash'

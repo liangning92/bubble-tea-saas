@@ -1,3 +1,6 @@
+import {applyOfflineWork,offlineTaskSchema,offlineAttendanceSchema} from './POSOfflineWorkService'
+import {applyOfflineRefundDecision,offlineRefundDecisionSchema} from './POSOfflineRefundService'
+import {verifyMemberRegistration} from './MemberOfflineService'
 import { requestItemRefund } from './ItemRefundService'
 import { createRefundRequest } from './OrderService'
 import { POS_OFFLINE_TTL_MS, POS_OFFLINE_DAYS, POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
@@ -18,8 +21,13 @@ import { posExpenseSchema } from './PosExpenseService'
 
 const prefix = 'pos.offline.operation:'
 const money = z.number().int().min(0).max(2147483647)
+const memberRegistrationSchema=z.object({name:z.string().trim().min(1).max(50),phone:z.string().regex(/^\+?[0-9]{10,15}$/),email:z.union([z.string().email().max(150),z.literal('')]).optional(),birthday:z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(d=>{const at=new Date(d);return Number.isFinite(at.getTime())&&at.toISOString().slice(0,10)===d}),z.literal('')]).optional(),referredByPhone:z.string().max(100).optional(),registrationToken:z.string().max(20000)}).strict()
 const base = z.object({id:z.string().uuid(), sessionId:z.string().min(1).max(100), occurredAt:z.string().datetime(), authorization:z.string().min(1).max(10000)})
 export const offlineOperationSchema = z.discriminatedUnion('kind',[
+ base.extend({kind:z.literal('task'),data:offlineTaskSchema}),
+ base.extend({kind:z.literal('attendance'),data:offlineAttendanceSchema}),
+ base.extend({kind:z.literal('refund-settle'),data:offlineRefundDecisionSchema}),
+ base.extend({kind:z.literal('member'),data:memberRegistrationSchema}),
  base.extend({kind:z.literal('open'),data:z.object({shift:z.string().min(1).max(100),openFloat:money.refine(n=>n>0)}).strict()}),
  base.extend({kind:z.literal('close'),data:z.object({actualCash:money,closeNote:z.string().max(2000).optional(),nextStaffId:z.string().max(100).optional(),manualReceiptsCashBasis:z.enum(['drawer_total','cash_receipts']).optional(),manualReceipts:manualReceiptsSchema.optional(),orders:z.array(z.object({orderNumber:z.string().max(100),finalAmount:money})).max(10000),localReport:z.record(z.unknown())}).strict()}),
  base.extend({kind:z.literal('cash'),data:z.object({type:z.enum(['cash_in','cash_out','float']),amount:money.refine(n=>n>0),note:z.string().max(2000).optional()}).strict()}),
@@ -29,13 +37,13 @@ export const offlineOperationSchema = z.discriminatedUnion('kind',[
 export class OfflineOperationError extends Error { constructor(message:string,public status=409){super(message)} }
 const permitted=(user:Pick<AuthUser,'role'|'accessRole'>,key:string)=>{
  if(user.role==='admin')return true
- if(!user.accessRole)return key==='orders.discount'?user.role==='manager':['manager','cashier'].includes(user.role)
- return user.accessRole.version===2?user.accessRole.modes?.[key]==='allow':user.accessRole.permissions.includes(key==='orders.refund.request'?'orders.refund':key)
+ if(!user.accessRole)return ['orders.discount','orders.refund','approvals.approve'].includes(key)?user.role==='manager':['manager','cashier'].includes(user.role)
+ return user.accessRole.version===2?user.accessRole.modes?.[key]==='allow':user.accessRole.permissions.includes(['orders.refund.request','approvals.approve'].includes(key)?'orders.refund':key)
 }
 export function offlineAuthorization(user:AuthUser,allowedPayments:string[]=[],policy:Record<string,unknown>={}) {
  const issuedAt=Date.now()
- const permissions=['pos.shift','pos.cash','pos.expense','orders.create','orders.discount','orders.refund.request','members.read'].filter(key=>permitted(user,key))
- return {token:jwt.sign({actorId:user.id,staffId:user.staffId,storeId:user.storeId,role:user.role,issuedAt,permissions,allowedPayments,...policy},config.jwt.secret,{audience:'pos-offline-operations',expiresIn:`${POS_OFFLINE_DAYS}d`}),actorId:user.id,issuedAt:new Date(issuedAt).toISOString(),expiresAt:new Date(issuedAt+POS_OFFLINE_TTL_MS).toISOString(),permissions}
+ const permissions=['pos.shift','pos.cash','pos.expense','orders.create','orders.discount','orders.refund.request','members.read','members.write','orders.refund','approvals.approve','personal.tasks','personal.attendance'].filter(key=>permitted(user,key))
+ return {token:jwt.sign({actorId:user.id,staffId:user.staffId,storeId:user.storeId,role:user.role,issuedAt,permissions,allowedPayments,...policy},config.jwt.secret,{audience:'pos-offline-operations',expiresIn:`${POS_OFFLINE_DAYS}d`}),independentRefundApproval:!!policy.independentRefundApproval,actorId:user.id,issuedAt:new Date(issuedAt).toISOString(),expiresAt:new Date(issuedAt+POS_OFFLINE_TTL_MS).toISOString(),permissions}
 }
 async function operationActor(storeId:string,input:z.infer<typeof offlineOperationSchema>,permission?:string) {
  const at=new Date(input.occurredAt).getTime()
@@ -47,7 +55,7 @@ async function operationActor(storeId:string,input:z.infer<typeof offlineOperati
  const actor={id:user?.id,role:user?.role,storeId:user?.staff?.storeId||user?.storeId||'',staffId:user?.staff?.id||''} as AuthUser
  if(!user||user.updatedAt.getTime()>grant.issuedAt||(user.staff&&user.staff.status!=='active')||actor.storeId!==storeId||actor.staffId!==grant.staffId||actor.role!==grant.role)throw new OfflineOperationError('OFFLINE_AUTHORIZATION_REVOKED',403)
  actor.accessRole=await userAccessV2(actor)||await assignedStaffAccess(actor)
- const key=permission|| (input.kind==='refund'?'orders.refund.request':input.kind==='cash'?'pos.cash':input.kind==='expense'?'pos.expense':'pos.shift')
+ const key=permission|| (input.kind==='task'?'personal.tasks':input.kind==='attendance'?'personal.attendance':input.kind==='refund-settle'?'orders.refund':input.kind==='member'?'members.write':input.kind==='refund'?'orders.refund.request':input.kind==='cash'?'pos.cash':input.kind==='expense'?'pos.expense':'pos.shift')
  if(!grant.permissions?.includes(key)||!permitted(actor,key))throw new OfflineOperationError('STAFF_ACCESS_PERMISSION_DENIED',403)
  return actor
 }
@@ -75,7 +83,22 @@ export async function applyOfflineOperation(storeId:string,body:unknown) {
   if(existing){const receipt=JSON.parse(existing.value);if(receipt.fingerprint!==fingerprint)throw new OfflineOperationError('OFFLINE_OPERATION_CONFLICT');return receipt.result}
   const at=new Date(input.occurredAt)
   let result:any
-  if(input.kind==='open'){
+  if(input.kind==='task'||input.kind==='attendance'){
+   result=await applyOfflineWork(tx,storeId,input,actor)
+  }else if(input.kind==='refund-settle'){
+   if(!authorization.permissions?.includes('approvals.approve')||!permitted(actor,'approvals.approve'))throw new OfflineOperationError('STAFF_ACCESS_PERMISSION_DENIED',403)
+   result=await applyOfflineRefundDecision(tx,storeId,input,actor,authorization)
+  }else if(input.kind==='member'){
+   const policy=verifyMemberRegistration(input.data.registrationToken,storeId,input.occurredAt)
+   const id='POSMEMBER-'+input.id
+   if(input.sessionId!=='MEMBER:'+id)throw new OfflineOperationError('OFFLINE_MEMBER_ID_INVALID',400)
+   if(await tx.member.findUnique({where:{phone:input.data.phone}}))throw new OfflineOperationError('MEMBER_PHONE_ALREADY_REGISTERED')
+   const ref=input.data.referredByPhone?.trim()
+   const inviter=ref?await tx.member.findFirst({where:{storeId,status:'active',OR:[{phone:ref},{referralCode:ref.toUpperCase()}]}}):null
+   result=await tx.member.create({data:{id,storeId,name:input.data.name,phone:input.data.phone,email:input.data.email||null,birthday:input.data.birthday?new Date(input.data.birthday+'T00:00:00+07:00'):null,points:policy.welcomePoints,referralCode:input.id.replace(/-/g,'').toUpperCase(),referredByMemberId:inviter?.id,createdAt:at}})
+   await tx.pointLog.create({data:{memberId:id,type:'earn',points:policy.welcomePoints,note:'Welcome bonus: offline registration '+input.id,createdAt:at}})
+   if(inviter){await tx.member.update({where:{id:inviter.id},data:{points:{increment:500}}});await tx.pointLog.create({data:{memberId:inviter.id,type:'earn',points:500,note:'Referral: offline registration '+input.id,createdAt:at}})}
+  }else if(input.kind==='open'){
    const active=await tx.shift.findFirst({where:{storeId,key:input.data.shift,isActive:true}})
    if(input.data.shift==='off'||(Array.isArray(authorization.shiftKeys)?!authorization.shiftKeys.includes(input.data.shift):!active))throw new OfflineOperationError('SHIFT_DISABLED')
    if(!input.sessionId.startsWith('POSSHIFT-'))throw new OfflineOperationError('OFFLINE_SESSION_ID_INVALID',400)

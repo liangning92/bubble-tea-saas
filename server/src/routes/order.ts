@@ -44,6 +44,7 @@ const createOrderSchema = z.object({
   offlineMemberCouponTemplateId:z.string().optional(),
   memberId: z.string().optional(),
   items: z.array(z.object({
+    offlineItemId:z.string().uuid().optional(),
     productId: z.string(),
     productName: z.string(),
     specId: z.string(),

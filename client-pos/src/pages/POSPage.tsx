@@ -2135,12 +2135,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 动态grid class
   const gridColsClass = {
-    '3': 'grid-cols-3',
-    '4': 'grid-cols-4',
-    '5': 'grid-cols-5',
-    '6': 'grid-cols-6',
-    '8': 'grid-cols-8'
-  }[posLayout.gridCols] || 'grid-cols-4'
+    '3': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3',
+    '4': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
+    '5': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5',
+    '6': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6',
+    '8': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-8'
+  }[posLayout.gridCols] || 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
 
   const cardHeightClass = posLayout.cardSize === 'large' ? 'h-24' : posLayout.cardSize === 'small' ? 'h-16' : 'h-20'
 
@@ -2173,7 +2173,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   },[quoteInputKey,activityRevision])
   useEffect(()=>{
     let live=true
-    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void posApi.prepareOfflineMembers().catch(()=>{});void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
+    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void posApi.prepareOfflineMembers().catch(()=>{});void posApi.prepareOfflineWork().catch(()=>{});void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
     void refresh();const timer=setInterval(refresh,15000)
     const focus=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
@@ -3395,7 +3395,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
         <OfflineOperationsStatus />
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
-        <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
+        <header className="bg-primary px-4 py-3 min-h-[56px] shrink-0 flex flex-wrap items-center justify-between gap-3 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
           <div className="flex items-center gap-4 shrink-0">
             {/* Logo 区域：上面是 Logo，下面紧贴收银员姓名 */}
@@ -3456,7 +3456,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>
 
           {/* 右侧：工具栏 + 窗口控制按钮 */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap max-w-full items-center gap-1.5 shrink-0">
             {selectedChannel && (() => {
               // 构建工具栏按钮数组
               const toolbarButtons: Array<{
@@ -3555,7 +3555,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               }
 
               return (
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {toolbarButtons.map(btn => (
                     <button
                       key={btn.id}
@@ -3654,9 +3654,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* Main */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
         {/* 左侧：分类栏 + 产品区 */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="h-[45vh] min-h-[320px] shrink-0 md:h-auto md:min-h-0 md:flex-1 min-w-0 flex flex-col overflow-hidden relative">
 
           {/* 分类区域 - 白色背景 */}
           {selectedChannel && (
@@ -3731,7 +3731,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         </div>
 
         {/* 购物车 - 大屏设计 */}
-        <div className="w-80 bg-white border-l flex flex-col">
+        <div className="w-full md:w-80 shrink-0 bg-white border-t md:border-t-0 md:border-l flex flex-col min-h-[320px] md:min-h-0">
           {/* 当前订单渠道与桌号/人数条（点击可随时修改） */}
           <div
             onClick={() => setShowChannelModal(true)}

@@ -10,7 +10,7 @@ const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/
   const pages={};
   for(const client of ['client-admin','client-pos']){
    const admin=client==='client-admin',port=admin?6231:6232;
-   const common=`import React from 'react';import{createRoot}from'react-dom/client';import './src/i18n/index.ts';import{useAuthStore}from'./src/stores/auth.ts';useAuthStore.setState({user:{id:'staff',role:'manager',storeId:'owned',staff:{id:'staff',name:'Staff'}},token:'synthetic'});`;
+   const common=`import React from 'react';import{createRoot}from'react-dom/client';import './src/i18n/index.ts';import{useAuthStore}from'./src/stores/auth.ts';useAuthStore.setState({user:{id:'staff',role:'manager',storeId:'owned',staff:{id:'staff',name:'Staff'}},token:'synthetic',isAuthenticated:true,apiUrl:location.origin+'/api'});`;
    const fixtureJs=common+(admin?`
 import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{POSSettingsPage}from'./src/pages/settings/POSSettingsPage.tsx';import{configApi,receiptTemplateApi,shiftApi}from'./src/services/api.ts';
 configApi.get=async()=>({data:{data:await(await fetch('/fixture-config')).json()}});configApi.set=async(storeId,key,value)=>fetch('/fixture-config',{method:'POST',body:JSON.stringify({storeId,key,value})});receiptTemplateApi.list=async()=>({data:{data:[]}});shiftApi.list=async()=>({data:{data:[]}});

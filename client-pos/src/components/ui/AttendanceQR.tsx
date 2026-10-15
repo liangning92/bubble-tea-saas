@@ -1,3 +1,5 @@
+import {offlineWorkState,recordOfflineAttendance} from '../../utils/offlineWork'
+import {useAuthStore} from '../../stores/auth'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { posApi } from '../../services/api'
@@ -11,6 +13,11 @@ interface AttendanceQRProps {
 
 export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
   const { t } = useTranslation()
+  const user=useAuthStore(s=>s.user),[local,setLocal]=useState<any>(null),[localBusy,setLocalBusy]=useState(false),[localError,setLocalError]=useState('')
+  const readLocal=useCallback(async()=>{try{await posApi.prepareOfflineWork()}catch{}try{setLocal(await offlineWorkState())}catch{setLocal(null)}},[])
+  useEffect(()=>{void readLocal()},[readLocal])
+  async function record(type:'check_in'|'check_out'){setLocalBusy(true);setLocalError('');try{await recordOfflineAttendance(type);await readLocal()}catch{setLocalError(t('offlineWork.failed'))}finally{setLocalBusy(false)}}
+  const openAttendance=local?.attendance?.find((r:any)=>!r.checkOutTime)
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [storeName, setStoreName] = useState<string>('')
   const [expiresAt, setExpiresAt] = useState<number>(0)
@@ -90,7 +97,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl w-full max-w-sm mx-4 overflow-hidden"
+        className="bg-white rounded-2xl w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -120,7 +127,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
             </div>
           ) : error ? (
             <div className="w-48 h-48 mx-auto bg-red-50 rounded-xl flex flex-col items-center justify-center">
-              <p className="text-red-500 text-sm">{error}</p>
+              <p className="text-red-500 text-sm p-2">{local?t('offlineWork.qrOffline'):error}</p>
               <button
                 onClick={loadQR}
                 className="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm"
@@ -159,6 +166,13 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
           ) : null}
         </div>
 
+        <section className="mx-6 mb-4 border rounded-xl p-3 space-y-2" data-testid="local-attendance">
+          <h3 className="font-semibold">{t('offlineWork.attendance')}</h3>
+          <p className="text-sm">{user?.staff?.name||user?.phone}</p>
+          <p className="text-xs text-gray-600">{t('offlineWork.attendanceNotice')}</p>
+          {local?<><p className="text-sm">{openAttendance?t('offlineWork.clockedIn')+' '+new Date(openAttendance.checkInTime).toLocaleString():t('offlineWork.clockedOut')}</p><div className="flex gap-2"><button disabled={localBusy||!!openAttendance} onClick={()=>void record('check_in')} className="flex-1 border rounded p-2 disabled:opacity-40">{t('offlineWork.checkIn')}</button><button disabled={localBusy||!openAttendance} onClick={()=>void record('check_out')} className="flex-1 border rounded p-2 disabled:opacity-40">{t('offlineWork.checkOut')}</button></div></>:<p className="text-sm text-amber-800">{t('offlineWork.unprepared')}</p>}
+          {localError&&<p role="alert" className="text-sm text-red-700">{localError}</p>}
+        </section>
         {/* Manual Refresh Button */}
         <div className="px-6 pb-4">
           <button

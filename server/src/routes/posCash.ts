@@ -1,3 +1,5 @@
+import {offlineWorkSnapshot} from '../services/POSOfflineWorkService'
+import {readPolicyV2} from '../services/StaffPermissionV2Service'
 import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import { config as runtimeConfig } from '../config/env'
@@ -96,7 +98,7 @@ for (const path of ['/balance', '/shifts/current']) {
         prisma.config.findUnique({where:{storeId_key:{storeId:req.user!.storeId,key:'shiftSettings'}}}),
         getExpenseCategories(req.user!.storeId)
       ])
-      const policy={shiftKeys:shifts.filter(s=>s.key!=='off').map(s=>s.key),requireSupervisorConfirm:!!(settingsRow&&JSON.parse(settingsRow.value).requireSupervisorConfirm),expenseCategoryKeys:categoriesRow.filter((c:any)=>c.posVisible!==false).map((c:any)=>c.key)}
+      const policy={independentRefundApproval:!!(await readPolicyV2(req.user!.storeId))?.active,shiftKeys:shifts.filter(s=>s.key!=='off').map(s=>s.key),requireSupervisorConfirm:!!(settingsRow&&JSON.parse(settingsRow.value).requireSupervisorConfirm),expenseCategoryKeys:categoriesRow.filter((c:any)=>c.posVisible!==false).map((c:any)=>c.key)}
       res.json({code:200,data:{...result,offlineAuthorization:offlineAuthorization(req.user!,allowedPayments,policy)}})
     } catch (error) {
       console.error('Get shift evidence error:', error)
@@ -105,10 +107,12 @@ for (const path of ['/balance', '/shifts/current']) {
   })
 }
 
+router.get('/offline-work',authenticate,authorize('admin','manager','cashier'),async(req:AuthRequest,res)=>{try{return res.json({code:200,data:await prisma.$transaction(tx=>offlineWorkSnapshot(req.user!,tx),{isolationLevel:runtimeConfig.databaseUrl.startsWith('postgres')?'RepeatableRead':'Serializable'})})}catch(error:any){return res.status(409).json({code:409,message:error.message})}})
+
 // The current operator authenticates delivery; each original actor has a signed, bounded grant.
 router.post('/shifts/offline-operations', authenticate, authorize('admin','manager','cashier'), async(req:AuthRequest,res)=>{
  try {return res.json({code:200,data:await applyOfflineOperation(req.user!.storeId,req.body)})}
- catch(error:any){const status=error instanceof OfflineOperationError?error.status:error?.name==='ZodError'?400:500;return res.status(status).json({code:status,message:status===500?'OFFLINE_OPERATION_SAVE_FAILED':error.message})}
+ catch(error:any){const status=error instanceof OfflineOperationError?error.status:error?.name==='ZodError'?400:/^(?:REFUND_|OFFLINE_REFUND_|OFFLINE_SHIFT_|OFFLINE_TASK_|OFFLINE_WORK_|OFFLINE_ATTENDANCE_|STAFF_ACCESS_|ADMIN_APPROVAL_|UNPREPARED_|INVALID_REFUND_|PARTIAL_REFUND_|REPLICA_FINANCIAL_)/.test(error?.message||'')?409:500;return res.status(status).json({code:status,message:status===500?'OFFLINE_OPERATION_SAVE_FAILED':error.message})}
 })
 
 // ==================== SHIFT SESSIONS ====================

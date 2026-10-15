@@ -1,5 +1,7 @@
+import {prepareOfflineWork,offlineTasks,mutateOfflineTask,localTaskPhoto} from '../utils/offlineWork'
+import {createOfflineMember} from '../utils/offlineOperations'
 import {offlineMembers,offlineMemberCoupons,prepareOfflineMembers,pendingOfflineMembers,offlineVerifyCoupon,offlineMemberEvidence} from '../utils/offlineMembers'
-import { offlineRefundQuote, queueRefund } from '../utils/offlineRefunds'
+import { offlineRefundQuote, queueRefund,cacheRefundOrder } from '../utils/offlineRefunds'
 import { offlineRead } from '../utils/offlineReads'
 import { currentOfflineShift, openOfflineShift, closeOfflineShift, createOfflineCashEvent, createOfflineExpense, offlineHandover, hasOfflineOperations } from '../utils/offlineOperations'
 import { serverUnavailable } from '../utils/serverUnavailable'
@@ -146,9 +148,9 @@ export const posApi = {
   },
   deleteOrder: (id: string) => api.delete(`/orders/${id}`),
   getOrders: (params?: any) => offlineRead('/orders',params,()=>api.get('/orders', { params,timeout:5000 })),
-  getRefundQuote: async (id: string) => {try{if(!navigator.onLine||!readBackendAuth().token||id.startsWith('LOCAL-'))return await offlineRefundQuote(id);return await api.get(`/orders/${id}/refund-quote`,{timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineRefundQuote(id)}},
+  getRefundQuote: async (id: string) => {try{if(!navigator.onLine||!readBackendAuth().token||id.startsWith('LOCAL-'))return await offlineRefundQuote(id);const [order,quote]=await Promise.all([api.get(`/orders/${id}`,{timeout:5000}),api.get(`/orders/${id}/refund-quote`,{timeout:5000})]);await cacheRefundOrder(order.data.data,quote.data.data);return quote}catch(error){if(!serverUnavailable(error))throw error;return offlineRefundQuote(id)}},
   requestRefund: (data: { orderId: string; reason: string; staffId?: string; reasonCode: string; selectedItemIds?: string[]; requestId?: string; items?: {itemId:string;quantity:number}[] }) =>
-    (async()=>{if(!navigator.onLine||!readBackendAuth().token||data.orderId.startsWith('LOCAL-')||await hasOfflineOperations(readBackendAuth().user!.storeId!))return queueRefund(data);try{return await api.post('/orders/refund-request',data,{timeout:10000})}catch(error){if(!serverUnavailable(error))throw error;return queueRefund(data)}})(),
+    queueRefund(data),
 
   // Members
   getMembers: async (params?: any) => {try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())return await offlineMembers(params);return await api.get('/members',{params,timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineMembers(params)}},
@@ -157,7 +159,7 @@ export const posApi = {
     try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())throw Error('OFFLINE');return await api.get(`/members/barcode/${encodeURIComponent(barcode)}`,{timeout:5000})}
     catch(error){if(!serverUnavailable(error))throw error;const members=await offlineMembers({search:barcode,pageSize:200});let member=members.data.data.list.find((m:any)=>m.phone===barcode||m.id===barcode);if(!member){try{member=(await offlineMemberEvidence(barcode)).member}catch{}}if(!member)throw {response:{status:404,data:{message:'Member not found'}}};return {data:{code:200,data:member,offline:true}}}
   },
-  createMember: (data: any) => api.post('/members', data),
+  createMember: async(data:any)=>({data:{code:201,data:await createOfflineMember(data),offline:true,message:undefined as string|undefined}}),
   getMemberCoupons: async (memberId:string) => {try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())return await offlineMemberCoupons(memberId);return await api.get(`/marketing/members/${memberId}/coupons`,{timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineMemberCoupons(memberId)}},
   verifyCoupon: (code: string, memberId?: string) =>
     (async()=>{try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())return await offlineVerifyCoupon(code,memberId);return await api.post('/marketing/coupons/verify',{code,memberId},{timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineVerifyCoupon(code,memberId)}})(),
@@ -206,15 +208,16 @@ export const posApi = {
   getStaffInfo: () => api.get('/auth/me'),
 
   // Hygiene
-  getMyTasks: (date?: string) => api.get('/hygiene/tasks/my', { params: { date } }),
-  getPendingTasks: () => api.get('/hygiene/tasks/pending'),
-  getOverdueTasks: () => api.get('/hygiene/tasks/overdue'),
+  prepareOfflineWork:()=>prepareOfflineWork(()=>api.get('/pos-cash/offline-work',{timeout:15000})),
+  getMyTasks: async(date?:string)=>{try{await posApi.prepareOfflineWork()}catch{}return offlineTasks(date)},
+  getPendingTasks:async()=>{const result=await posApi.getMyTasks(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));return {data:{code:200,data:result.data.data.list.filter((t:any)=>['pending','overdue','in_progress'].includes(t.status))}}},
+  getOverdueTasks: async()=>{try{await posApi.prepareOfflineWork()}catch{}return offlineTasks(undefined,true)},
   getTask: (id: string) => api.get('/hygiene/tasks/' + id),
-  startTask: (id: string) => api.put('/hygiene/tasks/' + id + '/start'),
+  startTask: (id: string) => mutateOfflineTask(id,'start'),
   completeTask: (id: string, data: { photoUrl?: string; signatureUrl?: string; note?: string; selfRating?: number; checklistResults?: { checklistId: string; completed: boolean; note?: string }[] }) =>
-    api.put(`/hygiene/tasks/${id}/complete`, data),
+    mutateOfflineTask(id,'complete',data),
   skipTask: (id: string, note: string) =>
-    api.put(`/hygiene/tasks/${id}/skip`, { note }),
+    mutateOfflineTask(id,'skip',{note}),
 
   // Cash Management
   getCashBalance: async () => posApi.getCurrentShift(),
@@ -241,8 +244,8 @@ export const posApi = {
   getCashSummary: (params?: any) => api.get('/pos-cash/summary', { params }),
 
   // Announcements
-  getActiveAnnouncements: (storeId: string) => api.get('/announcement/active', { params: { storeId } }),
-  getHygieneAnnouncements: (storeId: string) => api.get('/announcement/hygiene/pending', { params: { storeId } }),
+  getActiveAnnouncements: (storeId:string)=>offlineRead('/announcement/active',{storeId},()=>api.get('/announcement/active',{params:{storeId},timeout:5000})),
+  getHygieneAnnouncements:(storeId:string)=>offlineRead('/announcement/hygiene/pending',{storeId},()=>api.get('/announcement/hygiene/pending',{params:{storeId},timeout:5000})),
 
   // Attendance QR
   generateAttendanceQR: (posId: string) => api.post('/attendance-qr/generate', { posId }),
@@ -279,13 +282,7 @@ export const posApi = {
     api.post('/expenses', data),
 
   // File Upload
-  uploadAttachment: (file: File) => {
-    const formData = new FormData()
-    formData.append('files', file)
-    return api.post('/upload/attachment', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-  },
+  uploadAttachment: (file:File)=>localTaskPhoto(file),
 }
 
 // Shift API - uses admin's /api/shifts endpoint

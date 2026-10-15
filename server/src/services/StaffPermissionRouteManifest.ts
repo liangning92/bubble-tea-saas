@@ -5410,6 +5410,11 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/pos-cash/offline-work": {
+    "legacyRoles": ["admin", "manager", "cashier"],
+    "legacyPermission": null, "resource": null, "permission": null,
+    "ownerOnly": false, "export": false, "personal": false
+  },
   "POST /api/pos-cash/shifts/offline-operations": {
     "legacyRoles": [
       "admin",

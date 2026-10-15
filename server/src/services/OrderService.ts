@@ -50,6 +50,7 @@ export interface CreateOrderData {
   socialRef?: string         // 社交媒体消息ID(WhatsApp/社媒订单)
   note?: string              // 备注
   items: {
+    offlineItemId?:string
     productId: string
     productName: string
     specId: string
@@ -577,7 +578,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
 
   if(data.offlineMemberToken){
     if(!context?.occurredAt||!data.activityOfflineToken||!data.memberId)throw Error('OFFLINE_MEMBER_AUTHORIZATION_REQUIRED')
-    const snapshot=verifyOfflineMember(data.offlineMemberToken,data.storeId,data.memberId,context.occurredAt.toISOString())
+    const snapshot=await verifyOfflineMember(data.offlineMemberToken,data.storeId,data.memberId,context.occurredAt.toISOString())
     const couponId=unifiedQuote?.couponId,templateId=couponId?snapshot.coupons.find((c:any)=>c.id===couponId)?.coupon.id:undefined
     if(data.offlineMemberCouponId!==couponId||data.offlineMemberCouponTemplateId!==templateId)throw Error('OFFLINE_MEMBER_COUPON_CHANGED')
     calculatedPoints=offlineEarnedPoints(grandTotal,snapshot.member,snapshot.rule,context.occurredAt.toISOString())
@@ -667,6 +668,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
         note: data.note,
         items: {
           create: itemsWithCost.map((item) => ({
+            ...(context?.occurredAt&&item.offlineItemId?{id:item.offlineItemId}:{}),
             productId: item.productId,
             productName: item.productName,
             specId: item.specId,
@@ -815,7 +817,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
 }
 
 // Refund order (idempotent, transactional, full rollback of points / coupons / cash)
-export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean },db:any=prisma,voiding?: { reasonCode: 'error' | 'test'; actorId: string }) {
+export async function refundOrder(orderId: string, reason?: string, operatorStaffId?: string, refundAmount?: number, approval?: { requestId: string; approvedBy: string; note?: string; restoreUnprepared?: boolean },db:any=prisma,voiding?: { reasonCode: 'error' | 'test'; actorId: string },execution?:{occurredAt:Date;payoutMethod:'cash'|'external';shift:string;cashEventId?:string}) {
   const note = `${voiding ? 'Void' : 'Refund'}: ${reason || 'No reason provided'}`
 
   const operation = async (tx:any) => {
@@ -916,7 +918,7 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
       const sales = await tx.cashEvent.findMany({ where: { storeId: o.storeId, orderId: o.orderNumber, type: 'cash_sale' } })
       if (sales.reduce((sum, sale) => sum + sale.amount, 0) !== o.finalAmount) throw new Error('VOID_CASH_EVIDENCE_REQUIRED')
       for (const sale of sales) await tx.cashEvent.create({ data: { storeId: o.storeId, staffId: voiding.actorId, type: 'cash_sale', amount: -sale.amount, shift: sale.shift, paymentMethod: 'cash', orderId: o.orderNumber, createdAt: sale.createdAt, note: `Void ${o.orderNumber}: reverse ${sale.id}; ${reason}` } })
-    } else if (o.paymentMethod === 'cash' && cashRefund > 0) {
+    } else if ((execution?execution.payoutMethod==='cash':o.paymentMethod==='cash') && cashRefund > 0) {
       await tx.cashEvent.create({
         data: {
           storeId: o.storeId,
@@ -925,7 +927,8 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
           amount: cashRefund,
           paymentMethod: 'cash',
           orderId: o.orderNumber,
-          note: `Refund #${o.orderNumber}${reason ? ` - ${reason}` : ''}`
+          note: `Refund #${o.orderNumber}${reason ? ` - ${reason}` : ''}`,
+          ...(execution?{id:execution.cashEventId,createdAt:execution.occurredAt,shift:execution.shift}:{})
         }
       })
     }
@@ -933,7 +936,7 @@ export async function refundOrder(orderId: string, reason?: string, operatorStaf
     if (approval) {
       const approved = await tx.refundRequest.updateMany({
         where: { id: approval.requestId, orderId, status: 'pending' },
-        data: { status: 'approved', amount: refundAmount ?? o.finalAmount, approvedBy: approval.approvedBy, approvedAt: new Date(), note: approval.note }
+        data: { status: 'approved', amount: refundAmount ?? o.finalAmount, approvedBy: approval.approvedBy, approvedAt: execution?.occurredAt||new Date(), note: approval.note }
       })
       if (approved.count !== 1) throw new Error('REFUND_REQUEST_ALREADY_PROCESSED')
     }

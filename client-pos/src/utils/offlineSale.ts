@@ -78,13 +78,18 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
   if (!(POS_MANUAL_PAYMENT_METHODS as readonly string[]).includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || (!['cash','qris'].includes(request.paymentMethod)&&!externalConfirmed) || (request.discountAmount&&!request.activityOfflineToken)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
   if((request.memberId||request.pointsRedeemed||request.offlineMemberToken)&&(!request.memberId||!request.offlineMemberToken||!request.activityOfflineToken))throw Error('OFFLINE_MEMBER_AUTHORIZATION_REQUIRED')
   const localId = `LOCAL-${crypto.randomUUID()}`
-  const occurredAt = new Date()
-  const original = JSON.parse(JSON.stringify({...request,orderNumber:posOrderNumber(localId, occurredAt)}))
+  let occurredAt = new Date()
+  const original = JSON.parse(JSON.stringify({...request,items:request.items.map((item:any)=>({...item,offlineItemId:crypto.randomUUID()})),orderNumber:posOrderNumber(localId, occurredAt)}))
   return db.transaction('rw',db.config,db.orders,async()=> {
     if (localIdentity(request.storeId) !== backendUrl) throw new Error('CHECKOUT_BACKEND_CHANGED')
     if (await readCheckoutGeneration(request.storeId) !== generation) throw new Error('CHECKOUT_BASKET_STALE')
     const recovery = await readCheckoutRecovery(request.storeId)
     if (recovery.blocked || recovery.confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    const clockKey=`offline.ledger.clock:${encodeURIComponent(backendUrl)}:${encodeURIComponent(request.storeId)}`
+    const clock=(await db.config.get(clockKey))?.value||0
+    if(!Number.isSafeInteger(clock)||clock>Date.now()+60000)throw Error('OFFLINE_CLOCK_INVALID')
+    occurredAt=new Date(Math.max(Date.now(),clock+1))
+    if(original.activityOfflineToken)original.activityOccurredAt=occurredAt.toISOString()
     const products = await readSnapshot('/products',request.storeId) as {data?:{list?:Array<{id:string;specs?:Array<{id:string}>}>}}
     const configs = await readSnapshot('/config',request.storeId) as {data?:{paymentMethods?:Record<string,unknown>}}
     const shifts = await readSnapshot('/shifts',request.storeId) as {data?:Array<{key:string}>}
@@ -101,11 +106,11 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
       if(!Number.isSafeInteger(request.manualDiscountAmount)||request.manualDiscountAmount<1||!grant?.permissions?.includes('orders.discount')||!grant.token||Date.parse(grant.expiresAt)<=Date.now())throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
     }
     if(request.activityOfflineToken){const cached=await readSnapshot('/marketing/activities/offline-snapshot',request.storeId) as any;const snapshot=cached.data
-      if(!snapshot||snapshot.token!==request.activityOfflineToken||new Date(request.activityOccurredAt).getTime()>Date.parse(snapshot.expiresAt))throw Error('ACTIVITY_OFFLINE_CACHE_EXPIRED')
+      if(!snapshot||snapshot.token!==request.activityOfflineToken||new Date(original.activityOccurredAt).getTime()>Date.parse(snapshot.expiresAt))throw Error('ACTIVITY_OFFLINE_CACHE_EXPIRED')
       const member=request.memberId?await offlineMemberEvidence(request.memberId):undefined
       if(member&&(request.offlineMemberToken!==member.token||request.offlineMemberPointsBefore!==member.member.points))throw Error('OFFLINE_MEMBER_LEDGER_CONFLICT')
-      const extras=member?offlineMemberCandidates(member,{...request,pointsRequested:request.activityPointsRequested,couponId:request.activityCouponId},request.items,new Date(request.activityOccurredAt)):[]
-      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(request.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod},extras)
+      const extras=member?offlineMemberCandidates(member,{...request,pointsRequested:request.activityPointsRequested,couponId:request.activityCouponId},request.items,new Date(original.activityOccurredAt)):[]
+      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(original.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod},extras)
       const points=price.applied?.kind==='points'?price.applied.pointsRedeemed||0:0
       if((request.pointsRedeemed||0)!==points)throw Error('OFFLINE_MEMBER_PRICE_CHANGED')
       original.offlineMemberPointsEarned=member?offlineEarnedPoints(totals.finalAmount,member.member,member.rule,occurredAt.toISOString()):undefined
@@ -127,6 +132,7 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
       ...(!['cash','qris'].includes(request.paymentMethod)?{manualPayment:{kind:'external_manual' as const,method:request.paymentMethod,actorId:auth.user!.id!,at:occurredAt,evidence:'external_terminal_receipt' as const,bankConfirmed:false as const}}:{}),
       ...(manualQris?{manualPayment:{kind:'qris_manual' as const,actorId:auth.user!.id!,at:occurredAt,evidence:'customer_success_photo' as const,bankConfirmed:false as const}}:{})}
     row.id = await db.orders.add(row) as number
+    await db.config.put({key:clockKey,value:occurredAt.getTime(),updatedAt:occurredAt})
     await db.config.put({key:`checkout.generation:${encodeURIComponent(row.storeId)}`,value:crypto.randomUUID(),updatedAt:occurredAt})
     return row
   })
