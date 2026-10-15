@@ -5,3 +5,14 @@ test('cash drawer formula scopes cash/QRIS revenue and cents-based expenses to o
 test('signed differences and exact zero, including decimal expenses, do not become enforced thresholds',async()=>{const db={order:{findMany:async()=>[]},expense:{findMany:async()=>[{amount:125}]}};const r=await service.calculateShiftCash(db,'owned',{openedAt:new Date(0),openFloat:100},new Date());assert.equal(r.expectedCash,98.75);assert.equal(service.cashWarningFor('s',100,r,new Date()).difference,1.25);});
 test('cash warning reviews reject managers independently of route authorization',async()=>{await assert.rejects(()=>service.reviewCashWarning({$transaction:()=>{throw Error('Must not enter transaction')}},{id:'m',role:'manager',storeId:'owned'},'s','review'),e=>e.status===403);});
 test('warning and immutable report settings cannot be overwritten through generic config',()=>{const access=load('server/src/utils/configAccess.ts');for(const key of ['pos.shift.cash-warning:s','pos.shift.report:s'])assert.equal(access.isInternalConfig(key),true);assert.equal(access.isInternalConfig('shiftSettings'),false);});
+
+test('manual QRIS replaces recorded QRIS once and preserves the recorded source across corrections',()=>{
+ const recorded={revenue:313000,expenses:0,qris:0,cashFromRevenue:313000,openFloat:600000,expectedCash:913000};
+ const manual=service.applyHandoverQris(recorded,26000);
+ assert.equal(manual.expectedCash,887000);assert.equal(manual.cashFromRevenue,287000);assert.equal(manual.recordedQris,0);assert.equal(manual.qrisSource,'manual_handover');
+ const correctedFloat=service.applyHandoverQris({...manual,openFloat:420000},26000);assert.equal(correctedFloat.expectedCash,707000);
+ const mixed=service.applyHandoverQris({...recorded,qris:10000},26000);assert.equal(mixed.expectedCash,887000);assert.equal(mixed.recordedQris,10000);
+ const edited=service.applyHandoverQris(mixed,30000);assert.equal(edited.expectedCash,883000);assert.equal(edited.recordedQris,10000);
+ assert.equal(service.applyHandoverQris(edited).qris,10000);assert.equal(service.applyHandoverQris(mixed,0).expectedCash,913000);
+ assert.equal(recorded.expectedCash,913000);
+});

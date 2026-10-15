@@ -2,8 +2,16 @@ import { PrismaClient } from '@prisma/client'
 import { netReceivedAmount } from '../utils/refundAllocation'
 import { z } from 'zod'
 export const CASH_WARNING_PREFIX = 'pos.shift.cash-warning:'
-export type CashReconciliation = {version:1;source:string;windowStart:string;windowEnd:string;revenue:number;expenses:number;qris:number;cashFromRevenue:number;openFloat:number;expectedCash:number}
+export type CashReconciliation = {version:1;source:string;windowStart:string;windowEnd:string;revenue:number;expenses:number;qris:number;recordedQris?:number;qrisSource?:'recorded_orders'|'manual_handover';cashFromRevenue:number;openFloat:number;expectedCash:number}
 const money = (value:number) => Math.round(value * 100) / 100
+// The handover field is the total QRIS received for this shift, not an
+// additional payment on top of orders already classified as QRIS.
+export function applyHandoverQris(recorded:CashReconciliation,manualQris?:number):CashReconciliation {
+  const recordedQris = recorded.recordedQris ?? recorded.qris
+  const qris = manualQris ?? recordedQris
+  const cashFromRevenue = money(recorded.revenue-recorded.expenses-qris)
+  return {...recorded,recordedQris,qris,qrisSource:manualQris === undefined ? 'recorded_orders' : 'manual_handover',cashFromRevenue,expectedCash:money(cashFromRevenue+recorded.openFloat)}
+}
 export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>,storeId:string,shift:{openedAt:Date;openFloat:number},asOf:Date):Promise<CashReconciliation> {
   const where={storeId,createdAt:{gte:shift.openedAt,lt:asOf}}
   const [orders,expenses]=await Promise.all([
